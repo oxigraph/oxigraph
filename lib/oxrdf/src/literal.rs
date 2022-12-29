@@ -3,6 +3,8 @@ use crate::vocab::rdf;
 use crate::vocab::xsd;
 use crate::NamedNodeRef;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
+#[cfg(feature = "oxsdatatypes")]
+use oxsdatatypes::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -290,6 +292,134 @@ impl From<f64> for Literal {
             },
             datatype: xsd::DOUBLE.into(),
         })
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Boolean> for Literal {
+    #[inline]
+    fn from(value: Boolean) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::BOOLEAN)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Float> for Literal {
+    #[inline]
+    fn from(value: Float) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::FLOAT)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Double> for Literal {
+    #[inline]
+    fn from(value: Double) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::DOUBLE)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Integer> for Literal {
+    #[inline]
+    fn from(value: Integer) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::INTEGER)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Decimal> for Literal {
+    #[inline]
+    fn from(value: Decimal) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::DECIMAL)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<DateTime> for Literal {
+    #[inline]
+    fn from(value: DateTime) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::DATE_TIME)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Time> for Literal {
+    #[inline]
+    fn from(value: Time) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::TIME)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Date> for Literal {
+    #[inline]
+    fn from(value: Date) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::DATE)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<GYearMonth> for Literal {
+    #[inline]
+    fn from(value: GYearMonth) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::G_YEAR_MONTH)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<GYear> for Literal {
+    #[inline]
+    fn from(value: GYear) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::G_YEAR)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<GMonthDay> for Literal {
+    #[inline]
+    fn from(value: GMonthDay) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::G_MONTH_DAY)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<GMonth> for Literal {
+    #[inline]
+    fn from(value: GMonth) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::G_MONTH)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<GDay> for Literal {
+    #[inline]
+    fn from(value: GDay) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::G_DAY)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<Duration> for Literal {
+    #[inline]
+    fn from(value: Duration) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::DURATION)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<YearMonthDuration> for Literal {
+    #[inline]
+    fn from(value: YearMonthDuration) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::YEAR_MONTH_DURATION)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<DayTimeDuration> for Literal {
+    #[inline]
+    fn from(value: DayTimeDuration) -> Self {
+        Self::new_typed_literal(value.to_string(), xsd::DAY_TIME_DURATION)
     }
 }
 

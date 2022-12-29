@@ -7,7 +7,7 @@ use std::ops::Neg;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
-/// [XML Schema `duration` datatype](https://www.w3.org/TR/xmlschema11-2/#duration) implementation.
+/// [XML Schema `duration` datatype](https://www.w3.org/TR/xmlschema11-2/#duration)
 ///
 /// It stores the duration using a pair of a `YearMonthDuration` and a `DayTimeDuration`.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
@@ -17,6 +17,7 @@ pub struct Duration {
 }
 
 impl Duration {
+    #[inline]
     pub fn new(months: impl Into<i64>, seconds: impl Into<Decimal>) -> Self {
         Self {
             year_month: YearMonthDuration::new(months),
@@ -24,6 +25,7 @@ impl Duration {
         }
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 24]) -> Self {
         Self {
             year_month: YearMonthDuration::from_be_bytes(bytes[0..8].try_into().unwrap()),
@@ -32,43 +34,52 @@ impl Duration {
     }
 
     /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions/#func-years-from-duration)
+    #[inline]
     pub fn years(&self) -> i64 {
         self.year_month.years()
     }
 
     /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions/#func-months-from-duration)
+    #[inline]
     pub fn months(&self) -> i64 {
         self.year_month.months()
     }
 
     /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions/#func-days-from-duration)
+    #[inline]
     pub fn days(&self) -> i64 {
         self.day_time.days()
     }
 
     /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions/#func-hours-from-duration)
+    #[inline]
     pub fn hours(&self) -> i64 {
         self.day_time.hours()
     }
 
     /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions/#func-minutes-from-duration)
+    #[inline]
     pub fn minutes(&self) -> i64 {
         self.day_time.minutes()
     }
 
     /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions/#func-seconds-from-duration)
+    #[inline]
     pub fn seconds(&self) -> Decimal {
         self.day_time.seconds()
     }
 
+    #[inline]
     pub(super) const fn all_months(&self) -> i64 {
         self.year_month.all_months()
     }
 
+    #[inline]
     pub(super) const fn all_seconds(&self) -> Decimal {
         self.day_time.all_seconds()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 24] {
         let mut bytes = [0; 24];
         bytes[0..8].copy_from_slice(&self.year_month.to_be_bytes());
@@ -77,6 +88,7 @@ impl Duration {
     }
 
     /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDurations) and [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDurations)
+    #[inline]
     pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -86,6 +98,7 @@ impl Duration {
     }
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDurations) and [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDurations)
+    #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -93,11 +106,18 @@ impl Duration {
             day_time: self.day_time.checked_sub(rhs.day_time)?,
         })
     }
+
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self == other
+    }
 }
 
 impl TryFrom<StdDuration> for Duration {
     type Error = DecimalOverflowError;
 
+    #[inline]
     fn try_from(value: StdDuration) -> Result<Self, DecimalOverflowError> {
         Ok(DayTimeDuration::try_from(value)?.into())
     }
@@ -113,6 +133,7 @@ impl FromStr for Duration {
 
 impl fmt::Display for Duration {
     #[allow(clippy::many_single_char_names)]
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut ym = self.year_month.months;
         let mut ss = self.day_time.seconds;
@@ -174,6 +195,7 @@ impl fmt::Display for Duration {
 }
 
 impl PartialOrd for Duration {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let first = DateTime::new(1969, 9, 1, 0, 0, 0.into(), None).ok()?;
         let first_result = first
@@ -205,6 +227,7 @@ impl PartialOrd for Duration {
 impl Neg for Duration {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             year_month: self.year_month.neg(),
@@ -213,7 +236,7 @@ impl Neg for Duration {
     }
 }
 
-/// [XML Schema `yearMonthDuration` datatype](https://www.w3.org/TR/xmlschema11-2/#yearMonthDuration) implementation.
+/// [XML Schema `yearMonthDuration` datatype](https://www.w3.org/TR/xmlschema11-2/#yearMonthDuration)
 ///
 /// It stores the duration as a number of months encoded using a `i64`
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash, Default)]
@@ -222,12 +245,14 @@ pub struct YearMonthDuration {
 }
 
 impl YearMonthDuration {
+    #[inline]
     pub fn new(months: impl Into<i64>) -> Self {
         Self {
             months: months.into(),
         }
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 8]) -> Self {
         Self {
             months: i64::from_be_bytes(bytes),
@@ -235,48 +260,29 @@ impl YearMonthDuration {
     }
 
     /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions/#func-years-from-duration)
+    #[inline]
     pub fn years(self) -> i64 {
         self.months / 12
     }
 
     /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions/#func-months-from-duration)
+    #[inline]
     pub fn months(self) -> i64 {
         self.months % 12
     }
 
-    /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions/#func-days-from-duration)
-    #[allow(clippy::unused_self)]
-    pub fn days(self) -> i64 {
-        0
-    }
-
-    /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions/#func-hours-from-duration)
-    #[allow(clippy::unused_self)]
-    pub fn hours(self) -> i64 {
-        0
-    }
-
-    /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions/#func-minutes-from-duration)
-    #[allow(clippy::unused_self)]
-    pub fn minutes(self) -> i64 {
-        0
-    }
-
-    /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions/#func-seconds-from-duration)
-    #[allow(clippy::unused_self)]
-    pub fn seconds(self) -> Decimal {
-        Decimal::default()
-    }
-
+    #[inline]
     pub(super) const fn all_months(self) -> i64 {
         self.months
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 8] {
         self.months.to_be_bytes()
     }
 
     /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDurations)
+    #[inline]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -285,15 +291,23 @@ impl YearMonthDuration {
     }
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDurations)
+    #[inline]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             months: self.months.checked_sub(rhs.months)?,
         })
     }
+
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self == other
+    }
 }
 
 impl From<YearMonthDuration> for Duration {
+    #[inline]
     fn from(value: YearMonthDuration) -> Self {
         Self {
             year_month: value,
@@ -305,6 +319,7 @@ impl From<YearMonthDuration> for Duration {
 impl TryFrom<Duration> for YearMonthDuration {
     type Error = DecimalOverflowError;
 
+    #[inline]
     fn try_from(value: Duration) -> Result<Self, DecimalOverflowError> {
         if value.day_time == DayTimeDuration::default() {
             Ok(value.year_month)
@@ -323,6 +338,7 @@ impl FromStr for YearMonthDuration {
 }
 
 impl fmt::Display for YearMonthDuration {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.months == 0 {
             write!(f, "P0M")
@@ -333,24 +349,28 @@ impl fmt::Display for YearMonthDuration {
 }
 
 impl PartialEq<Duration> for YearMonthDuration {
+    #[inline]
     fn eq(&self, other: &Duration) -> bool {
         Duration::from(*self).eq(other)
     }
 }
 
 impl PartialEq<YearMonthDuration> for Duration {
+    #[inline]
     fn eq(&self, other: &YearMonthDuration) -> bool {
         self.eq(&Self::from(*other))
     }
 }
 
 impl PartialOrd<Duration> for YearMonthDuration {
+    #[inline]
     fn partial_cmp(&self, other: &Duration) -> Option<Ordering> {
         Duration::from(*self).partial_cmp(other)
     }
 }
 
 impl PartialOrd<YearMonthDuration> for Duration {
+    #[inline]
     fn partial_cmp(&self, other: &YearMonthDuration) -> Option<Ordering> {
         self.partial_cmp(&Self::from(*other))
     }
@@ -359,6 +379,7 @@ impl PartialOrd<YearMonthDuration> for Duration {
 impl Neg for YearMonthDuration {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             months: self.months.neg(),
@@ -366,7 +387,7 @@ impl Neg for YearMonthDuration {
     }
 }
 
-/// [XML Schema `dayTimeDuration` datatype](https://www.w3.org/TR/xmlschema11-2/#dayTimeDuration) implementation.
+/// [XML Schema `dayTimeDuration` datatype](https://www.w3.org/TR/xmlschema11-2/#dayTimeDuration)
 ///
 /// It stores the duration as a number of seconds encoded using a `Decimal`
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash, Default)]
@@ -375,62 +396,59 @@ pub struct DayTimeDuration {
 }
 
 impl DayTimeDuration {
+    #[inline]
     pub fn new(seconds: impl Into<Decimal>) -> Self {
         Self {
             seconds: seconds.into(),
         }
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
         Self {
             seconds: Decimal::from_be_bytes(bytes),
         }
     }
 
-    /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions/#func-years-from-duration)
-    #[allow(clippy::unused_self)]
-    pub fn years(&self) -> i64 {
-        0
-    }
-
-    /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions/#func-months-from-duration)
-    #[allow(clippy::unused_self)]
-    pub fn months(&self) -> i64 {
-        0
-    }
-
     /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions/#func-days-from-duration)
     #[allow(clippy::cast_possible_truncation)]
+    #[inline]
     pub fn days(&self) -> i64 {
         (self.seconds.as_i128() / 86400) as i64
     }
 
     /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions/#func-hours-from-duration)
     #[allow(clippy::cast_possible_truncation)]
+    #[inline]
     pub fn hours(&self) -> i64 {
         ((self.seconds.as_i128() % 86400) / 3600) as i64
     }
 
     /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions/#func-minutes-from-duration)
     #[allow(clippy::cast_possible_truncation)]
+    #[inline]
     pub fn minutes(&self) -> i64 {
         ((self.seconds.as_i128() % 3600) / 60) as i64
     }
 
     /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions/#func-seconds-from-duration)
+    #[inline]
     pub fn seconds(&self) -> Decimal {
         self.seconds.checked_rem(60).unwrap()
     }
 
+    #[inline]
     pub(super) const fn all_seconds(&self) -> Decimal {
         self.seconds
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 16] {
         self.seconds.to_be_bytes()
     }
 
     /// [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDurations)
+    #[inline]
     pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -439,15 +457,23 @@ impl DayTimeDuration {
     }
 
     /// [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDurations)
+    #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             seconds: self.seconds.checked_sub(rhs.seconds)?,
         })
     }
+
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self == other
+    }
 }
 
 impl From<DayTimeDuration> for Duration {
+    #[inline]
     fn from(value: DayTimeDuration) -> Self {
         Self {
             year_month: YearMonthDuration::default(),
@@ -459,6 +485,7 @@ impl From<DayTimeDuration> for Duration {
 impl TryFrom<Duration> for DayTimeDuration {
     type Error = DecimalOverflowError;
 
+    #[inline]
     fn try_from(value: Duration) -> Result<Self, DecimalOverflowError> {
         if value.year_month == YearMonthDuration::default() {
             Ok(value.day_time)
@@ -471,6 +498,7 @@ impl TryFrom<Duration> for DayTimeDuration {
 impl TryFrom<StdDuration> for DayTimeDuration {
     type Error = DecimalOverflowError;
 
+    #[inline]
     fn try_from(value: StdDuration) -> Result<Self, DecimalOverflowError> {
         Ok(Self {
             seconds: Decimal::new(
@@ -490,54 +518,63 @@ impl FromStr for DayTimeDuration {
 }
 
 impl fmt::Display for DayTimeDuration {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Duration::from(*self).fmt(f)
     }
 }
 
 impl PartialEq<Duration> for DayTimeDuration {
+    #[inline]
     fn eq(&self, other: &Duration) -> bool {
         Duration::from(*self).eq(other)
     }
 }
 
 impl PartialEq<DayTimeDuration> for Duration {
+    #[inline]
     fn eq(&self, other: &DayTimeDuration) -> bool {
         self.eq(&Self::from(*other))
     }
 }
 
 impl PartialEq<YearMonthDuration> for DayTimeDuration {
+    #[inline]
     fn eq(&self, other: &YearMonthDuration) -> bool {
         Duration::from(*self).eq(&Duration::from(*other))
     }
 }
 
 impl PartialEq<DayTimeDuration> for YearMonthDuration {
+    #[inline]
     fn eq(&self, other: &DayTimeDuration) -> bool {
         Duration::from(*self).eq(&Duration::from(*other))
     }
 }
 
 impl PartialOrd<Duration> for DayTimeDuration {
+    #[inline]
     fn partial_cmp(&self, other: &Duration) -> Option<Ordering> {
         Duration::from(*self).partial_cmp(other)
     }
 }
 
 impl PartialOrd<DayTimeDuration> for Duration {
+    #[inline]
     fn partial_cmp(&self, other: &DayTimeDuration) -> Option<Ordering> {
         self.partial_cmp(&Self::from(*other))
     }
 }
 
 impl PartialOrd<YearMonthDuration> for DayTimeDuration {
+    #[inline]
     fn partial_cmp(&self, other: &YearMonthDuration) -> Option<Ordering> {
         Duration::from(*self).partial_cmp(&Duration::from(*other))
     }
 }
 
 impl PartialOrd<DayTimeDuration> for YearMonthDuration {
+    #[inline]
     fn partial_cmp(&self, other: &DayTimeDuration) -> Option<Ordering> {
         Duration::from(*self).partial_cmp(&Duration::from(*other))
     }
@@ -546,6 +583,7 @@ impl PartialOrd<DayTimeDuration> for YearMonthDuration {
 impl Neg for DayTimeDuration {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
         Self {
             seconds: self.seconds.neg(),
@@ -561,9 +599,9 @@ mod tests {
     fn from_str() {
         let min = Duration::new(
             i64::MIN + 1,
-            Decimal::min_value().checked_add(Decimal::step()).unwrap(),
+            Decimal::MIN.checked_add(Decimal::step()).unwrap(),
         );
-        let max = Duration::new(i64::MAX, Decimal::max_value());
+        let max = Duration::new(i64::MAX, Decimal::MAX);
 
         assert_eq!(
             YearMonthDuration::from_str("P1Y").unwrap().to_string(),
@@ -700,6 +738,10 @@ mod tests {
         assert_eq!(
             Duration::from_str("P0Y0M10D").unwrap(),
             Duration::from_str("PT240H").unwrap()
+        );
+        assert_ne!(
+            Duration::from_str("P1M").unwrap(),
+            Duration::from_str("P30D").unwrap()
         );
     }
 

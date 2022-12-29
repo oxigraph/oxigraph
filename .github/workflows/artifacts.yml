@@ -66,7 +66,7 @@ jobs:
       - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v3
         with:
-          name: pyoxigraph_x86_64_linux
+          name: pyoxigraph_wheel_x86_64_linux
           path: target/wheels/*.whl
 
   wheel_mac:

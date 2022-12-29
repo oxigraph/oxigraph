@@ -1,15 +1,14 @@
-use crate::xsd::Float;
+use crate::{Boolean, Float, Integer};
 use std::cmp::Ordering;
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use std::num::ParseFloatError;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
-/// [XML Schema `double` datatype](https://www.w3.org/TR/xmlschema11-2/#double) implementation.
+/// [XML Schema `double` datatype](https://www.w3.org/TR/xmlschema11-2/#double)
 ///
-/// The "==" implementation is identity, not equality
-#[derive(Debug, Clone, Copy, Default)]
+/// Uses internally a [`f64`].
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(transparent)]
 pub struct Double {
     value: f64,
@@ -52,33 +51,20 @@ impl Double {
         self.value.round().into()
     }
 
-    /// Casts i64 into `Double`
     #[inline]
-    #[allow(clippy::cast_precision_loss)]
-    pub fn from_i64(value: i64) -> Self {
-        Self {
-            value: value as f64,
-        }
+    pub fn is_naan(self) -> bool {
+        self.value.is_nan()
     }
 
-    /// Casts `Double` into i64 without taking care of loss
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn to_i64(self) -> i64 {
-        self.value as i64
+    pub fn is_finite(self) -> bool {
+        self.value.is_finite()
     }
 
-    /// Casts `Double` into f32 without taking care of loss
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn to_f32(self) -> f32 {
-        self.value as f32
-    }
-
-    /// Creates a `bool` from a `Decimal` according to xsd:boolean cast constraints
-    #[inline]
-    pub fn to_bool(self) -> bool {
-        self.value != 0. && !self.value.is_nan()
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self.value.to_ne_bytes() == other.value.to_ne_bytes()
     }
 }
 
@@ -159,10 +145,23 @@ impl From<Float> for Double {
     }
 }
 
+impl From<Boolean> for Double {
+    #[inline]
+    fn from(value: Boolean) -> Self {
+        if bool::from(value) { 1. } else { 0. }.into()
+    }
+}
+
+impl From<Integer> for Double {
+    #[inline]
+    fn from(value: Integer) -> Self {
+        (i64::from(value) as f64).into()
+    }
+}
+
 impl FromStr for Double {
     type Err = ParseFloatError;
 
-    /// Parses decimals lexical mapping
     #[inline]
     fn from_str(input: &str) -> Result<Self, ParseFloatError> {
         Ok(f64::from_str(input)?.into())
@@ -182,26 +181,10 @@ impl fmt::Display for Double {
     }
 }
 
-impl PartialEq for Double {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.value.to_ne_bytes() == other.value.to_ne_bytes()
-    }
-}
-
-impl Eq for Double {}
-
 impl PartialOrd for Double {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.value.partial_cmp(&other.value)
-    }
-}
-
-impl Hash for Double {
-    #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write(&self.value.to_ne_bytes())
     }
 }
 
@@ -257,13 +240,45 @@ mod tests {
     #[test]
     fn eq() {
         assert_eq!(Double::from(0_f64), Double::from(0_f64));
-        assert_eq!(Double::from(f64::NAN), Double::from(f64::NAN));
-        assert_ne!(Double::from(-0.), Double::from(0.));
+        assert_ne!(Double::from(f64::NAN), Double::from(f64::NAN));
+        assert_eq!(Double::from(-0.), Double::from(0.));
+    }
+
+    #[test]
+    fn cmp() {
+        assert_eq!(
+            Double::from(0.).partial_cmp(&Double::from(0.)),
+            Some(Ordering::Equal)
+        );
+        assert_eq!(
+            Double::from(f64::INFINITY).partial_cmp(&Double::from(f64::MAX)),
+            Some(Ordering::Greater)
+        );
+        assert_eq!(
+            Double::from(f64::NEG_INFINITY).partial_cmp(&Double::from(f64::MIN)),
+            Some(Ordering::Less)
+        );
+        assert_eq!(Double::from(f64::NAN).partial_cmp(&Double::from(0.)), None);
+        assert_eq!(
+            Double::from(f64::NAN).partial_cmp(&Double::from(f64::NAN)),
+            None
+        );
+        assert_eq!(
+            Double::from(0.).partial_cmp(&Double::from(-0.)),
+            Some(Ordering::Equal)
+        );
+    }
+
+    #[test]
+    fn is_identical_with() {
+        assert!(Double::from(0.).is_identical_with(&Double::from(0.)));
+        assert!(Double::from(f64::NAN).is_identical_with(&Double::from(f64::NAN)));
+        assert!(!Double::from(-0.).is_identical_with(&Double::from(0.)));
     }
 
     #[test]
     fn from_str() -> Result<(), ParseFloatError> {
-        assert_eq!(Double::from(f64::NAN), Double::from_str("NaN")?);
+        assert!(Double::from(f64::NAN).is_identical_with(&Double::from_str("NaN")?));
         assert_eq!(Double::from(f64::INFINITY), Double::from_str("INF")?);
         assert_eq!(Double::from(f64::INFINITY), Double::from_str("+INF")?);
         assert_eq!(Double::from(f64::NEG_INFINITY), Double::from_str("-INF")?);

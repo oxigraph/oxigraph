@@ -982,16 +982,15 @@ dependencies = [
  "digest",
  "getrandom",
  "hex",
- "js-sys",
  "lazy_static",
  "libc",
  "md-5",
- "nom",
  "oxhttp",
  "oxilangtag",
  "oxiri",
  "oxrdf",
  "oxrocksdb-sys",
+ "oxsdatatypes",
  "rand",
  "regex",
  "rio_api",
@@ -1069,6 +1068,7 @@ dependencies = [
  "lasso",
  "oxilangtag",
  "oxiri",
+ "oxsdatatypes",
  "rand",
 ]
 
@@ -1079,6 +1079,14 @@ dependencies = [
  "bindgen",
  "cc",
  "libc",
+]
+
+[[package]]
+name = "oxsdatatypes"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "nom",
 ]
 
 [[package]]

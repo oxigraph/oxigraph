@@ -34,11 +34,11 @@ rio_api = "0.8"
 rio_turtle = "0.8"
 rio_xml = "0.8"
 hex = "0.4"
-nom = "7"
 siphasher = "0.3"
 lazy_static = "1"
 sysinfo = "0.27"
-oxrdf = { version = "0.1.1", path="oxrdf", features = ["rdf-star"] }
+oxrdf = { version = "0.1.1", path="oxrdf", features = ["rdf-star", "oxsdatatypes"] }
+oxsdatatypes = { version = "0.1.0", path="oxsdatatypes" }
 spargebra = { version = "0.2.3", path="spargebra", features = ["rdf-star"] }
 sparesults = { version = "0.1.3", path="sparesults", features = ["rdf-star"] }
 
@@ -48,7 +48,6 @@ oxrocksdb-sys = { version = "0.3.10", path="../oxrocksdb-sys" }
 oxhttp = { version = "0.1", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3"
 getrandom = {version="0.2", features=["js"]}
 
 [dev-dependencies]

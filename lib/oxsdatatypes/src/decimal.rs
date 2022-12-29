@@ -1,4 +1,4 @@
-use crate::xsd::{Double, Float};
+use crate::{Boolean, Double, Float, Integer};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
@@ -10,7 +10,7 @@ const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;
 const DECIMAL_PART_POW_MINUS_ONE: i128 = 100_000_000_000_000_000;
 const DECIMAL_PART_HALF_POW: i128 = 1_000_000_000;
 
-/// [XML Schema `decimal` datatype](https://www.w3.org/TR/xmlschema11-2/#decimal) implementation.
+/// [XML Schema `decimal` datatype](https://www.w3.org/TR/xmlschema11-2/#decimal)
 ///
 /// It stores the decimal in a fix point encoding allowing nearly 18 digits before and 18 digits after ".".
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash, Default)]
@@ -21,6 +21,7 @@ pub struct Decimal {
 impl Decimal {
     /// Constructs the decimal i / 10^n
     #[allow(clippy::cast_possible_truncation)]
+    #[inline]
     pub fn new(i: i128, n: u32) -> Result<Self, DecimalOverflowError> {
         let shift = (DECIMAL_PART_DIGITS as u32)
             .checked_sub(n)
@@ -155,39 +156,10 @@ impl Decimal {
         self.value > 0
     }
 
-    /// Creates a `Decimal` from a `Float` without taking care of precision
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub(crate) fn from_float(v: Float) -> Self {
-        Self::from_double(v.into())
-    }
-
-    /// Creates a `Float` from a `Decimal` without taking care of precision
-    #[inline]
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn to_float(self) -> Float {
-        (f64::from(self.to_double()) as f32).into()
-    }
-
-    /// Creates a `Decimal` from a `Double` without taking care of precision
-    #[inline]
-    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    pub(crate) fn from_double(v: Double) -> Self {
-        Self {
-            value: (f64::from(v) * (DECIMAL_PART_POW as f64)) as i128,
-        }
-    }
-
-    /// Creates a `Double` from a `Decimal` without taking care of precision
-    #[inline]
-    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    pub fn to_double(self) -> Double {
-        ((self.value as f64) / (DECIMAL_PART_POW as f64)).into()
-    }
-
-    /// Creates a `bool` from a `Decimal` according to xsd:boolean cast constraints
-    #[inline]
-    pub fn to_bool(self) -> bool {
-        self.value != 0
+    pub fn is_identical_with(&self, other: &Self) -> bool {
+        self == other
     }
 
     #[inline]
@@ -195,15 +167,9 @@ impl Decimal {
         self.value / DECIMAL_PART_POW
     }
 
-    #[cfg(test)]
-    pub(super) const fn min_value() -> Self {
-        Self { value: i128::MIN }
-    }
+    pub const MIN: Self = Self { value: i128::MIN };
 
-    #[cfg(test)]
-    pub(super) const fn max_value() -> Self {
-        Self { value: i128::MAX }
-    }
+    pub const MAX: Self = Self { value: i128::MAX };
 
     #[cfg(test)]
     pub(super) const fn step() -> Self {
@@ -292,6 +258,13 @@ impl From<u64> for Decimal {
     }
 }
 
+impl From<Integer> for Decimal {
+    #[inline]
+    fn from(value: Integer) -> Self {
+        i64::from(value).into()
+    }
+}
+
 impl TryFrom<i128> for Decimal {
     type Error = DecimalOverflowError;
 
@@ -319,11 +292,76 @@ impl TryFrom<u128> for Decimal {
     }
 }
 
+impl From<Boolean> for Decimal {
+    #[inline]
+    fn from(value: Boolean) -> Self {
+        bool::from(value).into()
+    }
+}
+
+impl TryFrom<Float> for Decimal {
+    type Error = DecimalOverflowError;
+
+    #[inline]
+    fn try_from(value: Float) -> Result<Self, DecimalOverflowError> {
+        Double::from(value).try_into()
+    }
+}
+
+impl TryFrom<Double> for Decimal {
+    type Error = DecimalOverflowError;
+
+    #[inline]
+    fn try_from(value: Double) -> Result<Self, DecimalOverflowError> {
+        let shifted = value * Double::from(DECIMAL_PART_POW as f64);
+        if shifted.is_finite()
+            && Double::from(i128::MIN as f64) <= shifted
+            && shifted <= Double::from(i128::MAX as f64)
+        {
+            Ok(Self {
+                value: f64::from(shifted) as i128,
+            })
+        } else {
+            Err(DecimalOverflowError)
+        }
+    }
+}
+
+impl From<Decimal> for Float {
+    #[inline]
+    fn from(value: Decimal) -> Self {
+        ((value.value as f32) / (DECIMAL_PART_POW as f32)).into()
+    }
+}
+
+impl From<Decimal> for Double {
+    #[inline]
+    fn from(value: Decimal) -> Self {
+        ((value.value as f64) / (DECIMAL_PART_POW as f64)).into()
+    }
+}
+
+impl TryFrom<Decimal> for Integer {
+    type Error = DecimalOverflowError;
+
+    #[inline]
+    fn try_from(value: Decimal) -> Result<Self, DecimalOverflowError> {
+        Ok(i64::try_from(
+            value
+                .value
+                .checked_div(DECIMAL_PART_POW)
+                .ok_or(DecimalOverflowError)?,
+        )
+        .map_err(|_| DecimalOverflowError)?
+        .into())
+    }
+}
+
 impl FromStr for Decimal {
-    type Err = ParseDecimalError;
+    type Err = DecimalParseError;
 
     /// Parses decimals lexical mapping
-    fn from_str(input: &str) -> Result<Self, ParseDecimalError> {
+    fn from_str(input: &str) -> Result<Self, DecimalParseError> {
         // (\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)
         let input = input.as_bytes();
         if input.is_empty() {
@@ -388,64 +426,6 @@ impl FromStr for Decimal {
         })
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct ParseDecimalError {
-    kind: ParseDecimalErrorKind,
-}
-
-#[derive(Debug, Clone)]
-enum ParseDecimalErrorKind {
-    Overflow,
-    Underflow,
-    UnexpectedChar,
-    UnexpectedEnd,
-}
-
-const PARSE_OVERFLOW: ParseDecimalError = ParseDecimalError {
-    kind: ParseDecimalErrorKind::Overflow,
-};
-const PARSE_UNDERFLOW: ParseDecimalError = ParseDecimalError {
-    kind: ParseDecimalErrorKind::Underflow,
-};
-const PARSE_UNEXPECTED_CHAR: ParseDecimalError = ParseDecimalError {
-    kind: ParseDecimalErrorKind::UnexpectedChar,
-};
-const PARSE_UNEXPECTED_END: ParseDecimalError = ParseDecimalError {
-    kind: ParseDecimalErrorKind::UnexpectedEnd,
-};
-
-impl fmt::Display for ParseDecimalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            ParseDecimalErrorKind::Overflow => write!(f, "Value overflow"),
-            ParseDecimalErrorKind::Underflow => write!(f, "Value underflow"),
-            ParseDecimalErrorKind::UnexpectedChar => write!(f, "Unexpected character"),
-            ParseDecimalErrorKind::UnexpectedEnd => write!(f, "Unexpected end of string"),
-        }
-    }
-}
-
-impl Error for ParseDecimalError {}
-
-impl From<DecimalOverflowError> for ParseDecimalError {
-    fn from(_: DecimalOverflowError) -> Self {
-        Self {
-            kind: ParseDecimalErrorKind::Overflow,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct DecimalOverflowError;
-
-impl fmt::Display for DecimalOverflowError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Value overflow")
-    }
-}
-
-impl Error for DecimalOverflowError {}
 
 impl fmt::Display for Decimal {
     /// Formats the decimal following its canonical representation.
@@ -533,18 +513,65 @@ impl Neg for Decimal {
     }
 }
 
-impl TryFrom<Decimal> for i64 {
-    type Error = DecimalOverflowError;
+/// An error when parsing a [`Decimal`].
+#[derive(Debug, Clone)]
+pub struct DecimalParseError {
+    kind: DecimalParseErrorKind,
+}
 
-    fn try_from(value: Decimal) -> Result<Self, DecimalOverflowError> {
-        value
-            .value
-            .checked_div(DECIMAL_PART_POW)
-            .ok_or(DecimalOverflowError)?
-            .try_into()
-            .map_err(|_| DecimalOverflowError)
+#[derive(Debug, Clone)]
+enum DecimalParseErrorKind {
+    Overflow,
+    Underflow,
+    UnexpectedChar,
+    UnexpectedEnd,
+}
+
+const PARSE_OVERFLOW: DecimalParseError = DecimalParseError {
+    kind: DecimalParseErrorKind::Overflow,
+};
+const PARSE_UNDERFLOW: DecimalParseError = DecimalParseError {
+    kind: DecimalParseErrorKind::Underflow,
+};
+const PARSE_UNEXPECTED_CHAR: DecimalParseError = DecimalParseError {
+    kind: DecimalParseErrorKind::UnexpectedChar,
+};
+const PARSE_UNEXPECTED_END: DecimalParseError = DecimalParseError {
+    kind: DecimalParseErrorKind::UnexpectedEnd,
+};
+
+impl fmt::Display for DecimalParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            DecimalParseErrorKind::Overflow => write!(f, "Value overflow"),
+            DecimalParseErrorKind::Underflow => write!(f, "Value underflow"),
+            DecimalParseErrorKind::UnexpectedChar => write!(f, "Unexpected character"),
+            DecimalParseErrorKind::UnexpectedEnd => write!(f, "Unexpected end of string"),
+        }
     }
 }
+
+impl Error for DecimalParseError {}
+
+impl From<DecimalOverflowError> for DecimalParseError {
+    fn from(_: DecimalOverflowError) -> Self {
+        Self {
+            kind: DecimalParseErrorKind::Overflow,
+        }
+    }
+}
+
+/// An overflow in [`Decimal`] computations.
+#[derive(Debug, Clone, Copy)]
+pub struct DecimalOverflowError;
+
+impl fmt::Display for DecimalOverflowError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Value overflow")
+    }
+}
+
+impl Error for DecimalOverflowError {}
 
 #[cfg(test)]
 mod tests {
@@ -574,19 +601,22 @@ mod tests {
         );
         assert_eq!(Decimal::from_str("0.1220").unwrap().to_string(), "0.122");
         assert_eq!(Decimal::from_str(".12200").unwrap().to_string(), "0.122");
+        assert_eq!(Decimal::from_str("1.").unwrap().to_string(), "1");
+        assert_eq!(Decimal::from_str("01.0").unwrap().to_string(), "1");
+        assert_eq!(Decimal::from_str("0").unwrap().to_string(), "0");
         assert_eq!(
-            Decimal::from_str(&Decimal::max_value().to_string()).unwrap(),
-            Decimal::max_value()
+            Decimal::from_str(&Decimal::MAX.to_string()).unwrap(),
+            Decimal::MAX
         );
         assert_eq!(
             Decimal::from_str(
-                &Decimal::min_value()
+                &Decimal::MIN
                     .checked_add(Decimal::step())
                     .unwrap()
                     .to_string()
             )
             .unwrap(),
-            Decimal::min_value().checked_add(Decimal::step()).unwrap()
+            Decimal::MIN.checked_add(Decimal::step()).unwrap()
         );
     }
 
@@ -609,18 +639,18 @@ mod tests {
 
     #[test]
     fn add() {
-        assert!(Decimal::min_value().checked_add(Decimal::step()).is_some());
-        assert!(Decimal::max_value().checked_add(Decimal::step()).is_none());
+        assert!(Decimal::MIN.checked_add(Decimal::step()).is_some());
+        assert!(Decimal::MAX.checked_add(Decimal::step()).is_none());
         assert_eq!(
-            Decimal::max_value().checked_add(Decimal::min_value()),
+            Decimal::MAX.checked_add(Decimal::MIN),
             Some(-Decimal::step())
         );
     }
 
     #[test]
     fn sub() {
-        assert!(Decimal::min_value().checked_sub(Decimal::step()).is_none());
-        assert!(Decimal::max_value().checked_sub(Decimal::step()).is_some());
+        assert!(Decimal::MIN.checked_sub(Decimal::step()).is_none());
+        assert!(Decimal::MAX.checked_sub(Decimal::step()).is_some());
     }
 
     #[test]
@@ -714,5 +744,93 @@ mod tests {
         );
         assert_eq!(Decimal::from(i64::MIN).floor(), Decimal::from(i64::MIN));
         assert_eq!(Decimal::from(i64::MAX).floor(), Decimal::from(i64::MAX));
+    }
+
+    #[test]
+    fn to_be_bytes() {
+        assert_eq!(
+            Decimal::from_be_bytes(Decimal::from(i64::MIN).to_be_bytes()),
+            Decimal::from(i64::MIN)
+        );
+        assert_eq!(
+            Decimal::from_be_bytes(Decimal::from(i64::MAX).to_be_bytes()),
+            Decimal::from(i64::MAX)
+        );
+        assert_eq!(
+            Decimal::from_be_bytes(Decimal::from(0).to_be_bytes()),
+            Decimal::from(0)
+        );
+        assert_eq!(
+            Decimal::from_be_bytes(Decimal::from(0).to_be_bytes()),
+            Decimal::from(0)
+        );
+        assert_eq!(
+            Decimal::from_be_bytes(Decimal::from_str("0.01").unwrap().to_be_bytes()),
+            Decimal::from_str("0.01").unwrap()
+        );
+    }
+
+    #[test]
+    fn from_bool() {
+        assert_eq!(Decimal::from(false), Decimal::from(0u8));
+        assert_eq!(Decimal::from(true), Decimal::from(1u8));
+    }
+
+    #[test]
+    fn from_float() {
+        assert_eq!(
+            Decimal::try_from(Float::from(0.)).unwrap(),
+            Decimal::from_str("0").unwrap()
+        );
+        assert_eq!(
+            Decimal::try_from(Float::from(-0.)).unwrap(),
+            Decimal::from_str("0.").unwrap()
+        );
+        assert_eq!(
+            Decimal::try_from(Float::from(-123.5)).unwrap(),
+            Decimal::from_str("-123.5").unwrap()
+        );
+        assert!(Decimal::try_from(Float::from(f32::NAN)).is_err());
+        assert!(Decimal::try_from(Float::from(f32::INFINITY)).is_err());
+        assert!(Decimal::try_from(Float::from(f32::NEG_INFINITY)).is_err());
+        assert!(Decimal::try_from(Float::from(f32::MIN)).is_err());
+        assert!(Decimal::try_from(Float::from(f32::MAX)).is_err());
+        assert!(
+            Decimal::try_from(Float::from(1672507302466.))
+                .unwrap()
+                .checked_sub(Decimal::from_str("1672507302466").unwrap())
+                .unwrap()
+                .abs()
+                < Decimal::from(1_000_000)
+        );
+    }
+
+    #[test]
+    fn from_double() {
+        assert_eq!(
+            Decimal::try_from(Double::from(0.)).unwrap(),
+            Decimal::from_str("0").unwrap()
+        );
+        assert_eq!(
+            Decimal::try_from(Double::from(-0.)).unwrap(),
+            Decimal::from_str("0").unwrap()
+        );
+        assert_eq!(
+            Decimal::try_from(Double::from(-123.1)).unwrap(),
+            Decimal::from_str("-123.1").unwrap()
+        );
+        assert!(
+            Decimal::try_from(Double::from(1672507302466.))
+                .unwrap()
+                .checked_sub(Decimal::from_str("1672507302466").unwrap())
+                .unwrap()
+                .abs()
+                < Decimal::from(1)
+        );
+        assert!(Decimal::try_from(Double::from(f64::NAN)).is_err());
+        assert!(Decimal::try_from(Double::from(f64::INFINITY)).is_err());
+        assert!(Decimal::try_from(Double::from(f64::NEG_INFINITY)).is_err());
+        assert!(Decimal::try_from(Double::from(f64::MIN)).is_err());
+        assert!(Decimal::try_from(Double::from(f64::MAX)).is_err());
     }
 }

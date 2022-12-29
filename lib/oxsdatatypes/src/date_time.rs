@@ -1,6 +1,6 @@
 use super::parser::{date_lexical_rep, date_time_lexical_rep, parse_value, time_lexical_rep};
 use super::{DayTimeDuration, Decimal, Duration, XsdParseError, YearMonthDuration};
-use crate::xsd::parser::{
+use crate::parser::{
     g_day_lexical_rep, g_month_day_lexical_rep, g_month_lexical_rep, g_year_lexical_rep,
     g_year_month_lexical_rep,
 };
@@ -11,13 +11,14 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::time::SystemTimeError;
 
-/// [XML Schema `dateTime` datatype](https://www.w3.org/TR/xmlschema11-2/#dateTime) implementation.
+/// [XML Schema `dateTime` datatype](https://www.w3.org/TR/xmlschema11-2/#dateTime)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct DateTime {
     timestamp: Timestamp,
 }
 
 impl DateTime {
+    #[inline]
     pub(super) fn new(
         year: i64,
         month: u8,
@@ -40,12 +41,14 @@ impl DateTime {
         })
     }
 
+    #[inline]
     pub fn now() -> Result<Self, DateTimeError> {
         Ok(Self {
             timestamp: Timestamp::now()?,
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -53,44 +56,53 @@ impl DateTime {
     }
 
     /// [fn:year-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-year-from-dateTime)
+    #[inline]
     pub fn year(&self) -> i64 {
         self.timestamp.year()
     }
 
     /// [fn:month-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-month-from-dateTime)
+    #[inline]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
     /// [fn:day-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-day-from-dateTime)
+    #[inline]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
     /// [fn:hour-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-hour-from-dateTime)
+    #[inline]
     pub fn hour(&self) -> u8 {
         self.timestamp.hour()
     }
 
     /// [fn:minute-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-minute-from-dateTime)
+    #[inline]
     pub fn minute(&self) -> u8 {
         self.timestamp.minute()
     }
 
     /// [fn:second-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-second-from-dateTime)
+    #[inline]
     pub fn second(&self) -> Decimal {
         self.timestamp.second()
     }
 
     /// [fn:timezone-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-timezone-from-dateTime)
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     fn properties(&self) -> DateTimeSevenPropertyModel {
         DateTimeSevenPropertyModel {
             year: Some(self.year()),
@@ -103,16 +115,19 @@ impl DateTime {
         }
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-dateTimes](https://www.w3.org/TR/xpath-functions/#func-subtract-dateTimes)
+    #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Duration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-dateTime)
+    #[inline]
     pub fn checked_add_year_month_duration(
         &self,
         rhs: impl Into<YearMonthDuration>,
@@ -121,6 +136,7 @@ impl DateTime {
     }
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-dateTime)
+    #[inline]
     pub fn checked_add_day_time_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -129,6 +145,7 @@ impl DateTime {
     }
 
     /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-dateTime) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-dateTime)
+    #[inline]
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
@@ -142,6 +159,7 @@ impl DateTime {
     }
 
     /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-dateTime)
+    #[inline]
     pub fn checked_sub_year_month_duration(
         &self,
         rhs: impl Into<YearMonthDuration>,
@@ -150,6 +168,7 @@ impl DateTime {
     }
 
     /// [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-dateTime)
+    #[inline]
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -158,6 +177,7 @@ impl DateTime {
     }
 
     /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-dateTime) and [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-dateTime)
+    #[inline]
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
@@ -170,6 +190,8 @@ impl DateTime {
         }
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -179,6 +201,7 @@ impl DateTime {
 impl TryFrom<Date> for DateTime {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
         Self::new(
             date.year(),
@@ -201,6 +224,7 @@ impl FromStr for DateTime {
 }
 
 impl fmt::Display for DateTime {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
@@ -223,13 +247,14 @@ impl fmt::Display for DateTime {
     }
 }
 
-/// [XML Schema `time` datatype](https://www.w3.org/TR/xmlschema11-2/#time) implementation.
+/// [XML Schema `time` datatype](https://www.w3.org/TR/xmlschema11-2/#time)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct Time {
     timestamp: Timestamp,
 }
 
 impl Time {
+    #[inline]
     pub(super) fn new(
         mut hour: u8,
         minute: u8,
@@ -252,6 +277,7 @@ impl Time {
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -259,44 +285,53 @@ impl Time {
     }
 
     /// [fn:hour-from-time](https://www.w3.org/TR/xpath-functions/#func-hour-from-time)
+    #[inline]
     pub fn hour(&self) -> u8 {
         self.timestamp.hour()
     }
 
     /// [fn:minute-from-time](https://www.w3.org/TR/xpath-functions/#func-minute-from-time)
+    #[inline]
     pub fn minute(&self) -> u8 {
         self.timestamp.minute()
     }
 
     /// [fn:second-from-time](https://www.w3.org/TR/xpath-functions/#func-second-from-time)
+    #[inline]
     pub fn second(&self) -> Decimal {
         self.timestamp.second()
     }
 
     /// [fn:timezone-from-time](https://www.w3.org/TR/xpath-functions/#func-timezone-from-time)
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-times](https://www.w3.org/TR/xpath-functions/#func-subtract-times)
+    #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Duration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-time)
+    #[inline]
     pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-time)
+    #[inline]
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
@@ -314,11 +349,13 @@ impl Time {
     }
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-time)
+    #[inline]
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-time)
+    #[inline]
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
@@ -335,6 +372,8 @@ impl Time {
         .ok()
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -344,6 +383,7 @@ impl Time {
 impl TryFrom<DateTime> for Time {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Self::new(
             date_time.hour(),
@@ -363,6 +403,7 @@ impl FromStr for Time {
 }
 
 impl fmt::Display for Time {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -378,13 +419,14 @@ impl fmt::Display for Time {
     }
 }
 
-/// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date) implementation.
+/// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct Date {
     timestamp: Timestamp,
 }
 
 impl Date {
+    #[inline]
     pub(super) fn new(
         year: i64,
         month: u8,
@@ -404,6 +446,7 @@ impl Date {
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -411,39 +454,47 @@ impl Date {
     }
 
     /// [fn:year-from-date](https://www.w3.org/TR/xpath-functions/#func-year-from-date)
+    #[inline]
     pub fn year(&self) -> i64 {
         self.timestamp.year()
     }
 
     /// [fn:month-from-date](https://www.w3.org/TR/xpath-functions/#func-month-from-date)
+    #[inline]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
     /// [fn:day-from-date](https://www.w3.org/TR/xpath-functions/#func-day-from-date)
+    #[inline]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
     /// [fn:timezone-from-date](https://www.w3.org/TR/xpath-functions/#func-timezone-from-date)
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-dates](https://www.w3.org/TR/xpath-functions/#func-subtract-dates)
+    #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Duration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-date)
+    #[inline]
     pub fn checked_add_year_month_duration(
         &self,
         rhs: impl Into<YearMonthDuration>,
@@ -452,11 +503,13 @@ impl Date {
     }
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-date)
+    #[inline]
     pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-date)
+    #[inline]
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(*self)
             .ok()?
@@ -466,6 +519,7 @@ impl Date {
     }
 
     /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-date)
+    #[inline]
     pub fn checked_sub_year_month_duration(
         &self,
         rhs: impl Into<YearMonthDuration>,
@@ -474,11 +528,13 @@ impl Date {
     }
 
     /// [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-date)
+    #[inline]
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-date) and [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-date)
+    #[inline]
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(*self)
             .ok()?
@@ -487,6 +543,8 @@ impl Date {
             .ok()
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -496,6 +554,7 @@ impl Date {
 impl TryFrom<DateTime> for Date {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Self::new(
             date_time.year(),
@@ -515,6 +574,7 @@ impl FromStr for Date {
 }
 
 impl fmt::Display for Date {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
@@ -528,13 +588,14 @@ impl fmt::Display for Date {
     }
 }
 
-/// [XML Schema `gYearMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gYearMonth) implementation.
+/// [XML Schema `gYearMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gYearMonth)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GYearMonth {
     timestamp: Timestamp,
 }
 
 impl GYearMonth {
+    #[inline]
     pub(super) fn new(
         year: i64,
         month: u8,
@@ -553,32 +614,40 @@ impl GYearMonth {
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
+    #[inline]
     pub fn year(&self) -> i64 {
         self.timestamp.year()
     }
 
+    #[inline]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -588,6 +657,7 @@ impl GYearMonth {
 impl TryFrom<DateTime> for GYearMonth {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Self::new(
             date_time.year(),
@@ -601,6 +671,7 @@ impl TryFrom<DateTime> for GYearMonth {
 impl TryFrom<Date> for GYearMonth {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
         Self::new(date.year(), date.month(), date.timezone_offset())
     }
@@ -615,6 +686,7 @@ impl FromStr for GYearMonth {
 }
 
 impl fmt::Display for GYearMonth {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
@@ -628,13 +700,14 @@ impl fmt::Display for GYearMonth {
     }
 }
 
-/// [XML Schema `gYear` datatype](https://www.w3.org/TR/xmlschema11-2/#gYear) implementation.
+/// [XML Schema `gYear` datatype](https://www.w3.org/TR/xmlschema11-2/#gYear)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GYear {
     timestamp: Timestamp,
 }
 
 impl GYear {
+    #[inline]
     pub(super) fn new(
         year: i64,
         timezone_offset: Option<TimezoneOffset>,
@@ -652,28 +725,35 @@ impl GYear {
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
+    #[inline]
     pub fn year(&self) -> i64 {
         self.timestamp.year()
     }
 
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -683,6 +763,7 @@ impl GYear {
 impl TryFrom<DateTime> for GYear {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Self::new(date_time.year(), date_time.timezone_offset())
     }
@@ -692,6 +773,7 @@ impl TryFrom<DateTime> for GYear {
 impl TryFrom<Date> for GYear {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
         Self::new(date.year(), date.timezone_offset())
     }
@@ -700,6 +782,7 @@ impl TryFrom<Date> for GYear {
 impl TryFrom<GYearMonth> for GYear {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(year_month: GYearMonth) -> Result<Self, DateTimeError> {
         Self::new(year_month.year(), year_month.timezone_offset())
     }
@@ -714,6 +797,7 @@ impl FromStr for GYear {
 }
 
 impl fmt::Display for GYear {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
@@ -727,13 +811,14 @@ impl fmt::Display for GYear {
     }
 }
 
-/// [XML Schema `gMonthDay` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonthDay) implementation.
+/// [XML Schema `gMonthDay` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonthDay)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GMonthDay {
     timestamp: Timestamp,
 }
 
 impl GMonthDay {
+    #[inline]
     pub(super) fn new(
         month: u8,
         day: u8,
@@ -752,32 +837,40 @@ impl GMonthDay {
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
+    #[inline]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
+    #[inline]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -787,6 +880,7 @@ impl GMonthDay {
 impl TryFrom<DateTime> for GMonthDay {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Self::new(
             date_time.month(),
@@ -800,6 +894,7 @@ impl TryFrom<DateTime> for GMonthDay {
 impl TryFrom<Date> for GMonthDay {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
         Self::new(date.month(), date.day(), date.timezone_offset())
     }
@@ -814,6 +909,7 @@ impl FromStr for GMonthDay {
 }
 
 impl fmt::Display for GMonthDay {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "--{:02}-{:02}", self.month(), self.day())?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -823,13 +919,14 @@ impl fmt::Display for GMonthDay {
     }
 }
 
-/// [XML Schema `gMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonth) implementation.
+/// [XML Schema `gMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonth)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GMonth {
     timestamp: Timestamp,
 }
 
 impl GMonth {
+    #[inline]
     pub(super) fn new(
         month: u8,
         timezone_offset: Option<TimezoneOffset>,
@@ -847,28 +944,35 @@ impl GMonth {
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
+    #[inline]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -878,6 +982,7 @@ impl GMonth {
 impl TryFrom<DateTime> for GMonth {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Self::new(date_time.month(), date_time.timezone_offset())
     }
@@ -887,6 +992,7 @@ impl TryFrom<DateTime> for GMonth {
 impl TryFrom<Date> for GMonth {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
         Self::new(date.month(), date.timezone_offset())
     }
@@ -895,6 +1001,7 @@ impl TryFrom<Date> for GMonth {
 impl TryFrom<GYearMonth> for GMonth {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(year_month: GYearMonth) -> Result<Self, DateTimeError> {
         Self::new(year_month.month(), year_month.timezone_offset())
     }
@@ -903,6 +1010,7 @@ impl TryFrom<GYearMonth> for GMonth {
 impl TryFrom<GMonthDay> for GMonth {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(month_day: GMonthDay) -> Result<Self, DateTimeError> {
         Self::new(month_day.month(), month_day.timezone_offset())
     }
@@ -917,6 +1025,7 @@ impl FromStr for GMonth {
 }
 
 impl fmt::Display for GMonth {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "--{:02}", self.month())?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -926,13 +1035,14 @@ impl fmt::Display for GMonth {
     }
 }
 
-/// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date) implementation.
+/// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date)
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GDay {
     timestamp: Timestamp,
 }
 
 impl GDay {
+    #[inline]
     pub(super) fn new(
         day: u8,
         timezone_offset: Option<TimezoneOffset>,
@@ -950,28 +1060,35 @@ impl GDay {
         })
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
         }
     }
 
+    #[inline]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
+    #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
+    #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.timestamp.is_identical_with(&other.timestamp)
     }
@@ -981,6 +1098,7 @@ impl GDay {
 impl TryFrom<DateTime> for GDay {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date_time: DateTime) -> Result<Self, DateTimeError> {
         Self::new(date_time.day(), date_time.timezone_offset())
     }
@@ -990,6 +1108,7 @@ impl TryFrom<DateTime> for GDay {
 impl TryFrom<Date> for GDay {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(date: Date) -> Result<Self, DateTimeError> {
         Self::new(date.day(), date.timezone_offset())
     }
@@ -998,6 +1117,7 @@ impl TryFrom<Date> for GDay {
 impl TryFrom<GMonthDay> for GDay {
     type Error = DateTimeError;
 
+    #[inline]
     fn try_from(month_day: GMonthDay) -> Result<Self, DateTimeError> {
         Self::new(month_day.day(), month_day.timezone_offset())
     }
@@ -1012,6 +1132,7 @@ impl FromStr for GDay {
 }
 
 impl fmt::Display for GDay {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "---{:02}", self.day())?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -1027,45 +1148,53 @@ pub struct TimezoneOffset {
 }
 
 impl TimezoneOffset {
+    #[inline]
     pub const fn utc() -> Self {
         Self { offset: 0 }
     }
 
     /// From offset in minute with respect to UTC
+    #[inline]
     pub(super) const fn new(offset: i16) -> Self {
         Self { offset }
     }
 
+    #[inline]
     pub fn from_be_bytes(bytes: [u8; 2]) -> Self {
         Self {
             offset: i16::from_be_bytes(bytes),
         }
     }
 
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 2] {
         self.offset.to_be_bytes()
     }
 }
 
 impl From<i16> for TimezoneOffset {
+    #[inline]
     fn from(offset: i16) -> Self {
         Self { offset }
     }
 }
 
 impl From<TimezoneOffset> for DayTimeDuration {
+    #[inline]
     fn from(value: TimezoneOffset) -> Self {
         Self::new(i32::from(value.offset) * 60)
     }
 }
 
 impl From<TimezoneOffset> for Duration {
+    #[inline]
     fn from(value: TimezoneOffset) -> Self {
         DayTimeDuration::from(value).into()
     }
 }
 
 impl fmt::Display for TimezoneOffset {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.offset {
             0 => write!(f, "Z"),
@@ -1094,6 +1223,7 @@ struct Timestamp {
 }
 
 impl PartialEq for Timestamp {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         match (self.timezone_offset, other.timezone_offset) {
             (Some(_), Some(_)) | (None, None) => self.value.eq(&other.value),
@@ -1105,6 +1235,7 @@ impl PartialEq for Timestamp {
 impl Eq for Timestamp {}
 
 impl PartialOrd for Timestamp {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self.timezone_offset, other.timezone_offset) {
             (Some(_), Some(_)) | (None, None) => self.value.partial_cmp(&other.value),
@@ -1135,12 +1266,14 @@ impl PartialOrd for Timestamp {
 }
 
 impl Hash for Timestamp {
+    #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state)
     }
 }
 
 impl Timestamp {
+    #[inline]
     fn new(props: &DateTimeSevenPropertyModel) -> Result<Self, DateTimeError> {
         // Validation
         if let (Some(day), Some(month)) = (props.day, props.month) {
@@ -1160,6 +1293,7 @@ impl Timestamp {
         })
     }
 
+    #[inline]
     fn now() -> Result<Self, DateTimeError> {
         Self::new(
             &date_time_plus_duration(
@@ -1180,6 +1314,7 @@ impl Timestamp {
         )
     }
 
+    #[inline]
     fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             value: Decimal::from_be_bytes(bytes[0..16].try_into().unwrap()),
@@ -1194,6 +1329,7 @@ impl Timestamp {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[inline]
     fn year_month_day(&self) -> (i64, u8, u8) {
         let mut days = (self.value.as_i128()
             + i128::from(
@@ -1248,22 +1384,26 @@ impl Timestamp {
         (year, month, day)
     }
 
+    #[inline]
     fn year(&self) -> i64 {
         let (year, _, _) = self.year_month_day();
         year
     }
 
+    #[inline]
     fn month(&self) -> u8 {
         let (_, month, _) = self.year_month_day();
         month
     }
 
+    #[inline]
     fn day(&self) -> u8 {
         let (_, _, day) = self.year_month_day();
         day
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[inline]
     fn hour(&self) -> u8 {
         (((self.value.as_i128()
             + i128::from(
@@ -1276,6 +1416,7 @@ impl Timestamp {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[inline]
     fn minute(&self) -> u8 {
         (((self.value.as_i128()
             + i128::from(
@@ -1287,14 +1428,17 @@ impl Timestamp {
             / 60) as u8
     }
 
+    #[inline]
     fn second(&self) -> Decimal {
         self.value.checked_rem_euclid(60).unwrap().abs()
     }
 
+    #[inline]
     const fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timezone_offset
     }
 
+    #[inline]
     fn checked_add_seconds(&self, seconds: Decimal) -> Option<Self> {
         Some(Self {
             value: self.value.checked_add(seconds)?,
@@ -1302,6 +1446,7 @@ impl Timestamp {
         })
     }
 
+    #[inline]
     fn checked_sub(&self, rhs: Self) -> Option<Duration> {
         match (self.timezone_offset, rhs.timezone_offset) {
             (Some(_), Some(_)) | (None, None) => {
@@ -1311,6 +1456,7 @@ impl Timestamp {
         }
     }
 
+    #[inline]
     fn checked_sub_seconds(&self, seconds: Decimal) -> Option<Self> {
         Some(Self {
             value: self.value.checked_sub(seconds)?,
@@ -1318,6 +1464,7 @@ impl Timestamp {
         })
     }
 
+    #[inline]
     fn to_be_bytes(self) -> [u8; 18] {
         let mut bytes = [0; 18];
         bytes[0..16].copy_from_slice(&self.value.to_be_bytes());
@@ -1328,17 +1475,22 @@ impl Timestamp {
         bytes
     }
 
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.value == other.value && self.timezone_offset == other.timezone_offset
     }
 }
 
-#[allow(clippy::unnecessary_wraps)]
 #[cfg(target_arch = "wasm32")]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     Ok(Duration::new(
         0,
-        Decimal::from_double((js_sys::Date::now() / 1000.).into()),
+        Decimal::try_from(crate::Double::from(js_sys::Date::now() / 1000.)).map_err(|_| {
+            DateTimeError {
+                kind: DateTimeErrorKind::Overflow,
+            }
+        })?,
     ))
 }
 
@@ -1498,6 +1650,7 @@ fn time_on_timeline(props: &DateTimeSevenPropertyModel) -> Option<Decimal> {
     .checked_add(se)
 }
 
+/// An error when doing [`DateTime`] operations.
 #[derive(Debug, Clone)]
 pub struct DateTimeError {
     kind: DateTimeErrorKind,
@@ -1511,6 +1664,7 @@ enum DateTimeErrorKind {
 }
 
 impl fmt::Display for DateTimeError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             DateTimeErrorKind::InvalidDayOfMonth { day, month } => {
@@ -1523,6 +1677,7 @@ impl fmt::Display for DateTimeError {
 }
 
 impl Error for DateTimeError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.kind {
             DateTimeErrorKind::SystemTime(error) => Some(error),
@@ -1532,6 +1687,7 @@ impl Error for DateTimeError {
 }
 
 impl From<SystemTimeError> for DateTimeError {
+    #[inline]
     fn from(error: SystemTimeError) -> Self {
         Self {
             kind: DateTimeErrorKind::SystemTime(error),
