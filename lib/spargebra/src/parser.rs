@@ -2109,6 +2109,10 @@ parser! {
             i("isTriple") "(" _ e:Expression() _ ")" {?
                 #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::IsTriple, vec![e]))}
                 #[cfg(not(feature = "rdf-star"))]{Err("The isTriple function is only available in SPARQL-star")}
+            } /
+            i("ADJUST") "("  _ a:Expression() _ "," _ b:Expression() _ ")" {?
+                #[cfg(feature = "sep-0002")]{Ok(Expression::FunctionCall(Function::Adjust, vec![a, b]))}
+                #[cfg(not(feature = "sep-0002"))]{Err("The ADJUST function is only available in SPARQL 1.2 SEP 0002")}
             }
 
         //[122]

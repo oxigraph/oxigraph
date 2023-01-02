@@ -376,6 +376,8 @@ pub enum Function {
     Object,
     #[cfg(feature = "rdf-star")]
     IsTriple,
+    #[cfg(feature = "sep-0002")]
+    Adjust,
     Custom(NamedNode),
 }
 
@@ -439,6 +441,8 @@ impl Function {
             Self::Object => write!(f, "object"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => write!(f, "istriple"),
+            #[cfg(feature = "sep-0002")]
+            Self::Adjust => write!(f, "adjust"),
             Self::Custom(iri) => write!(f, "{iri}"),
         }
     }
@@ -503,6 +507,8 @@ impl fmt::Display for Function {
             Self::Object => write!(f, "OBJECT"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => write!(f, "isTRIPLE"),
+            #[cfg(feature = "sep-0002")]
+            Self::Adjust => write!(f, "ADJUST"),
             Self::Custom(iri) => iri.fmt(f),
         }
     }

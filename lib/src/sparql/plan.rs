@@ -460,6 +460,7 @@ pub enum PlanExpression {
     Predicate(Box<Self>),
     Object(Box<Self>),
     IsTriple(Box<Self>),
+    Adjust(Box<Self>, Box<Self>),
     BooleanCast(Box<Self>),
     DoubleCast(Box<Self>),
     FloatCast(Box<Self>),
@@ -557,7 +558,8 @@ impl PlanExpression {
             | Self::StrDt(a, b)
             | Self::SameTerm(a, b)
             | Self::SubStr(a, b, None)
-            | Self::Regex(a, b, None) => {
+            | Self::Regex(a, b, None)
+            | Self::Adjust(a, b) => {
                 a.lookup_used_variables(callback);
                 b.lookup_used_variables(callback);
             }

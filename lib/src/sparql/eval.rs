@@ -1563,6 +1563,38 @@ impl SimpleEvaluator {
                     })
                 })
             }
+
+            PlanExpression::Adjust(dt, tz) => {
+                let dt = self.expression_evaluator(dt);
+                let tz = self.expression_evaluator(tz);
+                Rc::new(move |tuple| {
+                    let timezone_offset = Some(
+                        match tz(tuple)? {
+                            EncodedTerm::DayTimeDurationLiteral(tz) => TimezoneOffset::try_from(tz),
+                            EncodedTerm::DurationLiteral(tz) => TimezoneOffset::try_from(tz),
+                            _ => return None,
+                        }
+                        .ok()?,
+                    );
+                    Some(match dt(tuple)? {
+                        EncodedTerm::DateTimeLiteral(date_time) => {
+                            date_time.adjust(timezone_offset)?.into()
+                        }
+                        EncodedTerm::TimeLiteral(time) => time.adjust(timezone_offset)?.into(),
+                        EncodedTerm::DateLiteral(date) => date.adjust(timezone_offset)?.into(),
+                        EncodedTerm::GYearMonthLiteral(year_month) => {
+                            year_month.adjust(timezone_offset)?.into()
+                        }
+                        EncodedTerm::GYearLiteral(year) => year.adjust(timezone_offset)?.into(),
+                        EncodedTerm::GMonthDayLiteral(month_day) => {
+                            month_day.adjust(timezone_offset)?.into()
+                        }
+                        EncodedTerm::GDayLiteral(day) => day.adjust(timezone_offset)?.into(),
+                        EncodedTerm::GMonthLiteral(month) => month.adjust(timezone_offset)?.into(),
+                        _ => return None,
+                    })
+                })
+            }
             PlanExpression::Now => {
                 let now = self.now;
                 Rc::new(move |_| Some(now.into()))
