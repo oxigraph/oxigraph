@@ -190,6 +190,14 @@ impl DateTime {
         }
     }
 
+    // [fn:adjust-dateTime-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-dateTime-to-timezone)
+    #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        Some(Self {
+            timestamp: self.timestamp.adjust(timezone_offset)?,
+        })
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -372,6 +380,24 @@ impl Time {
         .ok()
     }
 
+    // [fn:adjust-time-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-time-to-timezone)
+    #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        DateTime::new(
+            1972,
+            12,
+            31,
+            self.hour(),
+            self.minute(),
+            self.second(),
+            self.timezone_offset(),
+        )
+        .ok()?
+        .adjust(timezone_offset)?
+        .try_into()
+        .ok()
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -543,6 +569,24 @@ impl Date {
             .ok()
     }
 
+    // [fn:adjust-date-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-date-to-timezone)
+    #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        DateTime::new(
+            self.year(),
+            self.month(),
+            self.day(),
+            0,
+            0,
+            Decimal::default(),
+            self.timezone_offset(),
+        )
+        .ok()?
+        .adjust(timezone_offset)?
+        .try_into()
+        .ok()
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -639,6 +683,13 @@ impl GYearMonth {
     #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
+    }
+
+    #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        Some(Self {
+            timestamp: self.timestamp.adjust(timezone_offset)?,
+        })
     }
 
     #[inline]
@@ -745,6 +796,13 @@ impl GYear {
     #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
+    }
+
+    #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        Some(Self {
+            timestamp: self.timestamp.adjust(timezone_offset)?,
+        })
     }
 
     #[inline]
@@ -865,6 +923,13 @@ impl GMonthDay {
     }
 
     #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        Some(Self {
+            timestamp: self.timestamp.adjust(timezone_offset)?,
+        })
+    }
+
+    #[inline]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
@@ -964,6 +1029,13 @@ impl GMonth {
     #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
+    }
+
+    #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        Some(Self {
+            timestamp: self.timestamp.adjust(timezone_offset)?,
+        })
     }
 
     #[inline]
@@ -1080,6 +1152,13 @@ impl GDay {
     #[inline]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
+    }
+
+    #[inline]
+    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        Some(Self {
+            timestamp: self.timestamp.adjust(timezone_offset)?,
+        })
     }
 
     #[inline]
@@ -1210,7 +1289,7 @@ impl TryFrom<Duration> for TimezoneOffset {
 impl From<TimezoneOffset> for DayTimeDuration {
     #[inline]
     fn from(value: TimezoneOffset) -> Self {
-        Self::new(i32::from(value.offset) * 60)
+        Self::new(i64::from(value.offset) * 60)
     }
 }
 
@@ -1451,9 +1530,9 @@ impl Timestamp {
     }
 
     #[inline]
-    fn checked_add_seconds(&self, seconds: Decimal) -> Option<Self> {
+    fn checked_add_seconds(&self, seconds: impl Into<Decimal>) -> Option<Self> {
         Some(Self {
-            value: self.value.checked_add(seconds)?,
+            value: self.value.checked_add(seconds.into())?,
             timezone_offset: self.timezone_offset,
         })
     }
@@ -1473,6 +1552,35 @@ impl Timestamp {
         Some(Self {
             value: self.value.checked_sub(seconds)?,
             timezone_offset: self.timezone_offset,
+        })
+    }
+
+    #[inline]
+    fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+        Some(if let Some(from_timezone) = self.timezone_offset {
+            if let Some(to_timezone) = timezone_offset {
+                Self {
+                    value: self.value, // We keep the timestamp
+                    timezone_offset: Some(to_timezone),
+                }
+            } else {
+                Self {
+                    value: self
+                        .value
+                        .checked_add(i64::from(from_timezone.offset) * 60)?, // We keep the literal value
+                    timezone_offset: None,
+                }
+            }
+        } else if let Some(to_timezone) = timezone_offset {
+            Self {
+                value: self.value.checked_sub(i64::from(to_timezone.offset) * 60)?, // We keep the literal value
+                timezone_offset: Some(to_timezone),
+            }
+        } else {
+            Self {
+                value: self.value,
+                timezone_offset: None,
+            }
         })
     }
 
@@ -2445,6 +2553,132 @@ mod tests {
                 .checked_sub_duration(Duration::from_str("P23DT10H10M").unwrap())
                 .unwrap(),
             Time::from_str("22:10:00-05:00").unwrap()
+        );
+    }
+
+    #[test]
+    fn adjust() {
+        assert_eq!(
+            DateTime::from_str("2002-03-07T10:00:00-07:00")
+                .unwrap()
+                .adjust(Some(
+                    DayTimeDuration::from_str("PT10H")
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                ))
+                .unwrap(),
+            DateTime::from_str("2002-03-08T03:00:00+10:00").unwrap()
+        );
+        assert_eq!(
+            DateTime::from_str("2002-03-07T00:00:00+01:00")
+                .unwrap()
+                .adjust(Some(
+                    DayTimeDuration::from_str("-PT8H")
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                ))
+                .unwrap(),
+            DateTime::from_str("2002-03-06T15:00:00-08:00").unwrap()
+        );
+        assert_eq!(
+            DateTime::from_str("2002-03-07T10:00:00")
+                .unwrap()
+                .adjust(None)
+                .unwrap(),
+            DateTime::from_str("2002-03-07T10:00:00").unwrap()
+        );
+        assert_eq!(
+            DateTime::from_str("2002-03-07T10:00:00-07:00")
+                .unwrap()
+                .adjust(None)
+                .unwrap(),
+            DateTime::from_str("2002-03-07T10:00:00").unwrap()
+        );
+
+        assert_eq!(
+            Date::from_str("2002-03-07")
+                .unwrap()
+                .adjust(Some(
+                    DayTimeDuration::from_str("-PT10H")
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                ))
+                .unwrap(),
+            Date::from_str("2002-03-07-10:00").unwrap()
+        );
+        assert_eq!(
+            Date::from_str("2002-03-07-07:00")
+                .unwrap()
+                .adjust(Some(
+                    DayTimeDuration::from_str("-PT10H")
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                ))
+                .unwrap(),
+            Date::from_str("2002-03-06-10:00").unwrap()
+        );
+        assert_eq!(
+            Date::from_str("2002-03-07").unwrap().adjust(None).unwrap(),
+            Date::from_str("2002-03-07").unwrap()
+        );
+        assert_eq!(
+            Date::from_str("2002-03-07-07:00")
+                .unwrap()
+                .adjust(None)
+                .unwrap(),
+            Date::from_str("2002-03-07").unwrap()
+        );
+
+        assert_eq!(
+            Time::from_str("10:00:00")
+                .unwrap()
+                .adjust(Some(
+                    DayTimeDuration::from_str("-PT10H")
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                ))
+                .unwrap(),
+            Time::from_str("10:00:00-10:00").unwrap()
+        );
+        assert_eq!(
+            Time::from_str("10:00:00-07:00")
+                .unwrap()
+                .adjust(Some(
+                    DayTimeDuration::from_str("-PT10H")
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                ))
+                .unwrap(),
+            Time::from_str("07:00:00-10:00").unwrap()
+        );
+        assert_eq!(
+            Time::from_str("10:00:00").unwrap().adjust(None).unwrap(),
+            Time::from_str("10:00:00").unwrap()
+        );
+        assert_eq!(
+            Time::from_str("10:00:00-07:00")
+                .unwrap()
+                .adjust(None)
+                .unwrap(),
+            Time::from_str("10:00:00").unwrap()
+        );
+        assert_eq!(
+            Time::from_str("10:00:00-07:00")
+                .unwrap()
+                .adjust(Some(
+                    DayTimeDuration::from_str("PT10H")
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                ))
+                .unwrap(),
+            Time::from_str("03:00:00+10:00").unwrap()
         );
     }
 

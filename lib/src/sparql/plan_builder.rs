@@ -651,6 +651,10 @@ impl<'a> PlanBuilder<'a> {
                 Function::IsTriple => PlanExpression::IsTriple(Box::new(
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
+                Function::Adjust => PlanExpression::Adjust(
+                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                ),
                 Function::Custom(name) => {
                     if self.custom_functions.contains_key(name) {
                         PlanExpression::CustomFunction(
