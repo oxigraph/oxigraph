@@ -32,7 +32,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: io.RawIOBase or io.BufferedIOBase or io.TextIOBase or str
+/// :type input: io(bytes) or io(str) or str
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -105,7 +105,7 @@ pub fn parse(
 /// :param input: the RDF triples and quads to serialize.
 /// :type input: iterable(Triple) or iterable(Quad)
 /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
-/// :type output: io.RawIOBase or io.BufferedIOBase or str
+/// :type output: io(bytes) or str
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
 /// :rtype: None

@@ -1,10 +1,10 @@
 import os
 import unittest
-from io import BytesIO, RawIOBase
+from io import BytesIO, UnsupportedOperation
+from tempfile import NamedTemporaryFile, TemporaryFile
 from typing import Any
 
 from pyoxigraph import *
-from tempfile import NamedTemporaryFile
 
 foo = NamedNode("http://foo")
 bar = NamedNode("http://bar")
@@ -241,11 +241,9 @@ class TestStore(unittest.TestCase):
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_with_io_error(self) -> None:
-        class BadIO(RawIOBase):
-            pass
-
-        with self.assertRaises(NotImplementedError) as _:
-            Store().load(BadIO(), mime_type="application/n-triples")
+        with self.assertRaises(UnsupportedOperation) as _:
+            with TemporaryFile("wb") as fp:
+                Store().load(fp, mime_type="application/n-triples")
 
     def test_dump_ntriples(self) -> None:
         store = Store()
@@ -281,11 +279,9 @@ class TestStore(unittest.TestCase):
         )
 
     def test_dump_with_io_error(self) -> None:
-        class BadIO(RawIOBase):
-            pass
-
         with self.assertRaises(OSError) as _:
-            Store().dump(BadIO(), mime_type="application/rdf+xml")
+            with TemporaryFile("rb") as fp:
+                Store().dump(fp, mime_type="application/rdf+xml")
 
     def test_write_in_read(self) -> None:
         store = Store()

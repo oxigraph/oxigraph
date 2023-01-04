@@ -266,7 +266,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io.RawIOBase or io.BufferedIOBase or io.TextIOBase or str
+    /// :type input: io(bytes) or io(str) or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -350,7 +350,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io.RawIOBase or io.BufferedIOBase or io.TextIOBase or str
+    /// :type input: io(bytes) or io(str) or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -431,7 +431,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
-    /// :type output: io.RawIOBase or io.BufferedIOBase or str
+    /// :type output: io(bytes) or str
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
