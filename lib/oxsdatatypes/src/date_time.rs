@@ -122,7 +122,7 @@ impl DateTime {
 
     /// [op:subtract-dateTimes](https://www.w3.org/TR/xpath-functions/#func-subtract-dateTimes)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Duration> {
+    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
@@ -320,7 +320,7 @@ impl Time {
 
     /// [op:subtract-times](https://www.w3.org/TR/xpath-functions/#func-subtract-times)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Duration> {
+    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
@@ -489,7 +489,7 @@ impl Date {
 
     /// [op:subtract-dates](https://www.w3.org/TR/xpath-functions/#func-subtract-dates)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Duration> {
+    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
@@ -1459,10 +1459,10 @@ impl Timestamp {
     }
 
     #[inline]
-    fn checked_sub(&self, rhs: Self) -> Option<Duration> {
+    fn checked_sub(&self, rhs: Self) -> Option<DayTimeDuration> {
         match (self.timezone_offset, rhs.timezone_offset) {
             (Some(_), Some(_)) | (None, None) => {
-                Some(Duration::new(0, self.value.checked_sub(rhs.value)?))
+                Some(DayTimeDuration::new(self.value.checked_sub(rhs.value)?))
             }
             _ => None, //TODO: implicit timezone
         }
@@ -2232,7 +2232,7 @@ mod tests {
                 .unwrap()
                 .checked_sub(DateTime::from_str("1999-11-28T09:00:00Z").unwrap())
                 .unwrap(),
-            Duration::from_str("P337DT2H12M").unwrap()
+            DayTimeDuration::from_str("P337DT2H12M").unwrap()
         );
 
         assert_eq!(
@@ -2240,21 +2240,21 @@ mod tests {
                 .unwrap()
                 .checked_sub(Date::from_str("1999-11-28").unwrap())
                 .unwrap(),
-            Duration::from_str("P337D").unwrap()
+            DayTimeDuration::from_str("P337D").unwrap()
         );
         assert_eq!(
             Date::from_str("2000-10-30+05:00")
                 .unwrap()
                 .checked_sub(Date::from_str("1999-11-28Z").unwrap())
                 .unwrap(),
-            Duration::from_str("P336DT19H").unwrap()
+            DayTimeDuration::from_str("P336DT19H").unwrap()
         );
         assert_eq!(
             Date::from_str("2000-10-15-05:00")
                 .unwrap()
                 .checked_sub(Date::from_str("2000-10-10+02:00").unwrap())
                 .unwrap(),
-            Duration::from_str("P5DT7H").unwrap()
+            DayTimeDuration::from_str("P5DT7H").unwrap()
         );
 
         assert_eq!(
@@ -2262,28 +2262,28 @@ mod tests {
                 .unwrap()
                 .checked_sub(Time::from_str("04:00:00-05:00").unwrap())
                 .unwrap(),
-            Duration::from_str("PT2H12M").unwrap()
+            DayTimeDuration::from_str("PT2H12M").unwrap()
         );
         assert_eq!(
             Time::from_str("11:00:00-05:00")
                 .unwrap()
                 .checked_sub(Time::from_str("21:30:00+05:30").unwrap())
                 .unwrap(),
-            Duration::from_str("PT0S").unwrap()
+            DayTimeDuration::from_str("PT0S").unwrap()
         );
         assert_eq!(
             Time::from_str("17:00:00-06:00")
                 .unwrap()
                 .checked_sub(Time::from_str("08:00:00+09:00").unwrap())
                 .unwrap(),
-            Duration::from_str("P1D").unwrap()
+            DayTimeDuration::from_str("P1D").unwrap()
         );
         assert_eq!(
             Time::from_str("24:00:00")
                 .unwrap()
                 .checked_sub(Time::from_str("23:59:59").unwrap())
                 .unwrap(),
-            Duration::from_str("-PT23H59M59S").unwrap()
+            DayTimeDuration::from_str("-PT23H59M59S").unwrap()
         );
     }
 
