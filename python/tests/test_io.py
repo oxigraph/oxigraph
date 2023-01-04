@@ -1,6 +1,6 @@
 import unittest
-from io import StringIO, BytesIO, RawIOBase
-from tempfile import NamedTemporaryFile
+from io import StringIO, BytesIO, UnsupportedOperation
+from tempfile import NamedTemporaryFile, TemporaryFile
 
 from pyoxigraph import *
 
@@ -49,11 +49,9 @@ class TestParse(unittest.TestCase):
         )
 
     def test_parse_io_error(self) -> None:
-        class BadIO(RawIOBase):
-            pass
-
-        with self.assertRaises(NotImplementedError) as _:
-            list(parse(BadIO(), mime_type="application/n-triples"))
+        with self.assertRaises(UnsupportedOperation) as _:
+            with TemporaryFile("wb") as fp:
+                list(parse(fp, mime_type="application/n-triples"))
 
 
 class TestSerialize(unittest.TestCase):
@@ -71,3 +69,8 @@ class TestSerialize(unittest.TestCase):
             self.assertEqual(
                 fp.read(), b'<http://example.com/foo> <http://example.com/p> "1" .\n'
             )
+
+    def test_serialize_io_error(self) -> None:
+        with self.assertRaises(UnsupportedOperation) as _:
+            with TemporaryFile("rb") as fp:
+                serialize([EXAMPLE_TRIPLE], fp, "text/turtle")

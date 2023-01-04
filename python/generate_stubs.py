@@ -23,6 +23,7 @@ GENERICS = {
     "iterable": _path_to_type("typing", "Iterable"),
     "iterator": _path_to_type("typing", "Iterator"),
     "list": _path_to_type("typing", "List"),
+    "io": _path_to_type("typing", "IO"),
 }
 OBJECT_MEMBERS = dict(inspect.getmembers(object))
 

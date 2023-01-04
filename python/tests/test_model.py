@@ -1,4 +1,5 @@
 import unittest
+
 from pyoxigraph import *
 
 XSD_STRING = NamedNode("http://www.w3.org/2001/XMLSchema#string")
