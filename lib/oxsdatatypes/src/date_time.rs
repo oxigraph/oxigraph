@@ -1142,21 +1142,26 @@ impl fmt::Display for GDay {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+/// A timezone offset with respect to UTC.
+///
+/// It is encoded as a number of minutes between -PT14H and PT14H.
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct TimezoneOffset {
     offset: i16, // in minute with respect to UTC
 }
 
 impl TimezoneOffset {
-    #[inline]
-    pub const fn utc() -> Self {
-        Self { offset: 0 }
-    }
-
     /// From offset in minute with respect to UTC
     #[inline]
-    pub(super) const fn new(offset: i16) -> Self {
-        Self { offset }
+    pub fn new(offset_in_minutes: i16) -> Result<Self, DateTimeError> {
+        let value = Self {
+            offset: offset_in_minutes,
+        };
+        if Self::MIN <= value && value <= Self::MAX {
+            Ok(value)
+        } else {
+            Err(DATE_TIME_OVERFLOW)
+        }
     }
 
     #[inline]
@@ -1170,12 +1175,35 @@ impl TimezoneOffset {
     pub fn to_be_bytes(self) -> [u8; 2] {
         self.offset.to_be_bytes()
     }
+
+    pub const MIN: Self = Self { offset: -14 * 60 };
+    pub const UTC: Self = Self { offset: 0 };
+    pub const MAX: Self = Self { offset: 14 * 60 };
 }
 
-impl From<i16> for TimezoneOffset {
+impl TryFrom<DayTimeDuration> for TimezoneOffset {
+    type Error = DateTimeError;
+
     #[inline]
-    fn from(offset: i16) -> Self {
-        Self { offset }
+    fn try_from(value: DayTimeDuration) -> Result<Self, DateTimeError> {
+        let result = Self::new((value.minutes() + value.hours() * 60) as i16)?;
+        if DayTimeDuration::from(result) == value {
+            Ok(result)
+        } else {
+            // The value is not an integral number of minutes or overflow problems
+            Err(DATE_TIME_OVERFLOW)
+        }
+    }
+}
+
+impl TryFrom<Duration> for TimezoneOffset {
+    type Error = DateTimeError;
+
+    #[inline]
+    fn try_from(value: Duration) -> Result<Self, DateTimeError> {
+        DayTimeDuration::try_from(value)
+            .map_err(|_| DATE_TIME_OVERFLOW)?
+            .try_into()
     }
 }
 
@@ -1287,9 +1315,7 @@ impl Timestamp {
 
         Ok(Self {
             timezone_offset: props.timezone_offset,
-            value: time_on_timeline(props).ok_or(DateTimeError {
-                kind: DateTimeErrorKind::Overflow,
-            })?,
+            value: time_on_timeline(props).ok_or(DATE_TIME_OVERFLOW)?,
         })
     }
 
@@ -1305,12 +1331,10 @@ impl Timestamp {
                     hour: Some(0),
                     minute: Some(0),
                     second: Some(Decimal::default()),
-                    timezone_offset: Some(TimezoneOffset::utc()),
+                    timezone_offset: Some(TimezoneOffset::UTC),
                 },
             )
-            .ok_or(DateTimeError {
-                kind: DateTimeErrorKind::Overflow,
-            })?,
+            .ok_or(DATE_TIME_OVERFLOW)?,
         )
     }
 
@@ -1332,11 +1356,7 @@ impl Timestamp {
     #[inline]
     fn year_month_day(&self) -> (i64, u8, u8) {
         let mut days = (self.value.as_i128()
-            + i128::from(
-                self.timezone_offset
-                    .unwrap_or_else(TimezoneOffset::utc)
-                    .offset,
-            ) * 60)
+            + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
             .div_euclid(86400)
             + 366;
 
@@ -1406,11 +1426,7 @@ impl Timestamp {
     #[inline]
     fn hour(&self) -> u8 {
         (((self.value.as_i128()
-            + i128::from(
-                self.timezone_offset
-                    .unwrap_or_else(TimezoneOffset::utc)
-                    .offset,
-            ) * 60)
+            + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
             .rem_euclid(86400))
             / 3600) as u8
     }
@@ -1419,11 +1435,7 @@ impl Timestamp {
     #[inline]
     fn minute(&self) -> u8 {
         (((self.value.as_i128()
-            + i128::from(
-                self.timezone_offset
-                    .unwrap_or_else(TimezoneOffset::utc)
-                    .offset,
-            ) * 60)
+            + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
             .rem_euclid(3600))
             / 60) as u8
     }
@@ -1486,11 +1498,8 @@ impl Timestamp {
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     Ok(Duration::new(
         0,
-        Decimal::try_from(crate::Double::from(js_sys::Date::now() / 1000.)).map_err(|_| {
-            DateTimeError {
-                kind: DateTimeErrorKind::Overflow,
-            }
-        })?,
+        Decimal::try_from(crate::Double::from(js_sys::Date::now() / 1000.))
+            .map_err(|_| DATE_TIME_OVERFLOW)?,
     ))
 }
 
@@ -1501,9 +1510,7 @@ fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)?
         .try_into()
-        .map_err(|_| DateTimeError {
-            kind: DateTimeErrorKind::Overflow,
-        })
+        .map_err(|_| DATE_TIME_OVERFLOW)
 }
 
 /// The [normalizeMonth](https://www.w3.org/TR/xmlschema11-2/#f-dt-normMo) function
@@ -1627,12 +1634,7 @@ fn time_on_timeline(props: &DateTimeSevenPropertyModel) -> Option<Decimal> {
         .map_or_else(|| days_in_month(Some(yr + 1), mo) - 1, |d| d - 1);
     let hr = props.hour.unwrap_or(0);
     let mi = i128::from(props.minute.unwrap_or(0))
-        - i128::from(
-            props
-                .timezone_offset
-                .unwrap_or_else(TimezoneOffset::utc)
-                .offset,
-        );
+        - i128::from(props.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset);
     let se = props.second.unwrap_or_default();
 
     Decimal::try_from(
@@ -1694,6 +1696,10 @@ impl From<SystemTimeError> for DateTimeError {
         }
     }
 }
+
+const DATE_TIME_OVERFLOW: DateTimeError = DateTimeError {
+    kind: DateTimeErrorKind::Overflow,
+};
 
 #[cfg(test)]
 mod tests {
