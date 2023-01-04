@@ -490,8 +490,8 @@ fn end_of_day_frag(input: &str) -> XsdResult<'_, (u8, u8, Decimal)> {
 // [63]   timezoneFrag ::= 'Z' | ('+' | '-') (('0' digit | '1' [0-3]) ':' minuteFrag | '14:00')
 fn timezone_frag(input: &str) -> XsdResult<'_, TimezoneOffset> {
     alt((
-        map(char('Z'), |_| TimezoneOffset::utc()),
-        map(
+        map(char('Z'), |_| TimezoneOffset::UTC),
+        map_res(
             tuple((
                 alt((map(char('+'), |_| 1), map(char('-'), |_| -1))),
                 alt((
