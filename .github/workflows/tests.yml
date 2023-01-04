@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: "0 0 * * 0"
+    - cron: "12 3 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,6 +26,7 @@ jobs:
         with:
           submodules: true
       - run: rustup update && rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
       - run: cargo clippy
         working-directory: ./lib/oxsdatatypes
       - run: cargo clippy
@@ -42,7 +43,8 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup override set 1.60.0 && rustup component add clippy
+      - run: rustup update && rustup override set 1.60.0 && rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --  -D warnings -D clippy::all
         working-directory: ./lib/oxsdatatypes
       - run: cargo clippy --  -D warnings -D clippy::all
@@ -67,6 +69,7 @@ jobs:
         with:
           submodules: true
       - run: rustup update
+      - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features
         env:
           RUST_BACKTRACE: 1
@@ -77,8 +80,9 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update && rustup toolchain install nightly
-      - run: cargo +nightly test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
+      - run: rustup update && rustup override set nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
         env:
           RUST_BACKTRACE: 1
           RUSTFLAGS: -Z sanitizer=address
@@ -90,6 +94,7 @@ jobs:
         with:
           submodules: true
       - run: rustup update
+      - uses: Swatinem/rust-cache@v2
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: cargo test --all-features
         env:
@@ -100,7 +105,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: rustup update
-      - run: cargo install wasm-pack
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install wasm-pack || true
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+          cache: npm
+          cache-dependency-path: "js/package.json"
       - run: npm install
         working-directory: ./js
       - run: npm test
@@ -113,14 +124,18 @@ jobs:
         with:
           submodules: true
       - run: rustup update
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
+          cache: pip
+          cache-dependency-path: '**/requirements.dev.txt'
       - run: pip install -r python/requirements.dev.txt
       - run: python -m black  --check --diff --color .
         working-directory: ./python
-      - run: maturin sdist -m python/Cargo.toml
-      - run: pip install target/wheels/*.tar.gz
+      - run: maturin build -m python/Cargo.toml
+      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
       - run: python -m unittest
         working-directory: ./python/tests
       - run: sphinx-build -M doctest . build
@@ -141,11 +156,16 @@ jobs:
         with:
           submodules: true
       - run: rustup update
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v4
         with:
           python-version: "3.7"
+          cache: pip
+          cache-dependency-path: '**/requirements.dev.txt'
       - run: pip install -r python/requirements.dev.txt
-      - run: pip install ./python
+      - run: maturin build -m python/Cargo.toml
+      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
       - run: python -m unittest
         working-directory: ./python/tests
 
