@@ -8,7 +8,6 @@ members = [
     "lib/sparesults",
     "lib/sparql-smith",
     "python",
-    "oxrocksdb-sys",
     "server",
     "testsuite"
 ]
