@@ -11,6 +11,7 @@ members = [
     "server",
     "testsuite"
 ]
+exclude = ["oxrocksdb-sys"]
 
 [profile.release]
 lto = true
