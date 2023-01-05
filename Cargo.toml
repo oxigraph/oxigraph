@@ -7,11 +7,11 @@ members = [
     "lib/spargebra",
     "lib/sparesults",
     "lib/sparql-smith",
+    "oxrocksdb-sys",
     "python",
     "server",
     "testsuite"
 ]
-exclude = ["oxrocksdb-sys"]
 
 [profile.release]
 lto = true
