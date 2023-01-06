@@ -2,13 +2,21 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
+#[cfg(not(target_family = "wasm"))]
 use rand::random;
+#[cfg(not(target_family = "wasm"))]
 use std::env::temp_dir;
 use std::error::Error;
+#[cfg(not(target_family = "wasm"))]
 use std::fs::{create_dir, remove_dir_all, File};
-use std::io::{Cursor, Write};
+use std::io::Cursor;
+#[cfg(not(target_family = "wasm"))]
+use std::io::Write;
+#[cfg(not(target_family = "wasm"))]
 use std::iter::once;
+#[cfg(not(target_family = "wasm"))]
 use std::path::{Path, PathBuf};
+#[cfg(not(target_family = "wasm"))]
 use std::process::Command;
 
 const DATA: &str = r#"
@@ -111,6 +119,7 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().load_graph(
@@ -127,6 +136,7 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().on_parse_error(|_| Ok(())).load_graph(
@@ -160,6 +170,7 @@ fn test_load_dataset() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new().unwrap();
     store
@@ -238,15 +249,16 @@ fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
     store.insert(quad)?;
     let iter = store.iter();
     store.remove(quad)?;
-    store.validate()?;
     assert_eq!(
         iter.collect::<Result<Vec<_>, _>>()?,
         vec![quad.into_owned()]
     );
+    store.validate()?;
     Ok(())
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dyn Error>> {
     let quad = QuadRef::new(
         NamedNodeRef::new_unchecked("http://example.com/s"),
@@ -262,6 +274,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_open_bad_dir() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
     create_dir(&dir.0)?;
@@ -291,6 +304,7 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_backup() -> Result<(), Box<dyn Error>> {
     let quad = QuadRef {
         subject: NamedNodeRef::new_unchecked("http://example.com/s").into(),
@@ -314,6 +328,7 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_bad_backup() -> Result<(), Box<dyn Error>> {
     let store_dir = TempDir::default();
     let backup_dir = TempDir::default();
@@ -324,6 +339,7 @@ fn test_bad_backup() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
     let backup_dir = TempDir::default();
     assert!(Store::new()?.backup(&backup_dir).is_err());
@@ -354,6 +370,7 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
     assert!(Command::new("git")
         .args(["clean", "-fX", dir])
@@ -366,20 +383,24 @@ fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(not(target_family = "wasm"))]
 struct TempDir(PathBuf);
 
+#[cfg(not(target_family = "wasm"))]
 impl Default for TempDir {
     fn default() -> Self {
         Self(temp_dir().join(format!("oxigraph-test-{}", random::<u128>())))
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl AsRef<Path> for TempDir {
     fn as_ref(&self) -> &Path {
         &self.0
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = remove_dir_all(&self.0);

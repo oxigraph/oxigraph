@@ -19,6 +19,7 @@ pub struct ColumnFamilyDefinition {
 pub struct Db(Arc<RwLock<HashMap<ColumnFamily, BTreeMap<Vec<u8>, Vec<u8>>>>>);
 
 impl Db {
+    #[allow(clippy::unnecessary_wraps)]
     pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self, StorageError> {
         let mut trees = HashMap::new();
         for cf in column_families {
@@ -225,7 +226,7 @@ pub struct Transaction<'a>(
 );
 
 impl Transaction<'_> {
-    #[allow(unsafe_code)]
+    #[allow(unsafe_code, clippy::useless_transmute)]
     pub fn reader(&self) -> Reader {
         // This transmute is safe because we take a weak reference and the only Rc reference used is guarded by the lifetime.
         Reader(InnerReader::Transaction(Rc::downgrade(unsafe {
@@ -233,6 +234,7 @@ impl Transaction<'_> {
         })))
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn contains_key_for_update(
         &self,
         column_family: &ColumnFamily,
@@ -244,6 +246,7 @@ impl Transaction<'_> {
             .map_or(false, |cf| cf.contains_key(key)))
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn insert(
         &mut self,
         column_family: &ColumnFamily,
@@ -266,6 +269,7 @@ impl Transaction<'_> {
         self.insert(column_family, key, &[])
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<(), StorageError> {
         self.0
             .borrow_mut()
@@ -286,6 +290,7 @@ impl Iter {
         Some(&self.current.as_ref()?.0)
     }
 
+    #[allow(dead_code)]
     pub fn value(&self) -> Option<&[u8]> {
         Some(&self.current.as_ref()?.1)
     }
@@ -294,6 +299,7 @@ impl Iter {
         self.current = self.iter.next();
     }
 
+    #[allow(clippy::unnecessary_wraps, clippy::unused_self)]
     pub fn status(&self) -> Result<(), StorageError> {
         Ok(())
     }

@@ -16,7 +16,7 @@ rust-version = "1.60"
 [dependencies]
 nom = "7"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
 
 [package.metadata.docs.rs]
