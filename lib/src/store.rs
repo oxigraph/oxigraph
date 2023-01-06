@@ -33,7 +33,7 @@ use crate::sparql::{
     UpdateOptions,
 };
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use crate::storage::StorageBulkLoader;
 use crate::storage::{
     ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageReader, StorageWriter,
@@ -41,7 +41,7 @@ use crate::storage::{
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
 use std::error::Error;
 use std::io::{BufRead, Write};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 use std::{fmt, str};
 
@@ -95,7 +95,7 @@ impl Store {
     }
 
     /// Opens a [`Store`] and creates it if it does not exist yet.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         Ok(Self {
             storage: Storage::open(path.as_ref())?,
@@ -717,7 +717,7 @@ impl Store {
     /// Flushes all buffers and ensures that all writes are saved on disk.
     ///
     /// Flushes are automatically done using background threads but might lag a little bit.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn flush(&self) -> Result<(), StorageError> {
         self.storage.flush()
     }
@@ -727,7 +727,7 @@ impl Store {
     /// Useful to call after a batch upload or another similar operation.
     ///
     /// Warning: Can take hours on huge databases.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn optimize(&self) -> Result<(), StorageError> {
         self.storage.compact()
     }
@@ -748,7 +748,7 @@ impl Store {
     /// This allows cheap regular backups.
     ///
     /// If you want to move your data to another RDF storage system, you should have a look at the [`Store::dump_dataset`] function instead.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn backup(&self, target_directory: impl AsRef<Path>) -> Result<(), StorageError> {
         self.storage.backup(target_directory.as_ref())
     }
@@ -772,7 +772,7 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn bulk_loader(&self) -> BulkLoader {
         BulkLoader {
             storage: StorageBulkLoader::new(self.storage.clone()),
@@ -782,7 +782,6 @@ impl Store {
 
     /// Validates that all the store invariants held in the data
     #[doc(hidden)]
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn validate(&self) -> Result<(), StorageError> {
         self.storage.snapshot().validate()
     }
@@ -1296,13 +1295,13 @@ impl Iterator for GraphNameIter {
 /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 pub struct BulkLoader {
     storage: StorageBulkLoader,
     on_parse_error: Option<Box<dyn Fn(ParseError) -> Result<(), ParseError>>>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 impl BulkLoader {
     /// Sets the maximal number of threads to be used by the bulk loader per operation.
     ///

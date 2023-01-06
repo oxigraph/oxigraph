@@ -1,6 +1,8 @@
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
+#[cfg(not(target_family = "wasm"))]
+use crate::model::Quad;
+use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
 use crate::storage::backend::{Reader, Transaction};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use crate::storage::binary_encoder::LATEST_STORAGE_VERSION;
 use crate::storage::binary_encoder::{
     decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
@@ -9,24 +11,30 @@ use crate::storage::binary_encoder::{
     WRITTEN_TERM_MAX_SIZE,
 };
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
-use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
-};
+#[cfg(not(target_family = "wasm"))]
+use crate::storage::numeric_encoder::Decoder;
+use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
+#[cfg(not(target_family = "wasm"))]
 use std::cmp::{max, min};
+#[cfg(not(target_family = "wasm"))]
 use std::collections::VecDeque;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use std::mem::take;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use std::path::{Path, PathBuf};
+#[cfg(not(target_family = "wasm"))]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(not(target_family = "wasm"))]
 use std::sync::Arc;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 use std::thread::spawn;
+#[cfg(not(target_family = "wasm"))]
 use std::thread::JoinHandle;
+#[cfg(not(target_family = "wasm"))]
 use sysinfo::{System, SystemExt};
 
 mod backend;
@@ -46,15 +54,18 @@ const DSPO_CF: &str = "dspo";
 const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
+#[cfg(not(target_family = "wasm"))]
 const DEFAULT_CF: &str = "default";
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
+#[cfg(not(target_family = "wasm"))]
 const MAX_BULK_LOAD_BATCH_SIZE: usize = 100_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
 pub struct Storage {
     db: Db,
+    #[cfg(not(target_family = "wasm"))]
     default_cf: ColumnFamily,
     id2str_cf: ColumnFamily,
     spog_cf: ColumnFamily,
@@ -74,7 +85,7 @@ impl Storage {
         Self::setup(Db::new(Self::column_families())?)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn open(path: &Path) -> Result<Self, StorageError> {
         Self::setup(Db::open(path, Self::column_families())?)
     }
@@ -150,8 +161,10 @@ impl Storage {
         ]
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn setup(db: Db) -> Result<Self, StorageError> {
         let this = Self {
+            #[cfg(not(target_family = "wasm"))]
             default_cf: db.column_family(DEFAULT_CF).unwrap(),
             id2str_cf: db.column_family(ID2STR_CF).unwrap(),
             spog_cf: db.column_family(SPOG_CF).unwrap(),
@@ -166,12 +179,12 @@ impl Storage {
             graphs_cf: db.column_family(GRAPHS_CF).unwrap(),
             db,
         };
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(target_family = "wasm"))]
         this.migrate()?;
         Ok(this)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     fn migrate(&self) -> Result<(), StorageError> {
         let mut version = self.ensure_version()?;
         if version == 0 {
@@ -211,7 +224,7 @@ impl Storage {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     fn ensure_version(&self) -> Result<u64, StorageError> {
         Ok(
             if let Some(version) = self.db.get(&self.default_cf, b"oxversion")? {
@@ -225,7 +238,7 @@ impl Storage {
         )
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     fn update_version(&self, version: u64) -> Result<(), StorageError> {
         self.db
             .insert(&self.default_cf, b"oxversion", &version.to_be_bytes())?;
@@ -252,7 +265,7 @@ impl Storage {
         })
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn flush(&self) -> Result<(), StorageError> {
         self.db.flush(&self.default_cf)?;
         self.db.flush(&self.gpos_cf)?;
@@ -267,7 +280,7 @@ impl Storage {
         self.db.flush(&self.id2str_cf)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn compact(&self) -> Result<(), StorageError> {
         self.db.compact(&self.default_cf)?;
         self.db.compact(&self.gpos_cf)?;
@@ -282,7 +295,7 @@ impl Storage {
         self.db.compact(&self.id2str_cf)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
         self.db.backup(target_directory)
     }
@@ -607,7 +620,7 @@ impl StorageReader {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(self
             .storage
@@ -618,31 +631,31 @@ impl StorageReader {
             .map_err(CorruptionError::new)?)
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(target_family = "wasm")]
     pub fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(self
             .reader
             .get(&self.storage.id2str_cf, &key.to_be_bytes())?
-            .map(|v| String::from_utf8(v.into()))
+            .map(String::from_utf8)
             .transpose()
             .map_err(CorruptionError::new)?)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         self.storage
             .db
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(target_family = "wasm")]
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         self.reader
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
 
     /// Validates that all the storage invariants held in the data
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     pub fn validate(&self) -> Result<(), StorageError> {
         // triples
         let dspo_size = self.dspo_quads(&[]).count();
@@ -751,6 +764,13 @@ impl StorageReader {
             }
         }
         Ok(())
+    }
+
+    /// Validates that all the storage invariants held in the data
+    #[cfg(target_family = "wasm")]
+    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
+    pub fn validate(&self) -> Result<(), StorageError> {
+        Ok(()) //TODO
     }
 }
 
@@ -975,7 +995,7 @@ impl<'a> StorageWriter<'a> {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(target_family = "wasm"))]
     fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
         if self
             .storage
@@ -991,7 +1011,7 @@ impl<'a> StorageWriter<'a> {
         )
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(target_family = "wasm")]
     fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
         self.transaction.insert(
             &self.storage.id2str_cf,
@@ -1156,7 +1176,7 @@ impl<'a> StorageWriter<'a> {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 pub struct StorageBulkLoader {
     storage: Storage,
     hooks: Vec<Box<dyn Fn(u64)>>,
@@ -1164,7 +1184,7 @@ pub struct StorageBulkLoader {
     max_memory_size: Option<usize>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 impl StorageBulkLoader {
     pub fn new(storage: Storage) -> Self {
         Self {
@@ -1290,7 +1310,7 @@ impl StorageBulkLoader {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 struct FileBulkLoader {
     storage: Storage,
     id2str: HashMap<StrHash, Box<str>>,
@@ -1299,7 +1319,7 @@ struct FileBulkLoader {
     graphs: HashSet<EncodedTerm>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_family = "wasm"))]
 impl FileBulkLoader {
     fn new(storage: Storage) -> Self {
         Self {

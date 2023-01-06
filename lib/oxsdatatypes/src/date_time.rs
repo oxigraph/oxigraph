@@ -1602,7 +1602,7 @@ impl Timestamp {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     Ok(Duration::new(
         0,
@@ -1611,7 +1611,7 @@ fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     ))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     use std::time::SystemTime;
 
