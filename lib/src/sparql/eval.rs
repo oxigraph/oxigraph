@@ -1325,22 +1325,35 @@ impl SimpleEvaluator {
                     Some((to_string(&dataset, &arg(tuple)?)?.chars().count() as i64).into())
                 })
             }
-            PlanExpression::Replace(arg, pattern, replacement, flags) => {
+            PlanExpression::StaticReplace(arg, regex, replacement) => {
+                let arg = self.expression_evaluator(arg);
+                let regex = regex.clone();
+                let replacement = self.expression_evaluator(replacement);
+                let dataset = self.dataset.clone();
+                Rc::new(move |tuple| {
+                    let (text, language) = to_string_and_language(&dataset, &arg(tuple)?)?;
+                    let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
+                    Some(build_plain_literal(
+                        &dataset,
+                        &regex.replace_all(&text, replacement.as_str()),
+                        language,
+                    ))
+                })
+            }
+            PlanExpression::DynamicReplace(arg, pattern, replacement, flags) => {
                 let arg = self.expression_evaluator(arg);
                 let pattern = self.expression_evaluator(pattern);
                 let replacement = self.expression_evaluator(replacement);
                 let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
                 let dataset = self.dataset.clone();
                 Rc::new(move |tuple| {
-                    let regex = compile_pattern(
-                        &dataset,
-                        &pattern(tuple)?,
-                        if let Some(flags) = &flags {
-                            Some(flags(tuple)?)
-                        } else {
-                            None
-                        },
-                    )?;
+                    let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
+                    let options = if let Some(flags) = &flags {
+                        Some(to_simple_string(&dataset, &flags(tuple)?)?)
+                    } else {
+                        None
+                    };
+                    let regex = compile_pattern(&pattern, options.as_deref())?;
                     let (text, language) = to_string_and_language(&dataset, &arg(tuple)?)?;
                     let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
                     Some(build_plain_literal(
@@ -1704,21 +1717,28 @@ impl SimpleEvaluator {
                     )
                 })
             }
-            PlanExpression::Regex(text, pattern, flags) => {
+            PlanExpression::StaticRegex(text, regex) => {
+                let text = self.expression_evaluator(text);
+                let dataset = self.dataset.clone();
+                let regex = regex.clone();
+                Rc::new(move |tuple| {
+                    let text = to_string(&dataset, &text(tuple)?)?;
+                    Some(regex.is_match(&text).into())
+                })
+            }
+            PlanExpression::DynamicRegex(text, pattern, flags) => {
                 let text = self.expression_evaluator(text);
                 let pattern = self.expression_evaluator(pattern);
                 let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
                 let dataset = self.dataset.clone();
                 Rc::new(move |tuple| {
-                    let regex = compile_pattern(
-                        &dataset,
-                        &pattern(tuple)?,
-                        if let Some(flags) = &flags {
-                            Some(flags(tuple)?)
-                        } else {
-                            None
-                        },
-                    )?;
+                    let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
+                    let options = if let Some(flags) = &flags {
+                        Some(to_simple_string(&dataset, &flags(tuple)?)?)
+                    } else {
+                        None
+                    };
+                    let regex = compile_pattern(&pattern, options.as_deref())?;
                     let text = to_string(&dataset, &text(tuple)?)?;
                     Some(regex.is_match(&text).into())
                 })
@@ -2193,17 +2213,10 @@ fn to_argument_compatible_strings(
     }
 }
 
-fn compile_pattern(
-    dataset: &DatasetView,
-    pattern: &EncodedTerm,
-    flags: Option<EncodedTerm>,
-) -> Option<Regex> {
-    // TODO Avoid to compile the regex each time
-    let pattern = to_simple_string(dataset, pattern)?;
-    let mut regex_builder = RegexBuilder::new(&pattern);
+pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
+    let mut regex_builder = RegexBuilder::new(pattern);
     regex_builder.size_limit(REGEX_SIZE_LIMIT);
     if let Some(flags) = flags {
-        let flags = to_simple_string(dataset, &flags)?;
         for flag in flags.chars() {
             match flag {
                 's' => {
