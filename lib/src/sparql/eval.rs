@@ -3039,10 +3039,10 @@ impl PathEvaluator {
                         }),
                 )
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_from_in_graph(a, start, graph_name)
                     .chain(self.eval_from_in_graph(b, start, graph_name)),
-            ),
+            )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 self.run_if_term_is_a_graph_node(start, graph_name, || {
                     let eval = self.clone();
@@ -3115,10 +3115,10 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_from_in_unknown_graph(a, start)
                     .chain(self.eval_from_in_unknown_graph(b, start)),
-            ),
+            )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 let start2 = start.clone();
                 let eval = self.clone();
@@ -3201,10 +3201,10 @@ impl PathEvaluator {
                         }),
                 )
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_to_in_graph(a, end, graph_name)
                     .chain(self.eval_to_in_graph(b, end, graph_name)),
-            ),
+            )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 self.run_if_term_is_a_graph_node(end, graph_name, || {
                     let eval = self.clone();
@@ -3275,10 +3275,10 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_to_in_unknown_graph(a, end)
                     .chain(self.eval_to_in_unknown_graph(b, end)),
-            ),
+            )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 let end2 = end.clone();
                 let eval = self.clone();
@@ -3363,10 +3363,10 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_open_in_graph(a, graph_name)
                     .chain(self.eval_open_in_graph(b, graph_name)),
-            ),
+            )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
@@ -3440,10 +3440,10 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(
+            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_open_in_unknown_graph(a)
                     .chain(self.eval_open_in_unknown_graph(b)),
-            ),
+            )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = p.clone();
