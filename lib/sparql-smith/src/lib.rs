@@ -38,7 +38,7 @@ pub struct Query {
     values_clause: ValuesClause,
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum QueryVariant {
     Select(SelectQuery),
     //TODO: Other variants!
@@ -59,7 +59,7 @@ impl Debug for Query {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct SelectQuery {
     // [7]  	SelectQuery	  ::=  	SelectClause DatasetClause* WhereClause SolutionModifier
     select_clause: SelectClause,
@@ -77,7 +77,7 @@ impl fmt::Display for SelectQuery {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct SubSelect {
     // [8]  	SubSelect	  ::=  	SelectClause WhereClause SolutionModifier ValuesClause
     select_clause: SelectClause,
@@ -96,20 +96,20 @@ impl fmt::Display for SubSelect {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct SelectClause {
     // [9]  	SelectClause	  ::=  	'SELECT' ( 'DISTINCT' | 'REDUCED' )? ( ( Var | ( '(' Expression 'AS' Var ')' ) )+ | '*' )
     option: Option<SelectOption>,
     values: SelectValues,
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum SelectOption {
     Distinct,
     Reduced,
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum SelectValues {
     Star,
     Projection {
@@ -118,7 +118,7 @@ enum SelectValues {
     },
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum SelectProjection {
     Variable(Var),
     Projection(Expression, Var),
@@ -148,7 +148,7 @@ impl fmt::Display for SelectClause {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct WhereClause {
     // [17]  	WhereClause	  ::=  	'WHERE'? GroupGraphPattern
     with_where: bool,
@@ -164,7 +164,7 @@ impl fmt::Display for WhereClause {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct SolutionModifier {
     // [18]  	SolutionModifier	  ::=  	GroupClause? HavingClause? OrderClause? LimitOffsetClauses?
     group: Option<GroupClause>,
@@ -191,7 +191,7 @@ impl fmt::Display for SolutionModifier {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct GroupClause {
     // [19]  	GroupClause	  ::=  	'GROUP' 'BY' GroupCondition+
     start: GroupCondition,
@@ -208,7 +208,7 @@ impl fmt::Display for GroupClause {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum GroupCondition {
     // [20]  	GroupCondition	  ::=  	BuiltInCall | FunctionCall | '(' Expression ( 'AS' Var )? ')' | Var
     BuiltInCall(BuiltInCall),
@@ -234,7 +234,7 @@ impl fmt::Display for GroupCondition {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct HavingClause {
     // [21]  	HavingClause	  ::=  	'HAVING' HavingCondition+
     start: HavingCondition,
@@ -254,7 +254,7 @@ impl fmt::Display for HavingClause {
 // [22]  	HavingCondition	  ::=  	Constraint
 type HavingCondition = Constraint;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct OrderClause {
     // [23]  	OrderClause	  ::=  	'ORDER' 'BY' OrderCondition+
     start: OrderCondition,
@@ -271,7 +271,7 @@ impl fmt::Display for OrderClause {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum OrderCondition {
     // [24]  	OrderCondition	  ::=  	( ( 'ASC' | 'DESC' ) BrackettedExpression ) | ( Constraint | Var )
     BrackettedExpression {
@@ -298,7 +298,7 @@ impl fmt::Display for OrderCondition {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum LimitOffsetClauses {
     // [25]  	LimitOffsetClauses	  ::=  	LimitClause OffsetClause? | OffsetClause LimitClause?
     LimitOffset(LimitClause, Option<OffsetClause>),
@@ -316,7 +316,7 @@ impl fmt::Display for LimitOffsetClauses {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct LimitClause {
     // [26]  	LimitClause	  ::=  	'LIMIT' INTEGER
     value: u8,
@@ -328,7 +328,7 @@ impl fmt::Display for LimitClause {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct OffsetClause {
     // [27]  	OffsetClause	  ::=  	'OFFSET' INTEGER
     value: u8,
@@ -340,7 +340,7 @@ impl fmt::Display for OffsetClause {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct ValuesClause {
     // [28]  	ValuesClause	  ::=  	( 'VALUES' DataBlock )?
     value: Option<DataBlock>,
@@ -356,7 +356,7 @@ impl fmt::Display for ValuesClause {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum GroupGraphPattern {
     // [53]  	GroupGraphPattern	  ::=  	'{' ( SubSelect | GroupGraphPatternSub ) '}'
     GroupGraphPatternSub(GroupGraphPatternSub),
@@ -374,14 +374,14 @@ impl fmt::Display for GroupGraphPattern {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct GroupGraphPatternSub {
     // [54]  	GroupGraphPatternSub	  ::=  	TriplesBlock? ( GraphPatternNotTriples '.'? TriplesBlock? )*
     start: Option<TriplesBlock>,
     others: Vec<GroupGraphPatternSubOtherBlock>,
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct GroupGraphPatternSubOtherBlock {
     start: GraphPatternNotTriples,
     with_dot: bool,
@@ -406,7 +406,7 @@ impl fmt::Display for GroupGraphPatternSub {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct TriplesBlock {
     // [55]  	TriplesBlock	  ::=  	TriplesSameSubjectPath ( '.' TriplesBlock? )?
     start: TriplesSameSubjectPath,
@@ -426,7 +426,7 @@ impl fmt::Display for TriplesBlock {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum GraphPatternNotTriples {
     // [56]  	GraphPatternNotTriples	  ::=  	GroupOrUnionGraphPattern | OptionalGraphPattern | MinusGraphPattern | GraphGraphPattern | ServiceGraphPattern | Filter | Bind | InlineData
     GroupOrUnion(GroupOrUnionGraphPattern),
@@ -456,7 +456,7 @@ impl fmt::Display for GraphPatternNotTriples {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct OptionalGraphPattern {
     // [57]  	OptionalGraphPattern	  ::=  	'OPTIONAL' GroupGraphPattern
     inner: GroupGraphPattern,
@@ -468,7 +468,7 @@ impl fmt::Display for OptionalGraphPattern {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct LateralGraphPattern {
     // []  	LateralGraphPattern	  ::=  	'LATERAL' GroupGraphPattern
     inner: GroupGraphPattern,
@@ -480,7 +480,7 @@ impl fmt::Display for LateralGraphPattern {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct GraphGraphPattern {
     // [58]  	GraphGraphPattern	  ::=  	'GRAPH' VarOrIri GroupGraphPattern
     graph: VarOrIri,
@@ -493,7 +493,7 @@ impl fmt::Display for GraphGraphPattern {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct Bind {
     // [60]  	Bind	  ::=  	'BIND' '(' Expression 'AS' Var ')'
     expression: Expression,
@@ -506,7 +506,7 @@ impl fmt::Display for Bind {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct InlineData {
     // [61]  	InlineData	  ::=  	'VALUES' DataBlock
     inner: DataBlock,
@@ -518,7 +518,7 @@ impl fmt::Display for InlineData {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum DataBlock {
     // [62]  	DataBlock	  ::=  	InlineDataOneVar | InlineDataFull
     OneVar(InlineDataOneVar),
@@ -534,7 +534,7 @@ impl fmt::Display for DataBlock {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct InlineDataOneVar {
     // [63]  	InlineDataOneVar	  ::=  	Var '{' DataBlockValue* '}'
     var: Var,
@@ -551,7 +551,6 @@ impl fmt::Display for InlineDataOneVar {
     }
 }
 
-#[derive(Debug)]
 struct InlineDataFull {
     // [64]  	InlineDataFull	  ::=  	( NIL | '(' Var* ')' ) '{' ( '(' DataBlockValue* ')' | NIL )* '}'
     vars: Vec<Var>,
@@ -599,7 +598,7 @@ impl fmt::Display for InlineDataFull {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum DataBlockValue {
     // [65]  	DataBlockValue	  ::=  	iri | RDFLiteral | NumericLiteral | BooleanLiteral | 'UNDEF'
     Iri(Iri),
@@ -617,7 +616,7 @@ impl fmt::Display for DataBlockValue {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct MinusGraphPattern {
     // [66]  	MinusGraphPattern	  ::=  	'MINUS' GroupGraphPattern
     inner: GroupGraphPattern,
@@ -629,7 +628,7 @@ impl fmt::Display for MinusGraphPattern {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct GroupOrUnionGraphPattern {
     // [67]  	GroupOrUnionGraphPattern	  ::=  	GroupGraphPattern ( 'UNION' GroupGraphPattern )*
     start: GroupGraphPattern,
@@ -646,7 +645,7 @@ impl fmt::Display for GroupOrUnionGraphPattern {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct Filter {
     // [68]  	Filter	  ::=  	'FILTER' Constraint
     constraint: Constraint,
@@ -658,7 +657,7 @@ impl fmt::Display for Filter {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum Constraint {
     // [69]  	Constraint	  ::=  	BrackettedExpression | BuiltInCall | FunctionCall
     BrackettedExpression(BrackettedExpression),
@@ -676,7 +675,7 @@ impl fmt::Display for Constraint {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct FunctionCall {
     // [70]  	FunctionCall	  ::=  	iri ArgList
     iri: Iri,
@@ -689,7 +688,7 @@ impl fmt::Display for FunctionCall {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum ArgList {
     // [71]  	ArgList	  ::=  	NIL | '(' 'DISTINCT'? Expression ( ',' Expression )* ')'
     Nil,
@@ -713,7 +712,7 @@ impl fmt::Display for ArgList {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct ExpressionList {
     // [72]  	ExpressionList	  ::=  	NIL | '(' Expression ( ',' Expression )* ')'
     inner: Vec<Expression>,
@@ -732,7 +731,7 @@ impl fmt::Display for ExpressionList {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PropertyListNotEmpty {
     // [77]  	PropertyListNotEmpty	  ::=  	Verb ObjectList ( ';' ( Verb ObjectList )? )*
     start_predicate: Verb,
@@ -740,7 +739,7 @@ struct PropertyListNotEmpty {
     others: Vec<Option<PropertyListElement>>,
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PropertyListElement {
     predicate: Verb,
     object: ObjectList,
@@ -759,7 +758,7 @@ impl fmt::Display for PropertyListNotEmpty {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum Verb {
     // [78]  	Verb	  ::=  	VarOrIri | 'a'
     VarOrIri(VarOrIri),
@@ -775,7 +774,7 @@ impl fmt::Display for Verb {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct ObjectList {
     // [79]  	ObjectList	  ::=  	Object ( ',' Object )*
     start: Object,
@@ -796,7 +795,7 @@ impl fmt::Display for ObjectList {
 // [80]  	Object	  ::=  	GraphNode
 type Object = GraphNode;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum TriplesSameSubjectPath {
     // [81]  	TriplesSameSubjectPath	  ::=  	VarOrTerm PropertyListPathNotEmpty | TriplesNodePath PropertyListPath
     Atomic {
@@ -828,7 +827,7 @@ impl fmt::Display for TriplesSameSubjectPath {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PropertyListPath {
     // [82]  	PropertyListPath	  ::=  	PropertyListPathNotEmpty?
     inner: Option<PropertyListPathNotEmpty>,
@@ -844,7 +843,7 @@ impl fmt::Display for PropertyListPath {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PropertyListPathNotEmpty {
     // [83]  	PropertyListPathNotEmpty	  ::=  	( VerbPath | VerbSimple ) ObjectListPath ( ';' ( ( VerbPath | VerbSimple ) ObjectList )? )*
     start_predicate: PropertyListPathNotEmptyVerb,
@@ -852,13 +851,13 @@ struct PropertyListPathNotEmpty {
     others: Vec<Option<PropertyListPathElement>>,
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum PropertyListPathNotEmptyVerb {
     VerbPath(VerbPath),
     VerbSimple(VerbSimple),
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PropertyListPathElement {
     predicate: PropertyListPathNotEmptyVerb,
     object: ObjectList,
@@ -891,7 +890,7 @@ type VerbPath = Path;
 // [85]  	VerbSimple	  ::=  	Var
 type VerbSimple = Var;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct ObjectListPath {
     // [86]  	ObjectListPath	  ::=  	ObjectPath ( ',' ObjectPath )*
     start: ObjectPath,
@@ -914,7 +913,7 @@ type ObjectPath = GraphNodePath;
 // [88]  	Path	  ::=  	PathAlternative
 type Path = PathAlternative;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PathAlternative {
     // [89]  	PathAlternative	  ::=  	PathSequence ( '|' PathSequence )*
     start: PathSequence,
@@ -931,7 +930,7 @@ impl fmt::Display for PathAlternative {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PathSequence {
     // [90]  	PathSequence	  ::=  	PathEltOrInverse ( '/' PathEltOrInverse )*
     start: PathEltOrInverse,
@@ -948,7 +947,7 @@ impl fmt::Display for PathSequence {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct PathElt {
     // [91]  	PathElt	  ::=  	PathPrimary PathMod?
     path: PathPrimary,
@@ -965,7 +964,7 @@ impl fmt::Display for PathElt {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum PathEltOrInverse {
     // [92]  	PathEltOrInverse	  ::=  	PathElt | '^' PathElt
     PathElt(PathElt),
@@ -981,7 +980,7 @@ impl fmt::Display for PathEltOrInverse {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum PathMod {
     // [93]  	PathMod	  ::=  	'?' | '*' | '+'
     ZeroOrOne,
@@ -999,7 +998,7 @@ impl fmt::Display for PathMod {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum PathPrimary {
     // [94]  	PathPrimary	  ::=  	iri | 'a' | '!' PathNegatedPropertySet | '(' Path ')'
     Iri(Iri),
@@ -1019,7 +1018,7 @@ impl fmt::Display for PathPrimary {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum PathNegatedPropertySet {
     // [95]  	PathNegatedPropertySet	  ::=  	PathOneInPropertySet | '(' ( PathOneInPropertySet ( '|' PathOneInPropertySet )* )? ')'
     Single(PathOneInPropertySet),
@@ -1044,7 +1043,7 @@ impl fmt::Display for PathNegatedPropertySet {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum PathOneInPropertySet {
     // [96]  	PathOneInPropertySet	  ::=  	iri | 'a' | '^' ( iri | 'a' )
     Iri(Iri),
@@ -1064,7 +1063,7 @@ impl fmt::Display for PathOneInPropertySet {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum TriplesNode {
     // [98]  	TriplesNode	  ::=  	Collection | BlankNodePropertyList
     Collection(Collection),
@@ -1080,7 +1079,7 @@ impl fmt::Display for TriplesNode {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct BlankNodePropertyList {
     // [99]  	BlankNodePropertyList	  ::=  	'[' PropertyListNotEmpty ']'
     inner: PropertyListNotEmpty,
@@ -1092,7 +1091,7 @@ impl fmt::Display for BlankNodePropertyList {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum TriplesNodePath {
     // [100]  	TriplesNodePath	  ::=  	CollectionPath | BlankNodePropertyListPath
     CollectionPath(CollectionPath),
@@ -1108,7 +1107,7 @@ impl fmt::Display for TriplesNodePath {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct BlankNodePropertyListPath {
     // [101]  	BlankNodePropertyListPath	  ::=  	'[' PropertyListPathNotEmpty ']'
     inner: PropertyListPathNotEmpty,
@@ -1120,7 +1119,7 @@ impl fmt::Display for BlankNodePropertyListPath {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct Collection {
     // [102]  	Collection	  ::=  	'(' GraphNode+ ')'
     start: Box<GraphNode>,
@@ -1137,7 +1136,7 @@ impl fmt::Display for Collection {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct CollectionPath {
     // [103]  	CollectionPath	  ::=  	'(' GraphNodePath+ ')'
     start: Box<GraphNodePath>,
@@ -1154,7 +1153,7 @@ impl fmt::Display for CollectionPath {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum GraphNode {
     // [104]  	GraphNode	  ::=  	VarOrTerm | TriplesNode
     VarOrTerm(VarOrTerm),
@@ -1170,7 +1169,7 @@ impl fmt::Display for GraphNode {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum GraphNodePath {
     // [105]  	GraphNodePath	  ::=  	VarOrTerm | TriplesNodePath
     VarOrTerm(VarOrTerm),
@@ -1186,7 +1185,7 @@ impl fmt::Display for GraphNodePath {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum VarOrTerm {
     // [106]  	VarOrTerm	  ::=  	Var | GraphTerm
     Var(Var),
@@ -1202,7 +1201,7 @@ impl fmt::Display for VarOrTerm {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum VarOrIri {
     // [107]  	VarOrIri	  ::=  	Var | iri
     Var(Var),
@@ -1218,7 +1217,6 @@ impl fmt::Display for VarOrIri {
     }
 }
 
-#[derive(Debug)]
 struct Var {
     // [108]  	Var	  ::=  	VAR1 | VAR2
     value: u8,
@@ -1242,7 +1240,7 @@ impl fmt::Display for Var {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum GraphTerm {
     // [109]  	GraphTerm	  ::=  	iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | NIL
     Iri(Iri),
@@ -1264,7 +1262,7 @@ impl fmt::Display for GraphTerm {
 // [110]  	Expression	  ::=  	ConditionalOrExpression
 type Expression = ConditionalOrExpression;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct ConditionalOrExpression {
     // [111]  	ConditionalOrExpression	  ::=  	ConditionalAndExpression ( '||' ConditionalAndExpression )*
     start: ConditionalAndExpression,
@@ -1281,7 +1279,7 @@ impl fmt::Display for ConditionalOrExpression {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct ConditionalAndExpression {
     // [112]  	ConditionalAndExpression	  ::=  	ValueLogical ( '&&' ValueLogical )*
     start: ValueLogical,
@@ -1301,7 +1299,7 @@ impl fmt::Display for ConditionalAndExpression {
 // [113]  	ValueLogical	  ::=  	RelationalExpression
 type ValueLogical = RelationalExpression;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum RelationalExpression {
     // [114]  	RelationalExpression	  ::=  	NumericExpression ( '=' NumericExpression | '!=' NumericExpression | '<' NumericExpression | '>' NumericExpression | '<=' NumericExpression | '>=' NumericExpression | 'IN' ExpressionList | 'NOT' 'IN' ExpressionList )?
     Base(NumericExpression),
@@ -1334,7 +1332,7 @@ impl fmt::Display for RelationalExpression {
 // [115]  	NumericExpression	  ::=  	AdditiveExpression
 type NumericExpression = AdditiveExpression;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum AdditiveExpression {
     // [116]  	AdditiveExpression	  ::=  	MultiplicativeExpression ( '+' MultiplicativeExpression | '-' MultiplicativeExpression | ( NumericLiteralPositive | NumericLiteralNegative ) ( ( '*' UnaryExpression ) | ( '/' UnaryExpression ) )* )*
     Base(MultiplicativeExpression),
@@ -1352,7 +1350,7 @@ impl fmt::Display for AdditiveExpression {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum MultiplicativeExpression {
     // [117]  	MultiplicativeExpression	  ::=  	UnaryExpression ( '*' UnaryExpression | '/' UnaryExpression )*
     Base(UnaryExpression),
@@ -1370,7 +1368,7 @@ impl fmt::Display for MultiplicativeExpression {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum UnaryExpression {
     // [118]  	UnaryExpression	  ::=  	  '!' PrimaryExpression | '+' PrimaryExpression | '-' PrimaryExpression | PrimaryExpression
     Not(PrimaryExpression),
@@ -1390,7 +1388,7 @@ impl fmt::Display for UnaryExpression {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum PrimaryExpression {
     // [119]  	PrimaryExpression	  ::=  	BrackettedExpression | BuiltInCall | iriOrFunction | RDFLiteral | NumericLiteral | BooleanLiteral | Var
     Bracketted(BrackettedExpression),
@@ -1412,7 +1410,7 @@ impl fmt::Display for PrimaryExpression {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct BrackettedExpression {
     // [120]  	BrackettedExpression	  ::=  	'(' Expression ')'
     inner: Box<Expression>,
@@ -1424,7 +1422,7 @@ impl fmt::Display for BrackettedExpression {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 enum BuiltInCall {
     // [121]  	BuiltInCall	  ::=  	  Aggregate
     // | 'STR' '(' Expression ')'
@@ -1496,7 +1494,7 @@ impl fmt::Display for BuiltInCall {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct ExistsFunc {
     // [125]  	ExistsFunc	  ::=  	'EXISTS' GroupGraphPattern
     pattern: GroupGraphPattern,
@@ -1508,7 +1506,7 @@ impl fmt::Display for ExistsFunc {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct NotExistsFunc {
     // [126]  	NotExistsFunc	  ::=  	'NOT' 'EXISTS' GroupGraphPattern
     pattern: GroupGraphPattern,
@@ -1520,7 +1518,7 @@ impl fmt::Display for NotExistsFunc {
     }
 }
 
-#[derive(Debug, Arbitrary)]
+#[derive(Arbitrary)]
 struct IriOrFunction {
     // [128]  	iriOrFunction	  ::=  	iri ArgList?
     iri: Iri,
@@ -1537,7 +1535,6 @@ impl fmt::Display for IriOrFunction {
     }
 }
 
-#[derive(Debug)]
 struct Literal {
     // [129]  	RDFLiteral	  ::=  	String ( LANGTAG | ( '^^' iri ) )?
     // [130]  	NumericLiteral	  ::=  	NumericLiteralUnsigned | NumericLiteralPositive | NumericLiteralNegative
@@ -1566,7 +1563,6 @@ impl fmt::Display for Literal {
     }
 }
 
-#[derive(Debug)]
 struct Iri {
     // [136]  	iri	  ::=  	IRIREF | PrefixedName
     value: u8,
