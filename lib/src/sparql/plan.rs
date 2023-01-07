@@ -1,6 +1,7 @@
 use crate::model::NamedNode;
 use crate::storage::numeric_encoder::EncodedTerm;
 use oxrdf::Variable;
+use regex::Regex;
 use spargebra::algebra::GraphPattern;
 use std::cmp::max;
 use std::collections::btree_map::Entry;
@@ -420,7 +421,8 @@ pub enum PlanExpression {
     Concat(Vec<Self>),
     SubStr(Box<Self>, Box<Self>, Option<Box<Self>>),
     StrLen(Box<Self>),
-    Replace(Box<Self>, Box<Self>, Box<Self>, Option<Box<Self>>),
+    StaticReplace(Box<Self>, Regex, Box<Self>),
+    DynamicReplace(Box<Self>, Box<Self>, Box<Self>, Option<Box<Self>>),
     UCase(Box<Self>),
     LCase(Box<Self>),
     EncodeForUri(Box<Self>),
@@ -454,7 +456,8 @@ pub enum PlanExpression {
     IsBlank(Box<Self>),
     IsLiteral(Box<Self>),
     IsNumeric(Box<Self>),
-    Regex(Box<Self>, Box<Self>, Option<Box<Self>>),
+    StaticRegex(Box<Self>, Regex),
+    DynamicRegex(Box<Self>, Box<Self>, Option<Box<Self>>),
     Triple(Box<Self>, Box<Self>, Box<Self>),
     Subject(Box<Self>),
     Predicate(Box<Self>),
@@ -504,6 +507,7 @@ impl PlanExpression {
             | Self::LCase(e)
             | Self::StrLen(e)
             | Self::EncodeForUri(e)
+            | Self::StaticRegex(e, _)
             | Self::Year(e)
             | Self::Month(e)
             | Self::Day(e)
@@ -550,6 +554,7 @@ impl PlanExpression {
             | Self::Divide(a, b)
             | Self::LangMatches(a, b)
             | Self::Contains(a, b)
+            | Self::StaticReplace(a, _, b)
             | Self::StrStarts(a, b)
             | Self::StrEnds(a, b)
             | Self::StrBefore(a, b)
@@ -558,21 +563,21 @@ impl PlanExpression {
             | Self::StrDt(a, b)
             | Self::SameTerm(a, b)
             | Self::SubStr(a, b, None)
-            | Self::Regex(a, b, None)
+            | Self::DynamicRegex(a, b, None)
             | Self::Adjust(a, b) => {
                 a.lookup_used_variables(callback);
                 b.lookup_used_variables(callback);
             }
             Self::If(a, b, c)
             | Self::SubStr(a, b, Some(c))
-            | Self::Regex(a, b, Some(c))
-            | Self::Replace(a, b, c, None)
+            | Self::DynamicRegex(a, b, Some(c))
+            | Self::DynamicReplace(a, b, c, None)
             | Self::Triple(a, b, c) => {
                 a.lookup_used_variables(callback);
                 b.lookup_used_variables(callback);
                 c.lookup_used_variables(callback);
             }
-            Self::Replace(a, b, c, Some(d)) => {
+            Self::DynamicReplace(a, b, c, Some(d)) => {
                 a.lookup_used_variables(callback);
                 b.lookup_used_variables(callback);
                 c.lookup_used_variables(callback);

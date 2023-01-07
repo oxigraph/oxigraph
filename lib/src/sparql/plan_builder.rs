@@ -1,11 +1,13 @@
 use crate::model::Term as OxTerm;
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
+use crate::sparql::eval::compile_pattern;
 use crate::sparql::plan::*;
 use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple};
 use oxrdf::vocab::xsd;
 use oxrdf::TermRef;
 use rand::random;
+use regex::Regex;
 use spargebra::algebra::*;
 use spargebra::term::*;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -486,17 +488,49 @@ impl<'a> PlanBuilder<'a> {
                     variables,
                     graph_name,
                 )?)),
-                Function::Replace => PlanExpression::Replace(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[2], variables, graph_name)?),
-                    match parameters.get(3) {
-                        Some(flags) => Some(Box::new(
-                            self.build_for_expression(flags, variables, graph_name)?,
-                        )),
-                        None => None,
-                    },
-                ),
+                Function::Replace => {
+                    if let Some(static_regex) =
+                        compile_static_pattern_if_exists(&parameters[1], parameters.get(3))
+                    {
+                        PlanExpression::StaticReplace(
+                            Box::new(self.build_for_expression(
+                                &parameters[0],
+                                variables,
+                                graph_name,
+                            )?),
+                            static_regex,
+                            Box::new(self.build_for_expression(
+                                &parameters[2],
+                                variables,
+                                graph_name,
+                            )?),
+                        )
+                    } else {
+                        PlanExpression::DynamicReplace(
+                            Box::new(self.build_for_expression(
+                                &parameters[0],
+                                variables,
+                                graph_name,
+                            )?),
+                            Box::new(self.build_for_expression(
+                                &parameters[1],
+                                variables,
+                                graph_name,
+                            )?),
+                            Box::new(self.build_for_expression(
+                                &parameters[2],
+                                variables,
+                                graph_name,
+                            )?),
+                            match parameters.get(3) {
+                                Some(flags) => Some(Box::new(
+                                    self.build_for_expression(flags, variables, graph_name)?,
+                                )),
+                                None => None,
+                            },
+                        )
+                    }
+                }
                 Function::UCase => PlanExpression::UCase(Box::new(self.build_for_expression(
                     &parameters[0],
                     variables,
@@ -620,16 +654,39 @@ impl<'a> PlanBuilder<'a> {
                 Function::IsNumeric => PlanExpression::IsNumeric(Box::new(
                     self.build_for_expression(&parameters[0], variables, graph_name)?,
                 )),
-                Function::Regex => PlanExpression::Regex(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
-                    match parameters.get(2) {
-                        Some(flags) => Some(Box::new(
-                            self.build_for_expression(flags, variables, graph_name)?,
-                        )),
-                        None => None,
-                    },
-                ),
+                Function::Regex => {
+                    if let Some(static_regex) =
+                        compile_static_pattern_if_exists(&parameters[1], parameters.get(2))
+                    {
+                        PlanExpression::StaticRegex(
+                            Box::new(self.build_for_expression(
+                                &parameters[0],
+                                variables,
+                                graph_name,
+                            )?),
+                            static_regex,
+                        )
+                    } else {
+                        PlanExpression::DynamicRegex(
+                            Box::new(self.build_for_expression(
+                                &parameters[0],
+                                variables,
+                                graph_name,
+                            )?),
+                            Box::new(self.build_for_expression(
+                                &parameters[1],
+                                variables,
+                                graph_name,
+                            )?),
+                            match parameters.get(2) {
+                                Some(flags) => Some(Box::new(
+                                    self.build_for_expression(flags, variables, graph_name)?,
+                                )),
+                                None => None,
+                            },
+                        )
+                    }
+                }
                 Function::Triple => PlanExpression::Triple(
                     Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
                     Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
@@ -1503,5 +1560,38 @@ fn add_pattern_variables<'a>(
             variables.insert(v);
         }
         TermPattern::Triple(t) => add_pattern_variables(t, variables, blank_nodes),
+    }
+}
+
+fn compile_static_pattern_if_exists(
+    pattern: &Expression,
+    options: Option<&Expression>,
+) -> Option<Regex> {
+    let static_pattern = if let Expression::Literal(pattern) = pattern {
+        if pattern.datatype() == xsd::STRING {
+            Some(pattern.value())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let static_options = if let Some(options) = options {
+        if let Expression::Literal(options) = options {
+            if options.datatype() == xsd::STRING {
+                Some(Some(options.value()))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        Some(None)
+    };
+    if let (Some(static_pattern), Some(static_options)) = (static_pattern, static_options) {
+        compile_pattern(static_pattern, static_options)
+    } else {
+        None
     }
 }
