@@ -7,7 +7,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum PlanNode {
     StaticBindings {
         tuples: Vec<EncodedTuple>,
@@ -372,21 +372,21 @@ impl PlanNode {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum PatternValue {
     Constant(EncodedTerm),
     Variable(usize),
     Triple(Box<TriplePatternValue>),
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub struct TriplePatternValue {
     pub subject: PatternValue,
     pub predicate: PatternValue,
     pub object: PatternValue,
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum PlanExpression {
     Constant(EncodedTerm),
     Variable(usize),
@@ -590,14 +590,14 @@ impl PlanExpression {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub struct PlanAggregation {
     pub function: PlanAggregationFunction,
     pub parameter: Option<PlanExpression>,
     pub distinct: bool,
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum PlanAggregationFunction {
     Count,
     Sum,
@@ -608,7 +608,7 @@ pub enum PlanAggregationFunction {
     GroupConcat { separator: Rc<String> },
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum PlanPropertyPath {
     Path(EncodedTerm),
     Reverse(Rc<Self>),
@@ -620,20 +620,20 @@ pub enum PlanPropertyPath {
     NegatedPropertySet(Rc<Vec<EncodedTerm>>),
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum Comparator {
     Asc(PlanExpression),
     Desc(PlanExpression),
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub struct TripleTemplate {
     pub subject: TripleTemplateValue,
     pub predicate: TripleTemplateValue,
     pub object: TripleTemplateValue,
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub enum TripleTemplateValue {
     Constant(EncodedTerm),
     BlankNode(usize),
