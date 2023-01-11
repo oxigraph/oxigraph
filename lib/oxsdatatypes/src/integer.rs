@@ -229,18 +229,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn from_float() {
+    fn from_str() -> Result<(), ParseIntError> {
+        assert_eq!(Integer::from_str("0")?.to_string(), "0");
+        assert_eq!(Integer::from_str("-0")?.to_string(), "0");
+        assert_eq!(Integer::from_str("123")?.to_string(), "123");
+        assert_eq!(Integer::from_str("-123")?.to_string(), "-123");
+        assert!(Integer::from_str("123456789123456789123456789123456789123456789").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn from_float() -> Result<(), ParseIntError> {
         assert_eq!(
-            Integer::try_from(Float::from(0.)).unwrap(),
-            Integer::from_str("0").unwrap()
+            Integer::try_from(Float::from(0.)).ok(),
+            Some(Integer::from_str("0")?)
         );
         assert_eq!(
-            Integer::try_from(Float::from(-0.)).unwrap(),
-            Integer::from_str("0").unwrap()
+            Integer::try_from(Float::from(-0.)).ok(),
+            Some(Integer::from_str("0")?)
         );
         assert_eq!(
-            Integer::try_from(Float::from(-123.1)).unwrap(),
-            Integer::from_str("-123").unwrap()
+            Integer::try_from(Float::from(-123.1)).ok(),
+            Some(Integer::from_str("-123")?)
         );
         assert!(Integer::try_from(Float::from(f32::NAN)).is_err());
         assert!(Integer::try_from(Float::from(f32::INFINITY)).is_err());
@@ -250,26 +260,27 @@ mod tests {
         assert!(
             Integer::try_from(Float::from(1672507302466.))
                 .unwrap()
-                .checked_sub(Integer::from_str("1672507302466").unwrap())
+                .checked_sub(Integer::from_str("1672507302466")?)
                 .unwrap()
                 .abs()
                 < Integer::from(1_000_000)
         );
+        Ok(())
     }
 
     #[test]
-    fn from_double() {
+    fn from_double() -> Result<(), ParseIntError> {
         assert_eq!(
-            Integer::try_from(Double::from(0.0)).unwrap(),
-            Integer::from_str("0").unwrap()
+            Integer::try_from(Double::from(0.0)).ok(),
+            Some(Integer::from_str("0")?)
         );
         assert_eq!(
-            Integer::try_from(Double::from(-0.0)).unwrap(),
-            Integer::from_str("0").unwrap()
+            Integer::try_from(Double::from(-0.0)).ok(),
+            Some(Integer::from_str("0")?)
         );
         assert_eq!(
-            Integer::try_from(Double::from(-123.1)).unwrap(),
-            Integer::from_str("-123").unwrap()
+            Integer::try_from(Double::from(-123.1)).ok(),
+            Some(Integer::from_str("-123")?)
         );
         assert!(
             Integer::try_from(Double::from(1672507302466.))
@@ -284,19 +295,21 @@ mod tests {
         assert!(Integer::try_from(Double::from(f64::NEG_INFINITY)).is_err());
         assert!(Integer::try_from(Double::from(f64::MIN)).is_err());
         assert!(Integer::try_from(Double::from(f64::MAX)).is_err());
+        Ok(())
     }
 
     #[test]
-    fn from_decimal() {
+    fn from_decimal() -> Result<(), ParseIntError> {
         assert_eq!(
-            Integer::try_from(Decimal::from(0)).unwrap(),
-            Integer::from_str("0").unwrap()
+            Integer::try_from(Decimal::from(0)).ok(),
+            Some(Integer::from_str("0")?)
         );
         assert_eq!(
-            Integer::try_from(Decimal::from_str("-123.1").unwrap()).unwrap(),
-            Integer::from_str("-123").unwrap()
+            Integer::try_from(Decimal::from_str("-123.1").unwrap()).ok(),
+            Some(Integer::from_str("-123")?)
         );
         assert!(Integer::try_from(Decimal::MIN).is_err());
         assert!(Integer::try_from(Decimal::MAX).is_err());
+        Ok(())
     }
 }

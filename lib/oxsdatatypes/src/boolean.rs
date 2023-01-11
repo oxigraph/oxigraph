@@ -88,17 +88,11 @@ mod tests {
 
     #[test]
     fn from_str() -> Result<(), ParseBoolError> {
-        assert_eq!(Boolean::from(true), Boolean::from_str("true")?);
-        assert_eq!(Boolean::from(true), Boolean::from_str("1")?);
-        assert_eq!(Boolean::from(false), Boolean::from_str("false")?);
-        assert_eq!(Boolean::from(false), Boolean::from_str("0")?);
+        assert_eq!(Boolean::from_str("true")?.to_string(), "true");
+        assert_eq!(Boolean::from_str("1")?.to_string(), "true");
+        assert_eq!(Boolean::from_str("false")?.to_string(), "false");
+        assert_eq!(Boolean::from_str("0")?.to_string(), "false");
         Ok(())
-    }
-
-    #[test]
-    fn to_string() {
-        assert_eq!("true", Boolean::from(true).to_string());
-        assert_eq!("false", Boolean::from(false).to_string());
     }
 
     #[test]
