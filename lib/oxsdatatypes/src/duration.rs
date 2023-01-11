@@ -596,75 +596,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn from_str() {
+    fn from_str() -> Result<(), XsdParseError> {
         let min = Duration::new(
             i64::MIN + 1,
             Decimal::MIN.checked_add(Decimal::step()).unwrap(),
         );
         let max = Duration::new(i64::MAX, Decimal::MAX);
 
-        assert_eq!(
-            YearMonthDuration::from_str("P1Y").unwrap().to_string(),
-            "P1Y"
-        );
-        assert_eq!(Duration::from_str("P1Y").unwrap().to_string(), "P1Y");
-        assert_eq!(
-            YearMonthDuration::from_str("P1M").unwrap().to_string(),
-            "P1M"
-        );
-        assert_eq!(Duration::from_str("P1M").unwrap().to_string(), "P1M");
-        assert_eq!(DayTimeDuration::from_str("P1D").unwrap().to_string(), "P1D");
-        assert_eq!(Duration::from_str("P1D").unwrap().to_string(), "P1D");
-        assert_eq!(
-            DayTimeDuration::from_str("PT1H").unwrap().to_string(),
-            "PT1H"
-        );
-        assert_eq!(Duration::from_str("PT1H").unwrap().to_string(), "PT1H");
-        assert_eq!(
-            DayTimeDuration::from_str("PT1M").unwrap().to_string(),
-            "PT1M"
-        );
-        assert_eq!(Duration::from_str("PT1M").unwrap().to_string(), "PT1M");
-        assert_eq!(
-            DayTimeDuration::from_str("PT1.1S").unwrap().to_string(),
-            "PT1.1S"
-        );
-        assert_eq!(Duration::from_str("PT1.1S").unwrap().to_string(), "PT1.1S");
-        assert_eq!(
-            YearMonthDuration::from_str("-P1Y").unwrap().to_string(),
-            "-P1Y"
-        );
-        assert_eq!(Duration::from_str("-P1Y").unwrap().to_string(), "-P1Y");
-        assert_eq!(
-            YearMonthDuration::from_str("-P1M").unwrap().to_string(),
-            "-P1M"
-        );
-        assert_eq!(Duration::from_str("-P1M").unwrap().to_string(), "-P1M");
-        assert_eq!(
-            DayTimeDuration::from_str("-P1D").unwrap().to_string(),
-            "-P1D"
-        );
-        assert_eq!(Duration::from_str("-P1D").unwrap().to_string(), "-P1D");
-        assert_eq!(
-            DayTimeDuration::from_str("-PT1H").unwrap().to_string(),
-            "-PT1H"
-        );
-        assert_eq!(Duration::from_str("-PT1H").unwrap().to_string(), "-PT1H");
-        assert_eq!(
-            DayTimeDuration::from_str("-PT1M").unwrap().to_string(),
-            "-PT1M"
-        );
-        assert_eq!(Duration::from_str("-PT1M").unwrap().to_string(), "-PT1M");
-        assert_eq!(
-            DayTimeDuration::from_str("-PT1.1S").unwrap().to_string(),
-            "-PT1.1S"
-        );
-        assert_eq!(
-            Duration::from_str("-PT1.1S").unwrap().to_string(),
-            "-PT1.1S"
-        );
-        assert_eq!(Duration::from_str(&max.to_string()).unwrap(), max);
-        assert_eq!(Duration::from_str(&min.to_string()).unwrap(), min);
+        assert_eq!(YearMonthDuration::from_str("P1Y")?.to_string(), "P1Y");
+        assert_eq!(Duration::from_str("P1Y")?.to_string(), "P1Y");
+        assert_eq!(YearMonthDuration::from_str("P1M")?.to_string(), "P1M");
+        assert_eq!(Duration::from_str("P1M")?.to_string(), "P1M");
+        assert_eq!(DayTimeDuration::from_str("P1D")?.to_string(), "P1D");
+        assert_eq!(Duration::from_str("P1D")?.to_string(), "P1D");
+        assert_eq!(DayTimeDuration::from_str("PT1H")?.to_string(), "PT1H");
+        assert_eq!(Duration::from_str("PT1H")?.to_string(), "PT1H");
+        assert_eq!(DayTimeDuration::from_str("PT1M")?.to_string(), "PT1M");
+        assert_eq!(Duration::from_str("PT1M")?.to_string(), "PT1M");
+        assert_eq!(DayTimeDuration::from_str("PT1.1S")?.to_string(), "PT1.1S");
+        assert_eq!(Duration::from_str("PT1.1S")?.to_string(), "PT1.1S");
+        assert_eq!(YearMonthDuration::from_str("-P1Y")?.to_string(), "-P1Y");
+        assert_eq!(Duration::from_str("-P1Y")?.to_string(), "-P1Y");
+        assert_eq!(YearMonthDuration::from_str("-P1M")?.to_string(), "-P1M");
+        assert_eq!(Duration::from_str("-P1M")?.to_string(), "-P1M");
+        assert_eq!(DayTimeDuration::from_str("-P1D")?.to_string(), "-P1D");
+        assert_eq!(Duration::from_str("-P1D")?.to_string(), "-P1D");
+        assert_eq!(DayTimeDuration::from_str("-PT1H")?.to_string(), "-PT1H");
+        assert_eq!(Duration::from_str("-PT1H")?.to_string(), "-PT1H");
+        assert_eq!(DayTimeDuration::from_str("-PT1M")?.to_string(), "-PT1M");
+        assert_eq!(Duration::from_str("-PT1M")?.to_string(), "-PT1M");
+        assert_eq!(DayTimeDuration::from_str("-PT1S")?.to_string(), "-PT1S");
+        assert_eq!(Duration::from_str("-PT1S")?.to_string(), "-PT1S");
+        assert_eq!(DayTimeDuration::from_str("-PT1.1S")?.to_string(), "-PT1.1S");
+        assert_eq!(Duration::from_str("-PT1.1S")?.to_string(), "-PT1.1S");
+        assert_eq!(Duration::from_str(&max.to_string())?, max);
+        assert_eq!(Duration::from_str(&min.to_string())?, min);
+        assert_eq!(Duration::from_str("PT0H")?.to_string(), "PT0S");
+        assert_eq!(Duration::from_str("-PT0H")?.to_string(), "PT0S");
+        assert_eq!(YearMonthDuration::from_str("P0Y")?.to_string(), "P0M");
+        assert_eq!(DayTimeDuration::from_str("PT0H")?.to_string(), "PT0S");
+        Ok(())
     }
 
     #[test]
@@ -678,149 +649,126 @@ mod tests {
     }
 
     #[test]
-    fn equals() {
+    fn equals() -> Result<(), XsdParseError> {
         assert_eq!(
-            YearMonthDuration::from_str("P1Y").unwrap(),
-            YearMonthDuration::from_str("P12M").unwrap()
-        );
-        assert_eq!(
-            YearMonthDuration::from_str("P1Y").unwrap(),
-            Duration::from_str("P12M").unwrap()
+            YearMonthDuration::from_str("P1Y")?,
+            YearMonthDuration::from_str("P12M")?
         );
         assert_eq!(
-            Duration::from_str("P1Y").unwrap(),
-            YearMonthDuration::from_str("P12M").unwrap()
+            YearMonthDuration::from_str("P1Y")?,
+            Duration::from_str("P12M")?
         );
         assert_eq!(
-            Duration::from_str("P1Y").unwrap(),
-            Duration::from_str("P12M").unwrap()
+            Duration::from_str("P1Y")?,
+            YearMonthDuration::from_str("P12M")?
+        );
+        assert_eq!(Duration::from_str("P1Y")?, Duration::from_str("P12M")?);
+        assert_eq!(
+            DayTimeDuration::from_str("PT24H")?,
+            DayTimeDuration::from_str("P1D")?
         );
         assert_eq!(
-            DayTimeDuration::from_str("PT24H").unwrap(),
-            DayTimeDuration::from_str("P1D").unwrap()
+            DayTimeDuration::from_str("PT24H")?,
+            Duration::from_str("P1D")?
         );
         assert_eq!(
-            DayTimeDuration::from_str("PT24H").unwrap(),
-            Duration::from_str("P1D").unwrap()
+            Duration::from_str("PT24H")?,
+            DayTimeDuration::from_str("P1D")?
+        );
+        assert_eq!(Duration::from_str("PT24H")?, Duration::from_str("P1D")?);
+        assert_ne!(Duration::from_str("P1Y")?, Duration::from_str("P365D")?);
+        assert_eq!(Duration::from_str("P0Y")?, Duration::from_str("P0D")?);
+        assert_ne!(Duration::from_str("P1Y")?, Duration::from_str("P365D")?);
+        assert_eq!(Duration::from_str("P2Y")?, Duration::from_str("P24M")?);
+        assert_eq!(Duration::from_str("P10D")?, Duration::from_str("PT240H")?);
+        assert_eq!(
+            Duration::from_str("P2Y0M0DT0H0M0S")?,
+            Duration::from_str("P24M")?
         );
         assert_eq!(
-            Duration::from_str("PT24H").unwrap(),
-            DayTimeDuration::from_str("P1D").unwrap()
+            Duration::from_str("P0Y0M10D")?,
+            Duration::from_str("PT240H")?
         );
-        assert_eq!(
-            Duration::from_str("PT24H").unwrap(),
-            Duration::from_str("P1D").unwrap()
-        );
-        assert_ne!(
-            Duration::from_str("P1Y").unwrap(),
-            Duration::from_str("P365D").unwrap()
-        );
-        assert_eq!(
-            Duration::from_str("P0Y").unwrap(),
-            Duration::from_str("P0D").unwrap()
-        );
-        assert_ne!(
-            Duration::from_str("P1Y").unwrap(),
-            Duration::from_str("P365D").unwrap()
-        );
-        assert_eq!(
-            Duration::from_str("P2Y").unwrap(),
-            Duration::from_str("P24M").unwrap()
-        );
-        assert_eq!(
-            Duration::from_str("P10D").unwrap(),
-            Duration::from_str("PT240H").unwrap()
-        );
-        assert_eq!(
-            Duration::from_str("P2Y0M0DT0H0M0S").unwrap(),
-            Duration::from_str("P24M").unwrap()
-        );
-        assert_eq!(
-            Duration::from_str("P0Y0M10D").unwrap(),
-            Duration::from_str("PT240H").unwrap()
-        );
-        assert_ne!(
-            Duration::from_str("P1M").unwrap(),
-            Duration::from_str("P30D").unwrap()
-        );
+        assert_ne!(Duration::from_str("P1M")?, Duration::from_str("P30D")?);
+        Ok(())
     }
 
     #[test]
-    fn years() {
-        assert_eq!(Duration::from_str("P20Y15M").unwrap().years(), 21);
-        assert_eq!(Duration::from_str("-P15M").unwrap().years(), -1);
-        assert_eq!(Duration::from_str("-P2DT15H").unwrap().years(), 0);
+    fn years() -> Result<(), XsdParseError> {
+        assert_eq!(Duration::from_str("P20Y15M")?.years(), 21);
+        assert_eq!(Duration::from_str("-P15M")?.years(), -1);
+        assert_eq!(Duration::from_str("-P2DT15H")?.years(), 0);
+        Ok(())
     }
 
     #[test]
-    fn months() {
-        assert_eq!(Duration::from_str("P20Y15M").unwrap().months(), 3);
-        assert_eq!(Duration::from_str("-P20Y18M").unwrap().months(), -6);
-        assert_eq!(Duration::from_str("-P2DT15H0M0S").unwrap().months(), 0);
+    fn months() -> Result<(), XsdParseError> {
+        assert_eq!(Duration::from_str("P20Y15M")?.months(), 3);
+        assert_eq!(Duration::from_str("-P20Y18M")?.months(), -6);
+        assert_eq!(Duration::from_str("-P2DT15H0M0S")?.months(), 0);
+        Ok(())
     }
 
     #[test]
-    fn days() {
-        assert_eq!(Duration::from_str("P3DT10H").unwrap().days(), 3);
-        assert_eq!(Duration::from_str("P3DT55H").unwrap().days(), 5);
-        assert_eq!(Duration::from_str("P3Y5M").unwrap().days(), 0);
+    fn days() -> Result<(), XsdParseError> {
+        assert_eq!(Duration::from_str("P3DT10H")?.days(), 3);
+        assert_eq!(Duration::from_str("P3DT55H")?.days(), 5);
+        assert_eq!(Duration::from_str("P3Y5M")?.days(), 0);
+        Ok(())
     }
 
     #[test]
-    fn hours() {
-        assert_eq!(Duration::from_str("P3DT10H").unwrap().hours(), 10);
-        assert_eq!(Duration::from_str("P3DT12H32M12S").unwrap().hours(), 12);
-        assert_eq!(Duration::from_str("PT123H").unwrap().hours(), 3);
-        assert_eq!(Duration::from_str("-P3DT10H").unwrap().hours(), -10);
+    fn hours() -> Result<(), XsdParseError> {
+        assert_eq!(Duration::from_str("P3DT10H")?.hours(), 10);
+        assert_eq!(Duration::from_str("P3DT12H32M12S")?.hours(), 12);
+        assert_eq!(Duration::from_str("PT123H")?.hours(), 3);
+        assert_eq!(Duration::from_str("-P3DT10H")?.hours(), -10);
+        Ok(())
     }
 
     #[test]
-    fn minutes() {
-        assert_eq!(Duration::from_str("P3DT10H").unwrap().minutes(), 0);
-        assert_eq!(Duration::from_str("-P5DT12H30M").unwrap().minutes(), -30);
+    fn minutes() -> Result<(), XsdParseError> {
+        assert_eq!(Duration::from_str("P3DT10H")?.minutes(), 0);
+        assert_eq!(Duration::from_str("-P5DT12H30M")?.minutes(), -30);
+        Ok(())
     }
 
     #[test]
-    fn seconds() {
+    fn seconds() -> Result<(), XsdParseError> {
         assert_eq!(
-            Duration::from_str("P3DT10H12.5S").unwrap().seconds(),
-            Decimal::from_str("12.5").unwrap()
+            Duration::from_str("P3DT10H12.5S")?.seconds(),
+            Decimal::from_str("12.5")?
         );
         assert_eq!(
-            Duration::from_str("-PT256S").unwrap().seconds(),
-            Decimal::from_str("-16.0").unwrap()
+            Duration::from_str("-PT256S")?.seconds(),
+            Decimal::from_str("-16.0")?
         );
+        Ok(())
     }
 
     #[test]
-    fn add() {
+    fn add() -> Result<(), XsdParseError> {
         assert_eq!(
-            Duration::from_str("P2Y11M")
-                .unwrap()
-                .checked_add(Duration::from_str("P3Y3M").unwrap()),
-            Some(Duration::from_str("P6Y2M").unwrap())
+            Duration::from_str("P2Y11M")?.checked_add(Duration::from_str("P3Y3M")?),
+            Some(Duration::from_str("P6Y2M")?)
         );
         assert_eq!(
-            Duration::from_str("P2DT12H5M")
-                .unwrap()
-                .checked_add(Duration::from_str("P5DT12H").unwrap()),
-            Some(Duration::from_str("P8DT5M").unwrap())
+            Duration::from_str("P2DT12H5M")?.checked_add(Duration::from_str("P5DT12H")?),
+            Some(Duration::from_str("P8DT5M")?)
         );
+        Ok(())
     }
 
     #[test]
-    fn sub() {
+    fn sub() -> Result<(), XsdParseError> {
         assert_eq!(
-            Duration::from_str("P2Y11M")
-                .unwrap()
-                .checked_sub(Duration::from_str("P3Y3M").unwrap()),
-            Some(Duration::from_str("-P4M").unwrap())
+            Duration::from_str("P2Y11M")?.checked_sub(Duration::from_str("P3Y3M")?),
+            Some(Duration::from_str("-P4M")?)
         );
         assert_eq!(
-            Duration::from_str("P2DT12H")
-                .unwrap()
-                .checked_sub(Duration::from_str("P1DT10H30M").unwrap()),
-            Some(Duration::from_str("P1DT1H30M").unwrap())
+            Duration::from_str("P2DT12H")?.checked_sub(Duration::from_str("P1DT10H30M")?),
+            Some(Duration::from_str("P1DT1H30M")?)
         );
+        Ok(())
     }
 }

@@ -1814,878 +1814,623 @@ mod tests {
     use super::*;
 
     #[test]
-    fn from_str() {
+    fn from_str() -> Result<(), XsdParseError> {
+        assert_eq!(Time::from_str("00:00:00Z")?.to_string(), "00:00:00Z");
+        assert_eq!(Time::from_str("00:00:00+00:00")?.to_string(), "00:00:00Z");
+        assert_eq!(Time::from_str("00:00:00-00:00")?.to_string(), "00:00:00Z");
+        assert_eq!(Time::from_str("00:00:00")?.to_string(), "00:00:00");
         assert_eq!(
-            Time::from_str("00:00:00Z").unwrap().to_string(),
-            "00:00:00Z"
-        );
-        assert_eq!(Time::from_str("00:00:00").unwrap().to_string(), "00:00:00");
-        assert_eq!(
-            Time::from_str("00:00:00+02:00").unwrap().to_string(),
+            Time::from_str("00:00:00+02:00")?.to_string(),
             "00:00:00+02:00"
         );
         assert_eq!(
-            Time::from_str("00:00:00+14:00").unwrap().to_string(),
+            Time::from_str("00:00:00+14:00")?.to_string(),
             "00:00:00+14:00"
         );
-        assert_eq!(Time::from_str("24:00:00").unwrap().to_string(), "00:00:00");
+        assert_eq!(Time::from_str("24:00:00")?.to_string(), "00:00:00");
+        assert_eq!(Time::from_str("24:00:00.00")?.to_string(), "00:00:00");
         assert_eq!(
-            Time::from_str("24:00:00.00").unwrap().to_string(),
-            "00:00:00"
-        );
-        assert_eq!(
-            Time::from_str("23:59:59.9999999999").unwrap().to_string(),
+            Time::from_str("23:59:59.9999999999")?.to_string(),
             "23:59:59.9999999999"
         );
 
+        assert_eq!(Date::from_str("0001-01-01Z")?.to_string(), "0001-01-01Z");
+        assert_eq!(Date::from_str("0001-01-01")?.to_string(), "0001-01-01");
         assert_eq!(
-            Date::from_str("0001-01-01Z").unwrap().to_string(),
-            "0001-01-01Z"
-        );
-        assert_eq!(
-            Date::from_str("0001-01-01").unwrap().to_string(),
-            "0001-01-01"
-        );
-        assert_eq!(
-            DateTime::from_str("0001-01-01T00:00:00Z")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("0001-01-01T00:00:00Z")?.to_string(),
             "0001-01-01T00:00:00Z"
         );
         assert_eq!(
-            DateTime::from_str("0001-01-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("0001-01-01T00:00:00")?.to_string(),
             "0001-01-01T00:00:00"
         );
         assert_eq!(
-            DateTime::from_str("1000000000-01-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("1000000000-01-01T00:00:00")?.to_string(),
             "1000000000-01-01T00:00:00"
         );
         assert_eq!(
-            DateTime::from_str("2001-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2001-12-31T23:59:59")?.to_string(),
             "2001-12-31T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("2004-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2004-12-31T23:59:59")?.to_string(),
             "2004-12-31T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("1900-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("1900-12-31T23:59:59")?.to_string(),
             "1900-12-31T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("2000-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2000-12-31T23:59:59")?.to_string(),
             "2000-12-31T23:59:59",
         );
         assert_eq!(
-            DateTime::from_str("1899-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("1899-12-31T23:59:59")?.to_string(),
             "1899-12-31T23:59:59"
         );
 
         assert_eq!(
-            DateTime::from_str("2001-02-28T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2001-02-28T23:59:59")?.to_string(),
             "2001-02-28T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("2004-02-29T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2004-02-29T23:59:59")?.to_string(),
             "2004-02-29T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("1900-02-28T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("1900-02-28T23:59:59")?.to_string(),
             "1900-02-28T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("2000-02-29T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2000-02-29T23:59:59")?.to_string(),
             "2000-02-29T23:59:59",
         );
         assert_eq!(
-            DateTime::from_str("1899-02-28T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("1899-02-28T23:59:59")?.to_string(),
             "1899-02-28T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("2001-03-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2001-03-01T00:00:00")?.to_string(),
             "2001-03-01T00:00:00"
         );
         assert_eq!(
-            DateTime::from_str("2004-03-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2004-03-01T00:00:00")?.to_string(),
             "2004-03-01T00:00:00"
         );
         assert_eq!(
-            DateTime::from_str("1900-03-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("1900-03-01T00:00:00")?.to_string(),
             "1900-03-01T00:00:00"
         );
         assert_eq!(
-            DateTime::from_str("2000-03-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("2000-03-01T00:00:00")?.to_string(),
             "2000-03-01T00:00:00",
         );
         assert_eq!(
-            DateTime::from_str("1899-03-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("1899-03-01T00:00:00")?.to_string(),
             "1899-03-01T00:00:00"
         );
 
         assert_eq!(
-            DateTime::from_str("-1000000000-01-01T00:00:00")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("-1000000000-01-01T00:00:00")?.to_string(),
             "-1000000000-01-01T00:00:00"
         );
         assert_eq!(
-            DateTime::from_str("-2001-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("-2001-12-31T23:59:59")?.to_string(),
             "-2001-12-31T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("-2004-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("-2004-12-31T23:59:59")?.to_string(),
             "-2004-12-31T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("-1900-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("-1900-12-31T23:59:59")?.to_string(),
             "-1900-12-31T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("-2000-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("-2000-12-31T23:59:59")?.to_string(),
             "-2000-12-31T23:59:59"
         );
         assert_eq!(
-            DateTime::from_str("-1899-12-31T23:59:59")
-                .unwrap()
-                .to_string(),
+            DateTime::from_str("-1899-12-31T23:59:59")?.to_string(),
             "-1899-12-31T23:59:59"
         );
 
         assert_eq!(
-            GYearMonth::from_str("-1899-12+01:00").unwrap().to_string(),
+            GYearMonth::from_str("-1899-12+01:00")?.to_string(),
             "-1899-12+01:00"
         );
+        assert_eq!(GYearMonth::from_str("-1899-12")?.to_string(), "-1899-12");
+        assert_eq!(GYear::from_str("-1899+01:00")?.to_string(), "-1899+01:00");
+        assert_eq!(GYear::from_str("-1899")?.to_string(), "-1899");
         assert_eq!(
-            GYear::from_str("-1899+01:00").unwrap().to_string(),
-            "-1899+01:00"
-        );
-        assert_eq!(
-            GMonthDay::from_str("--01-01+01:00").unwrap().to_string(),
+            GMonthDay::from_str("--01-01+01:00")?.to_string(),
             "--01-01+01:00"
         );
-        assert_eq!(
-            GDay::from_str("---01+01:00").unwrap().to_string(),
-            "---01+01:00"
-        );
-        assert_eq!(
-            GMonth::from_str("--01+01:00").unwrap().to_string(),
-            "--01+01:00"
-        );
+        assert_eq!(GMonthDay::from_str("--01-01")?.to_string(), "--01-01");
+        assert_eq!(GDay::from_str("---01+01:00")?.to_string(), "---01+01:00");
+        assert_eq!(GDay::from_str("---01")?.to_string(), "---01");
+        assert_eq!(GMonth::from_str("--01+01:00")?.to_string(), "--01+01:00");
+        assert_eq!(GMonth::from_str("--01")?.to_string(), "--01");
+        Ok(())
     }
 
     #[test]
-    fn equals() {
+    fn equals() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("2002-04-02T12:00:00-01:00").unwrap(),
-            DateTime::from_str("2002-04-02T17:00:00+04:00").unwrap()
+            DateTime::from_str("2002-04-02T12:00:00-01:00")?,
+            DateTime::from_str("2002-04-02T17:00:00+04:00")?
         );
         assert_eq!(
-            DateTime::from_str("2002-04-02T12:00:00-05:00").unwrap(),
-            DateTime::from_str("2002-04-02T23:00:00+06:00").unwrap()
+            DateTime::from_str("2002-04-02T12:00:00-05:00")?,
+            DateTime::from_str("2002-04-02T23:00:00+06:00")?
         );
         assert_ne!(
-            DateTime::from_str("2002-04-02T12:00:00-05:00").unwrap(),
-            DateTime::from_str("2002-04-02T17:00:00-05:00").unwrap()
+            DateTime::from_str("2002-04-02T12:00:00-05:00")?,
+            DateTime::from_str("2002-04-02T17:00:00-05:00")?
         );
         assert_eq!(
-            DateTime::from_str("2002-04-02T12:00:00-05:00").unwrap(),
-            DateTime::from_str("2002-04-02T12:00:00-05:00").unwrap()
+            DateTime::from_str("2002-04-02T12:00:00-05:00")?,
+            DateTime::from_str("2002-04-02T12:00:00-05:00")?
         );
         assert_eq!(
-            DateTime::from_str("2002-04-02T23:00:00-04:00").unwrap(),
-            DateTime::from_str("2002-04-03T02:00:00-01:00").unwrap()
+            DateTime::from_str("2002-04-02T23:00:00-04:00")?,
+            DateTime::from_str("2002-04-03T02:00:00-01:00")?
         );
         assert_eq!(
-            DateTime::from_str("1999-12-31T24:00:00-05:00").unwrap(),
-            DateTime::from_str("2000-01-01T00:00:00-05:00").unwrap()
+            DateTime::from_str("1999-12-31T24:00:00-05:00")?,
+            DateTime::from_str("2000-01-01T00:00:00-05:00")?
         );
         assert_ne!(
-            DateTime::from_str("2005-04-04T24:00:00-05:00").unwrap(),
-            DateTime::from_str("2005-04-04T00:00:00-05:00").unwrap()
+            DateTime::from_str("2005-04-04T24:00:00-05:00")?,
+            DateTime::from_str("2005-04-04T00:00:00-05:00")?
         );
 
         assert_ne!(
-            Date::from_str("2004-12-25Z").unwrap(),
-            Date::from_str("2004-12-25+07:00").unwrap()
+            Date::from_str("2004-12-25Z")?,
+            Date::from_str("2004-12-25+07:00")?
         );
         assert_eq!(
-            Date::from_str("2004-12-25-12:00").unwrap(),
-            Date::from_str("2004-12-26+12:00").unwrap()
+            Date::from_str("2004-12-25-12:00")?,
+            Date::from_str("2004-12-26+12:00")?
         );
 
         assert_ne!(
-            Time::from_str("08:00:00+09:00").unwrap(),
-            Time::from_str("17:00:00-06:00").unwrap()
+            Time::from_str("08:00:00+09:00")?,
+            Time::from_str("17:00:00-06:00")?
         );
         assert_eq!(
-            Time::from_str("21:30:00+10:30").unwrap(),
-            Time::from_str("06:00:00-05:00").unwrap()
+            Time::from_str("21:30:00+10:30")?,
+            Time::from_str("06:00:00-05:00")?
         );
         assert_eq!(
-            Time::from_str("24:00:00+01:00").unwrap(),
-            Time::from_str("00:00:00+01:00").unwrap()
-        );
-
-        assert_eq!(
-            Time::from_str("05:00:00-03:00").unwrap(),
-            Time::from_str("10:00:00+02:00").unwrap()
-        );
-        assert_ne!(
-            Time::from_str("23:00:00-03:00").unwrap(),
-            Time::from_str("02:00:00Z").unwrap()
-        );
-
-        assert_ne!(
-            GYearMonth::from_str("1986-02").unwrap(),
-            GYearMonth::from_str("1986-03").unwrap()
-        );
-        assert_ne!(
-            GYearMonth::from_str("1978-03").unwrap(),
-            GYearMonth::from_str("1978-03Z").unwrap()
-        );
-
-        assert_ne!(
-            GYear::from_str("2005-12:00").unwrap(),
-            GYear::from_str("2005+12:00").unwrap()
-        );
-        assert_ne!(
-            GYear::from_str("1976-05:00").unwrap(),
-            GYear::from_str("1976").unwrap()
+            Time::from_str("24:00:00+01:00")?,
+            Time::from_str("00:00:00+01:00")?
         );
 
         assert_eq!(
-            GMonthDay::from_str("--12-25-14:00").unwrap(),
-            GMonthDay::from_str("--12-26+10:00").unwrap()
+            Time::from_str("05:00:00-03:00")?,
+            Time::from_str("10:00:00+02:00")?
         );
         assert_ne!(
-            GMonthDay::from_str("--12-25").unwrap(),
-            GMonthDay::from_str("--12-26Z").unwrap()
+            Time::from_str("23:00:00-03:00")?,
+            Time::from_str("02:00:00Z")?
         );
 
         assert_ne!(
-            GMonth::from_str("--12-14:00").unwrap(),
-            GMonth::from_str("--12+10:00").unwrap()
+            GYearMonth::from_str("1986-02")?,
+            GYearMonth::from_str("1986-03")?
         );
         assert_ne!(
-            GMonth::from_str("--12").unwrap(),
-            GMonth::from_str("--12Z").unwrap()
+            GYearMonth::from_str("1978-03")?,
+            GYearMonth::from_str("1978-03Z")?
         );
 
         assert_ne!(
-            GDay::from_str("---25-14:00").unwrap(),
-            GDay::from_str("---25+10:00").unwrap()
+            GYear::from_str("2005-12:00")?,
+            GYear::from_str("2005+12:00")?
+        );
+        assert_ne!(GYear::from_str("1976-05:00")?, GYear::from_str("1976")?);
+
+        assert_eq!(
+            GMonthDay::from_str("--12-25-14:00")?,
+            GMonthDay::from_str("--12-26+10:00")?
         );
         assert_ne!(
-            GDay::from_str("---12").unwrap(),
-            GDay::from_str("---12Z").unwrap()
+            GMonthDay::from_str("--12-25")?,
+            GMonthDay::from_str("--12-26Z")?
         );
+
+        assert_ne!(
+            GMonth::from_str("--12-14:00")?,
+            GMonth::from_str("--12+10:00")?
+        );
+        assert_ne!(GMonth::from_str("--12")?, GMonth::from_str("--12Z")?);
+
+        assert_ne!(
+            GDay::from_str("---25-14:00")?,
+            GDay::from_str("---25+10:00")?
+        );
+        assert_ne!(GDay::from_str("---12")?, GDay::from_str("---12Z")?);
+        Ok(())
     }
 
     #[test]
     #[allow(clippy::neg_cmp_op_on_partial_ord)]
-    fn cmp() {
-        assert!(
-            Date::from_str("2004-12-25Z").unwrap() < Date::from_str("2004-12-25-05:00").unwrap()
-        );
-        assert!(
-            !(Date::from_str("2004-12-25-12:00").unwrap()
-                < Date::from_str("2004-12-26+12:00").unwrap())
-        );
+    fn cmp() -> Result<(), XsdParseError> {
+        assert!(Date::from_str("2004-12-25Z")? < Date::from_str("2004-12-25-05:00")?);
+        assert!(!(Date::from_str("2004-12-25-12:00")? < Date::from_str("2004-12-26+12:00")?));
 
-        assert!(
-            Date::from_str("2004-12-25Z").unwrap() > Date::from_str("2004-12-25+07:00").unwrap()
-        );
-        assert!(
-            !(Date::from_str("2004-12-25-12:00").unwrap()
-                > Date::from_str("2004-12-26+12:00").unwrap())
-        );
+        assert!(Date::from_str("2004-12-25Z")? > Date::from_str("2004-12-25+07:00")?);
+        assert!(!(Date::from_str("2004-12-25-12:00")? > Date::from_str("2004-12-26+12:00")?));
 
-        assert!(!(Time::from_str("12:00:00").unwrap() < Time::from_str("23:00:00+06:00").unwrap()));
-        assert!(Time::from_str("11:00:00-05:00").unwrap() < Time::from_str("17:00:00Z").unwrap());
-        assert!(!(Time::from_str("23:59:59").unwrap() < Time::from_str("24:00:00").unwrap()));
+        assert!(!(Time::from_str("12:00:00")? < Time::from_str("23:00:00+06:00")?));
+        assert!(Time::from_str("11:00:00-05:00")? < Time::from_str("17:00:00Z")?);
+        assert!(!(Time::from_str("23:59:59")? < Time::from_str("24:00:00")?));
 
-        assert!(
-            !(Time::from_str("08:00:00+09:00").unwrap()
-                > Time::from_str("17:00:00-06:00").unwrap())
-        );
+        assert!(!(Time::from_str("08:00:00+09:00")? > Time::from_str("17:00:00-06:00")?));
 
-        assert!(
-            GMonthDay::from_str("--12-12+13:00").unwrap()
-                < GMonthDay::from_str("--12-12+11:00").unwrap()
-        );
-        assert!(GDay::from_str("---15").unwrap() < GDay::from_str("---16").unwrap());
-        assert!(GDay::from_str("---15-13:00").unwrap() > GDay::from_str("---16+13:00").unwrap());
+        assert!(GMonthDay::from_str("--12-12+13:00")? < GMonthDay::from_str("--12-12+11:00")?);
+        assert!(GDay::from_str("---15")? < GDay::from_str("---16")?);
+        assert!(GDay::from_str("---15-13:00")? > GDay::from_str("---16+13:00")?);
         assert_eq!(
-            GDay::from_str("---15-11:00").unwrap(),
-            GDay::from_str("---16+13:00").unwrap()
+            GDay::from_str("---15-11:00")?,
+            GDay::from_str("---16+13:00")?
         );
-        assert!(GDay::from_str("---15-13:00")
-            .unwrap()
-            .partial_cmp(&GDay::from_str("---16").unwrap())
+        assert!(GDay::from_str("---15-13:00")?
+            .partial_cmp(&GDay::from_str("---16")?)
             .is_none());
+        Ok(())
     }
 
     #[test]
-    fn year() {
+    fn year() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("1999-05-31T13:20:00-05:00")
-                .unwrap()
-                .year(),
+            DateTime::from_str("1999-05-31T13:20:00-05:00")?.year(),
             1999
         );
         assert_eq!(
-            DateTime::from_str("1999-05-31T21:30:00-05:00")
-                .unwrap()
-                .year(),
+            DateTime::from_str("1999-05-31T21:30:00-05:00")?.year(),
             1999
         );
-        assert_eq!(
-            DateTime::from_str("1999-12-31T19:20:00").unwrap().year(),
-            1999
-        );
-        assert_eq!(
-            DateTime::from_str("1999-12-31T24:00:00").unwrap().year(),
-            2000
-        );
-        assert_eq!(
-            DateTime::from_str("-0002-06-06T00:00:00").unwrap().year(),
-            -2
-        );
+        assert_eq!(DateTime::from_str("1999-12-31T19:20:00")?.year(), 1999);
+        assert_eq!(DateTime::from_str("1999-12-31T24:00:00")?.year(), 2000);
+        assert_eq!(DateTime::from_str("-0002-06-06T00:00:00")?.year(), -2);
 
-        assert_eq!(Date::from_str("1999-05-31").unwrap().year(), 1999);
-        assert_eq!(Date::from_str("2000-01-01+05:00").unwrap().year(), 2000);
-        assert_eq!(Date::from_str("-0002-06-01").unwrap().year(), -2);
+        assert_eq!(Date::from_str("1999-05-31")?.year(), 1999);
+        assert_eq!(Date::from_str("2000-01-01+05:00")?.year(), 2000);
+        assert_eq!(Date::from_str("-0002-06-01")?.year(), -2);
+
+        assert_eq!(GYear::from_str("-0002")?.year(), -2);
+        assert_eq!(GYearMonth::from_str("-0002-02")?.year(), -2);
+        Ok(())
     }
 
     #[test]
-    fn month() {
-        assert_eq!(
-            DateTime::from_str("1999-05-31T13:20:00-05:00")
-                .unwrap()
-                .month(),
-            5
-        );
-        assert_eq!(
-            DateTime::from_str("1999-12-31T19:20:00-05:00")
-                .unwrap()
-                .month(),
-            12
-        );
+    fn month() -> Result<(), XsdParseError> {
+        assert_eq!(DateTime::from_str("1999-05-31T13:20:00-05:00")?.month(), 5);
+        assert_eq!(DateTime::from_str("1999-12-31T19:20:00-05:00")?.month(), 12);
 
-        assert_eq!(Date::from_str("1999-05-31-05:00").unwrap().month(), 5);
-        assert_eq!(Date::from_str("2000-01-01+05:00").unwrap().month(), 1);
+        assert_eq!(Date::from_str("1999-05-31-05:00")?.month(), 5);
+        assert_eq!(Date::from_str("2000-01-01+05:00")?.month(), 1);
+
+        assert_eq!(GMonth::from_str("--02")?.month(), 2);
+        assert_eq!(GYearMonth::from_str("-0002-02")?.month(), 2);
+        assert_eq!(GMonthDay::from_str("--02-03")?.month(), 2);
+        Ok(())
     }
 
     #[test]
-    fn day() {
-        assert_eq!(
-            DateTime::from_str("1999-05-31T13:20:00-05:00")
-                .unwrap()
-                .day(),
-            31
-        );
-        assert_eq!(
-            DateTime::from_str("1999-12-31T20:00:00-05:00")
-                .unwrap()
-                .day(),
-            31
-        );
+    fn day() -> Result<(), XsdParseError> {
+        assert_eq!(DateTime::from_str("1999-05-31T13:20:00-05:00")?.day(), 31);
+        assert_eq!(DateTime::from_str("1999-12-31T20:00:00-05:00")?.day(), 31);
 
-        assert_eq!(Date::from_str("1999-05-31-05:00").unwrap().day(), 31);
-        assert_eq!(Date::from_str("2000-01-01+05:00").unwrap().day(), 1);
+        assert_eq!(Date::from_str("1999-05-31-05:00")?.day(), 31);
+        assert_eq!(Date::from_str("2000-01-01+05:00")?.day(), 1);
+
+        assert_eq!(GDay::from_str("---03")?.day(), 3);
+        assert_eq!(GMonthDay::from_str("--02-03")?.day(), 3);
+        Ok(())
     }
 
     #[test]
-    fn hour() {
-        assert_eq!(
-            DateTime::from_str("1999-05-31T08:20:00-05:00")
-                .unwrap()
-                .hour(),
-            8
-        );
-        assert_eq!(
-            DateTime::from_str("1999-12-31T21:20:00-05:00")
-                .unwrap()
-                .hour(),
-            21
-        );
-        assert_eq!(
-            DateTime::from_str("1999-12-31T12:00:00").unwrap().hour(),
-            12
-        );
-        assert_eq!(DateTime::from_str("1999-12-31T24:00:00").unwrap().hour(), 0);
+    fn hour() -> Result<(), XsdParseError> {
+        assert_eq!(DateTime::from_str("1999-05-31T08:20:00-05:00")?.hour(), 8);
+        assert_eq!(DateTime::from_str("1999-12-31T21:20:00-05:00")?.hour(), 21);
+        assert_eq!(DateTime::from_str("1999-12-31T12:00:00")?.hour(), 12);
+        assert_eq!(DateTime::from_str("1999-12-31T24:00:00")?.hour(), 0);
 
-        assert_eq!(Time::from_str("11:23:00-05:00").unwrap().hour(), 11);
-        assert_eq!(Time::from_str("21:23:00-05:00").unwrap().hour(), 21);
-        assert_eq!(Time::from_str("01:23:00+05:00").unwrap().hour(), 1);
-        assert_eq!(Time::from_str("24:00:00").unwrap().hour(), 0);
+        assert_eq!(Time::from_str("11:23:00-05:00")?.hour(), 11);
+        assert_eq!(Time::from_str("21:23:00-05:00")?.hour(), 21);
+        assert_eq!(Time::from_str("01:23:00+05:00")?.hour(), 1);
+        assert_eq!(Time::from_str("24:00:00")?.hour(), 0);
+        Ok(())
     }
 
     #[test]
-    fn minute() {
+    fn minute() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("1999-05-31T13:20:00-05:00")
-                .unwrap()
-                .minute(),
+            DateTime::from_str("1999-05-31T13:20:00-05:00")?.minute(),
             20
         );
         assert_eq!(
-            DateTime::from_str("1999-05-31T13:30:00+05:30")
-                .unwrap()
-                .minute(),
+            DateTime::from_str("1999-05-31T13:30:00+05:30")?.minute(),
             30
         );
 
-        assert_eq!(Time::from_str("13:00:00Z").unwrap().minute(), 0);
+        assert_eq!(Time::from_str("13:00:00Z")?.minute(), 0);
+        Ok(())
     }
 
     #[test]
-    fn second() {
+    fn second() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("1999-05-31T13:20:00-05:00")
-                .unwrap()
-                .second(),
+            DateTime::from_str("1999-05-31T13:20:00-05:00")?.second(),
             Decimal::from(0)
         );
 
         assert_eq!(
-            Time::from_str("13:20:10.5").unwrap().second(),
-            Decimal::from_str("10.5").unwrap()
+            Time::from_str("13:20:10.5")?.second(),
+            Decimal::from_str("10.5")?
         );
+        Ok(())
     }
 
     #[test]
-    fn timezone() {
+    fn timezone() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("1999-05-31T13:20:00-05:00")
-                .unwrap()
-                .timezone(),
-            Some(DayTimeDuration::from_str("-PT5H").unwrap())
+            DateTime::from_str("1999-05-31T13:20:00-05:00")?.timezone(),
+            Some(DayTimeDuration::from_str("-PT5H")?)
         );
         assert_eq!(
-            DateTime::from_str("2000-06-12T13:20:00Z")
-                .unwrap()
-                .timezone(),
-            Some(DayTimeDuration::from_str("PT0S").unwrap())
+            DateTime::from_str("2000-06-12T13:20:00Z")?.timezone(),
+            Some(DayTimeDuration::from_str("PT0S")?)
+        );
+        assert_eq!(DateTime::from_str("2004-08-27T00:00:00")?.timezone(), None);
+
+        assert_eq!(
+            Date::from_str("1999-05-31-05:00")?.timezone(),
+            Some(DayTimeDuration::from_str("-PT5H")?)
         );
         assert_eq!(
-            DateTime::from_str("2004-08-27T00:00:00")
-                .unwrap()
-                .timezone(),
-            None
+            Date::from_str("2000-06-12Z")?.timezone(),
+            Some(DayTimeDuration::from_str("PT0S")?)
         );
 
         assert_eq!(
-            Date::from_str("1999-05-31-05:00").unwrap().timezone(),
-            Some(DayTimeDuration::from_str("-PT5H").unwrap())
+            Time::from_str("13:20:00-05:00")?.timezone(),
+            Some(DayTimeDuration::from_str("-PT5H")?)
         );
-        assert_eq!(
-            Date::from_str("2000-06-12Z").unwrap().timezone(),
-            Some(DayTimeDuration::from_str("PT0S").unwrap())
-        );
-
-        assert_eq!(
-            Time::from_str("13:20:00-05:00").unwrap().timezone(),
-            Some(DayTimeDuration::from_str("-PT5H").unwrap())
-        );
-        assert_eq!(Time::from_str("13:20:00").unwrap().timezone(), None);
+        assert_eq!(Time::from_str("13:20:00")?.timezone(), None);
+        Ok(())
     }
 
     #[test]
-    fn sub() {
+    fn sub() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("2000-10-30T06:12:00-05:00")
-                .unwrap()
-                .checked_sub(DateTime::from_str("1999-11-28T09:00:00Z").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("P337DT2H12M").unwrap()
+            DateTime::from_str("2000-10-30T06:12:00-05:00")?
+                .checked_sub(DateTime::from_str("1999-11-28T09:00:00Z")?),
+            Some(DayTimeDuration::from_str("P337DT2H12M")?)
         );
 
         assert_eq!(
-            Date::from_str("2000-10-30")
-                .unwrap()
-                .checked_sub(Date::from_str("1999-11-28").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("P337D").unwrap()
+            Date::from_str("2000-10-30")?.checked_sub(Date::from_str("1999-11-28")?),
+            Some(DayTimeDuration::from_str("P337D")?)
         );
         assert_eq!(
-            Date::from_str("2000-10-30+05:00")
-                .unwrap()
-                .checked_sub(Date::from_str("1999-11-28Z").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("P336DT19H").unwrap()
+            Date::from_str("2000-10-30+05:00")?.checked_sub(Date::from_str("1999-11-28Z")?),
+            Some(DayTimeDuration::from_str("P336DT19H")?)
         );
         assert_eq!(
-            Date::from_str("2000-10-15-05:00")
-                .unwrap()
-                .checked_sub(Date::from_str("2000-10-10+02:00").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("P5DT7H").unwrap()
+            Date::from_str("2000-10-15-05:00")?.checked_sub(Date::from_str("2000-10-10+02:00")?),
+            Some(DayTimeDuration::from_str("P5DT7H")?)
         );
 
         assert_eq!(
-            Time::from_str("11:12:00Z")
-                .unwrap()
-                .checked_sub(Time::from_str("04:00:00-05:00").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("PT2H12M").unwrap()
+            Time::from_str("11:12:00Z")?.checked_sub(Time::from_str("04:00:00-05:00")?),
+            Some(DayTimeDuration::from_str("PT2H12M")?)
         );
         assert_eq!(
-            Time::from_str("11:00:00-05:00")
-                .unwrap()
-                .checked_sub(Time::from_str("21:30:00+05:30").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("PT0S").unwrap()
+            Time::from_str("11:00:00-05:00")?.checked_sub(Time::from_str("21:30:00+05:30")?),
+            Some(DayTimeDuration::from_str("PT0S")?)
         );
         assert_eq!(
-            Time::from_str("17:00:00-06:00")
-                .unwrap()
-                .checked_sub(Time::from_str("08:00:00+09:00").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("P1D").unwrap()
+            Time::from_str("17:00:00-06:00")?.checked_sub(Time::from_str("08:00:00+09:00")?),
+            Some(DayTimeDuration::from_str("P1D")?)
         );
         assert_eq!(
-            Time::from_str("24:00:00")
-                .unwrap()
-                .checked_sub(Time::from_str("23:59:59").unwrap())
-                .unwrap(),
-            DayTimeDuration::from_str("-PT23H59M59S").unwrap()
+            Time::from_str("24:00:00")?.checked_sub(Time::from_str("23:59:59")?),
+            Some(DayTimeDuration::from_str("-PT23H59M59S")?)
         );
+        Ok(())
     }
 
     #[test]
-    fn add_duration() {
+    fn add_duration() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("2000-01-12T12:13:14Z")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1Y3M5DT7H10M3.3S").unwrap())
-                .unwrap(),
-            DateTime::from_str("2001-04-17T19:23:17.3Z").unwrap()
+            DateTime::from_str("2000-01-12T12:13:14Z")?
+                .checked_add_duration(Duration::from_str("P1Y3M5DT7H10M3.3S")?),
+            Some(DateTime::from_str("2001-04-17T19:23:17.3Z")?)
         );
         assert_eq!(
-            Date::from_str("2000-01-01")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("-P3M").unwrap())
-                .unwrap()
-                .to_string(),
-            "1999-10-01"
+            Date::from_str("2000-01-01")?.checked_add_duration(Duration::from_str("-P3M")?),
+            Some(Date::from_str("1999-10-01")?)
         );
         assert_eq!(
-            Date::from_str("2000-01-12")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("PT33H").unwrap())
-                .unwrap(),
-            Date::from_str("2000-01-13").unwrap()
+            Date::from_str("2000-01-12")?.checked_add_duration(Duration::from_str("PT33H")?),
+            Some(Date::from_str("2000-01-13")?)
         );
         assert_eq!(
-            Date::from_str("2000-03-30")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1D").unwrap())
-                .unwrap(),
-            Date::from_str("2000-03-31").unwrap()
+            Date::from_str("2000-03-30")?.checked_add_duration(Duration::from_str("P1D")?),
+            Some(Date::from_str("2000-03-31")?)
         );
         assert_eq!(
-            Date::from_str("2000-03-31")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1M").unwrap())
-                .unwrap(),
-            Date::from_str("2000-04-30").unwrap()
+            Date::from_str("2000-03-31")?.checked_add_duration(Duration::from_str("P1M")?),
+            Some(Date::from_str("2000-04-30")?)
         );
         assert_eq!(
-            Date::from_str("2000-03-30")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1M").unwrap())
-                .unwrap(),
-            Date::from_str("2000-04-30").unwrap()
+            Date::from_str("2000-03-30")?.checked_add_duration(Duration::from_str("P1M")?),
+            Some(Date::from_str("2000-04-30")?)
         );
         assert_eq!(
-            Date::from_str("2000-04-30")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1D").unwrap())
-                .unwrap(),
-            Date::from_str("2000-05-01").unwrap()
+            Date::from_str("2000-04-30")?.checked_add_duration(Duration::from_str("P1D")?),
+            Some(Date::from_str("2000-05-01")?)
         );
 
         assert_eq!(
-            DateTime::from_str("2000-10-30T11:12:00")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1Y2M").unwrap())
-                .unwrap(),
-            DateTime::from_str("2001-12-30T11:12:00").unwrap()
+            DateTime::from_str("2000-10-30T11:12:00")?
+                .checked_add_duration(Duration::from_str("P1Y2M")?),
+            Some(DateTime::from_str("2001-12-30T11:12:00")?)
         );
         assert_eq!(
-            DateTime::from_str("2000-10-30T11:12:00")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P3DT1H15M").unwrap())
-                .unwrap(),
-            DateTime::from_str("2000-11-02T12:27:00").unwrap()
+            DateTime::from_str("2000-10-30T11:12:00")?
+                .checked_add_duration(Duration::from_str("P3DT1H15M")?),
+            Some(DateTime::from_str("2000-11-02T12:27:00")?)
         );
 
         assert_eq!(
-            Date::from_str("2000-10-30")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1Y2M").unwrap())
-                .unwrap(),
-            Date::from_str("2001-12-30").unwrap()
+            Date::from_str("2000-10-30")?.checked_add_duration(Duration::from_str("P1Y2M")?),
+            Some(Date::from_str("2001-12-30")?)
         );
         assert_eq!(
-            Date::from_str("2004-10-30Z")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P2DT2H30M0S").unwrap())
-                .unwrap(),
-            Date::from_str("2004-11-01Z").unwrap()
+            Date::from_str("2004-10-30Z")?.checked_add_duration(Duration::from_str("P2DT2H30M0S")?),
+            Some(Date::from_str("2004-11-01Z")?)
         );
 
         assert_eq!(
-            Time::from_str("11:12:00")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P3DT1H15M").unwrap())
-                .unwrap(),
-            Time::from_str("12:27:00").unwrap()
+            Time::from_str("11:12:00")?.checked_add_duration(Duration::from_str("P3DT1H15M")?),
+            Some(Time::from_str("12:27:00")?)
         );
         assert_eq!(
-            Time::from_str("23:12:00+03:00")
-                .unwrap()
-                .checked_add_duration(Duration::from_str("P1DT3H15M").unwrap())
-                .unwrap(),
-            Time::from_str("02:27:00+03:00").unwrap()
+            Time::from_str("23:12:00+03:00")?
+                .checked_add_duration(Duration::from_str("P1DT3H15M")?),
+            Some(Time::from_str("02:27:00+03:00")?)
         );
+        Ok(())
     }
 
     #[test]
-    fn sub_duration() {
+    fn sub_duration() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("2000-10-30T11:12:00")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P1Y2M").unwrap())
-                .unwrap(),
-            DateTime::from_str("1999-08-30T11:12:00").unwrap()
+            DateTime::from_str("2000-10-30T11:12:00")?
+                .checked_sub_duration(Duration::from_str("P1Y2M")?),
+            Some(DateTime::from_str("1999-08-30T11:12:00")?)
         );
         assert_eq!(
-            DateTime::from_str("2000-10-30T11:12:00")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P3DT1H15M").unwrap())
-                .unwrap(),
-            DateTime::from_str("2000-10-27T09:57:00").unwrap()
+            DateTime::from_str("2000-10-30T11:12:00")?
+                .checked_sub_duration(Duration::from_str("P3DT1H15M")?),
+            Some(DateTime::from_str("2000-10-27T09:57:00")?)
         );
 
         assert_eq!(
-            Date::from_str("2000-10-30")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P1Y2M").unwrap())
-                .unwrap(),
-            Date::from_str("1999-08-30").unwrap()
+            Date::from_str("2000-10-30")?.checked_sub_duration(Duration::from_str("P1Y2M")?),
+            Some(Date::from_str("1999-08-30")?)
         );
         assert_eq!(
-            Date::from_str("2000-02-29Z")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P1Y").unwrap())
-                .unwrap(),
-            Date::from_str("1999-02-28Z").unwrap()
+            Date::from_str("2000-02-29Z")?.checked_sub_duration(Duration::from_str("P1Y")?),
+            Some(Date::from_str("1999-02-28Z")?)
         );
         assert_eq!(
-            Date::from_str("2000-10-31-05:00")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P1Y1M").unwrap())
-                .unwrap(),
-            Date::from_str("1999-09-30-05:00").unwrap()
+            Date::from_str("2000-10-31-05:00")?.checked_sub_duration(Duration::from_str("P1Y1M")?),
+            Some(Date::from_str("1999-09-30-05:00")?)
         );
         assert_eq!(
-            Date::from_str("2000-10-30")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P3DT1H15M").unwrap())
-                .unwrap(),
-            Date::from_str("2000-10-26").unwrap()
+            Date::from_str("2000-10-30")?.checked_sub_duration(Duration::from_str("P3DT1H15M")?),
+            Some(Date::from_str("2000-10-26")?)
         );
 
         assert_eq!(
-            Time::from_str("11:12:00")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P3DT1H15M").unwrap())
-                .unwrap(),
-            Time::from_str("09:57:00").unwrap()
+            Time::from_str("11:12:00")?.checked_sub_duration(Duration::from_str("P3DT1H15M")?),
+            Some(Time::from_str("09:57:00")?)
         );
         assert_eq!(
-            Time::from_str("08:20:00-05:00")
-                .unwrap()
-                .checked_sub_duration(Duration::from_str("P23DT10H10M").unwrap())
-                .unwrap(),
-            Time::from_str("22:10:00-05:00").unwrap()
+            Time::from_str("08:20:00-05:00")?
+                .checked_sub_duration(Duration::from_str("P23DT10H10M")?),
+            Some(Time::from_str("22:10:00-05:00")?)
         );
+        Ok(())
     }
 
     #[test]
-    fn adjust() {
+    fn adjust() -> Result<(), XsdParseError> {
         assert_eq!(
-            DateTime::from_str("2002-03-07T10:00:00-07:00")
-                .unwrap()
-                .adjust(Some(
-                    DayTimeDuration::from_str("PT10H")
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                ))
-                .unwrap(),
-            DateTime::from_str("2002-03-08T03:00:00+10:00").unwrap()
+            DateTime::from_str("2002-03-07T10:00:00-07:00")?.adjust(Some(
+                DayTimeDuration::from_str("PT10H")?.try_into().unwrap()
+            )),
+            Some(DateTime::from_str("2002-03-08T03:00:00+10:00")?)
         );
         assert_eq!(
-            DateTime::from_str("2002-03-07T00:00:00+01:00")
-                .unwrap()
-                .adjust(Some(
-                    DayTimeDuration::from_str("-PT8H")
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                ))
-                .unwrap(),
-            DateTime::from_str("2002-03-06T15:00:00-08:00").unwrap()
+            DateTime::from_str("2002-03-07T00:00:00+01:00")?.adjust(Some(
+                DayTimeDuration::from_str("-PT8H")?.try_into().unwrap()
+            )),
+            Some(DateTime::from_str("2002-03-06T15:00:00-08:00")?)
         );
         assert_eq!(
-            DateTime::from_str("2002-03-07T10:00:00")
-                .unwrap()
-                .adjust(None)
-                .unwrap(),
-            DateTime::from_str("2002-03-07T10:00:00").unwrap()
+            DateTime::from_str("2002-03-07T10:00:00")?.adjust(None),
+            Some(DateTime::from_str("2002-03-07T10:00:00")?)
         );
         assert_eq!(
-            DateTime::from_str("2002-03-07T10:00:00-07:00")
-                .unwrap()
-                .adjust(None)
-                .unwrap(),
-            DateTime::from_str("2002-03-07T10:00:00").unwrap()
+            DateTime::from_str("2002-03-07T10:00:00-07:00")?.adjust(None),
+            Some(DateTime::from_str("2002-03-07T10:00:00")?)
         );
 
         assert_eq!(
-            Date::from_str("2002-03-07")
-                .unwrap()
-                .adjust(Some(
-                    DayTimeDuration::from_str("-PT10H")
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                ))
-                .unwrap(),
-            Date::from_str("2002-03-07-10:00").unwrap()
+            Date::from_str("2002-03-07")?.adjust(Some(
+                DayTimeDuration::from_str("-PT10H")?.try_into().unwrap()
+            )),
+            Some(Date::from_str("2002-03-07-10:00")?)
         );
         assert_eq!(
-            Date::from_str("2002-03-07-07:00")
-                .unwrap()
-                .adjust(Some(
-                    DayTimeDuration::from_str("-PT10H")
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                ))
-                .unwrap(),
-            Date::from_str("2002-03-06-10:00").unwrap()
+            Date::from_str("2002-03-07-07:00")?.adjust(Some(
+                DayTimeDuration::from_str("-PT10H")
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+            )),
+            Some(Date::from_str("2002-03-06-10:00")?)
         );
         assert_eq!(
-            Date::from_str("2002-03-07").unwrap().adjust(None).unwrap(),
-            Date::from_str("2002-03-07").unwrap()
+            Date::from_str("2002-03-07")?.adjust(None),
+            Some(Date::from_str("2002-03-07")?)
         );
         assert_eq!(
-            Date::from_str("2002-03-07-07:00")
-                .unwrap()
-                .adjust(None)
-                .unwrap(),
-            Date::from_str("2002-03-07").unwrap()
+            Date::from_str("2002-03-07-07:00")?.adjust(None),
+            Some(Date::from_str("2002-03-07")?)
         );
 
         assert_eq!(
-            Time::from_str("10:00:00")
-                .unwrap()
-                .adjust(Some(
-                    DayTimeDuration::from_str("-PT10H")
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                ))
-                .unwrap(),
-            Time::from_str("10:00:00-10:00").unwrap()
+            Time::from_str("10:00:00")?.adjust(Some(
+                DayTimeDuration::from_str("-PT10H")?.try_into().unwrap()
+            )),
+            Some(Time::from_str("10:00:00-10:00")?)
         );
         assert_eq!(
-            Time::from_str("10:00:00-07:00")
-                .unwrap()
-                .adjust(Some(
-                    DayTimeDuration::from_str("-PT10H")
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                ))
-                .unwrap(),
-            Time::from_str("07:00:00-10:00").unwrap()
+            Time::from_str("10:00:00-07:00")?.adjust(Some(
+                DayTimeDuration::from_str("-PT10H")?.try_into().unwrap()
+            )),
+            Some(Time::from_str("07:00:00-10:00")?)
         );
         assert_eq!(
-            Time::from_str("10:00:00").unwrap().adjust(None).unwrap(),
-            Time::from_str("10:00:00").unwrap()
+            Time::from_str("10:00:00")?.adjust(None),
+            Some(Time::from_str("10:00:00")?)
         );
         assert_eq!(
-            Time::from_str("10:00:00-07:00")
-                .unwrap()
-                .adjust(None)
-                .unwrap(),
-            Time::from_str("10:00:00").unwrap()
+            Time::from_str("10:00:00-07:00")?.adjust(None),
+            Some(Time::from_str("10:00:00")?)
         );
         assert_eq!(
-            Time::from_str("10:00:00-07:00")
-                .unwrap()
-                .adjust(Some(
-                    DayTimeDuration::from_str("PT10H")
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                ))
-                .unwrap(),
-            Time::from_str("03:00:00+10:00").unwrap()
+            Time::from_str("10:00:00-07:00")?.adjust(Some(
+                DayTimeDuration::from_str("PT10H")?.try_into().unwrap()
+            )),
+            Some(Time::from_str("03:00:00+10:00")?)
         );
+        Ok(())
     }
 
     #[test]
-    fn now() {
+    fn now() -> Result<(), XsdParseError> {
         let now = DateTime::now().unwrap();
-        assert!(DateTime::from_str("2022-01-01T00:00:00Z").unwrap() < now);
-        assert!(now < DateTime::from_str("2100-01-01T00:00:00Z").unwrap());
+        assert!(DateTime::from_str("2022-01-01T00:00:00Z")? < now);
+        assert!(now < DateTime::from_str("2100-01-01T00:00:00Z")?);
+        Ok(())
     }
 }

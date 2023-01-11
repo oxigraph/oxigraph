@@ -278,19 +278,28 @@ mod tests {
 
     #[test]
     fn from_str() -> Result<(), ParseFloatError> {
-        assert!(Double::from(f64::NAN).is_identical_with(&Double::from_str("NaN")?));
-        assert_eq!(Double::from(f64::INFINITY), Double::from_str("INF")?);
-        assert_eq!(Double::from(f64::INFINITY), Double::from_str("+INF")?);
-        assert_eq!(Double::from(f64::NEG_INFINITY), Double::from_str("-INF")?);
-        assert_eq!(Double::from(0.), Double::from_str("0.0E0")?);
-        assert_eq!(Double::from(-0.), Double::from_str("-0.0E0")?);
+        assert_eq!(Double::from_str("NaN")?.to_string(), "NaN");
+        assert_eq!(Double::from_str("INF")?.to_string(), "INF");
+        assert_eq!(Double::from_str("+INF")?.to_string(), "INF");
+        assert_eq!(Double::from_str("-INF")?.to_string(), "-INF");
+        assert_eq!(Double::from_str("0.0E0")?.to_string(), "0");
+        assert_eq!(Double::from_str("-0.0E0")?.to_string(), "-0");
+        assert_eq!(Double::from_str("0.1e1")?.to_string(), "1");
+        assert_eq!(Double::from_str("-0.1e1")?.to_string(), "-1");
+        assert_eq!(Double::from_str("1.e1")?.to_string(), "10");
+        assert_eq!(Double::from_str("-1.e1")?.to_string(), "-10");
+        assert_eq!(Double::from_str("1")?.to_string(), "1");
+        assert_eq!(Double::from_str("-1")?.to_string(), "-1");
+        assert_eq!(Double::from_str("1.")?.to_string(), "1");
+        assert_eq!(Double::from_str("-1.")?.to_string(), "-1");
+        assert_eq!(
+            Double::from_str(&f64::MIN.to_string()).unwrap(),
+            Double::from(f64::MIN)
+        );
+        assert_eq!(
+            Double::from_str(&f64::MAX.to_string()).unwrap(),
+            Double::from(f64::MAX)
+        );
         Ok(())
-    }
-
-    #[test]
-    fn to_string() {
-        assert_eq!("NaN", Double::from(f64::NAN).to_string());
-        assert_eq!("INF", Double::from(f64::INFINITY).to_string());
-        assert_eq!("-INF", Double::from(f64::NEG_INFINITY).to_string());
     }
 }

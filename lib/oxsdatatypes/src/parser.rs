@@ -1,5 +1,5 @@
 use super::date_time::{DateTimeError, GDay, GMonth, GMonthDay, GYear, GYearMonth, TimezoneOffset};
-use super::decimal::DecimalParseError;
+use super::decimal::ParseDecimalError;
 use super::duration::{DayTimeDuration, YearMonthDuration};
 use super::*;
 use nom::branch::alt;
@@ -29,7 +29,7 @@ enum XsdParseErrorKind {
     TooMuchData { count: usize },
     Overflow,
     ParseInt(ParseIntError),
-    ParseDecimal(DecimalParseError),
+    ParseDecimal(ParseDecimalError),
     OutOfIntegerRange { value: u8, min: u8, max: u8 },
     DateTime(DateTimeError),
 }
@@ -108,8 +108,8 @@ impl From<ParseIntError> for XsdParseError {
     }
 }
 
-impl From<DecimalParseError> for XsdParseError {
-    fn from(error: DecimalParseError) -> Self {
+impl From<ParseDecimalError> for XsdParseError {
+    fn from(error: ParseDecimalError) -> Self {
         Self {
             kind: XsdParseErrorKind::ParseDecimal(error),
         }

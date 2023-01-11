@@ -358,10 +358,10 @@ impl TryFrom<Decimal> for Integer {
 }
 
 impl FromStr for Decimal {
-    type Err = DecimalParseError;
+    type Err = ParseDecimalError;
 
     /// Parses decimals lexical mapping
-    fn from_str(input: &str) -> Result<Self, DecimalParseError> {
+    fn from_str(input: &str) -> Result<Self, ParseDecimalError> {
         // (\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)
         let input = input.as_bytes();
         if input.is_empty() {
@@ -515,7 +515,7 @@ impl Neg for Decimal {
 
 /// An error when parsing a [`Decimal`].
 #[derive(Debug, Clone)]
-pub struct DecimalParseError {
+pub struct ParseDecimalError {
     kind: DecimalParseErrorKind,
 }
 
@@ -527,20 +527,20 @@ enum DecimalParseErrorKind {
     UnexpectedEnd,
 }
 
-const PARSE_OVERFLOW: DecimalParseError = DecimalParseError {
+const PARSE_OVERFLOW: ParseDecimalError = ParseDecimalError {
     kind: DecimalParseErrorKind::Overflow,
 };
-const PARSE_UNDERFLOW: DecimalParseError = DecimalParseError {
+const PARSE_UNDERFLOW: ParseDecimalError = ParseDecimalError {
     kind: DecimalParseErrorKind::Underflow,
 };
-const PARSE_UNEXPECTED_CHAR: DecimalParseError = DecimalParseError {
+const PARSE_UNEXPECTED_CHAR: ParseDecimalError = ParseDecimalError {
     kind: DecimalParseErrorKind::UnexpectedChar,
 };
-const PARSE_UNEXPECTED_END: DecimalParseError = DecimalParseError {
+const PARSE_UNEXPECTED_END: ParseDecimalError = ParseDecimalError {
     kind: DecimalParseErrorKind::UnexpectedEnd,
 };
 
-impl fmt::Display for DecimalParseError {
+impl fmt::Display for ParseDecimalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             DecimalParseErrorKind::Overflow => write!(f, "Value overflow"),
@@ -551,9 +551,9 @@ impl fmt::Display for DecimalParseError {
     }
 }
 
-impl Error for DecimalParseError {}
+impl Error for ParseDecimalError {}
 
-impl From<DecimalOverflowError> for DecimalParseError {
+impl From<DecimalOverflowError> for ParseDecimalError {
     fn from(_: DecimalOverflowError) -> Self {
         Self {
             kind: DecimalParseErrorKind::Overflow,
@@ -578,46 +578,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new() {
-        assert_eq!(Decimal::new(1, 0).unwrap().to_string(), "1");
-        assert_eq!(Decimal::new(1, 1).unwrap().to_string(), "0.1");
-        assert_eq!(Decimal::new(10, 0).unwrap().to_string(), "10");
-        assert_eq!(Decimal::new(10, 1).unwrap().to_string(), "1");
-        assert_eq!(Decimal::new(10, 2).unwrap().to_string(), "0.1");
+    fn new() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::new(1, 0)?.to_string(), "1");
+        assert_eq!(Decimal::new(1, 1)?.to_string(), "0.1");
+        assert_eq!(Decimal::new(10, 0)?.to_string(), "10");
+        assert_eq!(Decimal::new(10, 1)?.to_string(), "1");
+        assert_eq!(Decimal::new(10, 2)?.to_string(), "0.1");
+        Ok(())
     }
 
     #[test]
-    fn from_str() {
-        assert_eq!(Decimal::from_str("210").unwrap().to_string(), "210");
-        assert_eq!(Decimal::from_str("1000").unwrap().to_string(), "1000");
-        assert_eq!(Decimal::from_str("-1.23").unwrap().to_string(), "-1.23");
+    fn from_str() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::from_str("210")?.to_string(), "210");
+        assert_eq!(Decimal::from_str("1000")?.to_string(), "1000");
+        assert_eq!(Decimal::from_str("-1.23")?.to_string(), "-1.23");
         assert_eq!(
-            Decimal::from_str("12678967.543233").unwrap().to_string(),
+            Decimal::from_str("12678967.543233")?.to_string(),
             "12678967.543233"
         );
-        assert_eq!(
-            Decimal::from_str("+100000.00").unwrap().to_string(),
-            "100000"
-        );
-        assert_eq!(Decimal::from_str("0.1220").unwrap().to_string(), "0.122");
-        assert_eq!(Decimal::from_str(".12200").unwrap().to_string(), "0.122");
-        assert_eq!(Decimal::from_str("1.").unwrap().to_string(), "1");
-        assert_eq!(Decimal::from_str("01.0").unwrap().to_string(), "1");
-        assert_eq!(Decimal::from_str("0").unwrap().to_string(), "0");
-        assert_eq!(
-            Decimal::from_str(&Decimal::MAX.to_string()).unwrap(),
-            Decimal::MAX
-        );
+        assert_eq!(Decimal::from_str("+100000.00")?.to_string(), "100000");
+        assert_eq!(Decimal::from_str("0.1220")?.to_string(), "0.122");
+        assert_eq!(Decimal::from_str(".12200")?.to_string(), "0.122");
+        assert_eq!(Decimal::from_str("1.")?.to_string(), "1");
+        assert_eq!(Decimal::from_str("1.0")?.to_string(), "1");
+        assert_eq!(Decimal::from_str("01.0")?.to_string(), "1");
+        assert_eq!(Decimal::from_str("0")?.to_string(), "0");
+        assert_eq!(Decimal::from_str("-0")?.to_string(), "0");
+        assert_eq!(Decimal::from_str(&Decimal::MAX.to_string())?, Decimal::MAX);
         assert_eq!(
             Decimal::from_str(
                 &Decimal::MIN
                     .checked_add(Decimal::step())
                     .unwrap()
                     .to_string()
-            )
-            .unwrap(),
+            )?,
             Decimal::MIN.checked_add(Decimal::step()).unwrap()
         );
+        Ok(())
     }
 
     #[test]
@@ -654,100 +651,75 @@ mod tests {
     }
 
     #[test]
-    fn mul() {
+    fn mul() -> Result<(), ParseDecimalError> {
         assert_eq!(
-            Decimal::from_str("1")
-                .unwrap()
-                .checked_mul(Decimal::from_str("-1").unwrap()),
-            Some(Decimal::from_str("-1").unwrap())
+            Decimal::from_str("1")?.checked_mul(Decimal::from_str("-1")?),
+            Some(Decimal::from_str("-1")?)
         );
         assert_eq!(
-            Decimal::from_str("1000")
-                .unwrap()
-                .checked_mul(Decimal::from_str("1000").unwrap()),
-            Some(Decimal::from_str("1000000").unwrap())
+            Decimal::from_str("1000")?.checked_mul(Decimal::from_str("1000")?),
+            Some(Decimal::from_str("1000000")?)
         );
         assert_eq!(
-            Decimal::from_str("0.1")
-                .unwrap()
-                .checked_mul(Decimal::from_str("0.01").unwrap()),
-            Some(Decimal::from_str("0.001").unwrap())
+            Decimal::from_str("0.1")?.checked_mul(Decimal::from_str("0.01")?),
+            Some(Decimal::from_str("0.001")?)
         );
+        Ok(())
     }
 
     #[test]
-    fn div() {
+    fn div() -> Result<(), ParseDecimalError> {
         assert_eq!(
-            Decimal::from_str("1")
-                .unwrap()
-                .checked_div(Decimal::from_str("1").unwrap()),
-            Some(Decimal::from_str("1").unwrap())
+            Decimal::from_str("1")?.checked_div(Decimal::from_str("1")?),
+            Some(Decimal::from_str("1")?)
         );
         assert_eq!(
-            Decimal::from_str("100")
-                .unwrap()
-                .checked_div(Decimal::from_str("10").unwrap()),
-            Some(Decimal::from_str("10").unwrap())
+            Decimal::from_str("100")?.checked_div(Decimal::from_str("10")?),
+            Some(Decimal::from_str("10")?)
         );
         assert_eq!(
-            Decimal::from_str("10")
-                .unwrap()
-                .checked_div(Decimal::from_str("100").unwrap()),
-            Some(Decimal::from_str("0.1").unwrap())
+            Decimal::from_str("10")?.checked_div(Decimal::from_str("100")?),
+            Some(Decimal::from_str("0.1")?)
         );
+        Ok(())
     }
 
     #[test]
-    fn round() {
-        assert_eq!(Decimal::from_str("10").unwrap().round(), Decimal::from(10));
-        assert_eq!(
-            Decimal::from_str("-10").unwrap().round(),
-            Decimal::from(-10)
-        );
-        assert_eq!(Decimal::from_str("2.5").unwrap().round(), Decimal::from(3));
-        assert_eq!(
-            Decimal::from_str("2.4999").unwrap().round(),
-            Decimal::from(2)
-        );
-        assert_eq!(
-            Decimal::from_str("-2.5").unwrap().round(),
-            Decimal::from(-2)
-        );
+    fn round() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::from_str("10")?.round(), Decimal::from(10));
+        assert_eq!(Decimal::from_str("-10")?.round(), Decimal::from(-10));
+        assert_eq!(Decimal::from_str("2.5")?.round(), Decimal::from(3));
+        assert_eq!(Decimal::from_str("2.4999")?.round(), Decimal::from(2));
+        assert_eq!(Decimal::from_str("-2.5")?.round(), Decimal::from(-2));
         assert_eq!(Decimal::from(i64::MIN).round(), Decimal::from(i64::MIN));
         assert_eq!(Decimal::from(i64::MAX).round(), Decimal::from(i64::MAX));
+        Ok(())
     }
 
     #[test]
-    fn ceil() {
-        assert_eq!(Decimal::from_str("10").unwrap().ceil(), Decimal::from(10));
-        assert_eq!(Decimal::from_str("-10").unwrap().ceil(), Decimal::from(-10));
-        assert_eq!(Decimal::from_str("10.5").unwrap().ceil(), Decimal::from(11));
-        assert_eq!(
-            Decimal::from_str("-10.5").unwrap().ceil(),
-            Decimal::from(-10)
-        );
+    fn ceil() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::from_str("10")?.ceil(), Decimal::from(10));
+        assert_eq!(Decimal::from_str("-10")?.ceil(), Decimal::from(-10));
+        assert_eq!(Decimal::from_str("10.5")?.ceil(), Decimal::from(11));
+        assert_eq!(Decimal::from_str("-10.5")?.ceil(), Decimal::from(-10));
         assert_eq!(Decimal::from(i64::MIN).ceil(), Decimal::from(i64::MIN));
         assert_eq!(Decimal::from(i64::MAX).ceil(), Decimal::from(i64::MAX));
+        Ok(())
     }
 
     #[test]
-    fn floor() {
-        assert_eq!(Decimal::from_str("10").unwrap().ceil(), Decimal::from(10));
-        assert_eq!(Decimal::from_str("-10").unwrap().ceil(), Decimal::from(-10));
-        assert_eq!(
-            Decimal::from_str("10.5").unwrap().floor(),
-            Decimal::from(10)
-        );
-        assert_eq!(
-            Decimal::from_str("-10.5").unwrap().floor(),
-            Decimal::from(-11)
-        );
+    fn floor() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::from_str("10")?.ceil(), Decimal::from(10));
+        assert_eq!(Decimal::from_str("-10")?.ceil(), Decimal::from(-10));
+        assert_eq!(Decimal::from_str("10.5")?.floor(), Decimal::from(10));
+        assert_eq!(Decimal::from_str("-10.5")?.floor(), Decimal::from(-11));
         assert_eq!(Decimal::from(i64::MIN).floor(), Decimal::from(i64::MIN));
         assert_eq!(Decimal::from(i64::MAX).floor(), Decimal::from(i64::MAX));
+        Ok(())
     }
 
     #[test]
-    fn to_be_bytes() {
+    fn to_be_bytes() -> Result<(), ParseDecimalError> {
         assert_eq!(
             Decimal::from_be_bytes(Decimal::from(i64::MIN).to_be_bytes()),
             Decimal::from(i64::MIN)
@@ -765,9 +737,10 @@ mod tests {
             Decimal::from(0)
         );
         assert_eq!(
-            Decimal::from_be_bytes(Decimal::from_str("0.01").unwrap().to_be_bytes()),
-            Decimal::from_str("0.01").unwrap()
+            Decimal::from_be_bytes(Decimal::from_str("0.01")?.to_be_bytes()),
+            Decimal::from_str("0.01")?
         );
+        Ok(())
     }
 
     #[test]
@@ -777,18 +750,18 @@ mod tests {
     }
 
     #[test]
-    fn from_float() {
+    fn from_float() -> Result<(), ParseDecimalError> {
         assert_eq!(
-            Decimal::try_from(Float::from(0.)).unwrap(),
-            Decimal::from_str("0").unwrap()
+            Decimal::try_from(Float::from(0.)).ok(),
+            Some(Decimal::from_str("0")?)
         );
         assert_eq!(
-            Decimal::try_from(Float::from(-0.)).unwrap(),
-            Decimal::from_str("0.").unwrap()
+            Decimal::try_from(Float::from(-0.)).ok(),
+            Some(Decimal::from_str("0.")?)
         );
         assert_eq!(
-            Decimal::try_from(Float::from(-123.5)).unwrap(),
-            Decimal::from_str("-123.5").unwrap()
+            Decimal::try_from(Float::from(-123.5)).ok(),
+            Some(Decimal::from_str("-123.5")?)
         );
         assert!(Decimal::try_from(Float::from(f32::NAN)).is_err());
         assert!(Decimal::try_from(Float::from(f32::INFINITY)).is_err());
@@ -798,31 +771,32 @@ mod tests {
         assert!(
             Decimal::try_from(Float::from(1672507302466.))
                 .unwrap()
-                .checked_sub(Decimal::from_str("1672507302466").unwrap())
+                .checked_sub(Decimal::from_str("1672507302466")?)
                 .unwrap()
                 .abs()
                 < Decimal::from(1_000_000)
         );
+        Ok(())
     }
 
     #[test]
-    fn from_double() {
+    fn from_double() -> Result<(), ParseDecimalError> {
         assert_eq!(
-            Decimal::try_from(Double::from(0.)).unwrap(),
-            Decimal::from_str("0").unwrap()
+            Decimal::try_from(Double::from(0.)).ok(),
+            Some(Decimal::from_str("0")?)
         );
         assert_eq!(
-            Decimal::try_from(Double::from(-0.)).unwrap(),
-            Decimal::from_str("0").unwrap()
+            Decimal::try_from(Double::from(-0.)).ok(),
+            Some(Decimal::from_str("0")?)
         );
         assert_eq!(
-            Decimal::try_from(Double::from(-123.1)).unwrap(),
-            Decimal::from_str("-123.1").unwrap()
+            Decimal::try_from(Double::from(-123.1)).ok(),
+            Some(Decimal::from_str("-123.1")?)
         );
         assert!(
             Decimal::try_from(Double::from(1672507302466.))
                 .unwrap()
-                .checked_sub(Decimal::from_str("1672507302466").unwrap())
+                .checked_sub(Decimal::from_str("1672507302466")?)
                 .unwrap()
                 .abs()
                 < Decimal::from(1)
@@ -832,5 +806,6 @@ mod tests {
         assert!(Decimal::try_from(Double::from(f64::NEG_INFINITY)).is_err());
         assert!(Decimal::try_from(Double::from(f64::MIN)).is_err());
         assert!(Decimal::try_from(Double::from(f64::MAX)).is_err());
+        Ok(())
     }
 }

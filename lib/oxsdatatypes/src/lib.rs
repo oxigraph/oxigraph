@@ -17,7 +17,7 @@ pub use self::boolean::Boolean;
 pub use self::date_time::{
     Date, DateTime, DateTimeError, GDay, GMonth, GMonthDay, GYear, GYearMonth, Time, TimezoneOffset,
 };
-pub use self::decimal::{Decimal, DecimalOverflowError, DecimalParseError};
+pub use self::decimal::{Decimal, DecimalOverflowError, ParseDecimalError};
 pub use self::double::Double;
 pub use self::duration::{DayTimeDuration, Duration, YearMonthDuration};
 pub use self::float::Float;
