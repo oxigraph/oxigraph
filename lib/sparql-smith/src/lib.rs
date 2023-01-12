@@ -1479,15 +1479,43 @@ enum BuiltInCall {
     // | RegexExpression
     // | ExistsFunc
     // | NotExistsFunc
-    Bound(Var), //TODO: Other functions
+    Str(Box<Expression>),
+    Lang(Box<Expression>),
+    Datatype(Box<Expression>),
+    Bound(Var),
+    Iri(Box<Expression>),
+    Bnode(Box<Expression>),
+    Coalesce(ExpressionList),
+    If(Box<Expression>, Box<Expression>, Box<Expression>),
+    StrLang(Box<Expression>, Box<Expression>),
+    StrDt(Box<Expression>, Box<Expression>),
+    SameTerm(Box<Expression>, Box<Expression>),
+    IsIri(Box<Expression>),
+    IsBlank(Box<Expression>),
+    IsLiteral(Box<Expression>),
+    IsNumeric(Box<Expression>),
     Exists(ExistsFunc),
-    NotExists(ExistsFunc),
+    NotExists(NotExistsFunc), //TODO: Other functions
 }
 
 impl fmt::Display for BuiltInCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Str(v) => write!(f, "STR({v})"),
+            Self::Lang(v) => write!(f, "LANG({v})"),
+            Self::Datatype(v) => write!(f, "DATATYPE({v})"),
             Self::Bound(v) => write!(f, "BOUND({v})"),
+            Self::Iri(v) => write!(f, "IRI({v})"),
+            Self::Bnode(v) => write!(f, "BNODE({v})"),
+            Self::Coalesce(vs) => write!(f, "COALESCE{vs}"),
+            Self::If(a, b, c) => write!(f, "IF({a}, {b}, {c})"),
+            Self::StrLang(a, b) => write!(f, "STRLANG({a}, {b})"),
+            Self::StrDt(a, b) => write!(f, "STRDT({a}, {b})"),
+            Self::SameTerm(a, b) => write!(f, "sameTerm({a}, {b})"),
+            Self::IsIri(e) => write!(f, "isIRI({e})"),
+            Self::IsBlank(e) => write!(f, "isBlank({e})"),
+            Self::IsLiteral(e) => write!(f, "isLiteral({e})"),
+            Self::IsNumeric(e) => write!(f, "isNumeric({e})"),
             Self::Exists(e) => write!(f, "{e}"),
             Self::NotExists(e) => write!(f, "{e}"),
         }
