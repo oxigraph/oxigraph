@@ -43,7 +43,17 @@ use std::error::Error;
 use std::io::{BufRead, Write};
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
+use std::path::PathBuf;
 use std::{fmt, str};
+
+pub struct SecondaryOptions {
+    pub path: PathBuf,
+    pub secondary_path: PathBuf,
+}
+
+pub enum StoreOpenOptions {
+    OpenAsSecondary(SecondaryOptions),
+}
 
 /// An on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 /// Allows to query and update it using SPARQL.
@@ -99,6 +109,14 @@ impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         Ok(Self {
             storage: Storage::open(path.as_ref())?,
+        })
+    }
+
+    /// Opens a [`Store`] with options
+    #[cfg(not(target_family = "wasm"))]
+    pub fn open_with_options(options: StoreOpenOptions) -> Result<Self, StorageError> {
+        Ok(Self {
+            storage: Storage::open_with_options(options)?,
         })
     }
 

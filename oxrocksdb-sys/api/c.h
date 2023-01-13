@@ -65,6 +65,22 @@ typedef struct rocksdb_ingestexternalfilearg_t {
     rocksdb_ingestexternalfileoptions_t* options;
 } rocksdb_ingestexternalfilearg_t;
 
+rocksdb_pinnableslice_t* rocksdb_get_pinned_cf_with_status(
+    rocksdb_t* db, const rocksdb_readoptions_t* options,
+    rocksdb_column_family_handle_t* column_family, const char* key,
+    size_t keylen, rocksdb_status_t* statusptr);
+
+extern ROCKSDB_LIBRARY_API void rocksdb_try_catch_up_with_primary_with_status(
+        rocksdb_t* db, rocksdb_status_t* statusptr);
+
+extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_open_as_secondary_column_families_with_status(
+        const rocksdb_options_t* options, const char* name,
+        const char* secondary_path, int num_column_families,
+        const char* const* column_family_names,
+        const rocksdb_options_t* const* column_family_options,
+        rocksdb_column_family_handle_t** column_family_handles,
+        rocksdb_status_t* statusptr);
+
 extern ROCKSDB_LIBRARY_API rocksdb_transactiondb_t* rocksdb_transactiondb_open_column_families_with_status(
         const rocksdb_options_t* options,
         const rocksdb_transactiondb_options_t* txn_db_options, const char* name,
