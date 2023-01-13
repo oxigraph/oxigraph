@@ -6,7 +6,7 @@ use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use oxigraph::model::{GraphName, GraphNameRef, IriParseError, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryResults, Update};
-use oxigraph::store::{BulkLoader, LoaderError, Store};
+use oxigraph::store::{BulkLoader, LoaderError, SecondaryOptions, Store, StoreOpenOptions};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
@@ -37,6 +37,10 @@ struct Args {
     /// Directory in which persist the data.
     #[arg(short, long, global = true)]
     location: Option<PathBuf>,
+    /// Open underlying database in readonly mode, specify path to store info logs (LOG)
+    // see https://github.com/facebook/rocksdb/wiki/Read-only-and-Secondary-instances
+    #[arg(short, long, global = true)]
+    secondary_location: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
 }
@@ -67,7 +71,14 @@ enum Command {
 pub fn main() -> anyhow::Result<()> {
     let matches = Args::parse();
     let store = if let Some(path) = &matches.location {
-        Store::open(path)
+        if let Some(secondary_path) = &matches.secondary_location {
+            Store::open_with_options(StoreOpenOptions::OpenAsSecondary(SecondaryOptions {
+                path: path.to_path_buf(),
+                secondary_path: secondary_path.to_path_buf(),
+            }))
+        } else {
+            Store::open(path)
+        }
     } else {
         Store::new()
     }?;
