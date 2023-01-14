@@ -16,6 +16,7 @@ use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
+/// A parsing error
 #[derive(Debug, Clone)]
 pub struct XsdParseError {
     kind: XsdParseErrorKind,
