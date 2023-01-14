@@ -9,7 +9,7 @@ use std::time::Duration as StdDuration;
 
 /// [XML Schema `duration` datatype](https://www.w3.org/TR/xmlschema11-2/#duration)
 ///
-/// It stores the duration using a pair of a `YearMonthDuration` and a `DayTimeDuration`.
+/// It stores the duration using a pair of a [`YearMonthDuration`] and a [`DayTimeDuration`].
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
 pub struct Duration {
     year_month: YearMonthDuration,
@@ -238,7 +238,7 @@ impl Neg for Duration {
 
 /// [XML Schema `yearMonthDuration` datatype](https://www.w3.org/TR/xmlschema11-2/#yearMonthDuration)
 ///
-/// It stores the duration as a number of months encoded using a `i64`
+/// It stores the duration as a number of months encoded using a [`i64`].
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash, Default)]
 pub struct YearMonthDuration {
     months: i64,
@@ -389,7 +389,7 @@ impl Neg for YearMonthDuration {
 
 /// [XML Schema `dayTimeDuration` datatype](https://www.w3.org/TR/xmlschema11-2/#dayTimeDuration)
 ///
-/// It stores the duration as a number of seconds encoded using a `Decimal`
+/// It stores the duration as a number of seconds encoded using a [`Decimal`].
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash, Default)]
 pub struct DayTimeDuration {
     seconds: Decimal,

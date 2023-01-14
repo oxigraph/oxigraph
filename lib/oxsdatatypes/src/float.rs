@@ -8,6 +8,8 @@ use std::str::FromStr;
 /// [XML Schema `float` datatype](https://www.w3.org/TR/xmlschema11-2/#float)
 ///
 /// Uses internally a [`f32`].
+///
+/// Beware: serialization is currently buggy and do not follow the canonical mapping yet.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(transparent)]
 pub struct Float {

@@ -8,6 +8,8 @@ use std::str::FromStr;
 /// [XML Schema `double` datatype](https://www.w3.org/TR/xmlschema11-2/#double)
 ///
 /// Uses internally a [`f64`].
+///
+/// Beware: serialization is currently buggy and do not follow the canonical mapping yet.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(transparent)]
 pub struct Double {

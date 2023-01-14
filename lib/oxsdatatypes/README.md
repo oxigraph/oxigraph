@@ -19,6 +19,19 @@ use oxsdatatypes::Decimal;
 assert!(Decimal::from_str("22.2").unwrap() > Decimal::from_str("21").unwrap());
 ```
 
+Each datatype is represented by a Rust struct.
+
+Each datatype provides:
+* `FromStr` implementation to parse a datatype string serialization following its [lexical mapping](https://www.w3.org/TR/xmlschema11-2/#dt-lexical-mapping).
+* `Display` implementation to serialize a datatype following its [canonical mapping](https://www.w3.org/TR/xmlschema11-2/#dt-canonical-mapping).
+* `is_identical_with` method following its [identity relation](https://www.w3.org/TR/xmlschema11-2/#identity).
+* `PartialEq`, and `Eq` if possible, implementations following its [equality relation](https://www.w3.org/TR/xmlschema11-2/#equality).
+* `PartialOrd`, and `Ord` if possible, implementations following its [order relation](https://www.w3.org/TR/xmlschema11-2/#order).
+* `From` and `TryFrom` implementations to implement [XPath casting](https://www.w3.org/TR/xpath-functions-31/#casting).
+* Various methods implementing [XPath functions](https://www.w3.org/TR/xpath-functions/).
+* `from_be_bytes` and `to_be_bytes` methods for serialization.
+
+
 ## License
 
 This project is licensed under either of

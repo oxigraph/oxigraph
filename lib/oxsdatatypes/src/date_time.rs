@@ -12,6 +12,9 @@ use std::str::FromStr;
 use std::time::SystemTimeError;
 
 /// [XML Schema `dateTime` datatype](https://www.w3.org/TR/xmlschema11-2/#dateTime)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`]
+/// and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct DateTime {
     timestamp: Timestamp,
@@ -190,7 +193,7 @@ impl DateTime {
         }
     }
 
-    // [fn:adjust-dateTime-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-dateTime-to-timezone)
+    /// [fn:adjust-dateTime-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-dateTime-to-timezone)
     #[inline]
     pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
@@ -256,6 +259,9 @@ impl fmt::Display for DateTime {
 }
 
 /// [XML Schema `time` datatype](https://www.w3.org/TR/xmlschema11-2/#time)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`],
+/// when combined with the date 1972-12-31, and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct Time {
     timestamp: Timestamp,
@@ -446,6 +452,9 @@ impl fmt::Display for Time {
 }
 
 /// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`],
+/// when combined with the time 00:00:00, and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct Date {
     timestamp: Timestamp,
@@ -633,6 +642,9 @@ impl fmt::Display for Date {
 }
 
 /// [XML Schema `gYearMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gYearMonth)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`],
+/// when combined with the day-time 31T00:00:00, and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GYearMonth {
     timestamp: Timestamp,
@@ -752,6 +764,9 @@ impl fmt::Display for GYearMonth {
 }
 
 /// [XML Schema `gYear` datatype](https://www.w3.org/TR/xmlschema11-2/#gYear)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`],
+/// when combined with the month-day-time 12-31T00:00:00, and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GYear {
     timestamp: Timestamp,
@@ -870,6 +885,9 @@ impl fmt::Display for GYear {
 }
 
 /// [XML Schema `gMonthDay` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonthDay)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`],
+/// when combined with the year 1972 and the time 31T00:00:00, and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GMonthDay {
     timestamp: Timestamp,
@@ -985,6 +1003,9 @@ impl fmt::Display for GMonthDay {
 }
 
 /// [XML Schema `gMonth` datatype](https://www.w3.org/TR/xmlschema11-2/#gMonth)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`],
+/// when combined with the year 1972 and the day-time 31T00:00:00, and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GMonth {
     timestamp: Timestamp,
@@ -1108,6 +1129,9 @@ impl fmt::Display for GMonth {
 }
 
 /// [XML Schema `date` datatype](https://www.w3.org/TR/xmlschema11-2/#date)
+///
+/// It encodes the value using a number of seconds from the Gregorian calendar era using a [`Decimal`],
+/// when combined with the year-month 1972-12 and the 00:00:00, and an optional timezone offset in minutes.
 #[derive(Eq, PartialEq, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct GDay {
     timestamp: Timestamp,
