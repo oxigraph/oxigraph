@@ -59,7 +59,7 @@ impl From<quick_xml::Error> for ParseError {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
         match error {
-            quick_xml::Error::Io(error) => Self::Io(error),
+            quick_xml::Error::Io(error) => Self::Io(io::Error::new(error.kind(), error)),
             error => Self::Syntax(SyntaxError {
                 inner: SyntaxErrorKind::Xml(error),
             }),
@@ -117,7 +117,7 @@ impl From<SyntaxError> for io::Error {
     fn from(error: SyntaxError) -> Self {
         match error.inner {
             SyntaxErrorKind::Xml(error) => match error {
-                quick_xml::Error::Io(error) => error,
+                quick_xml::Error::Io(error) => io::Error::new(error.kind(), error),
                 quick_xml::Error::UnexpectedEof(error) => {
                     Self::new(io::ErrorKind::UnexpectedEof, error)
                 }

@@ -20,7 +20,7 @@ rdf-star = ["oxrdf/rdf-star"]
 [dependencies]
 json-event-parser = "0.1"
 oxrdf = { version = "0.1.1", path="../oxrdf" }
-quick-xml = "0.26"
+quick-xml = "0.27"
 
 [package.metadata.docs.rs]
 all-features = true

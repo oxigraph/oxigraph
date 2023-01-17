@@ -573,7 +573,7 @@ fn decode<'a, T>(
 
 fn map_xml_error(error: quick_xml::Error) -> io::Error {
     match error {
-        quick_xml::Error::Io(error) => error,
+        quick_xml::Error::Io(error) => io::Error::new(error.kind(), error),
         quick_xml::Error::UnexpectedEof(_) => io::Error::new(io::ErrorKind::UnexpectedEof, error),
         _ => io::Error::new(io::ErrorKind::InvalidData, error),
     }
