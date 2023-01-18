@@ -262,11 +262,11 @@ impl From<PyLiteral> for Term {
 #[pymethods]
 impl PyLiteral {
     #[new]
-    #[args(value, "*", datatype = "None", language = "None")]
+    #[pyo3(signature = (value, *, datatype = None, language = None))]
     fn new(
         value: String,
-        language: Option<String>,
         datatype: Option<PyNamedNode>,
+        language: Option<String>,
     ) -> PyResult<Self> {
         Ok(if let Some(language) = language {
             if let Some(datatype) = datatype {

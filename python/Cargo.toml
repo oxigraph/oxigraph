@@ -20,4 +20,4 @@ abi3 = ["pyo3/abi3-py37"]
 
 [dependencies]
 oxigraph = { version = "0.3.10", path="../lib", features = ["http_client"] }
-pyo3 = { version = "0.17", features = ["extension-module"] }
+pyo3 = { version = "0.18", features = ["extension-module"] }

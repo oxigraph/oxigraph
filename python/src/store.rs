@@ -66,7 +66,6 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, quad)")]
     fn add(&self, quad: &PyQuad, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             self.inner.insert(quad).map_err(map_storage_error)?;
@@ -87,7 +86,6 @@ impl PyStore {
     /// >>> store.remove(quad)
     /// >>> list(store)
     /// []
-    #[pyo3(text_signature = "($self, quad)")]
     fn remove(&self, quad: &PyQuad, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             self.inner.remove(quad).map_err(map_storage_error)?;
@@ -171,15 +169,8 @@ impl PyStore {
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
     #[pyo3(
+        signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None),
         text_signature = "($self, query, *, base_iri = None, use_default_graph_as_union = False, default_graph = None, named_graphs = None)"
-    )]
-    #[args(
-        query,
-        "*",
-        base_iri = "None",
-        use_default_graph_as_union = "false",
-        default_graph = "None",
-        named_graphs = "None"
     )]
     fn query(
         &self,
@@ -236,8 +227,7 @@ impl PyStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[pyo3(text_signature = "($self, update, *, base_iri = None)")]
-    #[args(update, "*", base_iri = "None")]
+    #[pyo3(signature = (update, *, base_iri = None), text_signature = "($self, update, *, base_iri = None)")]
     fn update(&self, update: &str, base_iri: Option<&str>, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             let update =
@@ -282,8 +272,7 @@ impl PyStore {
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
-    #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
+    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None), text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
     fn load(
         &self,
         input: PyObject,
@@ -366,8 +355,7 @@ impl PyStore {
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
-    #[args(input, mime_type, "*", base_iri = "None", to_graph = "None")]
+    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None), text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
     fn bulk_load(
         &self,
         input: PyObject,
@@ -446,8 +434,7 @@ impl PyStore {
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(text_signature = "($self, output, mime_type, *, from_graph = None)")]
-    #[args(output, mime_type, "*", from_graph = "None")]
+    #[pyo3(signature = (output, mime_type, *, from_graph = None), text_signature = "($self, output, mime_type, *, from_graph = None)")]
     fn dump(
         &self,
         output: PyObject,
@@ -502,7 +489,6 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[pyo3(text_signature = "($self)")]
     fn named_graphs(&self) -> GraphNameIter {
         GraphNameIter {
             inner: self.inner.named_graphs(),
@@ -520,7 +506,6 @@ impl PyStore {
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[pyo3(text_signature = "($self, graph_name)")]
     fn add_graph(&self, graph_name: &PyAny, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphName::from(&PyGraphNameRef::try_from(graph_name)?);
         py.allow_threads(|| {
@@ -551,7 +536,6 @@ impl PyStore {
     /// []
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[pyo3(text_signature = "($self, graph_name)")]
     fn clear_graph(&self, graph_name: &PyAny, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphName::from(&PyGraphNameRef::try_from(graph_name)?);
         py.allow_threads(|| {
@@ -575,7 +559,6 @@ impl PyStore {
     /// >>> store.remove_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// []
-    #[pyo3(text_signature = "($self, graph_name)")]
     fn remove_graph(&self, graph_name: &PyAny, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphName::from(&PyGraphNameRef::try_from(graph_name)?);
         py.allow_threads(|| {
@@ -604,7 +587,6 @@ impl PyStore {
     /// []
     /// >>> list(store.named_graphs())
     /// []
-    #[pyo3(text_signature = "($self)")]
     fn clear(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.clear().map_err(map_storage_error))
     }
@@ -615,7 +597,6 @@ impl PyStore {
     ///
     /// :rtype: None
     /// :raises IOError: if an I/O error happens during the flush.
-    #[pyo3(text_signature = "($self)")]
     fn flush(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.flush().map_err(map_storage_error))
     }
@@ -626,7 +607,6 @@ impl PyStore {
     ///
     /// :rtype: None
     /// :raises IOError: if an I/O error happens during the optimization.
-    #[pyo3(text_signature = "($self)")]
     fn optimize(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.optimize().map_err(map_storage_error))
     }
@@ -652,7 +632,6 @@ impl PyStore {
     /// :type target_directory: str
     /// :rtype: None
     /// :raises IOError: if an I/O error happens during the backup.
-    #[pyo3(text_signature = "($self, target_directory)")]
     fn backup(&self, target_directory: &str, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             self.inner

@@ -117,7 +117,6 @@ pub fn parse(
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-#[pyo3(text_signature = "(input, output, mime_type)")]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
     let output = if let Ok(path) = output.extract::<&str>(py) {
         PyWritable::from_file(path, py)
