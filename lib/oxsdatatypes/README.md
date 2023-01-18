@@ -8,7 +8,7 @@ oxsdatatypes
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 oxsdatatypes is an implementation of some [XML Schema Definition Language Datatypes](https://www.w3.org/TR/xmlschema11-2/).
-Its main aim is to ease the implementation of SPARQL or XPath.
+Its main aim is to ease the implementation of SPARQL and XPath.
 
 Usage example:
 
