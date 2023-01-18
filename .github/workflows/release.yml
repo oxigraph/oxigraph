@@ -64,6 +64,9 @@ jobs:
         working-directory: ./lib/spargebra
         continue-on-error: true
       - run: cargo publish
+        working-directory: ./lib/sparql-smith
+        continue-on-error: true
+      - run: cargo publish
         working-directory: ./lib
         continue-on-error: true
       - run: cargo publish

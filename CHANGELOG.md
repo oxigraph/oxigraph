@@ -1,3 +1,28 @@
+## [0.3.11] - 2022-12-18
+
+## Added
+- SPARQL: Implementation of the `LATERAL` operator following [SPARQL SEP-0006](https://github.com/w3c/sparql-12/blob/main/SEP/SEP-0006/sep-0006.md).
+  Support is behind the `sep-0006` feature in `spargebra` and enabled by default in Oxigraph. 
+- SPARQL: Implementation of the `ADJUST` function following [SPARQL SEP-0002](https://github.com/w3c/sparql-12/blob/main/SEP/SEP-0002/sep-0002.md).
+  Support is behind the `sep-0002` feature in `spargebra` and enabled by default in Oxigraph.
+- Rust: There is a new stand-alone crate `oxsdatatypes` implementing Rust structs for the common XML schema datatypes.
+  It was part of the Oxigraph crate and it might be useful for other SPARQL or XPath implementations.
+- Rust: The `oxigraph` crate can now be compiled for `wasm32-wasi` with the basic in-memory backend but without RocksDB.
+
+## Changed
+- SPARQL: The property path evaluator was sometime emitting duplicates when evaluating disjunctive patterns (`a|b`). It is now fixed.
+- SPARQL: If written explicitly in the SPARQL query, the regular expressions are now compiled once and not for each row.
+- SPARQL: Property path evaluation with both start and end variables bound has been optimized.
+- SPARQL: Casts to `xsd:decimal` from `xsd:float` and `xsd:double` now properly fails on overflow instead of overflowing the internal 128-bits representation.
+  This follows [XPath casting rules](https://www.w3.org/TR/xpath-functions/#casting-to-decimal).
+- Rust: The minimal supported Rust version is set at 1.60 and enforced using the CI.
+- Python: Local builds will now target the specific Python version instead of [abi3](https://docs.python.org/3/c-api/stable.html).
+  abi3 wheels are still released on Pypi alongside new Python-version specific builds for Linux+GNU.
+- SPARQL: Fixes a panic when the estimated upper bound of the results size was overflowing a `usize`.
+- Python: Uses `typing.IO` in Python stubs instead of narrower interfaces. 
+- Upgrades RocksDB to 7.9.2, `quick-xml` to 0.27 and `pyo3` to 0.18.
+
+
 ## [0.3.10] - 2022-12-21
 
 ## Added
