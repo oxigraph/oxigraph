@@ -202,6 +202,7 @@ jobs:
         with:
           submodules: true
       - run: |
+          rm -rf .git
           zip -r oxigraph_${{ github.event.release.tag_name }}.zip .
           tar -czf /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
           mv /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
