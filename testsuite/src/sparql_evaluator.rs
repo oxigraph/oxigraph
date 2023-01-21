@@ -150,10 +150,10 @@ fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
 fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     let store = Store::new()?;
     if let Some(data) = &test.data {
-        load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
+        load_dataset_to_store(data, &store)?;
     }
     for (name, value) in &test.graph_data {
-        load_to_store(value, &store, name)?;
+        load_graph_to_store(value, &store, name)?;
     }
     let query_file = test
         .query
@@ -172,14 +172,14 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     if !query.dataset().is_default_dataset() {
         for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
             if let GraphName::NamedNode(graph_name) = graph_name {
-                load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+                load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
             } else {
                 bail!("Invalid FROM in query {query} for test {test}");
             }
         }
         for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
             if let NamedOrBlankNode::NamedNode(graph_name) = graph_name {
-                load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+                load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
             } else {
                 bail!("Invalid FROM NAMED in query {query} for test {test}");
             }
@@ -243,18 +243,18 @@ fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     let store = Store::new()?;
     if let Some(data) = &test.data {
-        load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
+        load_dataset_to_store(data, &store)?;
     }
     for (name, value) in &test.graph_data {
-        load_to_store(value, &store, name)?;
+        load_graph_to_store(value, &store, name)?;
     }
 
     let result_store = Store::new()?;
     if let Some(data) = &test.result {
-        load_to_store(data, &result_store, GraphNameRef::DefaultGraph)?;
+        load_dataset_to_store(data, &result_store)?;
     }
     for (name, value) in &test.result_graph_data {
-        load_to_store(value, &result_store, name)?;
+        load_graph_to_store(value, &result_store, name)?;
     }
 
     let update_file = test
@@ -303,7 +303,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
             false,
         )
     } else {
-        StaticQueryResults::from_graph(load_graph(url)?)
+        StaticQueryResults::from_graph(load_graph(url, guess_graph_format(url)?)?)
     }
 }
 
@@ -321,7 +321,7 @@ impl StaticServiceHandler {
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
                         let store = Store::new()?;
-                        load_to_store(data, &store, GraphNameRef::DefaultGraph)?;
+                        load_dataset_to_store(data, &store)?;
                         Ok((name, store))
                     })
                     .collect::<Result<_>>()?,
@@ -699,4 +699,32 @@ fn solutions_to_string(solutions: Vec<Vec<(Variable, Term)>>, ordered: bool) -> 
         lines.sort_unstable();
     }
     lines.join("\n")
+}
+
+fn load_graph_to_store<'a>(
+    url: &str,
+    store: &Store,
+    to_graph_name: impl Into<GraphNameRef<'a>>,
+) -> Result<()> {
+    store.load_graph(
+        read_file(url)?,
+        guess_graph_format(url)?,
+        to_graph_name,
+        Some(url),
+    )?;
+    Ok(())
+}
+
+fn load_dataset_to_store<'a>(url: &str, store: &Store) -> Result<()> {
+    if let Ok(format) = guess_dataset_format(url) {
+        store.load_dataset(read_file(url)?, format, Some(url))
+    } else {
+        store.load_graph(
+            read_file(url)?,
+            guess_graph_format(url)?,
+            GraphNameRef::DefaultGraph,
+            Some(url),
+        )
+    }?;
+    Ok(())
 }
