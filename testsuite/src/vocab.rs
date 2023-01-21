@@ -48,6 +48,15 @@ pub mod mf {
     );
 }
 
+pub mod rdft {
+    use oxigraph::model::NamedNodeRef;
+
+    pub const APPROVAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/rdftest#approval");
+    pub const REJECTED: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/rdftest#Rejected");
+}
+
 pub mod qt {
     use oxigraph::model::NamedNodeRef;
 
