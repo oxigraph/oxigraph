@@ -921,6 +921,23 @@ impl From<BlankNodeRef<'_>> for GraphName {
     }
 }
 
+impl From<NamedOrBlankNode> for GraphName {
+    #[inline]
+    fn from(node: NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl From<NamedOrBlankNodeRef<'_>> for GraphName {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
+        node.into_owned().into()
+    }
+}
+
 /// A possible borrowed graph name.
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -991,6 +1008,23 @@ impl<'a> From<BlankNodeRef<'a>> for GraphNameRef<'a> {
 impl<'a> From<&'a BlankNode> for GraphNameRef<'a> {
     #[inline]
     fn from(node: &'a BlankNode) -> Self {
+        node.as_ref().into()
+    }
+}
+
+impl<'a> From<NamedOrBlankNodeRef<'a>> for GraphNameRef<'a> {
+    #[inline]
+    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
+        match node {
+            NamedOrBlankNodeRef::NamedNode(node) => node.into(),
+            NamedOrBlankNodeRef::BlankNode(node) => node.into(),
+        }
+    }
+}
+
+impl<'a> From<&'a NamedOrBlankNode> for GraphNameRef<'a> {
+    #[inline]
+    fn from(node: &'a NamedOrBlankNode) -> Self {
         node.as_ref().into()
     }
 }
