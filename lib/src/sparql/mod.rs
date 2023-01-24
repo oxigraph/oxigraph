@@ -14,7 +14,7 @@ mod service;
 mod update;
 
 use crate::model::{NamedNode, Term};
-pub use crate::sparql::algebra::{Query, Update};
+pub use crate::sparql::algebra::{Query, QueryDataset, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::{EvaluationError, QueryError};
 use crate::sparql::eval::SimpleEvaluator;
