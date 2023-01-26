@@ -70,7 +70,8 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 ## Sponsors
 
-* [RelationLabs](https://relationlabs.ai/) that builds [Relation-Graph](https://github.com/relationlabs/Relation-Graph), a SPARQL database module for the [Substrate blockchain platform](https://substrate.io/) based on Oxigraph.
+* [RelationLabs](https://relationlabs.ai/) that is building [Relation-Graph](https://github.com/relationlabs/Relation-Graph), a SPARQL database module for the [Substrate blockchain platform](https://substrate.io/) based on Oxigraph.
+* [Magnus Bakken](https://github.com/magbak) who is building [chrontext](https://github.com/magbak/chrontext), providing a SPARQL query endpoint on top of joint RDF and time series databases.
 * [ACE IoT Solutions](https://aceiotsolutions.com/), a building IOT platform.
 * [Albin Larsson](https://byabbe.se/) who is building [GovDirectory](https://www.govdirectory.org/), a directory of public agencies based on Wikidata.
 
