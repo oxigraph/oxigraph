@@ -715,7 +715,7 @@ fn load_graph_to_store<'a>(
     Ok(())
 }
 
-fn load_dataset_to_store<'a>(url: &str, store: &Store) -> Result<()> {
+fn load_dataset_to_store(url: &str, store: &Store) -> Result<()> {
     if let Ok(format) = guess_dataset_format(url) {
         store.load_dataset(read_file(url)?, format, Some(url))
     } else {

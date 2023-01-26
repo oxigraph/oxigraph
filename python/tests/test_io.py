@@ -8,6 +8,12 @@ from pyoxigraph import *
 EXAMPLE_TRIPLE = Triple(
     NamedNode("http://example.com/foo"), NamedNode("http://example.com/p"), Literal("1")
 )
+EXAMPLE_QUAD = Quad(
+    NamedNode("http://example.com/foo"),
+    NamedNode("http://example.com/p"),
+    Literal("1"),
+    NamedNode("http://example.com/g"),
+)
 
 
 class TestParse(unittest.TestCase):
@@ -53,6 +59,18 @@ class TestParse(unittest.TestCase):
             with TemporaryFile("wb") as fp:
                 list(parse(fp, mime_type="application/n-triples"))
 
+    def test_parse_quad(self) -> None:
+        self.assertEqual(
+            list(
+                parse(
+                    StringIO('<g> { <foo> <p> "1" }'),
+                    "application/trig",
+                    base_iri="http://example.com/",
+                )
+            ),
+            [EXAMPLE_QUAD],
+        )
+
 
 class TestSerialize(unittest.TestCase):
     def test_serialize_to_bytes_io(self) -> None:
@@ -74,3 +92,11 @@ class TestSerialize(unittest.TestCase):
         with self.assertRaises(UnsupportedOperation) as _:
             with TemporaryFile("rb") as fp:
                 serialize([EXAMPLE_TRIPLE], fp, "text/turtle")
+
+    def test_serialize_quad(self) -> None:
+        output = BytesIO()
+        serialize([EXAMPLE_QUAD], output, "application/trig")
+        self.assertEqual(
+            output.getvalue(),
+            b'<http://example.com/g> { <http://example.com/foo> <http://example.com/p> "1" }\n',
+        )
