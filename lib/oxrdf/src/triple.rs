@@ -1184,7 +1184,7 @@ impl<'a> QuadRef<'a> {
 impl fmt::Display for QuadRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.graph_name == GraphNameRef::DefaultGraph {
+        if self.graph_name.is_default_graph() {
             write!(f, "{} {} {}", self.subject, self.predicate, self.object)
         } else {
             write!(

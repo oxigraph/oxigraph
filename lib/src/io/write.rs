@@ -236,16 +236,16 @@ impl<W: Write> QuadWriter<W> {
                 writeln!(writer, "{quad} .")?;
             }
             QuadWriterKind::TriG(writer) => {
-                if quad.graph_name == GraphNameRef::DefaultGraph {
+                if quad.graph_name.is_default_graph() {
+                    writeln!(writer, "{} .", TripleRef::from(quad))
+                } else {
                     writeln!(
                         writer,
-                        "GRAPH {} {{ {} }}",
+                        "{} {{ {} }}",
                         quad.graph_name,
                         TripleRef::from(quad)
-                    )?;
-                } else {
-                    writeln!(writer, "{quad} .")?;
-                }
+                    )
+                }?;
             }
         }
         Ok(())

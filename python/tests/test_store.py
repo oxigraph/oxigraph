@@ -265,6 +265,17 @@ class TestStore(unittest.TestCase):
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
+    def test_dump_trig(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz, graph))
+        store.add(Quad(foo, bar, baz))
+        output = BytesIO()
+        store.dump(output, "application/trig")
+        self.assertEqual(
+            output.getvalue(),
+            b"<http://foo> <http://bar> <http://baz> .\n<http://graph> { <http://foo> <http://bar> <http://baz> }\n",
+        )
+
     def test_dump_file(self) -> None:
         with NamedTemporaryFile(delete=False) as fp:
             file_name = fp.name
