@@ -97,6 +97,31 @@ jobs:
         with:
           files: target/wheels/*.whl
 
+  publish_pypi_linux_musl:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        architecture: [ "x86_64", "aarch64" ]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/${{ matrix.architecture }}
+        if: matrix.architecture != 'x86_64'
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/true/g' > .github/workflows/musllinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/musllinux_1_1_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: target/wheels/*.whl
+
   publish_pypi_mac:
     runs-on: macos-latest
     env:

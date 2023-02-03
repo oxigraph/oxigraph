@@ -67,12 +67,25 @@ jobs:
         with:
           submodules: true
       - run: rustup update
-      - uses: Swatinem/rust-cache@v2
       - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%//g' > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_linux
+          path: target/wheels/*.whl
+
+  wheel_linux_musl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update
+      - run: sed 's/%arch%/x86_64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%//g' > .github/workflows/musllinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/musllinux_1_1_x86_64 /bin/sh /workdir/.github/workflows/musllinux_build_script.sh
+      - uses: actions/upload-artifact@v3
+        with:
+          name: pyoxigraph_wheel_x86_64_linux_musl
           path: target/wheels/*.whl
 
   wheel_mac:
