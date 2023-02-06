@@ -442,7 +442,7 @@ impl Selection {
 
 fn build_select(
     select: Selection,
-    wher: GraphPattern,
+    r#where: GraphPattern,
     mut group: Option<(Vec<Variable>, Vec<(Expression, Variable)>)>,
     having: Option<Expression>,
     order_by: Option<Vec<OrderExpression>>,
@@ -450,7 +450,7 @@ fn build_select(
     values: Option<GraphPattern>,
     state: &mut ParserState,
 ) -> Result<GraphPattern, &'static str> {
-    let mut p = wher;
+    let mut p = r#where;
     let mut with_aggregate = false;
 
     //GROUP BY
@@ -1429,7 +1429,7 @@ parser! {
                             }
                         });
                         if contains {
-                            return Err("An existing variable is overriden in the right side of LATERAL");
+                            return Err("An existing variable is overridden in the right side of LATERAL");
                         }
                         g = GraphPattern::Lateral { left: Box::new(g), right: Box::new(p) }
                     }

@@ -1505,7 +1505,7 @@ mod tests {
         // PUT - mismatched payload
         let request = Request::builder(Method::PUT, "http://localhost/store/person/1.ttl".parse()?)
             .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .with_body("@prefix fo");
+            .with_body("@prefix foo");
         server.test_status(request, Status::BAD_REQUEST)?;
 
         // PUT - empty graph

@@ -35,19 +35,19 @@
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
-    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:name "Multibytes character at the end of a unicode escape sequence" ;
     mf:action <small_unicode_escape_with_multibytes_char.rq> .
 
 :long_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
-    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:name "Multibytes character at the end of a unicode escape sequence" ;
     mf:action <long_unicode_escape_with_multibytes_char.rq> .
 
 :small_unicode_escape_with_multibytes_char_update rdf:type mf:NegativeUpdateSyntaxTest11 ;
-    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:name "Multibytes character at the end of a unicode escape sequence" ;
     mf:action <small_unicode_escape_with_multibytes_char.ru> .
 
 :long_unicode_escape_with_multibytes_char_update rdf:type mf:NegativeUpdateSyntaxTest11 ;
-    mf:name "Multibytes character at the end of a unicode espace sequence" ;
+    mf:name "Multibytes character at the end of a unicode escape sequence" ;
     mf:action <long_unicode_escape_with_multibytes_char.ru> .
 
 :describe rdf:type mf:QueryEvaluationTest ;

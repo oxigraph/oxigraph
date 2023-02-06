@@ -51,7 +51,7 @@
 - SPARQL: fixes serialization of SPARQL queries (property path and STRSTARTS function).
 - SPARQL: slightly optimize aggregates by avoiding an unneeded projection.
 - SPARQL: the parser now cleanly fails if invalid `VALUES` clauses are provided.
-- SPARQL: In DELETE/INSERT UPDATEs the currently written values can't be read anymore ("Halloween problem").
+- SPARQL: In DELETE/INSERT UPDATE the currently written values can't be read anymore ("Halloween problem").
 - `oxrdf`: makes Clippy run without warnings when `rdf-star` is disable.
 - Python: makes type annotations compatible with Python 3.7.
 - Python: makes sure the parameter default value is always included in the type annotation.
@@ -215,7 +215,7 @@
 - Server: The HTTP response bodies are now generated on the fly instead of being buffered.
 - Python: The `SledStore` and `MemoryStore` classes have been removed in favor of the `Store` class.
 - JS: The `MemoryStore` class has been renamed to `Store`.
-- JS: The [RDF/JS `DataFactory` interface](http://rdf.js.org/data-model-spec/#datafactory-interface) is now implemented by the `oxigraph` module itself and the `MemoryStore.dataFactory` propery has been removed.
+- JS: The [RDF/JS `DataFactory` interface](http://rdf.js.org/data-model-spec/#datafactory-interface) is now implemented by the `oxigraph` module itself and the `MemoryStore.dataFactory` property has been removed.
 - The implementation of SPARQL evaluation has been improved for better performances (especially joins).
 - The TLS implementation used in SPARQL HTTP calls is now [rustls](https://github.com/rustls/rustls) and not [native-tls](https://github.com/sfackler/rust-native-tls). The host system certificate registry is still used.
 - Spargebra: The basic RDF terms are now the ones of the `oxrdf` crate.

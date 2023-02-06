@@ -227,6 +227,14 @@ jobs:
       - run: python -m unittest
         working-directory: ./python/tests
 
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install typos-cli || true
+      - run: typos
+
   fuzz_changes:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
