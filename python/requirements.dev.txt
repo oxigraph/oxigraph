@@ -1,4 +1,4 @@
-black~=22.10
+black~=23.1
 furo
 maturin~=0.14.0
 mypy~=0.991.0

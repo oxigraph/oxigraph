@@ -28,6 +28,3 @@ Documentation = "https://pyoxigraph.readthedocs.io/"
 Homepage = "https://pyoxigraph.readthedocs.io/"
 Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
-
-[tool.black]
-target-version = ['py37']

@@ -72,7 +72,7 @@ def module_stubs(module: Any) -> ast.Module:
     types_to_import = {"typing"}
     classes = []
     functions = []
-    for (member_name, member_value) in inspect.getmembers(module):
+    for member_name, member_value in inspect.getmembers(module):
         element_path = [module.__name__, member_name]
         if member_name.startswith("__"):
             pass
@@ -100,7 +100,7 @@ def class_stubs(
     attributes: List[ast.AST] = []
     methods: List[ast.AST] = []
     magic_methods: List[ast.AST] = []
-    for (member_name, member_value) in inspect.getmembers(cls_def):
+    for member_name, member_value in inspect.getmembers(cls_def):
         current_element_path = element_path + [member_name]
         if member_name == "__init__":
             try:
