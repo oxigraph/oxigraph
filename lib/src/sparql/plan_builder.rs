@@ -144,7 +144,7 @@ impl<'a> PlanBuilder<'a> {
                 Box::new(self.build_for_expression(expr, variables, graph_name)?),
             ),
             GraphPattern::Union { left, right } => {
-                //We flatten the UNIONs
+                //We flatten the UNION
                 let mut stack: Vec<&GraphPattern> = vec![left, right];
                 let mut children = vec![];
                 loop {
