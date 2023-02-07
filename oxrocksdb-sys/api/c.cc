@@ -35,6 +35,38 @@ rocksdb_pinnableslice_t* rocksdb_get_pinned_cf_with_status(
   return v;
 }
 
+rocksdb_t* rocksdb_open_for_read_only_column_families_with_status(
+    const rocksdb_options_t* db_options, const char* name,
+    int num_column_families, const char* const* column_family_names,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles,
+    unsigned char error_if_wal_file_exists, rocksdb_status_t* statusptr) {
+  std::vector<ColumnFamilyDescriptor> column_families;
+  for (int i = 0; i < num_column_families; i++) {
+    column_families.push_back(ColumnFamilyDescriptor(
+        std::string(column_family_names[i]),
+        ColumnFamilyOptions(column_family_options[i]->rep)));
+  }
+
+  DB* db;
+  std::vector<ColumnFamilyHandle*> handles;
+  if (SaveStatus(statusptr,
+                DB::OpenForReadOnly(DBOptions(db_options->rep),
+                                    std::string(name), column_families,
+                                    &handles, &db, error_if_wal_file_exists))) {
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < handles.size(); i++) {
+    rocksdb_column_family_handle_t* c_handle =
+        new rocksdb_column_family_handle_t;
+    c_handle->rep = handles[i];
+    column_family_handles[i] = c_handle;
+  }
+  rocksdb_t* result = new rocksdb_t;
+  result->rep = db;
+  return result;
+}
 
 void rocksdb_try_catch_up_with_primary_with_status(
         rocksdb_t* db, rocksdb_status_t* statusptr) {

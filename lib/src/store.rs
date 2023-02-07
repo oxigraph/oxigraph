@@ -51,8 +51,13 @@ pub struct SecondaryOptions {
     pub secondary_path: PathBuf,
 }
 
+pub struct ReadOnlyOptions {
+    pub path: PathBuf,
+}
+
 pub enum StoreOpenOptions {
     OpenAsSecondary(SecondaryOptions),
+    OpenAsReadOnly(ReadOnlyOptions),
 }
 
 /// An on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).

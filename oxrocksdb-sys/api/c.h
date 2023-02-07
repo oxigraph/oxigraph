@@ -70,6 +70,15 @@ rocksdb_pinnableslice_t* rocksdb_get_pinned_cf_with_status(
     rocksdb_column_family_handle_t* column_family, const char* key,
     size_t keylen, rocksdb_status_t* statusptr);
 
+
+
+extern ROCKSDB_LIBRARY_API rocksdb_t* rocksdb_open_for_read_only_column_families_with_status(
+    const rocksdb_options_t* db_options, const char* name,
+    int num_column_families, const char* const* column_family_names,
+    const rocksdb_options_t* const* column_family_options,
+    rocksdb_column_family_handle_t** column_family_handles,
+    unsigned char error_if_wal_file_exists, rocksdb_status_t* statusptr);
+
 extern ROCKSDB_LIBRARY_API void rocksdb_try_catch_up_with_primary_with_status(
         rocksdb_t* db, rocksdb_status_t* statusptr);
 
