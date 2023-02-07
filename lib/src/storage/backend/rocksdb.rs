@@ -29,6 +29,7 @@ use std::{ptr, slice};
 enum OpeningMode {
     InMemory,
     Primary,
+    ReadOnly,
     Secondary(PathBuf),
 }
 
@@ -82,7 +83,7 @@ fn primary_db_handler_or_error(
     match db {
         InnerDbHandler::Primary(inner_db) | InnerDbHandler::InMemory(inner_db) => Ok(inner_db),
         _ => Err(StorageError::Other(
-            "Database is opened as secondary, can not execute this operation.".into(),
+            "Database is opened as secondary or readonly, can not execute this operation.".into(),
         )),
     }
 }
@@ -91,9 +92,9 @@ fn secondary_db_handler_or_error(
     db: &InnerDbHandler,
 ) -> Result<&InnerDbHandlerSecondary, StorageError> {
     match db {
-        InnerDbHandler::Secondary(inner_db) => Ok(inner_db),
+        InnerDbHandler::ReadOnly(inner_db) | InnerDbHandler::Secondary(inner_db) => Ok(inner_db),
         _ => Err(StorageError::Other(Box::<dyn Error + Send + Sync>::from(
-            "Expected secondary InnerDbHandler, got primary/in memory one",
+            "Expected secondary/read-only InnerDbHandler, got primary/in memory one",
         ))),
     }
 }
@@ -131,19 +132,20 @@ enum InnerDbHandler {
     Primary(InnerDbHandlerPrimary),
     InMemory(InnerDbHandlerPrimary),
     Secondary(InnerDbHandlerSecondary),
+    ReadOnly(InnerDbHandlerSecondary),
 }
 
 impl InnerDbHandler {
     fn is_null(&self) -> bool {
         match self {
             Self::Primary(s) | Self::InMemory(s) => s.db.is_null(),
-            Self::Secondary(s) => s.db.is_null(),
+            Self::ReadOnly(s) | Self::Secondary(s) => s.db.is_null(),
         }
     }
     fn primary_path(&self) -> &PathBuf {
         match self {
             Self::Primary(s) | Self::InMemory(s) => &s.path,
-            Self::Secondary(s) => &s.primary_path,
+            Self::ReadOnly(s) | Self::Secondary(s) => &s.primary_path,
         }
     }
 }
@@ -173,7 +175,7 @@ impl Drop for DbHandler {
                 InnerDbHandler::Primary(s) | InnerDbHandler::InMemory(s) => {
                     rocksdb_transactiondb_close(s.db);
                 }
-                InnerDbHandler::Secondary(s) => {
+                InnerDbHandler::Secondary(s) | InnerDbHandler::ReadOnly(s) => {
                     rocksdb_close(s.db);
                 }
             }
@@ -234,6 +236,11 @@ impl Db {
         column_families: Vec<ColumnFamilyDefinition>,
     ) -> Result<Self, StorageError> {
         match options {
+            StoreOpenOptions::OpenAsReadOnly(options) => Ok(Self(Arc::new(Self::do_open(
+                options.path,
+                column_families,
+                &OpeningMode::ReadOnly,
+            )?))),
             StoreOpenOptions::OpenAsSecondary(options) => Ok(Self(Arc::new(Self::do_open(
                 options.path,
                 column_families,
@@ -260,7 +267,7 @@ impl Db {
             );
             if let Some(available_fd) = available_file_descriptors()? {
                 let max_open_files = match &open_mode {
-                    OpeningMode::Primary | OpeningMode::InMemory => {
+                    OpeningMode::Primary | OpeningMode::InMemory | OpeningMode::ReadOnly => {
                         if available_fd < 96 {
                             rocksdb_options_destroy(options);
                             return Err(io::Error::new(
@@ -413,6 +420,23 @@ impl Db {
                         })
                     })
                 }
+                OpeningMode::ReadOnly => {
+                    ffi_result!(rocksdb_open_for_read_only_column_families_with_status(
+                        options,
+                        c_path.as_ptr(),
+                        c_num_column_families,
+                        c_column_family_names.as_ptr(),
+                        cf_options.as_ptr() as *const *const rocksdb_options_t,
+                        cf_handles.as_mut_ptr(),
+                        0, // false
+                    ))
+                    .map(|db| {
+                        InnerDbHandler::ReadOnly(InnerDbHandlerSecondary {
+                            db,
+                            primary_path: path,
+                        })
+                    })
+                }
             }
             .map_err(|e| {
                 for cf_option in &cf_options {
@@ -516,6 +540,10 @@ impl Db {
                         options,
                     }
                 }
+                InnerDbHandler::ReadOnly(_) => Reader {
+                    inner: InnerReader::Secondary(self.0.clone()),
+                    options,
+                },
                 InnerDbHandler::Secondary(_) => {
                     ffi_result!(rocksdb_try_catch_up_with_primary_with_status(
                         secondary_db_handler_or_error(&self.0.db).unwrap().db,
@@ -610,7 +638,8 @@ impl Db {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = match &self.0.db {
-                InnerDbHandler::Secondary(inner_db_handler) => {
+                InnerDbHandler::Secondary(inner_db_handler)
+                | InnerDbHandler::ReadOnly(inner_db_handler) => {
                     ffi_result!(rocksdb_get_pinned_cf_with_status(
                         inner_db_handler.db,
                         self.0.read_options,
@@ -745,8 +774,8 @@ impl Db {
 
     pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
         match &self.0.db {
-            InnerDbHandler::Secondary(_) => Err(StorageError::Other(
-                "It is not possible to backup an database opened as secondary.".into(),
+            InnerDbHandler::Secondary(_) | InnerDbHandler::ReadOnly(_) => Err(StorageError::Other(
+                "It is not possible to backup an database opened as secondary or read-only.".into(),
             )),
             InnerDbHandler::InMemory(_) => Err(StorageError::Other(
                 "It is not possible to backup an in-memory database created with `Store::new`"

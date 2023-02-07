@@ -6,7 +6,9 @@ use oxhttp::Server;
 use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
 use oxigraph::model::{GraphName, GraphNameRef, IriParseError, NamedNode, NamedOrBlankNode};
 use oxigraph::sparql::{Query, QueryResults, Update};
-use oxigraph::store::{BulkLoader, LoaderError, SecondaryOptions, Store, StoreOpenOptions};
+use oxigraph::store::{
+    BulkLoader, LoaderError, ReadOnlyOptions, SecondaryOptions, Store, StoreOpenOptions,
+};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
@@ -37,10 +39,20 @@ struct Args {
     /// Directory in which persist the data.
     #[arg(short, long, global = true)]
     location: Option<PathBuf>,
-    /// Open underlying database in readonly mode, specify path to store info logs (LOG)
+    /// Open underlying database in secondary mode, specify path to store info logs (LOG)
     // see https://github.com/facebook/rocksdb/wiki/Read-only-and-Secondary-instances
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, conflicts_with = "readonly")]
     secondary_location: Option<PathBuf>,
+    /// Open underlying database in read only mode
+    // see https://github.com/facebook/rocksdb/wiki/Read-only-and-Secondary-instances
+    #[arg(
+        short,
+        long,
+        global = true,
+        action,
+        conflicts_with = "secondary_location"
+    )]
+    readonly: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -75,6 +87,10 @@ pub fn main() -> anyhow::Result<()> {
             Store::open_with_options(StoreOpenOptions::OpenAsSecondary(SecondaryOptions {
                 path: path.to_path_buf(),
                 secondary_path: secondary_path.to_path_buf(),
+            }))
+        } else if matches.readonly {
+            Store::open_with_options(StoreOpenOptions::OpenAsReadOnly(ReadOnlyOptions {
+                path: path.to_path_buf(),
             }))
         } else {
             Store::open(path)
