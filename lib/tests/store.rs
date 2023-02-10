@@ -3,6 +3,8 @@ use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
 #[cfg(not(target_family = "wasm"))]
+use oxigraph::store::{ReadOnlyOptions, SecondaryOptions, StoreOpenOptions};
+#[cfg(not(target_family = "wasm"))]
 use rand::random;
 #[cfg(not(target_family = "wasm"))]
 use std::env::temp_dir;
@@ -18,7 +20,6 @@ use std::iter::once;
 use std::path::{Path, PathBuf};
 #[cfg(not(target_family = "wasm"))]
 use std::process::Command;
-
 const DATA: &str = r#"
 @prefix schema: <http://schema.org/> .
 @prefix wd: <http://www.wikidata.org/entity/> .
@@ -367,6 +368,87 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
         );
     }
     reset_dir("tests/rocksdb_bc_data")?;
+    Ok(())
+}
+
+#[test]
+#[cfg(not(target_family = "wasm"))]
+fn test_secondary_and_readonly() -> Result<(), Box<dyn Error>> {
+    let s = NamedNodeRef::new_unchecked("http://example.com/s");
+    let p = NamedNodeRef::new_unchecked("http://example.com/p");
+    let g = NamedNodeRef::new_unchecked("http://example.com/g");
+    let first_quad = QuadRef::new(s, p, NamedNodeRef::new_unchecked("http://example.com/o"), g);
+    let second_quad = QuadRef::new(
+        s,
+        p,
+        NamedNodeRef::new_unchecked("http://example.com/o2"),
+        g,
+    );
+    let second_quad_secondary = QuadRef::new(
+        s,
+        p,
+        NamedNodeRef::new_unchecked("http://example.com/o2secondary"),
+        g,
+    );
+    let second_quad_read_only = QuadRef::new(
+        s,
+        p,
+        NamedNodeRef::new_unchecked("http://example.com/o2read_only"),
+        g,
+    );
+    let store_dir = TempDir::default();
+    let secondary_dir = TempDir::default();
+
+    // primary store with read & write access
+    let primary = Store::open(store_dir.0.clone())?;
+    primary.insert(first_quad)?;
+    primary.flush()?;
+    // TODO: optimize should not be necessary here?
+    // if removed opening the readonly/secondary database throws an corruption error.
+    primary.optimize()?;
+
+    // create additional stores
+    // read_only will not update after creation, so it's important we create it after insertion of
+    // data.
+    let read_only = Store::open_with_options(StoreOpenOptions::OpenAsReadOnly(ReadOnlyOptions {
+        path: store_dir.0.clone(),
+    }))?;
+    let secondary =
+        Store::open_with_options(StoreOpenOptions::OpenAsSecondary(SecondaryOptions {
+            path: store_dir.0.clone(),
+            secondary_path: secondary_dir.0.clone(),
+        }))?;
+
+    // see if we can read the data on all three stores:
+    for store in &[&primary, &secondary, &read_only] {
+        assert_eq!(
+            store.iter().collect::<Result<Vec<_>, _>>()?,
+            vec![first_quad.into_owned()]
+        );
+    }
+
+    // now we add data to the primary store
+    primary.insert(second_quad)?;
+    // we expect that adding data is not possible with secondary or read_only.
+    assert!(secondary.insert(second_quad_secondary).is_err());
+    assert!(read_only.insert(second_quad_read_only).is_err());
+
+    // see if we can read the new data from primary and secondary
+    for store in &[&primary, &secondary] {
+        assert_eq!(
+            store.iter().collect::<Result<Vec<_>, _>>()?,
+            vec![first_quad.into_owned(), second_quad.into_owned()]
+        );
+    }
+    // readonly will not be updated, so here we see just the first document
+    assert_eq!(
+        read_only.iter().collect::<Result<Vec<_>, _>>()?,
+        vec![first_quad.into_owned()]
+    );
+
+    primary.validate()?;
+    secondary.validate()?;
+    read_only.validate()?;
     Ok(())
 }
 
