@@ -1,5 +1,5 @@
 black~=23.1
 furo
 maturin~=0.14.0
-mypy~=0.991.0
+mypy~=1.0
 sphinx~=5.3
