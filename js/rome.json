@@ -1,0 +1,10 @@
+{
+  "formatter": {
+    "indentStyle": "space",
+    "indentSize": 4,
+    "lineWidth": 100
+  },
+  "linter": {
+    "ignore": ["pkg"]
+  }
+}
