@@ -17,5 +17,5 @@ links = "rocksdb"
 libc = "0.2"
 
 [build-dependencies]
-bindgen = "0.63"
+bindgen = "0.64"
 cc = { version = "1", features = ["parallel"] }

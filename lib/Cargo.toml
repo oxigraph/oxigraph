@@ -36,7 +36,7 @@ rio_xml = "0.8"
 hex = "0.4"
 siphasher = "0.3"
 lazy_static = "1"
-sysinfo = "0.27"
+sysinfo = "0.28"
 oxrdf = { version = "0.1.3-dev", path="oxrdf", features = ["rdf-star", "oxsdatatypes"] }
 oxsdatatypes = { version = "0.1.0", path="oxsdatatypes" }
 spargebra = { version = "0.2.5-dev", path="spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
