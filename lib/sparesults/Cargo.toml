@@ -1,6 +1,6 @@
 [package]
 name = "sparesults"
-version = "0.1.4"
+version = "0.1.5-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -19,7 +19,7 @@ rdf-star = ["oxrdf/rdf-star"]
 
 [dependencies]
 json-event-parser = "0.1"
-oxrdf = { version = "0.1.2", path="../oxrdf" }
+oxrdf = { version = "0.1.3-dev", path="../oxrdf" }
 quick-xml = "0.27"
 
 [package.metadata.docs.rs]
