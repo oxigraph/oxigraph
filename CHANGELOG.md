@@ -1,6 +1,17 @@
-## [0.3.11] - 2022-12-18
+## [0.3.12] - 2023-02-18
 
-## Added
+### Added
+- `From<NamedOrBlankNode>` for `GraphName` (and similarly for `*Ref`).
+- Prebuilt Python wheels for Linux with [musl libc](https://www.musl-libc.org/).
+
+### Changed
+- Fixes TriG serialization.
+- `QueryDataset` is now properly exposed in the public Rust API.
+
+
+## [0.3.11] - 2023-01-18
+
+### Added
 - SPARQL: Implementation of the `LATERAL` operator following [SPARQL SEP-0006](https://github.com/w3c/sparql-12/blob/main/SEP/SEP-0006/sep-0006.md).
   Support is behind the `sep-0006` feature in `spargebra` and enabled by default in Oxigraph. 
 - SPARQL: Implementation of the `ADJUST` function following [SPARQL SEP-0002](https://github.com/w3c/sparql-12/blob/main/SEP/SEP-0002/sep-0002.md).
@@ -9,7 +20,7 @@
   It was part of the Oxigraph crate and it might be useful for other SPARQL or XPath implementations.
 - Rust: The `oxigraph` crate can now be compiled for `wasm32-wasi` with the basic in-memory backend but without RocksDB.
 
-## Changed
+### Changed
 - SPARQL: The property path evaluator was sometime emitting duplicates when evaluating disjunctive patterns (`a|b`). It is now fixed.
 - SPARQL: If written explicitly in the SPARQL query, the regular expressions are now compiled once and not for each row.
 - SPARQL: Property path evaluation with both start and end variables bound has been optimized.
@@ -25,12 +36,12 @@
 
 ## [0.3.10] - 2022-12-21
 
-## Added
+### Added
 - SPARQL: Property path with unbound graph are now evaluated.
   For example, `SELECT * WHERE { GRAPH ?g { ?s ex:p+ ?o } }` now works.
 - SPARQL: The query optimizer is now fuzzed for better testing.
 
-## Changed
+### Changed
 - SPARQL: Evaluation of zero-length paths with both start and end unbounded now return only terms defined in the current graph but not terms only defined in the query.
   For example, in `SELECT * WHERE { VALUES ?s { 1 } { ?s ex:p? ?o } }` the literal `1` won't be returned anymore if not in the queried graph.
 - Python: type stubs are now compatible with Python 3.7 and Mypy strict mode.
@@ -40,13 +51,13 @@
 
 ## [0.3.9] - 2022-12-07
 
-## Added
+### Added
 - Server: The `/store` endpoints now has a `no_transaction` HTTP option for `POST` and `PUT` request to get better performances at the cost of transactional guarantees.
 - Server: The `/store` endpoints now has a `lenient` HTTP option for `POST` and `PUT` request to ignore syntax errors (requires the  `no_transaction` option).
 - Server: allows path that are not valid UTF-8 in file path CLI arguments.
 - Rust: `From<spargebra::Query>` to `oxigraph::Query` (thanks to @hobofan).
 
-## Changed
+### Changed
 - SPARQL: `NOW()` function properly returns the current time and not 1970-01-01
 - SPARQL: fixes serialization of SPARQL queries (property path and STRSTARTS function).
 - SPARQL: slightly optimize aggregates by avoiding an unneeded projection.
