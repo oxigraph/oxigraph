@@ -104,7 +104,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: EmbarkStudios/cargo-deny-action@v1
+      - run: rustup update
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-deny || true
+      - run: cargo deny check
 
   semver_checks:
     runs-on: ubuntu-latest
