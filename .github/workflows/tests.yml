@@ -139,6 +139,7 @@ jobs:
         with:
           submodules: true
       - run: rustup update && rustup override set nightly
+      - run: sudo apt install -y llvm
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
         env:
