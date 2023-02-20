@@ -2487,4 +2487,31 @@ mod tests {
         assert!(now < DateTime::from_str("2100-01-01T00:00:00Z")?);
         Ok(())
     }
+
+    #[test]
+    fn minimally_conformant() -> Result<(), XsdParseError> {
+        // All minimally conforming processors must support nonnegative year values less than 10000
+        // (i.e., those expressible with four digits) in all datatypes which
+        // use the seven-property model defined in The Seven-property Model (§D.2.1)
+        // and have a non-absent value for year (i.e. dateTime, dateTimeStamp, date, gYearMonth, and gYear).
+        assert_eq!(GYear::from_str("9999")?.to_string(), "9999");
+        assert_eq!(
+            DateTime::from_str("9999-12-31T23:59:59Z")?.to_string(),
+            "9999-12-31T23:59:59Z"
+        );
+
+        // All minimally conforming processors must support second values to milliseconds
+        // (i.e. those expressible with three fraction digits) in all datatypes
+        // which use the seven-property model defined in The Seven-property Model (§D.2.1)
+        // and have a non-absent value for second (i.e. dateTime, dateTimeStamp, and time).
+        assert_eq!(
+            Time::from_str("00:00:00.678Z")?.to_string(),
+            "00:00:00.678Z"
+        );
+        assert_eq!(
+            DateTime::from_str("2000-01-01T00:00:00.678Z")?.to_string(),
+            "2000-01-01T00:00:00.678Z"
+        );
+        Ok(())
+    }
 }
