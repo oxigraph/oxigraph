@@ -771,4 +771,25 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn minimally_conformant() -> Result<(), XsdParseError> {
+        // All minimally conforming processors must support fractional-second duration values
+        // to milliseconds (i.e. those expressible with three fraction digits).
+        assert_eq!(Duration::from_str("PT0.001S")?.to_string(), "PT0.001S");
+        assert_eq!(Duration::from_str("-PT0.001S")?.to_string(), "-PT0.001S");
+
+        // All minimally conforming processors must support duration values with months values
+        // in the range −119999 to 119999 months (9999 years and 11 months)
+        // and seconds values in the range −31622400 to 31622400 seconds (one leap-year).
+        assert_eq!(
+            Duration::from_str("P119999MT31622400S")?.to_string(),
+            "P9999Y11M366D"
+        );
+        assert_eq!(
+            Duration::from_str("-P119999MT31622400S")?.to_string(),
+            "-P9999Y11M366D"
+        );
+        Ok(())
+    }
 }

@@ -810,4 +810,27 @@ mod tests {
         assert!(Decimal::try_from(Double::from(f64::MAX)).is_err());
         Ok(())
     }
+
+    #[test]
+    fn minimally_conformant() -> Result<(), ParseDecimalError> {
+        // All minimally conforming processors must support decimal values whose absolute value can be expressed as i / 10^k,
+        // where i and k are nonnegative integers such that i < 10^16 and k ≤ 16 (i.e., those expressible with sixteen total digits).
+        assert_eq!(
+            Decimal::from_str("1234567890123456")?.to_string(),
+            "1234567890123456"
+        );
+        assert_eq!(
+            Decimal::from_str("-1234567890123456")?.to_string(),
+            "-1234567890123456"
+        );
+        assert_eq!(
+            Decimal::from_str("0.1234567890123456")?.to_string(),
+            "0.1234567890123456"
+        );
+        assert_eq!(
+            Decimal::from_str("-0.1234567890123456")?.to_string(),
+            "-0.1234567890123456"
+        );
+        Ok(())
+    }
 }
