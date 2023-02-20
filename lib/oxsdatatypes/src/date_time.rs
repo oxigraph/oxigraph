@@ -243,12 +243,17 @@ impl fmt::Display for DateTime {
         }
         write!(
             f,
-            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{}{}",
             year.abs(),
             self.month(),
             self.day(),
             self.hour(),
             self.minute(),
+            if self.second().abs() >= 10.into() {
+                ""
+            } else {
+                "0"
+            },
             self.second()
         )?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -439,9 +444,14 @@ impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{:02}:{:02}:{:02}",
+            "{:02}:{:02}:{}{}",
             self.hour(),
             self.minute(),
+            if self.second().abs() >= 10.into() {
+                ""
+            } else {
+                "0"
+            },
             self.second()
         )?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -1932,6 +1942,26 @@ mod tests {
         assert_eq!(
             DateTime::from_str("1899-03-01T00:00:00")?.to_string(),
             "1899-03-01T00:00:00"
+        );
+        assert_eq!(
+            DateTime::from_str("-0899-03-01T00:00:00")?.to_string(),
+            "-0899-03-01T00:00:00"
+        );
+        assert_eq!(
+            DateTime::from_str("2000-01-01T00:00:00.1234567")?.to_string(),
+            "2000-01-01T00:00:00.1234567"
+        );
+        assert_eq!(
+            DateTime::from_str("2000-01-01T00:00:12.1234567")?.to_string(),
+            "2000-01-01T00:00:12.1234567"
+        );
+        assert_eq!(
+            Time::from_str("01:02:03.1234567")?.to_string(),
+            "01:02:03.1234567"
+        );
+        assert_eq!(
+            Time::from_str("01:02:13.1234567")?.to_string(),
+            "01:02:13.1234567"
         );
 
         assert_eq!(
