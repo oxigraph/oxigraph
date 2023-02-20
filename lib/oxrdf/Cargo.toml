@@ -1,6 +1,6 @@
 [package]
 name = "oxrdf"
-version = "0.1.3"
+version = "0.1.4-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -21,7 +21,8 @@ rdf-star = []
 rand = "0.8"
 oxilangtag = "0.1"
 oxiri = "0.2"
-oxsdatatypes = { version = "0.1.0", path="../oxsdatatypes", optional = true }
+
+oxsdatatypes = { version = "0.1.1-dev", path="../oxsdatatypes", optional = true }
 lasso = { version = "0.6", features = ["inline-more"] }
 
 [package.metadata.docs.rs]
