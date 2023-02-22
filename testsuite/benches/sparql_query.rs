@@ -9,8 +9,8 @@ criterion_main!(sparql);
 
 fn sparql_w3c_syntax_bench(c: &mut Criterion) {
     let manifest_urls = vec![
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl",
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/manifest-sparql11-query.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-syntax.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
     ];
     let queries: Vec<_> = TestManifest::new(manifest_urls)
         .flat_map(|test| {

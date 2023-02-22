@@ -13,16 +13,6 @@ pub fn read_file(url: &str) -> Result<impl BufRead> {
         url.replace("https://w3c.github.io/", "")
     } else if url.starts_with("http://www.w3.org/2013/RDFXMLTests/") {
         url.replace("http://www.w3.org/2013/RDFXMLTests/", "rdf-tests/rdf-xml/")
-    } else if url.starts_with("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/") {
-        url.replace(
-            "http://www.w3.org/2001/sw/DataAccess/tests/",
-            "rdf-tests/sparql11/",
-        )
-    } else if url.starts_with("http://www.w3.org/2009/sparql/docs/tests/data-sparql11/") {
-        url.replace(
-            "http://www.w3.org/2009/sparql/docs/tests/",
-            "rdf-tests/sparql11/",
-        )
     } else if url.starts_with("https://github.com/oxigraph/oxigraph/tests/") {
         url.replace(
             "https://github.com/oxigraph/oxigraph/tests/",

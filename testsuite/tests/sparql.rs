@@ -30,7 +30,7 @@ fn run_testsuite(manifest_url: &str, ignored_tests: Vec<&str>) -> Result<()> {
 #[test]
 fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
     run_testsuite(
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-syntax.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-syntax.ttl",
         vec![
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#syn-bad-26", // tokenizer
         ],
@@ -39,7 +39,7 @@ fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
 
 #[test]
 fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
-    run_testsuite("http://www.w3.org/2001/sw/DataAccess/tests/data-r2/manifest-evaluation.ttl", vec![
+    run_testsuite("https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl", vec![
         //Multiple writing of the same xsd:integer. Our system does strong normalization.
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
@@ -74,7 +74,7 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
 #[test]
 fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/manifest-sparql11-query.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
         vec![
             //BNODE() scope is currently wrong
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01",
@@ -87,7 +87,7 @@ fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
 #[test]
 fn sparql11_federation_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/manifest-sparql11-fed.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-fed.ttl",
         vec![
             // Problem during service evaluation order
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5",
@@ -98,7 +98,7 @@ fn sparql11_federation_w3c_evaluation_testsuite() -> Result<()> {
 #[test]
 fn sparql11_update_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/manifest-sparql11-update.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-update.ttl",
         vec![
             // We allow multiple INSERT DATA with the same blank nodes
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_54",
@@ -109,7 +109,7 @@ fn sparql11_update_w3c_evaluation_testsuite() -> Result<()> {
 #[test]
 fn sparql11_json_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/json-res/manifest.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql11/json-res/manifest.ttl",
         vec![],
     )
 }
@@ -117,7 +117,7 @@ fn sparql11_json_w3c_evaluation_testsuite() -> Result<()> {
 #[test]
 fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
     run_testsuite(
-        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest.ttl",
+        "https://w3c.github.io/rdf-tests/sparql/sparql11/csv-tsv-res/manifest.ttl",
         vec![
             // We do not run CSVResultFormatTest tests yet
             "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv01",
