@@ -14,7 +14,6 @@ pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, S
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::numeric_encoder::Decoder;
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
-pub use crate::store::StoreOpenOptions;
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_family = "wasm"))]
 use std::cmp::{max, min};
@@ -92,8 +91,20 @@ impl Storage {
     }
 
     #[cfg(not(target_family = "wasm"))]
-    pub fn open_with_options(options: StoreOpenOptions) -> Result<Self, StorageError> {
-        Self::setup(Db::open_with_options(options, Self::column_families())?)
+    pub fn open_secondary(
+        primary_path: &Path,
+        secondary_path: &Path,
+    ) -> Result<Self, StorageError> {
+        Self::setup(Db::open_secondary(
+            primary_path,
+            secondary_path,
+            Self::column_families(),
+        )?)
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub fn open_read_only(path: &Path) -> Result<Self, StorageError> {
+        Self::setup(Db::open_read_only(path, Self::column_families())?)
     }
 
     fn column_families() -> Vec<ColumnFamilyDefinition> {
