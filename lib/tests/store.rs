@@ -292,12 +292,12 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
     remove_dir_all(&dir.0)?;
     assert!(store
         .bulk_loader()
-        .load_quads(once(Quad {
-            subject: NamedNode::new_unchecked("http://example.com/s").into(),
-            predicate: NamedNode::new_unchecked("http://example.com/p"),
-            object: NamedNode::new_unchecked("http://example.com/o").into(),
-            graph_name: GraphName::DefaultGraph
-        }))
+        .load_quads(once(Quad::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/o"),
+            GraphName::DefaultGraph
+        )))
         .is_err());
     Ok(())
 }
@@ -305,12 +305,12 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_backup() -> Result<(), Box<dyn Error>> {
-    let quad = QuadRef {
-        subject: NamedNodeRef::new_unchecked("http://example.com/s").into(),
-        predicate: NamedNodeRef::new_unchecked("http://example.com/p"),
-        object: NamedNodeRef::new_unchecked("http://example.com/o").into(),
-        graph_name: GraphNameRef::DefaultGraph,
-    };
+    let quad = QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com/s"),
+        NamedNodeRef::new_unchecked("http://example.com/p"),
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        GraphNameRef::DefaultGraph,
+    );
     let store_dir = TempDir::default();
     let backup_dir = TempDir::default();
 
@@ -371,76 +371,119 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(not(target_family = "wasm"))]
-fn test_secondary_and_readonly() -> Result<(), Box<dyn Error>> {
+fn test_secondary() -> Result<(), Box<dyn Error>> {
+    let quad = QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com/s"),
+        NamedNodeRef::new_unchecked("http://example.com/p"),
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        GraphNameRef::DefaultGraph,
+    );
+    let primary_dir = TempDir::default();
+    let secondary_dir = TempDir::default();
+
+    // We open the store
+    let primary = Store::open(&primary_dir)?;
+    let secondary = Store::open_secondary(&primary_dir, &secondary_dir)?;
+
+    // We insert a quad
+    primary.insert(quad)?;
+    primary.flush()?;
+
+    // It is readable from both stores
+    for store in &[&primary, &secondary] {
+        assert!(store.contains(quad)?);
+        assert_eq!(
+            store.iter().collect::<Result<Vec<_>, _>>()?,
+            vec![quad.into_owned()]
+        );
+    }
+
+    // We validate the states
+    primary.validate()?;
+    secondary.validate()?;
+
+    // We close the primary store and remove its content
+    drop(primary);
+    remove_dir_all(&primary_dir)?;
+
+    // We secondary store is still readable
+    assert!(secondary.contains(quad)?);
+    secondary.validate()?;
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(target_family = "wasm"))]
+fn test_open_secondary_bad_dir() -> Result<(), Box<dyn Error>> {
+    let primary_dir = TempDir::default();
+    let secondary_dir = TempDir::default();
+    create_dir(&primary_dir.0)?;
+    {
+        File::create(primary_dir.0.join("CURRENT"))?.write_all(b"foo")?;
+    }
+    assert!(Store::open_secondary(&primary_dir, &secondary_dir).is_err());
+    Ok(())
+}
+
+#[test]
+#[cfg(not(target_family = "wasm"))]
+fn test_read_only() -> Result<(), Box<dyn Error>> {
     let s = NamedNodeRef::new_unchecked("http://example.com/s");
     let p = NamedNodeRef::new_unchecked("http://example.com/p");
-    let g = NamedNodeRef::new_unchecked("http://example.com/g");
-    let first_quad = QuadRef::new(s, p, NamedNodeRef::new_unchecked("http://example.com/o"), g);
+    let first_quad = QuadRef::new(
+        s,
+        p,
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        GraphNameRef::DefaultGraph,
+    );
     let second_quad = QuadRef::new(
         s,
         p,
         NamedNodeRef::new_unchecked("http://example.com/o2"),
-        g,
-    );
-    let second_quad_secondary = QuadRef::new(
-        s,
-        p,
-        NamedNodeRef::new_unchecked("http://example.com/o2secondary"),
-        g,
-    );
-    let second_quad_read_only = QuadRef::new(
-        s,
-        p,
-        NamedNodeRef::new_unchecked("http://example.com/o2read_only"),
-        g,
+        GraphNameRef::DefaultGraph,
     );
     let store_dir = TempDir::default();
-    let secondary_dir = TempDir::default();
 
-    // primary store with read & write access
-    let primary = Store::open(store_dir.0.clone())?;
-    primary.insert(first_quad)?;
-    primary.flush()?;
-    // TODO: optimize should not be necessary here?
-    // if removed opening the readonly/secondary database throws an corruption error.
-    primary.optimize()?;
+    // We write to the store and close it
+    {
+        let read_write = Store::open(&store_dir)?;
+        read_write.insert(first_quad)?;
+        read_write.flush()?;
+    }
 
-    // create additional stores
-    // read_only will not update after creation, so it's important we create it after insertion of
-    // data.
+    // We open as read-only
     let read_only = Store::open_read_only(&store_dir)?;
-    let secondary = Store::open_secondary(&store_dir, &secondary_dir)?;
-
-    // see if we can read the data on all three stores:
-    for store in &[&primary, &secondary, &read_only] {
-        assert_eq!(
-            store.iter().collect::<Result<Vec<_>, _>>()?,
-            vec![first_quad.into_owned()]
-        );
-    }
-
-    // now we add data to the primary store
-    primary.insert(second_quad)?;
-    // we expect that adding data is not possible with secondary or read_only.
-    assert!(secondary.insert(second_quad_secondary).is_err());
-    assert!(read_only.insert(second_quad_read_only).is_err());
-
-    // see if we can read the new data from primary and secondary
-    for store in &[&primary, &secondary] {
-        assert_eq!(
-            store.iter().collect::<Result<Vec<_>, _>>()?,
-            vec![first_quad.into_owned(), second_quad.into_owned()]
-        );
-    }
-    // readonly will not be updated, so here we see just the first document
+    assert!(read_only.contains(first_quad)?);
     assert_eq!(
         read_only.iter().collect::<Result<Vec<_>, _>>()?,
         vec![first_quad.into_owned()]
     );
-
-    primary.validate()?;
-    secondary.validate()?;
     read_only.validate()?;
+
+    // We open as read-write again
+    let read_write = Store::open(&store_dir)?;
+    read_write.insert(second_quad)?;
+    read_write.flush()?;
+    read_write.optimize()?; // Makes sure it's well flushed
+
+    // The new quad is in the read-write instance but not the read-only instance
+    assert!(read_write.contains(second_quad)?);
+    assert!(!read_only.contains(second_quad)?);
+    read_only.validate()?;
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(target_family = "wasm"))]
+fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::default();
+    create_dir(&dir.0)?;
+    {
+        File::create(dir.0.join("CURRENT"))?.write_all(b"foo")?;
+    }
+    assert!(Store::open_read_only(&dir).is_err());
     Ok(())
 }
 

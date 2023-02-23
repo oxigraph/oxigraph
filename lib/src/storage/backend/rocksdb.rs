@@ -884,9 +884,13 @@ impl Reader {
                         ));
                     }
                 }
-                InnerReader::Secondary(_) => {
-                    return Err(StorageError::Other(
-                        "Database is opened as secondary, can not execute Reader.get".into(),
+                InnerReader::Secondary(inner) => {
+                    ffi_result!(rocksdb_get_pinned_cf_with_status(
+                        secondary_db_handler_or_error(&inner.db)?.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr() as *const c_char,
+                        key.len()
                     ))
                 }
             }?;
