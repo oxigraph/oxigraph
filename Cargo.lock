@@ -139,9 +139,9 @@ dependencies = [
 
 [[package]]
 name = "bstr"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7f0778972c64420fdedc63f09919c8a88bda7b25135357fd25a5d9f3257e832"
+checksum = "5ffdb39cb703212f3c11973452c2861b972f757b021158f3516ba10f2fa8b2c1"
 dependencies = [
  "memchr",
  "once_cell",
@@ -214,9 +214,9 @@ dependencies = [
 
 [[package]]
 name = "clang-sys"
-version = "1.4.0"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa2e27ae6ab525c3d369ded447057bca5438d86dc3a68f6faafb8269ba82ebf3"
+checksum = "77ed9a53e5d4d9c573ae844bfac6872b159cb1d1585a83b29e7a64b7eef7332a"
 dependencies = [
  "glob",
  "libc",
@@ -973,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.13-dev"
+version = "0.3.13"
 dependencies = [
  "criterion",
  "digest",
@@ -1004,7 +1004,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.13-dev"
+version = "0.3.13"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1014,7 +1014,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.13-dev"
+version = "0.3.13"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1060,7 +1060,7 @@ checksum = "bb175ec8981211357b7b379869c2f8d555881c55ea62311428ec0de46d89bd5c"
 
 [[package]]
 name = "oxrdf"
-version = "0.1.4-dev"
+version = "0.1.4"
 dependencies = [
  "lasso",
  "oxilangtag",
@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "oxsdatatypes"
-version = "0.1.1-dev"
+version = "0.1.1"
 dependencies = [
  "js-sys",
  "nom",
@@ -1313,7 +1313,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.13-dev"
+version = "0.3.13"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1447,15 +1447,15 @@ dependencies = [
 
 [[package]]
 name = "rio_api"
-version = "0.8.0"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64bce58dd4aed6d706bd628c24076d9e88f6a8dd90a75fd0627b7440044b5975"
+checksum = "399f133da00f40a6be2d54b1c57e4a9004e68637530f76350bd02ea8dffef54e"
 
 [[package]]
 name = "rio_turtle"
-version = "0.8.0"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02aa66357f0ae6e1c5fb269a6823e588a51d191cc246c6b6c6bb9620cbe3e46e"
+checksum = "d76f84a733b7b8af1938eec4beb03d3e3cbf2a6a02dced10b82c42706d58e95b"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1464,9 +1464,9 @@ dependencies = [
 
 [[package]]
 name = "rio_xml"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d507cf3e28f9753c6d1ca317e1b1d8532223ee5cea5c5985f7d37e30168d22e3"
+checksum = "260447085620a4ec329d75b4b16610568fafecaeb4e51bbdb8e5f3324d2104f9"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1663,7 +1663,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "sparesults"
-version = "0.1.6-dev"
+version = "0.1.6"
 dependencies = [
  "json-event-parser",
  "oxrdf",
@@ -1672,7 +1672,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.2.6-dev"
+version = "0.2.6"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1702,9 +1702,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "syn"
-version = "1.0.107"
+version = "1.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f4064b5b16e03ae50984a5a8ed5d4f8803e6bc1fd170a3cda91a1be4b18e3f5"
+checksum = "d56e159d99e6c2b93995d171050271edb50ecc5288fbc7cc17de8fdce4e58c14"
 dependencies = [
  "proc-macro2",
  "quote",
