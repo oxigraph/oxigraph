@@ -2,8 +2,7 @@
 
 #![allow(unsafe_code, trivial_casts)]
 
-use crate::storage::error::StorageError;
-use crate::store::{CorruptionError, StoreOpenOptions};
+use crate::storage::error::{CorruptionError, StorageError};
 use lazy_static::lazy_static;
 use libc::{self, c_char, c_void, free};
 use oxrocksdb_sys::*;
@@ -225,28 +224,33 @@ impl Db {
         column_families: Vec<ColumnFamilyDefinition>,
     ) -> Result<Self, StorageError> {
         Ok(Self(Arc::new(Self::do_open(
-            path.to_owned(),
+            path.to_path_buf(),
             column_families,
             &OpeningMode::Primary,
         )?)))
     }
 
-    pub fn open_with_options(
-        options: StoreOpenOptions,
+    pub fn open_secondary(
+        primary_path: &Path,
+        secondary_path: &Path,
         column_families: Vec<ColumnFamilyDefinition>,
     ) -> Result<Self, StorageError> {
-        match options {
-            StoreOpenOptions::OpenAsReadOnly(options) => Ok(Self(Arc::new(Self::do_open(
-                options.path,
-                column_families,
-                &OpeningMode::ReadOnly,
-            )?))),
-            StoreOpenOptions::OpenAsSecondary(options) => Ok(Self(Arc::new(Self::do_open(
-                options.path,
-                column_families,
-                &OpeningMode::Secondary(options.secondary_path),
-            )?))),
-        }
+        Ok(Self(Arc::new(Self::do_open(
+            primary_path.to_path_buf(),
+            column_families,
+            &OpeningMode::Secondary(secondary_path.to_path_buf()),
+        )?)))
+    }
+
+    pub fn open_read_only(
+        path: &Path,
+        column_families: Vec<ColumnFamilyDefinition>,
+    ) -> Result<Self, StorageError> {
+        Ok(Self(Arc::new(Self::do_open(
+            path.to_path_buf(),
+            column_families,
+            &OpeningMode::ReadOnly,
+        )?)))
     }
 
     fn do_open(

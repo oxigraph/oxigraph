@@ -1,7 +1,6 @@
+use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, EncodedTriple, StrHash};
 use crate::storage::small_string::SmallString;
-use crate::storage::StorageError;
-use crate::store::CorruptionError;
 use oxsdatatypes::*;
 use std::io::{Cursor, Read};
 use std::mem::size_of;

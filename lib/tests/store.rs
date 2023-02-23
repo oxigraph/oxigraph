@@ -3,8 +3,6 @@ use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
 #[cfg(not(target_family = "wasm"))]
-use oxigraph::store::{ReadOnlyOptions, SecondaryOptions, StoreOpenOptions};
-#[cfg(not(target_family = "wasm"))]
 use rand::random;
 #[cfg(not(target_family = "wasm"))]
 use std::env::temp_dir;
@@ -410,14 +408,8 @@ fn test_secondary_and_readonly() -> Result<(), Box<dyn Error>> {
     // create additional stores
     // read_only will not update after creation, so it's important we create it after insertion of
     // data.
-    let read_only = Store::open_with_options(StoreOpenOptions::OpenAsReadOnly(ReadOnlyOptions {
-        path: store_dir.0.clone(),
-    }))?;
-    let secondary =
-        Store::open_with_options(StoreOpenOptions::OpenAsSecondary(SecondaryOptions {
-            path: store_dir.0.clone(),
-            secondary_path: secondary_dir.0.clone(),
-        }))?;
+    let read_only = Store::open_read_only(&store_dir)?;
+    let secondary = Store::open_secondary(&store_dir, &secondary_dir)?;
 
     // see if we can read the data on all three stores:
     for store in &[&primary, &secondary, &read_only] {

@@ -8,9 +8,7 @@ use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
 use oxigraph::sparql::{Query, QueryResults, Update};
-use oxigraph::store::{
-    BulkLoader, LoaderError, ReadOnlyOptions, SecondaryOptions, Store, StoreOpenOptions,
-};
+use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
@@ -97,14 +95,9 @@ pub fn main() -> anyhow::Result<()> {
     let matches = Args::parse();
     let store = if let Some(path) = &matches.location {
         if let Some(secondary_path) = &matches.secondary_location {
-            Store::open_with_options(StoreOpenOptions::OpenAsSecondary(SecondaryOptions {
-                path: path.to_path_buf(),
-                secondary_path: secondary_path.to_path_buf(),
-            }))
+            Store::open_secondary(path, secondary_path)
         } else if matches.readonly {
-            Store::open_with_options(StoreOpenOptions::OpenAsReadOnly(ReadOnlyOptions {
-                path: path.to_path_buf(),
-            }))
+            Store::open_read_only(path)
         } else {
             Store::open(path)
         }
