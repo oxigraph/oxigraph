@@ -45,13 +45,7 @@ struct Args {
     secondary_location: Option<PathBuf>,
     /// Open underlying database in read only mode
     // see https://github.com/facebook/rocksdb/wiki/Read-only-and-Secondary-instances
-    #[arg(
-        short,
-        long,
-        global = true,
-        action,
-        conflicts_with = "secondary_location"
-    )]
+    #[arg(short, long, global = true, conflicts_with = "secondary_location")]
     readonly: bool,
     #[command(subcommand)]
     command: Command,
