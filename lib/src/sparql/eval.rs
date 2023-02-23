@@ -786,6 +786,7 @@ impl SimpleEvaluator {
         }
     }
 
+    #[allow(clippy::redundant_closure)] // False positive in 1.60
     fn accumulator_builder(
         dataset: &Rc<DatasetView>,
         function: &PlanAggregationFunction,
@@ -796,14 +797,14 @@ impl SimpleEvaluator {
                 if distinct {
                     Box::new(|| Box::new(DistinctAccumulator::new(CountAccumulator::default())))
                 } else {
-                    Box::new(|| Box::new(CountAccumulator::default()))
+                    Box::new(|| Box::<CountAccumulator>::default())
                 }
             }
             PlanAggregationFunction::Sum => {
                 if distinct {
                     Box::new(|| Box::new(DistinctAccumulator::new(SumAccumulator::default())))
                 } else {
-                    Box::new(|| Box::new(SumAccumulator::default()))
+                    Box::new(|| Box::<SumAccumulator>::default())
                 }
             }
             PlanAggregationFunction::Min => {
@@ -818,10 +819,10 @@ impl SimpleEvaluator {
                 if distinct {
                     Box::new(|| Box::new(DistinctAccumulator::new(AvgAccumulator::default())))
                 } else {
-                    Box::new(|| Box::new(AvgAccumulator::default()))
+                    Box::new(|| Box::<AvgAccumulator>::default())
                 }
             }
-            PlanAggregationFunction::Sample => Box::new(|| Box::new(SampleAccumulator::default())), // DISTINCT does not make sense with sample
+            PlanAggregationFunction::Sample => Box::new(|| Box::<SampleAccumulator>::default()), // DISTINCT does not make sense with sample
             PlanAggregationFunction::GroupConcat { separator } => {
                 let dataset = dataset.clone();
                 let separator = separator.clone();
