@@ -973,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.3.13"
+version = "0.3.14-dev"
 dependencies = [
  "criterion",
  "digest",
@@ -1004,7 +1004,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_js"
-version = "0.3.13"
+version = "0.3.14-dev"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1014,7 +1014,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_server"
-version = "0.3.13"
+version = "0.3.14-dev"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1313,7 +1313,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.3.13"
+version = "0.3.14-dev"
 dependencies = [
  "oxigraph",
  "pyo3",
