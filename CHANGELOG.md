@@ -1,3 +1,10 @@
+## [0.3.13] - 2023-02-23
+
+### Changed
+- Fixes serialization of times with a decimal number of seconds lower than 10 (now `01:01:01.01` and not `01:01:1.01`).
+- Turtle and TriG: fixes parsing for prefixes named after keywords (`prefix`, `base`, `graph`, `true` and `false`).
+
+
 ## [0.3.12] - 2023-02-18
 
 ### Added
