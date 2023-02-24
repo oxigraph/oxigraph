@@ -19,7 +19,7 @@ use std::cmp::{max, min};
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::File;
-use std::io::{self, stdin, BufRead, BufReader, Read, Write};
+use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str;
@@ -113,6 +113,28 @@ enum Command {
         /// By default the default graph is used.
         ///
         /// Only available when loading a graph file (N-Triples, Turtle...) and not a dataset file (N-Quads, TriG...).
+        #[arg(long)]
+        graph: Option<String>,
+    },
+    /// Dump the store content into a file.
+    Dump {
+        /// Directory in which the data stored by Oxigraph are persisted.
+        #[arg(short, long)]
+        location: PathBuf,
+        /// file to dump to.
+        ///
+        /// If no file is given, stdout is used.
+        file: Option<PathBuf>,
+        /// The format of the file(s) to dump.
+        ///
+        /// Can be an extension like "nt" or a MIME type like "application/n-triples".
+        ///
+        /// By default the format is guessed from the target file extension.
+        #[arg(long, required_unless_present = "file")]
+        format: Option<String>,
+        /// Name of the graph to dump.
+        ///
+        /// By default all graphs are dumped if the output format supports datasets.
         #[arg(long)]
         graph: Option<String>,
     },
@@ -273,6 +295,44 @@ pub fn main() -> anyhow::Result<()> {
                 Ok(())
             }
         }
+        Command::Dump {
+            location,
+            file,
+            format,
+            graph,
+        } => {
+            let store = Store::open_read_only(&location)?;
+            let format = if let Some(format) = format {
+                GraphOrDatasetFormat::from_str(&format)?
+            } else if let Some(file) = &file {
+                GraphOrDatasetFormat::from_path(file)?
+            } else {
+                bail!("The --format option must be set when writing to stdout")
+            };
+            let graph = if let Some(graph) = &graph {
+                Some(if graph.eq_ignore_ascii_case("default") {
+                    GraphName::DefaultGraph
+                } else {
+                    NamedNodeRef::new(graph)
+                        .with_context(|| format!("The target graph name {graph} is invalid"))?
+                        .into()
+                })
+            } else {
+                None
+            };
+            if let Some(file) = file {
+                dump(
+                    &store,
+                    BufWriter::new(File::create(&file).map_err(|e| {
+                        anyhow!("Error while opening file {}: {e}", file.display())
+                    })?),
+                    format,
+                    graph,
+                )
+            } else {
+                dump(&store, stdout().lock(), format, graph)
+            }
+        }
     }
 }
 
@@ -295,6 +355,28 @@ fn bulk_load(
                 bail!("The --graph option is not allowed when loading a dataset format like NQuads or TriG");
             }
             loader.load_dataset(reader, format, base_iri)?
+        }
+    }
+    Ok(())
+}
+
+fn dump(
+    store: &Store,
+    writer: impl Write,
+    format: GraphOrDatasetFormat,
+    to_graph_name: Option<GraphName>,
+) -> anyhow::Result<()> {
+    match format {
+        GraphOrDatasetFormat::Graph(format) => store.dump_graph(
+            writer,
+            format,
+            &to_graph_name.ok_or_else(|| anyhow!("The --graph option is required when writing a graph format like NTriples, Turtle or RDF/XML"))?,
+        )?,
+        GraphOrDatasetFormat::Dataset(format) => {
+            if to_graph_name.is_some() {
+                bail!("The --graph option is not allowed when writing a dataset format like NQuads or TriG");
+            }
+            store.dump_dataset(writer, format)?
         }
     }
     Ok(())
@@ -1239,7 +1321,7 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use assert_cmd::Command;
-    use assert_fs::prelude::*;
+    use assert_fs::{prelude::*, NamedTempFile, TempDir};
     use flate2::write::GzEncoder;
     use flate2::Compression;
     use oxhttp::model::Method;
@@ -1266,38 +1348,66 @@ mod tests {
     }
 
     #[test]
-    fn cli_load_graph() -> Result<()> {
-        let file = assert_fs::NamedTempFile::new("sample.nt")?;
-        file.write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+    fn cli_load_and_dump_graph() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        let input_file = NamedTempFile::new("input.nt")?;
+        input_file
+            .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
         cli_command()?
             .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
             .arg("-f")
-            .arg(file.path())
+            .arg(input_file.path())
             .assert()
-            .success()
-            .stdout("")
-            .stderr(predicate::str::contains("1 triples loaded"));
+            .success();
+
+        let output_file = NamedTempFile::new("output.nt")?;
+        cli_command()?
+            .arg("dump")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg(output_file.path())
+            .arg("--graph")
+            .arg("default")
+            .assert()
+            .success();
+        output_file
+            .assert("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
         Ok(())
     }
 
     #[test]
-    fn cli_load_dataset() -> Result<()> {
-        let file = assert_fs::NamedTempFile::new("sample.nq")?;
-        file.write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+    fn cli_load_and_dump_dataset() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        let input_file = NamedTempFile::new("input.nq")?;
+        input_file
+            .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .")?;
         cli_command()?
             .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
             .arg("-f")
-            .arg(file.path())
+            .arg(input_file.path())
             .assert()
-            .success()
-            .stdout("")
-            .stderr(predicate::str::contains("1 triples loaded"));
+            .success();
+
+        let output_file = NamedTempFile::new("output.nq")?;
+        cli_command()?
+            .arg("dump")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg(output_file.path())
+            .assert()
+            .success();
+        output_file
+            .assert("<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
         Ok(())
     }
 
     #[test]
     fn cli_load_gzip_dataset() -> Result<()> {
-        let file = assert_fs::NamedTempFile::new("sample.nq.gz")?;
+        let file = NamedTempFile::new("sample.nq.gz")?;
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         encoder
             .write_all(b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
@@ -1307,42 +1417,98 @@ mod tests {
             .arg("-f")
             .arg(file.path())
             .assert()
-            .success()
-            .stdout("")
-            .stderr(predicate::str::contains("1 triples loaded"));
+            .success();
         Ok(())
     }
 
     #[test]
-    fn cli_load_with_graph_and_format() -> Result<()> {
-        let file = assert_fs::NamedTempFile::new("sample")?;
-        file.write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+    fn cli_load_and_dump_named_graph() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        let input_file = NamedTempFile::new("input.nt")?;
+        input_file
+            .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
         cli_command()?
             .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
             .arg("-f")
-            .arg(file.path())
+            .arg(input_file.path())
+            .arg("--graph")
+            .arg("http://example.com/g")
+            .assert()
+            .success();
+
+        let output_file = NamedTempFile::new("output.nt")?;
+        cli_command()?
+            .arg("dump")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg(output_file.path())
+            .arg("--graph")
+            .arg("http://example.com/g")
+            .assert()
+            .success();
+        output_file
+            .assert("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
+        Ok(())
+    }
+
+    #[test]
+    fn cli_load_and_dump_with_format() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        let input_file = NamedTempFile::new("input")?;
+        input_file
+            .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+        cli_command()?
+            .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("-f")
+            .arg(input_file.path())
             .arg("--format")
             .arg("nt")
-            .arg("--graph")
-            .arg("http://example.com")
             .assert()
-            .success()
-            .stdout("")
-            .stderr(predicate::str::contains("1 triples loaded"));
+            .success();
+
+        let output_file = NamedTempFile::new("output")?;
+        cli_command()?
+            .arg("dump")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg(output_file.path())
+            .arg("--graph")
+            .arg("default")
+            .arg("--format")
+            .arg("nt")
+            .assert()
+            .success();
+        output_file
+            .assert("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
         Ok(())
     }
 
     #[test]
-    fn cli_load_from_stdin() -> Result<()> {
+    fn cli_load_from_stdin_and_dump_to_stdout() -> Result<()> {
+        let store_dir = TempDir::new()?;
         cli_command()?
             .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
             .arg("--format")
             .arg("nq")
             .write_stdin("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")
             .assert()
+            .success();
+
+        cli_command()?
+            .arg("dump")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--format")
+            .arg("nq")
+            .assert()
             .success()
-            .stdout("")
-            .stderr(predicate::str::contains("1 triples loaded"));
+            .stdout("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
         Ok(())
     }
 
