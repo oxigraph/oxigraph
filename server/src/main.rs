@@ -94,14 +94,16 @@ enum Command {
         /// If multiple files are provided they are loaded in parallel.
         ///
         /// If no file is given, stdin is read.
-        #[arg(short, long, global = true, num_args = 0..)]
+        #[arg(num_args = 0..)]
         file: Vec<PathBuf>,
+        #[arg(short = 'f', long = "file", global = true, num_args = 0.., value_name = "FILE", hide = true)]
+        file_opt: Vec<PathBuf>, //TODO: remove on next breaking release
         /// The format of the file(s) to load.
         ///
         /// Can be an extension like "nt" or a MIME type like "application/n-triples".
         ///
         /// By default the format is guessed from the loaded file extension.
-        #[arg(long, required_unless_present = "file")]
+        #[arg(long, required_unless_present_any = ["file", "file_opt"])]
         format: Option<String>,
         /// Attempt to keep loading even if the data file is invalid.
         ///
@@ -165,7 +167,8 @@ pub fn main() -> anyhow::Result<()> {
             false,
         ),
         Command::Load {
-            file,
+            mut file,
+            file_opt,
             location,
             lenient,
             format,
@@ -177,7 +180,10 @@ pub fn main() -> anyhow::Result<()> {
                 eprintln!("Warning: opening an in-memory store. It will not be possible to read the written data.");
                 Store::new()
             }?;
-
+            if !file_opt.is_empty() {
+                eprintln!("Warning: the --file option is deprecated. Please use a positional argument instead");
+                file.extend(file_opt);
+            }
             let format = if let Some(format) = format {
                 Some(GraphOrDatasetFormat::from_str(&format)?)
             } else {
@@ -1357,7 +1363,6 @@ mod tests {
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
-            .arg("-f")
             .arg(input_file.path())
             .assert()
             .success();
@@ -1387,7 +1392,6 @@ mod tests {
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
-            .arg("-f")
             .arg(input_file.path())
             .assert()
             .success();
@@ -1414,7 +1418,6 @@ mod tests {
         file.write_binary(&encoder.finish()?)?;
         cli_command()?
             .arg("load")
-            .arg("-f")
             .arg(file.path())
             .assert()
             .success();
@@ -1461,7 +1464,7 @@ mod tests {
             .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
         cli_command()?
             .arg("load")
-            .arg("--location")
+            .arg("-l")
             .arg(store_dir.path())
             .arg("-f")
             .arg(input_file.path())
