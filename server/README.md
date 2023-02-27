@@ -17,10 +17,11 @@ It also provides a set of utility functions for reading, writing, and processing
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
-Oxigraph provides three different installation methods for Oxigraph server.
+Oxigraph provides different installation methods for Oxigraph server:
 * [`cargo install`](#installation) (multiplatform)
 * [A Docker image](#using-a-docker-image)
 * [A Homebrew formula](#homebrew)
+* [Pre-built binaries](https://github.com/oxigraph/oxigraph/releases/latest)
 
 It is also usable as [a Rust library](https://crates.io/crates/oxigraph) and as [a Python library](https://pyoxigraph.readthedocs.io/).
 
