@@ -263,10 +263,13 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update
+      - run: rustup update && rustup target add aarch64-apple-darwin
       - run: cargo build --release
         working-directory: ./server
+      - run: cargo build --release --target aarch64-apple-darwin
+        working-directory: ./server
       - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
+      - run: mv target/aarch64-apple-darwin/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_aarch64_apple
       - uses: softprops/action-gh-release@v1
         with:
           files: oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
