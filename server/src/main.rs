@@ -88,7 +88,7 @@ enum Command {
     Load {
         /// Directory in which the loaded data should be persisted.
         #[arg(short, long, global = true)]
-        location: Option<PathBuf>,
+        location: Option<PathBuf>, //TODO: make mandatory on next breaking release
         /// file(s) to load.
         ///
         /// If multiple files are provided they are loaded in parallel.
@@ -147,7 +147,7 @@ pub fn main() -> anyhow::Result<()> {
     match matches.command {
         Command::Serve { location, bind } => serve(
             if let Some(location) = location {
-                Store::open(&location)
+                Store::open(location)
             } else {
                 Store::new()
             }?,
@@ -155,14 +155,14 @@ pub fn main() -> anyhow::Result<()> {
             true,
         ),
         Command::ServeReadOnly { location, bind } => {
-            serve(Store::open_read_only(&location)?, bind, false)
+            serve(Store::open_read_only(location)?, bind, false)
         }
         Command::ServeSecondary {
             primary_location,
             secondary_location,
             bind,
         } => serve(
-            Store::open_secondary(&primary_location, &secondary_location)?,
+            Store::open_secondary(primary_location, secondary_location)?,
             bind,
             false,
         ),
@@ -175,7 +175,7 @@ pub fn main() -> anyhow::Result<()> {
             graph,
         } => {
             let store = if let Some(location) = location {
-                Store::open(&location)
+                Store::open(location)
             } else {
                 eprintln!("Warning: opening an in-memory store. It will not be possible to read the written data.");
                 Store::new()
@@ -307,7 +307,7 @@ pub fn main() -> anyhow::Result<()> {
             format,
             graph,
         } => {
-            let store = Store::open_read_only(&location)?;
+            let store = Store::open_read_only(location)?;
             let format = if let Some(format) = format {
                 GraphOrDatasetFormat::from_str(&format)?
             } else if let Some(file) = &file {
