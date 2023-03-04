@@ -1,6 +1,7 @@
 //! Definition of [`QuerySolution`] structure and associated utility constructions.
 
 use oxrdf::{Term, Variable, VariableRef};
+use std::fmt;
 use std::iter::Zip;
 use std::ops::Index;
 use std::rc::Rc;
@@ -180,6 +181,30 @@ impl Index<&Variable> for QuerySolution {
     #[inline]
     fn index(&self, index: &Variable) -> &Term {
         self.index(index.as_ref())
+    }
+}
+
+impl PartialEq for QuerySolution {
+    fn eq(&self, other: &Self) -> bool {
+        for (k, v) in self.iter() {
+            if other.get(k) != Some(v) {
+                return false;
+            }
+        }
+        for (k, v) in other.iter() {
+            if self.get(k) != Some(v) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl Eq for QuerySolution {}
+
+impl fmt::Debug for QuerySolution {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
     }
 }
 
