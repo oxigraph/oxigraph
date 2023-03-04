@@ -44,7 +44,7 @@ sparesults = { version = "0.1.6", path="sparesults", features = ["rdf-star"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc = "0.2"
-oxrocksdb-sys = { version = "0.3.11", path="../oxrocksdb-sys" }
+oxrocksdb-sys = { version = "0.3.12-dev", path="../oxrocksdb-sys" }
 oxhttp = { version = "0.1", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]

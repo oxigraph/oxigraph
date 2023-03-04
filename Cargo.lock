@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.3.11"
+version = "0.3.12-dev"
 dependencies = [
  "bindgen",
  "cc",
