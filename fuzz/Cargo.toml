@@ -9,12 +9,17 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
+anyhow = "1"
 lazy_static = "1"
 libfuzzer-sys = "0.4"
 spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
 sparesults = { path = "../lib/sparesults", features = ["rdf-star"] }
 sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
 oxigraph = { path = "../lib" }
+
+[profile.release]
+codegen-units = 1
+debug = true
 
 [workspace]
 
