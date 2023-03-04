@@ -18,7 +18,7 @@ oxhttp = { version = "0.1", features = ["rayon"] }
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
 oxigraph = { version = "0.3.14-dev", path = "../lib", features = ["http_client"] }
-sparesults = { version = "0.1.6", path = "../lib/sparesults", features = ["rdf-star"] }
+sparesults = { version = "0.1.7-dev", path = "../lib/sparesults", features = ["rdf-star"] }
 rand = "0.8"
 url = "2"
 oxiri = "0.2"

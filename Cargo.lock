@@ -1060,7 +1060,7 @@ checksum = "bb175ec8981211357b7b379869c2f8d555881c55ea62311428ec0de46d89bd5c"
 
 [[package]]
 name = "oxrdf"
-version = "0.1.4"
+version = "0.1.5-dev"
 dependencies = [
  "lasso",
  "oxilangtag",
@@ -1663,7 +1663,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "sparesults"
-version = "0.1.6"
+version = "0.1.7-dev"
 dependencies = [
  "json-event-parser",
  "oxrdf",
@@ -1672,7 +1672,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.2.6"
+version = "0.2.7-dev"
 dependencies = [
  "oxilangtag",
  "oxiri",
