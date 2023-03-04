@@ -177,13 +177,13 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io
         }
         #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
-            sink.write_all(b"<<")?;
+            sink.write_all(b"<< ")?;
             write_tsv_term(&triple.subject, sink)?;
             sink.write_all(b" ")?;
             write_tsv_term(&triple.predicate, sink)?;
             sink.write_all(b" ")?;
             write_tsv_term(&triple.object, sink)?;
-            sink.write_all(b">>")?;
+            sink.write_all(b" >>")?;
             Ok(())
         }
     }
