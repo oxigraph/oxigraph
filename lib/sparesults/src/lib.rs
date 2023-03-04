@@ -439,7 +439,7 @@ impl QueryResultsSerializer {
 /// let mut writer = json_serializer.solutions_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
 /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
 /// writer.finish()?;
-/// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t");
+/// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]

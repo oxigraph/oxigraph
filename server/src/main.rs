@@ -1354,7 +1354,7 @@ mod tests {
         .build();
         server.test_body(
             request,
-            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
+            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
         )
     }
 
@@ -1429,7 +1429,7 @@ mod tests {
             .build();
         server.test_body(
             request,
-            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
+            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
         )
     }
 
@@ -1454,7 +1454,7 @@ mod tests {
         .with_body("query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}");
         server.test_body(
             request,
-            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com",
+            "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
         )
     }
 
