@@ -260,6 +260,7 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
                 Event::Eof => return Err(SyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
                 _ => (),
             }
+            buffer.clear();
         }
     }
 }
@@ -533,6 +534,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                 Event::Eof => return Ok(None),
                 _ => (),
             }
+            self.buffer.clear();
         }
     }
 }
