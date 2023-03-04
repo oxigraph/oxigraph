@@ -161,7 +161,10 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
     let s = s.trim();
     if let Some(remain) = s.strip_prefix("_:") {
         let end = remain
-            .find(|v: char| v.is_whitespace() || matches!(v, '<' | '_' | '?' | '$' | '"' | '\''))
+            .find(|v: char| {
+                v.is_whitespace()
+                    || matches!(v, '<' | '_' | '?' | '$' | '"' | '\'' | '>' | '@' | '^')
+            })
             .unwrap_or(remain.len());
         let (value, remain) = remain.split_at(end);
         let term = BlankNode::new(value).map_err(|error| TermParseError {
