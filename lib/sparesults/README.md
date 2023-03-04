@@ -50,7 +50,7 @@ assert_eq!(
 // And with a set of solutions
 assert_eq!(
     convert_json_to_tsv(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice()).unwrap(),
-    b"?foo\t?bar\n\"test\"\t"
+    b"?foo\t?bar\n\"test\"\t\n"
 );
 ```
 

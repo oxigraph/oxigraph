@@ -27,6 +27,7 @@ impl<W: Write> CsvSolutionsWriter<W> {
             }
             sink.write_all(variable.as_str().as_bytes())?;
         }
+        sink.write_all(b"\r\n")?;
         Ok(Self { sink, variables })
     }
 
@@ -40,7 +41,6 @@ impl<W: Write> CsvSolutionsWriter<W> {
                 values[position] = Some(value);
             }
         }
-        self.sink.write_all(b"\r\n")?;
         let mut start_binding = true;
         for value in values {
             if start_binding {
@@ -52,7 +52,7 @@ impl<W: Write> CsvSolutionsWriter<W> {
                 write_csv_term(value, &mut self.sink)?;
             }
         }
-        Ok(())
+        self.sink.write_all(b"\r\n")
     }
 
     pub fn finish(mut self) -> io::Result<W> {
@@ -118,6 +118,7 @@ impl<W: Write> TsvSolutionsWriter<W> {
             sink.write_all(b"?")?;
             sink.write_all(variable.as_str().as_bytes())?;
         }
+        sink.write_all(b"\n")?;
         Ok(Self { sink, variables })
     }
 
@@ -131,7 +132,6 @@ impl<W: Write> TsvSolutionsWriter<W> {
                 values[position] = Some(value);
             }
         }
-        self.sink.write_all(b"\n")?;
         let mut start_binding = true;
         for value in values {
             if start_binding {
@@ -143,7 +143,7 @@ impl<W: Write> TsvSolutionsWriter<W> {
                 write_tsv_term(value, &mut self.sink)?;
             }
         }
-        Ok(())
+        self.sink.write_all(b"\n")
     }
 
     pub fn finish(mut self) -> io::Result<W> {
@@ -289,29 +289,42 @@ impl<R: BufRead> TsvQueryResultsReader<R> {
 
         // We read the header
         source.read_line(&mut buffer)?;
-        if buffer.trim().eq_ignore_ascii_case("true") {
+        let line = buffer
+            .as_str()
+            .trim_matches(|c| matches!(c, ' ' | '\r' | '\n'));
+        if line.eq_ignore_ascii_case("true") {
             return Ok(Self::Boolean(true));
         }
-        if buffer.trim().eq_ignore_ascii_case("false") {
+        if line.eq_ignore_ascii_case("false") {
             return Ok(Self::Boolean(false));
         }
         let mut variables = Vec::new();
-        for v in buffer.split('\t') {
-            let v = v.trim();
-            let variable = Variable::from_str(v).map_err(|e| {
-                SyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
-            })?;
-            if variables.contains(&variable) {
-                return Err(
-                    SyntaxError::msg(format!("The variable {variable} is declared twice")).into(),
-                );
+        if !line.is_empty() {
+            for v in line.split('\t') {
+                let v = v.trim();
+                if v.is_empty() {
+                    return Err(SyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar").into());
+                }
+                let variable = Variable::from_str(v).map_err(|e| {
+                    SyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
+                })?;
+                if variables.contains(&variable) {
+                    return Err(SyntaxError::msg(format!(
+                        "The variable {variable} is declared twice"
+                    ))
+                    .into());
+                }
+                variables.push(variable);
             }
-            variables.push(variable);
         }
-
+        let column_len = variables.len();
         Ok(Self::Solutions {
             variables,
-            solutions: TsvSolutionsReader { source, buffer },
+            solutions: TsvSolutionsReader {
+                source,
+                buffer,
+                column_len,
+            },
         })
     }
 }
@@ -319,6 +332,7 @@ impl<R: BufRead> TsvQueryResultsReader<R> {
 pub struct TsvSolutionsReader<R: BufRead> {
     source: R,
     buffer: String,
+    column_len: usize,
 }
 
 impl<R: BufRead> TsvSolutionsReader<R> {
@@ -327,21 +341,33 @@ impl<R: BufRead> TsvSolutionsReader<R> {
         if self.source.read_line(&mut self.buffer)? == 0 {
             return Ok(None);
         }
-        Ok(Some(
-            self.buffer
-                .split('\t')
-                .map(|v| {
-                    let v = v.trim();
-                    if v.is_empty() {
-                        Ok(None)
-                    } else {
-                        Ok(Some(Term::from_str(v).map_err(|e| SyntaxError {
-                            inner: SyntaxErrorKind::Term(e),
-                        })?))
-                    }
-                })
-                .collect::<Result<_, ParseError>>()?,
-        ))
+        let elements = self
+            .buffer
+            .split('\t')
+            .map(|v| {
+                let v = v.trim();
+                if v.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(Term::from_str(v).map_err(|e| SyntaxError {
+                        inner: SyntaxErrorKind::Term(e),
+                    })?))
+                }
+            })
+            .collect::<Result<Vec<_>, ParseError>>()?;
+        if elements.len() == self.column_len {
+            Ok(Some(elements))
+        } else if self.column_len == 0 && elements == [None] {
+            Ok(Some(Vec::new())) // Zero columns case
+        } else {
+            Err(SyntaxError::msg(format!(
+                "This TSV files has {} columns but we found a row with {} columns: {:?}",
+                self.column_len,
+                elements.len(),
+                self.buffer
+            ))
+            .into())
+        }
     }
 }
 
@@ -414,7 +440,7 @@ mod tests {
             )?;
         }
         let result = writer.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"");
+        assert_eq!(str::from_utf8(&result).unwrap(), "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"\r\n");
         Ok(())
     }
 
@@ -434,7 +460,7 @@ mod tests {
             )?;
         }
         let result = writer.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"");
+        assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n");
 
         // Read
         if let TsvQueryResultsReader::Solutions {
@@ -458,7 +484,16 @@ mod tests {
     #[test]
     fn test_bad_tsv() {
         let mut bad_tsvs = vec![
-            "?", "?p", "?p?o", "?p\n<", "?p\n_", "?p\n_:", "?p\n\"", "?p\n<<",
+            "?",
+            "?p",
+            "?p?o",
+            "?p\n<",
+            "?p\n_",
+            "?p\n_:",
+            "?p\n\"",
+            "?p\n<<",
+            "?p\n1\t2\n",
+            "?p\n\n",
         ];
         let a_lot_of_strings = format!("?p\n{}\n", "<".repeat(100_000));
         bad_tsvs.push(&a_lot_of_strings);
@@ -469,5 +504,70 @@ mod tests {
                 while let Ok(Some(_)) = solutions.read_next() {}
             }
         }
+    }
+
+    #[test]
+    fn test_no_columns_csv_serialization() -> io::Result<()> {
+        let mut writer = CsvSolutionsWriter::start(Vec::new(), Vec::new())?;
+        writer.write([])?;
+        let result = writer.finish()?;
+        assert_eq!(str::from_utf8(&result).unwrap(), "\r\n\r\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_columns_tsv_serialization() -> io::Result<()> {
+        let mut writer = TsvSolutionsWriter::start(Vec::new(), Vec::new())?;
+        writer.write([])?;
+        let result = writer.finish()?;
+        assert_eq!(str::from_utf8(&result).unwrap(), "\n\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_columns_tsv_parsing() -> io::Result<()> {
+        if let TsvQueryResultsReader::Solutions {
+            mut solutions,
+            variables,
+        } = TsvQueryResultsReader::read("\n\n".as_bytes())?
+        {
+            assert_eq!(variables, Vec::<Variable>::new());
+            assert_eq!(solutions.read_next()?, Some(Vec::new()));
+            assert_eq!(solutions.read_next()?, None);
+        } else {
+            unreachable!()
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_results_csv_serialization() -> io::Result<()> {
+        let result =
+            CsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish()?;
+        assert_eq!(str::from_utf8(&result).unwrap(), "a\r\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_results_tsv_serialization() -> io::Result<()> {
+        let result =
+            TsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish()?;
+        assert_eq!(str::from_utf8(&result).unwrap(), "?a\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_no_results_tsv_parsing() -> io::Result<()> {
+        if let TsvQueryResultsReader::Solutions {
+            mut solutions,
+            variables,
+        } = TsvQueryResultsReader::read("?a\n".as_bytes())?
+        {
+            assert_eq!(variables, vec![Variable::new_unchecked("a")]);
+            assert_eq!(solutions.read_next()?, None);
+        } else {
+            unreachable!()
+        }
+        Ok(())
     }
 }
