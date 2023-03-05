@@ -106,6 +106,20 @@ rocksdb_t* rocksdb_open_as_secondary_column_families_with_status(
   return result;
 }
 
+void rocksdb_create_checkpoint_with_status(rocksdb_t* db,
+                                           const char* checkpoint_dir,
+                                           rocksdb_status_t* statusptr) {
+  Checkpoint* checkpoint;
+  Status s = Checkpoint::Create(db->rep, &checkpoint);
+  if (!s.ok()) {
+    SaveStatus(statusptr, s);
+    return;
+  }
+  SaveStatus(statusptr,
+             checkpoint->CreateCheckpoint(std::string(checkpoint_dir)));
+  delete checkpoint;
+}
+
 rocksdb_transactiondb_t* rocksdb_transactiondb_open_column_families_with_status(
     const rocksdb_options_t* options,
     const rocksdb_transactiondb_options_t* txn_db_options, const char* name,

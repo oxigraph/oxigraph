@@ -90,6 +90,9 @@ rocksdb_open_as_secondary_column_families_with_status(
     rocksdb_column_family_handle_t** column_family_handles,
     rocksdb_status_t* statusptr);
 
+extern ROCKSDB_LIBRARY_API void rocksdb_create_checkpoint_with_status(
+    rocksdb_t* db, const char* checkpoint_dir, rocksdb_status_t* statusptr);
+
 extern ROCKSDB_LIBRARY_API rocksdb_transactiondb_t*
 rocksdb_transactiondb_open_column_families_with_status(
     const rocksdb_options_t* options,
