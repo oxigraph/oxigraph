@@ -312,14 +312,13 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
         GraphNameRef::DefaultGraph,
     );
     let store_dir = TempDir::default();
-    let secondary_store_dir = TempDir::default();
     let backup_from_rw_dir = TempDir::default();
     let backup_from_ro_dir = TempDir::default();
     let backup_from_secondary_dir = TempDir::default();
 
     let store = Store::open(&store_dir)?;
     store.insert(quad)?;
-    let secondary_store = Store::open_secondary(&store_dir, secondary_store_dir)?;
+    let secondary_store = Store::open_secondary(&store_dir)?;
     store.flush()?;
 
     store.backup(&backup_from_rw_dir)?;
@@ -396,11 +395,10 @@ fn test_secondary() -> Result<(), Box<dyn Error>> {
         GraphNameRef::DefaultGraph,
     );
     let primary_dir = TempDir::default();
-    let secondary_dir = TempDir::default();
 
     // We open the store
     let primary = Store::open(&primary_dir)?;
-    let secondary = Store::open_secondary(&primary_dir, &secondary_dir)?;
+    let secondary = Store::open_secondary(&primary_dir)?;
 
     // We insert a quad
     primary.insert(quad)?;
@@ -434,12 +432,11 @@ fn test_secondary() -> Result<(), Box<dyn Error>> {
 #[cfg(not(target_family = "wasm"))]
 fn test_open_secondary_bad_dir() -> Result<(), Box<dyn Error>> {
     let primary_dir = TempDir::default();
-    let secondary_dir = TempDir::default();
     create_dir(&primary_dir.0)?;
     {
         File::create(primary_dir.0.join("CURRENT"))?.write_all(b"foo")?;
     }
-    assert!(Store::open_secondary(&primary_dir, &secondary_dir).is_err());
+    assert!(Store::open_secondary(&primary_dir).is_err());
     Ok(())
 }
 

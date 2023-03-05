@@ -101,8 +101,8 @@ struct RwDbHandler {
     column_family_names: Vec<&'static str>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
     cf_options: Vec<*mut rocksdb_options_t>,
-    path: PathBuf,
     in_memory: bool,
+    path: PathBuf,
 }
 
 unsafe impl Send for RwDbHandler {}
@@ -130,8 +130,9 @@ impl Drop for RwDbHandler {
             rocksdb_options_destroy(self.options);
             rocksdb_block_based_options_destroy(self.block_based_table_options);
         }
-        if self.in_memory && self.path.exists() {
-            remove_dir_all(&self.path).unwrap();
+        if self.in_memory {
+            #[allow(clippy::let_underscore_must_use)]
+            let _ = remove_dir_all(&self.path);
         }
     }
 }
@@ -144,6 +145,7 @@ struct RoDbHandler {
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
     cf_options: Vec<*mut rocksdb_options_t>,
     is_secondary: bool,
+    path_to_remove: Option<PathBuf>,
 }
 
 unsafe impl Send for RoDbHandler {}
@@ -163,34 +165,29 @@ impl Drop for RoDbHandler {
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_options_destroy(self.options);
         }
+        if let Some(path) = &self.path_to_remove {
+            #[allow(clippy::let_underscore_must_use)]
+            let _ = remove_dir_all(path);
+        }
     }
 }
 
 impl Db {
     pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self, StorageError> {
-        let path = if cfg!(target_os = "linux") {
-            "/dev/shm/".into()
+        Self::open_read_write(None, column_families)
+    }
+
+    pub fn open_read_write(
+        path: Option<&Path>,
+        column_families: Vec<ColumnFamilyDefinition>,
+    ) -> Result<Self, StorageError> {
+        let (path, in_memory) = if let Some(path) = path {
+            (path.to_path_buf(), false)
         } else {
-            temp_dir()
-        }
-        .join(format!("oxigraph-rocksdb-{}", random::<u128>()));
-        Self::open_read_write(path, column_families, true)
-    }
-
-    pub fn open(
-        path: &Path,
-        column_families: Vec<ColumnFamilyDefinition>,
-    ) -> Result<Self, StorageError> {
-        Self::open_read_write(path.into(), column_families, false)
-    }
-
-    fn open_read_write(
-        path: PathBuf,
-        column_families: Vec<ColumnFamilyDefinition>,
-        in_memory: bool,
-    ) -> Result<Self, StorageError> {
+            (tmp_path(), true)
+        };
+        let c_path = path_to_cstring(&path)?;
         unsafe {
-            let c_path = path_to_cstring(&path)?;
             let options = Self::db_options(true, in_memory)?;
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
@@ -320,8 +317,8 @@ impl Db {
                     column_family_names,
                     cf_handles,
                     cf_options,
-                    path,
                     in_memory,
+                    path,
                 })),
             })
         }
@@ -329,12 +326,17 @@ impl Db {
 
     pub fn open_secondary(
         primary_path: &Path,
-        secondary_path: &Path,
+        secondary_path: Option<&Path>,
         column_families: Vec<ColumnFamilyDefinition>,
     ) -> Result<Self, StorageError> {
+        let c_primary_path = path_to_cstring(primary_path)?;
+        let (secondary_path, in_memory) = if let Some(path) = secondary_path {
+            (path.to_path_buf(), false)
+        } else {
+            (tmp_path(), true)
+        };
+        let c_secondary_path = path_to_cstring(&secondary_path)?;
         unsafe {
-            let c_primary_path = path_to_cstring(primary_path)?;
-            let c_secondary_path = path_to_cstring(secondary_path)?;
             let options = Self::db_options(false, false)?;
             let (column_family_names, c_column_family_names, cf_options) =
                 Self::column_families_names_and_options(column_families, options);
@@ -385,6 +387,11 @@ impl Db {
                     cf_handles,
                     cf_options,
                     is_secondary: true,
+                    path_to_remove: if in_memory {
+                        Some(secondary_path)
+                    } else {
+                        None
+                    },
                 })),
             })
         }
@@ -447,6 +454,7 @@ impl Db {
                     cf_handles,
                     cf_options,
                     is_secondary: false,
+                    path_to_remove: None,
                 })),
             })
         }
@@ -1427,4 +1435,13 @@ fn available_file_descriptors() -> io::Result<Option<u64>> {
 #[cfg(not(any(unix, windows)))]
 fn available_file_descriptors() -> io::Result<Option<u64>> {
     Ok(None)
+}
+
+fn tmp_path() -> PathBuf {
+    if cfg!(target_os = "linux") {
+        "/dev/shm/".into()
+    } else {
+        temp_dir()
+    }
+    .join(format!("oxigraph-rocksdb-{}", random::<u128>()))
 }
