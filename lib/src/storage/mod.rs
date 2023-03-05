@@ -87,17 +87,26 @@ impl Storage {
 
     #[cfg(not(target_family = "wasm"))]
     pub fn open(path: &Path) -> Result<Self, StorageError> {
-        Self::setup(Db::open(path, Self::column_families())?)
+        Self::setup(Db::open_read_write(Some(path), Self::column_families())?)
     }
 
     #[cfg(not(target_family = "wasm"))]
-    pub fn open_secondary(
+    pub fn open_secondary(primary_path: &Path) -> Result<Self, StorageError> {
+        Self::setup(Db::open_secondary(
+            primary_path,
+            None,
+            Self::column_families(),
+        )?)
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub fn open_persistent_secondary(
         primary_path: &Path,
         secondary_path: &Path,
     ) -> Result<Self, StorageError> {
         Self::setup(Db::open_secondary(
             primary_path,
-            secondary_path,
+            Some(secondary_path),
             Self::column_families(),
         )?)
     }
