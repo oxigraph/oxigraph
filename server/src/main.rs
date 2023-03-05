@@ -87,12 +87,30 @@ enum Command {
         #[arg(short, long, default_value = "localhost:7878")]
         bind: String,
     },
+    /// Creates database backup into a target directory.
+    ///
+    /// After its creation, the backup is usable a separated Oxigraph database
+    /// and operates independently from the original database.
+    ///
+    /// If the target directory is in the same file system as the current database,
+    /// the database content will not be fully copied
+    /// but hard links will be used to point to the original database immutable snapshots.
+    /// This allows cheap regular backups.
+    ///
+    /// If you want to move your data to another RDF storage system, you should use the dump operation instead.
+    Backup {
+        /// Directory in which the data stored by Oxigraph are persisted.
+        #[arg(short, long)]
+        location: PathBuf,
+        /// Directory to backup to.
+        directory: PathBuf,
+    },
     /// Load file(s) into the store.
     Load {
         /// Directory in which the loaded data should be persisted.
         #[arg(short, long, global = true)]
         location: Option<PathBuf>, //TODO: make mandatory on next breaking release
-        /// file(s) to load.
+        /// File(s) to load.
         ///
         /// If multiple files are provided they are loaded in parallel.
         ///
@@ -126,7 +144,7 @@ enum Command {
         /// Directory in which the data stored by Oxigraph are persisted.
         #[arg(short, long)]
         location: PathBuf,
-        /// file to dump to.
+        /// File to dump to.
         ///
         /// If no file is given, stdout is used.
         file: Option<PathBuf>,
@@ -173,6 +191,14 @@ pub fn main() -> anyhow::Result<()> {
             bind,
             false,
         ),
+        Command::Backup {
+            location,
+            directory,
+        } => {
+            let store = Store::open_read_only(location)?;
+            store.backup(directory)?;
+            Ok(())
+        }
         Command::Load {
             mut file,
             file_opt,
@@ -1339,6 +1365,7 @@ mod tests {
     use flate2::Compression;
     use oxhttp::model::Method;
     use predicates::prelude::*;
+    use std::fs::remove_dir_all;
 
     fn cli_command() -> Result<Command> {
         Ok(Command::from_std(
@@ -1514,6 +1541,41 @@ mod tests {
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("--format")
+            .arg("nq")
+            .assert()
+            .success()
+            .stdout("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
+        Ok(())
+    }
+
+    #[test]
+    fn cli_backup() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        cli_command()?
+            .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--format")
+            .arg("nq")
+            .write_stdin("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")
+            .assert()
+            .success();
+
+        let backup_dir = TempDir::new()?;
+        remove_dir_all(backup_dir.path())?; // The directory should not exist yet
+        cli_command()?
+            .arg("backup")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg(backup_dir.path())
+            .assert()
+            .success();
+
+        cli_command()?
+            .arg("dump")
+            .arg("--location")
+            .arg(backup_dir.path())
             .arg("--format")
             .arg("nq")
             .assert()
