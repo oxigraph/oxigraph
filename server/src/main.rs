@@ -56,8 +56,9 @@ enum Command {
     },
     /// Start Oxigraph HTTP server in read-only mode.
     ///
-    /// It allows to read the database while other processes are accessing it.
-    /// Changes done after this process has been launched will not be seen.
+    /// It allows to read the database while other processes are also reading it.
+    /// Opening as read-only while having an other process writing the database is undefined behavior.
+    /// Please use the serve-secondary command in this case.
     ServeReadOnly {
         /// Directory in which the data stored by Oxigraph are persisted.
         #[arg(short, long)]

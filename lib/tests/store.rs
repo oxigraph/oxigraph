@@ -312,17 +312,34 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
         GraphNameRef::DefaultGraph,
     );
     let store_dir = TempDir::default();
-    let backup_dir = TempDir::default();
+    let secondary_store_dir = TempDir::default();
+    let backup_from_rw_dir = TempDir::default();
+    let backup_from_ro_dir = TempDir::default();
+    let backup_from_secondary_dir = TempDir::default();
 
     let store = Store::open(&store_dir)?;
     store.insert(quad)?;
-    store.backup(&backup_dir)?;
-    store.remove(quad)?;
+    let secondary_store = Store::open_secondary(&store_dir, secondary_store_dir)?;
+    store.flush()?;
 
+    store.backup(&backup_from_rw_dir)?;
+    secondary_store.backup(&backup_from_secondary_dir)?;
+    store.remove(quad)?;
     assert!(!store.contains(quad)?);
-    let backup = Store::open(&backup_dir.0)?;
-    backup.validate()?;
-    assert!(backup.contains(quad)?);
+
+    let backup_from_rw = Store::open_read_only(&backup_from_rw_dir.0)?;
+    backup_from_rw.validate()?;
+    assert!(backup_from_rw.contains(quad)?);
+    backup_from_rw.backup(&backup_from_ro_dir)?;
+
+    let backup_from_ro = Store::open_read_only(&backup_from_ro_dir.0)?;
+    backup_from_ro.validate()?;
+    assert!(backup_from_ro.contains(quad)?);
+
+    let backup_from_secondary = Store::open_read_only(&backup_from_secondary_dir.0)?;
+    backup_from_secondary.validate()?;
+    assert!(backup_from_secondary.contains(quad)?);
+
     Ok(())
 }
 
