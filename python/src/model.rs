@@ -167,6 +167,7 @@ impl From<PyBlankNode> for GraphName {
 #[pymethods]
 impl PyBlankNode {
     #[new]
+    #[pyo3(signature = (value = None))]
     fn new(value: Option<String>) -> PyResult<Self> {
         Ok(if let Some(value) = value {
             BlankNode::new(value).map_err(|e| PyValueError::new_err(e.to_string()))?
@@ -739,6 +740,7 @@ impl<'a> From<&'a PyQuad> for QuadRef<'a> {
 #[pymethods]
 impl PyQuad {
     #[new]
+    #[pyo3(signature = (subject, predicate, object, graph_name = None))]
     fn new(
         subject: PySubject,
         predicate: PyNamedNode,

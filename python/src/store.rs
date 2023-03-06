@@ -20,6 +20,10 @@ use pyo3::{Py, PyRef};
 /// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
 /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 ///
+/// The :py:class:`Store` constructor opens a read-write instance.
+/// To open a static read-only instance use :py:func:`Store.read_only`
+/// and to open a read-only instance that tracks a read-write instance use :py:func:`Store.secondary`.
+///
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 ///              In this case, the store data are kept in memory and never written on disk.
@@ -42,6 +46,7 @@ pub struct PyStore {
 #[pymethods]
 impl PyStore {
     #[new]
+    #[pyo3(signature = (path = None))]
     fn new(path: Option<&str>, py: Python<'_>) -> PyResult<Self> {
         py.allow_threads(|| {
             Ok(Self {
@@ -49,6 +54,59 @@ impl PyStore {
                     Store::open(path)
                 } else {
                     Store::new()
+                }
+                .map_err(map_storage_error)?,
+            })
+        })
+    }
+
+    /// Opens a read-only store from disk.
+    ///
+    /// Opening as read-only while having an other process writing the database is undefined behavior.
+    /// :py:func:`Store.secondary` should be used in this case.
+    ///
+    /// :param path: path to the primary read-write instance data.
+    /// :type path: str
+    /// :return: the opened store.
+    /// :rtype: Store
+    /// :raises IOError: if the target directory contains invalid data or could not be accessed.
+    #[staticmethod]
+    fn read_only(path: &str, py: Python<'_>) -> PyResult<Self> {
+        py.allow_threads(|| {
+            Ok(Self {
+                inner: Store::open_read_only(path).map_err(map_storage_error)?,
+            })
+        })
+    }
+
+    /// Opens a read-only clone of a running read-write store.
+    ///
+    /// Changes done while this process is running will be replicated after a possible lag.
+    ///
+    /// It should only be used if a primary instance opened with :py:func:`Store` is running at the same time.
+    ///
+    /// If you want to simple read-only store use :py:func:`Store.read_only`.
+    ///
+    /// :param primary_path: path to the primary read-write instance data.
+    /// :type primary_path: str
+    /// :param secondary_path: path to an other directory for the secondary instance cache. If not given a temporary directory will be used.
+    /// :type secondary_path: str or None, optional
+    /// :return: the opened store.
+    /// :rtype: Store
+    /// :raises IOError: if the target directories contain invalid data or could not be accessed.
+    #[staticmethod]
+    #[pyo3(signature = (primary_path, secondary_path = None), text_signature = "(primary_path, secondary_path = None)")]
+    fn secondary(
+        primary_path: &str,
+        secondary_path: Option<&str>,
+        py: Python<'_>,
+    ) -> PyResult<Self> {
+        py.allow_threads(|| {
+            Ok(Self {
+                inner: if let Some(secondary_path) = secondary_path {
+                    Store::open_persistent_secondary(primary_path, secondary_path)
+                } else {
+                    Store::open_secondary(primary_path)
                 }
                 .map_err(map_storage_error)?,
             })
@@ -111,7 +169,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.quads_for_pattern(NamedNode('http://example.com'), None, None, None))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(text_signature = "($self, subject, predicate, object, graph_name = None)")]
+    #[pyo3(signature = (subject, predicate, object, graph_name = None), text_signature = "($self, subject, predicate, object, graph_name = None)")]
     fn quads_for_pattern(
         &self,
         subject: &PyAny,
