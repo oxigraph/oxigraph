@@ -82,7 +82,13 @@ def module_stubs(module: Any) -> ast.Module:
             )
         elif inspect.isbuiltin(member_value):
             functions.append(
-                function_stub(member_name, member_value, element_path, types_to_import)
+                function_stub(
+                    member_name,
+                    member_value,
+                    element_path,
+                    types_to_import,
+                    in_class=False,
+                )
             )
         else:
             logging.warning(f"Unsupported root construction {member_name}")
@@ -107,7 +113,11 @@ def class_stubs(
                 inspect.signature(cls_def)  # we check it actually exists
                 methods = [
                     function_stub(
-                        member_name, cls_def, current_element_path, types_to_import
+                        member_name,
+                        cls_def,
+                        current_element_path,
+                        types_to_import,
+                        in_class=True,
                     )
                 ] + methods
             except ValueError as e:
@@ -129,7 +139,11 @@ def class_stubs(
         elif inspect.isroutine(member_value):
             (magic_methods if member_name.startswith("__") else methods).append(
                 function_stub(
-                    member_name, member_value, current_element_path, types_to_import
+                    member_name,
+                    member_value,
+                    current_element_path,
+                    types_to_import,
+                    in_class=True,
                 )
             )
         else:
@@ -182,18 +196,27 @@ def data_descriptor_stub(
 
 
 def function_stub(
-    fn_name: str, fn_def: Any, element_path: List[str], types_to_import: Set[str]
+    fn_name: str,
+    fn_def: Any,
+    element_path: List[str],
+    types_to_import: Set[str],
+    *,
+    in_class: bool,
 ) -> ast.FunctionDef:
     body: List[ast.AST] = []
     doc = inspect.getdoc(fn_def)
     if doc is not None:
         body.append(build_doc_comment(doc))
 
+    decorator_list = []
+    if in_class and hasattr(fn_def, "__self__"):
+        decorator_list.append(ast.Name("staticmethod"))
+
     return ast.FunctionDef(
         fn_name,
         arguments_stub(fn_name, fn_def, doc or "", element_path, types_to_import),
         body or [AST_ELLIPSIS],
-        decorator_list=[],
+        decorator_list=decorator_list,
         returns=returns_stub(fn_name, doc, element_path, types_to_import)
         if doc
         else None,

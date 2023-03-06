@@ -1,7 +1,7 @@
 import os
 import unittest
 from io import BytesIO, UnsupportedOperation
-from tempfile import NamedTemporaryFile, TemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
 from typing import Any
 
 from pyoxigraph import *
@@ -315,6 +315,29 @@ class TestStore(unittest.TestCase):
         store.remove_graph(NamedNode("http://graph2"))
         self.assertEqual(list(store.named_graphs()), [])
         self.assertEqual(list(store), [])
+
+    def test_read_only(self) -> None:
+        quad = Quad(foo, bar, baz, graph)
+        with TemporaryDirectory() as dir:
+            store = Store(dir)
+            store.add(quad)
+            del store
+            store = Store.read_only(dir)
+            self.assertEqual(list(store), [quad])
+
+    def test_secondary(self) -> None:
+        quad = Quad(foo, bar, baz, graph)
+        with TemporaryDirectory() as dir:
+            store = Store(dir)
+            store.add(quad)
+            store.flush()
+
+            secondary_store = Store.secondary(dir)
+            self.assertEqual(list(secondary_store), [quad])
+
+            store.remove(quad)
+            store.flush()
+            self.assertEqual(list(secondary_store), [])
 
 
 if __name__ == "__main__":
