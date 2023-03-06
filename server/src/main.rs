@@ -173,10 +173,10 @@ pub fn main() -> anyhow::Result<()> {
                 Store::new()
             }?,
             bind,
-            true,
+            false,
         ),
         Command::ServeReadOnly { location, bind } => {
-            serve(Store::open_read_only(location)?, bind, false)
+            serve(Store::open_read_only(location)?, bind, true)
         }
         Command::ServeSecondary {
             primary_location,
@@ -189,7 +189,7 @@ pub fn main() -> anyhow::Result<()> {
                 Store::open_secondary(primary_location)
             }?,
             bind,
-            false,
+            true,
         ),
         Command::Backup {
             location,
@@ -486,9 +486,9 @@ impl FromStr for GraphOrDatasetFormat {
     }
 }
 
-fn serve(store: Store, bind: String, allow_writes: bool) -> anyhow::Result<()> {
+fn serve(store: Store, bind: String, read_only: bool) -> anyhow::Result<()> {
     let mut server = Server::new(move |request| {
-        handle_request(request, store.clone(), allow_writes)
+        handle_request(request, store.clone(), read_only)
             .unwrap_or_else(|(status, message)| error(status, message))
     });
     server.set_global_timeout(HTTP_TIMEOUT);
@@ -503,7 +503,7 @@ type HttpError = (Status, String);
 fn handle_request(
     request: &mut Request,
     store: Store,
-    allow_writes: bool,
+    read_only: bool,
 ) -> Result<Response, HttpError> {
     match (request.url().path(), request.method().as_ref()) {
         ("/", "HEAD") => Ok(Response::builder(Status::OK)
@@ -558,7 +558,10 @@ fn handle_request(
                 Err(unsupported_media_type(&content_type))
             }
         }
-        ("/update", "POST") if allow_writes => {
+        ("/update", "POST") => {
+            if read_only {
+                return Err(the_server_is_read_only());
+            }
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-update" {
@@ -641,7 +644,10 @@ fn handle_request(
                 )
             }
         }
-        (path, "PUT") if path.starts_with("/store") && allow_writes => {
+        (path, "PUT") if path.starts_with("/store") => {
+            if read_only {
+                return Err(the_server_is_read_only());
+            }
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if let Some(target) = store_target(request)? {
@@ -684,7 +690,10 @@ fn handle_request(
                 Ok(Response::builder(Status::NO_CONTENT).build())
             }
         }
-        (path, "DELETE") if path.starts_with("/store") && allow_writes => {
+        (path, "DELETE") if path.starts_with("/store") => {
+            if read_only {
+                return Err(the_server_is_read_only());
+            }
             if let Some(target) = store_target(request)? {
                 match target {
                     NamedGraphName::DefaultGraph => store
@@ -711,7 +720,10 @@ fn handle_request(
             }
             Ok(Response::builder(Status::NO_CONTENT).build())
         }
-        (path, "POST") if path.starts_with("/store") && allow_writes => {
+        (path, "POST") if path.starts_with("/store") => {
+            if read_only {
+                return Err(the_server_is_read_only());
+            }
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if let Some(target) = store_target(request)? {
@@ -1256,6 +1268,10 @@ fn error(status: Status, message: impl fmt::Display) -> Response {
 
 fn bad_request(message: impl fmt::Display) -> HttpError {
     (Status::BAD_REQUEST, message.to_string())
+}
+
+fn the_server_is_read_only() -> HttpError {
+    (Status::FORBIDDEN, "The server is read-only".into())
 }
 
 fn unsupported_media_type(content_type: &str) -> HttpError {
@@ -1814,6 +1830,19 @@ mod tests {
     }
 
     #[test]
+    fn post_update_read_only() -> Result<()> {
+        let request = Request::builder(Method::POST, "http://localhost/update".parse()?)
+            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-update")?
+            .with_body(
+                "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+            );
+        ServerTest::check_status(
+            ServerTest::new()?.exec_read_only(request),
+            Status::FORBIDDEN,
+        )
+    }
+
+    #[test]
     fn graph_store_url_normalization() -> Result<()> {
         let server = ServerTest::new()?;
 
@@ -2148,12 +2177,20 @@ mod tests {
         }
 
         fn exec(&self, mut request: Request) -> Response {
+            handle_request(&mut request, self.store.clone(), false)
+                .unwrap_or_else(|(status, message)| error(status, message))
+        }
+
+        fn exec_read_only(&self, mut request: Request) -> Response {
             handle_request(&mut request, self.store.clone(), true)
                 .unwrap_or_else(|(status, message)| error(status, message))
         }
 
         fn test_status(&self, request: Request, expected_status: Status) -> Result<()> {
-            let mut response = self.exec(request);
+            Self::check_status(self.exec(request), expected_status)
+        }
+
+        fn check_status(mut response: Response, expected_status: Status) -> Result<()> {
             let mut buf = String::new();
             response.body_mut().read_to_string(&mut buf)?;
             assert_eq!(response.status(), expected_status, "Error message: {buf}");
