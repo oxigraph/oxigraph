@@ -845,7 +845,7 @@ impl fmt::Display for PropertyListPath {
 
 #[derive(Arbitrary)]
 struct PropertyListPathNotEmpty {
-    // [83]  	PropertyListPathNotEmpty	  ::=  	( VerbPath | VerbSimple ) ObjectListPath ( ';' ( ( VerbPath | VerbSimple ) ObjectList )? )*
+    // [83]  	PropertyListPathNotEmpty	  ::=  	( VerbPath | VerbSimple ) ObjectListPath ( ';' ( ( VerbPath | VerbSimple ) ObjectListPath )? )*
     start_predicate: PropertyListPathNotEmptyVerb,
     start_object: Box<ObjectListPath>,
     others: Vec<Option<PropertyListPathElement>>,
@@ -860,7 +860,7 @@ enum PropertyListPathNotEmptyVerb {
 #[derive(Arbitrary)]
 struct PropertyListPathElement {
     predicate: PropertyListPathNotEmptyVerb,
-    object: ObjectList,
+    object: ObjectListPath,
 }
 
 impl fmt::Display for PropertyListPathNotEmpty {
