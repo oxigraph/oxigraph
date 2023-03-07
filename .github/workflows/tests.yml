@@ -298,8 +298,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 600
-          mode: 'code-change'
+          mode: code-change
           sanitizer: address
+          minimize-crashes: true
+          parallel-fuzzing: true
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
 
   fuzz_repo:
@@ -318,8 +320,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 3600
-          mode: 'batch'
+          mode: batch
           sanitizer: address
+          minimize-crashes: true
+          parallel-fuzzing: true
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
 
   fuzz_prune:
@@ -338,7 +342,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 14400
-          mode: 'prune'
+          mode: prune
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
 
   fuzz_coverage:
@@ -354,6 +358,6 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 600
-          mode: 'coverage'
-          sanitizer: 'coverage'
+          mode: coverage
+          sanitizer: coverage
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
