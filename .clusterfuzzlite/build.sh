@@ -15,9 +15,9 @@ function build_seed_corpus() {
 
 cd "$SRC"/oxigraph
 cargo fuzz build -O --debug-assertions
-for TARGET in sparql_eval sparql_results_json sparql_results_tsv
+for TARGET in sparql_eval # sparql_results_json sparql_results_tsv
 do
   cp fuzz/target/x86_64-unknown-linux-gnu/release/$TARGET "$OUT"/
 done
-build_seed_corpus sparql_results_json json
-build_seed_corpus sparql_results_tsv tsv
+# build_seed_corpus sparql_results_json json
+# build_seed_corpus sparql_results_tsv tsv
