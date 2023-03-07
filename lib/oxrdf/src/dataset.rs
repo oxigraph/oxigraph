@@ -18,6 +18,9 @@
 //! // direct access to a dataset graph
 //! let results: Vec<_> = dataset.graph(ex).iter().collect();
 //! assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
+//!
+//! // Print
+//! assert_eq!(dataset.to_string(), "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n");
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
@@ -901,7 +904,7 @@ impl<'a, T: Into<QuadRef<'a>>> Extend<T> for Dataset {
 impl fmt::Display for Dataset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self {
-            writeln!(f, "{t}")?;
+            writeln!(f, "{t} .")?;
         }
         Ok(())
     }
@@ -1236,7 +1239,7 @@ impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
 impl<'a> fmt::Display for GraphView<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self {
-            writeln!(f, "{t}")?;
+            writeln!(f, "{t} .")?;
         }
         Ok(())
     }
