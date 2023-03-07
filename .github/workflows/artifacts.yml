@@ -1,9 +1,12 @@
-name: Nightly artifacts
+name: Artifacts
 
 on:
   push:
     branches:
       - main
+  release:
+    types:
+      - published
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -36,6 +39,16 @@ jobs:
         with:
           name: oxigraph_server_aarch64-linux_gnu
           path: target/aarch64-unknown-linux-gnu/release/oxigraph_server
+      - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_linux_gnu
+        if: github.event_name == 'release'
+      - run: mv target/aarch64-unknown-linux-gnu/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_aarch64_linux_gnu
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            oxigraph_server_${{ github.event.release.tag_name }}_x86_64_linux_gnu
+            oxigraph_server_${{ github.event.release.tag_name }}_aarch64_linux_gnu
+        if: github.event_name == 'release'
 
   binary_mac:
     runs-on: macos-latest
@@ -61,6 +74,16 @@ jobs:
         with:
           name: oxigraph_server_aarch64_apple
           path: target/aarch64-apple-darwin/release/oxigraph_server
+      - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
+        if: github.event_name == 'release'
+      - run: mv target/aarch64-apple-darwin/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_aarch64_apple
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
+            oxigraph_server_${{ github.event.release.tag_name }}_aarch64_apple
+        if: github.event_name == 'release'
 
   binary_windows:
     runs-on: windows-latest
@@ -77,34 +100,68 @@ jobs:
         with:
           name: oxigraph_server_x86_64_windows_msvc
           path: target/release/oxigraph_server.exe
+      - run: mv target/release/oxigraph_server.exe oxigraph_server_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: oxigraph_server_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
+        if: github.event_name == 'release'
 
   wheel_linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        architecture: [ "x86_64", "aarch64" ]
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update
-      - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%//g' > .github/workflows/manylinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
+      - uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/${{ matrix.architecture }}
+        if: github.event_name == 'release' && matrix.architecture != 'x86_64'
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' }}/g' > .github/workflows/manylinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
+        if: github.event_name == 'release' || matrix.architecture == 'x86_64'
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_linux
           path: target/wheels/*.whl
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
+        if: github.event_name == 'release'
 
   wheel_linux_musl:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        architecture: [ "x86_64", "aarch64" ]
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update
-      - run: sed 's/%arch%/x86_64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%//g' > .github/workflows/musllinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/musllinux_1_1_x86_64 /bin/sh /workdir/.github/workflows/musllinux_build_script.sh
+      - uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/${{ matrix.architecture }}
+        if: github.event_name == 'release' && matrix.architecture != 'x86_64'
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' }}/g' > .github/workflows/musllinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/musllinux_1_1_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
+        if: github.event_name == 'release' || matrix.architecture == 'x86_64'
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_linux_musl
           path: target/wheels/*.whl
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
+        if: github.event_name == 'release'
 
   wheel_mac:
     runs-on: macos-latest
@@ -124,16 +181,26 @@ jobs:
           cache: pip
           cache-dependency-path: '**/requirements.dev.txt'
       - run: pip install -r python/requirements.dev.txt
-      - run: maturin build --release -m python/Cargo.toml
+      - run: maturin build --release -m python/Cargo.toml --features abi3
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin build --release -m python/Cargo.toml --universal2 --features abi3
+      - run: maturin build --release --target universal2-apple-darwin -m python/Cargo.toml --features abi3
+      - run: maturin build --release -m python/Cargo.toml --features abi3
+        if: github.event_name == 'release'
+      - run: maturin build --release --target aarch64-apple-darwin -m python/Cargo.toml --features abi3
+        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_universal2_mac
           path: target/wheels/*.whl
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
+        if: github.event_name == 'release'
 
   wheel_windows:
     runs-on: windows-latest
@@ -150,16 +217,23 @@ jobs:
           cache-dependency-path: '**/requirements.dev.txt'
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: pip install -r python/requirements.dev.txt
-      - run: maturin build --release -m python/Cargo.toml
+      - run: maturin build --release -m python/Cargo.toml --features abi3
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
       - run: maturin build --release -m python/Cargo.toml --features abi3
+      - run: maturin sdist -m python/Cargo.toml
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_windows
           path: target/wheels/*.whl
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages_dir: target/wheels
+        if: github.event_name == 'release'
 
   npm_tarball:
     runs-on: ubuntu-latest
@@ -181,24 +255,35 @@ jobs:
         with:
           name: oxigraph_wasm_npm
           path: js/*.tgz
+      - run: npm run release
+        working-directory: ./js
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: github.event_name == 'release'
 
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'recursive'
+          submodules: true
       - uses: docker/setup-buildx-action@v2
       - uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{github.actor}}
           password: ${{secrets.GITHUB_TOKEN}}
+      - uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        if: github.event_name == 'release'
       - uses: docker/metadata-action@v4
         id: docker_meta
         with:
-          images: ghcr.io/${{ github.repository }}
-          tags: nightly
+          images: |
+            ${{ github.repository }},enable=${{ github.event_name == 'release' }}
+            ghcr.io/${{ github.repository }}
       - uses: docker/build-push-action@v4
         with:
           context: .
@@ -209,3 +294,77 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  publish_crates:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update
+      - run: cargo login $CRATES_IO_TOKEN
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      - run: cargo publish
+        working-directory: ./oxrocksdb-sys
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./lib/oxsdatatypes
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./lib/oxrdf
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./lib/sparesults
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./lib/spargebra
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./lib/sparql-smith
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./lib
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./server
+
+  homebrew:
+    if: "github.event_name == 'release' && !contains('-', github.event.release.tag_name)"
+    runs-on: ubuntu-latest
+    needs: full_archive
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: oxigraph/homebrew-oxigraph
+          token: ${{ secrets.FULL_ACCESS_TOKEN }}
+      - run: |
+          wget "https://github.com/oxigraph/oxigraph/releases/download/${{ github.event.release.tag_name }}/oxigraph_${{ github.event.release.tag_name }}.tar.gz"
+          SHA=`shasum -a 256 "oxigraph_${{ github.event.release.tag_name }}.tar.gz" | awk '{ print $1 }'`
+          rm "oxigraph_${{ github.event.release.tag_name }}.tar.gz"
+          sed -i "s/download\/.*\.tar/download\/${{ github.event.release.tag_name }}\/oxigraph_${{ github.event.release.tag_name }}.tar/g" Formula/oxigraph.rb
+          sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/g" Formula/oxigraph.rb
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .
+          git diff-index --quiet HEAD || git commit -m "Upgrades to ${{ github.event.release.tag_name }}"
+          git push
+
+  full_archive:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: |
+          rm -rf .git
+          zip -r oxigraph_${{ github.event.release.tag_name }}.zip .
+          tar -czf /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
+          mv /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}.zip
+            oxigraph_${{ github.event.release.tag_name }}.tar.gz
