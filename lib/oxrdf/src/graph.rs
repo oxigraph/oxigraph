@@ -14,6 +14,9 @@
 //! // simple filter
 //! let results: Vec<_> = graph.triples_for_subject(ex).collect();
 //! assert_eq!(vec![triple], results);
+//!
+//! // Print
+//! assert_eq!(graph.to_string(), "<http://example.com> <http://example.com> <http://example.com> .\n");
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
