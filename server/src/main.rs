@@ -1604,6 +1604,11 @@ mod tests {
             escargot::CargoBuild::new()
                 .bin(env!("CARGO_PKG_NAME"))
                 .manifest_path(format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
+                .features(if cfg!(feature = "speedb") {
+                    "speedb"
+                } else {
+                    ""
+                })
                 .run()?
                 .command(),
         ))

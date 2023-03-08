@@ -1,4 +1,8 @@
+#ifdef SPEEDB
+#include "../speedb/db/c.cc"
+#else
 #include "../rocksdb/db/c.cc"
+#endif
 
 #include "c.h"
 

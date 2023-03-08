@@ -1,6 +1,10 @@
 #pragma once
 
+#ifdef SPEEDB
+#include "../speedb/include/rocksdb/c.h"
+#else
 #include "../rocksdb/include/rocksdb/c.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
