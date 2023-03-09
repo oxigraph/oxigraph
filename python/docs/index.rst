@@ -4,6 +4,9 @@ pyoxigraph |release|
 .. image:: https://img.shields.io/pypi/v/pyoxigraph
     :alt: PyPI
     :target: https://pypi.org/project/pyoxigraph/
+.. image:: https://img.shields.io/conda/vn/conda-forge/pyoxigraph
+    :alt: conda-forge
+    :target: https://anaconda.org/conda-forge/pyoxigraph
 .. image:: https://img.shields.io/pypi/implementation/pyoxigraph
     :alt: PyPI - Implementation
 .. image:: https://img.shields.io/pypi/pyversions/pyoxigraph
@@ -23,7 +26,7 @@ It also provides a set of utility functions for reading, writing, and processing
 `N-Quads <https://www.w3.org/TR/n-quads/>`_ and
 `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 
-Pyoxigraph is `distributed on Pypi <https://pypi.org/project/pyoxigraph/>`_.
+Pyoxigraph is distributed `on Pypi <https://pypi.org/project/pyoxigraph/>`_ and `on conda-forge <https://anaconda.org/conda-forge/pyoxigraph>`_.
 
 There is also a small library providing a `rdflib <https://rdflib.readthedocs.io>`_ store using pyoxigraph: `oxrdflib <https://github.com/oxigraph/oxrdflib>`_.
 
