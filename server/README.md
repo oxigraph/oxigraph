@@ -6,6 +6,7 @@ Oxigraph Server
 [![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph?sort=semver)](https://hub.docker.com/r/oxigraph/oxigraph)
 [![Docker Image Size (latest semver)](https://img.shields.io/docker/image-size/oxigraph/oxigraph)](https://hub.docker.com/r/oxigraph/oxigraph)
 [![Docker Pulls](https://img.shields.io/docker/pulls/oxigraph/oxigraph)](https://hub.docker.com/r/oxigraph/oxigraph)
+[![Conda](https://img.shields.io/conda/vn/conda-forge/oxigraph-server)](https://anaconda.org/conda-forge/oxigraph-server)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
@@ -21,6 +22,7 @@ Oxigraph provides different installation methods for Oxigraph server:
 * [`cargo install`](#installation) (multiplatform)
 * [A Docker image](#using-a-docker-image)
 * [A Homebrew formula](#homebrew)
+* [A conda-forge package](https://anaconda.org/conda-forge/oxigraph-server)
 * [Pre-built binaries](https://github.com/oxigraph/oxigraph/releases/latest)
 
 It is also usable as [a Rust library](https://crates.io/crates/oxigraph) and as [a Python library](https://pyoxigraph.readthedocs.io/).
