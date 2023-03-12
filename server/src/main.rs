@@ -17,15 +17,14 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::ffi::OsStr;
-use std::fmt;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::str;
 use std::str::FromStr;
 use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
+use std::{fmt, fs, str};
 use url::form_urlencoded;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
@@ -160,6 +159,56 @@ enum Command {
         /// By default all graphs are dumped if the output format supports datasets.
         #[arg(long)]
         graph: Option<String>,
+    },
+    /// Executes a SPARQL query against the store.
+    Query {
+        /// Directory in which the data stored by Oxigraph are persisted.
+        #[arg(short, long)]
+        location: PathBuf,
+        /// The SPARQL query to execute.
+        ///
+        /// If no query or query file are given, stdin is used.
+        #[arg(short, long, conflicts_with = "query_file")]
+        query: Option<String>,
+        /// File in which the query is stored.
+        ///
+        /// If no query or query file are given, stdin is used.
+        #[arg(long, conflicts_with = "query")]
+        query_file: Option<PathBuf>,
+        /// Base URI of the query.
+        #[arg(long)]
+        query_base: Option<String>,
+        /// File in which the query results will be stored.
+        ///
+        /// If no file is given, stdout is used.
+        #[arg(short, long)]
+        results_file: Option<PathBuf>,
+        /// The format of the results.
+        ///
+        /// Can be an extension like "nt" or a MIME type like "application/n-triples".
+        ///
+        /// By default the format is guessed from the results file extension.
+        #[arg(long, required_unless_present = "results_file")]
+        results_format: Option<String>,
+    },
+    /// Executes a SPARQL update against the store.
+    Update {
+        /// Directory in which the data stored by Oxigraph are persisted.
+        #[arg(short, long)]
+        location: PathBuf,
+        /// The SPARQL update to execute.
+        ///
+        /// If no query or query file are given, stdin is used.
+        #[arg(short, long, conflicts_with = "update_file")]
+        update: Option<String>,
+        /// File in which the update is stored.
+        ///
+        /// If no update or update file are given, stdin is used.
+        #[arg(long, conflicts_with = "update")]
+        update_file: Option<PathBuf>,
+        /// Base URI of the update.
+        #[arg(long)]
+        update_base: Option<String>,
     },
 }
 
@@ -367,6 +416,153 @@ pub fn main() -> anyhow::Result<()> {
                 dump(&store, stdout().lock(), format, graph)
             }
         }
+        Command::Query {
+            location,
+            query,
+            query_file,
+            query_base,
+            results_file,
+            results_format,
+        } => {
+            let query = if let Some(query) = query {
+                query
+            } else if let Some(query_file) = query_file {
+                fs::read_to_string(&query_file).with_context(|| {
+                    format!("Not able to read query file {}", query_file.display())
+                })?
+            } else {
+                // TODO: use io::read_to_string
+                let mut query = String::new();
+                stdin().lock().read_to_string(&mut query)?;
+                query
+            };
+            let query = Query::parse(&query, query_base.as_deref())?;
+            let store = Store::open_read_only(location)?;
+            match store.query(query)? {
+                QueryResults::Solutions(solutions) => {
+                    let format = if let Some(name) = results_format {
+                        if let Some(format) = QueryResultsFormat::from_extension(&name) {
+                            format
+                        } else if let Some(format) = QueryResultsFormat::from_media_type(&name) {
+                            format
+                        } else {
+                            bail!("The file format '{name}' is unknown")
+                        }
+                    } else if let Some(results_file) = &results_file {
+                        format_from_path(results_file, |ext| {
+                            QueryResultsFormat::from_extension(ext)
+                                .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                        })?
+                    } else {
+                        bail!("The --results-format option must be set when writing to stdout")
+                    };
+                    if let Some(results_file) = results_file {
+                        let mut writer = QueryResultsSerializer::from_format(format)
+                            .solutions_writer(
+                                BufWriter::new(File::create(results_file)?),
+                                solutions.variables().to_vec(),
+                            )?;
+                        for solution in solutions {
+                            writer.write(&solution?)?;
+                        }
+                        writer.finish()?;
+                    } else {
+                        let stdout = stdout(); // Not needed in Rust 1.61
+                        let mut writer = QueryResultsSerializer::from_format(format)
+                            .solutions_writer(stdout.lock(), solutions.variables().to_vec())?;
+                        for solution in solutions {
+                            writer.write(&solution?)?;
+                        }
+                        let _ = writer.finish()?;
+                    }
+                }
+                QueryResults::Boolean(result) => {
+                    let format = if let Some(name) = results_format {
+                        if let Some(format) = QueryResultsFormat::from_extension(&name) {
+                            format
+                        } else if let Some(format) = QueryResultsFormat::from_media_type(&name) {
+                            format
+                        } else {
+                            bail!("The file format '{name}' is unknown")
+                        }
+                    } else if let Some(results_file) = &results_file {
+                        format_from_path(results_file, |ext| {
+                            QueryResultsFormat::from_extension(ext)
+                                .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                        })?
+                    } else {
+                        bail!("The --results-format option must be set when writing to stdout")
+                    };
+                    if let Some(results_file) = results_file {
+                        QueryResultsSerializer::from_format(format).write_boolean_result(
+                            BufWriter::new(File::create(results_file)?),
+                            result,
+                        )?;
+                    } else {
+                        let _ = QueryResultsSerializer::from_format(format)
+                            .write_boolean_result(stdout().lock(), result)?;
+                    }
+                }
+                QueryResults::Graph(triples) => {
+                    let format = if let Some(name) = results_format {
+                        if let Some(format) = GraphFormat::from_extension(&name) {
+                            format
+                        } else if let Some(format) = GraphFormat::from_media_type(&name) {
+                            format
+                        } else {
+                            bail!("The file format '{name}' is unknown")
+                        }
+                    } else if let Some(results_file) = &results_file {
+                        format_from_path(results_file, |ext| {
+                            GraphFormat::from_extension(ext)
+                                .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                        })?
+                    } else {
+                        bail!("The --results-format option must be set when writing to stdout")
+                    };
+                    if let Some(results_file) = results_file {
+                        let mut writer = GraphSerializer::from_format(format)
+                            .triple_writer(BufWriter::new(File::create(results_file)?))?;
+                        for triple in triples {
+                            writer.write(triple?.as_ref())?;
+                        }
+                        writer.finish()?;
+                    } else {
+                        let stdout = stdout(); // Not needed in Rust 1.61
+                        let mut writer =
+                            GraphSerializer::from_format(format).triple_writer(stdout.lock())?;
+                        for triple in triples {
+                            writer.write(triple?.as_ref())?;
+                        }
+                        writer.finish()?;
+                    }
+                }
+            }
+            Ok(())
+        }
+        Command::Update {
+            location,
+            update,
+            update_file,
+            update_base,
+        } => {
+            let update = if let Some(update) = update {
+                update
+            } else if let Some(update_file) = update_file {
+                fs::read_to_string(&update_file).with_context(|| {
+                    format!("Not able to read update file {}", update_file.display())
+                })?
+            } else {
+                // TODO: use io::read_to_string
+                let mut update = String::new();
+                stdin().lock().read_to_string(&mut update)?;
+                update
+            };
+            let update = Update::parse(&update, update_base.as_deref())?;
+            let store = Store::open(location)?;
+            store.update(update)?;
+            Ok(())
+        }
     }
 }
 
@@ -424,18 +620,7 @@ enum GraphOrDatasetFormat {
 
 impl GraphOrDatasetFormat {
     fn from_path(path: &Path) -> anyhow::Result<Self> {
-        if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
-            Self::from_extension(ext).map_err(|e| {
-                e.context(format!(
-                    "Not able to guess the file format from file name extension '{ext}'"
-                ))
-            })
-        } else {
-            bail!(
-                "The path {} has no extension to guess a file format from",
-                path.display()
-            )
-        }
+        format_from_path(path, Self::from_extension)
     }
 
     fn from_extension(name: &str) -> anyhow::Result<Self> {
@@ -463,6 +648,24 @@ impl GraphOrDatasetFormat {
                 (None, Some(d)) => GraphOrDatasetFormat::Dataset(d),
                 (None, None) => bail!("The media type '{name}' is unknown"),
             },
+        )
+    }
+}
+
+fn format_from_path<T>(
+    path: &Path,
+    from_extension: impl FnOnce(&str) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+        from_extension(ext).map_err(|e| {
+            e.context(format!(
+                "Not able to guess the file format from file name extension '{ext}'"
+            ))
+        })
+    } else {
+        bail!(
+            "The path {} has no extension to guess a file format from",
+            path.display()
         )
     }
 }
@@ -1388,6 +1591,33 @@ mod tests {
         ))
     }
 
+    fn initialized_cli_store(data: &'static str) -> Result<TempDir> {
+        let store_dir = TempDir::new()?;
+        cli_command()?
+            .arg("load")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--format")
+            .arg("trig")
+            .write_stdin(data)
+            .assert()
+            .success();
+        Ok(store_dir)
+    }
+
+    fn assert_cli_state(store_dir: TempDir, data: &'static str) -> Result<()> {
+        cli_command()?
+            .arg("dump")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--format")
+            .arg("nq")
+            .assert()
+            .stdout(data)
+            .success();
+        Ok(())
+    }
+
     #[test]
     fn cli_help() -> Result<()> {
         cli_command()?
@@ -1583,16 +1813,9 @@ mod tests {
 
     #[test]
     fn cli_backup() -> Result<()> {
-        let store_dir = TempDir::new()?;
-        cli_command()?
-            .arg("load")
-            .arg("--location")
-            .arg(store_dir.path())
-            .arg("--format")
-            .arg("nq")
-            .write_stdin("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")
-            .assert()
-            .success();
+        let store_dir = initialized_cli_store(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )?;
 
         let backup_dir = TempDir::new()?;
         remove_dir_all(backup_dir.path())?; // The directory should not exist yet
@@ -1605,16 +1828,131 @@ mod tests {
             .assert()
             .success();
 
+        assert_cli_state(
+            store_dir,
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
+        )
+    }
+
+    #[test]
+    fn cli_ask_query_inline() -> Result<()> {
+        let store_dir = initialized_cli_store(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )?;
         cli_command()?
-            .arg("dump")
+            .arg("query")
             .arg("--location")
-            .arg(backup_dir.path())
-            .arg("--format")
-            .arg("nq")
+            .arg(store_dir.path())
+            .arg("--query")
+            .arg("ASK { <s> <p> <o> }")
+            .arg("--query-base")
+            .arg("http://example.com/")
+            .arg("--results-format")
+            .arg("csv")
             .assert()
-            .success()
-            .stdout("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
+            .stdout("true")
+            .success();
         Ok(())
+    }
+
+    #[test]
+    fn cli_construct_query_stdin() -> Result<()> {
+        let store_dir = initialized_cli_store(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )?;
+        cli_command()?
+            .arg("query")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--query-base")
+            .arg("http://example.com/")
+            .arg("--results-format")
+            .arg("nt")
+            .write_stdin("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+            .assert()
+            .stdout("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n")
+            .success();
+        Ok(())
+    }
+
+    #[test]
+    fn cli_select_query_file() -> Result<()> {
+        let store_dir = initialized_cli_store(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
+        )?;
+        let input_file = NamedTempFile::new("input.rq")?;
+        input_file.write_str("SELECT ?s WHERE { ?s ?p ?o }")?;
+        let output_file = NamedTempFile::new("output.tsv")?;
+        cli_command()?
+            .arg("query")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--query-file")
+            .arg(input_file.path())
+            .arg("--results-file")
+            .arg(output_file.path())
+            .assert()
+            .success();
+        output_file.assert("?s\n<http://example.com/s>\n");
+        Ok(())
+    }
+
+    #[test]
+    fn cli_ask_update_inline() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        cli_command()?
+            .arg("update")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--update")
+            .arg("INSERT DATA { <s> <p> <o> }")
+            .arg("--update-base")
+            .arg("http://example.com/")
+            .assert()
+            .success();
+        assert_cli_state(
+            store_dir,
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
+        )
+    }
+
+    #[test]
+    fn cli_construct_update_stdin() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        cli_command()?
+            .arg("update")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--update-base")
+            .arg("http://example.com/")
+            .write_stdin("INSERT DATA { <s> <p> <o> }")
+            .assert()
+            .success();
+        assert_cli_state(
+            store_dir,
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
+        )
+    }
+
+    #[test]
+    fn cli_update_file() -> Result<()> {
+        let store_dir = TempDir::new()?;
+        let input_file = NamedTempFile::new("input.rq")?;
+        input_file.write_str(
+            "INSERT DATA { <http://example.com/s> <http://example.com/p> <http://example.com/o> }",
+        )?;
+        cli_command()?
+            .arg("update")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--update-file")
+            .arg(input_file.path())
+            .assert()
+            .success();
+        assert_cli_state(
+            store_dir,
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
+        )
     }
 
     #[test]
