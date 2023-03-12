@@ -103,7 +103,8 @@ enum Command {
         #[arg(short, long)]
         location: PathBuf,
         /// Directory to backup to.
-        directory: PathBuf,
+        #[arg(short, long)]
+        destination: PathBuf,
     },
     /// Load file(s) into the store.
     Load {
@@ -115,16 +116,14 @@ enum Command {
         /// If multiple files are provided they are loaded in parallel.
         ///
         /// If no file is given, stdin is read.
-        #[arg(num_args = 0..)]
+        #[arg(short, long, global = true, num_args = 0..)]
         file: Vec<PathBuf>,
-        #[arg(short = 'f', long = "file", global = true, num_args = 0.., value_name = "FILE", hide = true)]
-        file_opt: Vec<PathBuf>, //TODO: remove on next breaking release
         /// The format of the file(s) to load.
         ///
         /// Can be an extension like "nt" or a MIME type like "application/n-triples".
         ///
         /// By default the format is guessed from the loaded file extension.
-        #[arg(long, required_unless_present_any = ["file", "file_opt"])]
+        #[arg(long, required_unless_present = "file")]
         format: Option<String>,
         /// Attempt to keep loading even if the data file is invalid.
         ///
@@ -147,6 +146,7 @@ enum Command {
         /// File to dump to.
         ///
         /// If no file is given, stdout is used.
+        #[arg(short, long)]
         file: Option<PathBuf>,
         /// The format of the file(s) to dump.
         ///
@@ -193,15 +193,14 @@ pub fn main() -> anyhow::Result<()> {
         ),
         Command::Backup {
             location,
-            directory,
+            destination,
         } => {
             let store = Store::open_read_only(location)?;
-            store.backup(directory)?;
+            store.backup(destination)?;
             Ok(())
         }
         Command::Load {
-            mut file,
-            file_opt,
+            file,
             location,
             lenient,
             format,
@@ -213,10 +212,6 @@ pub fn main() -> anyhow::Result<()> {
                 eprintln!("Warning: opening an in-memory store. It will not be possible to read the written data.");
                 Store::new()
             }?;
-            if !file_opt.is_empty() {
-                eprintln!("Warning: the --file option is deprecated. Please use a positional argument instead");
-                file.extend(file_opt);
-            }
             let format = if let Some(format) = format {
                 Some(GraphOrDatasetFormat::from_str(&format)?)
             } else {
@@ -1413,6 +1408,7 @@ mod tests {
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("--file")
             .arg(input_file.path())
             .assert()
             .success();
@@ -1422,6 +1418,7 @@ mod tests {
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("--file")
             .arg(output_file.path())
             .arg("--graph")
             .arg("default")
@@ -1442,6 +1439,7 @@ mod tests {
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("--file")
             .arg(input_file.path())
             .assert()
             .success();
@@ -1451,6 +1449,7 @@ mod tests {
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("--file")
             .arg(output_file.path())
             .assert()
             .success();
@@ -1461,6 +1460,7 @@ mod tests {
 
     #[test]
     fn cli_load_gzip_dataset() -> Result<()> {
+        let store_dir = TempDir::new()?;
         let file = NamedTempFile::new("sample.nq.gz")?;
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         encoder
@@ -1468,9 +1468,22 @@ mod tests {
         file.write_binary(&encoder.finish()?)?;
         cli_command()?
             .arg("load")
+            .arg("-l")
+            .arg(store_dir.path())
+            .arg("-f")
             .arg(file.path())
             .assert()
             .success();
+
+        cli_command()?
+            .arg("dump")
+            .arg("-l")
+            .arg(store_dir.path())
+            .arg("--format")
+            .arg("nq")
+            .assert()
+            .success()
+            .stdout("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
         Ok(())
     }
 
@@ -1478,11 +1491,12 @@ mod tests {
     fn cli_load_and_dump_named_graph() -> Result<()> {
         let store_dir = TempDir::new()?;
         let input_file = NamedTempFile::new("input.nt")?;
-        input_file
-            .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+        input_file.write_str(
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
+        )?;
         cli_command()?
             .arg("load")
-            .arg("--location")
+            .arg("-l")
             .arg(store_dir.path())
             .arg("-f")
             .arg(input_file.path())
@@ -1494,8 +1508,9 @@ mod tests {
         let output_file = NamedTempFile::new("output.nt")?;
         cli_command()?
             .arg("dump")
-            .arg("--location")
+            .arg("-l")
             .arg(store_dir.path())
+            .arg("-f")
             .arg(output_file.path())
             .arg("--graph")
             .arg("http://example.com/g")
@@ -1528,6 +1543,7 @@ mod tests {
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("--file")
             .arg(output_file.path())
             .arg("--graph")
             .arg("default")
@@ -1584,6 +1600,7 @@ mod tests {
             .arg("backup")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("--destination")
             .arg(backup_dir.path())
             .assert()
             .success();
