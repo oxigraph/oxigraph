@@ -130,6 +130,28 @@ impl PyStore {
         })
     }
 
+    /// Adds atomically a set of quads to this store.
+    ///
+    /// :param quads: the quads to add.
+    /// :type quad: iterable(Quad)
+    /// :rtype: None
+    /// :raises IOError: if an I/O error happens during the quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.extend([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    fn extend(&self, quads: &PyAny, py: Python<'_>) -> PyResult<()> {
+        let quads = quads
+            .iter()?
+            .map(|q| q?.extract())
+            .collect::<PyResult<Vec<PyQuad>>>()?;
+        py.allow_threads(|| {
+            self.inner.extend(quads).map_err(map_storage_error)?;
+            Ok(())
+        })
+    }
+
     /// Removes a quad from the store.
     ///
     /// :param quad: the quad to remove.
