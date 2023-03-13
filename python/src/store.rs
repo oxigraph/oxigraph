@@ -132,8 +132,11 @@ impl PyStore {
 
     /// Adds atomically a set of quads to this store.
     ///
+    /// Insertion is done in a transactional manner: either the full operation succeeds or nothing is written to the database.
+    /// The :py:func:`bulk_extend` method is also available for much faster loading of a large number of quads but without transactional guarantees.
+    ///
     /// :param quads: the quads to add.
-    /// :type quad: iterable(Quad)
+    /// :type quads: iterable(Quad)
     /// :rtype: None
     /// :raises IOError: if an I/O error happens during the quad insertion.
     ///
@@ -150,6 +153,29 @@ impl PyStore {
             self.inner.extend(quads).map_err(map_storage_error)?;
             Ok(())
         })
+    }
+
+    /// Adds a set of quads to this store.
+    ///
+    /// This function is designed to be as fast as possible **without** transactional guarantees.
+    /// Only a part of the data might be written to the store.
+    ///
+    /// :param quads: the quads to add.
+    /// :type quads: iterable(Quad)
+    /// :rtype: None
+    /// :raises IOError: if an I/O error happens during the quad insertion.
+    ///
+    /// >>> store = Store()
+    /// >>> store.bulk_extend([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
+    /// >>> list(store)
+    /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    fn bulk_extend(&self, quads: &PyAny) -> PyResult<()> {
+        self.inner
+            .bulk_loader()
+            .load_ok_quads::<PyErr, PythonOrStorageError>(
+                quads.iter()?.map(|q| q?.extract::<PyQuad>()),
+            )?;
+        Ok(())
     }
 
     /// Removes a quad from the store.
@@ -837,5 +863,30 @@ pub(crate) fn map_serializer_error(error: SerializerError) -> PyErr {
     match error {
         SerializerError::Storage(error) => map_storage_error(error),
         SerializerError::Io(error) => PyIOError::new_err(error.to_string()),
+    }
+}
+
+enum PythonOrStorageError {
+    Python(PyErr),
+    Storage(StorageError),
+}
+
+impl From<PyErr> for PythonOrStorageError {
+    fn from(error: PyErr) -> Self {
+        Self::Python(error)
+    }
+}
+
+impl From<StorageError> for PythonOrStorageError {
+    fn from(error: StorageError) -> Self {
+        Self::Storage(error)
+    }
+}
+impl From<PythonOrStorageError> for PyErr {
+    fn from(error: PythonOrStorageError) -> Self {
+        match error {
+            PythonOrStorageError::Python(error) => error,
+            PythonOrStorageError::Storage(error) => map_storage_error(error),
+        }
     }
 }

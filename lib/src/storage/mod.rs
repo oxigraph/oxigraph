@@ -1237,9 +1237,9 @@ impl StorageBulkLoader {
     }
 
     #[allow(clippy::trait_duplication_in_bounds)]
-    pub fn load<EI, EO: From<StorageError> + From<EI>, I: IntoIterator<Item = Result<Quad, EI>>>(
+    pub fn load<EI, EO: From<StorageError> + From<EI>>(
         &self,
-        quads: I,
+        quads: impl IntoIterator<Item = Result<Quad, EI>>,
     ) -> Result<(), EO> {
         let system = System::new_all();
         let cpu_count = min(4, system.physical_core_count().unwrap_or(2));
