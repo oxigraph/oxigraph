@@ -130,7 +130,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
             .map_err(map_io_err)?;
         for i in input.iter()? {
             writer
-                .write(&*i?.downcast::<PyCell<PyTriple>>()?.borrow())
+                .write(&*i?.extract::<PyRef<PyTriple>>()?)
                 .map_err(map_io_err)?;
         }
         writer.finish().map_err(map_io_err)?;
@@ -141,7 +141,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
             .map_err(map_io_err)?;
         for i in input.iter()? {
             writer
-                .write(&*i?.downcast::<PyCell<PyQuad>>()?.borrow())
+                .write(&*i?.extract::<PyRef<PyQuad>>()?)
                 .map_err(map_io_err)?;
         }
         writer.finish().map_err(map_io_err)?;
@@ -160,8 +160,8 @@ pub struct PyTripleReader {
 
 #[pymethods]
 impl PyTripleReader {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyTriple>> {
@@ -181,8 +181,8 @@ pub struct PyQuadReader {
 
 #[pymethods]
 impl PyQuadReader {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyQuad>> {

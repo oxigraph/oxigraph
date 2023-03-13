@@ -5,7 +5,6 @@ use oxigraph::model::Term;
 use oxigraph::sparql::*;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::{Py, PyRef};
 use std::vec::IntoIter;
 
 pub fn parse_query(
@@ -114,11 +113,10 @@ impl PyQuerySolution {
             Ok(self.inner.get(key).map(|term| PyTerm::from(term.clone())))
         } else if let Ok(key) = <&str>::extract(input) {
             Ok(self.inner.get(key).map(|term| PyTerm::from(term.clone())))
-        } else if let Ok(key) = input.downcast::<PyCell<PyVariable>>() {
-            let key = &*key.borrow();
+        } else if let Ok(key) = input.extract::<PyRef<PyVariable>>() {
             Ok(self
                 .inner
-                .get(<&Variable>::from(key))
+                .get(<&Variable>::from(&*key))
                 .map(|term| PyTerm::from(term.clone())))
         } else {
             Err(PyTypeError::new_err(format!(
@@ -143,8 +141,8 @@ pub struct SolutionValueIter {
 
 #[pymethods]
 impl SolutionValueIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self) -> Option<Option<PyTerm>> {
@@ -180,8 +178,8 @@ impl PyQuerySolutions {
             .collect()
     }
 
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self) -> PyResult<Option<PyQuerySolution>> {
@@ -205,8 +203,8 @@ pub struct PyQueryTriples {
 
 #[pymethods]
 impl PyQueryTriples {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self) -> PyResult<Option<PyTriple>> {

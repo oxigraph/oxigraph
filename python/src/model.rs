@@ -96,8 +96,8 @@ impl PyNamedNode {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<Self>>() {
-            Ok(op.matches(self.cmp(&other.borrow())))
+        if let Ok(other) = other.extract::<PyRef<Self>>() {
+            Ok(op.matches(self.cmp(&other)))
         } else if PyBlankNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
             || PyDefaultGraph::is_type_of(other)
@@ -202,8 +202,8 @@ impl PyBlankNode {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<Self>>() {
-            eq_compare(self, &other.borrow(), op)
+        if let Ok(other) = other.extract::<PyRef<Self>>() {
+            eq_compare(self, &other, op)
         } else if PyNamedNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
             || PyDefaultGraph::is_type_of(other)
@@ -338,8 +338,8 @@ impl PyLiteral {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<Self>>() {
-            eq_compare(self, &other.borrow(), op)
+        if let Ok(other) = other.extract::<PyRef<Self>>() {
+            eq_compare(self, &other, op)
         } else if PyNamedNode::is_type_of(other)
             || PyBlankNode::is_type_of(other)
             || PyDefaultGraph::is_type_of(other)
@@ -392,8 +392,8 @@ impl PyDefaultGraph {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.downcast::<PyCell<Self>>() {
-            eq_compare(self, &other.borrow(), op)
+        if let Ok(other) = other.extract::<PyRef<Self>>() {
+            eq_compare(self, &other, op)
         } else if PyNamedNode::is_type_of(other)
             || PyBlankNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
@@ -846,13 +846,13 @@ impl PyQuad {
         }
     }
 
-    fn __iter__(slf: PyRef<'_, Self>) -> QuadComponentsIter {
+    fn __iter__(&self) -> QuadComponentsIter {
         QuadComponentsIter {
             inner: vec![
-                Some(slf.inner.subject.clone().into()),
-                Some(slf.inner.predicate.clone().into()),
-                Some(slf.inner.object.clone()),
-                match slf.inner.graph_name.clone() {
+                Some(self.inner.subject.clone().into()),
+                Some(self.inner.predicate.clone().into()),
+                Some(self.inner.object.clone()),
+                match self.inner.graph_name.clone() {
                     GraphName::NamedNode(node) => Some(node.into()),
                     GraphName::BlankNode(node) => Some(node.into()),
                     GraphName::DefaultGraph => None,
@@ -946,8 +946,8 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedNodeRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
-            Ok(Self(node.borrow()))
+        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+            Ok(Self(node))
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF named node",
@@ -975,10 +975,10 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
-            Ok(Self::NamedNode(node.borrow()))
-        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
-            Ok(Self::BlankNode(node.borrow()))
+        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+            Ok(Self::NamedNode(node))
+        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+            Ok(Self::BlankNode(node))
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF named or blank node",
@@ -1008,12 +1008,12 @@ impl<'a> TryFrom<&'a PyAny> for PySubjectRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
-            Ok(Self::NamedNode(node.borrow()))
-        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
-            Ok(Self::BlankNode(node.borrow()))
-        } else if let Ok(node) = value.downcast::<PyCell<PyTriple>>() {
-            Ok(Self::Triple(node.borrow()))
+        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+            Ok(Self::NamedNode(node))
+        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+            Ok(Self::BlankNode(node))
+        } else if let Ok(node) = value.extract::<PyRef<PyTriple>>() {
+            Ok(Self::Triple(node))
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF named or blank node",
@@ -1051,14 +1051,14 @@ impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
-            Ok(Self::NamedNode(node.borrow()))
-        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
-            Ok(Self::BlankNode(node.borrow()))
-        } else if let Ok(node) = value.downcast::<PyCell<PyLiteral>>() {
-            Ok(Self::Literal(node.borrow()))
-        } else if let Ok(node) = value.downcast::<PyCell<PyTriple>>() {
-            Ok(Self::Triple(node.borrow()))
+        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+            Ok(Self::NamedNode(node))
+        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+            Ok(Self::BlankNode(node))
+        } else if let Ok(node) = value.extract::<PyRef<PyLiteral>>() {
+            Ok(Self::Literal(node))
+        } else if let Ok(node) = value.extract::<PyRef<PyTriple>>() {
+            Ok(Self::Triple(node))
         } else {
             Err(PyTypeError::new_err(format!(
                 "{} is not an RDF term",
@@ -1094,11 +1094,11 @@ impl<'a> TryFrom<&'a PyAny> for PyGraphNameRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.downcast::<PyCell<PyNamedNode>>() {
-            Ok(Self::NamedNode(node.borrow()))
-        } else if let Ok(node) = value.downcast::<PyCell<PyBlankNode>>() {
-            Ok(Self::BlankNode(node.borrow()))
-        } else if value.downcast::<PyCell<PyDefaultGraph>>().is_ok() {
+        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+            Ok(Self::NamedNode(node))
+        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+            Ok(Self::BlankNode(node))
+        } else if value.extract::<PyRef<PyDefaultGraph>>().is_ok() {
             Ok(Self::DefaultGraph)
         } else {
             Err(PyTypeError::new_err(format!(
@@ -1194,8 +1194,8 @@ pub struct TripleComponentsIter {
 
 #[pymethods]
 impl TripleComponentsIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self) -> Option<PyTerm> {
@@ -1210,8 +1210,8 @@ pub struct QuadComponentsIter {
 
 #[pymethods]
 impl QuadComponentsIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self, py: Python<'_>) -> Option<PyObject> {
