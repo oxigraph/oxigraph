@@ -9,7 +9,6 @@ use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::{Py, PyRef};
 
 /// RDF store.
 ///
@@ -728,8 +727,8 @@ pub struct QuadIter {
 
 #[pymethods]
 impl QuadIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self) -> PyResult<Option<PyQuad>> {
@@ -747,8 +746,8 @@ pub struct GraphNameIter {
 
 #[pymethods]
 impl GraphNameIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> Py<Self> {
-        slf.into()
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
     }
 
     fn __next__(&mut self) -> PyResult<Option<PyNamedOrBlankNode>> {
