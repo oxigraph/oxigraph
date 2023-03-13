@@ -25,7 +25,24 @@ class TestStore(unittest.TestCase):
 
     def test_extend(self) -> None:
         store = Store()
-        store.extend((Quad(foo, bar, baz), Quad(foo, bar, baz, graph), Quad(foo, bar, baz, DefaultGraph())))
+        store.extend(
+            (
+                Quad(foo, bar, baz),
+                Quad(foo, bar, baz, graph),
+                Quad(foo, bar, baz, DefaultGraph()),
+            )
+        )
+        self.assertEqual(len(store), 2)
+
+    def test_bulk_extend(self) -> None:
+        store = Store()
+        store.bulk_extend(
+            (
+                Quad(foo, bar, baz),
+                Quad(foo, bar, baz, graph),
+                Quad(foo, bar, baz, DefaultGraph()),
+            )
+        )
         self.assertEqual(len(store), 2)
 
     def test_remove(self) -> None:

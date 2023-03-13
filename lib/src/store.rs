@@ -1441,21 +1441,20 @@ impl BulkLoader {
                 .with_base_iri(base_iri)
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
-        self.storage
-            .load(parser.read_quads(reader)?.filter_map(|r| match r {
-                Ok(q) => Some(Ok(q)),
-                Err(e) => {
-                    if let Some(callback) = &self.on_parse_error {
-                        if let Err(e) = callback(e) {
-                            Some(Err(e))
-                        } else {
-                            None
-                        }
-                    } else {
+        self.load_ok_quads(parser.read_quads(reader)?.filter_map(|r| match r {
+            Ok(q) => Some(Ok(q)),
+            Err(e) => {
+                if let Some(callback) = &self.on_parse_error {
+                    if let Err(e) = callback(e) {
                         Some(Err(e))
+                    } else {
+                        None
                     }
+                } else {
+                    Some(Err(e))
                 }
-            }))
+            }
+        }))
     }
 
     /// Loads a graph file using the bulk loader.
@@ -1499,21 +1498,20 @@ impl BulkLoader {
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         let to_graph_name = to_graph_name.into();
-        self.storage
-            .load(parser.read_triples(reader)?.filter_map(|r| match r {
-                Ok(q) => Some(Ok(q.in_graph(to_graph_name.into_owned()))),
-                Err(e) => {
-                    if let Some(callback) = &self.on_parse_error {
-                        if let Err(e) = callback(e) {
-                            Some(Err(e))
-                        } else {
-                            None
-                        }
-                    } else {
+        self.load_ok_quads(parser.read_triples(reader)?.filter_map(|r| match r {
+            Ok(q) => Some(Ok(q.in_graph(to_graph_name.into_owned()))),
+            Err(e) => {
+                if let Some(callback) = &self.on_parse_error {
+                    if let Err(e) = callback(e) {
                         Some(Err(e))
+                    } else {
+                        None
                     }
+                } else {
+                    Some(Err(e))
                 }
-            }))
+            }
+        }))
     }
 
     /// Adds a set of quads using the bulk loader.
@@ -1523,9 +1521,26 @@ impl BulkLoader {
     /// Results might get weird if you delete data during the loading process.
     ///
     /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
-    pub fn load_quads(&self, quads: impl IntoIterator<Item = Quad>) -> Result<(), StorageError> {
+    pub fn load_quads(
+        &self,
+        quads: impl IntoIterator<Item = impl Into<Quad>>,
+    ) -> Result<(), StorageError> {
+        self.load_ok_quads(quads.into_iter().map(Ok::<_, StorageError>))
+    }
+
+    /// Adds a set of quads using the bulk loader while breaking in the middle of the process in case of error.
+    ///
+    /// Warning: This method is not atomic.
+    /// If the process fails in the middle of the file, only a part of the data may be written to the store.
+    /// Results might get weird if you delete data during the loading process.
+    ///
+    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
+    pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
+        &self,
+        quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,
+    ) -> Result<(), EO> {
         self.storage
-            .load::<StorageError, _, _>(quads.into_iter().map(Ok))
+            .load(quads.into_iter().map(|q| q.map(|q| q.into())))
     }
 }
 
