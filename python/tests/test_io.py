@@ -1,9 +1,8 @@
 import unittest
-from io import StringIO, BytesIO, UnsupportedOperation
+from io import BytesIO, StringIO, UnsupportedOperation
 from tempfile import NamedTemporaryFile, TemporaryFile
 
-from pyoxigraph import *
-
+from pyoxigraph import Literal, NamedNode, Quad, Triple, parse, serialize
 
 EXAMPLE_TRIPLE = Triple(
     NamedNode("http://example.com/foo"), NamedNode("http://example.com/p"), Literal("1")
@@ -55,9 +54,8 @@ class TestParse(unittest.TestCase):
         )
 
     def test_parse_io_error(self) -> None:
-        with self.assertRaises(UnsupportedOperation) as _:
-            with TemporaryFile("wb") as fp:
-                list(parse(fp, mime_type="application/n-triples"))
+        with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
+            list(parse(fp, mime_type="application/n-triples"))
 
     def test_parse_quad(self) -> None:
         self.assertEqual(
@@ -89,9 +87,8 @@ class TestSerialize(unittest.TestCase):
             )
 
     def test_serialize_io_error(self) -> None:
-        with self.assertRaises(UnsupportedOperation) as _:
-            with TemporaryFile("rb") as fp:
-                serialize([EXAMPLE_TRIPLE], fp, "text/turtle")
+        with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("rb") as fp:
+            serialize([EXAMPLE_TRIPLE], fp, "text/turtle")
 
     def test_serialize_quad(self) -> None:
         output = BytesIO()

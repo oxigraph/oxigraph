@@ -228,7 +228,7 @@ jobs:
           cache: pip
           cache-dependency-path: '**/requirements.dev.txt'
       - run: pip install -r python/requirements.dev.txt
-      - run: python -m black  --check --diff --color .
+      - run: python -m black --check --diff --color .
         working-directory: ./python
       - run: maturin build -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
@@ -244,6 +244,8 @@ jobs:
       - run: python -m mypy.stubtest pyoxigraph  --allowlist=mypy_allowlist.txt
         working-directory: ./python
       - run: python -m mypy generate_stubs.py tests --strict
+        working-directory: ./python
+      - run: python -m ruff check .
         working-directory: ./python
 
   python_msv:

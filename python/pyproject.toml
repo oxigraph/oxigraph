@@ -28,3 +28,29 @@ Documentation = "https://pyoxigraph.readthedocs.io/"
 Homepage = "https://pyoxigraph.readthedocs.io/"
 Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
+
+[tool.ruff]
+line-length = 120
+select = [
+    "ARG",
+    "B",
+    "C40",
+    "E",
+    "F",
+    "FBT",
+    "I",
+    "ICN",
+    "ISC",
+    "N",
+    "PIE",
+    "PTH",
+    "RET",
+    "RUF",
+    "SIM",
+    "T10",
+    "TCH",
+    "TID",
+    "UP",
+    "W",
+    "YTT"
+]

@@ -1,10 +1,21 @@
-import os
 import unittest
 from io import BytesIO, UnsupportedOperation
+from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
 from typing import Any
 
-from pyoxigraph import *
+from pyoxigraph import (
+    BlankNode,
+    DefaultGraph,
+    NamedNode,
+    Quad,
+    QuerySolution,
+    QuerySolutions,
+    QueryTriples,
+    Store,
+    Triple,
+    Variable,
+)
 
 foo = NamedNode("http://foo")
 bar = NamedNode("http://bar")
@@ -259,13 +270,12 @@ class TestStore(unittest.TestCase):
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
         store = Store()
         store.load(file_name, mime_type="application/n-quads")
-        os.remove(file_name)
+        Path(file_name).unlink()
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_with_io_error(self) -> None:
-        with self.assertRaises(UnsupportedOperation) as _:
-            with TemporaryFile("wb") as fp:
-                Store().load(fp, mime_type="application/n-triples")
+        with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
+            Store().load(fp, mime_type="application/n-triples")
 
     def test_dump_ntriples(self) -> None:
         store = Store()
@@ -304,17 +314,14 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
         store.dump(file_name, "application/n-quads")
-        with open(file_name, "rt") as fp:
-            file_content = fp.read()
         self.assertEqual(
-            file_content,
+            Path(file_name).read_text(),
             "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
     def test_dump_with_io_error(self) -> None:
-        with self.assertRaises(OSError) as _:
-            with TemporaryFile("rb") as fp:
-                Store().dump(fp, mime_type="application/rdf+xml")
+        with self.assertRaises(OSError) as _, TemporaryFile("rb") as fp:
+            Store().dump(fp, mime_type="application/rdf+xml")
 
     def test_write_in_read(self) -> None:
         store = Store()
