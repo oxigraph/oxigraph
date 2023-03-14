@@ -3,6 +3,7 @@ use oxigraph::sparql::Variable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyTuple};
 use pyo3::PyTypeInfo;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
@@ -109,6 +110,10 @@ impl PyNamedNode {
             ))
         }
     }
+
+    fn __getnewargs__(&self) -> (&str,) {
+        (self.value(),)
+    }
 }
 
 /// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_.
@@ -214,6 +219,10 @@ impl PyBlankNode {
                 "BlankNode could only be compared with RDF terms",
             ))
         }
+    }
+
+    fn __getnewargs__(&self) -> (&str,) {
+        (self.value(),)
     }
 }
 
@@ -351,6 +360,16 @@ impl PyLiteral {
             ))
         }
     }
+
+    fn __getnewargs_ex__<'a>(&'a self, py: Python<'a>) -> PyResult<((&'a str,), &'a PyDict)> {
+        let kwargs = PyDict::new(py);
+        if let Some(language) = self.language() {
+            kwargs.set_item("language", language)?;
+        } else {
+            kwargs.set_item("datatype", self.datatype().into_py(py))?;
+        }
+        Ok(((self.value(),), kwargs))
+    }
 }
 
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
@@ -404,6 +423,10 @@ impl PyDefaultGraph {
                 "DefaultGraph could only be compared with RDF terms",
             ))
         }
+    }
+
+    fn __getnewargs__<'a>(&self, py: Python<'a>) -> &'a PyTuple {
+        PyTuple::empty(py)
     }
 }
 
@@ -650,6 +673,10 @@ impl PyTriple {
             .into_iter(),
         }
     }
+
+    fn __getnewargs__(&self) -> (PySubject, PyNamedNode, PyTerm) {
+        (self.subject(), self.predicate(), self.object())
+    }
 }
 
 #[derive(FromPyObject)]
@@ -861,6 +888,15 @@ impl PyQuad {
             .into_iter(),
         }
     }
+
+    fn __getnewargs__(&self) -> (PySubject, PyNamedNode, PyTerm, PyGraphName) {
+        (
+            self.subject(),
+            self.predicate(),
+            self.object(),
+            self.graph_name(),
+        )
+    }
 }
 
 /// A SPARQL query variable.
@@ -931,6 +967,10 @@ impl PyVariable {
 
     fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
         eq_compare(self, other, op)
+    }
+
+    fn __getnewargs__(&self) -> (&str,) {
+        (self.value(),)
     }
 }
 

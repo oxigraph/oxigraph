@@ -1,3 +1,4 @@
+import pickle
 import unittest
 
 from pyoxigraph import (
@@ -26,6 +27,11 @@ class TestNamedNode(unittest.TestCase):
         self.assertEqual(NamedNode("http://foo"), NamedNode("http://foo"))
         self.assertNotEqual(NamedNode("http://foo"), NamedNode("http://bar"))
 
+    def test_pickle(self) -> None:
+        node = NamedNode("http://foo")
+        self.assertEqual(NamedNode(*node.__getnewargs__()), node)
+        self.assertEqual(pickle.loads(pickle.dumps(node)), node)
+
 
 class TestBlankNode(unittest.TestCase):
     def test_constructor(self) -> None:
@@ -40,6 +46,12 @@ class TestBlankNode(unittest.TestCase):
         self.assertNotEqual(BlankNode("foo"), BlankNode("bar"))
         self.assertNotEqual(BlankNode("foo"), NamedNode("http://foo"))
         self.assertNotEqual(NamedNode("http://foo"), BlankNode("foo"))
+
+    def test_pickle(self) -> None:
+        node = BlankNode("foo")
+        self.assertEqual(pickle.loads(pickle.dumps(node)), node)
+        auto = BlankNode()
+        self.assertEqual(pickle.loads(pickle.dumps(auto)), auto)
 
 
 class TestLiteral(unittest.TestCase):
@@ -72,6 +84,14 @@ class TestLiteral(unittest.TestCase):
         self.assertNotEqual(Literal("foo"), NamedNode("http://foo"))
         self.assertNotEqual(BlankNode("foo"), Literal("foo"))
         self.assertNotEqual(Literal("foo"), BlankNode("foo"))
+
+    def test_pickle(self) -> None:
+        simple = Literal("foo")
+        self.assertEqual(pickle.loads(pickle.dumps(simple)), simple)
+        lang_tagged = Literal("foo", language="en")
+        self.assertEqual(pickle.loads(pickle.dumps(lang_tagged)), lang_tagged)
+        number = Literal("1", datatype=XSD_INTEGER)
+        self.assertEqual(pickle.loads(pickle.dumps(number)), number)
 
 
 class TestTriple(unittest.TestCase):
@@ -149,6 +169,23 @@ class TestTriple(unittest.TestCase):
             "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
         )
 
+    def test_pickle(self) -> None:
+        triple = Triple(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+        )
+        self.assertEqual(pickle.loads(pickle.dumps(triple)), triple)
+
+
+class TestDefaultGraph(unittest.TestCase):
+    def test_equal(self) -> None:
+        self.assertEqual(DefaultGraph(), DefaultGraph())
+        self.assertNotEqual(DefaultGraph(), NamedNode("http://bar"))
+
+    def test_pickle(self) -> None:
+        self.assertEqual(pickle.loads(pickle.dumps(DefaultGraph())), DefaultGraph())
+
 
 class TestQuad(unittest.TestCase):
     def test_constructor(self) -> None:
@@ -220,6 +257,15 @@ class TestQuad(unittest.TestCase):
             "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
         )
 
+    def test_pickle(self) -> None:
+        quad = Quad(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+            NamedNode("http://example.com/g"),
+        )
+        self.assertEqual(pickle.loads(pickle.dumps(quad)), quad)
+
 
 class TestVariable(unittest.TestCase):
     def test_constructor(self) -> None:
@@ -231,6 +277,10 @@ class TestVariable(unittest.TestCase):
     def test_equal(self) -> None:
         self.assertEqual(Variable("foo"), Variable("foo"))
         self.assertNotEqual(Variable("foo"), Variable("bar"))
+
+    def test_pickle(self) -> None:
+        v = Variable("foo")
+        self.assertEqual(pickle.loads(pickle.dumps(v)), v)
 
 
 if __name__ == "__main__":
