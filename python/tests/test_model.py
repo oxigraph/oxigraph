@@ -1,3 +1,4 @@
+import copy
 import pickle
 import unittest
 
@@ -29,8 +30,9 @@ class TestNamedNode(unittest.TestCase):
 
     def test_pickle(self) -> None:
         node = NamedNode("http://foo")
-        self.assertEqual(NamedNode(*node.__getnewargs__()), node)
         self.assertEqual(pickle.loads(pickle.dumps(node)), node)
+        self.assertEqual(copy.copy(node), node)
+        self.assertEqual(copy.deepcopy(node), node)
 
 
 class TestBlankNode(unittest.TestCase):
@@ -50,8 +52,13 @@ class TestBlankNode(unittest.TestCase):
     def test_pickle(self) -> None:
         node = BlankNode("foo")
         self.assertEqual(pickle.loads(pickle.dumps(node)), node)
+        self.assertEqual(copy.copy(node), node)
+        self.assertEqual(copy.deepcopy(node), node)
+
         auto = BlankNode()
         self.assertEqual(pickle.loads(pickle.dumps(auto)), auto)
+        self.assertEqual(copy.copy(auto), auto)
+        self.assertEqual(copy.deepcopy(auto), auto)
 
 
 class TestLiteral(unittest.TestCase):
@@ -88,10 +95,18 @@ class TestLiteral(unittest.TestCase):
     def test_pickle(self) -> None:
         simple = Literal("foo")
         self.assertEqual(pickle.loads(pickle.dumps(simple)), simple)
+        self.assertEqual(copy.copy(simple), simple)
+        self.assertEqual(copy.deepcopy(simple), simple)
+
         lang_tagged = Literal("foo", language="en")
         self.assertEqual(pickle.loads(pickle.dumps(lang_tagged)), lang_tagged)
+        self.assertEqual(copy.copy(lang_tagged), lang_tagged)
+        self.assertEqual(copy.deepcopy(lang_tagged), lang_tagged)
+
         number = Literal("1", datatype=XSD_INTEGER)
         self.assertEqual(pickle.loads(pickle.dumps(number)), number)
+        self.assertEqual(copy.copy(number), number)
+        self.assertEqual(copy.deepcopy(number), number)
 
 
 class TestTriple(unittest.TestCase):
@@ -176,6 +191,8 @@ class TestTriple(unittest.TestCase):
             NamedNode("http://example.com/o"),
         )
         self.assertEqual(pickle.loads(pickle.dumps(triple)), triple)
+        self.assertEqual(copy.copy(triple), triple)
+        self.assertEqual(copy.deepcopy(triple), triple)
 
 
 class TestDefaultGraph(unittest.TestCase):
@@ -185,6 +202,8 @@ class TestDefaultGraph(unittest.TestCase):
 
     def test_pickle(self) -> None:
         self.assertEqual(pickle.loads(pickle.dumps(DefaultGraph())), DefaultGraph())
+        self.assertEqual(copy.copy(DefaultGraph()), DefaultGraph())
+        self.assertEqual(copy.deepcopy(DefaultGraph()), DefaultGraph())
 
 
 class TestQuad(unittest.TestCase):
@@ -265,6 +284,8 @@ class TestQuad(unittest.TestCase):
             NamedNode("http://example.com/g"),
         )
         self.assertEqual(pickle.loads(pickle.dumps(quad)), quad)
+        self.assertEqual(copy.copy(quad), quad)
+        self.assertEqual(copy.deepcopy(quad), quad)
 
 
 class TestVariable(unittest.TestCase):
@@ -281,6 +302,8 @@ class TestVariable(unittest.TestCase):
     def test_pickle(self) -> None:
         v = Variable("foo")
         self.assertEqual(pickle.loads(pickle.dumps(v)), v)
+        self.assertEqual(copy.copy(v), v)
+        self.assertEqual(copy.deepcopy(v), v)
 
 
 if __name__ == "__main__":

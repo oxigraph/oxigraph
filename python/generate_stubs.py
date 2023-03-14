@@ -153,12 +153,13 @@ def class_stubs(
             )
 
     doc = inspect.getdoc(cls_def)
+    doc_comment = build_doc_comment(doc) if doc else None
     return ast.ClassDef(
         cls_name,
         bases=[],
         keywords=[],
         body=(
-            ([build_doc_comment(doc)] if doc else [])
+            ([doc_comment] if doc_comment else [])
             + attributes
             + methods
             + magic_methods
@@ -193,7 +194,8 @@ def data_descriptor_stub(
         annotation=annotation or AST_TYPING_ANY,
         simple=1,
     )
-    return (assign, build_doc_comment(doc_comment)) if doc_comment else (assign,)
+    doc_comment = build_doc_comment(doc_comment) if doc_comment else None
+    return (assign, doc_comment) if doc_comment else (assign,)
 
 
 def function_stub(
@@ -207,7 +209,9 @@ def function_stub(
     body: List[ast.AST] = []
     doc = inspect.getdoc(fn_def)
     if doc is not None:
-        body.append(build_doc_comment(doc))
+        doc_comment = build_doc_comment(doc)
+        if doc_comment is not None:
+            body.append(doc_comment)
 
     decorator_list = []
     if in_class and hasattr(fn_def, "__self__"):
@@ -439,14 +443,15 @@ def parse_type_to_ast(
     return parse_sequence(stack[0])
 
 
-def build_doc_comment(doc: str) -> ast.Expr:
+def build_doc_comment(doc: str) -> Optional[ast.Expr]:
     lines = [line.strip() for line in doc.split("\n")]
     clean_lines = []
     for line in lines:
         if line.startswith((":type", ":rtype")):
             continue
         clean_lines.append(line)
-    return ast.Expr(value=ast.Constant("\n".join(clean_lines).strip()))
+    text = "\n".join(clean_lines).strip()
+    return ast.Expr(value=ast.Constant(text)) if text else None
 
 
 def format_with_black(code: str) -> str:
