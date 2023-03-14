@@ -36,6 +36,11 @@ const LOGO: &str = include_str!("../logo.svg");
 #[command(about, version)]
 /// Oxigraph SPARQL server.
 struct Args {
+    /// Directory in which the data should be persisted.
+    ///
+    /// If not present. An in-memory storage will be used.
+    #[arg(short, long, global = true)]
+    location: Option<PathBuf>, //TODO: move into commands on next breaking release
     #[command(subcommand)]
     command: Command,
 }
@@ -44,13 +49,8 @@ struct Args {
 enum Command {
     /// Start Oxigraph HTTP server in read-write mode.
     Serve {
-        /// Directory in which the data stored by Oxigraph should be persisted.
-        ///
-        /// If not present. An in-memory storage will be used.
-        #[arg(short, long, global = true)]
-        location: Option<PathBuf>,
         /// Host and port to listen to.
-        #[arg(short, long, default_value = "localhost:7878", global = true)]
+        #[arg(short, long, default_value = "localhost:7878")]
         bind: String,
     },
     /// Start Oxigraph HTTP server in read-only mode.
@@ -59,9 +59,6 @@ enum Command {
     /// Opening as read-only while having an other process writing the database is undefined behavior.
     /// Please use the serve-secondary command in this case.
     ServeReadOnly {
-        /// Directory in which the data stored by Oxigraph are persisted.
-        #[arg(short, long)]
-        location: PathBuf,
         /// Host and port to listen to.
         #[arg(short, long, default_value = "localhost:7878")]
         bind: String,
@@ -75,8 +72,8 @@ enum Command {
     /// Dirty reads might happen.
     ServeSecondary {
         /// Directory where the primary Oxigraph instance is writing to.
-        #[arg(long, alias = "location", short_alias = 'l')]
-        primary_location: PathBuf,
+        #[arg(long, conflicts_with = "location")]
+        primary_location: Option<PathBuf>,
         /// Directory to which the current secondary instance might write to.
         ///
         /// By default, temporary storage is used.
@@ -98,24 +95,18 @@ enum Command {
     ///
     /// If you want to move your data to another RDF storage system, you should use the dump operation instead.
     Backup {
-        /// Directory in which the data stored by Oxigraph are persisted.
-        #[arg(short, long)]
-        location: PathBuf,
         /// Directory to backup to.
         #[arg(short, long)]
         destination: PathBuf,
     },
     /// Load file(s) into the store.
     Load {
-        /// Directory in which the loaded data should be persisted.
-        #[arg(short, long, global = true)]
-        location: Option<PathBuf>, //TODO: make mandatory on next breaking release
         /// File(s) to load.
         ///
         /// If multiple files are provided they are loaded in parallel.
         ///
         /// If no file is given, stdin is read.
-        #[arg(short, long, global = true, num_args = 0..)]
+        #[arg(short, long, num_args = 0..)]
         file: Vec<PathBuf>,
         /// The format of the file(s) to load.
         ///
@@ -127,7 +118,7 @@ enum Command {
         /// Attempt to keep loading even if the data file is invalid.
         ///
         /// Only works with N-Triples and N-Quads for now.
-        #[arg(long, global = true)]
+        #[arg(long)]
         lenient: bool,
         /// Name of the graph to load the data to.
         ///
@@ -139,9 +130,6 @@ enum Command {
     },
     /// Dump the store content into a file.
     Dump {
-        /// Directory in which the data stored by Oxigraph are persisted.
-        #[arg(short, long)]
-        location: PathBuf,
         /// File to dump to.
         ///
         /// If no file is given, stdout is used.
@@ -162,9 +150,6 @@ enum Command {
     },
     /// Executes a SPARQL query against the store.
     Query {
-        /// Directory in which the data stored by Oxigraph are persisted.
-        #[arg(short, long)]
-        location: PathBuf,
         /// The SPARQL query to execute.
         ///
         /// If no query or query file are given, stdin is used.
@@ -193,9 +178,6 @@ enum Command {
     },
     /// Executes a SPARQL update against the store.
     Update {
-        /// Directory in which the data stored by Oxigraph are persisted.
-        #[arg(short, long)]
-        location: PathBuf,
         /// The SPARQL update to execute.
         ///
         /// If no query or query file are given, stdin is used.
@@ -215,8 +197,8 @@ enum Command {
 pub fn main() -> anyhow::Result<()> {
     let matches = Args::parse();
     match matches.command {
-        Command::Serve { location, bind } => serve(
-            if let Some(location) = location {
+        Command::Serve { bind } => serve(
+            if let Some(location) = matches.location {
                 Store::open(location)
             } else {
                 Store::new()
@@ -224,38 +206,49 @@ pub fn main() -> anyhow::Result<()> {
             bind,
             false,
         ),
-        Command::ServeReadOnly { location, bind } => {
-            serve(Store::open_read_only(location)?, bind, true)
-        }
+        Command::ServeReadOnly { bind } => serve(
+            Store::open_read_only(
+                matches
+                    .location
+                    .ok_or_else(|| anyhow!("The --location argument is required"))?,
+            )?,
+            bind,
+            true,
+        ),
         Command::ServeSecondary {
             primary_location,
             secondary_location,
             bind,
-        } => serve(
-            if let Some(secondary_location) = secondary_location {
-                Store::open_persistent_secondary(primary_location, secondary_location)
-            } else {
-                Store::open_secondary(primary_location)
-            }?,
-            bind,
-            true,
-        ),
-        Command::Backup {
-            location,
-            destination,
         } => {
-            let store = Store::open_read_only(location)?;
+            let primary_location = primary_location.or(matches.location).ok_or_else(|| {
+                anyhow!("Either the --location or the --primary-location argument is required")
+            })?;
+            serve(
+                if let Some(secondary_location) = secondary_location {
+                    Store::open_persistent_secondary(primary_location, secondary_location)
+                } else {
+                    Store::open_secondary(primary_location)
+                }?,
+                bind,
+                true,
+            )
+        }
+        Command::Backup { destination } => {
+            let store = Store::open_read_only(
+                matches
+                    .location
+                    .ok_or_else(|| anyhow!("The --location argument is required"))?,
+            )?;
             store.backup(destination)?;
             Ok(())
         }
         Command::Load {
             file,
-            location,
             lenient,
             format,
             graph,
         } => {
-            let store = if let Some(location) = location {
+            let store = if let Some(location) = matches.location {
                 Store::open(location)
             } else {
                 eprintln!("Warning: opening an in-memory store. It will not be possible to read the written data.");
@@ -379,12 +372,15 @@ pub fn main() -> anyhow::Result<()> {
             }
         }
         Command::Dump {
-            location,
             file,
             format,
             graph,
         } => {
-            let store = Store::open_read_only(location)?;
+            let store = Store::open_read_only(
+                matches
+                    .location
+                    .ok_or_else(|| anyhow!("The --location argument is required"))?,
+            )?;
             let format = if let Some(format) = format {
                 GraphOrDatasetFormat::from_str(&format)?
             } else if let Some(file) = &file {
@@ -417,7 +413,6 @@ pub fn main() -> anyhow::Result<()> {
             }
         }
         Command::Query {
-            location,
             query,
             query_file,
             query_base,
@@ -437,7 +432,11 @@ pub fn main() -> anyhow::Result<()> {
                 query
             };
             let query = Query::parse(&query, query_base.as_deref())?;
-            let store = Store::open_read_only(location)?;
+            let store = Store::open_read_only(
+                matches
+                    .location
+                    .ok_or_else(|| anyhow!("The --location argument is required"))?,
+            )?;
             match store.query(query)? {
                 QueryResults::Solutions(solutions) => {
                     let format = if let Some(name) = results_format {
@@ -541,7 +540,6 @@ pub fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::Update {
-            location,
             update,
             update_file,
             update_base,
@@ -559,7 +557,11 @@ pub fn main() -> anyhow::Result<()> {
                 update
             };
             let update = Update::parse(&update, update_base.as_deref())?;
-            let store = Store::open(location)?;
+            let store = Store::open(
+                matches
+                    .location
+                    .ok_or_else(|| anyhow!("The --location argument is required"))?,
+            )?;
             store.update(update)?;
             Ok(())
         }
@@ -1635,9 +1637,9 @@ mod tests {
         input_file
             .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
         cli_command()?
-            .arg("load")
             .arg("--location")
             .arg(store_dir.path())
+            .arg("load")
             .arg("--file")
             .arg(input_file.path())
             .assert()
