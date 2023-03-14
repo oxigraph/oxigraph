@@ -19,7 +19,7 @@ use std::vec::IntoIter;
 ///
 /// >>> str(NamedNode('http://example.com'))
 /// '<http://example.com>'
-#[pyclass(name = "NamedNode")]
+#[pyclass(name = "NamedNode", module = "pyoxigraph")]
 #[pyo3(text_signature = "(value)")]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct PyNamedNode {
@@ -121,7 +121,7 @@ impl PyNamedNode {
 ///
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
-#[pyclass(name = "BlankNode")]
+#[pyclass(name = "BlankNode", module = "pyoxigraph")]
 #[pyo3(text_signature = "(value = None)")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyBlankNode {
@@ -235,7 +235,7 @@ impl PyBlankNode {
 /// '"example"@en'
 /// >>> str(Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer')))
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
-#[pyclass(name = "Literal")]
+#[pyclass(name = "Literal", module = "pyoxigraph")]
 #[pyo3(text_signature = "(value, *, datatype = None, language = None)")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyLiteral {
@@ -354,7 +354,7 @@ impl PyLiteral {
 }
 
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
-#[pyclass(name = "DefaultGraph")]
+#[pyclass(name = "DefaultGraph", module = "pyoxigraph")]
 #[pyo3(text_signature = "()")]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct PyDefaultGraph {}
@@ -535,7 +535,7 @@ impl IntoPy<PyObject> for PyTerm {
 /// A triple could also be easily destructed into its components:
 ///
 /// >>> (s, p, o) = Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))
-#[pyclass(name = "Triple")]
+#[pyclass(name = "Triple", module = "pyoxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[pyo3(text_signature = "(subject, predicate, object)")]
 pub struct PyTriple {
@@ -712,7 +712,7 @@ impl IntoPy<PyObject> for PyGraphName {
 /// A quad could also be easily destructed into its components:
 ///
 /// >>> (s, p, o, g) = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
-#[pyclass(name = "Quad")]
+#[pyclass(name = "Quad", module = "pyoxigraph")]
 #[pyo3(text_signature = "(subject, predicate, object, graph_name = None)")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyQuad {
@@ -873,7 +873,7 @@ impl PyQuad {
 ///
 /// >>> str(Variable('foo'))
 /// '?foo'
-#[pyclass(name = "Variable")]
+#[pyclass(name = "Variable", module = "pyoxigraph")]
 #[pyo3(text_signature = "(value)")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyVariable {
@@ -1187,7 +1187,7 @@ fn triple_repr(triple: TripleRef<'_>, buffer: &mut String) {
     buffer.push('>');
 }
 
-#[pyclass]
+#[pyclass(module = "pyoxigraph")]
 pub struct TripleComponentsIter {
     inner: IntoIter<Term>,
 }
@@ -1203,7 +1203,7 @@ impl TripleComponentsIter {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "pyoxigraph")]
 pub struct QuadComponentsIter {
     inner: IntoIter<Option<Term>>,
 }

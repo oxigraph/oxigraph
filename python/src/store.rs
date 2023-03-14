@@ -35,7 +35,7 @@ use pyo3::prelude::*;
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(name = "Store")]
+#[pyclass(name = "Store", module = "pyoxigraph")]
 #[pyo3(text_signature = "(path = None)")]
 #[derive(Clone)]
 pub struct PyStore {
@@ -768,7 +768,7 @@ impl PyStore {
     }
 }
 
-#[pyclass(unsendable)]
+#[pyclass(unsendable, module = "pyoxigraph")]
 pub struct QuadIter {
     inner: store::QuadIter,
 }
@@ -787,7 +787,7 @@ impl QuadIter {
     }
 }
 
-#[pyclass(unsendable)]
+#[pyclass(unsendable, module = "pyoxigraph")]
 pub struct GraphNameIter {
     inner: store::GraphNameIter,
 }

@@ -153,7 +153,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
     }
 }
 
-#[pyclass(name = "TripleReader")]
+#[pyclass(name = "TripleReader", module = "pyoxigraph")]
 pub struct PyTripleReader {
     inner: TripleReader<PyReadable>,
 }
@@ -174,7 +174,7 @@ impl PyTripleReader {
     }
 }
 
-#[pyclass(name = "QuadReader")]
+#[pyclass(name = "QuadReader", module = "pyoxigraph")]
 pub struct PyQuadReader {
     inner: QuadReader<PyReadable>,
 }
