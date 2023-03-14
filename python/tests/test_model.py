@@ -1,6 +1,14 @@
 import unittest
 
-from pyoxigraph import *
+from pyoxigraph import (
+    BlankNode,
+    DefaultGraph,
+    Literal,
+    NamedNode,
+    Quad,
+    Triple,
+    Variable,
+)
 
 XSD_STRING = NamedNode("http://www.w3.org/2001/XMLSchema#string")
 XSD_INTEGER = NamedNode("http://www.w3.org/2001/XMLSchema#integer")

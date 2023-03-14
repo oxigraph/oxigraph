@@ -5,7 +5,7 @@ import inspect
 import logging
 import re
 import subprocess
-from typing import Set, List, Mapping, Any, Tuple, Union, Optional, Dict
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
 
 
 def _path_to_type(*elements: str) -> ast.AST:
@@ -107,7 +107,7 @@ def class_stubs(
     methods: List[ast.AST] = []
     magic_methods: List[ast.AST] = []
     for member_name, member_value in inspect.getmembers(cls_def):
-        current_element_path = element_path + [member_name]
+        current_element_path = [*element_path, member_name]
         if member_name == "__init__":
             try:
                 inspect.signature(cls_def)  # we check it actually exists
@@ -118,13 +118,14 @@ def class_stubs(
                         current_element_path,
                         types_to_import,
                         in_class=True,
-                    )
-                ] + methods
+                    ),
+                    *methods,
+                ]
             except ValueError as e:
                 if "no signature found" not in str(e):
                     raise ValueError(
-                        f"Error while parsing signature of {cls_name}.__init__: {e}"
-                    )
+                        f"Error while parsing signature of {cls_name}.__init_"
+                    ) from e
         elif (
             member_value == OBJECT_MEMBERS.get(member_name)
             or BUILTINS.get(member_name, ()) is None
@@ -256,7 +257,8 @@ def arguments_stub(
     for match in re.findall(r"^ *:type *([a-z_]+): ([^\n]*) *$", doc, re.MULTILINE):
         if match[0] not in real_parameters:
             raise ValueError(
-                f"The parameter {match[0]} of {'.'.join(element_path)} is defined in the documentation but not in the function signature"
+                f"The parameter {match[0]} of {'.'.join(element_path)} "
+                "is defined in the documentation but not in the function signature"
             )
         type = match[1]
         if type.endswith(", optional"):
@@ -277,7 +279,8 @@ def arguments_stub(
     for param in real_parameters.values():
         if param.name != "self" and param.name not in parsed_param_types:
             raise ValueError(
-                f"The parameter {param.name} of {'.'.join(element_path)} has no type definition in the function documentation"
+                f"The parameter {param.name} of {'.'.join(element_path)} "
+                "has no type definition in the function documentation"
             )
         param_ast = ast.arg(
             arg=param.name, annotation=parsed_param_types.get(param.name)
@@ -288,11 +291,13 @@ def arguments_stub(
             default_ast = ast.Constant(param.default)
             if param.name not in optional_params:
                 raise ValueError(
-                    f"Parameter {param.name} of {'.'.join(element_path)} is optional according to the type but not flagged as such in the doc"
+                    f"Parameter {param.name} of {'.'.join(element_path)} "
+                    "is optional according to the type but not flagged as such in the doc"
                 )
         elif param.name in optional_params:
             raise ValueError(
-                f"Parameter {param.name} of {'.'.join(element_path)} is optional according to the documentation but has no default value"
+                f"Parameter {param.name} of {'.'.join(element_path)} "
+                "is optional according to the documentation but has no default value"
             )
 
         if param.kind == param.POSITIONAL_ONLY:
@@ -329,14 +334,14 @@ def returns_stub(
         if isinstance(builtin, tuple) and builtin[1] is not None:
             return builtin[1]
         raise ValueError(
-            f"The return type of {'.'.join(element_path)} has no type definition using :rtype: in the function documentation"
+            f"The return type of {'.'.join(element_path)} "
+            "has no type definition using :rtype: in the function documentation"
         )
-    elif len(m) == 1:
-        return convert_type_from_doc(m[0], element_path, types_to_import)
-    else:
+    if len(m) > 1:
         raise ValueError(
             f"Multiple return type annotations found with :rtype: for {'.'.join(element_path)}"
         )
+    return convert_type_from_doc(m[0], element_path, types_to_import)
 
 
 def convert_type_from_doc(
@@ -368,9 +373,9 @@ def parse_type_to_ast(
     stack: List[List[Any]] = [[]]
     for token in tokens:
         if token == "(":
-            l: List[str] = []
-            stack[-1].append(l)
-            stack.append(l)
+            children: List[str] = []
+            stack[-1].append(children)
+            stack.append(children)
         elif token == ")":
             stack.pop()
         else:
@@ -435,13 +440,12 @@ def parse_type_to_ast(
 
 
 def build_doc_comment(doc: str) -> ast.Expr:
-    lines = [l.strip() for l in doc.split("\n")]
+    lines = [line.strip() for line in doc.split("\n")]
     clean_lines = []
-    for l in lines:
-        if l.startswith(":type") or l.startswith(":rtype"):
+    for line in lines:
+        if line.startswith((":type", ":rtype")):
             continue
-        else:
-            clean_lines.append(l)
+        clean_lines.append(line)
     return ast.Expr(value=ast.Constant("\n".join(clean_lines).strip()))
 
 
