@@ -111,8 +111,21 @@ impl PyNamedNode {
         }
     }
 
+    /// :rtype: typing.Any
     fn __getnewargs__(&self) -> (&str,) {
         (self.value(),)
+    }
+
+    /// :rtype: NamedNode
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: NamedNode
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
@@ -221,8 +234,21 @@ impl PyBlankNode {
         }
     }
 
+    /// :rtype: typing.Any
     fn __getnewargs__(&self) -> (&str,) {
         (self.value(),)
+    }
+
+    /// :rtype: BlankNode
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: BlankNode
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
@@ -361,6 +387,7 @@ impl PyLiteral {
         }
     }
 
+    /// :rtype: typing.Any
     fn __getnewargs_ex__<'a>(&'a self, py: Python<'a>) -> PyResult<((&'a str,), &'a PyDict)> {
         let kwargs = PyDict::new(py);
         if let Some(language) = self.language() {
@@ -369,6 +396,18 @@ impl PyLiteral {
             kwargs.set_item("datatype", self.datatype().into_py(py))?;
         }
         Ok(((self.value(),), kwargs))
+    }
+
+    /// :rtype: Literal
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: Literal
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
@@ -425,8 +464,21 @@ impl PyDefaultGraph {
         }
     }
 
+    /// :rtype: typing.Any
     fn __getnewargs__<'a>(&self, py: Python<'a>) -> &'a PyTuple {
         PyTuple::empty(py)
+    }
+
+    /// :rtype: DefaultGraph
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: DefaultGraph
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
@@ -674,8 +726,21 @@ impl PyTriple {
         }
     }
 
+    /// :rtype: typing.Any
     fn __getnewargs__(&self) -> (PySubject, PyNamedNode, PyTerm) {
         (self.subject(), self.predicate(), self.object())
+    }
+
+    /// :rtype: Triple
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: Triple
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
@@ -889,6 +954,7 @@ impl PyQuad {
         }
     }
 
+    /// :rtype: typing.Any
     fn __getnewargs__(&self) -> (PySubject, PyNamedNode, PyTerm, PyGraphName) {
         (
             self.subject(),
@@ -896,6 +962,18 @@ impl PyQuad {
             self.object(),
             self.graph_name(),
         )
+    }
+
+    /// :rtype: Quad
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: Quad
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
@@ -969,8 +1047,21 @@ impl PyVariable {
         eq_compare(self, other, op)
     }
 
+    /// :rtype: typing.Any
     fn __getnewargs__(&self) -> (&str,) {
         (self.value(),)
+    }
+
+    /// :rtype: Variable
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: Variable
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
