@@ -192,6 +192,11 @@ enum Command {
         #[arg(long)]
         update_base: Option<String>,
     },
+    /// Optimizes the database storage.
+    ///
+    /// Done by default in the background when serving requests.
+    /// It is likely to not be useful in most of cases except if you provide a read-only SPARQL endpoint under heavy oad.
+    Optimize {},
 }
 
 pub fn main() -> anyhow::Result<()> {
@@ -563,6 +568,15 @@ pub fn main() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow!("The --location argument is required"))?,
             )?;
             store.update(update)?;
+            Ok(())
+        }
+        Command::Optimize {} => {
+            let store = Store::open(
+                matches
+                    .location
+                    .ok_or_else(|| anyhow!("The --location argument is required"))?,
+            )?;
+            store.optimize()?;
             Ok(())
         }
     }
@@ -1631,7 +1645,7 @@ mod tests {
     }
 
     #[test]
-    fn cli_load_and_dump_graph() -> Result<()> {
+    fn cli_load_optimize_and_dump_graph() -> Result<()> {
         let store_dir = TempDir::new()?;
         let input_file = NamedTempFile::new("input.nt")?;
         input_file
@@ -1642,6 +1656,13 @@ mod tests {
             .arg("load")
             .arg("--file")
             .arg(input_file.path())
+            .assert()
+            .success();
+
+        cli_command()?
+            .arg("optimize")
+            .arg("--location")
+            .arg(store_dir.path())
             .assert()
             .success();
 
