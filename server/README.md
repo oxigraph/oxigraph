@@ -3,9 +3,6 @@ Oxigraph Server
 
 [![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server)
 [![Crates.io downloads](https://img.shields.io/crates/d/oxigraph_server)](https://crates.io/crates/oxigraph_server)
-[![Docker Image Version (latest semver)](https://img.shields.io/docker/v/oxigraph/oxigraph?sort=semver)](https://hub.docker.com/r/oxigraph/oxigraph)
-[![Docker Image Size (latest semver)](https://img.shields.io/docker/image-size/oxigraph/oxigraph)](https://hub.docker.com/r/oxigraph/oxigraph)
-[![Docker Pulls](https://img.shields.io/docker/pulls/oxigraph/oxigraph)](https://hub.docker.com/r/oxigraph/oxigraph)
 [![Conda](https://img.shields.io/conda/vn/conda-forge/oxigraph-server)](https://anaconda.org/conda-forge/oxigraph-server)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
@@ -90,13 +87,13 @@ It is also possible to load RDF data offline using bulk loading:
 
 ### Display the help menu
 ```sh
-docker run --rm oxigraph/oxigraph --help
+docker run --rm ghcr.io/oxigraph/oxigraph --help
 ```
 
 ### Run the Webserver
 Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
 ```sh
-docker run --rm -v $PWD/data:/data -p 7878:7878 oxigraph/oxigraph --location /data serve --bind 0.0.0.0:7878
+docker run --rm -v $PWD/data:/data -p 7878:7878 ghcr.io/oxigraph/oxigraph --location /data serve --bind 0.0.0.0:7878
 ```
 
 You can then access it from your machine on port `7878`:
@@ -208,7 +205,7 @@ cd oxigraph
 Then run this command to build the image locally:
 
 ````sh
-docker build -t oxigraph/oxigraph -f server/Dockerfile .
+docker build -t ghcr.io/oxigraph/oxigraph -f server/Dockerfile .
 ````
 
 ## Homebrew
