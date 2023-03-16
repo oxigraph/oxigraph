@@ -1,0 +1,16 @@
+{
+  "head": {
+    "vars": ["s"]
+  },
+  "results": {
+    "bindings": [
+      {
+        "s": {
+          "type": "literal",
+          "value": "foo",
+          "datatype": "http://example.com/dt"
+        }
+      }
+    ]
+  }
+}
