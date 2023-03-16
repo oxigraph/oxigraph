@@ -127,22 +127,25 @@ fn evaluate_negative_tsv_result_syntax_test(test: &Test) -> Result<()> {
 }
 
 fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
-    let results_file = test
+    let action_file = test
         .action
         .as_deref()
         .ok_or_else(|| anyhow!("No action found for test {test}"))?;
-    match QueryResults::read(Cursor::new(read_file_to_string(results_file)?), format)? {
-        QueryResults::Solutions(solutions) => {
-            for s in solutions {
-                s?;
-            }
+    let actual_results = StaticQueryResults::from_query_results(
+        QueryResults::read(Cursor::new(read_file_to_string(action_file)?), format)?,
+        true,
+    )?;
+    if let Some(result_file) = test.result.as_deref() {
+        let expected_results = StaticQueryResults::from_query_results(
+            QueryResults::read(Cursor::new(read_file_to_string(result_file)?), format)?,
+            true,
+        )?;
+        if !are_query_results_isomorphic(&expected_results, &actual_results) {
+            bail!(
+                "Failure on {test}.\n{}\n",
+                results_diff(expected_results, actual_results),
+            );
         }
-        QueryResults::Graph(triples) => {
-            for t in triples {
-                t?;
-            }
-        }
-        QueryResults::Boolean(_) => (),
     }
     Ok(())
 }

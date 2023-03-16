@@ -1,0 +1,16 @@
+{
+  "results": {
+    "bindings": [
+      {},
+      {
+        "s": {
+          "type": "literal",
+          "value": "foo"
+        }
+      }
+    ]
+  },
+  "head": {
+    "vars": ["s"]
+  }
+}

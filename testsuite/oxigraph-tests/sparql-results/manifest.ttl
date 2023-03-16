@@ -14,6 +14,7 @@
     :results_json_ignored_keys
     :results_xml_ignored_keys
     :results_json_typed_literal
+    :late_head
     ) .
 
 :results_json_duplicated_variables rdf:type ox:NegativeJsonResultsSyntaxTest ;
@@ -38,4 +39,10 @@
 
 :results_json_typed_literal rdf:type ox:PositiveJsonResultsSyntaxTest ;
     mf:name "typed-literal term type is allowed" ;
-    mf:action <typed_literal.srj> .
+    mf:action <typed_literal.srj> ;
+    mf:result <typed_literal_expected.srj> .
+
+:late_head rdf:type ox:PositiveJsonResultsSyntaxTest ;
+    mf:name "head after the list of results" ;
+    mf:action <late_head.srj> ;
+    mf:result <late_head_expected.srj> .
