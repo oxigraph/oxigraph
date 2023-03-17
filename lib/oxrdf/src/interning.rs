@@ -1,108 +1,175 @@
 //! Interning of RDF elements using Rodeo
 
 use crate::*;
-use lasso::{Key, Rodeo, Spur};
-#[cfg(feature = "rdf-star")]
-use std::collections::HashMap;
+use std::collections::hash_map::{Entry, HashMap, RandomState};
+use std::hash::{BuildHasher, Hasher};
 
 #[derive(Debug, Default)]
 pub struct Interner {
-    strings: Rodeo,
+    hasher: RandomState,
+    string_for_hash: HashMap<u64, String, IdentityHasherBuilder>,
     #[cfg(feature = "rdf-star")]
     triples: HashMap<InternedTriple, Triple>,
 }
 
+impl Interner {
+    fn get_or_intern(&mut self, value: &str) -> Key {
+        let mut hash = self.hash(value);
+        loop {
+            match self.string_for_hash.entry(hash) {
+                Entry::Vacant(e) => {
+                    e.insert(value.into());
+                    return Key(hash);
+                }
+                Entry::Occupied(e) => loop {
+                    if e.get() == value {
+                        return Key(hash);
+                    } else if hash == u64::MAX - 1 {
+                        hash = 0;
+                    } else {
+                        hash += 1;
+                    }
+                },
+            }
+        }
+    }
+
+    fn get(&self, value: &str) -> Option<Key> {
+        let mut hash = self.hash(value);
+        loop {
+            let v = self.string_for_hash.get(&hash)?;
+            if v == value {
+                return Some(Key(hash));
+            } else if hash == u64::MAX - 1 {
+                hash = 0;
+            } else {
+                hash += 1;
+            }
+        }
+    }
+
+    fn hash(&self, value: &str) -> u64 {
+        let mut hasher = self.hasher.build_hasher();
+        hasher.write(value.as_bytes());
+        let hash = hasher.finish();
+        if hash == u64::MAX {
+            0
+        } else {
+            hash
+        }
+    }
+
+    fn resolve(&self, key: &Key) -> &str {
+        self.string_for_hash
+            .get(&key.0)
+            .expect("Interned key not found")
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct Key(u64);
+
+impl Key {
+    fn first() -> Self {
+        Self(0)
+    }
+
+    fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+
+    fn impossible() -> Self {
+        Key(u64::MAX)
+    }
+}
+
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct InternedNamedNode {
-    id: Spur,
+    id: Key,
 }
 
 impl InternedNamedNode {
     pub fn encoded_into(named_node: NamedNodeRef<'_>, interner: &mut Interner) -> Self {
         Self {
-            id: interner.strings.get_or_intern(named_node.as_str()),
+            id: interner.get_or_intern(named_node.as_str()),
         }
     }
 
     pub fn encoded_from(named_node: NamedNodeRef<'_>, interner: &Interner) -> Option<Self> {
         Some(Self {
-            id: interner.strings.get(named_node.as_str())?,
+            id: interner.get(named_node.as_str())?,
         })
     }
 
     pub fn decode_from<'a>(&self, interner: &'a Interner) -> NamedNodeRef<'a> {
-        NamedNodeRef::new_unchecked(interner.strings.resolve(&self.id))
+        NamedNodeRef::new_unchecked(interner.resolve(&self.id))
     }
 
     pub fn first() -> Self {
-        Self { id: fist_spur() }
+        Self { id: Key::first() }
     }
 
     pub fn next(self) -> Self {
-        Self {
-            id: next_spur(self.id),
-        }
+        Self { id: self.id.next() }
     }
 
     pub fn impossible() -> Self {
         Self {
-            id: impossible_spur(),
+            id: Key::impossible(),
         }
     }
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct InternedBlankNode {
-    id: Spur,
+    id: Key,
 }
 
 impl InternedBlankNode {
     pub fn encoded_into(blank_node: BlankNodeRef<'_>, interner: &mut Interner) -> Self {
         Self {
-            id: interner.strings.get_or_intern(blank_node.as_str()),
+            id: interner.get_or_intern(blank_node.as_str()),
         }
     }
 
     pub fn encoded_from(blank_node: BlankNodeRef<'_>, interner: &Interner) -> Option<Self> {
         Some(Self {
-            id: interner.strings.get(blank_node.as_str())?,
+            id: interner.get(blank_node.as_str())?,
         })
     }
 
     pub fn decode_from<'a>(&self, interner: &'a Interner) -> BlankNodeRef<'a> {
-        BlankNodeRef::new_unchecked(interner.strings.resolve(&self.id))
+        BlankNodeRef::new_unchecked(interner.resolve(&self.id))
     }
 
     pub fn next(self) -> Self {
-        Self {
-            id: next_spur(self.id),
-        }
+        Self { id: self.id.next() }
     }
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub enum InternedLiteral {
     String {
-        value_id: Spur,
+        value_id: Key,
     },
     LanguageTaggedString {
-        value_id: Spur,
-        language_id: Spur,
+        value_id: Key,
+        language_id: Key,
     },
     TypedLiteral {
-        value_id: Spur,
+        value_id: Key,
         datatype: InternedNamedNode,
     },
 }
 
 impl InternedLiteral {
     pub fn encoded_into(literal: LiteralRef<'_>, interner: &mut Interner) -> Self {
-        let value_id = interner.strings.get_or_intern(literal.value());
+        let value_id = interner.get_or_intern(literal.value());
         if literal.is_plain() {
             if let Some(language) = literal.language() {
                 Self::LanguageTaggedString {
                     value_id,
-                    language_id: interner.strings.get_or_intern(language),
+                    language_id: interner.get_or_intern(language),
                 }
             } else {
                 Self::String { value_id }
@@ -116,12 +183,12 @@ impl InternedLiteral {
     }
 
     pub fn encoded_from(literal: LiteralRef<'_>, interner: &Interner) -> Option<Self> {
-        let value_id = interner.strings.get(literal.value())?;
+        let value_id = interner.get(literal.value())?;
         Some(if literal.is_plain() {
             if let Some(language) = literal.language() {
                 Self::LanguageTaggedString {
                     value_id,
-                    language_id: interner.strings.get(language)?,
+                    language_id: interner.get(language)?,
                 }
             } else {
                 Self::String { value_id }
@@ -137,17 +204,17 @@ impl InternedLiteral {
     pub fn decode_from<'a>(&self, interner: &'a Interner) -> LiteralRef<'a> {
         match self {
             InternedLiteral::String { value_id } => {
-                LiteralRef::new_simple_literal(interner.strings.resolve(value_id))
+                LiteralRef::new_simple_literal(interner.resolve(value_id))
             }
             InternedLiteral::LanguageTaggedString {
                 value_id,
                 language_id,
             } => LiteralRef::new_language_tagged_literal_unchecked(
-                interner.strings.resolve(value_id),
-                interner.strings.resolve(language_id),
+                interner.resolve(value_id),
+                interner.resolve(language_id),
             ),
             InternedLiteral::TypedLiteral { value_id, datatype } => LiteralRef::new_typed_literal(
-                interner.strings.resolve(value_id),
+                interner.resolve(value_id),
                 datatype.decode_from(interner),
             ),
         }
@@ -156,14 +223,14 @@ impl InternedLiteral {
     pub fn next(&self) -> Self {
         match self {
             Self::String { value_id } => Self::String {
-                value_id: next_spur(*value_id),
+                value_id: value_id.next(),
             },
             Self::LanguageTaggedString {
                 value_id,
                 language_id,
             } => Self::LanguageTaggedString {
                 value_id: *value_id,
-                language_id: next_spur(*language_id),
+                language_id: language_id.next(),
             },
             Self::TypedLiteral { value_id, datatype } => Self::TypedLiteral {
                 value_id: *value_id,
@@ -414,14 +481,32 @@ impl InternedTriple {
     }
 }
 
-fn fist_spur() -> Spur {
-    Spur::try_from_usize(0).unwrap()
+#[derive(Default)]
+struct IdentityHasherBuilder {}
+
+impl BuildHasher for IdentityHasherBuilder {
+    type Hasher = IdentityHasher;
+
+    fn build_hasher(&self) -> IdentityHasher {
+        IdentityHasher::default()
+    }
 }
 
-fn next_spur(value: Spur) -> Spur {
-    Spur::try_from_usize(value.into_usize() + 1).unwrap()
+#[derive(Default)]
+struct IdentityHasher {
+    value: u64,
 }
 
-fn impossible_spur() -> Spur {
-    Spur::try_from_usize((u32::MAX - 10).try_into().unwrap()).unwrap()
+impl Hasher for IdentityHasher {
+    fn finish(&self) -> u64 {
+        self.value
+    }
+
+    fn write(&mut self, _bytes: &[u8]) {
+        unimplemented!()
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.value = i
+    }
 }
