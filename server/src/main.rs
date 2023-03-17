@@ -373,6 +373,7 @@ pub fn main() -> anyhow::Result<()> {
                             })
                         }
                     });
+                store.flush()?;
                 Ok(())
             }
         }
@@ -568,6 +569,7 @@ pub fn main() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow!("The --location argument is required"))?,
             )?;
             store.update(update)?;
+            store.flush()?;
             Ok(())
         }
         Command::Optimize {} => {
