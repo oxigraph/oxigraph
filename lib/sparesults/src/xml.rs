@@ -18,19 +18,17 @@ pub fn write_boolean_xml_result<W: Write>(sink: W, value: bool) -> io::Result<W>
 fn do_write_boolean_xml_result<W: Write>(sink: W, value: bool) -> Result<W, quick_xml::Error> {
     let mut writer = Writer::new(sink);
     writer.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
-    let mut sparql_open = BytesStart::new("sparql");
-    sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
-    writer.write_event(Event::Start(sparql_open))?;
-    writer.write_event(Event::Start(BytesStart::new("head")))?;
-    writer.write_event(Event::End(BytesEnd::new("head")))?;
-    writer.write_event(Event::Start(BytesStart::new("boolean")))?;
-    writer.write_event(Event::Text(BytesText::new(if value {
-        "true"
-    } else {
-        "false"
-    })))?;
-    writer.write_event(Event::End(BytesEnd::new("boolean")))?;
-    writer.write_event(Event::End(BytesEnd::new("sparql")))?;
+    writer
+        .create_element("sparql")
+        .with_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"))
+        .write_inner_content(|writer| {
+            writer
+                .create_element("head")
+                .write_text_content(BytesText::new(""))?
+                .create_element("boolean")
+                .write_text_content(BytesText::new(if value { "true" } else { "false" }))?;
+            Ok(())
+        })?;
     Ok(writer.into_inner())
 }
 
@@ -49,13 +47,17 @@ impl<W: Write> XmlSolutionsWriter<W> {
         let mut sparql_open = BytesStart::new("sparql");
         sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
         writer.write_event(Event::Start(sparql_open))?;
-        writer.write_event(Event::Start(BytesStart::new("head")))?;
-        for variable in &variables {
-            let mut variable_tag = BytesStart::new("variable");
-            variable_tag.push_attribute(("name", variable.as_str()));
-            writer.write_event(Event::Empty(variable_tag))?;
-        }
-        writer.write_event(Event::End(BytesEnd::new("head")))?;
+        writer
+            .create_element("head")
+            .write_inner_content(|writer| {
+                for variable in &variables {
+                    writer
+                        .create_element("variable")
+                        .with_attribute(("name", variable.as_str()))
+                        .write_empty()?;
+                }
+                Ok(())
+            })?;
         writer.write_event(Event::Start(BytesStart::new("results")))?;
         Ok(Self { writer })
     }
@@ -74,12 +76,13 @@ impl<W: Write> XmlSolutionsWriter<W> {
         self.writer
             .write_event(Event::Start(BytesStart::new("result")))?;
         for (variable, value) in solution {
-            let mut binding_tag = BytesStart::new("binding");
-            binding_tag.push_attribute(("name", variable.as_str()));
-            self.writer.write_event(Event::Start(binding_tag))?;
-            write_xml_term(value, &mut self.writer)?;
             self.writer
-                .write_event(Event::End(BytesEnd::new("binding")))?;
+                .create_element("binding")
+                .with_attribute(("name", variable.as_str()))
+                .write_inner_content(|writer| {
+                    write_xml_term(value, writer)?;
+                    Ok(())
+                })?;
         }
         self.writer.write_event(Event::End(BytesEnd::new("result")))
     }
@@ -105,39 +108,48 @@ fn write_xml_term(
 ) -> Result<(), quick_xml::Error> {
     match term {
         TermRef::NamedNode(uri) => {
-            writer.write_event(Event::Start(BytesStart::new("uri")))?;
-            writer.write_event(Event::Text(BytesText::new(uri.as_str())))?;
-            writer.write_event(Event::End(BytesEnd::new("uri")))?;
+            writer
+                .create_element("uri")
+                .write_text_content(BytesText::new(uri.as_str()))?;
         }
         TermRef::BlankNode(bnode) => {
-            writer.write_event(Event::Start(BytesStart::new("bnode")))?;
-            writer.write_event(Event::Text(BytesText::new(bnode.as_str())))?;
-            writer.write_event(Event::End(BytesEnd::new("bnode")))?;
+            writer
+                .create_element("bnode")
+                .write_text_content(BytesText::new(bnode.as_str()))?;
         }
         TermRef::Literal(literal) => {
-            let mut literal_tag = BytesStart::new("literal");
-            if let Some(language) = literal.language() {
-                literal_tag.push_attribute(("xml:lang", language));
+            let element = writer.create_element("literal");
+            let element = if let Some(language) = literal.language() {
+                element.with_attribute(("xml:lang", language))
             } else if !literal.is_plain() {
-                literal_tag.push_attribute(("datatype", literal.datatype().as_str()));
-            }
-            writer.write_event(Event::Start(literal_tag))?;
-            writer.write_event(Event::Text(BytesText::new(literal.value())))?;
-            writer.write_event(Event::End(BytesEnd::new("literal")))?;
+                element.with_attribute(("datatype", literal.datatype().as_str()))
+            } else {
+                element
+            };
+            element.write_text_content(BytesText::new(literal.value()))?;
         }
         #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
-            writer.write_event(Event::Start(BytesStart::new("triple")))?;
-            writer.write_event(Event::Start(BytesStart::new("subject")))?;
-            write_xml_term(triple.subject.as_ref().into(), writer)?;
-            writer.write_event(Event::End(BytesEnd::new("subject")))?;
-            writer.write_event(Event::Start(BytesStart::new("predicate")))?;
-            write_xml_term(triple.predicate.as_ref().into(), writer)?;
-            writer.write_event(Event::End(BytesEnd::new("predicate")))?;
-            writer.write_event(Event::Start(BytesStart::new("object")))?;
-            write_xml_term(triple.object.as_ref(), writer)?;
-            writer.write_event(Event::End(BytesEnd::new("object")))?;
-            writer.write_event(Event::End(BytesEnd::new("triple")))?;
+            writer
+                .create_element("triple")
+                .write_inner_content(|writer| {
+                    writer
+                        .create_element("subject")
+                        .write_inner_content(|writer| {
+                            write_xml_term(triple.subject.as_ref().into(), writer)
+                        })?;
+                    writer
+                        .create_element("predicate")
+                        .write_inner_content(|writer| {
+                            write_xml_term(triple.predicate.as_ref().into(), writer)
+                        })?;
+                    writer
+                        .create_element("object")
+                        .write_inner_content(|writer| {
+                            write_xml_term(triple.object.as_ref(), writer)
+                        })?;
+                    Ok(())
+                })?;
         }
     }
     Ok(())
