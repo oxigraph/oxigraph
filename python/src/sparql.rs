@@ -3,7 +3,11 @@ use crate::map_storage_error;
 use crate::model::*;
 use oxigraph::model::Term;
 use oxigraph::sparql::*;
-use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyTypeError, PyValueError};
+use pyo3::basic::CompareOp;
+use pyo3::exceptions::{
+    PyNotImplementedError, PyRuntimeError, PySyntaxError, PyTypeError, PyValueError,
+};
+
 use pyo3::prelude::*;
 use std::vec::IntoIter;
 
@@ -102,6 +106,16 @@ impl PyQuerySolution {
         }
         buffer.push('>');
         buffer
+    }
+
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
+        match op {
+            CompareOp::Eq => Ok(self.inner == other.inner),
+            CompareOp::Ne => Ok(self.inner != other.inner),
+            _ => Err(PyNotImplementedError::new_err(
+                "Ordering is not implemented",
+            )),
+        }
     }
 
     fn __len__(&self) -> usize {
