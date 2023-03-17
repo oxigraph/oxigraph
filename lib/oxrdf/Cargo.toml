@@ -1,6 +1,6 @@
 [package]
 name = "oxrdf"
-version = "0.1.5-dev"
+version = "0.1.5"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"

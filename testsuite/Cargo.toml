@@ -15,7 +15,7 @@ publish = false
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 time = { version = "0.3", features = ["formatting"] }
-oxigraph = { path="../lib" }
+oxigraph = { path = "../lib" }
 text-diff = "0.4"
 
 [dev-dependencies]
