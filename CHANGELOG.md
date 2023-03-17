@@ -1,3 +1,29 @@
+## [0.3.14] - 2023-03-19
+
+### Added
+- Read only and secondary RocksDB storage. Allows to open the data as read-only or two follow a primary instance.
+- Server: adds multiple commands:
+  - `serve-secondary` and `serve-read-only` to serve the HTTP server in secondary and read only-modes.
+  - `dump` to dump the database content to a file.
+  - `query` and `update` to execute SPARQL query and updates.
+  - `backup` to do a database backup.
+  - `optimize` to optimize the database storage.
+- Server: adds `format` and `graph` options to the `load` command in order to select the loaded data format and the target graph.
+- Python: `Store.extend` and `Store.bulk_extend` methods.
+- Python: allows to pickle basic data model classes.
+
+### Changed
+- Upgrades RocksDB to 8.0.0.
+- Server: listening to localhost now properly listen to both IPv4 and IPv6.
+- RDF/XML and XML parser results: avoid an ever growing buffer.
+- JSON SPARQL results: allows the "head" key to be at the end of the document.
+- TSV SPARQL results: properly quote `\t` and print trailing line jumps.
+- `Term::from_str`: fixes parsing of blank nodes in object position of quoted triples.
+- `QuerySolution`: implements `Eq` and `Debug`.
+- JS: Reduces WASM build size.
+- OxRDF: fixes `Graph` and `Dataset` serialization to output proper N-Triples and N-Qauds.
+
+
 ## [0.3.13] - 2023-02-23
 
 ### Changed
