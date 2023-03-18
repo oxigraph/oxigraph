@@ -95,7 +95,7 @@ enum Command {
     ///
     /// If you want to move your data to another RDF storage system, you should use the dump operation instead.
     Backup {
-        /// Directory to backup to.
+        /// Directory in which the backup will be written.
         #[arg(short, long)]
         destination: PathBuf,
     },
@@ -195,7 +195,7 @@ enum Command {
     /// Optimizes the database storage.
     ///
     /// Done by default in the background when serving requests.
-    /// It is likely to not be useful in most of cases except if you provide a read-only SPARQL endpoint under heavy oad.
+    /// It is likely to not be useful in most of cases except if you provide a read-only SPARQL endpoint under heavy load.
     Optimize {},
 }
 
