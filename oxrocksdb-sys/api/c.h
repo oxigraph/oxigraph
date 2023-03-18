@@ -41,6 +41,7 @@ typedef enum rocksdb_status_subcode_t {
   rocksdb_status_subcode_overwritten = 12,
   rocksdb_status_subcode_txn_not_prepared = 13,
   rocksdb_status_subcode_io_fenced = 14,
+  rocksdb_status_subcode_merge_operator_failed = 15,
 } rocksdb_status_subcode_t;
 
 typedef enum rocksdb_status_severity_t {
