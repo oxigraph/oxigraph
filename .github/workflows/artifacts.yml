@@ -121,7 +121,7 @@ jobs:
         with:
           platforms: linux/${{ matrix.architecture }}
         if: github.event_name == 'release' && matrix.architecture != 'x86_64'
-      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' }}/g' > .github/workflows/manylinux_build_script.sh
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
         if: github.event_name == 'release' || matrix.architecture == 'x86_64'
       - uses: actions/upload-artifact@v3
@@ -149,7 +149,7 @@ jobs:
         with:
           platforms: linux/${{ matrix.architecture }}
         if: github.event_name == 'release' && matrix.architecture != 'x86_64'
-      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' }}/g' > .github/workflows/musllinux_build_script.sh
+      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/musllinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/musllinux_1_1_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
         if: github.event_name == 'release' || matrix.architecture == 'x86_64'
       - uses: actions/upload-artifact@v3
