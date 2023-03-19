@@ -367,6 +367,8 @@ class TestStore(unittest.TestCase):
             store.remove(quad)
             store.flush()
             self.assertEqual(list(secondary_store), [])
+            del secondary_store
+            del store
 
 
 if __name__ == "__main__":
