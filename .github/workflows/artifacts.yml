@@ -132,7 +132,7 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: target/wheels
+          packages-dir: target/wheels
         if: github.event_name == 'release'
 
   wheel_linux_musl:
@@ -160,7 +160,7 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: target/wheels
+          packages-dir: target/wheels
         if: github.event_name == 'release'
 
   wheel_mac:
@@ -195,11 +195,10 @@ jobs:
         with:
           name: pyoxigraph_wheel_universal2_mac
           path: target/wheels/*.whl
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: target/wheels
+      - run: pip install twine && twine upload target/wheels/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         if: github.event_name == 'release'
 
   wheel_windows:
@@ -228,11 +227,10 @@ jobs:
         with:
           name: pyoxigraph_wheel_x86_64_windows
           path: target/wheels/*.whl
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
-          packages_dir: target/wheels
+      - run: pip install twine && twine upload target/wheels/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         if: github.event_name == 'release'
 
   npm_tarball:
@@ -249,6 +247,7 @@ jobs:
           node-version: 16
           cache: npm
           cache-dependency-path: "js/package.json"
+          registry-url: https://registry.npmjs.org
       - run: npm run pack
         working-directory: ./js
       - uses: actions/upload-artifact@v3
@@ -359,7 +358,7 @@ jobs:
         with:
           submodules: true
       - run: |
-          rm -rf .git
+          rm -rf .git bench fuzz
           zip -r oxigraph_${{ github.event.release.tag_name }}.zip .
           tar -czf /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
           mv /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
