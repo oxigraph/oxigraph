@@ -8,7 +8,7 @@ export PATH="${PATH}:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin:/opt/p
 cd python
 python3.10 -m venv venv
 source venv/bin/activate
-pip install -r requirements.dev.txt
+pip install "maturin~=0.14.0"
 maturin develop --release -m Cargo.toml
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
 maturin build --release -m Cargo.toml --features abi3 --compatibility musllinux_1_1
