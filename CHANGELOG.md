@@ -1,9 +1,9 @@
 ## [0.3.14] - 2023-03-19
 
 ### Added
-- Read only and secondary RocksDB storage. Allows to open the data as read-only or two follow a primary instance.
+- Read only and secondary RocksDB storage. Allows to open the data as read-only or to follow a primary instance.
 - Server: adds multiple commands:
-  - `serve-secondary` and `serve-read-only` to serve the HTTP server in secondary and read only-modes.
+  - `serve-secondary` and `serve-read-only` to serve the HTTP server in secondary and read-only modes.
   - `dump` to dump the database content to a file.
   - `query` and `update` to execute SPARQL query and updates.
   - `backup` to do a database backup.
@@ -21,7 +21,7 @@
 - `Term::from_str`: fixes parsing of blank nodes in object position of quoted triples.
 - `QuerySolution`: implements `Eq` and `Debug`.
 - JS: Reduces WASM build size.
-- OxRDF: fixes `Graph` and `Dataset` serialization to output proper N-Triples and N-Qauds.
+- OxRDF: fixes `Graph` and `Dataset` serialization to output proper N-Triples and N-Quads.
 
 
 ## [0.3.13] - 2023-02-23
