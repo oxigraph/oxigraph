@@ -16,8 +16,6 @@ use crate::storage::numeric_encoder::Decoder;
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 #[cfg(not(target_family = "wasm"))]
-use std::cmp::{max, min};
-#[cfg(not(target_family = "wasm"))]
 use std::collections::VecDeque;
 #[cfg(not(target_family = "wasm"))]
 use std::collections::{HashMap, HashSet};
@@ -34,8 +32,6 @@ use std::sync::Arc;
 use std::thread::spawn;
 #[cfg(not(target_family = "wasm"))]
 use std::thread::JoinHandle;
-#[cfg(not(target_family = "wasm"))]
-use sysinfo::{System, SystemExt};
 
 mod backend;
 mod binary_encoder;
@@ -58,8 +54,6 @@ const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
 #[cfg(not(target_family = "wasm"))]
 const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
-#[cfg(not(target_family = "wasm"))]
-const MAX_BULK_LOAD_BATCH_SIZE: usize = 100_000_000;
 
 /// Low level storage primitives
 #[derive(Clone)]
@@ -1241,32 +1235,23 @@ impl StorageBulkLoader {
         &self,
         quads: impl IntoIterator<Item = Result<Quad, EI>>,
     ) -> Result<(), EO> {
-        let system = System::new_all();
-        let cpu_count = min(4, system.physical_core_count().unwrap_or(2));
-        let num_threads = max(
-            if let Some(num_threads) = self.num_threads {
-                num_threads
-            } else if let Some(max_memory_size) = self.max_memory_size {
-                min(
-                    cpu_count,
-                    max_memory_size * 1000 / DEFAULT_BULK_LOAD_BATCH_SIZE,
-                )
-            } else {
-                cpu_count
-            },
-            2,
-        );
-        let batch_size = min(
-            if let Some(max_memory_size) = self.max_memory_size {
-                max(1000, max_memory_size * 1000 / num_threads)
-            } else {
-                max(
-                    usize::try_from(system.free_memory()).unwrap() / 1000 / num_threads,
-                    DEFAULT_BULK_LOAD_BATCH_SIZE,
-                )
-            },
-            MAX_BULK_LOAD_BATCH_SIZE,
-        );
+        let num_threads = self.num_threads.unwrap_or(2);
+        if num_threads < 2 {
+            return Err(
+                StorageError::Other("The bulk loader needs at least 2 threads".into()).into(),
+            );
+        }
+        let batch_size = if let Some(max_memory_size) = self.max_memory_size {
+            max_memory_size * 1000 / num_threads
+        } else {
+            DEFAULT_BULK_LOAD_BATCH_SIZE
+        };
+        if batch_size < 10_000 {
+            return Err(StorageError::Other(
+                "The bulk loader memory bound is too low. It needs at least 100MB".into(),
+            )
+            .into());
+        }
         let mut threads = VecDeque::with_capacity(num_threads - 1);
         let mut buffer = Vec::with_capacity(batch_size);
         let done_counter = Arc::new(AtomicU64::new(0));
