@@ -1328,7 +1328,7 @@ impl Iterator for GraphNameIter {
 /// Memory usage is configurable using [`BulkLoader::set_max_memory_size_in_megabytes`]
 /// and the number of used threads with [`BulkLoader::set_num_threads`].
 /// By default the memory consumption target (excluding the system and RocksDB internal consumption)
-/// is 1GB per thread and the number of threads is set to the number of logical CPU cores provided by the system.
+/// is around 2GB per thread and 2 threads.
 /// These targets are considered per loaded file.
 ///
 /// Usage example with loading a dataset:
@@ -1360,23 +1360,21 @@ impl BulkLoader {
     ///
     /// This number must be at last 2 (one for parsing and one for loading).
     ///
-    /// By default this is the number of logical CPU cores provided by the system except if
-    /// [`BulkLoader::set_max_memory_size_in_megabytes`] is set. In this case at least one 1GB is reserved
-    /// per used thread.
+    /// The default value is 2.
     pub fn set_num_threads(mut self, num_threads: usize) -> Self {
         self.storage = self.storage.set_num_threads(num_threads);
         self
     }
 
-    /// Sets the maximal number of memory used by this operation.
+    /// Sets a rough idea of the maximal amount of memory to be used by this operation.
     ///
     /// This number must be at last a few megabytes per thread.
     ///
     /// Memory used by RocksDB and the system is not taken into account in this limit.
-    /// Note that depending on the system behavior this amount might never be reached.
+    /// Note that depending on the system behavior this amount might never be reached or be blown up
+    /// (for example if the data contains very long IRIs or literals).
     ///
-    /// By default, at most 1GB per used thread is used
-    /// (i.e. at most GBs at the number of available logical CPU cores in total).
+    /// By default, a target 2GB per used thread is used.
     pub fn set_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
         self.storage = self
             .storage
