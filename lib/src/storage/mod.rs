@@ -1309,14 +1309,13 @@ impl StorageBulkLoader {
         threads.push_back(spawn(move || {
             FileBulkLoader::new(storage, batch_size).load(buffer_to_load, &done_counter_clone)
         }));
-        self.on_possible_progress(done_counter, done_and_displayed_counter);
         Ok(())
     }
 
     fn on_possible_progress(&self, done: &AtomicU64, done_and_displayed: &mut u64) {
-        let new_counter = done.fetch_max(*done_and_displayed, Ordering::Relaxed);
+        let new_counter = done.load(Ordering::Relaxed);
         let display_step = u64::try_from(DEFAULT_BULK_LOAD_BATCH_SIZE).unwrap();
-        if new_counter % display_step > *done_and_displayed % display_step {
+        if new_counter / display_step > *done_and_displayed / display_step {
             for hook in &self.hooks {
                 hook(new_counter);
             }
