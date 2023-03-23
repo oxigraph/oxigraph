@@ -30,9 +30,9 @@ digest = "0.10"
 regex = "1"
 oxilangtag = "0.1"
 oxiri = "0.2"
-rio_api = "0.8"
-rio_turtle = "0.8"
-rio_xml = "0.8"
+rio_api = { git = "https://github.com/oxigraph/rio", branch = "buffer-bound" }
+rio_turtle = { git = "https://github.com/oxigraph/rio", branch = "buffer-bound" }
+rio_xml = { git = "https://github.com/oxigraph/rio", branch = "buffer-bound" }
 hex = "0.4"
 siphasher = "0.3"
 lazy_static = "1"
