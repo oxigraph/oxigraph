@@ -127,6 +127,11 @@ impl PyNamedNode {
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
         slf
     }
+
+    #[classattr]
+    fn __match_args__() -> (&'static str,) {
+        ("value",)
+    }
 }
 
 /// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_.
@@ -249,6 +254,11 @@ impl PyBlankNode {
     #[allow(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
         slf
+    }
+
+    #[classattr]
+    fn __match_args__() -> (&'static str,) {
+        ("value",)
     }
 }
 
@@ -408,6 +418,11 @@ impl PyLiteral {
     #[allow(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
         slf
+    }
+
+    #[classattr]
+    fn __match_args__() -> (&'static str,) {
+        ("value",)
     }
 }
 
@@ -742,6 +757,11 @@ impl PyTriple {
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
         slf
     }
+
+    #[classattr]
+    fn __match_args__() -> (&'static str, &'static str, &'static str) {
+        ("subject", "predicate", "object")
+    }
 }
 
 #[derive(FromPyObject)]
@@ -975,6 +995,11 @@ impl PyQuad {
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
         slf
     }
+
+    #[classattr]
+    fn __match_args__() -> (&'static str, &'static str, &'static str, &'static str) {
+        ("subject", "predicate", "object", "graph_name")
+    }
 }
 
 /// A SPARQL query variable.
@@ -1062,6 +1087,11 @@ impl PyVariable {
     #[allow(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
         slf
+    }
+
+    #[classattr]
+    fn __match_args__() -> (&'static str,) {
+        ("value",)
     }
 }
 

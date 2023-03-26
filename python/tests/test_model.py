@@ -1,5 +1,6 @@
 import copy
 import pickle
+import sys
 import unittest
 
 from pyoxigraph import (
@@ -15,6 +16,22 @@ from pyoxigraph import (
 XSD_STRING = NamedNode("http://www.w3.org/2001/XMLSchema#string")
 XSD_INTEGER = NamedNode("http://www.w3.org/2001/XMLSchema#integer")
 RDF_LANG_STRING = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+
+
+def match_works(test: unittest.TestCase, matched_value: str, constraint: str) -> None:
+    """Hack for Python < 3.10 compatibility"""
+    if sys.version_info < (3, 10):
+        return test.skipTest("match has been introduced by Python 3.10")
+    found = True
+    exec(
+        f"""
+match {matched_value}:
+    case {constraint}:
+        found = True
+"""
+    )
+    test.assertTrue(found)
+    return None
 
 
 class TestNamedNode(unittest.TestCase):
@@ -33,6 +50,12 @@ class TestNamedNode(unittest.TestCase):
         self.assertEqual(pickle.loads(pickle.dumps(node)), node)
         self.assertEqual(copy.copy(node), node)
         self.assertEqual(copy.deepcopy(node), node)
+
+    def test_basic_match(self) -> None:
+        match_works(self, 'NamedNode("http://foo")', 'NamedNode("http://foo")')
+
+    def test_wildcard_match(self) -> None:
+        match_works(self, 'NamedNode("http://foo")', "NamedNode(x)")
 
 
 class TestBlankNode(unittest.TestCase):
@@ -59,6 +82,12 @@ class TestBlankNode(unittest.TestCase):
         self.assertEqual(pickle.loads(pickle.dumps(auto)), auto)
         self.assertEqual(copy.copy(auto), auto)
         self.assertEqual(copy.deepcopy(auto), auto)
+
+    def test_basic_match(self) -> None:
+        match_works(self, 'BlankNode("foo")', 'BlankNode("foo")')
+
+    def test_wildcard_match(self) -> None:
+        match_works(self, 'BlankNode("foo")', "BlankNode(x)")
 
 
 class TestLiteral(unittest.TestCase):
@@ -107,6 +136,22 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(pickle.loads(pickle.dumps(number)), number)
         self.assertEqual(copy.copy(number), number)
         self.assertEqual(copy.deepcopy(number), number)
+
+    def test_basic_match(self) -> None:
+        match_works(
+            self, 'Literal("foo", language="en")', 'Literal("foo", language="en")'
+        )
+        match_works(
+            self,
+            'Literal("1", datatype=XSD_INTEGER)',
+            'Literal("1", datatype=NamedNode("http://www.w3.org/2001/XMLSchema#integer"))',
+        )
+
+    def test_wildcard_match(self) -> None:
+        match_works(self, 'Literal("foo", language="en")', "Literal(v, language=l)")
+        match_works(
+            self, 'Literal("1", datatype=XSD_INTEGER)', "Literal(v, datatype=d)"
+        )
 
 
 class TestTriple(unittest.TestCase):
@@ -194,6 +239,14 @@ class TestTriple(unittest.TestCase):
         self.assertEqual(copy.copy(triple), triple)
         self.assertEqual(copy.deepcopy(triple), triple)
 
+    def test_match(self) -> None:
+        match_works(
+            self,
+            'Triple(NamedNode("http://example.com/s"), NamedNode("http://example.com/p"), '
+            'NamedNode("http://example.com/o"))',
+            'Triple(NamedNode("http://example.com/s"), NamedNode(p), o)',
+        )
+
 
 class TestDefaultGraph(unittest.TestCase):
     def test_equal(self) -> None:
@@ -204,6 +257,9 @@ class TestDefaultGraph(unittest.TestCase):
         self.assertEqual(pickle.loads(pickle.dumps(DefaultGraph())), DefaultGraph())
         self.assertEqual(copy.copy(DefaultGraph()), DefaultGraph())
         self.assertEqual(copy.deepcopy(DefaultGraph()), DefaultGraph())
+
+    def test_match(self) -> None:
+        match_works(self, "DefaultGraph()", "DefaultGraph()")
 
 
 class TestQuad(unittest.TestCase):
@@ -287,6 +343,14 @@ class TestQuad(unittest.TestCase):
         self.assertEqual(copy.copy(quad), quad)
         self.assertEqual(copy.deepcopy(quad), quad)
 
+    def test_match(self) -> None:
+        match_works(
+            self,
+            'Quad(NamedNode("http://example.com/s"), NamedNode("http://example.com/p"), '
+            'NamedNode("http://example.com/o"), NamedNode("http://example.com/g"))',
+            'Quad(NamedNode("http://example.com/s"), NamedNode(p), o, NamedNode("http://example.com/g"))',
+        )
+
 
 class TestVariable(unittest.TestCase):
     def test_constructor(self) -> None:
@@ -304,6 +368,12 @@ class TestVariable(unittest.TestCase):
         self.assertEqual(pickle.loads(pickle.dumps(v)), v)
         self.assertEqual(copy.copy(v), v)
         self.assertEqual(copy.deepcopy(v), v)
+
+    def test_basic_match(self) -> None:
+        match_works(self, 'Variable("foo")', 'Variable("foo")')
+
+    def test_wildcard_match(self) -> None:
+        match_works(self, 'Variable("foo")', "Variable(x)")
 
 
 if __name__ == "__main__":
