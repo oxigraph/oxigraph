@@ -106,6 +106,7 @@ def class_stubs(
     attributes: List[ast.AST] = []
     methods: List[ast.AST] = []
     magic_methods: List[ast.AST] = []
+    constants: List[ast.AST] = []
     for member_name, member_value in inspect.getmembers(cls_def):
         current_element_path = [*element_path, member_name]
         if member_name == "__init__":
@@ -147,6 +148,21 @@ def class_stubs(
                     in_class=True,
                 )
             )
+        elif member_name == "__match_args__":
+            constants.append(
+                ast.AnnAssign(
+                    target=ast.Name(id=member_name, ctx=AST_STORE),
+                    annotation=ast.Subscript(
+                        value=_path_to_type("typing", "Tuple"),
+                        slice=ast.Tuple(
+                            elts=[_path_to_type("str"), ast.Ellipsis()], ctx=AST_LOAD
+                        ),
+                        ctx=AST_LOAD,
+                    ),
+                    value=ast.Constant(member_value),
+                    simple=1,
+                )
+            )
         else:
             logging.warning(
                 f"Unsupported member {member_name} of class {'.'.join(element_path)}"
@@ -163,6 +179,7 @@ def class_stubs(
             + attributes
             + methods
             + magic_methods
+            + constants
         )
         or [AST_ELLIPSIS],
         decorator_list=[_path_to_type("typing", "final")],
