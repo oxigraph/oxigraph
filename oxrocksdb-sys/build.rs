@@ -32,29 +32,42 @@ fn bindgen_rocksdb() {
 
 fn build_rocksdb() {
     let target = var("TARGET").unwrap();
+    let speedb = cfg!(feature = "speedb");
 
     let mut config = cc::Build::new();
     config
         .cpp(true)
-        .include("rocksdb/include/")
-        .include("rocksdb/")
+        .include(if speedb {
+            "speedb/include/"
+        } else {
+            "rocksdb/include/"
+        })
+        .include(if speedb { "speedb/" } else { "rocksdb/" })
         .file("api/c.cc")
         .file("api/build_version.cc")
         .define("NDEBUG", Some("1"))
         .define("LZ4", Some("1"))
         .include("lz4/lib/");
 
-    let mut lib_sources = include_str!("rocksdb/src.mk")
-        .split_once("LIB_SOURCES =")
-        .unwrap()
-        .1
-        .split_once("ifeq")
-        .unwrap()
-        .0
-        .split('\\')
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .collect::<Vec<_>>();
+    let mut lib_sources = if speedb {
+        include_str!("speedb/src.mk")
+    } else {
+        include_str!("rocksdb/src.mk")
+    }
+    .split_once("LIB_SOURCES =")
+    .unwrap()
+    .1
+    .split_once("ifeq")
+    .unwrap()
+    .0
+    .split('\\')
+    .map(str::trim)
+    .filter(|p| !p.is_empty())
+    .collect::<Vec<_>>();
+
+    if speedb {
+        config.define("SPEEDB", None);
+    }
 
     if target.contains("x86_64") {
         // This is needed to enable hardware CRC32C. Technically, SSE 4.2 is
@@ -177,7 +190,11 @@ fn build_rocksdb() {
         if file == "db/c.cc" || file == "util/build_version.cc" {
             continue;
         }
-        config.file(&format!("rocksdb/{file}"));
+        config.file(&if speedb {
+            format!("speedb/{file}")
+        } else {
+            format!("rocksdb/{file}")
+        });
     }
     config.compile("rocksdb");
 }

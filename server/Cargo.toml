@@ -12,6 +12,9 @@ Oxigraph SPARQL HTTP server
 edition = "2021"
 rust-version = "1.60"
 
+[features]
+speedb = ["oxigraph/speedb"]
+
 [dependencies]
 anyhow = "1"
 oxhttp = { version = "0.1", features = ["rayon"] }

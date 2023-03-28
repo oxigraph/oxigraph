@@ -13,3 +13,6 @@
 [submodule "oxrocksdb-sys/lz4"]
 	path = oxrocksdb-sys/lz4
 	url = https://github.com/lz4/lz4.git
+[submodule "oxrocksdb-sys/speedb"]
+	path = oxrocksdb-sys/speedb
+	url = https://github.com/oxigraph/speedb.git

@@ -13,6 +13,9 @@ rust-version = "1.60"
 build = "build.rs"
 links = "rocksdb"
 
+[features]
+speedb = []
+
 [dependencies]
 libc = "0.2"
 
