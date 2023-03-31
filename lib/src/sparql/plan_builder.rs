@@ -37,7 +37,10 @@ impl<'a> PlanBuilder<'a> {
         .build_for_graph_pattern(
             pattern,
             &mut variables,
-            &PatternValue::Constant(EncodedTerm::DefaultGraph),
+            &PatternValue::Constant(PlanTerm {
+                encoded: EncodedTerm::DefaultGraph,
+                plain: PatternValueConstant::DefaultGraph,
+            }),
         )?;
         let plan = if !without_optimizations && !is_cardinality_meaningful {
             // let's reduce downstream task.
@@ -125,13 +128,13 @@ impl<'a> PlanBuilder<'a> {
                     PlanNode::HashLeftJoin {
                         left: Box::new(left),
                         right: Box::new(right),
-                        expression: Box::new(
-                            expression
-                                .as_ref()
-                                .map_or(Ok(PlanExpression::Constant(true.into())), |e| {
-                                    self.build_for_expression(e, variables, graph_name)
-                                })?,
-                        ),
+                        expression: Box::new(expression.as_ref().map_or(
+                            Ok(PlanExpression::Literal(PlanTerm {
+                                encoded: true.into(),
+                                plain: true.into(),
+                            })),
+                            |e| self.build_for_expression(e, variables, graph_name),
+                        )?),
                     }
                 }
             }
@@ -171,7 +174,7 @@ impl<'a> PlanBuilder<'a> {
                 expression,
             } => PlanNode::Extend {
                 child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
-                position: variable_key(variables, variable),
+                variable: build_plan_variable(variables, variable),
                 expression: Box::new(self.build_for_expression(expression, variables, graph_name)?),
             },
             GraphPattern::Minus { left, right } => PlanNode::AntiJoin {
@@ -200,14 +203,18 @@ impl<'a> PlanBuilder<'a> {
                 aggregates,
             } => PlanNode::Aggregate {
                 child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
-                key_variables: Rc::new(by.iter().map(|k| variable_key(variables, k)).collect()),
+                key_variables: Rc::new(
+                    by.iter()
+                        .map(|k| build_plan_variable(variables, k))
+                        .collect(),
+                ),
                 aggregates: Rc::new(
                     aggregates
                         .iter()
                         .map(|(v, a)| {
                             Ok((
                                 self.build_for_aggregate(a, variables, graph_name)?,
-                                variable_key(variables, v),
+                                build_plan_variable(variables, v),
                             ))
                         })
                         .collect::<Result<Vec<_>, EvaluationError>>()?,
@@ -216,9 +223,36 @@ impl<'a> PlanBuilder<'a> {
             GraphPattern::Values {
                 variables: table_variables,
                 bindings,
-            } => PlanNode::StaticBindings {
-                tuples: self.encode_bindings(table_variables, bindings, variables),
-            },
+            } => {
+                let bindings_variables = table_variables
+                    .iter()
+                    .map(|v| build_plan_variable(variables, v))
+                    .collect::<Vec<_>>();
+                let encoded_tuples = bindings
+                    .iter()
+                    .map(|row| {
+                        let mut result = EncodedTuple::with_capacity(variables.len());
+                        for (key, value) in row.iter().enumerate() {
+                            if let Some(term) = value {
+                                result.set(
+                                    bindings_variables[key].encoded,
+                                    match term {
+                                        GroundTerm::NamedNode(node) => self.build_term(node),
+                                        GroundTerm::Literal(literal) => self.build_term(literal),
+                                        GroundTerm::Triple(triple) => self.build_triple(triple),
+                                    },
+                                );
+                            }
+                        }
+                        result
+                    })
+                    .collect();
+                PlanNode::StaticBindings {
+                    encoded_tuples,
+                    variables: bindings_variables,
+                    plain_bindings: bindings.clone(),
+                }
+            }
             GraphPattern::OrderBy { inner, expression } => {
                 let condition: Result<Vec<_>, EvaluationError> = expression
                     .iter()
@@ -242,7 +276,7 @@ impl<'a> PlanBuilder<'a> {
             } => {
                 let mut inner_variables = projection.clone();
                 let inner_graph_name =
-                    Self::convert_pattern_value_id(graph_name, variables, &mut inner_variables);
+                    Self::convert_pattern_value_id(graph_name, &mut inner_variables);
                 PlanNode::Project {
                     child: Box::new(self.build_for_graph_pattern(
                         inner,
@@ -254,7 +288,13 @@ impl<'a> PlanBuilder<'a> {
                             .iter()
                             .enumerate()
                             .map(|(new_variable, variable)| {
-                                (new_variable, variable_key(variables, variable))
+                                (
+                                    PlanVariable {
+                                        encoded: new_variable,
+                                        plain: variable.clone(),
+                                    },
+                                    build_plan_variable(variables, variable),
+                                )
                             })
                             .collect(),
                     ),
@@ -306,13 +346,18 @@ impl<'a> PlanBuilder<'a> {
             })
             .reduce(|a, b| self.new_join(a, b))
             .unwrap_or_else(|| PlanNode::StaticBindings {
-                tuples: vec![EncodedTuple::with_capacity(variables.len())],
+                encoded_tuples: vec![EncodedTuple::with_capacity(variables.len())],
+                variables: Vec::new(),
+                plain_bindings: vec![Vec::new()],
             })
     }
 
     fn build_for_path(&self, path: &PropertyPathExpression) -> PlanPropertyPath {
         match path {
-            PropertyPathExpression::NamedNode(p) => PlanPropertyPath::Path(self.build_term(p)),
+            PropertyPathExpression::NamedNode(p) => PlanPropertyPath::Path(PlanTerm {
+                encoded: self.build_term(p),
+                plain: p.clone(),
+            }),
             PropertyPathExpression::Reverse(p) => {
                 PlanPropertyPath::Reverse(Rc::new(self.build_for_path(p)))
             }
@@ -333,9 +378,16 @@ impl<'a> PlanBuilder<'a> {
             PropertyPathExpression::ZeroOrOne(p) => {
                 PlanPropertyPath::ZeroOrOne(Rc::new(self.build_for_path(p)))
             }
-            PropertyPathExpression::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
-                Rc::new(p.iter().map(|p| self.build_term(p)).collect()),
-            ),
+            PropertyPathExpression::NegatedPropertySet(p) => {
+                PlanPropertyPath::NegatedPropertySet(Rc::new(
+                    p.iter()
+                        .map(|p| PlanTerm {
+                            encoded: self.build_term(p),
+                            plain: p.clone(),
+                        })
+                        .collect(),
+                ))
+            }
         }
     }
 
@@ -346,9 +398,15 @@ impl<'a> PlanBuilder<'a> {
         graph_name: &PatternValue,
     ) -> Result<PlanExpression, EvaluationError> {
         Ok(match expression {
-            Expression::NamedNode(node) => PlanExpression::Constant(self.build_term(node)),
-            Expression::Literal(l) => PlanExpression::Constant(self.build_term(l)),
-            Expression::Variable(v) => PlanExpression::Variable(variable_key(variables, v)),
+            Expression::NamedNode(node) => PlanExpression::NamedNode(PlanTerm {
+                encoded: self.build_term(node),
+                plain: node.clone(),
+            }),
+            Expression::Literal(l) => PlanExpression::Literal(PlanTerm {
+                encoded: self.build_term(l),
+                plain: l.clone(),
+            }),
+            Expression::Variable(v) => PlanExpression::Variable(build_plan_variable(variables, v)),
             Expression::Or(a, b) => PlanExpression::Or(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
@@ -393,7 +451,12 @@ impl<'a> PlanBuilder<'a> {
                     .reduce(|a: Result<_, EvaluationError>, b| {
                         Ok(PlanExpression::Or(Box::new(a?), Box::new(b?)))
                     })
-                    .unwrap_or_else(|| Ok(PlanExpression::Constant(false.into())))?
+                    .unwrap_or_else(|| {
+                        Ok(PlanExpression::Literal(PlanTerm {
+                            encoded: false.into(),
+                            plain: false.into(),
+                        }))
+                    })?
             }
             Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
@@ -824,7 +887,7 @@ impl<'a> PlanBuilder<'a> {
                     }
                 }
             },
-            Expression::Bound(v) => PlanExpression::Bound(variable_key(variables, v)),
+            Expression::Bound(v) => PlanExpression::Bound(build_plan_variable(variables, v)),
             Expression::If(a, b, c) => PlanExpression::If(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
@@ -883,17 +946,23 @@ impl<'a> PlanBuilder<'a> {
     ) -> PatternValue {
         match term_or_variable {
             TermPattern::Variable(variable) => {
-                PatternValue::Variable(variable_key(variables, variable))
+                PatternValue::Variable(build_plan_variable(variables, variable))
             }
-            TermPattern::NamedNode(node) => PatternValue::Constant(self.build_term(node)),
+            TermPattern::NamedNode(node) => PatternValue::Constant(PlanTerm {
+                encoded: self.build_term(node),
+                plain: PatternValueConstant::NamedNode(node.clone()),
+            }),
             TermPattern::BlankNode(bnode) => {
-                PatternValue::Variable(variable_key(
+                PatternValue::Variable(build_plan_variable(
                     variables,
                     &Variable::new_unchecked(bnode.as_str()),
                 ))
                 //TODO: very bad hack to convert bnode to variable
             }
-            TermPattern::Literal(literal) => PatternValue::Constant(self.build_term(literal)),
+            TermPattern::Literal(literal) => PatternValue::Constant(PlanTerm {
+                encoded: self.build_term(literal),
+                plain: PatternValueConstant::Literal(literal.clone()),
+            }),
             TermPattern::Triple(triple) => {
                 match (
                     self.pattern_value_from_term_or_variable(&triple.subject, variables),
@@ -901,19 +970,48 @@ impl<'a> PlanBuilder<'a> {
                     self.pattern_value_from_term_or_variable(&triple.object, variables),
                 ) {
                     (
-                        PatternValue::Constant(subject),
-                        PatternValue::Constant(predicate),
-                        PatternValue::Constant(object),
-                    ) => PatternValue::Constant(
-                        EncodedTriple {
-                            subject,
-                            predicate,
-                            object,
+                        PatternValue::Constant(PlanTerm {
+                            encoded: encoded_subject,
+                            plain: plain_subject,
+                        }),
+                        PatternValue::Constant(PlanTerm {
+                            encoded: encoded_predicate,
+                            plain: plain_predicate,
+                        }),
+                        PatternValue::Constant(PlanTerm {
+                            encoded: encoded_object,
+                            plain: plain_object,
+                        }),
+                    ) => PatternValue::Constant(PlanTerm {
+                        encoded: EncodedTriple {
+                            subject: encoded_subject,
+                            predicate: encoded_predicate,
+                            object: encoded_object,
                         }
                         .into(),
-                    ),
+                        plain: PatternValueConstant::Triple(Box::new(Triple {
+                            subject: match plain_subject {
+                                PatternValueConstant::NamedNode(s) => s.into(),
+                                PatternValueConstant::Triple(s) => s.into(),
+                                PatternValueConstant::Literal(_)
+                                | PatternValueConstant::DefaultGraph => unreachable!(),
+                            },
+                            predicate: match plain_predicate {
+                                PatternValueConstant::NamedNode(s) => s,
+                                PatternValueConstant::Literal(_)
+                                | PatternValueConstant::Triple(_)
+                                | PatternValueConstant::DefaultGraph => unreachable!(),
+                            },
+                            object: match plain_object {
+                                PatternValueConstant::NamedNode(s) => s.into(),
+                                PatternValueConstant::Literal(s) => s.into(),
+                                PatternValueConstant::Triple(s) => s.into(),
+                                PatternValueConstant::DefaultGraph => unreachable!(),
+                            },
+                        })),
+                    }),
                     (subject, predicate, object) => {
-                        PatternValue::Triple(Box::new(TriplePatternValue {
+                        PatternValue::TriplePattern(Box::new(TriplePatternValue {
                             subject,
                             predicate,
                             object,
@@ -930,43 +1028,14 @@ impl<'a> PlanBuilder<'a> {
         variables: &mut Vec<Variable>,
     ) -> PatternValue {
         match named_node_or_variable {
-            NamedNodePattern::NamedNode(named_node) => {
-                PatternValue::Constant(self.build_term(named_node))
-            }
+            NamedNodePattern::NamedNode(named_node) => PatternValue::Constant(PlanTerm {
+                encoded: self.build_term(named_node),
+                plain: PatternValueConstant::NamedNode(named_node.clone()),
+            }),
             NamedNodePattern::Variable(variable) => {
-                PatternValue::Variable(variable_key(variables, variable))
+                PatternValue::Variable(build_plan_variable(variables, variable))
             }
         }
-    }
-
-    fn encode_bindings(
-        &self,
-        table_variables: &[Variable],
-        rows: &[Vec<Option<GroundTerm>>],
-        variables: &mut Vec<Variable>,
-    ) -> Vec<EncodedTuple> {
-        let bindings_variables_keys = table_variables
-            .iter()
-            .map(|v| variable_key(variables, v))
-            .collect::<Vec<_>>();
-        rows.iter()
-            .map(move |row| {
-                let mut result = EncodedTuple::with_capacity(variables.len());
-                for (key, value) in row.iter().enumerate() {
-                    if let Some(term) = value {
-                        result.set(
-                            bindings_variables_keys[key],
-                            match term {
-                                GroundTerm::NamedNode(node) => self.build_term(node),
-                                GroundTerm::Literal(literal) => self.build_term(literal),
-                                GroundTerm::Triple(triple) => self.build_triple(triple),
-                            },
-                        );
-                    }
-                }
-                result
-            })
-            .collect()
     }
 
     fn build_for_aggregate(
@@ -1059,15 +1128,20 @@ impl<'a> PlanBuilder<'a> {
     ) -> TripleTemplateValue {
         match term_or_variable {
             TermPattern::Variable(variable) => {
-                TripleTemplateValue::Variable(variable_key(variables, variable))
+                TripleTemplateValue::Variable(build_plan_variable(variables, variable))
             }
-            TermPattern::NamedNode(node) => TripleTemplateValue::Constant(self.build_term(node)),
-            TermPattern::BlankNode(bnode) => {
-                TripleTemplateValue::BlankNode(bnode_key(bnodes, bnode))
-            }
-            TermPattern::Literal(literal) => {
-                TripleTemplateValue::Constant(self.build_term(literal))
-            }
+            TermPattern::NamedNode(node) => TripleTemplateValue::Constant(PlanTerm {
+                encoded: self.build_term(node),
+                plain: node.clone().into(),
+            }),
+            TermPattern::BlankNode(bnode) => TripleTemplateValue::BlankNode(PlanVariable {
+                encoded: bnode_key(bnodes, bnode),
+                plain: bnode.clone(),
+            }),
+            TermPattern::Literal(literal) => TripleTemplateValue::Constant(PlanTerm {
+                encoded: self.build_term(literal),
+                plain: literal.clone().into(),
+            }),
             TermPattern::Triple(triple) => match (
                 self.template_value_from_term_or_variable(&triple.subject, variables, bnodes),
                 self.template_value_from_named_node_or_variable(&triple.predicate, variables),
@@ -1077,14 +1151,30 @@ impl<'a> PlanBuilder<'a> {
                     TripleTemplateValue::Constant(subject),
                     TripleTemplateValue::Constant(predicate),
                     TripleTemplateValue::Constant(object),
-                ) => TripleTemplateValue::Constant(
-                    EncodedTriple {
-                        subject,
-                        predicate,
-                        object,
+                ) => TripleTemplateValue::Constant(PlanTerm {
+                    encoded: EncodedTriple {
+                        subject: subject.encoded,
+                        predicate: predicate.encoded,
+                        object: object.encoded,
                     }
                     .into(),
-                ),
+                    plain: Triple {
+                        subject: match subject.plain {
+                            Term::NamedNode(node) => node.into(),
+                            Term::BlankNode(node) => node.into(),
+                            Term::Literal(_) => unreachable!(),
+                            Term::Triple(node) => node.into(),
+                        },
+                        predicate: match predicate.plain {
+                            Term::NamedNode(node) => node,
+                            Term::BlankNode(_) | Term::Literal(_) | Term::Triple(_) => {
+                                unreachable!()
+                            }
+                        },
+                        object: object.plain,
+                    }
+                    .into(),
+                }),
                 (subject, predicate, object) => {
                     TripleTemplateValue::Triple(Box::new(TripleTemplate {
                         subject,
@@ -1103,35 +1193,34 @@ impl<'a> PlanBuilder<'a> {
     ) -> TripleTemplateValue {
         match named_node_or_variable {
             NamedNodePattern::Variable(variable) => {
-                TripleTemplateValue::Variable(variable_key(variables, variable))
+                TripleTemplateValue::Variable(build_plan_variable(variables, variable))
             }
-            NamedNodePattern::NamedNode(term) => {
-                TripleTemplateValue::Constant(self.build_term(term))
-            }
+            NamedNodePattern::NamedNode(term) => TripleTemplateValue::Constant(PlanTerm {
+                encoded: self.build_term(term),
+                plain: term.clone().into(),
+            }),
         }
     }
 
-    fn convert_pattern_value_id(
-        from_value: &PatternValue,
-        from: &[Variable],
-        to: &mut Vec<Variable>,
-    ) -> PatternValue {
+    fn convert_pattern_value_id(from_value: &PatternValue, to: &mut Vec<Variable>) -> PatternValue {
         match from_value {
-            PatternValue::Constant(v) => PatternValue::Constant(v.clone()),
+            PatternValue::Constant(c) => PatternValue::Constant(c.clone()),
             PatternValue::Variable(from_id) => {
-                PatternValue::Variable(Self::convert_variable_id(*from_id, from, to))
+                PatternValue::Variable(Self::convert_plan_variable(from_id, to))
             }
-            PatternValue::Triple(triple) => PatternValue::Triple(Box::new(TriplePatternValue {
-                subject: Self::convert_pattern_value_id(&triple.subject, from, to),
-                predicate: Self::convert_pattern_value_id(&triple.predicate, from, to),
-                object: Self::convert_pattern_value_id(&triple.object, from, to),
-            })),
+            PatternValue::TriplePattern(triple) => {
+                PatternValue::TriplePattern(Box::new(TriplePatternValue {
+                    subject: Self::convert_pattern_value_id(&triple.subject, to),
+                    predicate: Self::convert_pattern_value_id(&triple.predicate, to),
+                    object: Self::convert_pattern_value_id(&triple.object, to),
+                }))
+            }
         }
     }
 
-    fn convert_variable_id(from_id: usize, from: &[Variable], to: &mut Vec<Variable>) -> usize {
-        if let Some(to_id) = to.iter().enumerate().find_map(|(to_id, var)| {
-            if *var == from[from_id] {
+    fn convert_plan_variable(from_variable: &PlanVariable, to: &mut Vec<Variable>) -> PlanVariable {
+        let encoded = if let Some(to_id) = to.iter().enumerate().find_map(|(to_id, var)| {
+            if *var == from_variable.plain {
                 Some(to_id)
             } else {
                 None
@@ -1141,6 +1230,10 @@ impl<'a> PlanBuilder<'a> {
         } else {
             to.push(Variable::new_unchecked(format!("{:x}", random::<u128>())));
             to.len() - 1
+        };
+        PlanVariable {
+            encoded,
+            plain: from_variable.plain.clone(),
         }
     }
 
@@ -1228,8 +1321,8 @@ impl<'a> PlanBuilder<'a> {
                 let mut child_bound = BTreeSet::new();
                 Self::add_left_join_problematic_variables(child, &mut child_bound);
                 for (child_i, output_i) in mapping.iter() {
-                    if child_bound.contains(child_i) {
-                        set.insert(*output_i);
+                    if child_bound.contains(&child_i.encoded) {
+                        set.insert(output_i.encoded);
                     }
                 }
             }
@@ -1238,10 +1331,10 @@ impl<'a> PlanBuilder<'a> {
                 aggregates,
                 ..
             } => {
-                set.extend(key_variables.iter());
+                set.extend(key_variables.iter().map(|v| v.encoded));
                 //TODO: This is too harsh
                 for (_, var) in aggregates.iter() {
-                    set.insert(*var);
+                    set.insert(var.encoded);
                 }
             }
         }
@@ -1371,21 +1464,21 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::Extend {
                 child,
                 expression,
-                position,
+                variable: position,
             } => {
                 //TODO: handle the case where the filter generates an expression variable
                 if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
                     PlanNode::Extend {
                         child: Box::new(self.push_filter(child, filter)),
                         expression,
-                        position,
+                        variable: position,
                     }
                 } else {
                     PlanNode::Filter {
                         child: Box::new(PlanNode::Extend {
                             child,
                             expression,
-                            position,
+                            variable: position,
                         }),
                         expression: filter,
                     }
@@ -1439,13 +1532,17 @@ impl<'a> PlanBuilder<'a> {
     }
 }
 
-fn variable_key(variables: &mut Vec<Variable>, variable: &Variable) -> usize {
-    match slice_key(variables, variable) {
+fn build_plan_variable(variables: &mut Vec<Variable>, variable: &Variable) -> PlanVariable {
+    let encoded = match slice_key(variables, variable) {
         Some(key) => key,
         None => {
             variables.push(variable.clone());
             variables.len() - 1
         }
+    };
+    PlanVariable {
+        plain: variable.clone(),
+        encoded,
     }
 }
 

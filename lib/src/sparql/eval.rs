@@ -1,6 +1,5 @@
 use crate::model::vocab::{rdf, xsd};
-use crate::model::{BlankNode, LiteralRef, NamedNodeRef};
-use crate::model::{NamedNode, Term, Triple};
+use crate::model::{BlankNode, LiteralRef, NamedNode, NamedNodeRef, Term, Triple};
 use crate::sparql::algebra::{Query, QueryDataset};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
@@ -110,8 +109,8 @@ impl SimpleEvaluator {
         node: &PlanNode,
     ) -> Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> {
         match node {
-            PlanNode::StaticBindings { tuples } => {
-                let tuples = tuples.clone();
+            PlanNode::StaticBindings { encoded_tuples, .. } => {
+                let tuples = encoded_tuples.clone();
                 Rc::new(move |from| {
                     Box::new(
                         tuples
@@ -162,10 +161,10 @@ impl SimpleEvaluator {
                 object,
                 graph_name,
             } => {
-                let subject = subject.clone();
-                let predicate = predicate.clone();
-                let object = object.clone();
-                let graph_name = graph_name.clone();
+                let subject = TupleSelector::from(subject);
+                let predicate = TupleSelector::from(predicate);
+                let object = TupleSelector::from(object);
+                let graph_name = TupleSelector::from(graph_name);
                 let dataset = self.dataset.clone();
                 Rc::new(move |from| {
                     let iter = dataset.encoded_quads_for_pattern(
@@ -197,10 +196,10 @@ impl SimpleEvaluator {
                 object,
                 graph_name,
             } => {
-                let subject = subject.clone();
+                let subject = TupleSelector::from(subject);
                 let path = path.clone();
-                let object = object.clone();
-                let graph_name = graph_name.clone();
+                let object = TupleSelector::from(object);
+                let graph_name = TupleSelector::from(graph_name);
                 let dataset = self.dataset.clone();
                 Rc::new(move |from| {
                     let input_subject = get_pattern_value(&subject, &from);
@@ -530,11 +529,11 @@ impl SimpleEvaluator {
             }
             PlanNode::Extend {
                 child,
-                position,
+                variable,
                 expression,
             } => {
                 let child = self.plan_evaluator(child);
-                let position = *position;
+                let position = variable.encoded;
                 let expression = self.expression_evaluator(expression);
                 Rc::new(move |from| {
                     let expression = expression.clone();
@@ -634,8 +633,8 @@ impl SimpleEvaluator {
                     let mapping = mapping.clone();
                     let mut input_tuple = EncodedTuple::with_capacity(mapping.len());
                     for (input_key, output_key) in mapping.iter() {
-                        if let Some(value) = from.get(*output_key) {
-                            input_tuple.set(*input_key, value.clone());
+                        if let Some(value) = from.get(output_key.encoded) {
+                            input_tuple.set(input_key.encoded, value.clone());
                         }
                     }
                     Box::new(child(input_tuple).filter_map(move |tuple| {
@@ -643,14 +642,15 @@ impl SimpleEvaluator {
                             Ok(tuple) => {
                                 let mut output_tuple = from.clone();
                                 for (input_key, output_key) in mapping.iter() {
-                                    if let Some(value) = tuple.get(*input_key) {
-                                        if let Some(existing_value) = output_tuple.get(*output_key)
+                                    if let Some(value) = tuple.get(input_key.encoded) {
+                                        if let Some(existing_value) =
+                                            output_tuple.get(output_key.encoded)
                                         {
                                             if existing_value != value {
                                                 return None; // Conflict
                                             }
                                         } else {
-                                            output_tuple.set(*output_key, value.clone());
+                                            output_tuple.set(output_key.encoded, value.clone());
                                         }
                                     }
                                 }
@@ -688,7 +688,7 @@ impl SimpleEvaluator {
                     })
                     .collect();
                 let accumulator_variables: Vec<_> =
-                    aggregates.iter().map(|(_, var)| *var).collect();
+                    aggregates.iter().map(|(_, var)| var.encoded).collect();
                 Rc::new(move |from| {
                     let tuple_size = from.capacity();
                     let key_variables = key_variables.clone();
@@ -707,7 +707,7 @@ impl SimpleEvaluator {
                             //TODO avoid copy for key?
                             let key = key_variables
                                 .iter()
-                                .map(|v| tuple.get(*v).cloned())
+                                .map(|v| tuple.get(v.encoded).cloned())
                                 .collect();
 
                             let key_accumulators =
@@ -739,7 +739,7 @@ impl SimpleEvaluator {
                                     let mut result = EncodedTuple::with_capacity(tuple_size);
                                     for (variable, value) in key_variables.iter().zip(key) {
                                         if let Some(value) = value {
-                                            result.set(*variable, value);
+                                            result.set(variable.encoded, value);
                                         }
                                     }
                                     for (accumulator, variable) in
@@ -765,7 +765,7 @@ impl SimpleEvaluator {
         variables: Rc<Vec<Variable>>,
         from: &EncodedTuple,
     ) -> Result<EncodedTuplesIterator, EvaluationError> {
-        let service_name = get_pattern_value(service_name, from)
+        let service_name = get_pattern_value(&service_name.into(), from)
             .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?;
         if let QueryResults::Solutions(iter) = self.service_handler.handle(
             self.dataset.decode_named_node(&service_name)?,
@@ -851,12 +851,16 @@ impl SimpleEvaluator {
         expression: &PlanExpression,
     ) -> Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
         match expression {
-            PlanExpression::Constant(t) => {
-                let t = t.clone();
+            PlanExpression::NamedNode(t) => {
+                let t = t.encoded.clone();
+                Rc::new(move |_| Some(t.clone()))
+            }
+            PlanExpression::Literal(t) => {
+                let t = t.encoded.clone();
                 Rc::new(move |_| Some(t.clone()))
             }
             PlanExpression::Variable(v) => {
-                let v = *v;
+                let v = v.encoded;
                 Rc::new(move |tuple| tuple.get(v).cloned())
             }
             PlanExpression::Exists(plan) => {
@@ -1158,7 +1162,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| datatype(&dataset, &e(tuple)?))
             }
             PlanExpression::Bound(v) => {
-                let v = *v;
+                let v = v.encoded;
                 Rc::new(move |tuple| Some(tuple.contains(v).into()))
             }
             PlanExpression::Iri(e) => {
@@ -2924,14 +2928,32 @@ impl NumericBinaryOperands {
     }
 }
 
-fn get_pattern_value<'a>(
-    selector: &'a PatternValue,
-    tuple: &'a EncodedTuple,
-) -> Option<EncodedTerm> {
+#[derive(Clone)]
+enum TupleSelector {
+    Constant(EncodedTerm),
+    Variable(usize),
+    TriplePattern(Rc<TripleTupleSelector>),
+}
+
+impl From<&PatternValue> for TupleSelector {
+    fn from(value: &PatternValue) -> Self {
+        match value {
+            PatternValue::Constant(c) => Self::Constant(c.encoded.clone()),
+            PatternValue::Variable(v) => Self::Variable(v.encoded),
+            PatternValue::TriplePattern(p) => Self::TriplePattern(Rc::new(TripleTupleSelector {
+                subject: (&p.subject).into(),
+                predicate: (&p.predicate).into(),
+                object: (&p.object).into(),
+            })),
+        }
+    }
+}
+
+fn get_pattern_value(selector: &TupleSelector, tuple: &EncodedTuple) -> Option<EncodedTerm> {
     match selector {
-        PatternValue::Constant(term) => Some(term.clone()),
-        PatternValue::Variable(v) => tuple.get(*v).cloned(),
-        PatternValue::Triple(triple) => Some(
+        TupleSelector::Constant(c) => Some(c.clone()),
+        TupleSelector::Variable(v) => tuple.get(*v).cloned(),
+        TupleSelector::TriplePattern(triple) => Some(
             EncodedTriple {
                 subject: get_pattern_value(&triple.subject, tuple)?,
                 predicate: get_pattern_value(&triple.predicate, tuple)?,
@@ -2942,20 +2964,26 @@ fn get_pattern_value<'a>(
     }
 }
 
+struct TripleTupleSelector {
+    subject: TupleSelector,
+    predicate: TupleSelector,
+    object: TupleSelector,
+}
+
 fn put_pattern_value(
-    selector: &PatternValue,
+    selector: &TupleSelector,
     value: EncodedTerm,
     tuple: &mut EncodedTuple,
 ) -> Option<()> {
     match selector {
-        PatternValue::Constant(c) => {
+        TupleSelector::Constant(c) => {
             if *c == value {
                 Some(())
             } else {
                 None
             }
         }
-        PatternValue::Variable(v) => {
+        TupleSelector::Variable(v) => {
             if let Some(old) = tuple.get(*v) {
                 if value == *old {
                     Some(())
@@ -2967,7 +2995,7 @@ fn put_pattern_value(
                 Some(())
             }
         }
-        PatternValue::Triple(triple) => {
+        TupleSelector::TriplePattern(triple) => {
             if let EncodedTerm::Triple(value) = value {
                 put_pattern_value(&triple.subject, value.subject.clone(), tuple)?;
                 put_pattern_value(&triple.predicate, value.predicate.clone(), tuple)?;
@@ -3022,7 +3050,12 @@ impl PathEvaluator {
         Ok(match path {
             PlanPropertyPath::Path(p) => self
                 .dataset
-                .encoded_quads_for_pattern(Some(start), Some(p), Some(end), Some(graph_name))
+                .encoded_quads_for_pattern(
+                    Some(start),
+                    Some(&p.encoded),
+                    Some(end),
+                    Some(graph_name),
+                )
                 .next()
                 .transpose()?
                 .is_some(),
@@ -3074,7 +3107,7 @@ impl PathEvaluator {
                 .encoded_quads_for_pattern(Some(start), None, Some(end), Some(graph_name))
                 .find_map(move |t| match t {
                     Ok(t) => {
-                        if ps.contains(&t.predicate) {
+                        if ps.iter().any(|p| p.encoded == t.predicate) {
                             None
                         } else {
                             Some(Ok(()))
@@ -3096,7 +3129,7 @@ impl PathEvaluator {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(Some(start), Some(p), Some(end), None)
+                    .encoded_quads_for_pattern(Some(start), Some(&p.encoded), Some(end), None)
                     .map(|t| Ok(t?.graph_name)),
             ),
             PlanPropertyPath::Reverse(p) => self.eval_closed_in_unknown_graph(p, end, start),
@@ -3178,7 +3211,7 @@ impl PathEvaluator {
                         .encoded_quads_for_pattern(Some(start), None, Some(end), None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.contains(&t.predicate) {
+                                if ps.iter().any(|p| p.encoded == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.graph_name))
@@ -3200,7 +3233,12 @@ impl PathEvaluator {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(Some(start), Some(p), None, Some(graph_name))
+                    .encoded_quads_for_pattern(
+                        Some(start),
+                        Some(&p.encoded),
+                        None,
+                        Some(graph_name),
+                    )
                     .map(|t| Ok(t?.object)),
             ),
             PlanPropertyPath::Reverse(p) => self.eval_to_in_graph(p, start, graph_name),
@@ -3253,7 +3291,7 @@ impl PathEvaluator {
                         .encoded_quads_for_pattern(Some(start), None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.contains(&t.predicate) {
+                                if ps.iter().any(|p| p.encoded == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.object))
@@ -3274,7 +3312,7 @@ impl PathEvaluator {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(Some(start), Some(p), None, None)
+                    .encoded_quads_for_pattern(Some(start), Some(&p.encoded), None, None)
                     .map(|t| {
                         let t = t?;
                         Ok((t.object, t.graph_name))
@@ -3340,7 +3378,7 @@ impl PathEvaluator {
                         .encoded_quads_for_pattern(Some(start), None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.contains(&t.predicate) {
+                                if ps.iter().any(|p| p.encoded == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.object, t.graph_name)))
@@ -3362,7 +3400,7 @@ impl PathEvaluator {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(p), Some(end), Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(&p.encoded), Some(end), Some(graph_name))
                     .map(|t| Ok(t?.subject)),
             ),
             PlanPropertyPath::Reverse(p) => self.eval_from_in_graph(p, end, graph_name),
@@ -3414,7 +3452,7 @@ impl PathEvaluator {
                         .encoded_quads_for_pattern(None, None, Some(end), Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.contains(&t.predicate) {
+                                if ps.iter().any(|p| p.encoded == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.subject))
@@ -3434,7 +3472,7 @@ impl PathEvaluator {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(p), Some(end), None)
+                    .encoded_quads_for_pattern(None, Some(&p.encoded), Some(end), None)
                     .map(|t| {
                         let t = t?;
                         Ok((t.subject, t.graph_name))
@@ -3500,7 +3538,7 @@ impl PathEvaluator {
                         .encoded_quads_for_pattern(Some(end), None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.contains(&t.predicate) {
+                                if ps.iter().any(|p| p.encoded == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.graph_name)))
@@ -3521,7 +3559,7 @@ impl PathEvaluator {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(p), None, Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(&p.encoded), None, Some(graph_name))
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
             PlanPropertyPath::Reverse(p) => Box::new(
@@ -3578,7 +3616,7 @@ impl PathEvaluator {
                         .encoded_quads_for_pattern(None, None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.contains(&t.predicate) {
+                                if ps.iter().any(|p| p.encoded == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.object)))
@@ -3599,7 +3637,7 @@ impl PathEvaluator {
         match path {
             PlanPropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(p), None, None)
+                    .encoded_quads_for_pattern(None, Some(&p.encoded), None, None)
                     .map(|t| t.map(|t| (t.subject, t.object, t.graph_name))),
             ),
             PlanPropertyPath::Reverse(p) => Box::new(
@@ -3653,7 +3691,7 @@ impl PathEvaluator {
                         .encoded_quads_for_pattern(None, None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.contains(&t.predicate) {
+                                if ps.iter().any(|p| p.encoded == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.object, t.graph_name)))
@@ -4081,13 +4119,13 @@ fn get_triple_template_value<'a>(
     bnodes: &'a mut Vec<EncodedTerm>,
 ) -> Option<EncodedTerm> {
     match selector {
-        TripleTemplateValue::Constant(term) => Some(term.clone()),
-        TripleTemplateValue::Variable(v) => tuple.get(*v).cloned(),
-        TripleTemplateValue::BlankNode(id) => {
-            if *id >= bnodes.len() {
-                bnodes.resize_with(*id + 1, new_bnode)
+        TripleTemplateValue::Constant(term) => Some(term.encoded.clone()),
+        TripleTemplateValue::Variable(v) => tuple.get(v.encoded).cloned(),
+        TripleTemplateValue::BlankNode(bnode) => {
+            if bnode.encoded >= bnodes.len() {
+                bnodes.resize_with(bnode.encoded + 1, new_bnode)
             }
-            Some(bnodes[*id].clone())
+            Some(bnodes[bnode.encoded].clone())
         }
         TripleTemplateValue::Triple(triple) => Some(
             EncodedTriple {
