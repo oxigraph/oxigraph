@@ -1,8 +1,9 @@
-use crate::model::NamedNode;
+use crate::model::{BlankNode, Literal, NamedNode, Term, Triple};
+use crate::sparql::Variable;
 use crate::storage::numeric_encoder::EncodedTerm;
-use oxrdf::Variable;
 use regex::Regex;
 use spargebra::algebra::GraphPattern;
+use spargebra::term::GroundTerm;
 use std::cmp::max;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,7 +12,9 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub enum PlanNode {
     StaticBindings {
-        tuples: Vec<EncodedTuple>,
+        encoded_tuples: Vec<EncodedTuple>,
+        variables: Vec<PlanVariable>,
+        plain_bindings: Vec<Vec<Option<GroundTerm>>>,
     },
     Service {
         service_name: PatternValue,
@@ -68,7 +71,7 @@ pub enum PlanNode {
     },
     Extend {
         child: Box<Self>,
-        position: usize,
+        variable: PlanVariable,
         expression: Box<PlanExpression>,
     },
     Sort {
@@ -92,13 +95,13 @@ pub enum PlanNode {
     },
     Project {
         child: Box<Self>,
-        mapping: Rc<Vec<(usize, usize)>>, // pairs of (variable key in child, variable key in output)
+        mapping: Rc<Vec<(PlanVariable, PlanVariable)>>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
         child: Box<Self>,
-        key_variables: Rc<Vec<usize>>,
-        aggregates: Rc<Vec<(PlanAggregation, usize)>>,
+        key_variables: Rc<Vec<PlanVariable>>,
+        aggregates: Rc<Vec<(PlanAggregation, PlanVariable)>>,
     },
 }
 
@@ -114,8 +117,8 @@ impl PlanNode {
 
     pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
-            Self::StaticBindings { tuples } => {
-                for tuple in tuples {
+            Self::StaticBindings { encoded_tuples, .. } => {
+                for tuple in encoded_tuples {
                     for (key, value) in tuple.iter().enumerate() {
                         if value.is_some() {
                             callback(key);
@@ -130,16 +133,16 @@ impl PlanNode {
                 graph_name,
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = predicate {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    callback(var.encoded);
                 }
             }
             Self::PathPattern {
@@ -149,13 +152,13 @@ impl PlanNode {
                 ..
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    callback(var.encoded);
                 }
             }
             Self::Filter { child, expression } => {
@@ -185,10 +188,10 @@ impl PlanNode {
             }
             Self::Extend {
                 child,
-                position,
+                variable,
                 expression,
             } => {
-                callback(*position);
+                callback(variable.encoded);
                 expression.lookup_used_variables(callback);
                 child.lookup_used_variables(callback);
             }
@@ -203,15 +206,15 @@ impl PlanNode {
                 ..
             } => {
                 if let PatternValue::Variable(v) = service_name {
-                    callback(*v);
+                    callback(v.encoded);
                 }
                 child.lookup_used_variables(callback);
             }
             Self::Project { mapping, child } => {
                 let child_bound = child.used_variables();
                 for (child_i, output_i) in mapping.iter() {
-                    if child_bound.contains(child_i) {
-                        callback(*output_i);
+                    if child_bound.contains(&child_i.encoded) {
+                        callback(output_i.encoded);
                     }
                 }
             }
@@ -221,10 +224,10 @@ impl PlanNode {
                 ..
             } => {
                 for var in key_variables.iter() {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 for (_, var) in aggregates.iter() {
-                    callback(*var);
+                    callback(var.encoded);
                 }
             }
         }
@@ -243,10 +246,10 @@ impl PlanNode {
 
     pub fn lookup_always_bound_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
-            Self::StaticBindings { tuples } => {
+            Self::StaticBindings { encoded_tuples, .. } => {
                 let mut variables = BTreeMap::default(); // value true iff always bound
-                let max_tuple_length = tuples.iter().map(|t| t.capacity()).fold(0, max);
-                for tuple in tuples {
+                let max_tuple_length = encoded_tuples.iter().map(|t| t.capacity()).fold(0, max);
+                for tuple in encoded_tuples {
                     for key in 0..max_tuple_length {
                         match variables.entry(key) {
                             Entry::Vacant(e) => {
@@ -273,16 +276,16 @@ impl PlanNode {
                 graph_name,
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = predicate {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    callback(var.encoded);
                 }
             }
             Self::PathPattern {
@@ -292,13 +295,13 @@ impl PlanNode {
                 ..
             } => {
                 if let PatternValue::Variable(var) = subject {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = object {
-                    callback(*var);
+                    callback(var.encoded);
                 }
                 if let PatternValue::Variable(var) = graph_name {
-                    callback(*var);
+                    callback(var.encoded);
                 }
             }
             Self::Filter { child, .. } => {
@@ -327,12 +330,15 @@ impl PlanNode {
             }
             Self::Extend {
                 child,
-                position,
+                variable,
                 expression,
             } => {
-                if matches!(expression.as_ref(), PlanExpression::Constant(_)) {
+                if matches!(
+                    expression.as_ref(),
+                    PlanExpression::NamedNode(_) | PlanExpression::Literal(_)
+                ) {
                     // TODO: more cases?
-                    callback(*position);
+                    callback(variable.encoded);
                 }
                 child.lookup_always_bound_variables(callback);
             }
@@ -351,8 +357,8 @@ impl PlanNode {
             Self::Project { mapping, child } => {
                 let child_bound = child.always_bound_variables();
                 for (child_i, output_i) in mapping.iter() {
-                    if child_bound.contains(child_i) {
-                        callback(*output_i);
+                    if child_bound.contains(&child_i.encoded) {
+                        callback(output_i.encoded);
                     }
                 }
             }
@@ -374,10 +380,24 @@ impl PlanNode {
 }
 
 #[derive(Debug, Clone)]
+pub struct PlanTerm<T> {
+    pub encoded: EncodedTerm,
+    pub plain: T,
+}
+
+#[derive(Debug, Clone)]
 pub enum PatternValue {
-    Constant(EncodedTerm),
-    Variable(usize),
-    Triple(Box<TriplePatternValue>),
+    Constant(PlanTerm<PatternValueConstant>),
+    Variable(PlanVariable),
+    TriplePattern(Box<TriplePatternValue>),
+}
+
+#[derive(Debug, Clone)]
+pub enum PatternValueConstant {
+    NamedNode(NamedNode),
+    Literal(Literal),
+    Triple(Box<Triple>),
+    DefaultGraph,
 }
 
 #[derive(Debug, Clone)]
@@ -388,9 +408,16 @@ pub struct TriplePatternValue {
 }
 
 #[derive(Debug, Clone)]
+pub struct PlanVariable<P = Variable> {
+    pub encoded: usize,
+    pub plain: P,
+}
+
+#[derive(Debug, Clone)]
 pub enum PlanExpression {
-    Constant(EncodedTerm),
-    Variable(usize),
+    NamedNode(PlanTerm<NamedNode>),
+    Literal(PlanTerm<Literal>),
+    Variable(PlanVariable),
     Exists(Rc<PlanNode>),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
@@ -410,7 +437,7 @@ pub enum PlanExpression {
     Lang(Box<Self>),
     LangMatches(Box<Self>, Box<Self>),
     Datatype(Box<Self>),
-    Bound(usize),
+    Bound(PlanVariable),
     Iri(Box<Self>),
     BNode(Option<Box<Self>>),
     Rand,
@@ -483,9 +510,10 @@ impl PlanExpression {
     pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
         match self {
             Self::Variable(v) | Self::Bound(v) => {
-                callback(*v);
+                callback(v.encoded);
             }
-            Self::Constant(_)
+            Self::NamedNode(_)
+            | Self::Literal(_)
             | Self::Rand
             | Self::Now
             | Self::Uuid
@@ -615,14 +643,14 @@ pub enum PlanAggregationFunction {
 
 #[derive(Debug, Clone)]
 pub enum PlanPropertyPath {
-    Path(EncodedTerm),
+    Path(PlanTerm<NamedNode>),
     Reverse(Rc<Self>),
     Sequence(Rc<Self>, Rc<Self>),
     Alternative(Rc<Self>, Rc<Self>),
     ZeroOrMore(Rc<Self>),
     OneOrMore(Rc<Self>),
     ZeroOrOne(Rc<Self>),
-    NegatedPropertySet(Rc<Vec<EncodedTerm>>),
+    NegatedPropertySet(Rc<Vec<PlanTerm<NamedNode>>>),
 }
 
 #[derive(Debug, Clone)]
@@ -640,9 +668,9 @@ pub struct TripleTemplate {
 
 #[derive(Debug, Clone)]
 pub enum TripleTemplateValue {
-    Constant(EncodedTerm),
-    BlankNode(usize),
-    Variable(usize),
+    Constant(PlanTerm<Term>),
+    BlankNode(PlanVariable<BlankNode>),
+    Variable(PlanVariable),
     Triple(Box<TripleTemplate>),
 }
 
