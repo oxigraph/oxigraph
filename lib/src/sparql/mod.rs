@@ -56,7 +56,7 @@ pub(crate) fn evaluate_query(
                 options.service_handler(),
                 Rc::new(options.custom_functions),
             )
-            .evaluate_select_plan(&plan, Rc::new(variables)))
+            .evaluate_select_plan(Rc::new(plan), Rc::new(variables)))
         }
         spargebra::Query::Ask {
             pattern, base_iri, ..
@@ -74,7 +74,7 @@ pub(crate) fn evaluate_query(
                 options.service_handler(),
                 Rc::new(options.custom_functions),
             )
-            .evaluate_ask_plan(&plan)
+            .evaluate_ask_plan(Rc::new(plan))
         }
         spargebra::Query::Construct {
             template,
@@ -102,7 +102,7 @@ pub(crate) fn evaluate_query(
                 options.service_handler(),
                 Rc::new(options.custom_functions),
             )
-            .evaluate_construct_plan(&plan, construct))
+            .evaluate_construct_plan(Rc::new(plan), construct))
         }
         spargebra::Query::Describe {
             pattern, base_iri, ..
@@ -120,7 +120,7 @@ pub(crate) fn evaluate_query(
                 options.service_handler(),
                 Rc::new(options.custom_functions),
             )
-            .evaluate_describe_plan(&plan))
+            .evaluate_describe_plan(Rc::new(plan)))
         }
     }
 }
