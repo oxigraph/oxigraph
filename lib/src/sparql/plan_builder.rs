@@ -46,7 +46,7 @@ impl<'a> PlanBuilder<'a> {
             // let's reduce downstream task.
             // TODO: avoid if already REDUCED or DISTINCT
             PlanNode::Reduced {
-                child: Box::new(plan),
+                child: Rc::new(plan),
             }
         } else {
             plan
@@ -113,21 +113,21 @@ impl<'a> PlanBuilder<'a> {
                     //We add the extra filter if needed
                     let right = if let Some(expr) = expression {
                         self.push_filter(
-                            Box::new(right),
+                            Rc::new(right),
                             Box::new(self.build_for_expression(expr, variables, graph_name)?),
                         )
                     } else {
                         right
                     };
                     PlanNode::ForLoopLeftJoin {
-                        left: Box::new(left),
-                        right: Box::new(right),
+                        left: Rc::new(left),
+                        right: Rc::new(right),
                         possible_problem_vars: Rc::new(possible_problem_vars.into_iter().collect()),
                     }
                 } else {
                     PlanNode::HashLeftJoin {
-                        left: Box::new(left),
-                        right: Box::new(right),
+                        left: Rc::new(left),
+                        right: Rc::new(right),
                         expression: Box::new(expression.as_ref().map_or(
                             Ok(PlanExpression::Literal(PlanTerm {
                                 encoded: true.into(),
@@ -139,11 +139,11 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             GraphPattern::Lateral { left, right } => PlanNode::ForLoopJoin {
-                left: Box::new(self.build_for_graph_pattern(left, variables, graph_name)?),
-                right: Box::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+                left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
+                right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
             },
             GraphPattern::Filter { expr, inner } => self.push_filter(
-                Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
                 Box::new(self.build_for_expression(expr, variables, graph_name)?),
             ),
             GraphPattern::Union { left, right } => {
@@ -157,9 +157,9 @@ impl<'a> PlanBuilder<'a> {
                             stack.push(left);
                             stack.push(right);
                         }
-                        Some(p) => {
-                            children.push(self.build_for_graph_pattern(p, variables, graph_name)?)
-                        }
+                        Some(p) => children.push(Rc::new(
+                            self.build_for_graph_pattern(p, variables, graph_name)?,
+                        )),
                     }
                 }
                 PlanNode::Union { children }
@@ -173,13 +173,13 @@ impl<'a> PlanBuilder<'a> {
                 variable,
                 expression,
             } => PlanNode::Extend {
-                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
                 variable: build_plan_variable(variables, variable),
                 expression: Box::new(self.build_for_expression(expression, variables, graph_name)?),
             },
             GraphPattern::Minus { left, right } => PlanNode::AntiJoin {
-                left: Box::new(self.build_for_graph_pattern(left, variables, graph_name)?),
-                right: Box::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+                left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
+                right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
             },
             GraphPattern::Service {
                 name,
@@ -192,7 +192,7 @@ impl<'a> PlanBuilder<'a> {
                 PlanNode::Service {
                     service_name,
                     variables: Rc::new(variables.clone()),
-                    child: Box::new(child),
+                    child: Rc::new(child),
                     graph_pattern: Rc::new(inner.as_ref().clone()),
                     silent: *silent,
                 }
@@ -202,7 +202,7 @@ impl<'a> PlanBuilder<'a> {
                 variables: by,
                 aggregates,
             } => PlanNode::Aggregate {
-                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
                 key_variables: Rc::new(
                     by.iter()
                         .map(|k| build_plan_variable(variables, k))
@@ -266,7 +266,7 @@ impl<'a> PlanBuilder<'a> {
                     })
                     .collect();
                 PlanNode::Sort {
-                    child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                    child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
                     by: condition?,
                 }
             }
@@ -278,7 +278,7 @@ impl<'a> PlanBuilder<'a> {
                 let inner_graph_name =
                     Self::convert_pattern_value_id(graph_name, &mut inner_variables);
                 PlanNode::Project {
-                    child: Box::new(self.build_for_graph_pattern(
+                    child: Rc::new(self.build_for_graph_pattern(
                         inner,
                         &mut inner_variables,
                         &inner_graph_name,
@@ -301,10 +301,10 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             GraphPattern::Distinct { inner } => PlanNode::HashDeduplicate {
-                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
             },
             GraphPattern::Reduced { inner } => PlanNode::Reduced {
-                child: Box::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
             },
             GraphPattern::Slice {
                 inner,
@@ -314,13 +314,13 @@ impl<'a> PlanBuilder<'a> {
                 let mut plan = self.build_for_graph_pattern(inner, variables, graph_name)?;
                 if *start > 0 {
                     plan = PlanNode::Skip {
-                        child: Box::new(plan),
+                        child: Rc::new(plan),
                         count: *start,
                     };
                 }
                 if let Some(length) = length {
                     plan = PlanNode::Limit {
-                        child: Box::new(plan),
+                        child: Rc::new(plan),
                         count: *length,
                     };
                 }
@@ -1351,8 +1351,8 @@ impl<'a> PlanBuilder<'a> {
                 swap(&mut left, &mut right);
             }
             PlanNode::ForLoopJoin {
-                left: Box::new(left),
-                right: Box::new(right),
+                left: Rc::new(left),
+                right: Rc::new(right),
             }
         } else {
             // Let's avoid materializing right if left is already materialized
@@ -1361,8 +1361,8 @@ impl<'a> PlanBuilder<'a> {
                 swap(&mut left, &mut right);
             }
             PlanNode::HashJoin {
-                left: Box::new(left),
-                right: Box::new(right),
+                left: Rc::new(left),
+                right: Rc::new(right),
             }
         }
     }
@@ -1387,7 +1387,9 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::Filter { child, .. } | PlanNode::Extend { child, .. } => {
                 Self::is_fit_for_for_loop_join(child)
             }
-            PlanNode::Union { children } => children.iter().all(Self::is_fit_for_for_loop_join),
+            PlanNode::Union { children } => {
+                children.iter().all(|c| Self::is_fit_for_for_loop_join(c))
+            }
             PlanNode::AntiJoin { .. }
             | PlanNode::HashLeftJoin { .. }
             | PlanNode::ForLoopLeftJoin { .. }
@@ -1402,7 +1404,7 @@ impl<'a> PlanBuilder<'a> {
         }
     }
 
-    fn push_filter(&self, node: Box<PlanNode>, filter: Box<PlanExpression>) -> PlanNode {
+    fn push_filter(&self, node: Rc<PlanNode>, filter: Box<PlanExpression>) -> PlanNode {
         if !self.with_optimizations {
             return PlanNode::Filter {
                 child: node,
@@ -1410,34 +1412,37 @@ impl<'a> PlanBuilder<'a> {
             };
         }
         if let PlanExpression::And(f1, f2) = *filter {
-            return self.push_filter(Box::new(self.push_filter(node, f1)), f2);
+            return self.push_filter(Rc::new(self.push_filter(node, f1)), f2);
         }
         let mut filter_variables = BTreeSet::new();
         filter.lookup_used_variables(&mut |v| {
             filter_variables.insert(v);
         });
-        match *node {
+        match node.as_ref() {
             PlanNode::HashJoin { left, right } => {
                 if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
                     if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
                         PlanNode::HashJoin {
-                            left: Box::new(self.push_filter(left, filter.clone())),
-                            right: Box::new(self.push_filter(right, filter)),
+                            left: Rc::new(self.push_filter(left.clone(), filter.clone())),
+                            right: Rc::new(self.push_filter(right.clone(), filter)),
                         }
                     } else {
                         PlanNode::HashJoin {
-                            left: Box::new(self.push_filter(left, filter)),
-                            right,
+                            left: Rc::new(self.push_filter(left.clone(), filter)),
+                            right: right.clone(),
                         }
                     }
                 } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
                     PlanNode::HashJoin {
-                        left,
-                        right: Box::new(self.push_filter(right, filter)),
+                        left: left.clone(),
+                        right: Rc::new(self.push_filter(right.clone(), filter)),
                     }
                 } else {
                     PlanNode::Filter {
-                        child: Box::new(PlanNode::HashJoin { left, right }),
+                        child: Rc::new(PlanNode::HashJoin {
+                            left: left.clone(),
+                            right: right.clone(),
+                        }),
                         expression: filter,
                     }
                 }
@@ -1445,18 +1450,21 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::ForLoopJoin { left, right } => {
                 if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
                     PlanNode::ForLoopJoin {
-                        left: Box::new(self.push_filter(left, filter)),
-                        right,
+                        left: Rc::new(self.push_filter(left.clone(), filter)),
+                        right: right.clone(),
                     }
                 } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
                     PlanNode::ForLoopJoin {
                         //TODO: should we do that always?
-                        left,
-                        right: Box::new(self.push_filter(right, filter)),
+                        left: left.clone(),
+                        right: Rc::new(self.push_filter(right.clone(), filter)),
                     }
                 } else {
                     PlanNode::Filter {
-                        child: Box::new(PlanNode::HashJoin { left, right }),
+                        child: Rc::new(PlanNode::HashJoin {
+                            left: left.clone(),
+                            right: right.clone(),
+                        }),
                         expression: filter,
                     }
                 }
@@ -1464,21 +1472,21 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::Extend {
                 child,
                 expression,
-                variable: position,
+                variable,
             } => {
                 //TODO: handle the case where the filter generates an expression variable
                 if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
                     PlanNode::Extend {
-                        child: Box::new(self.push_filter(child, filter)),
-                        expression,
-                        variable: position,
+                        child: Rc::new(self.push_filter(child.clone(), filter)),
+                        expression: expression.clone(),
+                        variable: variable.clone(),
                     }
                 } else {
                     PlanNode::Filter {
-                        child: Box::new(PlanNode::Extend {
-                            child,
-                            expression,
-                            variable: position,
+                        child: Rc::new(PlanNode::Extend {
+                            child: child.clone(),
+                            expression: expression.clone(),
+                            variable: variable.clone(),
                         }),
                         expression: filter,
                     }
@@ -1487,25 +1495,25 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::Filter { child, expression } => {
                 if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
                     PlanNode::Filter {
-                        child: Box::new(self.push_filter(child, filter)),
-                        expression,
+                        child: Rc::new(self.push_filter(child.clone(), filter)),
+                        expression: expression.clone(),
                     }
                 } else {
                     PlanNode::Filter {
-                        child,
-                        expression: Box::new(PlanExpression::And(expression, filter)),
+                        child: child.clone(),
+                        expression: Box::new(PlanExpression::And(expression.clone(), filter)),
                     }
                 }
             }
             PlanNode::Union { children } => PlanNode::Union {
                 children: children
-                    .into_iter()
-                    .map(|c| self.push_filter(Box::new(c), filter.clone()))
+                    .iter()
+                    .map(|c| Rc::new(self.push_filter(c.clone(), filter.clone())))
                     .collect(),
             },
-            node => PlanNode::Filter {
+            _ => PlanNode::Filter {
                 //TODO: more?
-                child: Box::new(node),
+                child: node,
                 expression: filter,
             },
         }

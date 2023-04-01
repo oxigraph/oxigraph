@@ -9,7 +9,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum PlanNode {
     StaticBindings {
         encoded_tuples: Vec<EncodedTuple>,
@@ -19,7 +19,7 @@ pub enum PlanNode {
     Service {
         service_name: PatternValue,
         variables: Rc<Vec<Variable>>,
-        child: Box<Self>,
+        child: Rc<Self>,
         graph_pattern: Rc<GraphPattern>,
         silent: bool,
     },
@@ -37,69 +37,69 @@ pub enum PlanNode {
     },
     /// Streams left and materializes right join
     HashJoin {
-        left: Box<Self>,
-        right: Box<Self>,
+        left: Rc<Self>,
+        right: Rc<Self>,
     },
     /// Right nested in left loop
     ForLoopJoin {
-        left: Box<Self>,
-        right: Box<Self>,
+        left: Rc<Self>,
+        right: Rc<Self>,
     },
     /// Streams left and materializes right anti join
     AntiJoin {
-        left: Box<Self>,
-        right: Box<Self>,
+        left: Rc<Self>,
+        right: Rc<Self>,
     },
     Filter {
-        child: Box<Self>,
+        child: Rc<Self>,
         expression: Box<PlanExpression>,
     },
     Union {
-        children: Vec<Self>,
+        children: Vec<Rc<Self>>,
     },
     /// hash left join
     HashLeftJoin {
-        left: Box<Self>,
-        right: Box<Self>,
+        left: Rc<Self>,
+        right: Rc<Self>,
         expression: Box<PlanExpression>,
     },
     /// right nested in left loop
     ForLoopLeftJoin {
-        left: Box<Self>,
-        right: Box<Self>,
+        left: Rc<Self>,
+        right: Rc<Self>,
         possible_problem_vars: Rc<Vec<usize>>, //Variables that should not be part of the entry of the left join
     },
     Extend {
-        child: Box<Self>,
+        child: Rc<Self>,
         variable: PlanVariable,
         expression: Box<PlanExpression>,
     },
     Sort {
-        child: Box<Self>,
+        child: Rc<Self>,
         by: Vec<Comparator>,
     },
     HashDeduplicate {
-        child: Box<Self>,
+        child: Rc<Self>,
     },
     /// Removes duplicated consecutive elements
     Reduced {
-        child: Box<Self>,
+        child: Rc<Self>,
     },
     Skip {
-        child: Box<Self>,
+        child: Rc<Self>,
         count: usize,
     },
     Limit {
-        child: Box<Self>,
+        child: Rc<Self>,
         count: usize,
     },
     Project {
-        child: Box<Self>,
+        child: Rc<Self>,
         mapping: Rc<Vec<(PlanVariable, PlanVariable)>>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
-        child: Box<Self>,
+        child: Rc<Self>,
         key_variables: Rc<Vec<PlanVariable>>,
         aggregates: Rc<Vec<(PlanAggregation, PlanVariable)>>,
     },

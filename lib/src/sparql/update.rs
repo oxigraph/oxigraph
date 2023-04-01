@@ -132,8 +132,9 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             Rc::new(self.options.query_options.custom_functions.clone()),
         );
         let mut bnodes = HashMap::new();
-        let tuples = evaluator.plan_evaluator(&plan)(EncodedTuple::with_capacity(variables.len()))
-            .collect::<Result<Vec<_>, _>>()?; //TODO: would be much better to stream
+        let tuples =
+            evaluator.plan_evaluator(Rc::new(plan))(EncodedTuple::with_capacity(variables.len()))
+                .collect::<Result<Vec<_>, _>>()?; //TODO: would be much better to stream
         for tuple in tuples {
             for quad in delete {
                 if let Some(quad) =

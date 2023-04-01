@@ -60,14 +60,14 @@ impl SimpleEvaluator {
 
     pub fn evaluate_select_plan(
         &self,
-        plan: &PlanNode,
+        plan: Rc<PlanNode>,
         variables: Rc<Vec<Variable>>,
     ) -> QueryResults {
         let iter = self.plan_evaluator(plan)(EncodedTuple::with_capacity(variables.len()));
         QueryResults::Solutions(decode_bindings(self.dataset.clone(), iter, variables))
     }
 
-    pub fn evaluate_ask_plan(&self, plan: &PlanNode) -> Result<QueryResults, EvaluationError> {
+    pub fn evaluate_ask_plan(&self, plan: Rc<PlanNode>) -> Result<QueryResults, EvaluationError> {
         let from = EncodedTuple::with_capacity(plan.used_variables().len());
         match self.plan_evaluator(plan)(from).next() {
             Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
@@ -78,7 +78,7 @@ impl SimpleEvaluator {
 
     pub fn evaluate_construct_plan(
         &self,
-        plan: &PlanNode,
+        plan: Rc<PlanNode>,
         template: Vec<TripleTemplate>,
     ) -> QueryResults {
         let from = EncodedTuple::with_capacity(plan.used_variables().len());
@@ -93,7 +93,7 @@ impl SimpleEvaluator {
         })
     }
 
-    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> QueryResults {
+    pub fn evaluate_describe_plan(&self, plan: Rc<PlanNode>) -> QueryResults {
         let from = EncodedTuple::with_capacity(plan.used_variables().len());
         QueryResults::Graph(QueryTripleIter {
             iter: Box::new(DescribeIterator {
@@ -106,9 +106,9 @@ impl SimpleEvaluator {
 
     pub fn plan_evaluator(
         &self,
-        node: &PlanNode,
+        node: Rc<PlanNode>,
     ) -> Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> {
-        match node {
+        match node.as_ref() {
             PlanNode::StaticBindings { encoded_tuples, .. } => {
                 let tuples = encoded_tuples.clone();
                 Rc::new(move |from| {
@@ -348,8 +348,8 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let left = self.plan_evaluator(left);
-                let right = self.plan_evaluator(right);
+                let left = self.plan_evaluator(left.clone());
+                let right = self.plan_evaluator(right.clone());
                 if join_keys.is_empty() {
                     // Cartesian product
                     Rc::new(move |from| {
@@ -392,8 +392,8 @@ impl SimpleEvaluator {
                 }
             }
             PlanNode::ForLoopJoin { left, right } => {
-                let left = self.plan_evaluator(left);
-                let right = self.plan_evaluator(right);
+                let left = self.plan_evaluator(left.clone());
+                let right = self.plan_evaluator(right.clone());
                 Rc::new(move |from| {
                     let right = right.clone();
                     Box::new(left(from).flat_map(move |t| match t {
@@ -408,8 +408,8 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let left = self.plan_evaluator(left);
-                let right = self.plan_evaluator(right);
+                let left = self.plan_evaluator(left.clone());
+                let right = self.plan_evaluator(right.clone());
                 if join_keys.is_empty() {
                     Rc::new(move |from| {
                         let right: Vec<_> = right(from.clone()).filter_map(Result::ok).collect();
@@ -449,8 +449,8 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let left = self.plan_evaluator(left);
-                let right = self.plan_evaluator(right);
+                let left = self.plan_evaluator(left.clone());
+                let right = self.plan_evaluator(right.clone());
                 let expression = self.expression_evaluator(expression);
                 // Real hash join
                 Rc::new(move |from| {
@@ -476,8 +476,8 @@ impl SimpleEvaluator {
                 right,
                 possible_problem_vars,
             } => {
-                let left = self.plan_evaluator(left);
-                let right = self.plan_evaluator(right);
+                let left = self.plan_evaluator(left.clone());
+                let right = self.plan_evaluator(right.clone());
                 let possible_problem_vars = possible_problem_vars.clone();
                 Rc::new(move |from| {
                     if possible_problem_vars.is_empty() {
@@ -499,7 +499,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Filter { child, expression } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 let expression = self.expression_evaluator(expression);
                 Rc::new(move |from| {
                     let expression = expression.clone();
@@ -516,7 +516,7 @@ impl SimpleEvaluator {
             PlanNode::Union { children } => {
                 let children: Vec<_> = children
                     .iter()
-                    .map(|child| self.plan_evaluator(child))
+                    .map(|child| self.plan_evaluator(child.clone()))
                     .collect();
                 Rc::new(move |from| {
                     Box::new(UnionIterator {
@@ -532,7 +532,7 @@ impl SimpleEvaluator {
                 variable,
                 expression,
             } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 let position = variable.encoded;
                 let expression = self.expression_evaluator(expression);
                 Rc::new(move |from| {
@@ -547,7 +547,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Sort { child, by } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 let by: Vec<_> = by
                     .iter()
                     .map(|comp| match comp {
@@ -604,11 +604,11 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::HashDeduplicate { child } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 Rc::new(move |from| Box::new(hash_deduplicate(child(from))))
             }
             PlanNode::Reduced { child } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 Rc::new(move |from| {
                     Box::new(ConsecutiveDeduplication {
                         inner: child(from),
@@ -617,17 +617,17 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Skip { child, count } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 let count = *count;
                 Rc::new(move |from| Box::new(child(from).skip(count)))
             }
             PlanNode::Limit { child, count } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 let count = *count;
                 Rc::new(move |from| Box::new(child(from).take(count)))
             }
             PlanNode::Project { child, mapping } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 let mapping = mapping.clone();
                 Rc::new(move |from| {
                     let mapping = mapping.clone();
@@ -666,7 +666,7 @@ impl SimpleEvaluator {
                 key_variables,
                 aggregates,
             } => {
-                let child = self.plan_evaluator(child);
+                let child = self.plan_evaluator(child.clone());
                 let key_variables = key_variables.clone();
                 let aggregate_input_expressions: Vec<_> = aggregates
                     .iter()
@@ -864,8 +864,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| tuple.get(v).cloned())
             }
             PlanExpression::Exists(plan) => {
-                let plan = plan.clone();
-                let eval = self.plan_evaluator(&plan);
+                let eval = self.plan_evaluator(plan.clone());
                 Rc::new(move |tuple| Some(eval(tuple.clone()).next().is_some().into()))
             }
             PlanExpression::Or(a, b) => {
