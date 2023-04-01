@@ -212,6 +212,12 @@ impl Db {
                 16,
             );
             rocksdb_options_set_block_based_table_factory(options, block_based_table_options);
+            #[cfg(feature = "rocksdb_debug")]
+            {
+                rocksdb_options_set_info_log_level(options, 0);
+                rocksdb_options_enable_statistics(options);
+                rocksdb_options_set_stats_dump_period_sec(options, 60);
+            }
 
             let (column_family_names, c_column_family_names, cf_options) =
                 Self::column_families_names_and_options(column_families, options);
