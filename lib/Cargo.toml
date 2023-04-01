@@ -20,6 +20,7 @@ all-features = true
 [features]
 default = []
 http_client = ["oxhttp", "oxhttp/rustls"]
+rocksdb_debug = []
 
 [dependencies]
 rand = "0.8"
