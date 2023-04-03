@@ -20,7 +20,3 @@ text-diff = "0.4"
 
 [dev-dependencies]
 criterion = "0.4"
-
-[[bench]]
-name = "sparql_query"
-harness = false

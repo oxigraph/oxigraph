@@ -161,7 +161,55 @@ fn run_operation(store: &Store, operations: &[Operation]) {
     }
 }
 
-criterion_group!(store, store_query_and_update, store_load);
+fn sparql_parsing(c: &mut Criterion) {
+    let mut data = Vec::new();
+    read_data("explore-1000.nt.zst")
+        .read_to_end(&mut data)
+        .unwrap();
+
+    let operations = read_data("mix-exploreAndUpdate-1000.tsv.zst")
+        .lines()
+        .map(|l| {
+            let l = l.unwrap();
+            let mut parts = l.trim().split('\t');
+            let kind = parts.next().unwrap();
+            let operation = parts.next().unwrap();
+            match kind {
+                "query" => RawOperation::Query(operation.to_string()),
+                "update" => RawOperation::Update(operation.to_string()),
+                _ => panic!("Unexpected operation kind {kind}"),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let mut group = c.benchmark_group("sparql parsing");
+    group.sample_size(10);
+    group.throughput(Throughput::Bytes(
+        operations
+            .iter()
+            .map(|o| match o {
+                RawOperation::Query(q) => q.len(),
+                RawOperation::Update(u) => u.len(),
+            })
+            .sum::<usize>() as u64,
+    ));
+    group.bench_function("BSBM query and update set", |b| {
+        b.iter(|| {
+            for operation in &operations {
+                match operation {
+                    RawOperation::Query(q) => {
+                        Query::parse(q, None).unwrap();
+                    }
+                    RawOperation::Update(u) => {
+                        Update::parse(u, None).unwrap();
+                    }
+                }
+            }
+        })
+    });
+}
+
+criterion_group!(store, sparql_parsing, store_query_and_update, store_load);
 
 criterion_main!(store);
 
@@ -181,6 +229,12 @@ fn read_data(file: &str) -> impl BufRead {
         std::io::copy(&mut response.into_body(), &mut File::create(file).unwrap()).unwrap();
     }
     BufReader::new(zstd::Decoder::new(File::open(file).unwrap()).unwrap())
+}
+
+#[derive(Clone)]
+enum RawOperation {
+    Query(String),
+    Update(String),
 }
 
 #[allow(clippy::large_enum_variant)]
