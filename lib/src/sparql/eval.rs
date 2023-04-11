@@ -28,6 +28,8 @@ use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::rc::Rc;
 use std::str;
+use std::time::Duration as StdDuration;
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 use std::time::Instant;
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
@@ -42,6 +44,7 @@ pub struct SimpleEvaluator {
     now: DateTime,
     service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
     custom_functions: Rc<CustomFunctionRegistry>,
+    run_stats: bool,
 }
 
 impl SimpleEvaluator {
@@ -50,6 +53,7 @@ impl SimpleEvaluator {
         base_iri: Option<Rc<Iri<String>>>,
         service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
         custom_functions: Rc<CustomFunctionRegistry>,
+        run_stats: bool,
     ) -> Self {
         Self {
             dataset,
@@ -57,6 +61,7 @@ impl SimpleEvaluator {
             now: DateTime::now().unwrap(),
             service_handler,
             custom_functions,
+            run_stats,
         }
     }
 
@@ -64,69 +69,76 @@ impl SimpleEvaluator {
         &self,
         plan: Rc<PlanNode>,
         variables: Rc<Vec<Variable>>,
-    ) -> QueryResults {
-        let iter = self.plan_evaluator(plan)(EncodedTuple::with_capacity(variables.len()));
-        QueryResults::Solutions(decode_bindings(self.dataset.clone(), iter, variables))
+    ) -> (QueryResults, Rc<PlanNodeWithStats>) {
+        let (eval, stats) = self.plan_evaluator(plan);
+        (
+            QueryResults::Solutions(decode_bindings(
+                self.dataset.clone(),
+                eval(EncodedTuple::with_capacity(variables.len())),
+                variables,
+            )),
+            stats,
+        )
     }
 
-    pub fn evaluate_ask_plan(&self, plan: Rc<PlanNode>) -> Result<QueryResults, EvaluationError> {
+    pub fn evaluate_ask_plan(
+        &self,
+        plan: Rc<PlanNode>,
+    ) -> (Result<QueryResults, EvaluationError>, Rc<PlanNodeWithStats>) {
         let from = EncodedTuple::with_capacity(plan.used_variables().len());
-        match self.plan_evaluator(plan)(from).next() {
-            Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
-            Some(Err(error)) => Err(error),
-            None => Ok(QueryResults::Boolean(false)),
-        }
+        let (eval, stats) = self.plan_evaluator(plan);
+        (
+            match eval(from).next() {
+                Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
+                Some(Err(error)) => Err(error),
+                None => Ok(QueryResults::Boolean(false)),
+            },
+            stats,
+        )
     }
 
     pub fn evaluate_construct_plan(
         &self,
         plan: Rc<PlanNode>,
         template: Vec<TripleTemplate>,
-    ) -> QueryResults {
+    ) -> (QueryResults, Rc<PlanNodeWithStats>) {
         let from = EncodedTuple::with_capacity(plan.used_variables().len());
-        QueryResults::Graph(QueryTripleIter {
-            iter: Box::new(ConstructIterator {
-                eval: self.clone(),
-                iter: self.plan_evaluator(plan)(from),
-                template,
-                buffered_results: Vec::default(),
-                bnodes: Vec::default(),
+        let (eval, stats) = self.plan_evaluator(plan);
+        (
+            QueryResults::Graph(QueryTripleIter {
+                iter: Box::new(ConstructIterator {
+                    eval: self.clone(),
+                    iter: eval(from),
+                    template,
+                    buffered_results: Vec::default(),
+                    bnodes: Vec::default(),
+                }),
             }),
-        })
+            stats,
+        )
     }
 
-    pub fn evaluate_describe_plan(&self, plan: Rc<PlanNode>) -> QueryResults {
+    pub fn evaluate_describe_plan(
+        &self,
+        plan: Rc<PlanNode>,
+    ) -> (QueryResults, Rc<PlanNodeWithStats>) {
         let from = EncodedTuple::with_capacity(plan.used_variables().len());
-        QueryResults::Graph(QueryTripleIter {
-            iter: Box::new(DescribeIterator {
-                eval: self.clone(),
-                iter: self.plan_evaluator(plan)(from),
-                quads: Box::new(empty()),
+        let (eval, stats) = self.plan_evaluator(plan);
+        (
+            QueryResults::Graph(QueryTripleIter {
+                iter: Box::new(DescribeIterator {
+                    eval: self.clone(),
+                    iter: eval(from),
+                    quads: Box::new(empty()),
+                }),
             }),
-        })
+            stats,
+        )
     }
 
     pub fn plan_evaluator(
         &self,
         node: Rc<PlanNode>,
-    ) -> Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> {
-        self.build_plan_evaluator(node, false).0
-    }
-
-    pub fn plan_evaluator_with_stats(
-        &self,
-        node: Rc<PlanNode>,
-    ) -> (
-        Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
-        Rc<PlanNodeWithStats>,
-    ) {
-        self.build_plan_evaluator(node, true)
-    }
-
-    fn build_plan_evaluator(
-        &self,
-        node: Rc<PlanNode>,
-        run_stats: bool,
     ) -> (
         Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
         Rc<PlanNodeWithStats>,
@@ -372,9 +384,9 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let (left, left_stats) = self.build_plan_evaluator(left.clone(), run_stats);
+                let (left, left_stats) = self.plan_evaluator(left.clone());
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.build_plan_evaluator(right.clone(), run_stats);
+                let (right, right_stats) = self.plan_evaluator(right.clone());
                 stat_children.push(right_stats);
                 if join_keys.is_empty() {
                     // Cartesian product
@@ -418,9 +430,9 @@ impl SimpleEvaluator {
                 }
             }
             PlanNode::ForLoopJoin { left, right } => {
-                let (left, left_stats) = self.build_plan_evaluator(left.clone(), run_stats);
+                let (left, left_stats) = self.plan_evaluator(left.clone());
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.build_plan_evaluator(right.clone(), run_stats);
+                let (right, right_stats) = self.plan_evaluator(right.clone());
                 stat_children.push(right_stats);
                 Rc::new(move |from| {
                     let right = right.clone();
@@ -436,9 +448,9 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let (left, left_stats) = self.build_plan_evaluator(left.clone(), run_stats);
+                let (left, left_stats) = self.plan_evaluator(left.clone());
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.build_plan_evaluator(right.clone(), run_stats);
+                let (right, right_stats) = self.plan_evaluator(right.clone());
                 stat_children.push(right_stats);
                 if join_keys.is_empty() {
                     Rc::new(move |from| {
@@ -479,9 +491,9 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let (left, left_stats) = self.build_plan_evaluator(left.clone(), run_stats);
+                let (left, left_stats) = self.plan_evaluator(left.clone());
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.build_plan_evaluator(right.clone(), run_stats);
+                let (right, right_stats) = self.plan_evaluator(right.clone());
                 stat_children.push(right_stats);
                 let expression = self.expression_evaluator(expression);
                 // Real hash join
@@ -508,9 +520,9 @@ impl SimpleEvaluator {
                 right,
                 possible_problem_vars,
             } => {
-                let (left, left_stats) = self.build_plan_evaluator(left.clone(), run_stats);
+                let (left, left_stats) = self.plan_evaluator(left.clone());
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.build_plan_evaluator(right.clone(), run_stats);
+                let (right, right_stats) = self.plan_evaluator(right.clone());
                 stat_children.push(right_stats);
                 let possible_problem_vars = possible_problem_vars.clone();
                 Rc::new(move |from| {
@@ -533,7 +545,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Filter { child, expression } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 let expression = self.expression_evaluator(expression);
                 Rc::new(move |from| {
@@ -552,8 +564,7 @@ impl SimpleEvaluator {
                 let children: Vec<_> = children
                     .iter()
                     .map(|child| {
-                        let (child, child_stats) =
-                            self.build_plan_evaluator(child.clone(), run_stats);
+                        let (child, child_stats) = self.plan_evaluator(child.clone());
                         stat_children.push(child_stats);
                         child
                     })
@@ -572,7 +583,7 @@ impl SimpleEvaluator {
                 variable,
                 expression,
             } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 let position = variable.encoded;
                 let expression = self.expression_evaluator(expression);
@@ -588,7 +599,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Sort { child, by } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 let by: Vec<_> = by
                     .iter()
@@ -646,12 +657,12 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::HashDeduplicate { child } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 Rc::new(move |from| Box::new(hash_deduplicate(child(from))))
             }
             PlanNode::Reduced { child } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 Rc::new(move |from| {
                     Box::new(ConsecutiveDeduplication {
@@ -661,19 +672,19 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Skip { child, count } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 let count = *count;
                 Rc::new(move |from| Box::new(child(from).skip(count)))
             }
             PlanNode::Limit { child, count } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 let count = *count;
                 Rc::new(move |from| Box::new(child(from).take(count)))
             }
             PlanNode::Project { child, mapping } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 let mapping = mapping.clone();
                 Rc::new(move |from| {
@@ -713,7 +724,7 @@ impl SimpleEvaluator {
                 key_variables,
                 aggregates,
             } => {
-                let (child, child_stats) = self.build_plan_evaluator(child.clone(), run_stats);
+                let (child, child_stats) = self.plan_evaluator(child.clone());
                 stat_children.push(child_stats);
                 let key_variables = key_variables.clone();
                 let aggregate_input_expressions: Vec<_> = aggregates
@@ -810,10 +821,10 @@ impl SimpleEvaluator {
             exec_count: Cell::new(0),
             exec_duration: Cell::new(std::time::Duration::from_secs(0)),
         });
-        if run_stats {
+        if self.run_stats {
             let stats = stats.clone();
             evaluator = Rc::new(move |tuple| {
-                let start = Instant::now();
+                let start = Timer::now();
                 let inner = evaluator(tuple);
                 stats
                     .exec_duration
@@ -845,6 +856,7 @@ impl SimpleEvaluator {
                     base_iri: self.base_iri.as_ref().map(|iri| iri.as_ref().clone()),
                 },
                 dataset: QueryDataset::new(),
+                parsing_duration: None,
             },
         )? {
             Ok(encode_bindings(self.dataset.clone(), variables, iter))
@@ -933,7 +945,7 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| tuple.get(v).cloned())
             }
             PlanExpression::Exists(plan) => {
-                let eval = self.plan_evaluator(plan.clone());
+                let (eval, _) = self.plan_evaluator(plan.clone()); //TODO: stats
                 Rc::new(move |tuple| Some(eval(tuple.clone()).next().is_some().into()))
             }
             PlanExpression::Or(a, b) => {
@@ -4775,7 +4787,7 @@ impl Iterator for StatsIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
-        let start = Instant::now();
+        let start = Timer::now();
         let result = self.inner.next();
         self.stats
             .exec_duration
@@ -4784,6 +4796,42 @@ impl Iterator for StatsIterator {
             self.stats.exec_count.set(self.stats.exec_count.get() + 1);
         }
         result
+    }
+}
+
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+pub struct Timer {
+    timestamp_ms: f64,
+}
+
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+impl Timer {
+    pub fn now() -> Self {
+        Self {
+            timestamp_ms: js_sys::Date::now(),
+        }
+    }
+
+    pub fn elapsed(&self) -> StdDuration {
+        StdDuration::from_secs_f64((js_sys::Date::now() - self.timestamp_ms) / 1000.)
+    }
+}
+
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+pub struct Timer {
+    instant: Instant,
+}
+
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+impl Timer {
+    pub fn now() -> Self {
+        Self {
+            instant: Instant::now(),
+        }
+    }
+
+    pub fn elapsed(&self) -> StdDuration {
+        self.instant.elapsed()
     }
 }
 

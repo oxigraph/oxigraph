@@ -17,29 +17,34 @@ use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::{EvaluationError, QueryError};
-use crate::sparql::eval::SimpleEvaluator;
+use crate::sparql::eval::{SimpleEvaluator, Timer};
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
+use crate::sparql::plan::PlanNodeWithStats;
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::StorageReader;
+use json_event_parser::{JsonEvent, JsonWriter};
 pub use oxrdf::{Variable, VariableNameParseError};
 pub use sparesults::QueryResultsFormat;
 pub use spargebra::ParseError;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
+use std::{fmt, io};
 
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn evaluate_query(
     reader: StorageReader,
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
-) -> Result<QueryResults, EvaluationError> {
+    run_stats: bool,
+) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
     let query = query.try_into().map_err(Into::into)?;
     let dataset = DatasetView::new(reader, &query.dataset);
-    match query.inner {
+    let start_planning = Timer::now();
+    let (results, plan_node_with_stats, planning_duration) = match query.inner {
         spargebra::Query::Select {
             pattern, base_iri, ..
         } => {
@@ -50,13 +55,16 @@ pub(crate) fn evaluate_query(
                 &options.custom_functions,
                 options.without_optimizations,
             )?;
-            Ok(SimpleEvaluator::new(
+            let planning_duration = start_planning.elapsed();
+            let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
                 Rc::new(options.custom_functions),
+                run_stats,
             )
-            .evaluate_select_plan(Rc::new(plan), Rc::new(variables)))
+            .evaluate_select_plan(Rc::new(plan), Rc::new(variables));
+            (Ok(results), explanation, planning_duration)
         }
         spargebra::Query::Ask {
             pattern, base_iri, ..
@@ -68,13 +76,16 @@ pub(crate) fn evaluate_query(
                 &options.custom_functions,
                 options.without_optimizations,
             )?;
-            SimpleEvaluator::new(
+            let planning_duration = start_planning.elapsed();
+            let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
                 Rc::new(options.custom_functions),
+                run_stats,
             )
-            .evaluate_ask_plan(Rc::new(plan))
+            .evaluate_ask_plan(Rc::new(plan));
+            (results, explanation, planning_duration)
         }
         spargebra::Query::Construct {
             template,
@@ -96,13 +107,16 @@ pub(crate) fn evaluate_query(
                 &options.custom_functions,
                 options.without_optimizations,
             );
-            Ok(SimpleEvaluator::new(
+            let planning_duration = start_planning.elapsed();
+            let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
                 Rc::new(options.custom_functions),
+                run_stats,
             )
-            .evaluate_construct_plan(Rc::new(plan), construct))
+            .evaluate_construct_plan(Rc::new(plan), construct);
+            (Ok(results), explanation, planning_duration)
         }
         spargebra::Query::Describe {
             pattern, base_iri, ..
@@ -114,15 +128,25 @@ pub(crate) fn evaluate_query(
                 &options.custom_functions,
                 options.without_optimizations,
             )?;
-            Ok(SimpleEvaluator::new(
+            let planning_duration = start_planning.elapsed();
+            let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
                 Rc::new(options.custom_functions),
+                run_stats,
             )
-            .evaluate_describe_plan(Rc::new(plan)))
+            .evaluate_describe_plan(Rc::new(plan));
+            (Ok(results), explanation, planning_duration)
         }
-    }
+    };
+    let explanation = QueryExplanation {
+        inner: plan_node_with_stats,
+        with_stats: run_stats,
+        parsing_duration: query.parsing_duration,
+        planning_duration,
+    };
+    Ok((results, explanation))
 }
 
 /// Options for SPARQL query evaluation.
@@ -255,5 +279,41 @@ impl From<QueryOptions> for UpdateOptions {
     #[inline]
     fn from(query_options: QueryOptions) -> Self {
         Self { query_options }
+    }
+}
+
+/// The explanation of a query.
+#[derive(Clone)]
+pub struct QueryExplanation {
+    inner: Rc<PlanNodeWithStats>,
+    with_stats: bool,
+    parsing_duration: Option<Duration>,
+    planning_duration: Duration,
+}
+
+impl QueryExplanation {
+    /// Writes the explanation as JSON.
+    pub fn write_in_json(&self, output: impl io::Write) -> io::Result<()> {
+        let mut writer = JsonWriter::from_writer(output);
+        writer.write_event(JsonEvent::StartObject)?;
+        if let Some(parsing_duration) = self.parsing_duration {
+            writer.write_event(JsonEvent::ObjectKey("parsing duration in seconds"))?;
+            writer.write_event(JsonEvent::Number(
+                &parsing_duration.as_secs_f32().to_string(),
+            ))?;
+        }
+        writer.write_event(JsonEvent::ObjectKey("planning duration in seconds"))?;
+        writer.write_event(JsonEvent::Number(
+            &self.planning_duration.as_secs_f32().to_string(),
+        ))?;
+        writer.write_event(JsonEvent::ObjectKey("plan"))?;
+        self.inner.json_node(&mut writer, self.with_stats)?;
+        writer.write_event(JsonEvent::EndObject)
+    }
+}
+
+impl fmt::Debug for QueryExplanation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.inner)
     }
 }
