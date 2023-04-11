@@ -4,10 +4,12 @@ use crate::storage::numeric_encoder::EncodedTerm;
 use regex::Regex;
 use spargebra::algebra::GraphPattern;
 use spargebra::term::GroundTerm;
+use std::cell::Cell;
 use std::cmp::max;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub enum PlanNode {
@@ -751,4 +753,11 @@ impl IntoIterator for EncodedTuple {
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
     }
+}
+
+pub struct PlanNodeWithStats {
+    pub node: Rc<PlanNode>,
+    pub children: Vec<Rc<PlanNodeWithStats>>,
+    pub exec_count: Cell<usize>,
+    pub exec_duration: Cell<Duration>,
 }
