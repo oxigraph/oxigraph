@@ -29,8 +29,8 @@ use crate::io::{
 };
 use crate::model::*;
 use crate::sparql::{
-    evaluate_query, evaluate_update, EvaluationError, Query, QueryOptions, QueryResults, Update,
-    UpdateOptions,
+    evaluate_query, evaluate_update, EvaluationError, Query, QueryExplanation, QueryOptions,
+    QueryResults, Update, UpdateOptions,
 };
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 #[cfg(not(target_family = "wasm"))]
@@ -207,7 +207,37 @@ impl Store {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        evaluate_query(self.storage.snapshot(), query, options)
+        let (results, _) = self.explain_query_opt(query, options, false)?;
+        results
+    }
+
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options and
+    /// returns a query explanation with some statistics (if enabled with the `with_stats` parameter).
+    ///
+    /// Beware: if you want to compute statistics you need to exhaust the results iterator before having a look at them.
+    ///
+    /// Usage example serialising the explanation with statistics in JSON:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    ///
+    /// let store = Store::new()?;
+    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) =  store.explain_query_opt("SELECT ?s WHERE { VALUES ?s { 1 2 3 } }", QueryOptions::default(), true)? {
+    ///     // We make sure to have read all the solutions
+    ///     for _ in solutions {
+    ///     }
+    ///     let mut buf = Vec::new();
+    ///     explanation.write_in_json(&mut buf)?;
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn explain_query_opt(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        options: QueryOptions,
+        with_stats: bool,
+    ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
+        evaluate_query(self.storage.snapshot(), query, options, with_stats)
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -918,7 +948,8 @@ impl<'a> Transaction<'a> {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        evaluate_query(self.writer.reader(), query, options)
+        let (results, _) = evaluate_query(self.writer.reader(), query, options, false)?;
+        results
     }
 
     /// Retrieves quads with a filter on each quad component.

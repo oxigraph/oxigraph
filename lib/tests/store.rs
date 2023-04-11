@@ -12,11 +12,11 @@ use std::fs::{create_dir, remove_dir_all, File};
 use std::io::Cursor;
 #[cfg(not(target_family = "wasm"))]
 use std::io::Write;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "linux")]
 use std::iter::once;
 #[cfg(not(target_family = "wasm"))]
 use std::path::{Path, PathBuf};
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "linux")]
 use std::process::Command;
 const DATA: &str = r#"
 @prefix schema: <http://schema.org/> .
@@ -501,7 +501,7 @@ fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "linux")]
 fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
     assert!(Command::new("git")
         .args(["clean", "-fX", dir])

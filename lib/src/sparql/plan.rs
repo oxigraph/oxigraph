@@ -1,6 +1,7 @@
 use crate::model::{BlankNode, Literal, NamedNode, Term, Triple};
 use crate::sparql::Variable;
 use crate::storage::numeric_encoder::EncodedTerm;
+use json_event_parser::{JsonEvent, JsonWriter};
 use regex::Regex;
 use spargebra::algebra::GraphPattern;
 use spargebra::term::GroundTerm;
@@ -10,6 +11,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::time::Duration;
+use std::{fmt, io};
 
 #[derive(Debug)]
 pub enum PlanNode {
@@ -387,11 +389,27 @@ pub struct PlanTerm<T> {
     pub plain: T,
 }
 
+impl<T: fmt::Display> fmt::Display for PlanTerm<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.plain)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum PatternValue {
     Constant(PlanTerm<PatternValueConstant>),
     Variable(PlanVariable),
     TriplePattern(Box<TriplePatternValue>),
+}
+
+impl fmt::Display for PatternValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Constant(c) => write!(f, "{c}"),
+            Self::Variable(v) => write!(f, "{v}"),
+            Self::TriplePattern(p) => write!(f, "{p}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -402,6 +420,17 @@ pub enum PatternValueConstant {
     DefaultGraph,
 }
 
+impl fmt::Display for PatternValueConstant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NamedNode(n) => write!(f, "{n}"),
+            Self::Literal(l) => write!(f, "{l}"),
+            Self::Triple(t) => write!(f, "<< {t} >>"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TriplePatternValue {
     pub subject: PatternValue,
@@ -409,10 +438,22 @@ pub struct TriplePatternValue {
     pub object: PatternValue,
 }
 
+impl fmt::Display for TriplePatternValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PlanVariable<P = Variable> {
     pub encoded: usize,
     pub plain: P,
+}
+
+impl<P: fmt::Display> fmt::Display for PlanVariable<P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.plain)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -625,11 +666,186 @@ impl PlanExpression {
     }
 }
 
+impl fmt::Display for PlanExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Variable(v) => {
+                write!(f, "{v}")
+            }
+            Self::Bound(v) => {
+                write!(f, "Bound({v})")
+            }
+            Self::NamedNode(n) => write!(f, "{n}"),
+            Self::Literal(l) => write!(f, "{l}"),
+            Self::Rand => write!(f, "Rand()"),
+            Self::Now => write!(f, "Now()"),
+            Self::Uuid => write!(f, "Uuid()"),
+            Self::StrUuid => write!(f, "StrUuid()"),
+            Self::UnaryPlus(e) => write!(f, "UnaryPlus({e})"),
+            Self::UnaryMinus(e) => write!(f, "UnaryMinus({e})"),
+            Self::Not(e) => write!(f, "Not({e})"),
+            Self::BNode(e) => {
+                if let Some(e) = e {
+                    write!(f, "BNode({e})")
+                } else {
+                    write!(f, "BNode()")
+                }
+            }
+            Self::Str(e) => write!(f, "Str({e})"),
+            Self::Lang(e) => write!(f, "Lang({e})"),
+            Self::Datatype(e) => write!(f, "Datatype({e})"),
+            Self::Iri(e) => write!(f, "Iri({e})"),
+            Self::Abs(e) => write!(f, "Abs({e})"),
+            Self::Ceil(e) => write!(f, "Ceil({e})"),
+            Self::Floor(e) => write!(f, "Floor({e})"),
+            Self::Round(e) => write!(f, "Round({e})"),
+            Self::UCase(e) => write!(f, "UCase({e})"),
+            Self::LCase(e) => write!(f, "LCase({e})"),
+            Self::StrLen(e) => write!(f, "StrLen({e})"),
+            Self::EncodeForUri(e) => write!(f, "EncodeForUri({e})"),
+            Self::StaticRegex(e, r) => write!(f, "StaticRegex({e}, {r})"),
+            Self::Year(e) => write!(f, "Year({e})"),
+            Self::Month(e) => write!(f, "Month({e})"),
+            Self::Day(e) => write!(f, "Day({e})"),
+            Self::Hours(e) => write!(f, "Hours({e})"),
+            Self::Minutes(e) => write!(f, "Minutes({e})"),
+            Self::Seconds(e) => write!(f, "Seconds({e})"),
+            Self::Timezone(e) => write!(f, "Timezone({e})"),
+            Self::Tz(e) => write!(f, "Tz({e})"),
+            Self::Md5(e) => write!(f, "Md5({e})"),
+            Self::Sha1(e) => write!(f, "Sha1({e})"),
+            Self::Sha256(e) => write!(f, "Sha256({e})"),
+            Self::Sha384(e) => write!(f, "Sha384({e})"),
+            Self::Sha512(e) => write!(f, "Sha512({e})"),
+            Self::IsIri(e) => write!(f, "IsIri({e})"),
+            Self::IsBlank(e) => write!(f, "IsBlank({e})"),
+            Self::IsLiteral(e) => write!(f, "IsLiteral({e})"),
+            Self::IsNumeric(e) => write!(f, "IsNumeric({e})"),
+            Self::IsTriple(e) => write!(f, "IsTriple({e})"),
+            Self::Subject(e) => write!(f, "Subject({e})"),
+            Self::Predicate(e) => write!(f, "Predicate({e})"),
+            Self::Object(e) => write!(f, "Object({e})"),
+            Self::BooleanCast(e) => write!(f, "BooleanCast({e})"),
+            Self::DoubleCast(e) => write!(f, "DoubleCast({e})"),
+            Self::FloatCast(e) => write!(f, "FloatCast({e})"),
+            Self::DecimalCast(e) => write!(f, "DecimalCast({e})"),
+            Self::IntegerCast(e) => write!(f, "IntegerCast({e})"),
+            Self::DateCast(e) => write!(f, "DateCast({e})"),
+            Self::TimeCast(e) => write!(f, "TimeCast({e})"),
+            Self::DateTimeCast(e) => write!(f, "DateTimeCast({e})"),
+            Self::DurationCast(e) => write!(f, "DurationCast({e})"),
+            Self::YearMonthDurationCast(e) => write!(f, "YearMonthDurationCast({e})"),
+            Self::DayTimeDurationCast(e) => write!(f, "DayTimeDurationCast({e})"),
+            Self::StringCast(e) => write!(f, "StringCast({e})"),
+            Self::Or(a, b) => write!(f, "Or({a}, {b})"),
+            Self::And(a, b) => write!(f, "And({a}, {b})"),
+            Self::Equal(a, b) => write!(f, "Equal({a}, {b})"),
+            Self::Greater(a, b) => write!(f, "Greater({a}, {b})"),
+            Self::GreaterOrEqual(a, b) => write!(f, "GreaterOrEqual({a}, {b})"),
+            Self::Less(a, b) => write!(f, "Less({a}, {b})"),
+            Self::LessOrEqual(a, b) => write!(f, "LessOrEqual({a}, {b})"),
+            Self::Add(a, b) => write!(f, "Add({a}, {b})"),
+            Self::Subtract(a, b) => write!(f, "Subtract({a}, {b})"),
+            Self::Multiply(a, b) => write!(f, "Multiply({a}, {b})"),
+            Self::Divide(a, b) => write!(f, "Divide({a}, {b})"),
+            Self::LangMatches(a, b) => write!(f, "LangMatches({a}, {b})"),
+            Self::Contains(a, b) => write!(f, "Contains({a}, {b})"),
+            Self::StaticReplace(a, b, c) => write!(f, "StaticReplace({a}, {b}, {c})"),
+            Self::StrStarts(a, b) => write!(f, "StrStarts({a}, {b})"),
+            Self::StrEnds(a, b) => write!(f, "StrEnds({a}, {b})"),
+            Self::StrBefore(a, b) => write!(f, "StrBefore({a}, {b})"),
+            Self::StrAfter(a, b) => write!(f, "StrAfter({a}, {b})"),
+            Self::StrLang(a, b) => write!(f, "StrLang({a}, {b})"),
+            Self::StrDt(a, b) => write!(f, "StrDt({a}, {b})"),
+            Self::SameTerm(a, b) => write!(f, "SameTerm({a}, {b})"),
+            Self::SubStr(a, b, None) => write!(f, "SubStr({a}, {b})"),
+            Self::DynamicRegex(a, b, None) => write!(f, "DynamicRegex({a}, {b})"),
+            Self::Adjust(a, b) => write!(f, "Adjust({a}, {b})"),
+            Self::If(a, b, c) => write!(f, "If({a}, {b}, {c})"),
+            Self::SubStr(a, b, Some(c)) => write!(f, "SubStr({a}, {b}, {c})"),
+            Self::DynamicRegex(a, b, Some(c)) => write!(f, "DynamicRegex({a}, {b}, {c})"),
+            Self::DynamicReplace(a, b, c, None) => write!(f, "DynamicReplace({a}, {b}, {c})"),
+            Self::Triple(a, b, c) => write!(f, "Triple({a}, {b}, {c})"),
+            Self::DynamicReplace(a, b, c, Some(d)) => {
+                write!(f, "DynamicReplace({a}, {b}, {c}, {d})")
+            }
+            Self::Concat(es) => {
+                write!(f, "Concat(")?;
+                for (i, e) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, ")")
+            }
+            Self::Coalesce(es) => {
+                write!(f, "Coalesce(")?;
+                for (i, e) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, ")")
+            }
+            Self::CustomFunction(name, es) => {
+                write!(f, "{name}(")?;
+                for (i, e) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, ")")
+            }
+            Self::Exists(_) => write!(f, "Exists()"), //TODO
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PlanAggregation {
     pub function: PlanAggregationFunction,
     pub parameter: Option<PlanExpression>,
     pub distinct: bool,
+}
+
+impl fmt::Display for PlanAggregation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.function {
+            PlanAggregationFunction::Count => {
+                write!(f, "Count")
+            }
+            PlanAggregationFunction::Sum => {
+                write!(f, "Sum")
+            }
+            PlanAggregationFunction::Min => {
+                write!(f, "Min")
+            }
+            PlanAggregationFunction::Max => {
+                write!(f, "Max")
+            }
+            PlanAggregationFunction::Avg => {
+                write!(f, "Avg")
+            }
+            PlanAggregationFunction::GroupConcat { .. } => {
+                write!(f, "GroupConcat")
+            }
+            PlanAggregationFunction::Sample => write!(f, "Sample"),
+        }?;
+        if self.distinct {
+            write!(f, "Distinct")?;
+        }
+        write!(f, "(")?;
+        if let Some(expr) = &self.parameter {
+            write!(f, "{expr}")?;
+        }
+        if let PlanAggregationFunction::GroupConcat { separator } = &self.function {
+            write!(f, "; separator={separator}")?;
+        }
+        write!(f, ")")
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -655,10 +871,43 @@ pub enum PlanPropertyPath {
     NegatedPropertySet(Rc<Vec<PlanTerm<NamedNode>>>),
 }
 
+impl fmt::Display for PlanPropertyPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Path(p) => write!(f, "{p}"),
+            Self::Reverse(p) => write!(f, "Reverse({p})"),
+            Self::Sequence(a, b) => write!(f, "Sequence{a}, {b}"),
+            Self::Alternative(a, b) => write!(f, "Alternative{a}, {b}"),
+            Self::ZeroOrMore(p) => write!(f, "ZeroOrMore({p})"),
+            Self::OneOrMore(p) => write!(f, "OneOrMore({p})"),
+            Self::ZeroOrOne(p) => write!(f, "ZeroOrOne({p})"),
+            Self::NegatedPropertySet(ps) => {
+                write!(f, "NegatedPropertySet(")?;
+                for (i, p) in ps.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Comparator {
     Asc(PlanExpression),
     Desc(PlanExpression),
+}
+
+impl fmt::Display for Comparator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Asc(c) => write!(f, "Asc({c})"),
+            Self::Desc(c) => write!(f, "Desc({c})"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -668,12 +917,29 @@ pub struct TripleTemplate {
     pub object: TripleTemplateValue,
 }
 
+impl fmt::Display for TripleTemplate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.predicate, self.object)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum TripleTemplateValue {
     Constant(PlanTerm<Term>),
     BlankNode(PlanVariable<BlankNode>),
     Variable(PlanVariable),
     Triple(Box<TripleTemplate>),
+}
+
+impl fmt::Display for TripleTemplateValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Constant(c) => write!(f, "{c}"),
+            Self::BlankNode(bn) => write!(f, "{bn}"),
+            Self::Variable(v) => write!(f, "{v}"),
+            Self::Triple(t) => write!(f, "<< {t} >>"),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -760,4 +1026,136 @@ pub struct PlanNodeWithStats {
     pub children: Vec<Rc<PlanNodeWithStats>>,
     pub exec_count: Cell<usize>,
     pub exec_duration: Cell<Duration>,
+}
+
+impl PlanNodeWithStats {
+    pub fn json_node(
+        &self,
+        writer: &mut JsonWriter<impl io::Write>,
+        with_stats: bool,
+    ) -> io::Result<()> {
+        writer.write_event(JsonEvent::StartObject)?;
+        writer.write_event(JsonEvent::ObjectKey("name"))?;
+        writer.write_event(JsonEvent::String(&self.node_label()))?;
+        if with_stats {
+            writer.write_event(JsonEvent::ObjectKey("number of results"))?;
+            writer.write_event(JsonEvent::Number(&self.exec_count.get().to_string()))?;
+            writer.write_event(JsonEvent::ObjectKey("duration in seconds"))?;
+            writer.write_event(JsonEvent::Number(
+                &self.exec_duration.get().as_secs_f32().to_string(),
+            ))?;
+        }
+        writer.write_event(JsonEvent::ObjectKey("children"))?;
+        writer.write_event(JsonEvent::StartArray)?;
+        for child in &self.children {
+            child.json_node(writer, with_stats)?;
+        }
+        writer.write_event(JsonEvent::EndArray)?;
+        writer.write_event(JsonEvent::EndObject)
+    }
+
+    fn node_label(&self) -> String {
+        match self.node.as_ref() {
+            PlanNode::Aggregate {
+                key_variables,
+                aggregates,
+                ..
+            } => format!(
+                "Aggregate({})",
+                key_variables
+                    .iter()
+                    .map(|c| c.to_string())
+                    .chain(aggregates.iter().map(|(agg, v)| format!("{agg} -> {v}")))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            PlanNode::AntiJoin { .. } => "AntiJoin".to_owned(),
+            PlanNode::Extend {
+                expression,
+                variable,
+                ..
+            } => format!("Extend({expression} -> {variable})"),
+            PlanNode::Filter { expression, .. } => format!("Filter({expression})"),
+            PlanNode::ForLoopJoin { .. } => "ForLoopJoin".to_owned(),
+            PlanNode::ForLoopLeftJoin { .. } => "ForLoopLeftJoin".to_owned(),
+            PlanNode::HashDeduplicate { .. } => "HashDeduplicate".to_owned(),
+            PlanNode::HashJoin { .. } => "HashJoin".to_owned(),
+            PlanNode::HashLeftJoin { expression, .. } => format!("HashLeftJoin({expression})"),
+            PlanNode::Limit { count, .. } => format!("Limit({count})"),
+            PlanNode::PathPattern {
+                subject,
+                path,
+                object,
+                graph_name,
+            } => format!("PathPattern({subject} {path} {object} {graph_name})"),
+            PlanNode::Project { mapping, .. } => {
+                format!(
+                    "Project({})",
+                    mapping
+                        .iter()
+                        .map(|(f, t)| if f.plain == t.plain {
+                            f.to_string()
+                        } else {
+                            format!("{f} -> {t}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            PlanNode::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => format!("QuadPattern({subject} {predicate} {object} {graph_name})"),
+            PlanNode::Reduced { .. } => "Reduced".to_owned(),
+            PlanNode::Service {
+                service_name,
+                silent,
+                ..
+            } => {
+                if *silent {
+                    format!("SilentService({service_name})")
+                } else {
+                    format!("Service({service_name})")
+                }
+            }
+            PlanNode::Skip { count, .. } => format!("Skip({count})"),
+            PlanNode::Sort { by, .. } => {
+                format!(
+                    "Sort({})",
+                    by.iter()
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            PlanNode::StaticBindings { variables, .. } => {
+                format!(
+                    "StaticBindings({})",
+                    variables
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            PlanNode::Union { .. } => "Union".to_owned(),
+        }
+    }
+}
+
+impl fmt::Debug for PlanNodeWithStats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut obj = f.debug_struct("Node");
+        obj.field("name", &self.node_label());
+        if self.exec_duration.get() > Duration::default() {
+            obj.field("number of results", &self.exec_count.get());
+            obj.field("duration in seconds", &self.exec_duration.get());
+        }
+        if !self.children.is_empty() {
+            obj.field("children", &self.children);
+        }
+        obj.finish()
+    }
 }

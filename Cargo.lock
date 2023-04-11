@@ -932,6 +932,8 @@ dependencies = [
  "digest",
  "getrandom",
  "hex",
+ "js-sys",
+ "json-event-parser",
  "lazy_static",
  "libc",
  "md-5",

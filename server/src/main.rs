@@ -7,7 +7,7 @@ use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerialize
 use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
-use oxigraph::sparql::{Query, QueryResults, Update};
+use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
 use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
@@ -175,6 +175,23 @@ enum Command {
         /// By default the format is guessed from the results file extension.
         #[arg(long, required_unless_present = "results_file")]
         results_format: Option<String>,
+        /// Prints to stderr a human-readable explanation of the query evaluation.
+        ///
+        /// Use the stats option to print also query evaluation statistics.
+        #[arg(long, conflicts_with = "explain_file")]
+        explain: bool,
+        /// Write to the given file an explanation of the query evaluation.
+        ///
+        /// If the file extension is .json the JSON format is used, if .txt a human readable format is used.
+        ///
+        /// Use the stats option to print also query evaluation statistics.
+        #[arg(long, conflicts_with = "explain")]
+        explain_file: Option<PathBuf>,
+        /// Computes some evaluation statistics to print as part of the query explanations.
+        ///
+        /// Beware, computing the statistics adds some overhead to the evaluation runtime.
+        #[arg(long)]
+        stats: bool,
     },
     /// Executes a SPARQL update against the store.
     Update {
@@ -424,6 +441,9 @@ pub fn main() -> anyhow::Result<()> {
             query_base,
             results_file,
             results_format,
+            explain,
+            explain_file,
+            stats,
         } => {
             let query = if let Some(query) = query {
                 query
@@ -443,107 +463,130 @@ pub fn main() -> anyhow::Result<()> {
                     .location
                     .ok_or_else(|| anyhow!("The --location argument is required"))?,
             )?;
-            match store.query(query)? {
-                QueryResults::Solutions(solutions) => {
-                    let format = if let Some(name) = results_format {
-                        if let Some(format) = QueryResultsFormat::from_extension(&name) {
-                            format
-                        } else if let Some(format) = QueryResultsFormat::from_media_type(&name) {
-                            format
+            let (results, explanation) =
+                store.explain_query_opt(query, QueryOptions::default(), stats)?;
+            let print_result = (|| {
+                match results? {
+                    QueryResults::Solutions(solutions) => {
+                        let format = if let Some(name) = results_format {
+                            if let Some(format) = QueryResultsFormat::from_extension(&name) {
+                                format
+                            } else if let Some(format) = QueryResultsFormat::from_media_type(&name)
+                            {
+                                format
+                            } else {
+                                bail!("The file format '{name}' is unknown")
+                            }
+                        } else if let Some(results_file) = &results_file {
+                            format_from_path(results_file, |ext| {
+                                QueryResultsFormat::from_extension(ext)
+                                    .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                            })?
                         } else {
-                            bail!("The file format '{name}' is unknown")
+                            bail!("The --results-format option must be set when writing to stdout")
+                        };
+                        if let Some(results_file) = results_file {
+                            let mut writer = QueryResultsSerializer::from_format(format)
+                                .solutions_writer(
+                                    BufWriter::new(File::create(results_file)?),
+                                    solutions.variables().to_vec(),
+                                )?;
+                            for solution in solutions {
+                                writer.write(&solution?)?;
+                            }
+                            writer.finish()?;
+                        } else {
+                            let stdout = stdout(); // Not needed in Rust 1.61
+                            let mut writer = QueryResultsSerializer::from_format(format)
+                                .solutions_writer(stdout.lock(), solutions.variables().to_vec())?;
+                            for solution in solutions {
+                                writer.write(&solution?)?;
+                            }
+                            let _ = writer.finish()?;
                         }
-                    } else if let Some(results_file) = &results_file {
-                        format_from_path(results_file, |ext| {
-                            QueryResultsFormat::from_extension(ext)
-                                .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
-                        })?
-                    } else {
-                        bail!("The --results-format option must be set when writing to stdout")
-                    };
-                    if let Some(results_file) = results_file {
-                        let mut writer = QueryResultsSerializer::from_format(format)
-                            .solutions_writer(
+                    }
+                    QueryResults::Boolean(result) => {
+                        let format = if let Some(name) = results_format {
+                            if let Some(format) = QueryResultsFormat::from_extension(&name) {
+                                format
+                            } else if let Some(format) = QueryResultsFormat::from_media_type(&name)
+                            {
+                                format
+                            } else {
+                                bail!("The file format '{name}' is unknown")
+                            }
+                        } else if let Some(results_file) = &results_file {
+                            format_from_path(results_file, |ext| {
+                                QueryResultsFormat::from_extension(ext)
+                                    .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                            })?
+                        } else {
+                            bail!("The --results-format option must be set when writing to stdout")
+                        };
+                        if let Some(results_file) = results_file {
+                            QueryResultsSerializer::from_format(format).write_boolean_result(
                                 BufWriter::new(File::create(results_file)?),
-                                solutions.variables().to_vec(),
+                                result,
                             )?;
-                        for solution in solutions {
-                            writer.write(&solution?)?;
-                        }
-                        writer.finish()?;
-                    } else {
-                        let stdout = stdout(); // Not needed in Rust 1.61
-                        let mut writer = QueryResultsSerializer::from_format(format)
-                            .solutions_writer(stdout.lock(), solutions.variables().to_vec())?;
-                        for solution in solutions {
-                            writer.write(&solution?)?;
-                        }
-                        let _ = writer.finish()?;
-                    }
-                }
-                QueryResults::Boolean(result) => {
-                    let format = if let Some(name) = results_format {
-                        if let Some(format) = QueryResultsFormat::from_extension(&name) {
-                            format
-                        } else if let Some(format) = QueryResultsFormat::from_media_type(&name) {
-                            format
                         } else {
-                            bail!("The file format '{name}' is unknown")
+                            let _ = QueryResultsSerializer::from_format(format)
+                                .write_boolean_result(stdout().lock(), result)?;
                         }
-                    } else if let Some(results_file) = &results_file {
-                        format_from_path(results_file, |ext| {
-                            QueryResultsFormat::from_extension(ext)
-                                .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
-                        })?
-                    } else {
-                        bail!("The --results-format option must be set when writing to stdout")
-                    };
-                    if let Some(results_file) = results_file {
-                        QueryResultsSerializer::from_format(format).write_boolean_result(
-                            BufWriter::new(File::create(results_file)?),
-                            result,
-                        )?;
-                    } else {
-                        let _ = QueryResultsSerializer::from_format(format)
-                            .write_boolean_result(stdout().lock(), result)?;
                     }
-                }
-                QueryResults::Graph(triples) => {
-                    let format = if let Some(name) = results_format {
-                        if let Some(format) = GraphFormat::from_extension(&name) {
-                            format
-                        } else if let Some(format) = GraphFormat::from_media_type(&name) {
-                            format
+                    QueryResults::Graph(triples) => {
+                        let format = if let Some(name) = results_format {
+                            if let Some(format) = GraphFormat::from_extension(&name) {
+                                format
+                            } else if let Some(format) = GraphFormat::from_media_type(&name) {
+                                format
+                            } else {
+                                bail!("The file format '{name}' is unknown")
+                            }
+                        } else if let Some(results_file) = &results_file {
+                            format_from_path(results_file, |ext| {
+                                GraphFormat::from_extension(ext)
+                                    .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                            })?
                         } else {
-                            bail!("The file format '{name}' is unknown")
+                            bail!("The --results-format option must be set when writing to stdout")
+                        };
+                        if let Some(results_file) = results_file {
+                            let mut writer = GraphSerializer::from_format(format)
+                                .triple_writer(BufWriter::new(File::create(results_file)?))?;
+                            for triple in triples {
+                                writer.write(triple?.as_ref())?;
+                            }
+                            writer.finish()?;
+                        } else {
+                            let stdout = stdout(); // Not needed in Rust 1.61
+                            let mut writer = GraphSerializer::from_format(format)
+                                .triple_writer(stdout.lock())?;
+                            for triple in triples {
+                                writer.write(triple?.as_ref())?;
+                            }
+                            writer.finish()?;
                         }
-                    } else if let Some(results_file) = &results_file {
-                        format_from_path(results_file, |ext| {
-                            GraphFormat::from_extension(ext)
-                                .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
-                        })?
-                    } else {
-                        bail!("The --results-format option must be set when writing to stdout")
-                    };
-                    if let Some(results_file) = results_file {
-                        let mut writer = GraphSerializer::from_format(format)
-                            .triple_writer(BufWriter::new(File::create(results_file)?))?;
-                        for triple in triples {
-                            writer.write(triple?.as_ref())?;
-                        }
-                        writer.finish()?;
-                    } else {
-                        let stdout = stdout(); // Not needed in Rust 1.61
-                        let mut writer =
-                            GraphSerializer::from_format(format).triple_writer(stdout.lock())?;
-                        for triple in triples {
-                            writer.write(triple?.as_ref())?;
-                        }
-                        writer.finish()?;
                     }
                 }
+                Ok(())
+            })();
+            if let Some(explain_file) = explain_file {
+                let mut file = BufWriter::new(File::create(&explain_file)?);
+                match explain_file
+                    .extension()
+                    .and_then(|e| e.to_str()) {
+                    Some("json") => {
+                        explanation.write_in_json(file)?;
+                    },
+                    Some("txt") => {
+                        write!(file, "{:?}", explanation)?;
+                    },
+                    _ => bail!("The given explanation file {} must have an extension that is .json or .txt", explain_file.display())
+                }
+            } else if explain || stats {
+                eprintln!("{:?}", explanation);
             }
-            Ok(())
+            print_result
         }
         Command::Update {
             update,
