@@ -18,6 +18,7 @@ default = []
 rdf-star = ["oxrdf/rdf-star"]
 sep-0002 = []
 sep-0006 = []
+rules = []
 
 [dependencies]
 peg = "0.8"

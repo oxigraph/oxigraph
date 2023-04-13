@@ -1,5 +1,6 @@
 use crate::algebra::*;
 use crate::query::*;
+use crate::rule::*;
 use crate::term::*;
 use crate::update::*;
 use oxilangtag::LanguageTag;
@@ -54,7 +55,7 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
     };
 
     let operations =
-        parser::UpdateInit(&unescape_unicode_codepoints(update), &mut state).map_err(|e| {
+        parser::UpdateUnit(&unescape_unicode_codepoints(update), &mut state).map_err(|e| {
             ParseError {
                 inner: ParseErrorKind::Parser(e),
             }
@@ -62,6 +63,27 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
     Ok(Update {
         operations,
         base_iri: state.base_iri,
+    })
+}
+
+/// Parses a set of if/then rules with an optional base IRI to resolve relative IRIs in the rule.
+pub fn parse_rule_set(rules: &str, base_iri: Option<&str>) -> Result<RuleSet, ParseError> {
+    let mut state = ParserState {
+        base_iri: if let Some(base_iri) = base_iri {
+            Some(Iri::parse(base_iri.to_owned()).map_err(|e| ParseError {
+                inner: ParseErrorKind::InvalidBaseIri(e),
+            })?)
+        } else {
+            None
+        },
+        namespaces: HashMap::default(),
+        used_bnodes: HashSet::default(),
+        currently_used_bnodes: HashSet::default(),
+        aggregates: Vec::new(),
+    };
+
+    parser::RuleSetUnit(&unescape_unicode_codepoints(rules), &mut state).map_err(|e| ParseError {
+        inner: ParseErrorKind::Parser(e),
     })
 }
 
@@ -966,7 +988,7 @@ parser! {
         }
 
         //[3]
-        pub rule UpdateInit() -> Vec<GraphUpdateOperation> = Update()
+        pub rule UpdateUnit() -> Vec<GraphUpdateOperation> = Update()
 
         //[4]
         rule Prologue() = (BaseDecl() _ / PrefixDecl() _)* {}
@@ -2444,6 +2466,17 @@ parser! {
             } else {
                 Err(literal)
             }
+        }
+
+        pub rule RuleSetUnit() -> RuleSet = RuleSet()
+
+        rule RuleSet() -> RuleSet = _ Prologue() _ rules:(Rule() ** (_ ";" _))  _ ( ";" _)? { RuleSet { rules } }
+
+        rule Rule() -> Rule = i("IF") _ body:ConstructTemplate() _ i("THEN") _ head:ConstructTemplate() {?
+            Ok(Rule {
+                body: GraphPattern::Bgp { patterns: body },
+                head: head.into_iter().map(GroundTriplePattern::try_from).collect::<Result<_, ()>>().map_err(|_| "Blank nodes are not allowed in rules head")?
+            })
         }
     }
 }

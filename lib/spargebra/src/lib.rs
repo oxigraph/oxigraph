@@ -8,9 +8,12 @@
 pub mod algebra;
 mod parser;
 mod query;
+mod rule;
 pub mod term;
 mod update;
 
 pub use parser::ParseError;
 pub use query::*;
+#[cfg(feature = "rules")]
+pub use rule::*;
 pub use update::*;
