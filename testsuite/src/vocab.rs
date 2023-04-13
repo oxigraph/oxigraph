@@ -77,6 +77,7 @@ pub mod qt {
 
 pub mod ut {
     use oxigraph::model::NamedNodeRef;
+
     pub const DATA: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2009/sparql/tests/test-update#data");
     pub const GRAPH_DATA: NamedNodeRef<'_> =
@@ -85,4 +86,11 @@ pub mod ut {
         NamedNodeRef::new_unchecked("http://www.w3.org/2009/sparql/tests/test-update#graph");
     pub const REQUEST: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2009/sparql/tests/test-update#request");
+}
+
+pub mod ox {
+    use oxigraph::model::NamedNodeRef;
+
+    pub const RULES_DATA: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("https://github.com/oxigraph/oxigraph/tests#rulesData");
 }

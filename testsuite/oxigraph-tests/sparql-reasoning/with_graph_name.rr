@@ -1,0 +1,3 @@
+PREFIX ex: <http://example.org/>
+
+IF { ?g a ex:Foo } THEN { ?g a ex:Bar }

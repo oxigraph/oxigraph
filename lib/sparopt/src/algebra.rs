@@ -7,12 +7,12 @@ use spargebra::algebra::{
     GraphPattern as AlGraphPattern, OrderExpression as AlOrderExpression,
 };
 pub use spargebra::algebra::{Function, PropertyPathExpression};
-#[cfg(feature = "rdf-star")]
-use spargebra::term::GroundTriplePattern;
-use spargebra::term::{BlankNode, TermPattern, TriplePattern};
+use spargebra::term::{BlankNode, GroundSubject, TermPattern, TriplePattern};
 pub use spargebra::term::{
     GroundTerm, GroundTermPattern, Literal, NamedNode, NamedNodePattern, Variable,
 };
+#[cfg(feature = "rdf-star")]
+use spargebra::term::{GroundTriple, GroundTriplePattern};
 use std::collections::HashMap;
 
 /// An [expression](https://www.w3.org/TR/sparql11-query/#expressions).
@@ -188,6 +188,41 @@ impl From<NamedNode> for Expression {
 impl From<Literal> for Expression {
     fn from(value: Literal) -> Self {
         Self::Literal(value)
+    }
+}
+
+impl From<GroundSubject> for Expression {
+    fn from(value: GroundSubject) -> Self {
+        match value {
+            GroundSubject::NamedNode(value) => value.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundSubject::Triple(value) => (*value).into(),
+        }
+    }
+}
+
+impl From<GroundTerm> for Expression {
+    fn from(value: GroundTerm) -> Self {
+        match value {
+            GroundTerm::NamedNode(value) => value.into(),
+            GroundTerm::Literal(value) => value.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundTerm::Triple(value) => (*value).into(),
+        }
+    }
+}
+
+#[cfg(feature = "rdf-star")]
+impl From<GroundTriple> for Expression {
+    fn from(value: GroundTriple) -> Self {
+        Self::FunctionCall(
+            Function::Triple,
+            vec![
+                value.subject.into(),
+                value.predicate.into(),
+                value.object.into(),
+            ],
+        )
     }
 }
 

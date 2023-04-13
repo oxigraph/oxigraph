@@ -14,7 +14,7 @@ mod service;
 mod update;
 
 use crate::model::{NamedNode, Term};
-pub use crate::sparql::algebra::{Query, QueryDataset, Update};
+pub use crate::sparql::algebra::{Query, QueryDataset, RuleSet, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::{EvaluationError, QueryError};
 use crate::sparql::eval::{SimpleEvaluator, Timer};
@@ -29,6 +29,7 @@ use json_event_parser::{JsonEvent, JsonWriter};
 pub use oxrdf::{Variable, VariableNameParseError};
 pub use sparesults::QueryResultsFormat;
 pub use spargebra::ParseError;
+use sparopt::QueryRewriter;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -53,6 +54,7 @@ pub(crate) fn evaluate_query(
                 &pattern,
                 true,
                 &options.custom_functions,
+                options.query_rewriter.as_ref(),
                 options.without_optimizations,
             )?;
             let planning_duration = start_planning.elapsed();
@@ -74,6 +76,7 @@ pub(crate) fn evaluate_query(
                 &pattern,
                 false,
                 &options.custom_functions,
+                options.query_rewriter.as_ref(),
                 options.without_optimizations,
             )?;
             let planning_duration = start_planning.elapsed();
@@ -98,6 +101,7 @@ pub(crate) fn evaluate_query(
                 &pattern,
                 false,
                 &options.custom_functions,
+                options.query_rewriter.as_ref(),
                 options.without_optimizations,
             )?;
             let construct = PlanBuilder::build_graph_template(
@@ -126,6 +130,7 @@ pub(crate) fn evaluate_query(
                 &pattern,
                 false,
                 &options.custom_functions,
+                options.query_rewriter.as_ref(),
                 options.without_optimizations,
             )?;
             let planning_duration = start_planning.elapsed();
@@ -174,6 +179,7 @@ pub struct QueryOptions {
     http_timeout: Option<Duration>,
     http_redirection_limit: usize,
     without_optimizations: bool,
+    query_rewriter: Option<Rc<QueryRewriter>>,
 }
 
 impl QueryOptions {
@@ -265,6 +271,13 @@ impl QueryOptions {
     #[must_use]
     pub fn without_optimizations(mut self) -> Self {
         self.without_optimizations = true;
+        self
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn with_inference_rules(mut self, rules: RuleSet) -> Self {
+        self.query_rewriter = Some(Rc::new(QueryRewriter::new(rules.inner)));
         self
     }
 }

@@ -67,6 +67,10 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
         "https://github.com/oxigraph/oxigraph/tests#NegativeTsvResultsSyntaxTest",
         evaluate_negative_tsv_result_syntax_test,
     );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#SparqlRuleEvaluationTest",
+        evaluate_rule_evaluation_test,
+    );
 }
 
 fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
@@ -284,6 +288,58 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
             Update::parse(&read_file_to_string(update_file)?, Some(update_file)).unwrap(),
         )
     }
+}
+
+fn evaluate_rule_evaluation_test(test: &Test) -> Result<()> {
+    let store = Store::new()?;
+    if let Some(data) = &test.data {
+        load_dataset_to_store(data, &store)?;
+    }
+    for (name, value) in &test.graph_data {
+        load_graph_to_store(value, &store, name)?;
+    }
+    let query_file = test
+        .query
+        .as_deref()
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+    let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
+        .map_err(|e| anyhow!("Failure to parse query of {test} with error: {e}"))?;
+    let rule_file = test
+        .rules_data
+        .as_deref()
+        .ok_or_else(|| anyhow!("No rules data found for test {test}"))?;
+    let options = QueryOptions::default().with_inference_rules(
+        RuleSet::parse(&read_file_to_string(rule_file)?, Some(rule_file))
+            .map_err(|e| anyhow!("Failure to parse rule set of {test} with error: {e}"))?,
+    );
+
+    let expected_results = load_sparql_query_result(test.result.as_ref().unwrap())
+        .map_err(|e| anyhow!("Error constructing expected graph for {test}: {e}"))?;
+    let with_order = if let StaticQueryResults::Solutions { ordered, .. } = &expected_results {
+        *ordered
+    } else {
+        false
+    };
+
+    for with_query_optimizer in [true, false] {
+        let mut options = options.clone();
+        if !with_query_optimizer {
+            options = options.without_optimizations();
+        }
+        let actual_results = store
+            .query_opt(query.clone(), options)
+            .map_err(|e| anyhow!("Failure to execute query of {test} with error: {e}"))?;
+        let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)?;
+
+        if !are_query_results_isomorphic(&expected_results, &actual_results) {
+            bail!(
+                "Failure on {test}.\n{}\nParsed query:\n{}\nData:\n{store}\n",
+                results_diff(expected_results, actual_results),
+                Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap()
+            );
+        }
+    }
+    Ok(())
 }
 
 fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {

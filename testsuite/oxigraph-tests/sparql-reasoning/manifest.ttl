@@ -1,0 +1,39 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix :      <https://github.com/oxigraph/oxigraph/tests/sparql/manifest#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:    <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:    <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix ox:    <https://github.com/oxigraph/oxigraph/tests#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Oxigraph SPARQL reasoning tests" ;
+    mf:entries
+    (
+    :simple_type_inheritance
+    :simple_fact
+    :with_graph_name
+    ) .
+
+:simple_type_inheritance rdf:type ox:SparqlRuleEvaluationTest ;
+    mf:name "Simple type inheritance" ;
+    mf:action
+         [ qt:query <simple_type_inheritance.rq> ;
+           qt:data  <simple_type_inheritance.ttl> ] ;
+    ox:rulesData <simple_type_inheritance.rr> ;
+    mf:result <simple_type_inheritance.srj> .
+
+:simple_fact rdf:type ox:SparqlRuleEvaluationTest ;
+    mf:name "Simple fact" ;
+    mf:action
+         [ qt:query <simple_fact.rq> ;
+           qt:data  <simple_fact.ttl> ] ;
+    ox:rulesData <simple_fact.rr> ;
+    mf:result <simple_fact.srj> .
+
+:with_graph_name rdf:type ox:SparqlRuleEvaluationTest ;
+    mf:name "Simple type inheritance" ;
+    mf:action
+         [ qt:query <with_graph_name.rq> ;
+           qt:graphData  <with_graph_name.ttl> ] ;
+    ox:rulesData <with_graph_name.rr> ;
+    mf:result <with_graph_name.srj> .

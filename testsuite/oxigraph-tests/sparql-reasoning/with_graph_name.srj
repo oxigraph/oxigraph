@@ -1,0 +1,19 @@
+{
+  "head": {
+    "vars": ["s", "g"]
+  },
+  "results": {
+    "bindings": [
+      {
+        "s": {
+          "type": "uri",
+          "value": "http://example.org/s1"
+        },
+        "g": {
+          "type": "uri",
+          "value": "https://github.com/oxigraph/oxigraph/tests/sparql-reasoning/with_graph_name.ttl"
+        }
+      }
+    ]
+  }
+}

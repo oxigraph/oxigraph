@@ -1,0 +1,2 @@
+PREFIX ex: <http://example.org/>
+ex:s1 a ex:Foo .

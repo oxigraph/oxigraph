@@ -181,6 +181,56 @@ impl<'a> TryFrom<&'a String> for Update {
     }
 }
 
+/// A parsed rule set.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct RuleSet {
+    pub(super) inner: spargebra::RuleSet,
+}
+
+impl RuleSet {
+    /// Parses a rule set with an optional base IRI to resolve relative IRIs in the rule set.
+    pub fn parse(rule_set: &str, base_iri: Option<&str>) -> Result<Self, spargebra::ParseError> {
+        let rule_set = spargebra::RuleSet::parse(rule_set, base_iri)?;
+        Ok(rule_set.into())
+    }
+}
+
+impl fmt::Display for RuleSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f) //TODO: override
+    }
+}
+
+impl FromStr for RuleSet {
+    type Err = spargebra::ParseError;
+
+    fn from_str(rule_set: &str) -> Result<Self, spargebra::ParseError> {
+        Self::parse(rule_set, None)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for RuleSet {
+    type Error = spargebra::ParseError;
+
+    fn try_from(rule_set: &str) -> Result<Self, spargebra::ParseError> {
+        Self::from_str(rule_set)
+    }
+}
+
+impl<'a> TryFrom<&'a String> for RuleSet {
+    type Error = spargebra::ParseError;
+
+    fn try_from(rule_set: &String) -> Result<Self, spargebra::ParseError> {
+        Self::from_str(rule_set)
+    }
+}
+
+impl From<spargebra::RuleSet> for RuleSet {
+    fn from(rule_set: spargebra::RuleSet) -> Self {
+        Self { inner: rule_set }
+    }
+}
+
 /// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct QueryDataset {

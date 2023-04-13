@@ -19,6 +19,7 @@ pub struct Test {
     pub service_data: Vec<(String, String)>,
     pub result: Option<String>,
     pub result_graph_data: Vec<(NamedNode, String)>,
+    pub rules_data: Option<String>,
 }
 
 impl fmt::Display for Test {
@@ -255,6 +256,14 @@ impl TestManifest {
                 Some(_) => bail!("invalid result"),
                 None => (None, Vec::new()),
             };
+            let rules_data = if let Some(TermRef::NamedNode(n)) = self
+                .graph
+                .object_for_subject_predicate(&test_node, ox::RULES_DATA)
+            {
+                Some(n.as_str().to_owned())
+            } else {
+                None
+            };
             return Ok(Some(Test {
                 id: test_node,
                 kind,
@@ -268,6 +277,7 @@ impl TestManifest {
                 service_data,
                 result,
                 result_graph_data,
+                rules_data,
             }));
         }
     }

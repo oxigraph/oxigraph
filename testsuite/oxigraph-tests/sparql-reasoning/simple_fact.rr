@@ -1,0 +1,3 @@
+PREFIX ex: <http://example.org/>
+
+IF {} THEN { ex:s ex:p ex:o }

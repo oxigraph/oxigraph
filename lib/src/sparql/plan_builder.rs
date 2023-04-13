@@ -9,7 +9,7 @@ use oxrdf::{BlankNode, Term, TermRef, Triple};
 use regex::Regex;
 use spargebra::term::{GroundSubject, GroundTriple, TermPattern, TriplePattern};
 use sparopt::algebra::*;
-use sparopt::Optimizer;
+use sparopt::{Optimizer, QueryRewriter};
 use std::collections::{BTreeSet, HashMap};
 use std::mem::swap;
 use std::rc::Rc;
@@ -26,9 +26,13 @@ impl<'a> PlanBuilder<'a> {
         pattern: &spargebra::algebra::GraphPattern,
         is_cardinality_meaningful: bool,
         custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
+        query_rewriter: Option<&Rc<QueryRewriter>>,
         without_optimizations: bool,
     ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut pattern = GraphPattern::from(pattern);
+        if let Some(query_rewriter) = query_rewriter {
+            pattern = query_rewriter.rewrite_graph_pattern(&pattern);
+        }
         if !without_optimizations {
             pattern = Optimizer::default().optimize(pattern);
         }
