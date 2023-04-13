@@ -9,10 +9,6 @@ from pathlib import Path
 from shutil import which
 from tempfile import NamedTemporaryFile
 
-if which('flamegraph.pl') is None:
-    raise Exception(
-        'This script requires the flamegraph.pl script from https://github.com/brendangregg/FlameGraph to be installed and be in $PATH.')
-
 parser = ArgumentParser(
     prog='OxigraphFlamegraph',
     description='Builds a flamegraph from the Oxigraph query explanation JSON format',
@@ -44,13 +40,24 @@ def add_to_trace(node, path):
     else:
         already_used_names[path] = 0
     samples = node['duration in seconds'] - sum(child['duration in seconds'] for child in node.get("children", ()))
-    trace.append(trace_line(path, samples))
+    if int(samples * 1_000_000) > 0:
+        trace.append(trace_line(path, samples))
     for i, child in enumerate(node.get("children", ())):
         add_to_trace(child, path)
 
 
 add_to_trace(explanation["plan"], 'eval')
-with NamedTemporaryFile('w+t') as fp:
-    fp.write('\n'.join(trace))
-    fp.flush()
-    args.flamegraph_svg.write_bytes(subprocess.run(['flamegraph.pl', fp.name], stdout=subprocess.PIPE).stdout)
+inferno = which('inferno-flamegraph')
+flamegraph_pl = which('flamegraph.pl')
+if inferno:
+    args.flamegraph_svg.write_text(
+        subprocess.run([inferno], input='\n'.join(trace), stdout=subprocess.PIPE, text=True).stdout)
+elif flamegraph_pl:
+    with NamedTemporaryFile('w+t') as fp:
+        fp.write('\n'.join(trace))
+        fp.flush()
+        args.flamegraph_svg.write_text(
+            subprocess.run([flamegraph_pl, fp.name], stdout=subprocess.PIPE, text=True).stdout)
+else:
+    raise Exception(
+        'This script requires either the inferno-flamegraph from https://github.com/jonhoo/inferno either the flamegraph.pl script from https://github.com/brendangregg/FlameGraph to be installed and be in $PATH.')
