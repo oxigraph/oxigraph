@@ -1,0 +1,4 @@
+SELECT ?s WHERE {
+    ?s ?p ?o .
+    FILTER(EXISTS { VALUES () {}})
+}

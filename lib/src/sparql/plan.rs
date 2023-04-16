@@ -41,8 +41,8 @@ pub enum PlanNode {
     },
     /// Streams left and materializes right join
     HashJoin {
-        left: Rc<Self>,
-        right: Rc<Self>,
+        probe_child: Rc<Self>,
+        build_child: Rc<Self>,
     },
     /// Right nested in left loop
     ForLoopJoin {
@@ -71,7 +71,6 @@ pub enum PlanNode {
     ForLoopLeftJoin {
         left: Rc<Self>,
         right: Rc<Self>,
-        possible_problem_vars: Rc<[usize]>, //Variables that should not be part of the entry of the left join
     },
     Extend {
         child: Rc<Self>,
@@ -160,7 +159,10 @@ impl PlanNode {
                     child.lookup_used_variables(callback);
                 }
             }
-            Self::HashJoin { left, right }
+            Self::HashJoin {
+                probe_child: left,
+                build_child: right,
+            }
             | Self::ForLoopJoin { left, right, .. }
             | Self::AntiJoin { left, right }
             | Self::ForLoopLeftJoin { left, right, .. } => {
@@ -296,7 +298,11 @@ impl PlanNode {
                     }
                 }
             }
-            Self::HashJoin { left, right } | Self::ForLoopJoin { left, right, .. } => {
+            Self::HashJoin {
+                probe_child: left,
+                build_child: right,
+            }
+            | Self::ForLoopJoin { left, right, .. } => {
                 left.lookup_always_bound_variables(callback);
                 right.lookup_always_bound_variables(callback);
             }
@@ -343,16 +349,6 @@ impl PlanNode {
                 //TODO
             }
         }
-    }
-
-    pub fn is_variable_bound(&self, variable: usize) -> bool {
-        let mut found = false;
-        self.lookup_always_bound_variables(&mut |v| {
-            if v == variable {
-                found = true;
-            }
-        });
-        found
     }
 }
 

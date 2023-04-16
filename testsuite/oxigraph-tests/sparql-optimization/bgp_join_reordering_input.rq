@@ -1,0 +1,9 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?s ?o WHERE {
+    ?m2 ex:p2 ?o .
+    ?s ex:p1 ?m1 , ?m2 .
+    ?m1 ex:p2 ?o .
+    ?s ex:p1prime ?m1 .
+    ?s a ex:C .
+}

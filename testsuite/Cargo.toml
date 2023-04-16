@@ -16,4 +16,6 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 time = { version = "0.3", features = ["formatting"] }
 oxigraph = { path = "../lib" }
+sparopt = { path = "../lib/sparopt" }
+spargebra = { path = "../lib/spargebra" }
 text-diff = "0.4"

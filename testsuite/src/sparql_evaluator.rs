@@ -8,6 +8,7 @@ use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::*;
 use oxigraph::store::Store;
+use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::io::{self, Cursor};
@@ -66,6 +67,10 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#NegativeTsvResultsSyntaxTest",
         evaluate_negative_tsv_result_syntax_test,
+    );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#QueryOptimizationTest",
+        evaluate_query_optimization_test,
     );
 }
 
@@ -716,4 +721,55 @@ fn load_dataset_to_store(url: &str, store: &Store) -> Result<()> {
         )
     }?;
     Ok(())
+}
+
+fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
+    let action = test
+        .action
+        .as_deref()
+        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+    let actual = (&Optimizer::optimize_graph_pattern(
+        (&if let spargebra::Query::Select { pattern, .. } =
+            spargebra::Query::parse(&read_file_to_string(action)?, Some(action))?
+        {
+            pattern
+        } else {
+            bail!("Only SELECT queries are supported in query sparql-optimization tests")
+        })
+            .into(),
+    ))
+        .into();
+    let result = test
+        .result
+        .as_ref()
+        .ok_or_else(|| anyhow!("No tests result found"))?;
+    let expected = if let spargebra::Query::Select { pattern, .. } =
+        spargebra::Query::parse(&read_file_to_string(result)?, Some(result))?
+    {
+        pattern
+    } else {
+        bail!("Only SELECT queries are supported in query sparql-optimization tests")
+    };
+    if expected == actual {
+        Ok(())
+    } else {
+        bail!(
+            "Failure on {test}.\nDiff:\n{}\n",
+            format_diff(
+                &spargebra::Query::Select {
+                    pattern: expected,
+                    dataset: None,
+                    base_iri: None
+                }
+                .to_sse(),
+                &spargebra::Query::Select {
+                    pattern: actual,
+                    dataset: None,
+                    base_iri: None
+                }
+                .to_sse(),
+                "query"
+            )
+        )
+    }
 }

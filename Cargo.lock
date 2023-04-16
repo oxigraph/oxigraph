@@ -958,6 +958,7 @@ dependencies = [
  "siphasher",
  "sparesults",
  "spargebra",
+ "sparopt",
  "zstd",
 ]
 
@@ -998,6 +999,8 @@ dependencies = [
  "anyhow",
  "clap",
  "oxigraph",
+ "spargebra",
+ "sparopt",
  "text-diff",
  "time",
 ]
@@ -1611,6 +1614,15 @@ dependencies = [
  "oxrdf",
  "peg",
  "rand",
+]
+
+[[package]]
+name = "sparopt"
+version = "0.1.0-alpha.1-dev"
+dependencies = [
+ "oxrdf",
+ "rand",
+ "spargebra",
 ]
 
 [[package]]
