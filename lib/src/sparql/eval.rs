@@ -379,21 +379,24 @@ impl SimpleEvaluator {
                     }
                 })
             }
-            PlanNode::HashJoin { left, right } => {
-                let join_keys: Vec<_> = left
+            PlanNode::HashJoin {
+                probe_child,
+                build_child,
+            } => {
+                let join_keys: Vec<_> = probe_child
                     .always_bound_variables()
-                    .intersection(&right.always_bound_variables())
+                    .intersection(&build_child.always_bound_variables())
                     .copied()
                     .collect();
-                let (left, left_stats) = self.plan_evaluator(Rc::clone(left));
-                stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(Rc::clone(right));
-                stat_children.push(right_stats);
+                let (probe, probe_stats) = self.plan_evaluator(Rc::clone(probe_child));
+                stat_children.push(probe_stats);
+                let (build, build_stats) = self.plan_evaluator(Rc::clone(build_child));
+                stat_children.push(build_stats);
                 if join_keys.is_empty() {
                     // Cartesian product
                     Rc::new(move |from| {
                         let mut errors = Vec::default();
-                        let right_values = right(from.clone())
+                        let build_values = build(from.clone())
                             .filter_map(|result| match result {
                                 Ok(result) => Some(result),
                                 Err(error) => {
@@ -403,8 +406,8 @@ impl SimpleEvaluator {
                             })
                             .collect::<Vec<_>>();
                         Box::new(CartesianProductJoinIterator {
-                            left_iter: left(from),
-                            right: right_values,
+                            probe_iter: probe(from),
+                            built: build_values,
                             buffered_results: errors,
                         })
                     })
@@ -412,8 +415,8 @@ impl SimpleEvaluator {
                     // Real hash join
                     Rc::new(move |from| {
                         let mut errors = Vec::default();
-                        let mut right_values = EncodedTupleSet::new(join_keys.clone());
-                        right_values.extend(right(from.clone()).filter_map(
+                        let mut built_values = EncodedTupleSet::new(join_keys.clone());
+                        built_values.extend(build(from.clone()).filter_map(
                             |result| match result {
                                 Ok(result) => Some(result),
                                 Err(error) => {
@@ -423,8 +426,8 @@ impl SimpleEvaluator {
                             },
                         ));
                         Box::new(HashJoinIterator {
-                            left_iter: left(from),
-                            right: right_values,
+                            probe_iter: probe(from),
+                            built: built_values,
                             buffered_results: errors,
                         })
                     })
@@ -516,33 +519,17 @@ impl SimpleEvaluator {
                     })
                 })
             }
-            PlanNode::ForLoopLeftJoin {
-                left,
-                right,
-                possible_problem_vars,
-            } => {
+            PlanNode::ForLoopLeftJoin { left, right } => {
                 let (left, left_stats) = self.plan_evaluator(Rc::clone(left));
                 stat_children.push(left_stats);
                 let (right, right_stats) = self.plan_evaluator(Rc::clone(right));
                 stat_children.push(right_stats);
-                let possible_problem_vars = Rc::clone(possible_problem_vars);
                 Rc::new(move |from| {
-                    if possible_problem_vars.is_empty() {
-                        Box::new(ForLoopLeftJoinIterator {
-                            right_evaluator: Rc::clone(&right),
-                            left_iter: left(from),
-                            current_right: Box::new(empty()),
-                        })
-                    } else {
-                        Box::new(BadForLoopLeftJoinIterator {
-                            from_tuple: from.clone(),
-                            right_evaluator: Rc::clone(&right),
-                            left_iter: left(from),
-                            current_left: EncodedTuple::with_capacity(0),
-                            current_right: Box::new(empty()),
-                            problem_vars: Rc::clone(&possible_problem_vars),
-                        })
-                    }
+                    Box::new(ForLoopLeftJoinIterator {
+                        right_evaluator: Rc::clone(&right),
+                        left_iter: left(from),
+                        current_right: Box::new(empty()),
+                    })
                 })
             }
             PlanNode::Filter { child, expression } => {
@@ -3887,8 +3874,8 @@ impl PathEvaluator {
 }
 
 struct CartesianProductJoinIterator {
-    left_iter: EncodedTuplesIterator,
-    right: Vec<EncodedTuple>,
+    probe_iter: EncodedTuplesIterator,
+    built: Vec<EncodedTuple>,
     buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
 }
 
@@ -3900,12 +3887,12 @@ impl Iterator for CartesianProductJoinIterator {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
             }
-            let left_tuple = match self.left_iter.next()? {
-                Ok(left_tuple) => left_tuple,
+            let probe_tuple = match self.probe_iter.next()? {
+                Ok(probe_tuple) => probe_tuple,
                 Err(error) => return Some(Err(error)),
             };
-            for right_tuple in &self.right {
-                if let Some(result_tuple) = left_tuple.combine_with(right_tuple) {
+            for built_tuple in &self.built {
+                if let Some(result_tuple) = probe_tuple.combine_with(built_tuple) {
                     self.buffered_results.push(Ok(result_tuple))
                 }
             }
@@ -3913,17 +3900,17 @@ impl Iterator for CartesianProductJoinIterator {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let (min, max) = self.left_iter.size_hint();
+        let (min, max) = self.probe_iter.size_hint();
         (
-            min.saturating_mul(self.right.len()),
-            max.map(|v| v.saturating_mul(self.right.len())),
+            min.saturating_mul(self.built.len()),
+            max.map(|v| v.saturating_mul(self.built.len())),
         )
     }
 }
 
 struct HashJoinIterator {
-    left_iter: EncodedTuplesIterator,
-    right: EncodedTupleSet,
+    probe_iter: EncodedTuplesIterator,
+    built: EncodedTupleSet,
     buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
 }
 
@@ -3935,15 +3922,15 @@ impl Iterator for HashJoinIterator {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
             }
-            let left_tuple = match self.left_iter.next()? {
-                Ok(left_tuple) => left_tuple,
+            let probe_tuple = match self.probe_iter.next()? {
+                Ok(probe_tuple) => probe_tuple,
                 Err(error) => return Some(Err(error)),
             };
             self.buffered_results.extend(
-                self.right
-                    .get(&left_tuple)
+                self.built
+                    .get(&probe_tuple)
                     .iter()
-                    .filter_map(|right_tuple| left_tuple.combine_with(right_tuple).map(Ok)),
+                    .filter_map(|built_tuple| probe_tuple.combine_with(built_tuple).map(Ok)),
             )
         }
     }
@@ -3951,10 +3938,10 @@ impl Iterator for HashJoinIterator {
     fn size_hint(&self) -> (usize, Option<usize>) {
         (
             0,
-            self.left_iter
+            self.probe_iter
                 .size_hint()
                 .1
-                .map(|v| v.saturating_mul(self.right.len())),
+                .map(|v| v.saturating_mul(self.built.len())),
         )
     }
 }
@@ -4030,58 +4017,6 @@ impl Iterator for ForLoopLeftJoinIterator {
             Some(right_tuple)
         } else {
             Some(Ok(left_tuple))
-        }
-    }
-}
-
-struct BadForLoopLeftJoinIterator {
-    from_tuple: EncodedTuple,
-    right_evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
-    left_iter: EncodedTuplesIterator,
-    current_left: EncodedTuple,
-    current_right: EncodedTuplesIterator,
-    problem_vars: Rc<[usize]>,
-}
-
-impl Iterator for BadForLoopLeftJoinIterator {
-    type Item = Result<EncodedTuple, EvaluationError>;
-
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
-        for right_tuple in &mut self.current_right {
-            match right_tuple {
-                Ok(right_tuple) => {
-                    if let Some(combined) = right_tuple.combine_with(&self.current_left) {
-                        return Some(Ok(combined));
-                    }
-                }
-                Err(error) => return Some(Err(error)),
-            }
-        }
-        match self.left_iter.next()? {
-            Ok(left_tuple) => {
-                let mut right_input = self.from_tuple.clone();
-                for (var, val) in left_tuple.iter().enumerate() {
-                    if let Some(val) = val {
-                        if !self.problem_vars.contains(&var) {
-                            right_input.set(var, val);
-                        }
-                    }
-                }
-                self.current_right = (self.right_evaluator)(right_input);
-                for right_tuple in &mut self.current_right {
-                    match right_tuple {
-                        Ok(right_tuple) => {
-                            if let Some(combined) = right_tuple.combine_with(&left_tuple) {
-                                self.current_left = left_tuple;
-                                return Some(Ok(combined));
-                            }
-                        }
-                        Err(error) => return Some(Err(error)),
-                    }
-                }
-                Some(Ok(left_tuple))
-            }
-            Err(error) => Some(Err(error)),
         }
     }
 }

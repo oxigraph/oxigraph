@@ -105,7 +105,6 @@ pub(crate) fn evaluate_query(
                 &template,
                 variables,
                 &options.custom_functions,
-                options.without_optimizations,
             );
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(

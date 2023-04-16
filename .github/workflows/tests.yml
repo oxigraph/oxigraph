@@ -36,6 +36,8 @@ jobs:
         working-directory: ./lib/sparesults
       - run: cargo clippy
         working-directory: ./lib/spargebra
+      - run: cargo clippy
+        working-directory: ./lib/sparopt
       - run: cargo clippy --all-targets --all-features
 
   clippy_wasm_js:
@@ -76,6 +78,8 @@ jobs:
         working-directory: ./lib/sparesults
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./lib/spargebra
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./lib/sparopt
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./server
 
@@ -119,7 +123,7 @@ jobs:
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-semver-checks || true
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server --exclude sparopt
 
   test_linux:
     runs-on: ubuntu-latest
