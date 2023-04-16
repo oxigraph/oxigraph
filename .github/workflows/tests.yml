@@ -35,6 +35,8 @@ jobs:
         working-directory: ./lib/sparesults
       - run: cargo clippy
         working-directory: ./lib/spargebra
+      - run: cargo clippy
+        working-directory: ./lib/sparopt
       - run: cargo clippy --all-targets --all-features
 
   clippy_wasm_js:
@@ -75,6 +77,8 @@ jobs:
         working-directory: ./lib/sparesults
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./lib/spargebra
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./lib/sparopt
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./server
 

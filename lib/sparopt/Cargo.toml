@@ -1,0 +1,28 @@
+[package]
+name = "sparopt"
+version = "0.1.0-alpha.1"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["SPARQL"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparopt"
+homepage = "https://oxigraph.org/"
+description = """
+A SPARQL optimizer
+"""
+edition = "2021"
+rust-version = "1.60"
+
+[features]
+default = []
+rdf-star = ["oxrdf/rdf-star", "spargebra/rdf-star"]
+sep-0002 = ["spargebra/sep-0002"]
+sep-0006 = ["spargebra/sep-0006"]
+
+[dependencies]
+oxrdf = { version = "0.1.5", path="../oxrdf" }
+rand = "0.8"
+spargebra = { version = "0.2.8-dev", path="../spargebra" }
+
+[package.metadata.docs.rs]
+all-features = true

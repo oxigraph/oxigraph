@@ -6,6 +6,7 @@ members = [
     "lib/oxsdatatypes",
     "lib/spargebra",
     "lib/sparesults",
+    "lib/sparopt",
     "lib/sparql-smith",
     "oxrocksdb-sys",
     "python",

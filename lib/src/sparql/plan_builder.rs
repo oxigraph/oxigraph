@@ -5,12 +5,12 @@ use crate::sparql::eval::compile_pattern;
 use crate::sparql::plan::*;
 use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple};
 use oxrdf::vocab::xsd;
-use oxrdf::TermRef;
-use rand::random;
+use oxrdf::{BlankNode, Term, TermRef, Triple};
 use regex::Regex;
-use spargebra::algebra::*;
-use spargebra::term::*;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use spargebra::term::{GroundSubject, GroundTriple, TermPattern, TriplePattern};
+use sparopt::algebra::*;
+use sparopt::Optimizer;
+use std::collections::{BTreeSet, HashMap};
 use std::mem::swap;
 use std::rc::Rc;
 
@@ -23,25 +23,22 @@ pub struct PlanBuilder<'a> {
 impl<'a> PlanBuilder<'a> {
     pub fn build(
         dataset: &'a DatasetView,
-        pattern: &GraphPattern,
+        pattern: &spargebra::algebra::GraphPattern,
         is_cardinality_meaningful: bool,
         custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
         without_optimizations: bool,
     ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
+        let mut pattern = GraphPattern::from(pattern);
+        if !without_optimizations {
+            pattern = Optimizer::default().optimize(pattern);
+        }
         let mut variables = Vec::default();
         let plan = PlanBuilder {
             dataset,
             custom_functions,
             with_optimizations: !without_optimizations,
         }
-        .build_for_graph_pattern(
-            pattern,
-            &mut variables,
-            &PatternValue::Constant(PlanTerm {
-                encoded: EncodedTerm::DefaultGraph,
-                plain: PatternValueConstant::DefaultGraph,
-            }),
-        )?;
+        .build_for_graph_pattern(&pattern, &mut variables)?;
         let plan = if !without_optimizations && !is_cardinality_meaningful {
             // let's reduce downstream task.
             // TODO: avoid if already REDUCED or DISTINCT
@@ -73,37 +70,53 @@ impl<'a> PlanBuilder<'a> {
         &self,
         pattern: &GraphPattern,
         variables: &mut Vec<Variable>,
-        graph_name: &PatternValue,
     ) -> Result<PlanNode, EvaluationError> {
         Ok(match pattern {
-            GraphPattern::Bgp { patterns } => {
-                if self.with_optimizations {
-                    self.build_for_bgp(sort_bgp(patterns), variables, graph_name)
-                } else {
-                    self.build_for_bgp(patterns, variables, graph_name)
-                }
-            }
+            GraphPattern::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => PlanNode::QuadPattern {
+                subject: self.pattern_value_from_ground_term_pattern(subject, variables),
+                predicate: self.pattern_value_from_named_node_or_variable(predicate, variables),
+                object: self.pattern_value_from_ground_term_pattern(object, variables),
+                graph_name: graph_name.as_ref().map_or(
+                    PatternValue::Constant(PlanTerm {
+                        encoded: EncodedTerm::DefaultGraph,
+                        plain: PatternValueConstant::DefaultGraph,
+                    }),
+                    |g| self.pattern_value_from_named_node_or_variable(g, variables),
+                ),
+            },
             GraphPattern::Path {
                 subject,
                 path,
                 object,
+                graph_name,
             } => PlanNode::PathPattern {
-                subject: self.pattern_value_from_term_or_variable(subject, variables),
+                subject: self.pattern_value_from_ground_term_pattern(subject, variables),
                 path: Rc::new(self.build_for_path(path)),
-                object: self.pattern_value_from_term_or_variable(object, variables),
-                graph_name: graph_name.clone(),
+                object: self.pattern_value_from_ground_term_pattern(object, variables),
+                graph_name: graph_name.as_ref().map_or(
+                    PatternValue::Constant(PlanTerm {
+                        encoded: EncodedTerm::DefaultGraph,
+                        plain: PatternValueConstant::DefaultGraph,
+                    }),
+                    |g| self.pattern_value_from_named_node_or_variable(g, variables),
+                ),
             },
             GraphPattern::Join { left, right } => self.new_join(
-                self.build_for_graph_pattern(left, variables, graph_name)?,
-                self.build_for_graph_pattern(right, variables, graph_name)?,
+                self.build_for_graph_pattern(left, variables)?,
+                self.build_for_graph_pattern(right, variables)?,
             ),
             GraphPattern::LeftJoin {
                 left,
                 right,
                 expression,
             } => {
-                let left = self.build_for_graph_pattern(left, variables, graph_name)?;
-                let right = self.build_for_graph_pattern(right, variables, graph_name)?;
+                let left = self.build_for_graph_pattern(left, variables)?;
+                let right = self.build_for_graph_pattern(right, variables)?;
 
                 let mut possible_problem_vars = BTreeSet::new();
                 Self::add_left_join_problematic_variables(&right, &mut possible_problem_vars);
@@ -111,13 +124,18 @@ impl<'a> PlanBuilder<'a> {
                     // TODO: don't use if SERVICE is inside of for loop
 
                     //We add the extra filter if needed
-                    let right = if let Some(expr) = expression {
+                    let without_filter = if let Expression::Literal(l) = expression {
+                        l.datatype() == xsd::BOOLEAN && l.value() == "true"
+                    } else {
+                        false
+                    };
+                    let right = if without_filter {
+                        right
+                    } else {
                         self.push_filter(
                             Rc::new(right),
-                            Box::new(self.build_for_expression(expr, variables, graph_name)?),
+                            Box::new(self.build_for_expression(expression, variables)?),
                         )
-                    } else {
-                        right
                     };
                     PlanNode::ForLoopLeftJoin {
                         left: Rc::new(left),
@@ -128,58 +146,36 @@ impl<'a> PlanBuilder<'a> {
                     PlanNode::HashLeftJoin {
                         left: Rc::new(left),
                         right: Rc::new(right),
-                        expression: Box::new(expression.as_ref().map_or(
-                            Ok(PlanExpression::Literal(PlanTerm {
-                                encoded: true.into(),
-                                plain: true.into(),
-                            })),
-                            |e| self.build_for_expression(e, variables, graph_name),
-                        )?),
+                        expression: Box::new(self.build_for_expression(expression, variables)?),
                     }
                 }
             }
             GraphPattern::Lateral { left, right } => PlanNode::ForLoopJoin {
-                left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
-                right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+                left: Rc::new(self.build_for_graph_pattern(left, variables)?),
+                right: Rc::new(self.build_for_graph_pattern(right, variables)?),
             },
-            GraphPattern::Filter { expr, inner } => self.push_filter(
-                Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
-                Box::new(self.build_for_expression(expr, variables, graph_name)?),
+            GraphPattern::Filter { expression, inner } => self.push_filter(
+                Rc::new(self.build_for_graph_pattern(inner, variables)?),
+                Box::new(self.build_for_expression(expression, variables)?),
             ),
-            GraphPattern::Union { left, right } => {
-                //We flatten the UNION
-                let mut stack: Vec<&GraphPattern> = vec![left, right];
-                let mut children = vec![];
-                loop {
-                    match stack.pop() {
-                        None => break,
-                        Some(GraphPattern::Union { left, right }) => {
-                            stack.push(left);
-                            stack.push(right);
-                        }
-                        Some(p) => children.push(Rc::new(
-                            self.build_for_graph_pattern(p, variables, graph_name)?,
-                        )),
-                    }
-                }
-                PlanNode::Union { children }
-            }
-            GraphPattern::Graph { name, inner } => {
-                let graph_name = self.pattern_value_from_named_node_or_variable(name, variables);
-                self.build_for_graph_pattern(inner, variables, &graph_name)?
-            }
+            GraphPattern::Union { inner } => PlanNode::Union {
+                children: inner
+                    .iter()
+                    .map(|p| Ok(Rc::new(self.build_for_graph_pattern(p, variables)?)))
+                    .collect::<Result<_, EvaluationError>>()?,
+            },
             GraphPattern::Extend {
                 inner,
                 variable,
                 expression,
             } => PlanNode::Extend {
-                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables)?),
                 variable: build_plan_variable(variables, variable),
-                expression: Box::new(self.build_for_expression(expression, variables, graph_name)?),
+                expression: Box::new(self.build_for_expression(expression, variables)?),
             },
             GraphPattern::Minus { left, right } => PlanNode::AntiJoin {
-                left: Rc::new(self.build_for_graph_pattern(left, variables, graph_name)?),
-                right: Rc::new(self.build_for_graph_pattern(right, variables, graph_name)?),
+                left: Rc::new(self.build_for_graph_pattern(left, variables)?),
+                right: Rc::new(self.build_for_graph_pattern(right, variables)?),
             },
             GraphPattern::Service {
                 name,
@@ -187,13 +183,13 @@ impl<'a> PlanBuilder<'a> {
                 silent,
             } => {
                 // Child building should be at the begging in order for `variables` to be filled
-                let child = self.build_for_graph_pattern(inner, variables, graph_name)?;
+                let child = self.build_for_graph_pattern(inner, variables)?;
                 let service_name = self.pattern_value_from_named_node_or_variable(name, variables);
                 PlanNode::Service {
                     service_name,
                     variables: Rc::new(variables.clone()),
                     child: Rc::new(child),
-                    graph_pattern: Rc::new(inner.as_ref().clone()),
+                    graph_pattern: Rc::new(inner.as_ref().into()),
                     silent: *silent,
                 }
             }
@@ -202,7 +198,7 @@ impl<'a> PlanBuilder<'a> {
                 variables: by,
                 aggregates,
             } => PlanNode::Aggregate {
-                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables)?),
                 key_variables: Rc::new(
                     by.iter()
                         .map(|k| build_plan_variable(variables, k))
@@ -213,7 +209,7 @@ impl<'a> PlanBuilder<'a> {
                         .iter()
                         .map(|(v, a)| {
                             Ok((
-                                self.build_for_aggregate(a, variables, graph_name)?,
+                                self.build_for_aggregate(a, variables)?,
                                 build_plan_variable(variables, v),
                             ))
                         })
@@ -257,16 +253,16 @@ impl<'a> PlanBuilder<'a> {
                 let condition: Result<Vec<_>, EvaluationError> = expression
                     .iter()
                     .map(|comp| match comp {
-                        OrderExpression::Asc(e) => Ok(Comparator::Asc(
-                            self.build_for_expression(e, variables, graph_name)?,
-                        )),
-                        OrderExpression::Desc(e) => Ok(Comparator::Desc(
-                            self.build_for_expression(e, variables, graph_name)?,
-                        )),
+                        OrderExpression::Asc(e) => {
+                            Ok(Comparator::Asc(self.build_for_expression(e, variables)?))
+                        }
+                        OrderExpression::Desc(e) => {
+                            Ok(Comparator::Desc(self.build_for_expression(e, variables)?))
+                        }
                     })
                     .collect();
                 PlanNode::Sort {
-                    child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                    child: Rc::new(self.build_for_graph_pattern(inner, variables)?),
                     by: condition?,
                 }
             }
@@ -275,14 +271,8 @@ impl<'a> PlanBuilder<'a> {
                 variables: projection,
             } => {
                 let mut inner_variables = projection.clone();
-                let inner_graph_name =
-                    Self::convert_pattern_value_id(graph_name, &mut inner_variables);
                 PlanNode::Project {
-                    child: Rc::new(self.build_for_graph_pattern(
-                        inner,
-                        &mut inner_variables,
-                        &inner_graph_name,
-                    )?),
+                    child: Rc::new(self.build_for_graph_pattern(inner, &mut inner_variables)?),
                     mapping: Rc::new(
                         projection
                             .iter()
@@ -301,17 +291,17 @@ impl<'a> PlanBuilder<'a> {
                 }
             }
             GraphPattern::Distinct { inner } => PlanNode::HashDeduplicate {
-                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables)?),
             },
             GraphPattern::Reduced { inner } => PlanNode::Reduced {
-                child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
+                child: Rc::new(self.build_for_graph_pattern(inner, variables)?),
             },
             GraphPattern::Slice {
                 inner,
                 start,
                 length,
             } => {
-                let mut plan = self.build_for_graph_pattern(inner, variables, graph_name)?;
+                let mut plan = self.build_for_graph_pattern(inner, variables)?;
                 if *start > 0 {
                     plan = PlanNode::Skip {
                         child: Rc::new(plan),
@@ -327,29 +317,6 @@ impl<'a> PlanBuilder<'a> {
                 plan
             }
         })
-    }
-
-    fn build_for_bgp<'b>(
-        &self,
-        patterns: impl IntoIterator<Item = &'b TriplePattern>,
-        variables: &mut Vec<Variable>,
-        graph_name: &PatternValue,
-    ) -> PlanNode {
-        patterns
-            .into_iter()
-            .map(|triple| PlanNode::QuadPattern {
-                subject: self.pattern_value_from_term_or_variable(&triple.subject, variables),
-                predicate: self
-                    .pattern_value_from_named_node_or_variable(&triple.predicate, variables),
-                object: self.pattern_value_from_term_or_variable(&triple.object, variables),
-                graph_name: graph_name.clone(),
-            })
-            .reduce(|a, b| self.new_join(a, b))
-            .unwrap_or_else(|| PlanNode::StaticBindings {
-                encoded_tuples: vec![EncodedTuple::with_capacity(variables.len())],
-                variables: Vec::new(),
-                plain_bindings: vec![Vec::new()],
-            })
     }
 
     fn build_for_path(&self, path: &PropertyPathExpression) -> PlanPropertyPath {
@@ -395,7 +362,6 @@ impl<'a> PlanBuilder<'a> {
         &self,
         expression: &Expression,
         variables: &mut Vec<Variable>,
-        graph_name: &PatternValue,
     ) -> Result<PlanExpression, EvaluationError> {
         Ok(match expression {
             Expression::NamedNode(node) => PlanExpression::NamedNode(PlanTerm {
@@ -408,44 +374,44 @@ impl<'a> PlanBuilder<'a> {
             }),
             Expression::Variable(v) => PlanExpression::Variable(build_plan_variable(variables, v)),
             Expression::Or(a, b) => PlanExpression::Or(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::And(a, b) => PlanExpression::And(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::Equal(a, b) => PlanExpression::Equal(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::SameTerm(a, b) => PlanExpression::SameTerm(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::Greater(a, b) => PlanExpression::Greater(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::GreaterOrEqual(a, b) => PlanExpression::GreaterOrEqual(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::Less(a, b) => PlanExpression::Less(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::LessOrEqual(a, b) => PlanExpression::LessOrEqual(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::In(e, l) => {
-                let e = self.build_for_expression(e, variables, graph_name)?;
+                let e = self.build_for_expression(e, variables)?;
                 l.iter()
                     .map(|v| {
                         Ok(PlanExpression::Equal(
                             Box::new(e.clone()),
-                            Box::new(self.build_for_expression(v, variables, graph_name)?),
+                            Box::new(self.build_for_expression(v, variables)?),
                         ))
                     })
                     .reduce(|a: Result<_, EvaluationError>, b| {
@@ -459,321 +425,233 @@ impl<'a> PlanBuilder<'a> {
                     })?
             }
             Expression::Add(a, b) => PlanExpression::Add(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::Subtract(a, b) => PlanExpression::Subtract(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::Multiply(a, b) => PlanExpression::Multiply(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
             Expression::Divide(a, b) => PlanExpression::Divide(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::UnaryPlus(e) => PlanExpression::UnaryPlus(Box::new(
-                self.build_for_expression(e, variables, graph_name)?,
-            )),
-            Expression::UnaryMinus(e) => PlanExpression::UnaryMinus(Box::new(
-                self.build_for_expression(e, variables, graph_name)?,
-            )),
-            Expression::Not(e) => PlanExpression::Not(Box::new(
-                self.build_for_expression(e, variables, graph_name)?,
-            )),
+            Expression::UnaryPlus(e) => {
+                PlanExpression::UnaryPlus(Box::new(self.build_for_expression(e, variables)?))
+            }
+            Expression::UnaryMinus(e) => {
+                PlanExpression::UnaryMinus(Box::new(self.build_for_expression(e, variables)?))
+            }
+            Expression::Not(e) => {
+                PlanExpression::Not(Box::new(self.build_for_expression(e, variables)?))
+            }
             Expression::FunctionCall(function, parameters) => match function {
-                Function::Str => PlanExpression::Str(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Lang => PlanExpression::Lang(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::Str => PlanExpression::Str(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Lang => PlanExpression::Lang(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::LangMatches => PlanExpression::LangMatches(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
                 Function::Datatype => PlanExpression::Datatype(Box::new(
-                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                    self.build_for_expression(&parameters[0], variables)?,
                 )),
-                Function::Iri => PlanExpression::Iri(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::Iri => PlanExpression::Iri(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::BNode => PlanExpression::BNode(match parameters.get(0) {
-                    Some(e) => Some(Box::new(
-                        self.build_for_expression(e, variables, graph_name)?,
-                    )),
+                    Some(e) => Some(Box::new(self.build_for_expression(e, variables)?)),
                     None => None,
                 }),
                 Function::Rand => PlanExpression::Rand,
-                Function::Abs => PlanExpression::Abs(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Ceil => PlanExpression::Ceil(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Floor => PlanExpression::Floor(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Round => PlanExpression::Round(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::Abs => PlanExpression::Abs(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Ceil => PlanExpression::Ceil(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Floor => PlanExpression::Floor(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Round => PlanExpression::Round(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::Concat => {
-                    PlanExpression::Concat(self.expression_list(parameters, variables, graph_name)?)
+                    PlanExpression::Concat(self.expression_list(parameters, variables)?)
                 }
                 Function::SubStr => PlanExpression::SubStr(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                     match parameters.get(2) {
-                        Some(flags) => Some(Box::new(
-                            self.build_for_expression(flags, variables, graph_name)?,
-                        )),
+                        Some(flags) => Some(Box::new(self.build_for_expression(flags, variables)?)),
                         None => None,
                     },
                 ),
-                Function::StrLen => PlanExpression::StrLen(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::StrLen => PlanExpression::StrLen(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::Replace => {
                     if let Some(static_regex) =
                         compile_static_pattern_if_exists(&parameters[1], parameters.get(3))
                     {
                         PlanExpression::StaticReplace(
-                            Box::new(self.build_for_expression(
-                                &parameters[0],
-                                variables,
-                                graph_name,
-                            )?),
+                            Box::new(self.build_for_expression(&parameters[0], variables)?),
                             static_regex,
-                            Box::new(self.build_for_expression(
-                                &parameters[2],
-                                variables,
-                                graph_name,
-                            )?),
+                            Box::new(self.build_for_expression(&parameters[2], variables)?),
                         )
                     } else {
                         PlanExpression::DynamicReplace(
-                            Box::new(self.build_for_expression(
-                                &parameters[0],
-                                variables,
-                                graph_name,
-                            )?),
-                            Box::new(self.build_for_expression(
-                                &parameters[1],
-                                variables,
-                                graph_name,
-                            )?),
-                            Box::new(self.build_for_expression(
-                                &parameters[2],
-                                variables,
-                                graph_name,
-                            )?),
+                            Box::new(self.build_for_expression(&parameters[0], variables)?),
+                            Box::new(self.build_for_expression(&parameters[1], variables)?),
+                            Box::new(self.build_for_expression(&parameters[2], variables)?),
                             match parameters.get(3) {
-                                Some(flags) => Some(Box::new(
-                                    self.build_for_expression(flags, variables, graph_name)?,
-                                )),
+                                Some(flags) => {
+                                    Some(Box::new(self.build_for_expression(flags, variables)?))
+                                }
                                 None => None,
                             },
                         )
                     }
                 }
-                Function::UCase => PlanExpression::UCase(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::LCase => PlanExpression::LCase(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::UCase => PlanExpression::UCase(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::LCase => PlanExpression::LCase(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::EncodeForUri => PlanExpression::EncodeForUri(Box::new(
-                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                    self.build_for_expression(&parameters[0], variables)?,
                 )),
                 Function::Contains => PlanExpression::Contains(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
                 Function::StrStarts => PlanExpression::StrStarts(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
                 Function::StrEnds => PlanExpression::StrEnds(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
                 Function::StrBefore => PlanExpression::StrBefore(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
                 Function::StrAfter => PlanExpression::StrAfter(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
-                Function::Year => PlanExpression::Year(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Month => PlanExpression::Month(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Day => PlanExpression::Day(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Hours => PlanExpression::Hours(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Minutes => PlanExpression::Minutes(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Seconds => PlanExpression::Seconds(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Timezone => PlanExpression::Timezone(Box::new(
-                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                Function::Year => PlanExpression::Year(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
                 )),
-                Function::Tz => PlanExpression::Tz(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::Month => PlanExpression::Month(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Day => PlanExpression::Day(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Hours => PlanExpression::Hours(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Minutes => PlanExpression::Minutes(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Seconds => PlanExpression::Seconds(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Timezone => PlanExpression::Timezone(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Tz => PlanExpression::Tz(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::Now => PlanExpression::Now,
                 Function::Uuid => PlanExpression::Uuid,
                 Function::StrUuid => PlanExpression::StrUuid,
-                Function::Md5 => PlanExpression::Md5(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Sha1 => PlanExpression::Sha1(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Sha256 => PlanExpression::Sha256(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Sha384 => PlanExpression::Sha384(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Sha512 => PlanExpression::Sha512(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::Md5 => PlanExpression::Md5(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Sha1 => PlanExpression::Sha1(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Sha256 => PlanExpression::Sha256(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Sha384 => PlanExpression::Sha384(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Sha512 => PlanExpression::Sha512(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::StrLang => PlanExpression::StrLang(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
                 Function::StrDt => PlanExpression::StrDt(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
-                Function::IsIri => PlanExpression::IsIri(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::IsBlank => PlanExpression::IsBlank(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::IsIri => PlanExpression::IsIri(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::IsBlank => PlanExpression::IsBlank(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::IsLiteral => PlanExpression::IsLiteral(Box::new(
-                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                    self.build_for_expression(&parameters[0], variables)?,
                 )),
                 Function::IsNumeric => PlanExpression::IsNumeric(Box::new(
-                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                    self.build_for_expression(&parameters[0], variables)?,
                 )),
                 Function::Regex => {
                     if let Some(static_regex) =
                         compile_static_pattern_if_exists(&parameters[1], parameters.get(2))
                     {
                         PlanExpression::StaticRegex(
-                            Box::new(self.build_for_expression(
-                                &parameters[0],
-                                variables,
-                                graph_name,
-                            )?),
+                            Box::new(self.build_for_expression(&parameters[0], variables)?),
                             static_regex,
                         )
                     } else {
                         PlanExpression::DynamicRegex(
-                            Box::new(self.build_for_expression(
-                                &parameters[0],
-                                variables,
-                                graph_name,
-                            )?),
-                            Box::new(self.build_for_expression(
-                                &parameters[1],
-                                variables,
-                                graph_name,
-                            )?),
+                            Box::new(self.build_for_expression(&parameters[0], variables)?),
+                            Box::new(self.build_for_expression(&parameters[1], variables)?),
                             match parameters.get(2) {
-                                Some(flags) => Some(Box::new(
-                                    self.build_for_expression(flags, variables, graph_name)?,
-                                )),
+                                Some(flags) => {
+                                    Some(Box::new(self.build_for_expression(flags, variables)?))
+                                }
                                 None => None,
                             },
                         )
                     }
                 }
                 Function::Triple => PlanExpression::Triple(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[2], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
+                    Box::new(self.build_for_expression(&parameters[2], variables)?),
                 ),
-                Function::Subject => PlanExpression::Subject(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
-                Function::Predicate => PlanExpression::Predicate(Box::new(
-                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                Function::Subject => PlanExpression::Subject(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
                 )),
-                Function::Object => PlanExpression::Object(Box::new(self.build_for_expression(
-                    &parameters[0],
-                    variables,
-                    graph_name,
-                )?)),
+                Function::Predicate => PlanExpression::Predicate(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
+                Function::Object => PlanExpression::Object(Box::new(
+                    self.build_for_expression(&parameters[0], variables)?,
+                )),
                 Function::IsTriple => PlanExpression::IsTriple(Box::new(
-                    self.build_for_expression(&parameters[0], variables, graph_name)?,
+                    self.build_for_expression(&parameters[0], variables)?,
                 )),
                 Function::Adjust => PlanExpression::Adjust(
-                    Box::new(self.build_for_expression(&parameters[0], variables, graph_name)?),
-                    Box::new(self.build_for_expression(&parameters[1], variables, graph_name)?),
+                    Box::new(self.build_for_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_expression(&parameters[1], variables)?),
                 ),
                 Function::Custom(name) => {
                     if self.custom_functions.contains_key(name) {
@@ -781,7 +659,7 @@ impl<'a> PlanBuilder<'a> {
                             name.clone(),
                             parameters
                                 .iter()
-                                .map(|p| self.build_for_expression(p, variables, graph_name))
+                                .map(|p| self.build_for_expression(p, variables))
                                 .collect::<Result<Vec<_>, EvaluationError>>()?,
                         )
                     } else if name.as_ref() == xsd::BOOLEAN {
@@ -789,7 +667,6 @@ impl<'a> PlanBuilder<'a> {
                             parameters,
                             PlanExpression::BooleanCast,
                             variables,
-                            graph_name,
                             "boolean",
                         )?
                     } else if name.as_ref() == xsd::DOUBLE {
@@ -797,23 +674,15 @@ impl<'a> PlanBuilder<'a> {
                             parameters,
                             PlanExpression::DoubleCast,
                             variables,
-                            graph_name,
                             "double",
                         )?
                     } else if name.as_ref() == xsd::FLOAT {
-                        self.build_cast(
-                            parameters,
-                            PlanExpression::FloatCast,
-                            variables,
-                            graph_name,
-                            "float",
-                        )?
+                        self.build_cast(parameters, PlanExpression::FloatCast, variables, "float")?
                     } else if name.as_ref() == xsd::DECIMAL {
                         self.build_cast(
                             parameters,
                             PlanExpression::DecimalCast,
                             variables,
-                            graph_name,
                             "decimal",
                         )?
                     } else if name.as_ref() == xsd::INTEGER {
@@ -821,31 +690,17 @@ impl<'a> PlanBuilder<'a> {
                             parameters,
                             PlanExpression::IntegerCast,
                             variables,
-                            graph_name,
                             "integer",
                         )?
                     } else if name.as_ref() == xsd::DATE {
-                        self.build_cast(
-                            parameters,
-                            PlanExpression::DateCast,
-                            variables,
-                            graph_name,
-                            "date",
-                        )?
+                        self.build_cast(parameters, PlanExpression::DateCast, variables, "date")?
                     } else if name.as_ref() == xsd::TIME {
-                        self.build_cast(
-                            parameters,
-                            PlanExpression::TimeCast,
-                            variables,
-                            graph_name,
-                            "time",
-                        )?
+                        self.build_cast(parameters, PlanExpression::TimeCast, variables, "time")?
                     } else if name.as_ref() == xsd::DATE_TIME {
                         self.build_cast(
                             parameters,
                             PlanExpression::DateTimeCast,
                             variables,
-                            graph_name,
                             "dateTime",
                         )?
                     } else if name.as_ref() == xsd::DURATION {
@@ -853,7 +708,6 @@ impl<'a> PlanBuilder<'a> {
                             parameters,
                             PlanExpression::DurationCast,
                             variables,
-                            graph_name,
                             "duration",
                         )?
                     } else if name.as_ref() == xsd::YEAR_MONTH_DURATION {
@@ -861,7 +715,6 @@ impl<'a> PlanBuilder<'a> {
                             parameters,
                             PlanExpression::YearMonthDurationCast,
                             variables,
-                            graph_name,
                             "yearMonthDuration",
                         )?
                     } else if name.as_ref() == xsd::DAY_TIME_DURATION {
@@ -869,7 +722,6 @@ impl<'a> PlanBuilder<'a> {
                             parameters,
                             PlanExpression::DayTimeDurationCast,
                             variables,
-                            graph_name,
                             "dayTimeDuration",
                         )?
                     } else if name.as_ref() == xsd::STRING {
@@ -877,32 +729,27 @@ impl<'a> PlanBuilder<'a> {
                             parameters,
                             PlanExpression::StringCast,
                             variables,
-                            graph_name,
                             "string",
                         )?
                     } else {
                         return Err(EvaluationError::msg(format!(
-                            "Not supported custom function {expression}"
+                            "Not supported custom function {name}"
                         )));
                     }
                 }
             },
             Expression::Bound(v) => PlanExpression::Bound(build_plan_variable(variables, v)),
             Expression::If(a, b, c) => PlanExpression::If(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
-                Box::new(self.build_for_expression(c, variables, graph_name)?),
+                Box::new(self.build_for_expression(a, variables)?),
+                Box::new(self.build_for_expression(b, variables)?),
+                Box::new(self.build_for_expression(c, variables)?),
             ),
             Expression::Exists(n) => {
                 let mut variables = variables.clone(); // Do not expose the exists variables outside
-                PlanExpression::Exists(Rc::new(self.build_for_graph_pattern(
-                    n,
-                    &mut variables,
-                    graph_name,
-                )?))
+                PlanExpression::Exists(Rc::new(self.build_for_graph_pattern(n, &mut variables)?))
             }
             Expression::Coalesce(parameters) => {
-                PlanExpression::Coalesce(self.expression_list(parameters, variables, graph_name)?)
+                PlanExpression::Coalesce(self.expression_list(parameters, variables)?)
             }
         })
     }
@@ -912,15 +759,12 @@ impl<'a> PlanBuilder<'a> {
         parameters: &[Expression],
         constructor: impl Fn(Box<PlanExpression>) -> PlanExpression,
         variables: &mut Vec<Variable>,
-        graph_name: &PatternValue,
         name: &'static str,
     ) -> Result<PlanExpression, EvaluationError> {
         if parameters.len() == 1 {
-            Ok(constructor(Box::new(self.build_for_expression(
-                &parameters[0],
-                variables,
-                graph_name,
-            )?)))
+            Ok(constructor(Box::new(
+                self.build_for_expression(&parameters[0], variables)?,
+            )))
         } else {
             Err(EvaluationError::msg(format!(
                 "The xsd:{name} casting takes only one parameter"
@@ -932,42 +776,34 @@ impl<'a> PlanBuilder<'a> {
         &self,
         l: &[Expression],
         variables: &mut Vec<Variable>,
-        graph_name: &PatternValue,
     ) -> Result<Vec<PlanExpression>, EvaluationError> {
         l.iter()
-            .map(|e| self.build_for_expression(e, variables, graph_name))
+            .map(|e| self.build_for_expression(e, variables))
             .collect()
     }
 
-    fn pattern_value_from_term_or_variable(
+    fn pattern_value_from_ground_term_pattern(
         &self,
-        term_or_variable: &TermPattern,
+        term_pattern: &GroundTermPattern,
         variables: &mut Vec<Variable>,
     ) -> PatternValue {
-        match term_or_variable {
-            TermPattern::Variable(variable) => {
+        match term_pattern {
+            GroundTermPattern::Variable(variable) => {
                 PatternValue::Variable(build_plan_variable(variables, variable))
             }
-            TermPattern::NamedNode(node) => PatternValue::Constant(PlanTerm {
+            GroundTermPattern::NamedNode(node) => PatternValue::Constant(PlanTerm {
                 encoded: self.build_term(node),
                 plain: PatternValueConstant::NamedNode(node.clone()),
             }),
-            TermPattern::BlankNode(bnode) => {
-                PatternValue::Variable(build_plan_variable(
-                    variables,
-                    &Variable::new_unchecked(bnode.as_str()),
-                ))
-                //TODO: very bad hack to convert bnode to variable
-            }
-            TermPattern::Literal(literal) => PatternValue::Constant(PlanTerm {
+            GroundTermPattern::Literal(literal) => PatternValue::Constant(PlanTerm {
                 encoded: self.build_term(literal),
                 plain: PatternValueConstant::Literal(literal.clone()),
             }),
-            TermPattern::Triple(triple) => {
+            GroundTermPattern::Triple(triple) => {
                 match (
-                    self.pattern_value_from_term_or_variable(&triple.subject, variables),
+                    self.pattern_value_from_ground_term_pattern(&triple.subject, variables),
                     self.pattern_value_from_named_node_or_variable(&triple.predicate, variables),
-                    self.pattern_value_from_term_or_variable(&triple.object, variables),
+                    self.pattern_value_from_ground_term_pattern(&triple.object, variables),
                 ) {
                     (
                         PatternValue::Constant(PlanTerm {
@@ -1042,40 +878,39 @@ impl<'a> PlanBuilder<'a> {
         &self,
         aggregate: &AggregateExpression,
         variables: &mut Vec<Variable>,
-        graph_name: &PatternValue,
     ) -> Result<PlanAggregation, EvaluationError> {
         match aggregate {
             AggregateExpression::Count { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Count,
                 parameter: match expr {
-                    Some(expr) => Some(self.build_for_expression(expr, variables, graph_name)?),
+                    Some(expr) => Some(self.build_for_expression(expr, variables)?),
                     None => None,
                 },
                 distinct: *distinct,
             }),
             AggregateExpression::Sum { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Sum,
-                parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(expr, variables)?),
                 distinct: *distinct,
             }),
             AggregateExpression::Min { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Min,
-                parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(expr, variables)?),
                 distinct: *distinct,
             }),
             AggregateExpression::Max { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Max,
-                parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(expr, variables)?),
                 distinct: *distinct,
             }),
             AggregateExpression::Avg { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Avg,
-                parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(expr, variables)?),
                 distinct: *distinct,
             }),
             AggregateExpression::Sample { expr, distinct } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::Sample,
-                parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(expr, variables)?),
                 distinct: *distinct,
             }),
             AggregateExpression::GroupConcat {
@@ -1086,7 +921,7 @@ impl<'a> PlanBuilder<'a> {
                 function: PlanAggregationFunction::GroupConcat {
                     separator: Rc::new(separator.clone().unwrap_or_else(|| " ".to_owned())),
                 },
-                parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
+                parameter: Some(self.build_for_expression(expr, variables)?),
                 distinct: *distinct,
             }),
             AggregateExpression::Custom { .. } => Err(EvaluationError::msg(
@@ -1199,41 +1034,6 @@ impl<'a> PlanBuilder<'a> {
                 encoded: self.build_term(term),
                 plain: term.clone().into(),
             }),
-        }
-    }
-
-    fn convert_pattern_value_id(from_value: &PatternValue, to: &mut Vec<Variable>) -> PatternValue {
-        match from_value {
-            PatternValue::Constant(c) => PatternValue::Constant(c.clone()),
-            PatternValue::Variable(from_id) => {
-                PatternValue::Variable(Self::convert_plan_variable(from_id, to))
-            }
-            PatternValue::TriplePattern(triple) => {
-                PatternValue::TriplePattern(Box::new(TriplePatternValue {
-                    subject: Self::convert_pattern_value_id(&triple.subject, to),
-                    predicate: Self::convert_pattern_value_id(&triple.predicate, to),
-                    object: Self::convert_pattern_value_id(&triple.object, to),
-                }))
-            }
-        }
-    }
-
-    fn convert_plan_variable(from_variable: &PlanVariable, to: &mut Vec<Variable>) -> PlanVariable {
-        let encoded = if let Some(to_id) = to.iter().enumerate().find_map(|(to_id, var)| {
-            if *var == from_variable.plain {
-                Some(to_id)
-            } else {
-                None
-            }
-        }) {
-            to_id
-        } else {
-            to.push(Variable::new_unchecked(format!("{:x}", random::<u128>())));
-            to.len() - 1
-        };
-        PlanVariable {
-            encoded,
-            plain: from_variable.plain.clone(),
         }
     }
 
@@ -1571,101 +1371,6 @@ fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
         }
     }
     None
-}
-
-fn sort_bgp(p: &[TriplePattern]) -> Vec<&TriplePattern> {
-    let mut assigned_variables = HashSet::default();
-    let mut assigned_blank_nodes = HashSet::default();
-    let mut new_p: Vec<_> = p.iter().collect();
-
-    for i in 0..new_p.len() {
-        new_p[i..].sort_by(|p1, p2| {
-            estimate_pattern_cost(p1, &assigned_variables, &assigned_blank_nodes).cmp(
-                &estimate_pattern_cost(p2, &assigned_variables, &assigned_blank_nodes),
-            )
-        });
-        add_pattern_variables(new_p[i], &mut assigned_variables, &mut assigned_blank_nodes);
-    }
-
-    new_p
-}
-
-fn estimate_pattern_cost(
-    pattern: &TriplePattern,
-    assigned_variables: &HashSet<&Variable>,
-    assigned_blank_nodes: &HashSet<&BlankNode>,
-) -> u32 {
-    let mut count = 0;
-    match &pattern.subject {
-        TermPattern::NamedNode(_) | TermPattern::Literal(_) => count += 1,
-        TermPattern::BlankNode(bnode) => {
-            if !assigned_blank_nodes.contains(bnode) {
-                count += 4;
-            }
-        }
-        TermPattern::Variable(v) => {
-            if !assigned_variables.contains(v) {
-                count += 4;
-            }
-        }
-        TermPattern::Triple(t) => {
-            count += estimate_pattern_cost(t, assigned_variables, assigned_blank_nodes)
-        }
-    }
-    if let NamedNodePattern::Variable(v) = &pattern.predicate {
-        if !assigned_variables.contains(v) {
-            count += 4;
-        }
-    } else {
-        count += 1;
-    }
-    match &pattern.object {
-        TermPattern::NamedNode(_) | TermPattern::Literal(_) => count += 1,
-        TermPattern::BlankNode(bnode) => {
-            if !assigned_blank_nodes.contains(bnode) {
-                count += 4;
-            }
-        }
-        TermPattern::Variable(v) => {
-            if !assigned_variables.contains(v) {
-                count += 4;
-            }
-        }
-        TermPattern::Triple(t) => {
-            count += estimate_pattern_cost(t, assigned_variables, assigned_blank_nodes)
-        }
-    }
-    count
-}
-
-fn add_pattern_variables<'a>(
-    pattern: &'a TriplePattern,
-    variables: &mut HashSet<&'a Variable>,
-    blank_nodes: &mut HashSet<&'a BlankNode>,
-) {
-    match &pattern.subject {
-        TermPattern::NamedNode(_) | TermPattern::Literal(_) => (),
-        TermPattern::BlankNode(bnode) => {
-            blank_nodes.insert(bnode);
-        }
-        TermPattern::Variable(v) => {
-            variables.insert(v);
-        }
-        TermPattern::Triple(t) => add_pattern_variables(t, variables, blank_nodes),
-    }
-    if let NamedNodePattern::Variable(v) = &pattern.predicate {
-        variables.insert(v);
-    }
-    match &pattern.object {
-        TermPattern::NamedNode(_) | TermPattern::Literal(_) => (),
-        TermPattern::BlankNode(bnode) => {
-            blank_nodes.insert(bnode);
-        }
-        TermPattern::Variable(v) => {
-            variables.insert(v);
-        }
-        TermPattern::Triple(t) => add_pattern_variables(t, variables, blank_nodes),
-    }
 }
 
 fn compile_static_pattern_if_exists(

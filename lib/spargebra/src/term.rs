@@ -541,6 +541,19 @@ impl From<NamedNodePattern> for TermPattern {
     }
 }
 
+impl From<GroundTermPattern> for TermPattern {
+    #[inline]
+    fn from(element: GroundTermPattern) -> Self {
+        match element {
+            GroundTermPattern::NamedNode(node) => node.into(),
+            GroundTermPattern::Literal(literal) => literal.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundTermPattern::Triple(t) => TriplePattern::from(*t).into(),
+            GroundTermPattern::Variable(variable) => variable.into(),
+        }
+    }
+}
+
 impl TryFrom<TermPattern> for Subject {
     type Error = ();
 
@@ -794,6 +807,17 @@ impl From<Triple> for TriplePattern {
         Self {
             subject: triple.subject.into(),
             predicate: triple.predicate.into(),
+            object: triple.object.into(),
+        }
+    }
+}
+
+impl From<GroundTriplePattern> for TriplePattern {
+    #[inline]
+    fn from(triple: GroundTriplePattern) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate,
             object: triple.object.into(),
         }
     }

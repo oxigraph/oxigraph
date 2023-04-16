@@ -67,6 +67,7 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
         // We choose to simplify first the nested group patterns in OPTIONAL
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
         // This test relies on naive iteration on the input file
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2"
     ])
 }
