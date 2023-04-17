@@ -754,6 +754,13 @@ impl SimpleEvaluator {
                     let mut errors = Vec::default();
                     let mut accumulators_for_group =
                         HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
+                    if key_variables.is_empty() {
+                        // There is always a single group if there is no GROUP BY
+                        accumulators_for_group.insert(
+                            Vec::new(),
+                            accumulator_builders.iter().map(|c| c()).collect::<Vec<_>>(),
+                        );
+                    }
                     child(from)
                         .filter_map(|result| match result {
                             Ok(result) => Some(result),
@@ -784,10 +791,6 @@ impl SimpleEvaluator {
                                 );
                             }
                         });
-                    if accumulators_for_group.is_empty() && key_variables.is_empty() {
-                        // There is always a single group if there is no GROUP BY
-                        accumulators_for_group.insert(Vec::new(), Vec::new());
-                    }
                     let accumulator_variables = accumulator_variables.clone();
                     Box::new(
                         errors
