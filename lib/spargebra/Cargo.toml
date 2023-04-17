@@ -1,6 +1,6 @@
 [package]
 name = "spargebra"
-version = "0.2.7"
+version = "0.2.8-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"

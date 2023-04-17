@@ -40,7 +40,7 @@ lazy_static = "1"
 json-event-parser = "0.1"
 oxrdf = { version = "0.1.5", path="oxrdf", features = ["rdf-star", "oxsdatatypes"] }
 oxsdatatypes = { version = "0.1.1", path="oxsdatatypes" }
-spargebra = { version = "0.2.7", path="spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
+spargebra = { version = "0.2.8-dev", path="spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
 sparesults = { version = "0.1.7", path="sparesults", features = ["rdf-star"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
