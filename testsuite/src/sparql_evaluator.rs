@@ -453,16 +453,17 @@ fn are_query_results_isomorphic(
 
 fn compare_solutions(expected: &[(Variable, Term)], actual: &[(Variable, Term)]) -> bool {
     let mut bnode_map = HashMap::new();
-    expected.iter().zip(actual).all(
-        move |((expected_variable, expected_value), (actual_variable, actual_value))| {
-            expected_variable == actual_variable
-                && compare_terms(
-                    expected_value.as_ref(),
-                    actual_value.as_ref(),
-                    &mut bnode_map,
-                )
-        },
-    )
+    expected.len() == actual.len()
+        && expected.iter().zip(actual).all(
+            move |((expected_variable, expected_value), (actual_variable, actual_value))| {
+                expected_variable == actual_variable
+                    && compare_terms(
+                        expected_value.as_ref(),
+                        actual_value.as_ref(),
+                        &mut bnode_map,
+                    )
+            },
+        )
 }
 
 fn compare_terms<'a>(
