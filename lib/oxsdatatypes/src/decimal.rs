@@ -370,49 +370,57 @@ impl FromStr for Decimal {
             return Err(PARSE_UNEXPECTED_END);
         }
 
-        let (sign, mut cursor) = match input.first() {
-            Some(b'+') => (1, 1),
-            Some(b'-') => (-1, 1),
-            _ => (1, 0),
+        let (sign, mut input) = match input.first() {
+            Some(b'+') => (1, &input[1..]),
+            Some(b'-') => (-1, &input[1..]),
+            _ => (1, input),
         };
 
         let mut value = 0_i128;
-        let mut with_before_dot = false;
-        while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
-            value = value
-                .checked_mul(10)
-                .ok_or(PARSE_OVERFLOW)?
-                .checked_add((input[cursor] - b'0').into())
-                .ok_or(PARSE_OVERFLOW)?;
-            cursor += 1;
-            with_before_dot = true;
-        }
-
-        let mut exp = DECIMAL_PART_POW;
-        if input.len() > cursor {
-            if input[cursor] != b'.' {
-                return Err(PARSE_UNEXPECTED_CHAR);
-            }
-            cursor += 1;
-
-            let mut with_after_dot = false;
-            while cursor < input.len() && b'0' <= input[cursor] && input[cursor] <= b'9' {
-                exp = exp.checked_div(10).ok_or(PARSE_UNDERFLOW)?;
+        let with_before_dot = input.first().map_or(false, |c| c.is_ascii_digit());
+        while let Some(c) = input.first() {
+            if c.is_ascii_digit() {
                 value = value
                     .checked_mul(10)
                     .ok_or(PARSE_OVERFLOW)?
-                    .checked_add((input[cursor] - b'0').into())
+                    .checked_add((*c - b'0').into())
                     .ok_or(PARSE_OVERFLOW)?;
-                cursor += 1;
-                with_after_dot = true;
+                input = &input[1..];
+            } else {
+                break;
             }
+        }
 
-            if !with_before_dot && !with_after_dot {
+        let mut exp = DECIMAL_PART_POW;
+        if let Some(c) = input.first() {
+            if *c != b'.' {
+                return Err(PARSE_UNEXPECTED_CHAR);
+            }
+            input = &input[1..];
+            if input.is_empty() && !with_before_dot {
                 //We only have a dot
                 return Err(PARSE_UNEXPECTED_END);
             }
-            if input.len() > cursor {
-                return Err(PARSE_UNEXPECTED_CHAR);
+            while input.last() == Some(&b'0') {
+                // Hack to avoid underflows
+                input = &input[..input.len() - 1];
+            }
+            while let Some(c) = input.first() {
+                if c.is_ascii_digit() {
+                    exp /= 10;
+                    value = value
+                        .checked_mul(10)
+                        .ok_or(PARSE_OVERFLOW)?
+                        .checked_add((*c - b'0').into())
+                        .ok_or(PARSE_OVERFLOW)?;
+                    input = &input[1..];
+                } else {
+                    return Err(PARSE_UNEXPECTED_CHAR);
+                }
+            }
+            if exp == 0 {
+                //Underflow
+                return Err(PARSE_UNDERFLOW);
             }
         } else if !with_before_dot {
             //It's empty
@@ -591,6 +599,14 @@ mod tests {
 
     #[test]
     fn from_str() -> Result<(), ParseDecimalError> {
+        assert!(Decimal::from_str("").is_err());
+        assert!(Decimal::from_str("+").is_err());
+        assert!(Decimal::from_str("-").is_err());
+        assert!(Decimal::from_str(".").is_err());
+        assert!(Decimal::from_str("+.").is_err());
+        assert!(Decimal::from_str("-.").is_err());
+        assert!(Decimal::from_str("a").is_err());
+        assert!(Decimal::from_str(".a").is_err());
         assert_eq!(Decimal::from_str("210")?.to_string(), "210");
         assert_eq!(Decimal::from_str("1000")?.to_string(), "1000");
         assert_eq!(Decimal::from_str("-1.23")?.to_string(), "-1.23");
@@ -615,6 +631,12 @@ mod tests {
                     .to_string()
             )?,
             Decimal::MIN.checked_add(Decimal::step()).unwrap()
+        );
+        assert!(Decimal::from_str("0.0000000000000000001").is_err());
+        assert!(Decimal::from_str("1000000000000000000000").is_err());
+        assert_eq!(
+            Decimal::from_str("0.100000000000000000000000000").unwrap(),
+            Decimal::from_str("0.1").unwrap()
         );
         Ok(())
     }
