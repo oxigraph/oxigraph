@@ -1,3 +1,19 @@
+## [0.3.15] - 2023-04-18
+
+### Added
+- Rust: adds `Store.explain_query_opt` method that allows to get an explanation of the evaluation with profiling statistics.
+- Server: adds explanation and profiling to the `query` action (`--explain`, `--explain-file` and `--stats` options).
+- Python: implements the `__match_args__` attribute on terms (literals, triples, quads...) to allow `match` operator usage.
+- Server: adds the `--cors` option to the `serve` actions to allow cross-origin resource sharing.
+
+### Changed
+- SPARQL: fixes evaluation of empty aggregation without GROUP BY: aggregators now return their default value (0 for COUNT...) and not an empty row.
+- SPARQL: fixes parsing of decimal with more than 19 digits in the fractional part.
+- Server docker image: switch to the smaller distroless base images.
+- Bulk loader: by default only uses 2 concurrent threads and around 2GB of RAM.
+- Server load: progress is now printed to stderr much more regularly.
+
+
 ## [0.3.14] - 2023-03-19
 
 ### Added
