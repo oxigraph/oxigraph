@@ -74,17 +74,20 @@ impl<W: Write> XmlSolutionsWriter<W> {
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> Result<(), quick_xml::Error> {
         self.writer
-            .write_event(Event::Start(BytesStart::new("result")))?;
-        for (variable, value) in solution {
-            self.writer
-                .create_element("binding")
-                .with_attribute(("name", variable.as_str()))
-                .write_inner_content(|writer| {
-                    write_xml_term(value, writer)?;
-                    Ok(())
-                })?;
-        }
-        self.writer.write_event(Event::End(BytesEnd::new("result")))
+            .create_element("result")
+            .write_inner_content(|writer| {
+                for (variable, value) in solution {
+                    writer
+                        .create_element("binding")
+                        .with_attribute(("name", variable.as_str()))
+                        .write_inner_content(|writer| {
+                            write_xml_term(value, writer)?;
+                            Ok(())
+                        })?;
+                }
+                Ok(())
+            })?;
+        Ok(())
     }
 
     pub fn finish(self) -> io::Result<W> {
