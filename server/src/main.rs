@@ -584,7 +584,7 @@ pub fn main() -> anyhow::Result<()> {
                     _ => bail!("The given explanation file {} must have an extension that is .json or .txt", explain_file.display())
                 }
             } else if explain || stats {
-                eprintln!("{:?}", explanation);
+                eprintln!("{:#?}", explanation);
             }
             print_result
         }
