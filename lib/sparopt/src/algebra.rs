@@ -66,8 +66,8 @@ pub enum Expression {
 impl Expression {
     pub(crate) fn effective_boolean_value(&self) -> Option<bool> {
         match self {
-            Expression::NamedNode(_) => Some(true),
-            Expression::Literal(literal) => {
+            Self::NamedNode(_) => Some(true),
+            Self::Literal(literal) => {
                 if literal.datatype() == xsd::BOOLEAN {
                     match literal.value() {
                         "true" | "1" => Some(true),
@@ -212,9 +212,44 @@ impl From<GroundTerm> for Expression {
     }
 }
 
+impl From<NamedNodePattern> for Expression {
+    fn from(value: NamedNodePattern) -> Self {
+        match value {
+            NamedNodePattern::NamedNode(value) => value.into(),
+            NamedNodePattern::Variable(variable) => variable.into(),
+        }
+    }
+}
+
+impl From<GroundTermPattern> for Expression {
+    fn from(value: GroundTermPattern) -> Self {
+        match value {
+            GroundTermPattern::NamedNode(value) => value.into(),
+            GroundTermPattern::Literal(value) => value.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundTermPattern::Triple(value) => (*value).into(),
+            GroundTermPattern::Variable(variable) => variable.into(),
+        }
+    }
+}
+
 #[cfg(feature = "rdf-star")]
 impl From<GroundTriple> for Expression {
     fn from(value: GroundTriple) -> Self {
+        Self::FunctionCall(
+            Function::Triple,
+            vec![
+                value.subject.into(),
+                value.predicate.into(),
+                value.object.into(),
+            ],
+        )
+    }
+}
+
+#[cfg(feature = "rdf-star")]
+impl From<GroundTriplePattern> for Expression {
+    fn from(value: GroundTriplePattern) -> Self {
         Self::FunctionCall(
             Function::Triple,
             vec![
@@ -393,6 +428,15 @@ pub enum GraphPattern {
         name: NamedNodePattern,
         inner: Box<Self>,
         silent: bool,
+    },
+    /// Fix point operator
+    #[cfg(feature = "fixed-point")]
+    FixedPoint {
+        id: FixedPointId,
+        /// invariant: the inner plans should always return the all the listed variables and only them
+        variables: Vec<Variable>,
+        constant: Box<FixedPointGraphPattern>,
+        recursive: Box<FixedPointGraphPattern>,
     },
 }
 
@@ -644,6 +688,18 @@ impl GraphPattern {
             silent,
         }
     }
+
+    #[cfg(feature = "fixed-point")]
+    pub(crate) fn fixed_point(
+        id: FixedPointId,
+        inner: FixedPointGraphPattern,
+        variables: Vec<Variable>,
+    ) -> Self {
+        FixedPointGraphPattern::fixed_point(id, inner, variables)
+            .try_into()
+            .unwrap()
+    }
+
     fn from_sparql_algebra(
         pattern: &AlGraphPattern,
         graph_name: Option<&NamedNodePattern>,
@@ -803,7 +859,7 @@ impl GraphPattern {
         }
     }
 
-    fn triple_pattern_from_algebra(
+    pub(crate) fn triple_pattern_from_algebra(
         pattern: &TriplePattern,
         blank_nodes: &mut HashMap<BlankNode, Variable>,
     ) -> (GroundTermPattern, NamedNodePattern, GroundTermPattern) {
@@ -1001,6 +1057,406 @@ impl From<&GraphPattern> for AlGraphPattern {
                 name: name.clone(),
                 silent: *silent,
             },
+            #[cfg(feature = "fixed-point")]
+            GraphPattern::FixedPoint { .. } => unimplemented!(),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+pub struct FixedPointId(pub usize);
+
+/// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery) inside of a fixed-point operation.
+#[cfg(feature = "fixed-point")]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum FixedPointGraphPattern {
+    /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern).
+    QuadPattern {
+        subject: GroundTermPattern,
+        predicate: NamedNodePattern,
+        object: GroundTermPattern,
+        graph_name: Option<NamedNodePattern>,
+    },
+    /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin).
+    Join {
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+    /// [Filter](https://www.w3.org/TR/sparql11-query/#defn_algFilter).
+    Filter {
+        expression: FixedPointExpression,
+        inner: Box<Self>,
+    },
+    /// [Union](https://www.w3.org/TR/sparql11-query/#defn_algUnion).
+    Union {
+        inner: Vec<Self>,
+    },
+    /// [Extend](https://www.w3.org/TR/sparql11-query/#defn_extend).
+    Extend {
+        inner: Box<Self>,
+        variable: Variable,
+        expression: FixedPointExpression,
+    },
+    /// A table used to provide inline values
+    Values {
+        variables: Vec<Variable>,
+        bindings: Vec<Vec<Option<GroundTerm>>>,
+    },
+    /// [Project](https://www.w3.org/TR/sparql11-query/#defn_algProjection).
+    Project {
+        inner: Box<Self>,
+        variables: Vec<Variable>,
+    },
+    /// Inner fixed point operator
+    FixedPoint {
+        id: FixedPointId,
+        /// invariant: the inner plans should always return the all the listed variables and only them
+        variables: Vec<Variable>,
+        constant: Box<Self>,
+        recursive: Box<Self>,
+    },
+    FixedPointEntry(FixedPointId),
+}
+
+#[cfg(feature = "fixed-point")]
+impl FixedPointGraphPattern {
+    pub(crate) fn empty() -> Self {
+        Self::Values {
+            variables: Vec::new(),
+            bindings: Vec::new(),
+        }
+    }
+
+    /// Check if the pattern is the empty table
+    fn is_empty(&self) -> bool {
+        if let Self::Values { bindings, .. } = self {
+            bindings.is_empty()
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn singleton() -> Self {
+        Self::Values {
+            variables: Vec::new(),
+            bindings: vec![Vec::new()],
+        }
+    }
+
+    pub(crate) fn join(left: Self, right: Self) -> Self {
+        if left.is_empty() || right.is_empty() {
+            return Self::empty();
+        }
+        Self::Join {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    pub(crate) fn union(left: Self, right: Self) -> Self {
+        if left.is_empty() {
+            return right;
+        }
+        if right.is_empty() {
+            return left;
+        }
+        Self::Union {
+            inner: match (left, right) {
+                (Self::Union { inner: mut left }, Self::Union { inner: right }) => {
+                    left.extend(right);
+                    left
+                }
+                (Self::Union { inner: mut left }, right) => {
+                    left.push(right);
+                    left
+                }
+                (left, Self::Union { inner: mut right }) => {
+                    right.insert(0, left);
+                    right
+                }
+                (left, right) => vec![left, right],
+            },
+        }
+    }
+
+    pub(crate) fn extend(
+        inner: Self,
+        variable: Variable,
+        expression: FixedPointExpression,
+    ) -> Self {
+        if inner.is_empty() {
+            return Self::empty();
+        }
+        Self::Extend {
+            inner: Box::new(inner),
+            variable,
+            expression,
+        }
+    }
+
+    pub(crate) fn project(inner: Self, variables: Vec<Variable>) -> Self {
+        if inner.is_empty() {
+            return Self::empty();
+        }
+        Self::Project {
+            inner: Box::new(inner),
+            variables,
+        }
+    }
+
+    #[cfg(feature = "fixed-point")]
+    pub(crate) fn fixed_point(id: FixedPointId, inner: Self, variables: Vec<Variable>) -> Self {
+        if inner.is_empty() {
+            return Self::empty();
+        }
+        let children = if let Self::Union { inner } = inner {
+            inner
+        } else {
+            vec![inner]
+        };
+        let mut constant = Self::empty();
+        let mut recursive = Self::empty();
+        for child in children {
+            if child.is_recursion_used(&id) {
+                recursive = Self::union(recursive, child);
+            } else {
+                constant = Self::union(constant, child);
+            }
+        }
+        if recursive.is_empty() {
+            return constant;
+        }
+        Self::FixedPoint {
+            id,
+            variables,
+            constant: Box::new(constant),
+            recursive: Box::new(recursive),
+        }
+    }
+
+    fn is_recursion_used(&self, id: &FixedPointId) -> bool {
+        match self {
+            Self::QuadPattern { .. } | Self::Values { .. } => false,
+            Self::Filter { inner, .. }
+            | Self::Extend { inner, .. }
+            | Self::Project { inner, .. } => Self::is_recursion_used(inner, id),
+            Self::Join { left, right } => {
+                Self::is_recursion_used(left, id) || Self::is_recursion_used(right, id)
+            }
+            Self::Union { inner } => inner.iter().any(|p| Self::is_recursion_used(p, id)),
+            Self::FixedPoint {
+                constant,
+                recursive,
+                ..
+            } => Self::is_recursion_used(constant, id) || Self::is_recursion_used(recursive, id),
+            Self::FixedPointEntry(tid) => id == tid,
+        }
+    }
+}
+
+impl TryFrom<FixedPointGraphPattern> for GraphPattern {
+    type Error = ();
+
+    fn try_from(pattern: FixedPointGraphPattern) -> Result<Self, ()> {
+        Ok(match pattern {
+            FixedPointGraphPattern::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => Self::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            },
+            FixedPointGraphPattern::Join { left, right } => Self::Join {
+                left: Box::new((*left).try_into()?),
+                right: Box::new((*right).try_into()?),
+            },
+            FixedPointGraphPattern::Union { inner } => Self::Union {
+                inner: inner
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<_, ()>>()?,
+            },
+            FixedPointGraphPattern::Filter { inner, expression } => Self::Filter {
+                expression: expression.into(),
+                inner: Box::new((*inner).try_into()?),
+            },
+            FixedPointGraphPattern::Extend {
+                inner,
+                variable,
+                expression,
+            } => Self::Extend {
+                expression: expression.into(),
+                variable,
+                inner: Box::new((*inner).try_into()?),
+            },
+            FixedPointGraphPattern::Values {
+                variables,
+                bindings,
+            } => Self::Values {
+                variables,
+                bindings,
+            },
+            FixedPointGraphPattern::Project { inner, variables } => Self::Project {
+                variables,
+                inner: Box::new((*inner).try_into()?),
+            },
+            FixedPointGraphPattern::FixedPoint {
+                id,
+                variables,
+                constant,
+                recursive,
+            } => Self::FixedPoint {
+                id,
+                variables,
+                constant,
+                recursive,
+            },
+            FixedPointGraphPattern::FixedPointEntry(_) => return Err(()),
+        })
+    }
+}
+
+/// An [expression](https://www.w3.org/TR/sparql11-query/#expressions) inside of a fix point.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum FixedPointExpression {
+    NamedNode(NamedNode),
+    Literal(Literal),
+    Variable(Variable),
+    /// [Logical-or](https://www.w3.org/TR/sparql11-query/#func-logical-or).
+    Or(Box<Self>, Box<Self>),
+    /// [Logical-and](https://www.w3.org/TR/sparql11-query/#func-logical-and).
+    And(Box<Self>, Box<Self>),
+    /// [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm).
+    SameTerm(Box<Self>, Box<Self>),
+    /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
+    In(Box<Self>, Vec<Self>),
+    /// [fn:not](https://www.w3.org/TR/xpath-functions/#func-not).
+    Not(Box<Self>),
+    /// A regular function call.
+    FunctionCall(Function, Vec<Self>),
+}
+
+impl From<NamedNode> for FixedPointExpression {
+    fn from(value: NamedNode) -> Self {
+        Self::NamedNode(value)
+    }
+}
+
+impl From<Literal> for FixedPointExpression {
+    fn from(value: Literal) -> Self {
+        Self::Literal(value)
+    }
+}
+
+impl From<GroundSubject> for FixedPointExpression {
+    fn from(value: GroundSubject) -> Self {
+        match value {
+            GroundSubject::NamedNode(value) => value.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundSubject::Triple(value) => (*value).into(),
+        }
+    }
+}
+
+impl From<GroundTerm> for FixedPointExpression {
+    fn from(value: GroundTerm) -> Self {
+        match value {
+            GroundTerm::NamedNode(value) => value.into(),
+            GroundTerm::Literal(value) => value.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundTerm::Triple(value) => (*value).into(),
+        }
+    }
+}
+
+impl From<NamedNodePattern> for FixedPointExpression {
+    fn from(value: NamedNodePattern) -> Self {
+        match value {
+            NamedNodePattern::NamedNode(value) => value.into(),
+            NamedNodePattern::Variable(variable) => variable.into(),
+        }
+    }
+}
+
+impl From<GroundTermPattern> for FixedPointExpression {
+    fn from(value: GroundTermPattern) -> Self {
+        match value {
+            GroundTermPattern::NamedNode(value) => value.into(),
+            GroundTermPattern::Literal(value) => value.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundTermPattern::Triple(value) => (*value).into(),
+            GroundTermPattern::Variable(variable) => variable.into(),
+        }
+    }
+}
+
+#[cfg(feature = "rdf-star")]
+impl From<GroundTriple> for FixedPointExpression {
+    fn from(value: GroundTriple) -> Self {
+        Self::FunctionCall(
+            Function::Triple,
+            vec![
+                value.subject.into(),
+                value.predicate.into(),
+                value.object.into(),
+            ],
+        )
+    }
+}
+
+#[cfg(feature = "rdf-star")]
+impl From<GroundTriplePattern> for FixedPointExpression {
+    fn from(value: GroundTriplePattern) -> Self {
+        Self::FunctionCall(
+            Function::Triple,
+            vec![
+                value.subject.into(),
+                value.predicate.into(),
+                value.object.into(),
+            ],
+        )
+    }
+}
+
+impl From<Variable> for FixedPointExpression {
+    fn from(value: Variable) -> Self {
+        Self::Variable(value)
+    }
+}
+
+impl From<bool> for FixedPointExpression {
+    fn from(value: bool) -> Self {
+        Literal::from(value).into()
+    }
+}
+
+impl From<FixedPointExpression> for Expression {
+    fn from(expression: FixedPointExpression) -> Self {
+        match expression {
+            FixedPointExpression::NamedNode(node) => Self::NamedNode(node),
+            FixedPointExpression::Literal(literal) => Self::Literal(literal),
+            FixedPointExpression::Variable(variable) => Self::Variable(variable),
+            FixedPointExpression::Or(left, right) => {
+                Self::Or(Box::new((*left).into()), Box::new((*right).into()))
+            }
+            FixedPointExpression::And(left, right) => {
+                Self::And(Box::new((*left).into()), Box::new((*right).into()))
+            }
+            FixedPointExpression::SameTerm(left, right) => {
+                Self::SameTerm(Box::new((*left).into()), Box::new((*right).into()))
+            }
+            FixedPointExpression::In(left, right) => Self::In(
+                Box::new((*left).into()),
+                right.into_iter().map(Into::into).collect(),
+            ),
+            FixedPointExpression::Not(inner) => Self::Not(Box::new((*inner).into())),
+            FixedPointExpression::FunctionCall(name, args) => {
+                Self::FunctionCall(name, args.into_iter().map(Into::into).collect())
+            }
         }
     }
 }

@@ -2474,7 +2474,7 @@ parser! {
 
         rule Rule() -> Rule = i("IF") _ body:ConstructTemplate() _ i("THEN") _ head:ConstructTemplate() {?
             Ok(Rule {
-                body: GraphPattern::Bgp { patterns: body },
+                body,
                 head: head.into_iter().map(GroundTriplePattern::try_from).collect::<Result<_, ()>>().map_err(|_| "Blank nodes are not allowed in rules head")?
             })
         }

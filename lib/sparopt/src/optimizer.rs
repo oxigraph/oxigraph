@@ -1,4 +1,4 @@
-use crate::algebra::{Expression, GraphPattern};
+use crate::algebra::{Expression, FixedPointGraphPattern, GraphPattern};
 
 #[derive(Default)]
 pub struct Optimizer {}
@@ -99,6 +99,20 @@ impl Optimizer {
                 inner,
                 silent,
             } => GraphPattern::service(Self::normalize_pattern(*inner), name, silent),
+            #[cfg(feature = "fixed-point")]
+            GraphPattern::FixedPoint {
+                id,
+                variables,
+                constant,
+                recursive,
+            } => {
+                GraphPattern::fixed_point(
+                    id,
+                    FixedPointGraphPattern::union(*constant, *recursive),
+                    variables,
+                )
+                //TODO: recursive normalization
+            }
         }
     }
 

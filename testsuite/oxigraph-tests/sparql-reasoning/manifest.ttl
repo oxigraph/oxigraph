@@ -12,6 +12,7 @@
     :simple_type_inheritance
     :simple_fact
     :with_graph_name
+    :simple_recursion
     ) .
 
 :simple_type_inheritance rdf:type ox:SparqlRuleEvaluationTest ;
@@ -37,3 +38,11 @@
            qt:graphData  <with_graph_name.ttl> ] ;
     ox:rulesData <with_graph_name.rr> ;
     mf:result <with_graph_name.srj> .
+
+:simple_recursion rdf:type ox:SparqlRuleEvaluationTest ;
+    mf:name "Simple recursion" ;
+    mf:action
+         [ qt:query <simple_recursion.rq> ;
+           qt:data  <simple_recursion.ttl> ] ;
+    ox:rulesData <simple_recursion.rr> ;
+    mf:result <simple_recursion.srj> .

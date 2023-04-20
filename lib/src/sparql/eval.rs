@@ -36,6 +36,8 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
 type CustomFunctionRegistry = HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>;
+type FixedPointEvaluationFn =
+    Rc<dyn Fn(EncodedTuple, HashMap<usize, Rc<Vec<EncodedTuple>>>) -> EncodedTuplesIterator>;
 
 #[derive(Clone)]
 pub struct SimpleEvaluator {
@@ -144,6 +146,7 @@ impl SimpleEvaluator {
         Rc<PlanNodeWithStats>,
     ) {
         let mut stat_children = Vec::new();
+        let mut fixed_point_stat_children = Vec::new();
         let mut evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> = match node.as_ref() {
             PlanNode::StaticBindings { encoded_tuples, .. } => {
                 let tuples = encoded_tuples.clone();
@@ -817,10 +820,26 @@ impl SimpleEvaluator {
                     )
                 })
             }
+            PlanNode::FixedPoint {
+                id,
+                constant,
+                recursive,
+            } => {
+                let (constant, constant_stats) = self.fixed_point_plan_evaluator(constant.clone());
+                fixed_point_stat_children.push(constant_stats);
+                let (recursive, recursive_stats) =
+                    self.fixed_point_plan_evaluator(recursive.clone());
+                fixed_point_stat_children.push(recursive_stats);
+                let id = *id;
+                Rc::new(move |from| {
+                    evaluate_fixed_point(id, &constant, &recursive, &from, &HashMap::new())
+                })
+            }
         };
         let stats = Rc::new(PlanNodeWithStats {
             node,
             children: stat_children,
+            fixed_point_children: fixed_point_stat_children,
             exec_count: Cell::new(0),
             exec_duration: Cell::new(std::time::Duration::from_secs(0)),
         });
@@ -833,6 +852,258 @@ impl SimpleEvaluator {
                     .exec_duration
                     .set(stats.exec_duration.get() + start.elapsed());
                 Box::new(StatsIterator {
+                    inner,
+                    stats: stats.clone(),
+                })
+            })
+        }
+        (evaluator, stats)
+    }
+
+    pub fn fixed_point_plan_evaluator(
+        &self,
+        node: Rc<FixedPointPlanNode>,
+    ) -> (FixedPointEvaluationFn, Rc<FixedPointPlanNodeWithStats>) {
+        let mut stat_children = Vec::new();
+        let mut evaluator: Rc<
+            dyn Fn(EncodedTuple, HashMap<usize, Rc<Vec<EncodedTuple>>>) -> EncodedTuplesIterator,
+        > = match node.as_ref() {
+            FixedPointPlanNode::StaticBindings { encoded_tuples, .. } => {
+                let tuples = encoded_tuples.clone();
+                Rc::new(move |from, _| {
+                    Box::new(
+                        tuples
+                            .iter()
+                            .filter_map(move |t| Some(Ok(t.combine_with(&from)?)))
+                            .collect::<Vec<_>>()
+                            .into_iter(),
+                    )
+                })
+            }
+            FixedPointPlanNode::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => {
+                let subject = TupleSelector::from(subject);
+                let predicate = TupleSelector::from(predicate);
+                let object = TupleSelector::from(object);
+                let graph_name = TupleSelector::from(graph_name);
+                let dataset = self.dataset.clone();
+                Rc::new(move |from, _| {
+                    let iter = dataset.encoded_quads_for_pattern(
+                        get_pattern_value(&subject, &from).as_ref(),
+                        get_pattern_value(&predicate, &from).as_ref(),
+                        get_pattern_value(&object, &from).as_ref(),
+                        get_pattern_value(&graph_name, &from).as_ref(),
+                    );
+                    let subject = subject.clone();
+                    let predicate = predicate.clone();
+                    let object = object.clone();
+                    let graph_name = graph_name.clone();
+                    Box::new(iter.filter_map(move |quad| match quad {
+                        Ok(quad) => {
+                            let mut new_tuple = from.clone();
+                            put_pattern_value(&subject, quad.subject, &mut new_tuple)?;
+                            put_pattern_value(&predicate, quad.predicate, &mut new_tuple)?;
+                            put_pattern_value(&object, quad.object, &mut new_tuple)?;
+                            put_pattern_value(&graph_name, quad.graph_name, &mut new_tuple)?;
+                            Some(Ok(new_tuple))
+                        }
+                        Err(error) => Some(Err(error)),
+                    }))
+                })
+            }
+            FixedPointPlanNode::HashJoin { left, right } => {
+                let join_keys: Vec<_> = left
+                    .used_variables()
+                    .intersection(&right.used_variables())
+                    .copied()
+                    .collect();
+                let (left, left_stats) = self.fixed_point_plan_evaluator(left.clone());
+                stat_children.push(left_stats);
+                let (right, right_stats) = self.fixed_point_plan_evaluator(right.clone());
+                stat_children.push(right_stats);
+                if join_keys.is_empty() {
+                    // Cartesian product
+                    Rc::new(move |from, fixed_point_values| {
+                        let mut errors = Vec::default();
+                        let right_values = right(from.clone(), fixed_point_values.clone())
+                            .filter_map(|result| match result {
+                                Ok(result) => Some(result),
+                                Err(error) => {
+                                    errors.push(Err(error));
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        Box::new(CartesianProductJoinIterator {
+                            left_iter: left(from, fixed_point_values),
+                            right: right_values,
+                            buffered_results: errors,
+                        })
+                    })
+                } else {
+                    // Real hash join
+                    Rc::new(move |from, fixed_point_values| {
+                        let mut errors = Vec::default();
+                        let mut right_values = EncodedTupleSet::new(join_keys.clone());
+                        right_values.extend(
+                            right(from.clone(), fixed_point_values.clone()).filter_map(|result| {
+                                match result {
+                                    Ok(result) => Some(result),
+                                    Err(error) => {
+                                        errors.push(Err(error));
+                                        None
+                                    }
+                                }
+                            }),
+                        );
+                        Box::new(HashJoinIterator {
+                            left_iter: left(from, fixed_point_values),
+                            right: right_values,
+                            buffered_results: errors,
+                        })
+                    })
+                }
+            }
+            FixedPointPlanNode::Filter { child, expression } => {
+                let (child, child_stats) = self.fixed_point_plan_evaluator(child.clone());
+                stat_children.push(child_stats);
+                let expression = self.expression_evaluator(expression);
+                Rc::new(move |from, fixed_point_values| {
+                    let expression = expression.clone();
+                    Box::new(child(from, fixed_point_values).filter(move |tuple| {
+                        match tuple {
+                            Ok(tuple) => expression(tuple)
+                                .and_then(|term| to_bool(&term))
+                                .unwrap_or(false),
+                            Err(_) => true,
+                        }
+                    }))
+                })
+            }
+            FixedPointPlanNode::Union { children } => {
+                let children: Vec<_> = children
+                    .iter()
+                    .map(|child| {
+                        let (child, child_stats) = self.fixed_point_plan_evaluator(child.clone());
+                        stat_children.push(child_stats);
+                        child
+                    })
+                    .collect();
+                Rc::new(move |from, fixed_point_values| {
+                    Box::new(FixedPointUnionIterator {
+                        plans: children.clone(),
+                        input: (from, fixed_point_values),
+                        current_iterator: Box::new(empty()),
+                        current_plan: 0,
+                    })
+                })
+            }
+            FixedPointPlanNode::Extend {
+                child,
+                variable,
+                expression,
+            } => {
+                let (child, child_stats) = self.fixed_point_plan_evaluator(child.clone());
+                stat_children.push(child_stats);
+                let position = variable.encoded;
+                let expression = self.expression_evaluator(expression);
+                Rc::new(move |from, fixed_point_values| {
+                    let expression = expression.clone();
+                    Box::new(child(from, fixed_point_values).map(move |tuple| {
+                        let mut tuple = tuple?;
+                        if let Some(value) = expression(&tuple) {
+                            tuple.set(position, value);
+                        }
+                        Ok(tuple)
+                    }))
+                })
+            }
+            FixedPointPlanNode::Project { child, mapping } => {
+                let (child, child_stats) = self.fixed_point_plan_evaluator(child.clone());
+                stat_children.push(child_stats);
+                let mapping = mapping.clone();
+                Rc::new(move |from, fixed_point_values| {
+                    let mapping = mapping.clone();
+                    let mut input_tuple = EncodedTuple::with_capacity(mapping.len());
+                    for (input_key, output_key) in mapping.iter() {
+                        if let Some(value) = from.get(output_key.encoded) {
+                            input_tuple.set(input_key.encoded, value.clone());
+                        }
+                    }
+                    Box::new(
+                        child(input_tuple, fixed_point_values).filter_map(move |tuple| {
+                            match tuple {
+                                Ok(tuple) => {
+                                    let mut output_tuple = from.clone();
+                                    for (input_key, output_key) in mapping.iter() {
+                                        if let Some(value) = tuple.get(input_key.encoded) {
+                                            if let Some(existing_value) =
+                                                output_tuple.get(output_key.encoded)
+                                            {
+                                                if existing_value != value {
+                                                    return None; // Conflict
+                                                }
+                                            } else {
+                                                output_tuple.set(output_key.encoded, value.clone());
+                                            }
+                                        }
+                                    }
+                                    Some(Ok(output_tuple))
+                                }
+                                Err(e) => Some(Err(e)),
+                            }
+                        }),
+                    )
+                })
+            }
+            FixedPointPlanNode::FixedPoint {
+                id,
+                constant,
+                recursive,
+            } => {
+                let (constant, constant_stats) = self.fixed_point_plan_evaluator(constant.clone());
+                stat_children.push(constant_stats);
+                let (recursive, recursive_stats) =
+                    self.fixed_point_plan_evaluator(recursive.clone());
+                stat_children.push(recursive_stats);
+                let id = *id;
+                Rc::new(move |from, fixed_point_values| {
+                    evaluate_fixed_point(id, &constant, &recursive, &from, &fixed_point_values)
+                })
+            }
+            FixedPointPlanNode::FixedPointEntry { id, .. } => {
+                let id = *id;
+                Rc::new(move |from, fixed_point_values| {
+                    Box::new(
+                        fixed_point_values[&id]
+                            .as_ref()
+                            .clone()
+                            .into_iter()
+                            .filter_map(move |t| t.combine_with(&from))
+                            .map(Ok),
+                    )
+                })
+            }
+        };
+        let stats = Rc::new(FixedPointPlanNodeWithStats {
+            node,
+            children: stat_children,
+            exec_count: Cell::new(0),
+            exec_duration: Cell::new(std::time::Duration::from_secs(0)),
+        });
+        if self.run_stats {
+            let stats = stats.clone();
+            evaluator = Rc::new(move |tuple, fixed_point_values| {
+                let start = Timer::now();
+                let inner = evaluator(tuple, fixed_point_values);
+                stats
+                    .exec_duration
+                    .set(stats.exec_duration.get() + start.elapsed());
+                Box::new(FixedPointStatsIterator {
                     inner,
                     stats: stats.clone(),
                 })
@@ -3883,6 +4154,52 @@ impl PathEvaluator {
     }
 }
 
+fn evaluate_fixed_point(
+    id: usize,
+    constant: &FixedPointEvaluationFn,
+    recursive: &FixedPointEvaluationFn,
+    from: &EncodedTuple,
+    fixed_point_values: &HashMap<usize, Rc<Vec<EncodedTuple>>>,
+) -> EncodedTuplesIterator {
+    // Naive algorithm. We should at least be semi-naive
+    let mut errors = Vec::new();
+    let mut all_results = constant(from.clone(), HashMap::new())
+        .filter_map(|result| match result {
+            Ok(result) => Some(result),
+            Err(error) => {
+                errors.push(error);
+                None
+            }
+        })
+        .collect::<HashSet<_>>();
+    let mut new_set = all_results.iter().cloned().collect::<Vec<_>>();
+    while !new_set.is_empty() {
+        let mut fixed_point_values = fixed_point_values.clone();
+        fixed_point_values.insert(id, Rc::new(all_results.iter().cloned().collect()));
+        new_set = recursive(from.clone(), fixed_point_values)
+            .filter_map(|result| match result {
+                Ok(result) => {
+                    if all_results.insert(result.clone()) {
+                        Some(result)
+                    } else {
+                        None
+                    }
+                }
+                Err(error) => {
+                    errors.push(error);
+                    None
+                }
+            })
+            .collect();
+    }
+    Box::new(
+        errors
+            .into_iter()
+            .map(Err)
+            .chain(all_results.into_iter().map(Ok)),
+    )
+}
+
 struct CartesianProductJoinIterator {
     left_iter: EncodedTuplesIterator,
     right: Vec<EncodedTuple>,
@@ -4104,6 +4421,31 @@ impl Iterator for UnionIterator {
                 return None;
             }
             self.current_iterator = self.plans[self.current_plan](self.input.clone());
+            self.current_plan += 1;
+        }
+    }
+}
+
+struct FixedPointUnionIterator {
+    plans: Vec<FixedPointEvaluationFn>,
+    input: (EncodedTuple, HashMap<usize, Rc<Vec<EncodedTuple>>>),
+    current_iterator: EncodedTuplesIterator,
+    current_plan: usize,
+}
+
+impl Iterator for FixedPointUnionIterator {
+    type Item = Result<EncodedTuple, EvaluationError>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+        loop {
+            if let Some(tuple) = self.current_iterator.next() {
+                return Some(tuple);
+            }
+            if self.current_plan >= self.plans.len() {
+                return None;
+            }
+            self.current_iterator =
+                self.plans[self.current_plan](self.input.0.clone(), self.input.1.clone());
             self.current_plan += 1;
         }
     }
@@ -4787,6 +5129,27 @@ struct StatsIterator {
 }
 
 impl Iterator for StatsIterator {
+    type Item = Result<EncodedTuple, EvaluationError>;
+
+    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+        let start = Timer::now();
+        let result = self.inner.next();
+        self.stats
+            .exec_duration
+            .set(self.stats.exec_duration.get() + start.elapsed());
+        if matches!(result, Some(Ok(_))) {
+            self.stats.exec_count.set(self.stats.exec_count.get() + 1);
+        }
+        result
+    }
+}
+
+struct FixedPointStatsIterator {
+    inner: EncodedTuplesIterator,
+    stats: Rc<FixedPointPlanNodeWithStats>,
+}
+
+impl Iterator for FixedPointStatsIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {

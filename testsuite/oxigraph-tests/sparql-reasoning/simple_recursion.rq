@@ -1,0 +1,5 @@
+PREFIX ex: <http://example.org/>
+
+SELECT DISTINCT * WHERE {
+ ?s ex:includedIn ?o
+}

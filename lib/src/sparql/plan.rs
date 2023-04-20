@@ -107,6 +107,11 @@ pub enum PlanNode {
         key_variables: Rc<Vec<PlanVariable>>,
         aggregates: Rc<Vec<(PlanAggregation, PlanVariable)>>,
     },
+    FixedPoint {
+        id: usize,
+        constant: Rc<FixedPointPlanNode>,
+        recursive: Rc<FixedPointPlanNode>,
+    },
 }
 
 impl PlanNode {
@@ -217,6 +222,14 @@ impl PlanNode {
                 for (_, var) in aggregates.iter() {
                     callback(var.encoded);
                 }
+            }
+            Self::FixedPoint {
+                constant,
+                recursive,
+                ..
+            } => {
+                constant.lookup_used_variables(callback);
+                recursive.lookup_used_variables(callback);
             }
         }
     }
@@ -336,7 +349,7 @@ impl PlanNode {
                     }
                 }
             }
-            Self::Aggregate { .. } => {
+            Self::Aggregate { .. } | Self::FixedPoint { .. } => {
                 //TODO
             }
         }
@@ -350,6 +363,138 @@ impl PlanNode {
             }
         });
         found
+    }
+}
+
+#[derive(Debug)]
+pub enum FixedPointPlanNode {
+    StaticBindings {
+        encoded_tuples: Vec<EncodedTuple>,
+        variables: Vec<PlanVariable>,
+        plain_bindings: Vec<Vec<Option<GroundTerm>>>,
+    },
+    QuadPattern {
+        subject: PatternValue,
+        predicate: PatternValue,
+        object: PatternValue,
+        graph_name: PatternValue,
+    },
+    /// Streams left and materializes right join
+    HashJoin {
+        left: Rc<Self>,
+        right: Rc<Self>,
+    },
+    Filter {
+        child: Rc<Self>,
+        expression: PlanExpression,
+    },
+    Union {
+        children: Vec<Rc<Self>>,
+    },
+    Extend {
+        child: Rc<Self>,
+        variable: PlanVariable,
+        expression: PlanExpression,
+    },
+    Project {
+        child: Rc<Self>,
+        mapping: Rc<Vec<(PlanVariable, PlanVariable)>>, // pairs of (variable key in child, variable key in output)
+    },
+    FixedPoint {
+        id: usize,
+        constant: Rc<Self>,
+        recursive: Rc<Self>,
+    },
+    FixedPointEntry {
+        id: usize,
+        variables: Vec<PlanVariable>,
+    },
+}
+
+impl FixedPointPlanNode {
+    /// Returns variables that might be bound in the result set
+    pub fn used_variables(&self) -> BTreeSet<usize> {
+        let mut set = BTreeSet::default();
+        self.lookup_used_variables(&mut |v| {
+            set.insert(v);
+        });
+        set
+    }
+
+    pub fn lookup_used_variables(&self, callback: &mut impl FnMut(usize)) {
+        match self {
+            Self::StaticBindings { encoded_tuples, .. } => {
+                for tuple in encoded_tuples {
+                    for (key, value) in tuple.iter().enumerate() {
+                        if value.is_some() {
+                            callback(key);
+                        }
+                    }
+                }
+            }
+            Self::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => {
+                if let PatternValue::Variable(var) = subject {
+                    callback(var.encoded);
+                }
+                if let PatternValue::Variable(var) = predicate {
+                    callback(var.encoded);
+                }
+                if let PatternValue::Variable(var) = object {
+                    callback(var.encoded);
+                }
+                if let PatternValue::Variable(var) = graph_name {
+                    callback(var.encoded);
+                }
+            }
+            Self::Filter { child, expression } => {
+                expression.lookup_used_variables(callback);
+                child.lookup_used_variables(callback);
+            }
+            Self::Union { children } => {
+                for child in children.iter() {
+                    child.lookup_used_variables(callback);
+                }
+            }
+            Self::HashJoin { left, right } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+            }
+            Self::Extend {
+                child,
+                variable,
+                expression,
+            } => {
+                callback(variable.encoded);
+                expression.lookup_used_variables(callback);
+                child.lookup_used_variables(callback);
+            }
+            Self::Project { mapping, child } => {
+                let child_bound = child.used_variables();
+                for (child_i, output_i) in mapping.iter() {
+                    if child_bound.contains(&child_i.encoded) {
+                        callback(output_i.encoded);
+                    }
+                }
+            }
+            Self::FixedPoint {
+                constant,
+                recursive,
+                ..
+            } => {
+                constant.lookup_used_variables(callback);
+                recursive.lookup_used_variables(callback);
+            }
+            Self::FixedPointEntry { variables, .. } => {
+                for variable in variables {
+                    callback(variable.encoded);
+                }
+            }
+        }
     }
 }
 
@@ -1005,7 +1150,8 @@ impl IntoIterator for EncodedTuple {
 
 pub struct PlanNodeWithStats {
     pub node: Rc<PlanNode>,
-    pub children: Vec<Rc<PlanNodeWithStats>>,
+    pub children: Vec<Rc<Self>>,
+    pub fixed_point_children: Vec<Rc<FixedPointPlanNodeWithStats>>,
     pub exec_count: Cell<usize>,
     pub exec_duration: Cell<Duration>,
 }
@@ -1030,6 +1176,9 @@ impl PlanNodeWithStats {
         writer.write_event(JsonEvent::ObjectKey("children"))?;
         writer.write_event(JsonEvent::StartArray)?;
         for child in &self.children {
+            child.json_node(writer, with_stats)?;
+        }
+        for child in &self.fixed_point_children {
             child.json_node(writer, with_stats)?;
         }
         writer.write_event(JsonEvent::EndArray)?;
@@ -1123,11 +1272,110 @@ impl PlanNodeWithStats {
                 )
             }
             PlanNode::Union { .. } => "Union".to_owned(),
+            PlanNode::FixedPoint { id, .. } => format!("FixedPoint{id}"),
         }
     }
 }
 
 impl fmt::Debug for PlanNodeWithStats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut obj = f.debug_struct("Node");
+        obj.field("name", &self.node_label());
+        if self.exec_duration.get() > Duration::default() {
+            obj.field("number of results", &self.exec_count.get());
+            obj.field("duration in seconds", &self.exec_duration.get());
+        }
+        if !self.children.is_empty() {
+            obj.field("children", &self.children);
+        }
+        if !self.fixed_point_children.is_empty() {
+            obj.field("children", &self.fixed_point_children);
+        }
+        obj.finish()
+    }
+}
+
+pub struct FixedPointPlanNodeWithStats {
+    pub node: Rc<FixedPointPlanNode>,
+    pub children: Vec<Rc<Self>>,
+    pub exec_count: Cell<usize>,
+    pub exec_duration: Cell<Duration>,
+}
+
+impl FixedPointPlanNodeWithStats {
+    pub fn json_node(
+        &self,
+        writer: &mut JsonWriter<impl io::Write>,
+        with_stats: bool,
+    ) -> io::Result<()> {
+        writer.write_event(JsonEvent::StartObject)?;
+        writer.write_event(JsonEvent::ObjectKey("name"))?;
+        writer.write_event(JsonEvent::String(&self.node_label()))?;
+        if with_stats {
+            writer.write_event(JsonEvent::ObjectKey("number of results"))?;
+            writer.write_event(JsonEvent::Number(&self.exec_count.get().to_string()))?;
+            writer.write_event(JsonEvent::ObjectKey("duration in seconds"))?;
+            writer.write_event(JsonEvent::Number(
+                &self.exec_duration.get().as_secs_f32().to_string(),
+            ))?;
+        }
+        writer.write_event(JsonEvent::ObjectKey("children"))?;
+        writer.write_event(JsonEvent::StartArray)?;
+        for child in &self.children {
+            child.json_node(writer, with_stats)?;
+        }
+        writer.write_event(JsonEvent::EndArray)?;
+        writer.write_event(JsonEvent::EndObject)
+    }
+
+    fn node_label(&self) -> String {
+        match self.node.as_ref() {
+            FixedPointPlanNode::Extend {
+                expression,
+                variable,
+                ..
+            } => format!("Extend({expression} -> {variable})"),
+            FixedPointPlanNode::Filter { expression, .. } => format!("Filter({expression})"),
+
+            FixedPointPlanNode::HashJoin { .. } => "HashJoin".to_owned(),
+            FixedPointPlanNode::Project { mapping, .. } => {
+                format!(
+                    "Project({})",
+                    mapping
+                        .iter()
+                        .map(|(f, t)| if f.plain == t.plain {
+                            f.to_string()
+                        } else {
+                            format!("{f} -> {t}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            FixedPointPlanNode::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => format!("QuadPattern({subject} {predicate} {object} {graph_name})"),
+            FixedPointPlanNode::StaticBindings { variables, .. } => {
+                format!(
+                    "StaticBindings({})",
+                    variables
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            FixedPointPlanNode::Union { .. } => "Union".to_owned(),
+            FixedPointPlanNode::FixedPoint { id, .. } => format!("FixedPoint{id}"),
+            FixedPointPlanNode::FixedPointEntry { id, .. } => format!("FixedPointEntry{id}"),
+        }
+    }
+}
+
+impl fmt::Debug for FixedPointPlanNodeWithStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut obj = f.debug_struct("Node");
         obj.field("name", &self.node_label());

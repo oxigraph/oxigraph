@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "rules"), allow(dead_code))]
-use crate::algebra::*;
 use crate::parser::{parse_rule_set, ParseError};
 use crate::term::*;
 use std::fmt;
@@ -78,7 +77,7 @@ pub struct Rule {
     /// The construction template.
     pub head: Vec<GroundTriplePattern>,
     /// The rule body graph pattern.
-    pub body: GraphPattern,
+    pub body: Vec<TriplePattern>,
 }
 
 impl Rule {
@@ -99,22 +98,22 @@ impl Rule {
             }
             t.fmt_sse(f)?;
         }
-        write!(f, ") ")?;
-        self.body.fmt_sse(f)?;
-        write!(f, ")")
+        write!(f, ") (bgp")?;
+        for pattern in &self.body {
+            write!(f, " ")?;
+            pattern.fmt_sse(f)?;
+        }
+        write!(f, "))")
     }
 }
 
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "IF {{ {} }} THEN {{ ",
-            SparqlGraphRootPattern {
-                pattern: &self.body,
-                dataset: None
-            }
-        )?;
+        write!(f, "IF {{ ")?;
+        for triple in self.body.iter() {
+            write!(f, "{triple} . ")?;
+        }
+        write!(f, "}} THEN {{ ")?;
         for triple in self.head.iter() {
             write!(f, "{triple} . ")?;
         }

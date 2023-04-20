@@ -320,6 +320,254 @@ impl<'a> PlanBuilder<'a> {
                 }
                 plan
             }
+            GraphPattern::FixedPoint {
+                variables: fixed_point_variables,
+                constant,
+                recursive,
+                id,
+            } => {
+                let mut fixed_points = HashMap::new();
+                fixed_points.insert(
+                    *id,
+                    fixed_point_variables
+                        .iter()
+                        .enumerate()
+                        .map(|(new_variable, variable)| PlanVariable {
+                            encoded: new_variable,
+                            plain: variable.clone(),
+                        })
+                        .collect(),
+                );
+                let plan = PlanNode::Project {
+                    mapping: Rc::new(
+                        fixed_point_variables
+                            .iter()
+                            .enumerate()
+                            .map(|(new_variable, variable)| {
+                                (
+                                    PlanVariable {
+                                        encoded: new_variable,
+                                        plain: variable.clone(),
+                                    },
+                                    build_plan_variable(variables, variable),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    child: Rc::new(PlanNode::FixedPoint {
+                        id: id.0,
+                        constant: Rc::new(self.build_for_fixed_point_graph_pattern(
+                            constant,
+                            &mut fixed_point_variables.clone(),
+                            &mut fixed_points,
+                        )?),
+                        recursive: Rc::new(self.build_for_fixed_point_graph_pattern(
+                            recursive,
+                            &mut fixed_point_variables.clone(),
+                            &mut fixed_points,
+                        )?),
+                    }),
+                };
+                plan
+            }
+        })
+    }
+
+    fn build_for_fixed_point_graph_pattern(
+        &self,
+        pattern: &FixedPointGraphPattern,
+        variables: &mut Vec<Variable>,
+        fixed_points: &mut HashMap<FixedPointId, Vec<PlanVariable>>,
+    ) -> Result<FixedPointPlanNode, EvaluationError> {
+        Ok(match pattern {
+            FixedPointGraphPattern::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => FixedPointPlanNode::QuadPattern {
+                subject: self.pattern_value_from_ground_term_pattern(subject, variables),
+                predicate: self.pattern_value_from_named_node_or_variable(predicate, variables),
+                object: self.pattern_value_from_ground_term_pattern(object, variables),
+                graph_name: graph_name.as_ref().map_or(
+                    PatternValue::Constant(PlanTerm {
+                        encoded: EncodedTerm::DefaultGraph,
+                        plain: PatternValueConstant::DefaultGraph,
+                    }),
+                    |g| self.pattern_value_from_named_node_or_variable(g, variables),
+                ),
+            },
+            FixedPointGraphPattern::Join { left, right } => {
+                let mut left =
+                    self.build_for_fixed_point_graph_pattern(left, variables, fixed_points)?;
+                let mut right =
+                    self.build_for_fixed_point_graph_pattern(right, variables, fixed_points)?;
+                // Let's avoid materializing right if left is already materialized
+                // TODO: be smarter and reuse already existing materialization
+                if matches!(left, FixedPointPlanNode::StaticBindings { .. }) {
+                    swap(&mut left, &mut right);
+                }
+                FixedPointPlanNode::HashJoin {
+                    left: Rc::new(left),
+                    right: Rc::new(right),
+                }
+            }
+            FixedPointGraphPattern::Filter { inner, expression } => FixedPointPlanNode::Filter {
+                child: Rc::new(self.build_for_fixed_point_graph_pattern(
+                    inner,
+                    variables,
+                    fixed_points,
+                )?),
+                expression: self.build_for_fixed_point_expression(expression, variables)?,
+            },
+            FixedPointGraphPattern::Union { inner } => FixedPointPlanNode::Union {
+                children: inner
+                    .iter()
+                    .map(|p| {
+                        Ok(Rc::new(self.build_for_fixed_point_graph_pattern(
+                            p,
+                            variables,
+                            fixed_points,
+                        )?))
+                    })
+                    .collect::<Result<_, EvaluationError>>()?,
+            },
+            FixedPointGraphPattern::Extend {
+                inner,
+                variable,
+                expression,
+            } => FixedPointPlanNode::Extend {
+                child: Rc::new(self.build_for_fixed_point_graph_pattern(
+                    inner,
+                    variables,
+                    fixed_points,
+                )?),
+                variable: build_plan_variable(variables, variable),
+                expression: self.build_for_fixed_point_expression(expression, variables)?,
+            },
+            FixedPointGraphPattern::Values {
+                variables: table_variables,
+                bindings,
+            } => {
+                let bindings_variables = table_variables
+                    .iter()
+                    .map(|v| build_plan_variable(variables, v))
+                    .collect::<Vec<_>>();
+                let encoded_tuples = bindings
+                    .iter()
+                    .map(|row| {
+                        let mut result = EncodedTuple::with_capacity(variables.len());
+                        for (key, value) in row.iter().enumerate() {
+                            if let Some(term) = value {
+                                result.set(
+                                    bindings_variables[key].encoded,
+                                    match term {
+                                        GroundTerm::NamedNode(node) => self.build_term(node),
+                                        GroundTerm::Literal(literal) => self.build_term(literal),
+                                        GroundTerm::Triple(triple) => self.build_triple(triple),
+                                    },
+                                );
+                            }
+                        }
+                        result
+                    })
+                    .collect();
+                FixedPointPlanNode::StaticBindings {
+                    encoded_tuples,
+                    variables: bindings_variables,
+                    plain_bindings: bindings.clone(),
+                }
+            }
+            FixedPointGraphPattern::Project {
+                inner,
+                variables: projection,
+            } => {
+                let mut inner_variables = projection.clone();
+                FixedPointPlanNode::Project {
+                    child: Rc::new(self.build_for_fixed_point_graph_pattern(
+                        inner,
+                        &mut inner_variables,
+                        fixed_points,
+                    )?),
+                    mapping: Rc::new(
+                        projection
+                            .iter()
+                            .enumerate()
+                            .map(|(new_variable, variable)| {
+                                (
+                                    PlanVariable {
+                                        encoded: new_variable,
+                                        plain: variable.clone(),
+                                    },
+                                    build_plan_variable(variables, variable),
+                                )
+                            })
+                            .collect(),
+                    ),
+                }
+            }
+            FixedPointGraphPattern::FixedPoint {
+                variables: fixed_point_variables,
+                constant,
+                recursive,
+                id,
+            } => {
+                fixed_points.insert(
+                    *id,
+                    fixed_point_variables
+                        .iter()
+                        .enumerate()
+                        .map(|(new_variable, variable)| PlanVariable {
+                            encoded: new_variable,
+                            plain: variable.clone(),
+                        })
+                        .collect(),
+                );
+                let plan = FixedPointPlanNode::Project {
+                    mapping: Rc::new(
+                        fixed_point_variables
+                            .iter()
+                            .enumerate()
+                            .map(|(new_variable, variable)| {
+                                (
+                                    PlanVariable {
+                                        encoded: new_variable,
+                                        plain: variable.clone(),
+                                    },
+                                    build_plan_variable(variables, variable),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    child: Rc::new(FixedPointPlanNode::FixedPoint {
+                        id: id.0,
+                        constant: Rc::new(self.build_for_fixed_point_graph_pattern(
+                            constant,
+                            &mut fixed_point_variables.clone(),
+                            fixed_points,
+                        )?),
+                        recursive: Rc::new(self.build_for_fixed_point_graph_pattern(
+                            recursive,
+                            &mut fixed_point_variables.clone(),
+                            fixed_points,
+                        )?),
+                    }),
+                };
+                fixed_points.remove(id);
+                plan
+            }
+            FixedPointGraphPattern::FixedPointEntry(id) => {
+                let fixed_point_variable = if let Some(fixed_point_variable) = fixed_points.get(id)
+                {
+                    fixed_point_variable
+                } else {
+                    return Err(EvaluationError::msg("Invalid fixed point"));
+                };
+                FixedPointPlanNode::FixedPointEntry {
+                    id: id.0,
+                    variables: fixed_point_variable.clone(),
+                }
+            }
         })
     }
 
@@ -758,6 +1006,72 @@ impl<'a> PlanBuilder<'a> {
         })
     }
 
+    fn build_for_fixed_point_expression(
+        &self,
+        expression: &FixedPointExpression,
+        variables: &mut Vec<Variable>,
+    ) -> Result<PlanExpression, EvaluationError> {
+        Ok(match expression {
+            FixedPointExpression::NamedNode(node) => PlanExpression::NamedNode(PlanTerm {
+                encoded: self.build_term(node),
+                plain: node.clone(),
+            }),
+            FixedPointExpression::Literal(l) => PlanExpression::Literal(PlanTerm {
+                encoded: self.build_term(l),
+                plain: l.clone(),
+            }),
+            FixedPointExpression::Variable(v) => {
+                PlanExpression::Variable(build_plan_variable(variables, v))
+            }
+            FixedPointExpression::Or(a, b) => PlanExpression::Or(
+                Box::new(self.build_for_fixed_point_expression(a, variables)?),
+                Box::new(self.build_for_fixed_point_expression(b, variables)?),
+            ),
+            FixedPointExpression::And(a, b) => PlanExpression::And(
+                Box::new(self.build_for_fixed_point_expression(a, variables)?),
+                Box::new(self.build_for_fixed_point_expression(b, variables)?),
+            ),
+            FixedPointExpression::SameTerm(a, b) => PlanExpression::SameTerm(
+                Box::new(self.build_for_fixed_point_expression(a, variables)?),
+                Box::new(self.build_for_fixed_point_expression(b, variables)?),
+            ),
+            FixedPointExpression::In(e, l) => {
+                let e = self.build_for_fixed_point_expression(e, variables)?;
+                l.iter()
+                    .map(|v| {
+                        Ok(PlanExpression::Equal(
+                            Box::new(e.clone()),
+                            Box::new(self.build_for_fixed_point_expression(v, variables)?),
+                        ))
+                    })
+                    .reduce(|a: Result<_, EvaluationError>, b| {
+                        Ok(PlanExpression::Or(Box::new(a?), Box::new(b?)))
+                    })
+                    .unwrap_or_else(|| {
+                        Ok(PlanExpression::Literal(PlanTerm {
+                            encoded: false.into(),
+                            plain: false.into(),
+                        }))
+                    })?
+            }
+            FixedPointExpression::Not(e) => PlanExpression::Not(Box::new(
+                self.build_for_fixed_point_expression(e, variables)?,
+            )),
+            FixedPointExpression::FunctionCall(function, parameters) => match function {
+                Function::Triple => PlanExpression::Triple(
+                    Box::new(self.build_for_fixed_point_expression(&parameters[0], variables)?),
+                    Box::new(self.build_for_fixed_point_expression(&parameters[1], variables)?),
+                    Box::new(self.build_for_fixed_point_expression(&parameters[2], variables)?),
+                ),
+                name => {
+                    return Err(EvaluationError::msg(format!(
+                        "Not supported custom function {name}"
+                    )))
+                }
+            },
+        })
+    }
+
     fn build_cast(
         &self,
         parameters: &[Expression],
@@ -1141,6 +1455,9 @@ impl<'a> PlanBuilder<'a> {
                     set.insert(var.encoded);
                 }
             }
+            PlanNode::FixedPoint { .. } => {
+                // All variables must be bound
+            }
         }
     }
 
@@ -1204,7 +1521,8 @@ impl<'a> PlanBuilder<'a> {
             | PlanNode::Skip { .. }
             | PlanNode::Limit { .. }
             | PlanNode::Project { .. }
-            | PlanNode::Aggregate { .. } => false,
+            | PlanNode::Aggregate { .. }
+            | PlanNode::FixedPoint { .. } => false,
         }
     }
 

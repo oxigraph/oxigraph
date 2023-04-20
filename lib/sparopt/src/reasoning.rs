@@ -8,7 +8,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 pub struct QueryRewriter {
-    rules: Vec<(Vec<GroundTriplePattern>, GraphPattern)>,
+    rules: Vec<(Vec<GroundTriplePattern>, Vec<GroundTriplePattern>)>,
 }
 
 impl QueryRewriter {
@@ -17,7 +17,23 @@ impl QueryRewriter {
             rules: rule_set
                 .rules
                 .into_iter()
-                .map(|rule| (rule.head, (&rule.body).into()))
+                .map(|rule| {
+                    (rule.head, {
+                        let mut blank_nodes = HashMap::new();
+                        rule.body
+                            .iter()
+                            .map(|p| {
+                                let (subject, predicate, object) =
+                                    GraphPattern::triple_pattern_from_algebra(p, &mut blank_nodes);
+                                GroundTriplePattern {
+                                    subject,
+                                    predicate,
+                                    object,
+                                }
+                            })
+                            .collect()
+                    })
+                })
                 .collect(),
         }
     }
@@ -30,7 +46,16 @@ impl QueryRewriter {
                 predicate,
                 object,
                 graph_name,
-            } => self.rewrite_quad_pattern(subject, predicate, object, graph_name.as_ref()),
+            } => self
+                .rewrite_quad_pattern(
+                    subject,
+                    predicate,
+                    object,
+                    graph_name.as_ref(),
+                    &mut Vec::new(),
+                )
+                .try_into()
+                .unwrap(),
             GraphPattern::Path { .. } => todo!(),
             GraphPattern::Join { left, right } => GraphPattern::join(
                 self.rewrite_graph_pattern(left),
@@ -106,6 +131,7 @@ impl QueryRewriter {
                 silent,
                 name,
             } => GraphPattern::service(self.rewrite_graph_pattern(inner), name.clone(), *silent),
+            GraphPattern::FixedPoint { .. } => todo!(),
         }
     }
 
@@ -115,9 +141,98 @@ impl QueryRewriter {
         predicate: &NamedNodePattern,
         object: &GroundTermPattern,
         graph_name: Option<&NamedNodePattern>,
-    ) -> GraphPattern {
+        possible_fixed_points: &mut Vec<(
+            GroundTermPattern,
+            NamedNodePattern,
+            GroundTermPattern,
+            Option<NamedNodePattern>,
+            FixedPointId,
+        )>,
+    ) -> FixedPointGraphPattern {
+        // We check if we are in a loop
+        for (
+            fixed_point_subject,
+            fixed_point_predicate,
+            fixed_point_object,
+            fixed_point_graph_name,
+            fixed_point_id,
+        ) in possible_fixed_points.iter()
+        {
+            let mut variable_mapping = Vec::new();
+            if let (GroundTermPattern::Variable(from), GroundTermPattern::Variable(to)) =
+                (fixed_point_subject, subject)
+            {
+                variable_mapping.push((from.clone(), to.clone()));
+            } else if fixed_point_subject == subject {
+                // Ok
+            } else {
+                continue; // Not compatible
+            }
+            if let (NamedNodePattern::Variable(from), NamedNodePattern::Variable(to)) =
+                (fixed_point_predicate, predicate)
+            {
+                variable_mapping.push((from.clone(), to.clone()));
+            } else if fixed_point_predicate == predicate {
+                // Ok
+            } else {
+                continue; // Not compatible
+            }
+            if let (GroundTermPattern::Variable(from), GroundTermPattern::Variable(to)) =
+                (fixed_point_object, object)
+            {
+                variable_mapping.push((from.clone(), to.clone()));
+            } else if fixed_point_object == object {
+                // Ok
+            } else {
+                continue; // Not compatible
+            }
+            if let (Some(NamedNodePattern::Variable(from)), Some(NamedNodePattern::Variable(to))) =
+                (fixed_point_graph_name, graph_name)
+            {
+                variable_mapping.push((from.clone(), to.clone()));
+            } else if fixed_point_graph_name.as_ref() == graph_name {
+                // Ok
+            } else {
+                continue; // Not compatible
+            }
+            let mut plan = FixedPointGraphPattern::FixedPointEntry(*fixed_point_id);
+            for (from, to) in &variable_mapping {
+                if from != to {
+                    plan = FixedPointGraphPattern::extend(plan, to.clone(), from.clone().into());
+                }
+            }
+            return FixedPointGraphPattern::project(
+                plan,
+                variable_mapping.into_iter().map(|(_, v)| v).collect(),
+            );
+        }
+
+        let new_fixed_point_id = FixedPointId(possible_fixed_points.len());
+        possible_fixed_points.push((
+            subject.clone(),
+            predicate.clone(),
+            object.clone(),
+            graph_name.cloned(),
+            new_fixed_point_id,
+        ));
+
+        // We get the output variables list:
+        let mut output_variables = Vec::new();
+        if let GroundTermPattern::Variable(v) = subject {
+            output_variables.push(v.clone());
+        }
+        if let NamedNodePattern::Variable(v) = predicate {
+            output_variables.push(v.clone());
+        }
+        if let GroundTermPattern::Variable(v) = object {
+            output_variables.push(v.clone());
+        }
+        if let Some(NamedNodePattern::Variable(v)) = graph_name {
+            output_variables.push(v.clone());
+        }
+
         // We rewrite based on rules
-        let mut graph_pattern = GraphPattern::QuadPattern {
+        let mut pattern = FixedPointGraphPattern::QuadPattern {
             subject: subject.clone(),
             predicate: predicate.clone(),
             object: object.clone(),
@@ -125,36 +240,50 @@ impl QueryRewriter {
         };
         for (rule_head, rule_body) in &self.rules {
             for head_pattern in rule_head {
-                if let Some(nested) = self.apply_rule_for_quad_pattern(
+                if let Some(nested) = self.apply_rule_on_quad_pattern(
                     subject,
                     predicate,
                     object,
                     graph_name,
                     head_pattern,
                     rule_body,
+                    possible_fixed_points,
                 ) {
-                    graph_pattern = GraphPattern::union(graph_pattern, nested);
+                    pattern = FixedPointGraphPattern::union(
+                        pattern,
+                        FixedPointGraphPattern::project(nested, output_variables.clone()),
+                    );
                 }
             }
         }
-        graph_pattern
+        possible_fixed_points.pop();
+        FixedPointGraphPattern::fixed_point(new_fixed_point_id, pattern, output_variables)
     }
 
     /// Attempts to use a given rule to get new facts for a triple pattern
-    fn apply_rule_for_quad_pattern(
+    fn apply_rule_on_quad_pattern(
         &self,
         subject: &GroundTermPattern,
         predicate: &NamedNodePattern,
         object: &GroundTermPattern,
         graph_name: Option<&NamedNodePattern>,
         head: &GroundTriplePattern,
-        body: &GraphPattern,
-    ) -> Option<GraphPattern> {
+        body: &[GroundTriplePattern],
+        possible_fixed_points: &mut Vec<(
+            GroundTermPattern,
+            NamedNodePattern,
+            GroundTermPattern,
+            Option<NamedNodePattern>,
+            FixedPointId,
+        )>,
+    ) -> Option<FixedPointGraphPattern> {
         let head_unification = Self::unify_triple_pattern(
             subject.clone(),
+            head.subject.clone(),
             predicate.clone(),
+            head.predicate.clone(),
             object.clone(),
-            head.clone(),
+            head.object.clone(),
         )?;
         // We build a nested query
         // from is the parent query and to is the nested one
@@ -189,9 +318,14 @@ impl QueryRewriter {
                 },
             }
         }
-        let mut plan = self.rewrite_rule_body(body, graph_name, &mut replacements_in_rule)?;
+        let mut plan = self.rewrite_rule_body(
+            body,
+            graph_name,
+            &mut replacements_in_rule,
+            possible_fixed_points,
+        )?;
         for (variable, value) in final_binds {
-            plan = GraphPattern::extend(
+            plan = FixedPointGraphPattern::extend(
                 plan,
                 variable,
                 match value {
@@ -205,81 +339,33 @@ impl QueryRewriter {
 
     fn rewrite_rule_body<'a>(
         &self,
-        pattern: &'a GraphPattern,
+        body: &'a [GroundTriplePattern],
         parent_graph_name: Option<&'a NamedNodePattern>,
         replacements_in_rule: &mut HashMap<Variable, TermOrVariable>,
-    ) -> Option<GraphPattern> {
-        Some(match pattern {
-            GraphPattern::QuadPattern {
-                subject,
-                predicate,
-                object,
-                graph_name,
-            } => self.rewrite_quad_pattern(
-                &Self::apply_replacement_on_term_pattern(subject, replacements_in_rule)?,
-                &Self::apply_replacement_on_named_node_pattern(predicate, replacements_in_rule)?,
-                &Self::apply_replacement_on_term_pattern(object, replacements_in_rule)?,
-                if let Some(graph_name) = graph_name {
-                    Some(Self::apply_replacement_on_named_node_pattern(
-                        graph_name,
-                        replacements_in_rule,
-                    )?)
-                } else {
-                    parent_graph_name.cloned()
-                }
-                .as_ref(),
-            ),
-            GraphPattern::Join { left, right } => GraphPattern::join(
-                self.rewrite_rule_body(left, parent_graph_name, replacements_in_rule)?,
-                self.rewrite_rule_body(right, parent_graph_name, replacements_in_rule)?,
-            ),
-            GraphPattern::Values {
-                variables,
-                bindings,
-            } => {
-                let variable_mapping = variables
-                    .iter()
-                    .map(|v| {
-                        replacements_in_rule
-                            .entry(v.clone())
-                            .or_insert_with(|| TermOrVariable::Variable(new_var()))
-                            .clone()
-                    })
-                    .collect::<Vec<_>>();
-                GraphPattern::Values {
-                    variables: variable_mapping
-                        .iter()
-                        .filter_map(|v| match v {
-                            TermOrVariable::Term(_) => None,
-                            TermOrVariable::Variable(v) => Some(v.clone()),
-                        })
-                        .collect(),
-                    bindings: bindings
-                        .iter()
-                        .filter_map(|binding| {
-                            let mut new_binding = Vec::with_capacity(binding.len());
-                            for (variable, value) in variable_mapping.iter().zip(binding) {
-                                match variable {
-                                    TermOrVariable::Variable(_) => new_binding.push(value.clone()),
-                                    TermOrVariable::Term(cst) => {
-                                        let compatible = if let Some(value) = value {
-                                            cst == value
-                                        } else {
-                                            true
-                                        };
-                                        if !compatible {
-                                            return None;
-                                        }
-                                    }
-                                }
-                            }
-                            Some(new_binding)
-                        })
-                        .collect(),
-                }
-            }
-            _ => unreachable!("Not allowed by the parser yet: {pattern:?}"),
-        })
+        possible_fixed_points: &mut Vec<(
+            GroundTermPattern,
+            NamedNodePattern,
+            GroundTermPattern,
+            Option<NamedNodePattern>,
+            FixedPointId,
+        )>,
+    ) -> Option<FixedPointGraphPattern> {
+        let mut patterns = Vec::new();
+        for p in body {
+            patterns.push(self.rewrite_quad_pattern(
+                &Self::apply_replacement_on_term_pattern(&p.subject, replacements_in_rule)?,
+                &Self::apply_replacement_on_named_node_pattern(&p.predicate, replacements_in_rule)?,
+                &Self::apply_replacement_on_term_pattern(&p.object, replacements_in_rule)?,
+                parent_graph_name,
+                possible_fixed_points,
+            ));
+        }
+        Some(
+            patterns
+                .into_iter()
+                .reduce(FixedPointGraphPattern::join)
+                .unwrap_or_else(FixedPointGraphPattern::singleton),
+        )
     }
 
     fn apply_replacement_on_named_node_pattern(
@@ -336,16 +422,18 @@ impl QueryRewriter {
 
     fn unify_triple_pattern(
         from_subject: GroundTermPattern,
+        to_subject: GroundTermPattern,
         from_predicate: NamedNodePattern,
+        to_predicate: NamedNodePattern,
         from_object: GroundTermPattern,
-        to: GroundTriplePattern,
+        to_object: GroundTermPattern,
     ) -> Option<Vec<Replacement>> {
-        let mut mapping = Self::unify_ground_term_pattern(from_subject, to.subject)?;
+        let mut mapping = Self::unify_ground_term_pattern(from_subject, to_subject)?;
         mapping.extend(Self::unify_named_node_pattern(
             from_predicate,
-            to.predicate,
+            to_predicate,
         )?);
-        mapping.extend(Self::unify_ground_term_pattern(from_object, to.object)?);
+        mapping.extend(Self::unify_ground_term_pattern(from_object, to_object)?);
         Some(mapping)
     }
 

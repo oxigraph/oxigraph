@@ -1,0 +1,4 @@
+PREFIX ex: <http://example.org/>
+ex:Bar ex:includedIn ex:Foo .
+ex:Baz ex:includedIn ex:Bar .
+ex:Baa ex:includedIn ex:Baz .

@@ -15,10 +15,11 @@ rust-version = "1.60"
 
 [features]
 default = []
+fixed-point = []
 rdf-star = ["oxrdf/rdf-star", "spargebra/rdf-star"]
 sep-0002 = ["spargebra/sep-0002"]
 sep-0006 = ["spargebra/sep-0006"]
-rules = ["spargebra/rules"]
+rules = ["spargebra/rules", "fixed-point"]
 
 [dependencies]
 oxrdf = { version = "0.1.5", path="../oxrdf" }
