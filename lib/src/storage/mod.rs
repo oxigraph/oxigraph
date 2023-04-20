@@ -288,7 +288,7 @@ impl Storage {
     #[cfg(not(target_family = "wasm"))]
     pub fn flush(&self) -> Result<(), StorageError> {
         self.db.flush(&self.default_cf)?;
-        self.db.flush(&self.gpos_cf)?;
+        self.db.flush(&self.gspo_cf)?;
         self.db.flush(&self.gpos_cf)?;
         self.db.flush(&self.gosp_cf)?;
         self.db.flush(&self.spog_cf)?;
@@ -303,7 +303,7 @@ impl Storage {
     #[cfg(not(target_family = "wasm"))]
     pub fn compact(&self) -> Result<(), StorageError> {
         self.db.compact(&self.default_cf)?;
-        self.db.compact(&self.gpos_cf)?;
+        self.db.compact(&self.gspo_cf)?;
         self.db.compact(&self.gpos_cf)?;
         self.db.compact(&self.gosp_cf)?;
         self.db.compact(&self.spog_cf)?;
