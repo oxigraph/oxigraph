@@ -175,11 +175,6 @@ impl Optimizer {
                 let right = Self::normalize_expression(*right);
                 Expression::LessOrEqual(Box::new(left), Box::new(right))
             }
-            Expression::In(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = right.into_iter().map(Self::normalize_expression).collect();
-                Expression::In(Box::new(left), right)
-            }
             Expression::Add(left, right) => {
                 let left = Self::normalize_expression(*left);
                 let right = Self::normalize_expression(*right);

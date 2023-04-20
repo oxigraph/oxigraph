@@ -657,25 +657,6 @@ impl<'a> PlanBuilder<'a> {
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
             ),
-            Expression::In(e, l) => {
-                let e = self.build_for_expression(e, variables)?;
-                l.iter()
-                    .map(|v| {
-                        Ok(PlanExpression::Equal(
-                            Box::new(e.clone()),
-                            Box::new(self.build_for_expression(v, variables)?),
-                        ))
-                    })
-                    .reduce(|a: Result<_, EvaluationError>, b| {
-                        Ok(PlanExpression::Or(Box::new(a?), Box::new(b?)))
-                    })
-                    .unwrap_or_else(|| {
-                        Ok(PlanExpression::Literal(PlanTerm {
-                            encoded: false.into(),
-                            plain: false.into(),
-                        }))
-                    })?
-            }
             Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables)?),
                 Box::new(self.build_for_expression(b, variables)?),
@@ -1035,25 +1016,6 @@ impl<'a> PlanBuilder<'a> {
                 Box::new(self.build_for_fixed_point_expression(a, variables)?),
                 Box::new(self.build_for_fixed_point_expression(b, variables)?),
             ),
-            FixedPointExpression::In(e, l) => {
-                let e = self.build_for_fixed_point_expression(e, variables)?;
-                l.iter()
-                    .map(|v| {
-                        Ok(PlanExpression::Equal(
-                            Box::new(e.clone()),
-                            Box::new(self.build_for_fixed_point_expression(v, variables)?),
-                        ))
-                    })
-                    .reduce(|a: Result<_, EvaluationError>, b| {
-                        Ok(PlanExpression::Or(Box::new(a?), Box::new(b?)))
-                    })
-                    .unwrap_or_else(|| {
-                        Ok(PlanExpression::Literal(PlanTerm {
-                            encoded: false.into(),
-                            plain: false.into(),
-                        }))
-                    })?
-            }
             FixedPointExpression::Not(e) => PlanExpression::Not(Box::new(
                 self.build_for_fixed_point_expression(e, variables)?,
             )),

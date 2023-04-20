@@ -35,8 +35,6 @@ pub enum Expression {
     /// [op:numeric-less-than](https://www.w3.org/TR/xpath-functions/#func-numeric-less-than) and other XSD greater than operators.
     Less(Box<Self>, Box<Self>),
     LessOrEqual(Box<Self>, Box<Self>),
-    /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
-    In(Box<Self>, Vec<Self>),
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add) and other XSD additions.
     Add(Box<Self>, Box<Self>),
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract) and other XSD subtractions.
@@ -122,13 +120,19 @@ impl Expression {
                 Box::new(Self::from_sparql_algebra(left, graph_name)),
                 Box::new(Self::from_sparql_algebra(right, graph_name)),
             ),
-            AlExpression::In(left, right) => Self::In(
-                Box::new(Self::from_sparql_algebra(left, graph_name)),
+            AlExpression::In(left, right) => {
+                let left = Self::from_sparql_algebra(left, graph_name);
                 right
                     .iter()
-                    .map(|e| Self::from_sparql_algebra(e, graph_name))
-                    .collect(),
-            ),
+                    .map(|e| {
+                        Self::Equal(
+                            Box::new(left.clone()),
+                            Box::new(Self::from_sparql_algebra(e, graph_name)),
+                        )
+                    })
+                    .reduce(|a, b| Self::Or(Box::new(a), Box::new(b)))
+                    .unwrap_or_else(|| false.into())
+            }
             AlExpression::Add(left, right) => Self::Add(
                 Box::new(Self::from_sparql_algebra(left, graph_name)),
                 Box::new(Self::from_sparql_algebra(right, graph_name)),
@@ -310,10 +314,6 @@ impl From<&Expression> for AlExpression {
             Expression::LessOrEqual(left, right) => Self::LessOrEqual(
                 Box::new(left.as_ref().into()),
                 Box::new(right.as_ref().into()),
-            ),
-            Expression::In(left, right) => Self::In(
-                Box::new(left.as_ref().into()),
-                right.iter().map(|e| e.into()).collect(),
             ),
             Expression::Add(left, right) => Self::Add(
                 Box::new(left.as_ref().into()),
@@ -1332,8 +1332,6 @@ pub enum FixedPointExpression {
     And(Box<Self>, Box<Self>),
     /// [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm).
     SameTerm(Box<Self>, Box<Self>),
-    /// [IN](https://www.w3.org/TR/sparql11-query/#func-in)
-    In(Box<Self>, Vec<Self>),
     /// [fn:not](https://www.w3.org/TR/xpath-functions/#func-not).
     Not(Box<Self>),
     /// A regular function call.
@@ -1449,10 +1447,6 @@ impl From<FixedPointExpression> for Expression {
             FixedPointExpression::SameTerm(left, right) => {
                 Self::SameTerm(Box::new((*left).into()), Box::new((*right).into()))
             }
-            FixedPointExpression::In(left, right) => Self::In(
-                Box::new((*left).into()),
-                right.into_iter().map(Into::into).collect(),
-            ),
             FixedPointExpression::Not(inner) => Self::Not(Box::new((*inner).into())),
             FixedPointExpression::FunctionCall(name, args) => {
                 Self::FunctionCall(name, args.into_iter().map(Into::into).collect())
