@@ -121,111 +121,72 @@ impl Optimizer {
             Expression::NamedNode(node) => node.into(),
             Expression::Literal(literal) => literal.into(),
             Expression::Variable(variable) => variable.into(),
-            Expression::Or(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                match (
-                    left.effective_boolean_value(),
-                    right.effective_boolean_value(),
-                ) {
-                    (Some(true), _) | (_, Some(true)) => true.into(),
-                    (Some(false), Some(false)) => false.into(),
-                    _ => Expression::Or(Box::new(left), Box::new(right)),
-                }
-            }
-            Expression::And(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                match (
-                    left.effective_boolean_value(),
-                    right.effective_boolean_value(),
-                ) {
-                    (Some(false), _) | (_, Some(false)) => false.into(),
-                    (Some(true), Some(true)) => true.into(),
-                    _ => Expression::And(Box::new(left), Box::new(right)),
-                }
-            }
-            Expression::Equal(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::Equal(Box::new(left), Box::new(right))
-            }
-            Expression::SameTerm(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::SameTerm(Box::new(left), Box::new(right))
-            }
-            Expression::Greater(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::Greater(Box::new(left), Box::new(right))
-            }
-            Expression::GreaterOrEqual(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::GreaterOrEqual(Box::new(left), Box::new(right))
-            }
-            Expression::Less(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::Less(Box::new(left), Box::new(right))
-            }
-            Expression::LessOrEqual(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::LessOrEqual(Box::new(left), Box::new(right))
-            }
-            Expression::Add(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::Add(Box::new(left), Box::new(right))
-            }
-            Expression::Subtract(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::Subtract(Box::new(left), Box::new(right))
-            }
-            Expression::Multiply(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::Multiply(Box::new(left), Box::new(right))
-            }
-            Expression::Divide(left, right) => {
-                let left = Self::normalize_expression(*left);
-                let right = Self::normalize_expression(*right);
-                Expression::Divide(Box::new(left), Box::new(right))
-            }
+            Expression::Or(left, right) => Expression::or(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::And(left, right) => Expression::and(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::Equal(left, right) => Expression::equal(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::SameTerm(left, right) => Expression::same_term(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::Greater(left, right) => Expression::greater(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::GreaterOrEqual(left, right) => Expression::greater_or_equal(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::Less(left, right) => Expression::less(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::LessOrEqual(left, right) => Expression::less_or_equal(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::Add(left, right) => Expression::add(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::Subtract(left, right) => Expression::subtract(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::Multiply(left, right) => Expression::multiply(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
+            Expression::Divide(left, right) => Expression::divide(
+                Self::normalize_expression(*left),
+                Self::normalize_expression(*right),
+            ),
             Expression::UnaryPlus(inner) => {
-                let inner = Self::normalize_expression(*inner);
-                Expression::UnaryPlus(Box::new(inner))
+                Expression::unary_plus(Self::normalize_expression(*inner))
             }
             Expression::UnaryMinus(inner) => {
-                let inner = Self::normalize_expression(*inner);
-                Expression::UnaryMinus(Box::new(inner))
+                Expression::unary_minus(Self::normalize_expression(*inner))
             }
-            Expression::Not(inner) => {
-                let inner = Self::normalize_expression(*inner);
-                Expression::Not(Box::new(inner))
-            }
-            Expression::Exists(inner) => {
-                let inner = Self::normalize_pattern(*inner);
-                Expression::Exists(Box::new(inner))
-            }
+            Expression::Not(inner) => Expression::not(Self::normalize_expression(*inner)),
+            Expression::Exists(inner) => Expression::exists(Self::normalize_pattern(*inner)),
             Expression::Bound(variable) => Expression::Bound(variable),
-            Expression::If(cond, then, els) => {
-                let cond = Self::normalize_expression(*cond);
-                let then = Self::normalize_expression(*then);
-                let els = Self::normalize_expression(*els);
-                match cond.effective_boolean_value() {
-                    Some(true) => then,
-                    Some(false) => els,
-                    None => Expression::If(Box::new(cond), Box::new(then), Box::new(els)),
-                }
-            }
+            Expression::If(cond, then, els) => Expression::if_cond(
+                Self::normalize_expression(*cond),
+                Self::normalize_expression(*then),
+                Self::normalize_expression(*els),
+            ),
             Expression::Coalesce(inners) => {
-                Expression::Coalesce(inners.into_iter().map(Self::normalize_expression).collect())
+                Expression::coalesce(inners.into_iter().map(Self::normalize_expression).collect())
             }
-            Expression::FunctionCall(name, args) => Expression::FunctionCall(
+            Expression::FunctionCall(name, args) => Expression::call(
                 name,
                 args.into_iter().map(Self::normalize_expression).collect(),
             ),

@@ -62,6 +62,103 @@ pub enum Expression {
 }
 
 impl Expression {
+    pub(crate) fn or(left: Self, right: Self) -> Self {
+        match (
+            left.effective_boolean_value(),
+            right.effective_boolean_value(),
+        ) {
+            (Some(true), _) | (_, Some(true)) => true.into(),
+            (Some(false), Some(false)) => false.into(),
+            _ => Self::Or(Box::new(left), Box::new(right)),
+        }
+    }
+
+    pub(crate) fn and(left: Self, right: Self) -> Self {
+        match (
+            left.effective_boolean_value(),
+            right.effective_boolean_value(),
+        ) {
+            (Some(false), _) | (_, Some(false)) => false.into(),
+            (Some(true), Some(true)) => true.into(),
+            _ => Self::And(Box::new(left), Box::new(right)),
+        }
+    }
+
+    pub(crate) fn equal(left: Self, right: Self) -> Self {
+        Self::Equal(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn same_term(left: Self, right: Self) -> Self {
+        Self::SameTerm(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn greater(left: Self, right: Self) -> Self {
+        Self::Greater(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn greater_or_equal(left: Self, right: Self) -> Self {
+        Self::GreaterOrEqual(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn less(left: Self, right: Self) -> Self {
+        Self::Less(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn less_or_equal(left: Self, right: Self) -> Self {
+        Self::LessOrEqual(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn add(left: Self, right: Self) -> Self {
+        Self::Add(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn subtract(left: Self, right: Self) -> Self {
+        Self::Subtract(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn multiply(left: Self, right: Self) -> Self {
+        Self::Multiply(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn divide(left: Self, right: Self) -> Self {
+        Self::Divide(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn unary_plus(inner: Self) -> Self {
+        Self::UnaryPlus(Box::new(inner))
+    }
+
+    pub(crate) fn unary_minus(inner: Self) -> Self {
+        Self::UnaryMinus(Box::new(inner))
+    }
+
+    pub(crate) fn not(inner: Self) -> Self {
+        Self::Not(Box::new(inner))
+    }
+
+    pub(crate) fn exists(inner: GraphPattern) -> Self {
+        if inner.is_empty() {
+            return false.into();
+        }
+        Self::Exists(Box::new(inner))
+    }
+
+    pub(crate) fn if_cond(cond: Self, then: Self, els: Self) -> Self {
+        match cond.effective_boolean_value() {
+            Some(true) => then,
+            Some(false) => els,
+            None => Self::If(Box::new(cond), Box::new(then), Box::new(els)),
+        }
+    }
+
+    pub(crate) fn coalesce(args: Vec<Self>) -> Self {
+        Self::Coalesce(args)
+    }
+
+    pub(crate) fn call(name: Function, args: Vec<Self>) -> Self {
+        Self::FunctionCall(name, args)
+    }
+
     pub(crate) fn effective_boolean_value(&self) -> Option<bool> {
         match self {
             Self::NamedNode(_) => Some(true),
