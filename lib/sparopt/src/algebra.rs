@@ -1406,6 +1406,56 @@ impl FixedPointGraphPattern {
             Self::FixedPointEntry(tid) => id == tid,
         }
     }
+
+    pub(crate) fn lookup_used_variables(&self, callback: &mut impl FnMut(&Variable)) {
+        match self {
+            FixedPointGraphPattern::QuadPattern {
+                subject,
+                predicate,
+                object,
+                graph_name,
+            } => {
+                lookup_ground_term_pattern_used_variables(subject, callback);
+                if let NamedNodePattern::Variable(v) = predicate {
+                    callback(v);
+                }
+                lookup_ground_term_pattern_used_variables(object, callback);
+                if let Some(NamedNodePattern::Variable(v)) = graph_name {
+                    callback(v);
+                }
+            }
+            FixedPointGraphPattern::Join { left, right } => {
+                left.lookup_used_variables(callback);
+                right.lookup_used_variables(callback);
+            }
+            FixedPointGraphPattern::Filter { inner, .. } => {
+                inner.lookup_used_variables(callback);
+                // TODO: we assume all expression variables are bound
+            }
+            FixedPointGraphPattern::Union { inner } => {
+                for inner in inner {
+                    inner.lookup_used_variables(callback);
+                }
+            }
+            FixedPointGraphPattern::Extend {
+                inner, variable, ..
+            } => {
+                inner.lookup_used_variables(callback);
+                callback(variable);
+                // TODO: we assume all expression variables are bound
+            }
+            FixedPointGraphPattern::Values { variables, .. }
+            | FixedPointGraphPattern::Project { variables, .. }
+            | FixedPointGraphPattern::FixedPoint { variables, .. } => {
+                for v in variables {
+                    callback(v);
+                }
+            }
+            FixedPointGraphPattern::FixedPointEntry(_) => {
+                //TODO
+            }
+        }
+    }
 }
 
 impl TryFrom<FixedPointGraphPattern> for GraphPattern {
@@ -1836,4 +1886,19 @@ impl From<&OrderExpression> for AlOrderExpression {
 
 fn new_var() -> Variable {
     Variable::new_unchecked(format!("{:x}", random::<u128>()))
+}
+
+fn lookup_ground_term_pattern_used_variables(
+    pattern: &GroundTermPattern,
+    callback: &mut impl FnMut(&Variable),
+) {
+    if let GroundTermPattern::Variable(v) = pattern {
+        callback(v)
+    } else if let GroundTermPattern::Triple(t) = pattern {
+        lookup_ground_term_pattern_used_variables(&t.subject, callback);
+        if let NamedNodePattern::Variable(v) = &t.predicate {
+            callback(v);
+        }
+        lookup_ground_term_pattern_used_variables(&t.object, callback);
+    }
 }

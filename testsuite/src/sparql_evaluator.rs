@@ -198,11 +198,17 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         false
     };
 
-    for with_query_optimizer in [true, false] {
-        let mut options = options.clone();
-        if !with_query_optimizer {
-            options = options.without_optimizations();
-        }
+    enum Mode {
+        Base,
+        WithoutOptimizer,
+        WithInferenceRules,
+    }
+    for mode in [Mode::Base, Mode::WithoutOptimizer, Mode::WithInferenceRules] {
+        let options = match mode {
+            Mode::Base => options.clone(),
+            Mode::WithoutOptimizer => options.clone().without_optimizations(),
+            Mode::WithInferenceRules => options.clone().with_inference_rules(RuleSet::default()),
+        };
         let actual_results = store
             .query_opt(query.clone(), options)
             .map_err(|e| anyhow!("Failure to execute query of {test} with error: {e}"))?;
@@ -210,7 +216,12 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
 
         if !are_query_results_isomorphic(&expected_results, &actual_results) {
             bail!(
-                "Failure on {test}.\n{}\nParsed query:\n{}\nData:\n{store}\n",
+                "Failure{} on {test}.\n{}\nParsed query:\n{}\nData:\n{store}\n",
+                match mode {
+                    Mode::Base => "",
+                    Mode::WithoutOptimizer => " without optimizer",
+                    Mode::WithInferenceRules => " with inference rules",
+                },
                 results_diff(expected_results, actual_results),
                 Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap()
             );

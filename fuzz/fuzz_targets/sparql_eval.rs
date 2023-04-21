@@ -3,7 +3,7 @@
 use lazy_static::lazy_static;
 use libfuzzer_sys::fuzz_target;
 use oxigraph::io::DatasetFormat;
-use oxigraph::sparql::{Query, QueryOptions, QueryResults, QuerySolutionIter};
+use oxigraph::sparql::{Query, QueryOptions, QueryResults, QuerySolutionIter, RuleSet};
 use oxigraph::store::Store;
 
 lazy_static! {
@@ -26,23 +26,38 @@ fuzz_target!(|data: sparql_smith::Query| {
         let options = QueryOptions::default();
         let with_opt = STORE.query_opt(query.clone(), options.clone()).unwrap();
         let without_opt = STORE
-            .query_opt(query, options.without_optimizations())
+            .query_opt(query.clone(), options.clone().without_optimizations())
             .unwrap();
-        match (with_opt, without_opt) {
-            (QueryResults::Solutions(with_opt), QueryResults::Solutions(without_opt)) => {
-                assert_eq!(
-                    query_solutions_key(with_opt, query_str.contains(" REDUCED ")),
-                    query_solutions_key(without_opt, query_str.contains(" REDUCED "))
-                )
-            }
-            (QueryResults::Graph(_), QueryResults::Graph(_)) => unimplemented!(),
-            (QueryResults::Boolean(with_opt), QueryResults::Boolean(without_opt)) => {
-                assert_eq!(with_opt, without_opt)
-            }
-            _ => panic!("Different query result types"),
-        }
+        compare_results(with_opt, without_opt, &query_str);
+        let with_opt_and_reasoning = STORE
+            .query_opt(
+                query.clone(),
+                options
+                    .clone()
+                    .with_inference_rules(RuleSet::default())
+                    .clone(),
+            )
+            .unwrap();
+        let with_opt = STORE.query_opt(query.clone(), options).unwrap();
+        compare_results(with_opt, with_opt_and_reasoning, &query_str);
     }
 });
+
+fn compare_results(a: QueryResults, b: QueryResults, query_str: &str) {
+    match (a, b) {
+        (QueryResults::Solutions(a), QueryResults::Solutions(b)) => {
+            assert_eq!(
+                query_solutions_key(a, query_str.contains(" REDUCED ")),
+                query_solutions_key(b, query_str.contains(" REDUCED "))
+            )
+        }
+        (QueryResults::Graph(_), QueryResults::Graph(_)) => unimplemented!(),
+        (QueryResults::Boolean(a), QueryResults::Boolean(b)) => {
+            assert_eq!(a, b)
+        }
+        _ => panic!("Different query result types"),
+    }
+}
 
 fn query_solutions_key(iter: QuerySolutionIter, is_reduced: bool) -> String {
     // TODO: ordering

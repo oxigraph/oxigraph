@@ -438,18 +438,10 @@ impl FixedPointPlanNode {
                 object,
                 graph_name,
             } => {
-                if let PatternValue::Variable(var) = subject {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = predicate {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = object {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = graph_name {
-                    callback(var.encoded);
-                }
+                subject.lookup_variables(callback);
+                predicate.lookup_variables(callback);
+                object.lookup_variables(callback);
+                graph_name.lookup_variables(callback);
             }
             Self::Filter { child, expression } => {
                 expression.lookup_used_variables(callback);
