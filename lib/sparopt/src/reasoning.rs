@@ -56,7 +56,25 @@ impl QueryRewriter {
                 )
                 .try_into()
                 .unwrap(),
-            GraphPattern::Path { .. } => todo!(),
+            GraphPattern::Path {
+                subject,
+                path,
+                object,
+                graph_name,
+            } => {
+                let inner = self
+                    .rewrite_property_path(subject, path, object, graph_name.as_ref(), 0)
+                    .try_into()
+                    .unwrap();
+                if matches!(
+                    inner,
+                    GraphPattern::FixedPoint { .. } | GraphPattern::Distinct { .. }
+                ) {
+                    inner
+                } else {
+                    GraphPattern::distinct(inner) // We make sure we only return distinct results
+                }
+            }
             GraphPattern::Join { left, right } => GraphPattern::join(
                 self.rewrite_graph_pattern(left),
                 self.rewrite_graph_pattern(right),
@@ -207,7 +225,7 @@ impl QueryRewriter {
             );
         }
 
-        let new_fixed_point_id = FixedPointId(possible_fixed_points.len());
+        let new_fixed_point_id = FixedPointId(1_000_000 + possible_fixed_points.len());
         possible_fixed_points.push((
             subject.clone(),
             predicate.clone(),
@@ -258,6 +276,309 @@ impl QueryRewriter {
         }
         possible_fixed_points.pop();
         FixedPointGraphPattern::fixed_point(new_fixed_point_id, pattern, output_variables)
+    }
+
+    fn rewrite_property_path(
+        &self,
+        subject: &GroundTermPattern,
+        path: &PropertyPathExpression,
+        object: &GroundTermPattern,
+        graph_name: Option<&NamedNodePattern>,
+        fix_point_counter: usize,
+    ) -> FixedPointGraphPattern {
+        match path {
+            PropertyPathExpression::NamedNode(p) => self.rewrite_quad_pattern(
+                subject,
+                &p.clone().into(),
+                object,
+                graph_name,
+                &mut Vec::new(),
+            ),
+            PropertyPathExpression::Reverse(p) => {
+                self.rewrite_property_path(object, p, subject, graph_name, fix_point_counter)
+            }
+            PropertyPathExpression::Sequence(left, right) => {
+                let mut final_variables = Vec::new();
+                if let GroundTermPattern::Variable(v) = subject {
+                    final_variables.push(v.clone());
+                }
+                if let GroundTermPattern::Variable(v) = object {
+                    final_variables.push(v.clone());
+                }
+                if let Some(NamedNodePattern::Variable(v)) = graph_name {
+                    final_variables.push(v.clone());
+                }
+                let middle = new_var();
+                FixedPointGraphPattern::project(
+                    FixedPointGraphPattern::join(
+                        self.rewrite_property_path(
+                            subject,
+                            left,
+                            &middle.clone().into(),
+                            graph_name,
+                            fix_point_counter,
+                        ),
+                        self.rewrite_property_path(
+                            &middle.into(),
+                            right,
+                            object,
+                            graph_name,
+                            fix_point_counter,
+                        ),
+                    ),
+                    final_variables,
+                )
+            }
+            PropertyPathExpression::Alternative(left, right) => FixedPointGraphPattern::union(
+                self.rewrite_property_path(subject, left, object, graph_name, fix_point_counter),
+                self.rewrite_property_path(subject, right, object, graph_name, fix_point_counter),
+            ),
+            PropertyPathExpression::ZeroOrOne(p) => FixedPointGraphPattern::union(
+                self.zero_graph_pattern(subject, object, graph_name),
+                self.rewrite_property_path(subject, p, object, graph_name, fix_point_counter),
+            ),
+            PropertyPathExpression::ZeroOrMore(p) => FixedPointGraphPattern::union(
+                self.zero_graph_pattern(subject, object, graph_name),
+                self.one_or_more_pattern(subject, p, object, graph_name, fix_point_counter),
+            ),
+            PropertyPathExpression::OneOrMore(p) => {
+                self.one_or_more_pattern(subject, p, object, graph_name, fix_point_counter)
+            }
+            PropertyPathExpression::NegatedPropertySet(p) => {
+                let var = new_var();
+                FixedPointGraphPattern::filter(
+                    self.rewrite_quad_pattern(
+                        subject,
+                        &var.clone().into(),
+                        object,
+                        graph_name,
+                        &mut Vec::new(),
+                    ),
+                    FixedPointExpression::not(
+                        p.iter()
+                            .map(|p| {
+                                FixedPointExpression::same_term(
+                                    var.clone().into(),
+                                    p.clone().into(),
+                                )
+                            })
+                            .reduce(FixedPointExpression::or)
+                            .unwrap_or_else(|| false.into()),
+                    ),
+                )
+            }
+        }
+    }
+
+    fn zero_graph_pattern(
+        &self,
+        subject: &GroundTermPattern,
+        object: &GroundTermPattern,
+        graph_name: Option<&NamedNodePattern>,
+    ) -> FixedPointGraphPattern {
+        //TODO: FixedPointGraphPattern::values check existence
+        match subject {
+            GroundTermPattern::NamedNode(subject) => match object {
+                GroundTermPattern::NamedNode(object) if subject == object => {
+                    FixedPointGraphPattern::singleton()
+                }
+                GroundTermPattern::Variable(object) => FixedPointGraphPattern::values(
+                    vec![object.clone()],
+                    vec![vec![Some(subject.clone().into())]],
+                ),
+                _ => FixedPointGraphPattern::empty(),
+            },
+            GroundTermPattern::Literal(subject) => match object {
+                GroundTermPattern::Literal(object) if subject == object => {
+                    FixedPointGraphPattern::singleton()
+                }
+                GroundTermPattern::Variable(object) => FixedPointGraphPattern::values(
+                    vec![object.clone()],
+                    vec![vec![Some(subject.clone().into())]],
+                ),
+                _ => FixedPointGraphPattern::empty(),
+            },
+            GroundTermPattern::Triple(_) => todo!(),
+            GroundTermPattern::Variable(subject) => match object {
+                GroundTermPattern::NamedNode(object) => FixedPointGraphPattern::values(
+                    vec![subject.clone()],
+                    vec![vec![Some(object.clone().into())]],
+                ),
+                GroundTermPattern::Literal(object) => FixedPointGraphPattern::values(
+                    vec![subject.clone()],
+                    vec![vec![Some(object.clone().into())]],
+                ),
+                GroundTermPattern::Triple(_) => todo!(),
+                GroundTermPattern::Variable(object) => {
+                    let s = new_var();
+                    let p = new_var();
+                    let o = new_var();
+                    let mut final_variables = vec![subject.clone(), object.clone()];
+                    if let Some(NamedNodePattern::Variable(v)) = graph_name {
+                        final_variables.push(v.clone());
+                    }
+                    let base_pattern = self.rewrite_quad_pattern(
+                        &s.clone().into(),
+                        &p.clone().into(),
+                        &o.clone().into(),
+                        graph_name,
+                        &mut Vec::new(),
+                    );
+                    FixedPointGraphPattern::project(
+                        FixedPointGraphPattern::union(
+                            FixedPointGraphPattern::extend(
+                                FixedPointGraphPattern::extend(
+                                    base_pattern.clone(),
+                                    subject.clone(),
+                                    s.clone().into(),
+                                ),
+                                object.clone(),
+                                s.into(),
+                            ),
+                            FixedPointGraphPattern::extend(
+                                FixedPointGraphPattern::extend(
+                                    base_pattern,
+                                    subject.clone(),
+                                    o.clone().into(),
+                                ),
+                                object.clone(),
+                                o.into(),
+                            ),
+                        ),
+                        final_variables,
+                    )
+                }
+            },
+        }
+    }
+
+    fn one_or_more_pattern(
+        &self,
+        subject: &GroundTermPattern,
+        path: &PropertyPathExpression,
+        object: &GroundTermPattern,
+        graph_name: Option<&NamedNodePattern>,
+        fix_point_counter: usize,
+    ) -> FixedPointGraphPattern {
+        let mut final_variables = Vec::new();
+        if let GroundTermPattern::Variable(v) = subject {
+            final_variables.push(v.clone());
+        }
+        if let GroundTermPattern::Variable(v) = object {
+            final_variables.push(v.clone());
+        }
+        if let Some(NamedNodePattern::Variable(v)) = graph_name {
+            final_variables.push(v.clone());
+        }
+
+        let fix_point_id = FixedPointId(fix_point_counter);
+        let start_var = new_var();
+        let middle_var = new_var();
+        let end_var = new_var();
+        let mut in_loop_variables = vec![start_var.clone(), end_var.clone()];
+        if let Some(NamedNodePattern::Variable(v)) = graph_name {
+            in_loop_variables.push(v.clone());
+        }
+        let mut middle_variables = vec![start_var.clone(), middle_var.clone()];
+        if let Some(NamedNodePattern::Variable(v)) = graph_name {
+            middle_variables.push(v.clone());
+        }
+        FixedPointGraphPattern::project(
+            Self::pattern_mapping(
+                Self::pattern_mapping(
+                    FixedPointGraphPattern::fixed_point(
+                        FixedPointId(fix_point_counter),
+                        FixedPointGraphPattern::union(
+                            self.rewrite_property_path(
+                                &start_var.clone().into(),
+                                path,
+                                &end_var.clone().into(),
+                                graph_name,
+                                fix_point_counter + 1,
+                            ),
+                            FixedPointGraphPattern::project(
+                                FixedPointGraphPattern::join(
+                                    FixedPointGraphPattern::project(
+                                        FixedPointGraphPattern::extend(
+                                            FixedPointGraphPattern::FixedPointEntry(fix_point_id),
+                                            middle_var.clone(),
+                                            end_var.clone().into(),
+                                        ),
+                                        middle_variables,
+                                    ),
+                                    self.rewrite_property_path(
+                                        &middle_var.into(),
+                                        path,
+                                        &end_var.clone().into(),
+                                        graph_name,
+                                        fix_point_counter + 1,
+                                    ),
+                                ),
+                                in_loop_variables.clone(),
+                            ),
+                        ),
+                        in_loop_variables,
+                    ),
+                    start_var.into(),
+                    subject,
+                ),
+                end_var.into(),
+                object,
+            ),
+            final_variables,
+        )
+    }
+
+    fn pattern_mapping(
+        pattern: FixedPointGraphPattern,
+        pattern_value: FixedPointExpression,
+        target: &GroundTermPattern,
+    ) -> FixedPointGraphPattern {
+        match target {
+            GroundTermPattern::NamedNode(target) => FixedPointGraphPattern::filter(
+                pattern,
+                FixedPointExpression::same_term(pattern_value, target.clone().into()),
+            ),
+            GroundTermPattern::Literal(target) => FixedPointGraphPattern::filter(
+                pattern,
+                FixedPointExpression::same_term(target.clone().into(), pattern_value),
+            ),
+            GroundTermPattern::Triple(target) => Self::pattern_mapping(
+                Self::pattern_mapping(
+                    match &target.predicate {
+                        NamedNodePattern::NamedNode(target_predicate) => {
+                            FixedPointGraphPattern::filter(
+                                pattern,
+                                FixedPointExpression::same_term(
+                                    FixedPointExpression::call(
+                                        Function::Predicate,
+                                        vec![pattern_value.clone()],
+                                    ),
+                                    target_predicate.clone().into(),
+                                ),
+                            )
+                        }
+                        NamedNodePattern::Variable(target_predicate) => {
+                            FixedPointGraphPattern::extend(
+                                pattern,
+                                target_predicate.clone(),
+                                FixedPointExpression::call(
+                                    Function::Predicate,
+                                    vec![pattern_value.clone()],
+                                ),
+                            )
+                        }
+                    },
+                    FixedPointExpression::call(Function::Subject, vec![pattern_value.clone()]),
+                    &target.subject,
+                ),
+                FixedPointExpression::call(Function::Object, vec![pattern_value]),
+                &target.object,
+            ),
+            GroundTermPattern::Variable(target) => {
+                FixedPointGraphPattern::extend(pattern, target.clone(), pattern_value)
+            }
+        }
     }
 
     /// Attempts to use a given rule to get new facts for a triple pattern

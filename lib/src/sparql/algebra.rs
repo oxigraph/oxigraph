@@ -182,7 +182,7 @@ impl<'a> TryFrom<&'a String> for Update {
 }
 
 /// A parsed rule set.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub struct RuleSet {
     pub(super) inner: spargebra::RuleSet,
 }

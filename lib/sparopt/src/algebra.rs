@@ -1276,6 +1276,20 @@ impl FixedPointGraphPattern {
         }
     }
 
+    pub(crate) fn filter(inner: Self, expression: FixedPointExpression) -> Self {
+        if inner.is_empty() {
+            return Self::empty();
+        }
+        match expression.effective_boolean_value() {
+            Some(true) => inner,
+            Some(false) => Self::empty(),
+            None => Self::Filter {
+                inner: Box::new(inner),
+                expression,
+            },
+        }
+    }
+
     pub(crate) fn extend(
         inner: Self,
         variable: Variable,
@@ -1288,6 +1302,49 @@ impl FixedPointGraphPattern {
             inner: Box::new(inner),
             variable,
             expression,
+        }
+    }
+
+    pub(crate) fn values(
+        mut variables: Vec<Variable>,
+        mut bindings: Vec<Vec<Option<GroundTerm>>>,
+    ) -> Self {
+        let empty_rows = (0..variables.len())
+            .filter(|row| !bindings.iter().any(|binding| binding.get(*row).is_some()))
+            .collect::<Vec<_>>();
+        if !empty_rows.is_empty() {
+            // We remove empty rows
+            variables = variables
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    if empty_rows.contains(&i) {
+                        None
+                    } else {
+                        Some(v)
+                    }
+                })
+                .collect();
+            bindings = bindings
+                .into_iter()
+                .map(|binding| {
+                    binding
+                        .into_iter()
+                        .enumerate()
+                        .filter_map(|(i, v)| {
+                            if empty_rows.contains(&i) {
+                                None
+                            } else {
+                                Some(v)
+                            }
+                        })
+                        .collect()
+                })
+                .collect();
+        }
+        Self::Values {
+            variables,
+            bindings,
         }
     }
 
@@ -1526,6 +1583,49 @@ impl From<Variable> for FixedPointExpression {
 impl From<bool> for FixedPointExpression {
     fn from(value: bool) -> Self {
         Literal::from(value).into()
+    }
+}
+
+impl FixedPointExpression {
+    pub(crate) fn or(left: Self, right: Self) -> Self {
+        match (
+            left.effective_boolean_value(),
+            right.effective_boolean_value(),
+        ) {
+            (Some(true), _) | (_, Some(true)) => true.into(),
+            (Some(false), Some(false)) => false.into(),
+            _ => Self::Or(Box::new(left), Box::new(right)),
+        }
+    }
+
+    pub(crate) fn same_term(left: Self, right: Self) -> Self {
+        Self::SameTerm(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn not(inner: Self) -> Self {
+        Self::Not(Box::new(inner))
+    }
+
+    pub(crate) fn call(name: Function, args: Vec<Self>) -> Self {
+        Self::FunctionCall(name, args)
+    }
+
+    pub(crate) fn effective_boolean_value(&self) -> Option<bool> {
+        match self {
+            Self::NamedNode(_) => Some(true),
+            Self::Literal(literal) => {
+                if literal.datatype() == xsd::BOOLEAN {
+                    match literal.value() {
+                        "true" | "1" => Some(true),
+                        "false" | "0" => Some(false),
+                        _ => None, //TODO
+                    }
+                } else {
+                    None
+                }
+            }
+            _ => None, // We assume the expression has been normalized
+        }
     }
 }
 

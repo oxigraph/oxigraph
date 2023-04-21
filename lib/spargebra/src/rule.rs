@@ -5,7 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 
 /// A parsed if/then rule set.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub struct RuleSet {
     pub rules: Vec<Rule>,
 }
