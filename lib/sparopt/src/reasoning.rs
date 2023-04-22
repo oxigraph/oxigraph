@@ -1009,7 +1009,7 @@ impl QueryRewriter {
                 }]),
             },
             GroundTermPattern::Literal(from) => match to {
-                GroundTermPattern::NamedNode(_) => None,
+                GroundTermPattern::NamedNode(_) | GroundTermPattern::Triple(_) => None,
                 GroundTermPattern::Literal(to) => {
                     if from == to {
                         Some(Vec::new())
@@ -1017,7 +1017,6 @@ impl QueryRewriter {
                         None
                     }
                 }
-                GroundTermPattern::Triple(_) => None,
                 GroundTermPattern::Variable(to) => Some(vec![Replacement::ConstToVar {
                     from: from.into(),
                     to,

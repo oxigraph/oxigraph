@@ -152,6 +152,12 @@ fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
 }
 
 fn evaluate_evaluation_test(test: &Test) -> Result<()> {
+    enum Mode {
+        Base,
+        WithoutOptimizer,
+        WithInferenceRules,
+    }
+
     let store = Store::new()?;
     if let Some(data) = &test.data {
         load_dataset_to_store(data, &store)?;
@@ -198,11 +204,6 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         false
     };
 
-    enum Mode {
-        Base,
-        WithoutOptimizer,
-        WithInferenceRules,
-    }
     for mode in [Mode::Base, Mode::WithoutOptimizer, Mode::WithInferenceRules] {
         let options = match mode {
             Mode::Base => options.clone(),

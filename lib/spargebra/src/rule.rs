@@ -20,8 +20,7 @@ impl RuleSet {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub fn to_sse(&self) -> String {
         let mut buffer = String::new();
-        self.fmt_sse(&mut buffer)
-            .expect("Unexpected error during SSE formatting");
+        self.fmt_sse(&mut buffer).unwrap();
         buffer
     }
 
@@ -84,8 +83,7 @@ impl Rule {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub fn to_sse(&self) -> String {
         let mut buffer = String::new();
-        self.fmt_sse(&mut buffer)
-            .expect("Unexpected error during SSE formatting");
+        self.fmt_sse(&mut buffer).unwrap();
         buffer
     }
 
@@ -110,11 +108,11 @@ impl Rule {
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "IF {{ ")?;
-        for triple in self.body.iter() {
+        for triple in &self.body {
             write!(f, "{triple} . ")?;
         }
         write!(f, "}} THEN {{ ")?;
-        for triple in self.head.iter() {
+        for triple in &self.head {
             write!(f, "{triple} . ")?;
         }
         write!(f, "}}")

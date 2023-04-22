@@ -1371,7 +1371,7 @@ impl FixedPointGraphPattern {
         let mut constant = Self::empty();
         let mut recursive = Self::empty();
         for child in children {
-            if child.is_recursion_used(&id) {
+            if child.is_recursion_used(id) {
                 recursive = Self::union(recursive, child);
             } else {
                 constant = Self::union(constant, child);
@@ -1388,7 +1388,7 @@ impl FixedPointGraphPattern {
         }
     }
 
-    fn is_recursion_used(&self, id: &FixedPointId) -> bool {
+    fn is_recursion_used(&self, id: FixedPointId) -> bool {
         match self {
             Self::QuadPattern { .. } | Self::Values { .. } => false,
             Self::Filter { inner, .. }
@@ -1403,13 +1403,13 @@ impl FixedPointGraphPattern {
                 recursive,
                 ..
             } => Self::is_recursion_used(constant, id) || Self::is_recursion_used(recursive, id),
-            Self::FixedPointEntry(tid) => id == tid,
+            Self::FixedPointEntry(tid) => id == *tid,
         }
     }
 
     pub(crate) fn lookup_used_variables(&self, callback: &mut impl FnMut(&Variable)) {
         match self {
-            FixedPointGraphPattern::QuadPattern {
+            Self::QuadPattern {
                 subject,
                 predicate,
                 object,
@@ -1424,34 +1424,34 @@ impl FixedPointGraphPattern {
                     callback(v);
                 }
             }
-            FixedPointGraphPattern::Join { left, right } => {
+            Self::Join { left, right } => {
                 left.lookup_used_variables(callback);
                 right.lookup_used_variables(callback);
             }
-            FixedPointGraphPattern::Filter { inner, .. } => {
+            Self::Filter { inner, .. } => {
                 inner.lookup_used_variables(callback);
                 // TODO: we assume all expression variables are bound
             }
-            FixedPointGraphPattern::Union { inner } => {
+            Self::Union { inner } => {
                 for inner in inner {
                     inner.lookup_used_variables(callback);
                 }
             }
-            FixedPointGraphPattern::Extend {
+            Self::Extend {
                 inner, variable, ..
             } => {
                 inner.lookup_used_variables(callback);
                 callback(variable);
                 // TODO: we assume all expression variables are bound
             }
-            FixedPointGraphPattern::Values { variables, .. }
-            | FixedPointGraphPattern::Project { variables, .. }
-            | FixedPointGraphPattern::FixedPoint { variables, .. } => {
+            Self::Values { variables, .. }
+            | Self::Project { variables, .. }
+            | Self::FixedPoint { variables, .. } => {
                 for v in variables {
                     callback(v);
                 }
             }
-            FixedPointGraphPattern::FixedPointEntry(_) => {
+            Self::FixedPointEntry(_) => {
                 //TODO
             }
         }
