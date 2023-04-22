@@ -1,4 +1,9 @@
-#![allow(dead_code, clippy::inherent_to_string)]
+#![allow(
+    dead_code,
+    clippy::inherent_to_string,
+    clippy::unused_self,
+    clippy::use_self
+)]
 
 use crate::format_err;
 use crate::utils::to_err;
@@ -313,7 +318,7 @@ impl JsDefaultGraph {
 
     #[wasm_bindgen(js_name = toString)]
     pub fn to_string(&self) -> String {
-        "DEFAULT".to_string()
+        "DEFAULT".to_owned()
     }
 
     pub fn equals(&self, other: &JsValue) -> bool {
@@ -476,19 +481,19 @@ impl From<JsTerm> for JsValue {
 
 impl From<NamedNode> for JsTerm {
     fn from(node: NamedNode) -> Self {
-        JsTerm::NamedNode(node.into())
+        Self::NamedNode(node.into())
     }
 }
 
 impl From<BlankNode> for JsTerm {
     fn from(node: BlankNode) -> Self {
-        JsTerm::BlankNode(node.into())
+        Self::BlankNode(node.into())
     }
 }
 
 impl From<Literal> for JsTerm {
     fn from(literal: Literal) -> Self {
-        JsTerm::Literal(literal.into())
+        Self::Literal(literal.into())
     }
 }
 
@@ -527,20 +532,20 @@ impl From<GraphName> for JsTerm {
         match name {
             GraphName::NamedNode(node) => node.into(),
             GraphName::BlankNode(node) => node.into(),
-            GraphName::DefaultGraph => JsTerm::DefaultGraph(JsDefaultGraph {}),
+            GraphName::DefaultGraph => Self::DefaultGraph(JsDefaultGraph {}),
         }
     }
 }
 
 impl From<Variable> for JsTerm {
     fn from(variable: Variable) -> Self {
-        JsTerm::Variable(variable.into())
+        Self::Variable(variable.into())
     }
 }
 
 impl From<Triple> for JsTerm {
     fn from(triple: Triple) -> Self {
-        JsTerm::Quad(triple.into())
+        Self::Quad(triple.into())
     }
 }
 
@@ -552,7 +557,7 @@ impl From<Box<Triple>> for JsTerm {
 
 impl From<Quad> for JsTerm {
     fn from(quad: Quad) -> Self {
-        JsTerm::Quad(quad.into())
+        Self::Quad(quad.into())
     }
 }
 
@@ -660,7 +665,7 @@ impl TryFrom<JsTerm> for GraphName {
                 "The literal {} is not a possible graph name",
                 literal.inner
             )),
-            JsTerm::DefaultGraph(_) => Ok(GraphName::DefaultGraph),
+            JsTerm::DefaultGraph(_) => Ok(Self::DefaultGraph),
             JsTerm::Variable(variable) => Err(format_err!(
                 "The variable {} is not a possible RDF term",
                 variable.inner

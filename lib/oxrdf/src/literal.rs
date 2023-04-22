@@ -268,9 +268,9 @@ impl From<f32> for Literal {
     fn from(value: f32) -> Self {
         Self(LiteralContent::TypedLiteral {
             value: if value == f32::INFINITY {
-                "INF".to_string()
+                "INF".to_owned()
             } else if value == f32::NEG_INFINITY {
-                "-INF".to_string()
+                "-INF".to_owned()
             } else {
                 value.to_string()
             },
@@ -284,9 +284,9 @@ impl From<f64> for Literal {
     fn from(value: f64) -> Self {
         Self(LiteralContent::TypedLiteral {
             value: if value == f64::INFINITY {
-                "INF".to_string()
+                "INF".to_owned()
             } else if value == f64::NEG_INFINITY {
-                "-INF".to_string()
+                "-INF".to_owned()
             } else {
                 value.to_string()
             },
@@ -616,7 +616,7 @@ impl PartialEq<LiteralRef<'_>> for Literal {
 }
 
 #[inline]
-pub(crate) fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
+pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')?;
     for c in string.chars() {
         match c {

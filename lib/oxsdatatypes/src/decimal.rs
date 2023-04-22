@@ -314,6 +314,7 @@ impl TryFrom<Double> for Decimal {
     type Error = DecimalOverflowError;
 
     #[inline]
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     fn try_from(value: Double) -> Result<Self, DecimalOverflowError> {
         let shifted = value * Double::from(DECIMAL_PART_POW as f64);
         if shifted.is_finite()
@@ -331,6 +332,7 @@ impl TryFrom<Double> for Decimal {
 
 impl From<Decimal> for Float {
     #[inline]
+    #[allow(clippy::cast_precision_loss)]
     fn from(value: Decimal) -> Self {
         ((value.value as f32) / (DECIMAL_PART_POW as f32)).into()
     }
@@ -338,6 +340,7 @@ impl From<Decimal> for Float {
 
 impl From<Decimal> for Double {
     #[inline]
+    #[allow(clippy::cast_precision_loss)]
     fn from(value: Decimal) -> Self {
         ((value.value as f64) / (DECIMAL_PART_POW as f64)).into()
     }
@@ -769,8 +772,8 @@ mod tests {
 
     #[test]
     fn from_bool() {
-        assert_eq!(Decimal::from(false), Decimal::from(0u8));
-        assert_eq!(Decimal::from(true), Decimal::from(1u8));
+        assert_eq!(Decimal::from(false), Decimal::from(0_u8));
+        assert_eq!(Decimal::from(true), Decimal::from(1_u8));
     }
 
     #[test]
@@ -793,7 +796,7 @@ mod tests {
         assert!(Decimal::try_from(Float::from(f32::MIN)).is_err());
         assert!(Decimal::try_from(Float::from(f32::MAX)).is_err());
         assert!(
-            Decimal::try_from(Float::from(1672507302466.))
+            Decimal::try_from(Float::from(1_672_507_302_466.))
                 .unwrap()
                 .checked_sub(Decimal::from_str("1672507302466")?)
                 .unwrap()
@@ -818,7 +821,7 @@ mod tests {
             Some(Decimal::from_str("-123.1")?)
         );
         assert!(
-            Decimal::try_from(Double::from(1672507302466.))
+            Decimal::try_from(Double::from(1_672_507_302_466.))
                 .unwrap()
                 .checked_sub(Decimal::from_str("1672507302466")?)
                 .unwrap()

@@ -18,6 +18,8 @@ use std::iter::once;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::process::Command;
+
+#[allow(clippy::non_ascii_literal)]
 const DATA: &str = r#"
 @prefix schema: <http://schema.org/> .
 @prefix wd: <http://www.wikidata.org/entity/> .
@@ -31,6 +33,8 @@ wd:Q90 a schema:City ;
     schema:url "https://www.paris.fr/"^^xsd:anyURI ;
     schema:postalCode "75001" .
 "#;
+
+#[allow(clippy::non_ascii_literal)]
 const GRAPH_DATA: &str = r#"
 @prefix schema: <http://schema.org/> .
 @prefix wd: <http://www.wikidata.org/entity/> .
@@ -70,7 +74,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
         QuadRef::new(
             paris,
             name,
-            LiteralRef::new_language_tagged_literal_unchecked("la ville lumière", "fr"),
+            LiteralRef::new_language_tagged_literal_unchecked("la ville lumi\u{e8}re", "fr"),
             graph_name,
         ),
         QuadRef::new(paris, country, france, graph_name),
@@ -534,6 +538,8 @@ impl AsRef<Path> for TempDir {
 #[cfg(not(target_family = "wasm"))]
 impl Drop for TempDir {
     fn drop(&mut self) {
-        let _ = remove_dir_all(&self.0);
+        if self.0.is_dir() {
+            remove_dir_all(&self.0).unwrap();
+        }
     }
 }

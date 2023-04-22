@@ -30,14 +30,14 @@ pub struct JsonSolutionsWriter<W: Write> {
 }
 
 impl<W: Write> JsonSolutionsWriter<W> {
-    pub fn start(sink: W, variables: Vec<Variable>) -> io::Result<Self> {
+    pub fn start(sink: W, variables: &[Variable]) -> io::Result<Self> {
         let mut writer = JsonWriter::from_writer(sink);
         writer.write_event(JsonEvent::StartObject)?;
         writer.write_event(JsonEvent::ObjectKey("head"))?;
         writer.write_event(JsonEvent::StartObject)?;
         writer.write_event(JsonEvent::ObjectKey("vars"))?;
         writer.write_event(JsonEvent::StartArray)?;
-        for variable in &variables {
+        for variable in variables {
             writer.write_event(JsonEvent::String(variable.as_str()))?;
         }
         writer.write_event(JsonEvent::EndArray)?;
@@ -155,7 +155,7 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                         if let Some(buffered_bindings) = buffered_bindings.take() {
                             let mut mapping = BTreeMap::default();
                             for (i, var) in extracted_variables.iter().enumerate() {
-                                mapping.insert(var.as_str().to_string(), i);
+                                mapping.insert(var.as_str().to_owned(), i);
                             }
                             output_iter = Some(Self::Solutions {
                                 variables: extracted_variables,
@@ -192,7 +192,7 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                         if let Some(variables) = variables {
                             let mut mapping = BTreeMap::default();
                             for (i, var) in variables.iter().enumerate() {
-                                mapping.insert(var.as_str().to_string(), i);
+                                mapping.insert(var.as_str().to_owned(), i);
                             }
                             return Ok(Self::Solutions {
                                 variables,
@@ -201,34 +201,32 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                                     mapping,
                                 },
                             });
-                        } else {
-                            // We buffer all results before being able to read the header
-                            let mut bindings = Vec::new();
-                            let mut variables = Vec::new();
-                            let mut values = Vec::new();
-                            loop {
-                                match reader.read_event(&mut buffer)? {
-                                    JsonEvent::StartObject => (),
-                                    JsonEvent::EndObject => {
-                                        bindings.push((take(&mut variables), take(&mut values)));
-                                    }
-                                    JsonEvent::EndArray | JsonEvent::Eof => {
-                                        buffered_bindings = Some(bindings);
-                                        break;
-                                    }
-                                    JsonEvent::ObjectKey(key) => {
-                                        variables.push(key.to_string());
-                                        values.push(read_value(&mut reader, &mut buffer, 0)?);
-                                    }
-                                    _ => {
-                                        return Err(SyntaxError::msg(
-                                            "Invalid result serialization",
-                                        )
-                                        .into())
-                                    }
+                        }
+                        // We buffer all results before being able to read the header
+                        let mut bindings = Vec::new();
+                        let mut variables = Vec::new();
+                        let mut values = Vec::new();
+                        loop {
+                            match reader.read_event(&mut buffer)? {
+                                JsonEvent::StartObject => (),
+                                JsonEvent::EndObject => {
+                                    bindings.push((take(&mut variables), take(&mut values)));
+                                }
+                                JsonEvent::EndArray | JsonEvent::Eof => {
+                                    buffered_bindings = Some(bindings);
+                                    break;
+                                }
+                                JsonEvent::ObjectKey(key) => {
+                                    variables.push(key.to_owned());
+                                    values.push(read_value(&mut reader, &mut buffer, 0)?);
+                                }
+                                _ => {
+                                    return Err(
+                                        SyntaxError::msg("Invalid result serialization").into()
+                                    )
                                 }
                             }
-                        };
+                        }
                     }
                     "boolean" => {
                         return if let JsonEvent::Boolean(v) = reader.read_event(&mut buffer)? {
@@ -323,12 +321,6 @@ fn read_value<R: BufRead>(
     buffer: &mut Vec<u8>,
     number_of_recursive_calls: usize,
 ) -> Result<Term, ParseError> {
-    if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
-        return Err(SyntaxError::msg(format!(
-            "Too many nested triples ({MAX_NUMBER_OF_NESTED_TRIPLES}). The parser fails here to avoid a stack overflow."
-        ))
-            .into());
-    }
     enum Type {
         Uri,
         BNode,
@@ -342,6 +334,13 @@ fn read_value<R: BufRead>(
         Value,
         Lang,
         Datatype,
+    }
+
+    if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
+        return Err(SyntaxError::msg(format!(
+            "Too many nested triples ({MAX_NUMBER_OF_NESTED_TRIPLES}). The parser fails here to avoid a stack overflow."
+        ))
+            .into());
     }
     let mut state = None;
     let mut t = None;

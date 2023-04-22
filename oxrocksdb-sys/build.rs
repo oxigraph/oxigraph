@@ -25,9 +25,9 @@ fn bindgen_rocksdb() {
         .allowlist_type("rocksdb_.*")
         .allowlist_var("rocksdb_.*")
         .generate()
-        .expect("unable to generate rocksdb bindings")
+        .unwrap()
         .write_to_file(PathBuf::from(var("OUT_DIR").unwrap()).join("bindings.rs"))
-        .expect("unable to write rocksdb bindings");
+        .unwrap();
 }
 
 fn build_rocksdb() {
@@ -138,7 +138,7 @@ fn build_rocksdb() {
         // Remove POSIX-specific sources
         lib_sources = lib_sources
             .iter()
-            .cloned()
+            .copied()
             .filter(|file| {
                 !matches!(
                     *file,

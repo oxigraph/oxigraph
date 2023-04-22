@@ -136,6 +136,7 @@ impl From<Boolean> for Float {
 
 impl From<Integer> for Float {
     #[inline]
+    #[allow(clippy::cast_precision_loss)]
     fn from(value: Integer) -> Self {
         (i64::from(value) as f32).into()
     }
@@ -143,6 +144,7 @@ impl From<Integer> for Float {
 
 impl From<Double> for Float {
     #[inline]
+    #[allow(clippy::cast_possible_truncation)]
     fn from(value: Double) -> Self {
         Self {
             value: f64::from(value) as f32,

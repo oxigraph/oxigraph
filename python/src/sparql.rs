@@ -61,12 +61,12 @@ pub fn parse_query(
     Ok(query)
 }
 
-pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyResult<PyObject> {
-    Ok(match results {
+pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObject {
+    match results {
         QueryResults::Solutions(inner) => PyQuerySolutions { inner }.into_py(py),
         QueryResults::Graph(inner) => PyQueryTriples { inner }.into_py(py),
         QueryResults::Boolean(b) => b.into_py(py),
-    })
+    }
 }
 
 /// Tuple associating variables and terms that are the result of a SPARQL ``SELECT`` query.
@@ -229,7 +229,7 @@ impl PyQueryTriples {
     }
 }
 
-pub(crate) fn map_evaluation_error(error: EvaluationError) -> PyErr {
+pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     match error {
         EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
         EvaluationError::Storage(error) => map_storage_error(error),

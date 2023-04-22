@@ -37,11 +37,11 @@ pub struct XmlSolutionsWriter<W: Write> {
 }
 
 impl<W: Write> XmlSolutionsWriter<W> {
-    pub fn start(sink: W, variables: Vec<Variable>) -> io::Result<Self> {
+    pub fn start(sink: W, variables: &[Variable]) -> io::Result<Self> {
         Self::do_start(sink, variables).map_err(map_xml_error)
     }
 
-    fn do_start(sink: W, variables: Vec<Variable>) -> Result<Self, quick_xml::Error> {
+    fn do_start(sink: W, variables: &[Variable]) -> Result<Self, quick_xml::Error> {
         let mut writer = Writer::new(sink);
         writer.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
         let mut sparql_open = BytesStart::new("sparql");
@@ -50,7 +50,7 @@ impl<W: Write> XmlSolutionsWriter<W> {
         writer
             .create_element("head")
             .write_inner_content(|writer| {
-                for variable in &variables {
+                for variable in variables {
                     writer
                         .create_element("variable")
                         .with_attribute(("name", variable.as_str()))

@@ -55,19 +55,6 @@ pub struct TestManifest {
     manifests_to_do: VecDeque<String>,
 }
 
-impl TestManifest {
-    pub fn new<S: ToString>(manifest_urls: impl IntoIterator<Item = S>) -> Self {
-        Self {
-            graph: Graph::new(),
-            tests_to_do: VecDeque::new(),
-            manifests_to_do: manifest_urls
-                .into_iter()
-                .map(|url| url.to_string())
-                .collect(),
-        }
-    }
-}
-
 impl Iterator for TestManifest {
     type Item = Result<Test>;
 
@@ -84,6 +71,17 @@ impl Iterator for TestManifest {
 }
 
 impl TestManifest {
+    pub fn new<S: ToString>(manifest_urls: impl IntoIterator<Item = S>) -> Self {
+        Self {
+            graph: Graph::new(),
+            tests_to_do: VecDeque::new(),
+            manifests_to_do: manifest_urls
+                .into_iter()
+                .map(|url| url.to_string())
+                .collect(),
+        }
+    }
+
     fn next_test(&mut self) -> Result<Option<Test>> {
         loop {
             let test_node = if let Some(test_node) = self.tests_to_do.pop_front() {
@@ -107,7 +105,7 @@ impl TestManifest {
                 .graph
                 .object_for_subject_predicate(&test_node, mf::NAME)
             {
-                Some(c.value().to_string())
+                Some(c.value().to_owned())
             } else {
                 None
             };
@@ -126,7 +124,7 @@ impl TestManifest {
                 .graph
                 .object_for_subject_predicate(&test_node, rdfs::COMMENT)
             {
-                Some(c.value().to_string())
+                Some(c.value().to_owned())
             } else {
                 None
             };

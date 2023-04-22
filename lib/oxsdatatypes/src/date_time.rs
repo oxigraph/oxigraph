@@ -1299,7 +1299,11 @@ impl TryFrom<DayTimeDuration> for TimezoneOffset {
 
     #[inline]
     fn try_from(value: DayTimeDuration) -> Result<Self, DateTimeError> {
-        let result = Self::new((value.minutes() + value.hours() * 60) as i16)?;
+        let result = Self::new(
+            (value.minutes() + value.hours() * 60)
+                .try_into()
+                .map_err(|_| DATE_TIME_OVERFLOW)?,
+        )?;
         if DayTimeDuration::from(result) == value {
             Ok(result)
         } else {

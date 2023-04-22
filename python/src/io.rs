@@ -54,11 +54,10 @@ pub fn parse(
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     let input = if let Ok(path) = input.extract::<&str>(py) {
-        PyReadable::from_file(path, py)
+        PyReadable::from_file(path, py).map_err(map_io_err)?
     } else {
         PyReadable::from_data(input, py)
-    }
-    .map_err(map_io_err)?;
+    };
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut parser = GraphParser::from_format(graph_format);
         if let Some(base_iri) = base_iri {
@@ -119,11 +118,10 @@ pub fn parse(
 #[pyfunction]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
     let output = if let Ok(path) = output.extract::<&str>(py) {
-        PyWritable::from_file(path, py)
+        PyWritable::from_file(path, py).map_err(map_io_err)?
     } else {
         PyWritable::from_data(output)
-    }
-    .map_err(map_io_err)?;
+    };
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
         let mut writer = GraphSerializer::from_format(graph_format)
             .triple_writer(output)
@@ -195,7 +193,7 @@ impl PyQuadReader {
     }
 }
 
-pub(crate) enum PyReadable {
+pub enum PyReadable {
     Bytes(Cursor<Vec<u8>>),
     Io(BufReader<PyIo>),
     File(BufReader<File>),
@@ -208,14 +206,14 @@ impl PyReadable {
         )))
     }
 
-    pub fn from_data(data: PyObject, py: Python<'_>) -> io::Result<Self> {
-        Ok(if let Ok(bytes) = data.extract::<Vec<u8>>(py) {
+    pub fn from_data(data: PyObject, py: Python<'_>) -> Self {
+        if let Ok(bytes) = data.extract::<Vec<u8>>(py) {
             Self::Bytes(Cursor::new(bytes))
         } else if let Ok(string) = data.extract::<String>(py) {
             Self::Bytes(Cursor::new(string.into_bytes()))
         } else {
             Self::Io(BufReader::new(PyIo(data)))
-        })
+        }
     }
 }
 
@@ -247,7 +245,7 @@ impl BufRead for PyReadable {
     }
 }
 
-pub(crate) enum PyWritable {
+pub enum PyWritable {
     Io(BufWriter<PyIo>),
     File(BufWriter<File>),
 }
@@ -259,8 +257,8 @@ impl PyWritable {
         )))
     }
 
-    pub fn from_data(data: PyObject) -> io::Result<Self> {
-        Ok(Self::Io(BufWriter::new(PyIo(data))))
+    pub fn from_data(data: PyObject) -> Self {
+        Self::Io(BufWriter::new(PyIo(data)))
     }
 }
 
@@ -280,7 +278,7 @@ impl Write for PyWritable {
     }
 }
 
-pub(crate) struct PyIo(PyObject);
+pub struct PyIo(PyObject);
 
 impl Read for PyIo {
     fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
@@ -326,7 +324,7 @@ fn to_io_err(error: impl Into<PyErr>) -> io::Error {
     io::Error::new(io::ErrorKind::Other, error.into())
 }
 
-pub(crate) fn map_io_err(error: io::Error) -> PyErr {
+pub fn map_io_err(error: io::Error) -> PyErr {
     if error.get_ref().map_or(false, |s| s.is::<PyErr>()) {
         *error.into_inner().unwrap().downcast().unwrap()
     } else {
@@ -334,7 +332,7 @@ pub(crate) fn map_io_err(error: io::Error) -> PyErr {
     }
 }
 
-pub(crate) fn map_parse_error(error: ParseError) -> PyErr {
+pub fn map_parse_error(error: ParseError) -> PyErr {
     match error {
         ParseError::Syntax(error) => PySyntaxError::new_err(error.to_string()),
         ParseError::Io(error) => map_io_err(error),
@@ -346,7 +344,7 @@ pub(crate) fn map_parse_error(error: ParseError) -> PyErr {
 ///
 /// Code from pyo3: https://github.com/PyO3/pyo3/blob/a67180c8a42a0bc0fdc45b651b62c0644130cf47/src/python.rs#L366
 #[allow(unsafe_code)]
-pub(crate) fn allow_threads_unsafe<T>(f: impl FnOnce() -> T) -> T {
+pub fn allow_threads_unsafe<T>(f: impl FnOnce() -> T) -> T {
     struct RestoreGuard {
         tstate: *mut pyo3::ffi::PyThreadState,
     }

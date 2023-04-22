@@ -175,8 +175,8 @@ fn sparql_parsing(c: &mut Criterion) {
             let kind = parts.next().unwrap();
             let operation = parts.next().unwrap();
             match kind {
-                "query" => RawOperation::Query(operation.to_string()),
-                "update" => RawOperation::Update(operation.to_string()),
+                "query" => RawOperation::Query(operation.to_owned()),
+                "update" => RawOperation::Update(operation.to_owned()),
                 _ => panic!("Unexpected operation kind {kind}"),
             }
         })
