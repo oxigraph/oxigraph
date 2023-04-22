@@ -67,15 +67,14 @@ impl Query {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub fn to_sse(&self) -> String {
         let mut buffer = String::new();
-        self.fmt_sse(&mut buffer)
-            .expect("Unexpected error during SSE formatting");
+        self.fmt_sse(&mut buffer).unwrap();
         buffer
     }
 
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Query::Select {
+            Self::Select {
                 dataset,
                 pattern,
                 base_iri,
@@ -97,7 +96,7 @@ impl Query {
                 }
                 Ok(())
             }
-            Query::Construct {
+            Self::Construct {
                 template,
                 dataset,
                 pattern,
@@ -129,7 +128,7 @@ impl Query {
                 }
                 Ok(())
             }
-            Query::Describe {
+            Self::Describe {
                 dataset,
                 pattern,
                 base_iri,
@@ -153,7 +152,7 @@ impl Query {
                 }
                 Ok(())
             }
-            Query::Ask {
+            Self::Ask {
                 dataset,
                 pattern,
                 base_iri,
@@ -184,7 +183,7 @@ impl Query {
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Query::Select {
+            Self::Select {
                 dataset,
                 pattern,
                 base_iri,
@@ -201,7 +200,7 @@ impl fmt::Display for Query {
                     }
                 )
             }
-            Query::Construct {
+            Self::Construct {
                 template,
                 dataset,
                 pattern,
@@ -227,7 +226,7 @@ impl fmt::Display for Query {
                     }
                 )
             }
-            Query::Describe {
+            Self::Describe {
                 dataset,
                 pattern,
                 base_iri,
@@ -248,7 +247,7 @@ impl fmt::Display for Query {
                     }
                 )
             }
-            Query::Ask {
+            Self::Ask {
                 dataset,
                 pattern,
                 base_iri,

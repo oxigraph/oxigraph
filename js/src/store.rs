@@ -1,3 +1,5 @@
+#![allow(clippy::use_self)]
+
 use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
@@ -17,6 +19,7 @@ pub struct JsStore {
 #[wasm_bindgen(js_class = Store)]
 impl JsStore {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::use_self)]
     pub fn new(quads: Option<Box<[JsValue]>>) -> Result<JsStore, JsValue> {
         console_error_panic_hook::set_once();
 

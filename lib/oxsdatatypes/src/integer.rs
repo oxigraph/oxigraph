@@ -258,7 +258,7 @@ mod tests {
         assert!(Integer::try_from(Float::from(f32::MIN)).is_err());
         assert!(Integer::try_from(Float::from(f32::MAX)).is_err());
         assert!(
-            Integer::try_from(Float::from(1672507302466.))
+            Integer::try_from(Float::from(1_672_507_302_466.))
                 .unwrap()
                 .checked_sub(Integer::from_str("1672507302466")?)
                 .unwrap()
@@ -283,7 +283,7 @@ mod tests {
             Some(Integer::from_str("-123")?)
         );
         assert!(
-            Integer::try_from(Double::from(1672507302466.))
+            Integer::try_from(Double::from(1_672_507_302_466.))
                 .unwrap()
                 .checked_sub(Integer::from_str("1672507302466").unwrap())
                 .unwrap()

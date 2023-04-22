@@ -11,6 +11,7 @@ macro_rules! format_err {
     };
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn to_err(e: impl ToString) -> JsValue {
     JsValue::from(Error::new(&e.to_string()))
 }

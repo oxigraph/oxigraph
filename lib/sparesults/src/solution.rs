@@ -118,7 +118,7 @@ impl QuerySolution {
 impl<V: Into<Rc<Vec<Variable>>>, S: Into<Vec<Option<Term>>>> From<(V, S)> for QuerySolution {
     #[inline]
     fn from((v, s): (V, S)) -> Self {
-        QuerySolution {
+        Self {
             variables: v.into(),
             values: s.into(),
         }

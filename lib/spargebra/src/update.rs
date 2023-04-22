@@ -33,8 +33,7 @@ impl Update {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub fn to_sse(&self) -> String {
         let mut buffer = String::new();
-        self.fmt_sse(&mut buffer)
-            .expect("Unexpected error during SSE formatting");
+        self.fmt_sse(&mut buffer).unwrap();
         buffer
     }
 
@@ -124,7 +123,7 @@ impl GraphUpdateOperation {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            GraphUpdateOperation::InsertData { data } => {
+            Self::InsertData { data } => {
                 write!(f, "(insertData (")?;
                 for (i, t) in data.iter().enumerate() {
                     if i > 0 {
@@ -134,7 +133,7 @@ impl GraphUpdateOperation {
                 }
                 write!(f, "))")
             }
-            GraphUpdateOperation::DeleteData { data } => {
+            Self::DeleteData { data } => {
                 write!(f, "(deleteData (")?;
                 for (i, t) in data.iter().enumerate() {
                     if i > 0 {
@@ -144,7 +143,7 @@ impl GraphUpdateOperation {
                 }
                 write!(f, "))")
             }
-            GraphUpdateOperation::DeleteInsert {
+            Self::DeleteInsert {
                 delete,
                 insert,
                 using,
@@ -182,7 +181,7 @@ impl GraphUpdateOperation {
                 }
                 write!(f, ")")
             }
-            GraphUpdateOperation::Load {
+            Self::Load {
                 silent,
                 source,
                 destination,
@@ -195,7 +194,7 @@ impl GraphUpdateOperation {
                 destination.fmt_sse(f)?;
                 write!(f, ")")
             }
-            GraphUpdateOperation::Clear { silent, graph } => {
+            Self::Clear { silent, graph } => {
                 write!(f, "(clear ")?;
                 if *silent {
                     write!(f, "silent ")?;
@@ -203,14 +202,14 @@ impl GraphUpdateOperation {
                 graph.fmt_sse(f)?;
                 write!(f, ")")
             }
-            GraphUpdateOperation::Create { silent, graph } => {
+            Self::Create { silent, graph } => {
                 write!(f, "(create ")?;
                 if *silent {
                     write!(f, "silent ")?;
                 }
                 write!(f, "{graph})")
             }
-            GraphUpdateOperation::Drop { silent, graph } => {
+            Self::Drop { silent, graph } => {
                 write!(f, "(drop ")?;
                 if *silent {
                     write!(f, "silent ")?;
@@ -225,17 +224,17 @@ impl GraphUpdateOperation {
 impl fmt::Display for GraphUpdateOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphUpdateOperation::InsertData { data } => {
+            Self::InsertData { data } => {
                 writeln!(f, "INSERT DATA {{")?;
                 write_quads(data, f)?;
                 write!(f, "}}")
             }
-            GraphUpdateOperation::DeleteData { data } => {
+            Self::DeleteData { data } => {
                 writeln!(f, "DELETE DATA {{")?;
                 write_ground_quads(data, f)?;
                 write!(f, "}}")
             }
-            GraphUpdateOperation::DeleteInsert {
+            Self::DeleteInsert {
                 delete,
                 insert,
                 using,
@@ -274,7 +273,7 @@ impl fmt::Display for GraphUpdateOperation {
                     }
                 )
             }
-            GraphUpdateOperation::Load {
+            Self::Load {
                 silent,
                 source,
                 destination,
@@ -289,21 +288,21 @@ impl fmt::Display for GraphUpdateOperation {
                 }
                 Ok(())
             }
-            GraphUpdateOperation::Clear { silent, graph } => {
+            Self::Clear { silent, graph } => {
                 write!(f, "CLEAR ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
                 write!(f, "{graph}")
             }
-            GraphUpdateOperation::Create { silent, graph } => {
+            Self::Create { silent, graph } => {
                 write!(f, "CREATE ")?;
                 if *silent {
                     write!(f, "SILENT ")?;
                 }
                 write!(f, "GRAPH {graph}")
             }
-            GraphUpdateOperation::Drop { silent, graph } => {
+            Self::Drop { silent, graph } => {
                 write!(f, "DROP ")?;
                 if *silent {
                     write!(f, "SILENT ")?;

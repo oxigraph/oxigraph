@@ -45,10 +45,10 @@ impl QueryResultsFormat {
     #[inline]
     pub fn iri(self) -> &'static str {
         match self {
-            QueryResultsFormat::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
-            QueryResultsFormat::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
-            QueryResultsFormat::Csv => "http://www.w3.org/ns/formats/SPARQL_Results_CSV",
-            QueryResultsFormat::Tsv => "http://www.w3.org/ns/formats/SPARQL_Results_TSV",
+            Self::Xml => "http://www.w3.org/ns/formats/SPARQL_Results_XML",
+            Self::Json => "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
+            Self::Csv => "http://www.w3.org/ns/formats/SPARQL_Results_CSV",
+            Self::Tsv => "http://www.w3.org/ns/formats/SPARQL_Results_TSV",
         }
     }
     /// The format [IANA media type](https://tools.ietf.org/html/rfc2046).
@@ -61,10 +61,10 @@ impl QueryResultsFormat {
     #[inline]
     pub fn media_type(self) -> &'static str {
         match self {
-            QueryResultsFormat::Xml => "application/sparql-results+xml",
-            QueryResultsFormat::Json => "application/sparql-results+json",
-            QueryResultsFormat::Csv => "text/csv; charset=utf-8",
-            QueryResultsFormat::Tsv => "text/tab-separated-values; charset=utf-8",
+            Self::Xml => "application/sparql-results+xml",
+            Self::Json => "application/sparql-results+json",
+            Self::Csv => "text/csv; charset=utf-8",
+            Self::Tsv => "text/tab-separated-values; charset=utf-8",
         }
     }
 
@@ -78,10 +78,10 @@ impl QueryResultsFormat {
     #[inline]
     pub fn file_extension(self) -> &'static str {
         match self {
-            QueryResultsFormat::Xml => "srx",
-            QueryResultsFormat::Json => "srj",
-            QueryResultsFormat::Csv => "csv",
-            QueryResultsFormat::Tsv => "tsv",
+            Self::Xml => "srx",
+            Self::Json => "srj",
+            Self::Csv => "csv",
+            Self::Tsv => "tsv",
         }
     }
 
@@ -408,10 +408,10 @@ impl QueryResultsSerializer {
         Ok(SolutionsWriter {
             formatter: match self.format {
                 QueryResultsFormat::Xml => {
-                    SolutionsWriterKind::Xml(XmlSolutionsWriter::start(writer, variables)?)
+                    SolutionsWriterKind::Xml(XmlSolutionsWriter::start(writer, &variables)?)
                 }
                 QueryResultsFormat::Json => {
-                    SolutionsWriterKind::Json(JsonSolutionsWriter::start(writer, variables)?)
+                    SolutionsWriterKind::Json(JsonSolutionsWriter::start(writer, &variables)?)
                 }
                 QueryResultsFormat::Csv => {
                     SolutionsWriterKind::Csv(CsvSolutionsWriter::start(writer, variables)?)

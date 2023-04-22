@@ -529,7 +529,7 @@ mod tests {
         if let TsvQueryResultsReader::Solutions {
             mut solutions,
             variables,
-        } = TsvQueryResultsReader::read("\n\n".as_bytes())?
+        } = TsvQueryResultsReader::read(b"\n\n".as_slice())?
         {
             assert_eq!(variables, Vec::<Variable>::new());
             assert_eq!(solutions.read_next()?, Some(Vec::new()));
@@ -561,7 +561,7 @@ mod tests {
         if let TsvQueryResultsReader::Solutions {
             mut solutions,
             variables,
-        } = TsvQueryResultsReader::read("?a\n".as_bytes())?
+        } = TsvQueryResultsReader::read(b"?a\n".as_slice())?
         {
             assert_eq!(variables, vec![Variable::new_unchecked("a")]);
             assert_eq!(solutions.read_next()?, None);

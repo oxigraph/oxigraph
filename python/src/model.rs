@@ -434,7 +434,7 @@ pub struct PyDefaultGraph {}
 
 impl From<PyDefaultGraph> for GraphName {
     fn from(_: PyDefaultGraph) -> Self {
-        GraphName::DefaultGraph
+        Self::DefaultGraph
     }
 }
 

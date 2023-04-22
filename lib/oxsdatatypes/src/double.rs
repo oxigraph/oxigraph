@@ -156,6 +156,7 @@ impl From<Boolean> for Double {
 
 impl From<Integer> for Double {
     #[inline]
+    #[allow(clippy::cast_precision_loss)]
     fn from(value: Integer) -> Self {
         (i64::from(value) as f64).into()
     }

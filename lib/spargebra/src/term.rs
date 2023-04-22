@@ -764,9 +764,7 @@ impl TriplePattern {
             object: object.into(),
         }
     }
-}
 
-impl TriplePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         write!(f, "(triple ")?;
@@ -885,9 +883,7 @@ impl QuadPattern {
             graph_name: graph_name.into(),
         }
     }
-}
 
-impl QuadPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphNamePattern::DefaultGraph {

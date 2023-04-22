@@ -295,7 +295,7 @@ impl PyStore {
         )?;
         let results =
             allow_threads_unsafe(|| self.inner.query(query)).map_err(map_evaluation_error)?;
-        query_results_to_python(py, results)
+        Ok(query_results_to_python(py, results))
     }
 
     /// Executes a `SPARQL 1.1 update <https://www.w3.org/TR/sparql11-update/>`_.
@@ -392,11 +392,10 @@ impl PyStore {
             None
         };
         let input = if let Ok(path) = input.extract::<&str>(py) {
-            PyReadable::from_file(path, py)
+            PyReadable::from_file(path, py).map_err(map_io_err)?
         } else {
             PyReadable::from_data(input, py)
-        }
-        .map_err(map_io_err)?;
+        };
         py.allow_threads(|| {
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
@@ -475,11 +474,10 @@ impl PyStore {
             None
         };
         let input = if let Ok(path) = input.extract::<&str>(py) {
-            PyReadable::from_file(path, py)
+            PyReadable::from_file(path, py).map_err(map_io_err)?
         } else {
             PyReadable::from_data(input, py)
-        }
-        .map_err(map_io_err)?;
+        };
         py.allow_threads(|| {
             if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
                 self.inner
@@ -548,11 +546,10 @@ impl PyStore {
         py: Python<'_>,
     ) -> PyResult<()> {
         let output = if let Ok(path) = output.extract::<&str>(py) {
-            PyWritable::from_file(path, py)
+            PyWritable::from_file(path, py).map_err(map_io_err)?
         } else {
             PyWritable::from_data(output)
-        }
-        .map_err(map_io_err)?;
+        };
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
@@ -757,8 +754,8 @@ impl PyStore {
         self.inner.len().map_err(map_storage_error)
     }
 
-    fn __contains__(&self, quad: PyQuad) -> PyResult<bool> {
-        self.inner.contains(&quad).map_err(map_storage_error)
+    fn __contains__(&self, quad: &PyQuad) -> PyResult<bool> {
+        self.inner.contains(quad).map_err(map_storage_error)
     }
 
     fn __iter__(&self) -> QuadIter {
@@ -845,21 +842,21 @@ pub fn extract_quads_pattern<'a>(
     ))
 }
 
-pub(crate) fn map_storage_error(error: StorageError) -> PyErr {
+pub fn map_storage_error(error: StorageError) -> PyErr {
     match error {
         StorageError::Io(error) => PyIOError::new_err(error.to_string()),
         _ => PyRuntimeError::new_err(error.to_string()),
     }
 }
 
-pub(crate) fn map_loader_error(error: LoaderError) -> PyErr {
+pub fn map_loader_error(error: LoaderError) -> PyErr {
     match error {
         LoaderError::Storage(error) => map_storage_error(error),
         LoaderError::Parsing(error) => map_parse_error(error),
     }
 }
 
-pub(crate) fn map_serializer_error(error: SerializerError) -> PyErr {
+pub fn map_serializer_error(error: SerializerError) -> PyErr {
     match error {
         SerializerError::Storage(error) => map_storage_error(error),
         SerializerError::Io(error) => PyIOError::new_err(error.to_string()),

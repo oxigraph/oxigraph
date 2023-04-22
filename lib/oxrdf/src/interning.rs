@@ -59,10 +59,8 @@ impl Interner {
         }
     }
 
-    fn resolve(&self, key: &Key) -> &str {
-        self.string_for_hash
-            .get(&key.0)
-            .expect("Interned key not found")
+    fn resolve(&self, key: Key) -> &str {
+        &self.string_for_hash[&key.0]
     }
 }
 
@@ -79,7 +77,7 @@ impl Key {
     }
 
     fn impossible() -> Self {
-        Key(u64::MAX)
+        Self(u64::MAX)
     }
 }
 
@@ -101,8 +99,8 @@ impl InternedNamedNode {
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Interner) -> NamedNodeRef<'a> {
-        NamedNodeRef::new_unchecked(interner.resolve(&self.id))
+    pub fn decode_from(self, interner: &Interner) -> NamedNodeRef {
+        NamedNodeRef::new_unchecked(interner.resolve(self.id))
     }
 
     pub fn first() -> Self {
@@ -138,8 +136,8 @@ impl InternedBlankNode {
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Interner) -> BlankNodeRef<'a> {
-        BlankNodeRef::new_unchecked(interner.resolve(&self.id))
+    pub fn decode_from(self, interner: &Interner) -> BlankNodeRef {
+        BlankNodeRef::new_unchecked(interner.resolve(self.id))
     }
 
     pub fn next(self) -> Self {
@@ -203,18 +201,18 @@ impl InternedLiteral {
 
     pub fn decode_from<'a>(&self, interner: &'a Interner) -> LiteralRef<'a> {
         match self {
-            InternedLiteral::String { value_id } => {
-                LiteralRef::new_simple_literal(interner.resolve(value_id))
+            Self::String { value_id } => {
+                LiteralRef::new_simple_literal(interner.resolve(*value_id))
             }
-            InternedLiteral::LanguageTaggedString {
+            Self::LanguageTaggedString {
                 value_id,
                 language_id,
             } => LiteralRef::new_language_tagged_literal_unchecked(
-                interner.resolve(value_id),
-                interner.resolve(language_id),
+                interner.resolve(*value_id),
+                interner.resolve(*language_id),
             ),
-            InternedLiteral::TypedLiteral { value_id, datatype } => LiteralRef::new_typed_literal(
-                interner.resolve(value_id),
+            Self::TypedLiteral { value_id, datatype } => LiteralRef::new_typed_literal(
+                interner.resolve(*value_id),
                 datatype.decode_from(interner),
             ),
         }
@@ -503,7 +501,7 @@ impl Hasher for IdentityHasher {
     }
 
     fn write(&mut self, _bytes: &[u8]) {
-        unimplemented!()
+        unreachable!("Should only be used on u64 values")
     }
 
     fn write_u64(&mut self, i: u64) {

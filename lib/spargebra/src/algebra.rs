@@ -591,6 +591,138 @@ pub enum GraphPattern {
     },
 }
 
+impl fmt::Display for GraphPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bgp { patterns } => {
+                for pattern in patterns {
+                    write!(f, "{pattern} .")?
+                }
+                Ok(())
+            }
+            Self::Path {
+                subject,
+                path,
+                object,
+            } => write!(f, "{subject} {path} {object} ."),
+            Self::Join { left, right } => {
+                #[allow(clippy::match_same_arms)]
+                match right.as_ref() {
+                    Self::LeftJoin { .. }
+                    | Self::Minus { .. }
+                    | Self::Extend { .. }
+                    | Self::Filter { .. } => {
+                        // The second block might be considered as a modification of the first one.
+                        write!(f, "{left} {{ {right} }}")
+                    }
+                    #[cfg(feature = "sep-0006")]
+                    Self::Lateral { .. } => {
+                        write!(f, "{left} {{ {right} }}")
+                    }
+                    _ => write!(f, "{left} {right}"),
+                }
+            }
+            Self::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
+                if let Some(expr) = expression {
+                    write!(f, "{left} OPTIONAL {{ {right} FILTER({expr}) }}")
+                } else {
+                    write!(f, "{left} OPTIONAL {{ {right} }}")
+                }
+            }
+            #[cfg(feature = "sep-0006")]
+            Self::Lateral { left, right } => {
+                write!(f, "{left} LATERAL {{ {right} }}")
+            }
+            Self::Filter { expr, inner } => {
+                write!(f, "{inner} FILTER({expr})")
+            }
+            Self::Union { left, right } => write!(f, "{{ {left} }} UNION {{ {right} }}",),
+            Self::Graph { name, inner } => {
+                write!(f, "GRAPH {name} {{ {inner} }}")
+            }
+            Self::Extend {
+                inner,
+                variable,
+                expression,
+            } => write!(f, "{inner} BIND({expression} AS {variable})"),
+            Self::Minus { left, right } => write!(f, "{left} MINUS {{ {right} }}"),
+            Self::Service {
+                name,
+                inner,
+                silent,
+            } => {
+                if *silent {
+                    write!(f, "SERVICE SILENT {name} {{ {inner} }}")
+                } else {
+                    write!(f, "SERVICE {name} {{ {inner} }}")
+                }
+            }
+            Self::Values {
+                variables,
+                bindings,
+            } => {
+                write!(f, "VALUES ( ")?;
+                for var in variables {
+                    write!(f, "{var} ")?;
+                }
+                write!(f, ") {{ ")?;
+                for row in bindings {
+                    write!(f, "( ")?;
+                    for val in row {
+                        match val {
+                            Some(val) => write!(f, "{val} "),
+                            None => write!(f, "UNDEF "),
+                        }?;
+                    }
+                    write!(f, ") ")?;
+                }
+                write!(f, " }}")
+            }
+            Self::Group {
+                inner,
+                variables,
+                aggregates,
+            } => {
+                write!(f, "{{SELECT")?;
+                for (a, v) in aggregates {
+                    write!(f, " ({v} AS {a})")?;
+                }
+                for b in variables {
+                    write!(f, " {b}")?;
+                }
+                write!(f, " WHERE {{ {inner} }}")?;
+                if !variables.is_empty() {
+                    write!(f, " GROUP BY")?;
+                    for v in variables {
+                        write!(f, " {v}")?;
+                    }
+                }
+                write!(f, "}}")
+            }
+            p => write!(
+                f,
+                "{{ {} }}",
+                SparqlGraphRootPattern {
+                    pattern: p,
+                    dataset: None
+                }
+            ),
+        }
+    }
+}
+
+impl Default for GraphPattern {
+    fn default() -> Self {
+        Self::Bgp {
+            patterns: Vec::default(),
+        }
+    }
+}
+
 impl GraphPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
@@ -793,146 +925,14 @@ impl GraphPattern {
             }
         }
     }
-}
 
-impl fmt::Display for GraphPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Bgp { patterns } => {
-                for pattern in patterns {
-                    write!(f, "{pattern} .")?
-                }
-                Ok(())
-            }
-            Self::Path {
-                subject,
-                path,
-                object,
-            } => write!(f, "{subject} {path} {object} ."),
-            Self::Join { left, right } => {
-                match right.as_ref() {
-                    Self::LeftJoin { .. }
-                    | Self::Minus { .. }
-                    | Self::Extend { .. }
-                    | Self::Filter { .. } => {
-                        // The second block might be considered as a modification of the first one.
-                        write!(f, "{left} {{ {right} }}")
-                    }
-                    #[cfg(feature = "sep-0006")]
-                    Self::Lateral { .. } => {
-                        write!(f, "{left} {{ {right} }}")
-                    }
-                    _ => write!(f, "{left} {right}"),
-                }
-            }
-            Self::LeftJoin {
-                left,
-                right,
-                expression,
-            } => {
-                if let Some(expr) = expression {
-                    write!(f, "{left} OPTIONAL {{ {right} FILTER({expr}) }}")
-                } else {
-                    write!(f, "{left} OPTIONAL {{ {right} }}")
-                }
-            }
-            #[cfg(feature = "sep-0006")]
-            Self::Lateral { left, right } => {
-                write!(f, "{left} LATERAL {{ {right} }}")
-            }
-            Self::Filter { expr, inner } => {
-                write!(f, "{inner} FILTER({expr})")
-            }
-            Self::Union { left, right } => write!(f, "{{ {left} }} UNION {{ {right} }}",),
-            Self::Graph { name, inner } => {
-                write!(f, "GRAPH {name} {{ {inner} }}")
-            }
-            Self::Extend {
-                inner,
-                variable,
-                expression,
-            } => write!(f, "{inner} BIND({expression} AS {variable})"),
-            Self::Minus { left, right } => write!(f, "{left} MINUS {{ {right} }}"),
-            Self::Service {
-                name,
-                inner,
-                silent,
-            } => {
-                if *silent {
-                    write!(f, "SERVICE SILENT {name} {{ {inner} }}")
-                } else {
-                    write!(f, "SERVICE {name} {{ {inner} }}")
-                }
-            }
-            Self::Values {
-                variables,
-                bindings,
-            } => {
-                write!(f, "VALUES ( ")?;
-                for var in variables {
-                    write!(f, "{var} ")?;
-                }
-                write!(f, ") {{ ")?;
-                for row in bindings {
-                    write!(f, "( ")?;
-                    for val in row {
-                        match val {
-                            Some(val) => write!(f, "{val} "),
-                            None => write!(f, "UNDEF "),
-                        }?;
-                    }
-                    write!(f, ") ")?;
-                }
-                write!(f, " }}")
-            }
-            Self::Group {
-                inner,
-                variables,
-                aggregates,
-            } => {
-                write!(f, "{{SELECT")?;
-                for (a, v) in aggregates {
-                    write!(f, " ({v} AS {a})")?;
-                }
-                for b in variables {
-                    write!(f, " {b}")?;
-                }
-                write!(f, " WHERE {{ {inner} }}")?;
-                if !variables.is_empty() {
-                    write!(f, " GROUP BY")?;
-                    for v in variables {
-                        write!(f, " {v}")?;
-                    }
-                }
-                write!(f, "}}")
-            }
-            p => write!(
-                f,
-                "{{ {} }}",
-                SparqlGraphRootPattern {
-                    pattern: p,
-                    dataset: None
-                }
-            ),
-        }
-    }
-}
-
-impl Default for GraphPattern {
-    fn default() -> Self {
-        Self::Bgp {
-            patterns: Vec::default(),
-        }
-    }
-}
-
-impl GraphPattern {
     /// Calls `callback` on each [in-scope variable](https://www.w3.org/TR/sparql11-query/#variableScope) occurrence.
     pub fn on_in_scope_variable<'a>(&'a self, mut callback: impl FnMut(&'a Variable)) {
         self.lookup_in_scope_variables(&mut callback)
     }
 
     fn lookup_in_scope_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
+        #[allow(clippy::match_same_arms)]
         match self {
             Self::Bgp { patterns } => {
                 for pattern in patterns {
@@ -981,7 +981,6 @@ impl GraphPattern {
                 inner.lookup_in_scope_variables(callback);
             }
             Self::Minus { left, .. } => left.lookup_in_scope_variables(callback),
-            Self::Service { inner, .. } => inner.lookup_in_scope_variables(callback),
             Self::Group {
                 variables,
                 aggregates,
@@ -994,17 +993,13 @@ impl GraphPattern {
                     callback(v);
                 }
             }
-            Self::Values { variables, .. } => {
+            Self::Values { variables, .. } | Self::Project { variables, .. } => {
                 for v in variables {
                     callback(v);
                 }
             }
-            Self::Project { variables, .. } => {
-                for v in variables {
-                    callback(v);
-                }
-            }
-            Self::Filter { inner, .. }
+            Self::Service { inner, .. }
+            | Self::Filter { inner, .. }
             | Self::OrderBy { inner, .. }
             | Self::Distinct { inner }
             | Self::Reduced { inner }

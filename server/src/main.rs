@@ -1,3 +1,4 @@
+#![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
 use anyhow::{anyhow, bail, Context, Error};
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
@@ -27,7 +28,7 @@ use std::time::{Duration, Instant};
 use std::{fmt, fs, str};
 use url::form_urlencoded;
 
-const MAX_SPARQL_BODY_SIZE: u64 = 1_048_576;
+const MAX_SPARQL_BODY_SIZE: u64 = 0x0010_0000;
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const LOGO: &str = include_str!("../logo.svg");
@@ -302,6 +303,7 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 None
             };
+            #[allow(clippy::cast_precision_loss)]
             if file.is_empty() {
                 // We read from stdin
                 let start = Instant::now();
@@ -320,7 +322,7 @@ pub fn main() -> anyhow::Result<()> {
                     })
                 }
                 bulk_load(
-                    loader,
+                    &loader,
                     stdin().lock(),
                     format.ok_or_else(|| {
                         anyhow!("The --format option must be set when loading from stdin")
@@ -370,7 +372,7 @@ pub fn main() -> anyhow::Result<()> {
                                 if let Err(error) = {
                                     if file.extension().map_or(false, |e| e == OsStr::new("gz")) {
                                         bulk_load(
-                                            loader,
+                                            &loader,
                                             BufReader::new(MultiGzDecoder::new(fp)),
                                             format.unwrap_or_else(|| {
                                                 GraphOrDatasetFormat::from_path(
@@ -383,7 +385,7 @@ pub fn main() -> anyhow::Result<()> {
                                         )
                                     } else {
                                         bulk_load(
-                                            loader,
+                                            &loader,
                                             BufReader::new(fp),
                                             format.unwrap_or_else(|| {
                                                 GraphOrDatasetFormat::from_path(&file).unwrap()
@@ -515,6 +517,7 @@ pub fn main() -> anyhow::Result<()> {
                             for solution in solutions {
                                 writer.write(&solution?)?;
                             }
+                            #[allow(clippy::let_underscore_must_use)]
                             let _ = writer.finish()?;
                         }
                     }
@@ -542,6 +545,7 @@ pub fn main() -> anyhow::Result<()> {
                                 result,
                             )?;
                         } else {
+                            #[allow(clippy::let_underscore_must_use)]
                             let _ = QueryResultsSerializer::from_format(format)
                                 .write_boolean_result(stdout().lock(), result)?;
                         }
@@ -641,7 +645,7 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn bulk_load(
-    loader: BulkLoader,
+    loader: &BulkLoader,
     reader: impl BufRead,
     format: GraphOrDatasetFormat,
     base_iri: Option<&str>,
@@ -700,8 +704,8 @@ impl GraphOrDatasetFormat {
     fn from_extension(name: &str) -> anyhow::Result<Self> {
         Ok(match (GraphFormat::from_extension(name), DatasetFormat::from_extension(name)) {
             (Some(g), Some(d)) => bail!("The file extension '{name}' can be resolved to both '{}' and '{}', not sure what to pick", g.file_extension(), d.file_extension()),
-            (Some(g), None) => GraphOrDatasetFormat::Graph(g),
-            (None, Some(d)) => GraphOrDatasetFormat::Dataset(d),
+            (Some(g), None) => Self::Graph(g),
+            (None, Some(d)) => Self::Dataset(d),
             (None, None) =>
             bail!("The file extension '{name}' is unknown")
         })
@@ -718,8 +722,8 @@ impl GraphOrDatasetFormat {
                 g.file_extension(),
                 d.file_extension()
             ),
-                (Some(g), None) => GraphOrDatasetFormat::Graph(g),
-                (None, Some(d)) => GraphOrDatasetFormat::Dataset(d),
+                (Some(g), None) => Self::Graph(g),
+                (None, Some(d)) => Self::Dataset(d),
                 (None, None) => bail!("The media type '{name}' is unknown"),
             },
         )
@@ -846,7 +850,7 @@ fn handle_request(
             .unwrap()
             .with_body(LOGO)),
         ("/query", "GET") => {
-            configure_and_evaluate_sparql_query(store, &[url_query(request)], None, request)
+            configure_and_evaluate_sparql_query(&store, &[url_query(request)], None, request)
         }
         ("/query", "POST") => {
             let content_type =
@@ -859,7 +863,7 @@ fn handle_request(
                     .read_to_string(&mut buffer)
                     .map_err(bad_request)?;
                 configure_and_evaluate_sparql_query(
-                    store,
+                    &store,
                     &[url_query(request)],
                     Some(buffer),
                     request,
@@ -872,7 +876,7 @@ fn handle_request(
                     .read_to_end(&mut buffer)
                     .map_err(bad_request)?;
                 configure_and_evaluate_sparql_query(
-                    store,
+                    &store,
                     &[url_query(request), &buffer],
                     None,
                     request,
@@ -895,7 +899,7 @@ fn handle_request(
                     .read_to_string(&mut buffer)
                     .map_err(bad_request)?;
                 configure_and_evaluate_sparql_update(
-                    store,
+                    &store,
                     &[url_query(request)],
                     Some(buffer),
                     request,
@@ -908,7 +912,7 @@ fn handle_request(
                     .read_to_end(&mut buffer)
                     .map_err(bad_request)?;
                 configure_and_evaluate_sparql_update(
-                    store,
+                    &store,
                     &[url_query(request), &buffer],
                     None,
                     request,
@@ -1127,7 +1131,7 @@ fn url_query_parameter<'a>(request: &'a Request, param: &str) -> Option<Cow<'a, 
 }
 
 fn configure_and_evaluate_sparql_query(
-    store: Store,
+    store: &Store,
     encoded: &[&[u8]],
     mut query: Option<String>,
     request: &Request,
@@ -1154,7 +1158,7 @@ fn configure_and_evaluate_sparql_query(
     let query = query.ok_or_else(|| bad_request("You should set the 'query' parameter"))?;
     evaluate_sparql_query(
         store,
-        query,
+        &query,
         use_default_graph_as_union,
         default_graph_uris,
         named_graph_uris,
@@ -1163,14 +1167,14 @@ fn configure_and_evaluate_sparql_query(
 }
 
 fn evaluate_sparql_query(
-    store: Store,
-    query: String,
+    store: &Store,
+    query: &str,
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
     request: &Request,
 ) -> Result<Response, HttpError> {
-    let mut query = Query::parse(&query, Some(&base_url(request))).map_err(bad_request)?;
+    let mut query = Query::parse(query, Some(&base_url(request))).map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -1256,7 +1260,7 @@ fn evaluate_sparql_query(
 }
 
 fn configure_and_evaluate_sparql_update(
-    store: Store,
+    store: &Store,
     encoded: &[&[u8]],
     mut update: Option<String>,
     request: &Request,
@@ -1283,7 +1287,7 @@ fn configure_and_evaluate_sparql_update(
     let update = update.ok_or_else(|| bad_request("You should set the 'update' parameter"))?;
     evaluate_sparql_update(
         store,
-        update,
+        &update,
         use_default_graph_as_union,
         default_graph_uris,
         named_graph_uris,
@@ -1292,15 +1296,15 @@ fn configure_and_evaluate_sparql_update(
 }
 
 fn evaluate_sparql_update(
-    store: Store,
-    update: String,
+    store: &Store,
+    update: &str,
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
     request: &Request,
 ) -> Result<Response, HttpError> {
     let mut update =
-        Update::parse(&update, Some(base_url(request).as_str())).map_err(bad_request)?;
+        Update::parse(update, Some(base_url(request).as_str())).map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -1461,7 +1465,7 @@ fn content_negotiation<F>(
             .ok_or_else(|| internal_server_error("Unknown media type"));
     }
     let mut result = None;
-    let mut result_score = 0f32;
+    let mut result_score = 0_f32;
 
     for possible in header.split(',') {
         let (possible, parameters) = possible.split_once(';').unwrap_or((possible, ""));
@@ -1730,7 +1734,7 @@ mod tests {
         Ok(store_dir)
     }
 
-    fn assert_cli_state(store_dir: TempDir, data: &'static str) -> Result<()> {
+    fn assert_cli_state(store_dir: &TempDir, data: &'static str) -> Result<()> {
         cli_command()?
             .arg("dump")
             .arg("--location")
@@ -1961,7 +1965,7 @@ mod tests {
             .success();
 
         assert_cli_state(
-            store_dir,
+            &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
         )
     }
@@ -2043,7 +2047,7 @@ mod tests {
             .assert()
             .success();
         assert_cli_state(
-            store_dir,
+            &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
         )
     }
@@ -2061,7 +2065,7 @@ mod tests {
             .assert()
             .success();
         assert_cli_state(
-            store_dir,
+            &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
         )
     }
@@ -2082,7 +2086,7 @@ mod tests {
             .assert()
             .success();
         assert_cli_state(
-            store_dir,
+            &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
         )
     }

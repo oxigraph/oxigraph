@@ -74,7 +74,7 @@ pub struct SyntaxError {
 }
 
 #[derive(Debug)]
-pub(crate) enum SyntaxErrorKind {
+pub enum SyntaxErrorKind {
     Xml(quick_xml::Error),
     Term(TermParseError),
     Msg { msg: String },
@@ -117,7 +117,7 @@ impl From<SyntaxError> for io::Error {
     fn from(error: SyntaxError) -> Self {
         match error.inner {
             SyntaxErrorKind::Xml(error) => match error {
-                quick_xml::Error::Io(error) => io::Error::new(error.kind(), error),
+                quick_xml::Error::Io(error) => Self::new(error.kind(), error),
                 quick_xml::Error::UnexpectedEof(error) => {
                     Self::new(io::ErrorKind::UnexpectedEof, error)
                 }

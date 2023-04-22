@@ -101,9 +101,8 @@ fn evaluate_positive_json_result_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_negative_json_result_syntax_test(test: &Test) -> Result<()> {
     if result_syntax_check(test, QueryResultsFormat::Json).is_ok() {
         bail!("Oxigraph parses even if it should not {test}.")
-    } else {
-        Ok(())
     }
+    Ok(())
 }
 
 fn evaluate_positive_xml_result_syntax_test(test: &Test) -> Result<()> {
@@ -113,17 +112,15 @@ fn evaluate_positive_xml_result_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_negative_xml_result_syntax_test(test: &Test) -> Result<()> {
     if result_syntax_check(test, QueryResultsFormat::Xml).is_ok() {
         bail!("Oxigraph parses even if it should not {test}.")
-    } else {
-        Ok(())
     }
+    Ok(())
 }
 
 fn evaluate_negative_tsv_result_syntax_test(test: &Test) -> Result<()> {
     if result_syntax_check(test, QueryResultsFormat::Tsv).is_ok() {
         bail!("Oxigraph parses even if it should not {test}.")
-    } else {
-        Ok(())
     }
+    Ok(())
 }
 
 fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
@@ -306,7 +303,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
             false,
         )
     } else {
-        StaticQueryResults::from_graph(load_graph(url, guess_graph_format(url)?)?)
+        StaticQueryResults::from_graph(&load_graph(url, guess_graph_format(url)?)?)
     }
 }
 
@@ -502,11 +499,11 @@ enum StaticQueryResults {
 }
 
 impl StaticQueryResults {
-    fn from_query_results(results: QueryResults, with_order: bool) -> Result<StaticQueryResults> {
-        Self::from_graph(to_graph(results, with_order)?)
+    fn from_query_results(results: QueryResults, with_order: bool) -> Result<Self> {
+        Self::from_graph(&to_graph(results, with_order)?)
     }
 
-    fn from_graph(graph: Graph) -> Result<StaticQueryResults> {
+    fn from_graph(graph: &Graph) -> Result<Self> {
         // Hack to normalize literals
         let store = Store::new().unwrap();
         for t in graph.iter() {
@@ -519,9 +516,7 @@ impl StaticQueryResults {
         if let Some(result_set) = graph.subject_for_predicate_object(rdf::TYPE, rs::RESULT_SET) {
             if let Some(bool) = graph.object_for_subject_predicate(result_set, rs::BOOLEAN) {
                 // Boolean query
-                Ok(StaticQueryResults::Boolean(
-                    bool == Literal::from(true).as_ref().into(),
-                ))
+                Ok(Self::Boolean(bool == Literal::from(true).as_ref().into()))
             } else {
                 // Regular query
                 let mut variables: Vec<Variable> = graph
@@ -584,7 +579,7 @@ impl StaticQueryResults {
 
                 let ordered = solutions.iter().all(|(_, index)| index.is_some());
 
-                Ok(StaticQueryResults::Solutions {
+                Ok(Self::Solutions {
                     variables,
                     solutions: solutions
                         .into_iter()
@@ -595,7 +590,7 @@ impl StaticQueryResults {
             }
         } else {
             graph.canonicalize();
-            Ok(StaticQueryResults::Graph(graph))
+            Ok(Self::Graph(graph))
         }
     }
 }
