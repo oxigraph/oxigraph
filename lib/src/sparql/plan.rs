@@ -136,18 +136,10 @@ impl PlanNode {
                 object,
                 graph_name,
             } => {
-                if let PatternValue::Variable(var) = subject {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = predicate {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = object {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = graph_name {
-                    callback(var.encoded);
-                }
+                subject.lookup_variables(callback);
+                predicate.lookup_variables(callback);
+                object.lookup_variables(callback);
+                graph_name.lookup_variables(callback);
             }
             Self::PathPattern {
                 subject,
@@ -155,15 +147,9 @@ impl PlanNode {
                 graph_name,
                 ..
             } => {
-                if let PatternValue::Variable(var) = subject {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = object {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = graph_name {
-                    callback(var.encoded);
-                }
+                subject.lookup_variables(callback);
+                object.lookup_variables(callback);
+                graph_name.lookup_variables(callback);
             }
             Self::Filter { child, expression } => {
                 expression.lookup_used_variables(callback);
@@ -209,9 +195,7 @@ impl PlanNode {
                 service_name,
                 ..
             } => {
-                if let PatternValue::Variable(v) = service_name {
-                    callback(v.encoded);
-                }
+                service_name.lookup_variables(callback);
                 child.lookup_used_variables(callback);
             }
             Self::Project { mapping, child } => {
@@ -279,18 +263,10 @@ impl PlanNode {
                 object,
                 graph_name,
             } => {
-                if let PatternValue::Variable(var) = subject {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = predicate {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = object {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = graph_name {
-                    callback(var.encoded);
-                }
+                subject.lookup_variables(callback);
+                predicate.lookup_variables(callback);
+                object.lookup_variables(callback);
+                graph_name.lookup_variables(callback);
             }
             Self::PathPattern {
                 subject,
@@ -298,15 +274,9 @@ impl PlanNode {
                 graph_name,
                 ..
             } => {
-                if let PatternValue::Variable(var) = subject {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = object {
-                    callback(var.encoded);
-                }
-                if let PatternValue::Variable(var) = graph_name {
-                    callback(var.encoded);
-                }
+                subject.lookup_variables(callback);
+                object.lookup_variables(callback);
+                graph_name.lookup_variables(callback);
             }
             Self::Filter { child, .. } => {
                 //TODO: have a look at the expression to know if it filters out unbound variables
@@ -400,6 +370,18 @@ pub enum PatternValue {
     Constant(PlanTerm<PatternValueConstant>),
     Variable(PlanVariable),
     TriplePattern(Box<TriplePatternValue>),
+}
+
+impl PatternValue {
+    pub fn lookup_variables(&self, callback: &mut impl FnMut(usize)) {
+        if let Self::Variable(v) = self {
+            callback(v.encoded)
+        } else if let Self::TriplePattern(p) = self {
+            p.subject.lookup_variables(callback);
+            p.predicate.lookup_variables(callback);
+            p.object.lookup_variables(callback);
+        }
+    }
 }
 
 impl fmt::Display for PatternValue {
