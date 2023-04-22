@@ -32,6 +32,8 @@
     :values_too_many
     :values_too_few
     :values_property_path_all
+    :one_or_more_shared
+    :one_or_more_star
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -147,3 +149,17 @@
     mf:action
          [ qt:query  <values_property_path_all.rq> ] ;
     mf:result  <values_property_path_all.srx> .
+
+:one_or_more_shared rdf:type mf:QueryEvaluationTest ;
+    mf:name "SPARQL one or more with shared variable" ;
+    mf:action
+         [ qt:query  <one_or_more_shared.rq> ;
+           qt:data   <one_or_more_shared.ttl> ] ;
+    mf:result  <one_or_more_shared.srx> .
+
+:one_or_more_star rdf:type mf:QueryEvaluationTest ;
+    mf:name "SPARQL-star one or more with shared variable" ;
+    mf:action
+         [ qt:query  <one_or_more_star.rq> ;
+           qt:data   <one_or_more_star.ttl> ] ;
+    mf:result  <one_or_more_star.srx> .
