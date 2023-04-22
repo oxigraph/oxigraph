@@ -1,0 +1,4 @@
+@prefix ex: <http://example.org/> .
+
+<< ex:s ex:p ex:o >> ex:p ex:m .
+ex:m ex:p << ex:s ex:p ex:oa >> , << ex:sbis ex:p ex:oa >> .
