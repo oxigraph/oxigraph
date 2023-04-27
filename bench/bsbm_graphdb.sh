@@ -3,7 +3,6 @@
 DATASET_SIZE=100000
 PARALLELISM=16
 VERSION="9.3.3"
-JAVA_HOME=/usr/lib/jvm/java-11-openjdk
 
 set -eu
 cd bsbm-tools
