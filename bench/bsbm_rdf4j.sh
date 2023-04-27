@@ -4,6 +4,8 @@ DATASET_SIZE=100000
 PARALLELISM=16
 VERSION="4.2.2"
 TOMCAT_VERSION="9.0.71"
+
+set -eu
 wget -nc -O "rdf4j-${VERSION}.zip" "https://www.eclipse.org/downloads/download.php?file=/rdf4j/eclipse-rdf4j-${VERSION}-sdk.zip&mirror_id=1"
 wget -nc -O "tomcat-${TOMCAT_VERSION}.zip" "https://dlcdn.apache.org/tomcat/tomcat-9/v${TOMCAT_VERSION}/bin/apache-tomcat-${TOMCAT_VERSION}.zip"
 cd bsbm-tools || exit
@@ -40,8 +42,8 @@ curl -f -X PUT -H 'Content-Type:application/n-triples' -T "explore-${DATASET_SIZ
 ./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.rdf4j-lmdb.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:8080/rdf4j-server/repositories/bsbm -u http://localhost:8080/rdf4j-server/repositories/bsbm/statements -udataset "explore-update-${DATASET_SIZE}.nt"
 #./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.rdf4j-lmdb.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://localhost:8080/rdf4j-server/repositories/bsbm
 "${CATALINA_HOME}"/bin/shutdown.sh
-rm "explore-${DATASET_SIZE}.nt"
-rm "explore-update-${DATASET_SIZE}.nt"
-rm -r td_data
-rm -r "eclipse-rdf4j-${VERSION}"
-rm -r "apache-tomcat-${TOMCAT_VERSION}"
+rm -f "explore-${DATASET_SIZE}.nt"
+rm -f "explore-update-${DATASET_SIZE}.nt"
+rm -rf td_data
+rm -rf "eclipse-rdf4j-${VERSION}"
+rm -rf "apache-tomcat-${TOMCAT_VERSION}"
