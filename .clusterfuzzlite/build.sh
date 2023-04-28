@@ -5,7 +5,7 @@ function build_seed_corpus() {
   mkdir "/tmp/oxigraph_$1"
   for file in **/*."$2"
   do
-    hash=($(sha256sum "$file"))
+    hash=$(sha256sum "$file" | awk '{print $1;}')
     cp "$file" "/tmp/oxigraph_$1/$hash"
   done
   zip "$1_seed_corpus.zip" /tmp/"oxigraph_$1"/*
