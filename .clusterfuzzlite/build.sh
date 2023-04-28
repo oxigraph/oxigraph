@@ -15,6 +15,8 @@ function build_seed_corpus() {
 
 cd "$SRC"/oxigraph
 cargo fuzz build -O --debug-assertions
+# shellcheck disable=SC2043
+#  SC2043 (warning): This loop will only ever run once.
 for TARGET in sparql_eval # sparql_results_json sparql_results_tsv
 do
   cp fuzz/target/x86_64-unknown-linux-gnu/release/$TARGET "$OUT"/
