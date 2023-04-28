@@ -1,3 +1,12 @@
+## [0.3.16] - 2023-04-29
+
+### Changed
+- Fixes flush and compaction on the GSPO index. It might improve Oxigraph performances and storage space.
+- SPARQL: fixes some optimizations in presence quoted triples with nested variables.
+- SPARQL profiler: adds EXISTS operation to the explanation and profiling tree.
+- Upgrades RocksDB to 8.1.1.
+
+
 ## [0.3.15] - 2023-04-18
 
 ### Added
