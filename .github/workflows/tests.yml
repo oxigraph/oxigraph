@@ -383,3 +383,10 @@ jobs:
           mode: coverage
           sanitizer: coverage
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: sudo apt install -y shellcheck
+      - run: git grep -l '^#\( *shellcheck \|!\(/bin/\|/usr/bin/env \)\(sh\|bash\|dash\|ksh\)\)' | xargs shellcheck
