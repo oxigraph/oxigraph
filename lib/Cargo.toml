@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph"
-version = "0.3.16"
+version = "0.3.17-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -38,14 +38,14 @@ hex = "0.4"
 siphasher = "0.3"
 lazy_static = "1"
 json-event-parser = "0.1"
-oxrdf = { version = "0.1.5", path="oxrdf", features = ["rdf-star", "oxsdatatypes"] }
-oxsdatatypes = { version = "0.1.1", path="oxsdatatypes" }
-spargebra = { version = "0.2.7", path="spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
-sparesults = { version = "0.1.7", path="sparesults", features = ["rdf-star"] }
+oxrdf = { version = "0.1.6-dev", path="oxrdf", features = ["rdf-star", "oxsdatatypes"] }
+oxsdatatypes = { version = "0.1.2-dev", path="oxsdatatypes" }
+spargebra = { version = "0.2.8-dev", path="spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
+sparesults = { version = "0.1.8-dev", path="sparesults", features = ["rdf-star"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc = "0.2"
-oxrocksdb-sys = { version = "0.3.16", path="../oxrocksdb-sys" }
+oxrocksdb-sys = { version = "0.3.17-dev", path="../oxrocksdb-sys" }
 oxhttp = { version = "0.1", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
