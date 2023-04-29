@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph_server"
-version = "0.3.16"
+version = "0.3.17-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -17,8 +17,8 @@ anyhow = "1"
 oxhttp = { version = "0.1", features = ["rayon"] }
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
-oxigraph = { version = "0.3.16", path = "../lib", features = ["http_client"] }
-sparesults = { version = "0.1.7", path = "../lib/sparesults", features = ["rdf-star"] }
+oxigraph = { version = "0.3.17-dev", path = "../lib", features = ["http_client"] }
+sparesults = { version = "0.1.8-dev", path = "../lib/sparesults", features = ["rdf-star"] }
 rand = "0.8"
 url = "2"
 oxiri = "0.2"
