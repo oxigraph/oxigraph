@@ -591,7 +591,7 @@ pub fn main() -> anyhow::Result<()> {
                 let mut file = BufWriter::new(File::create(&explain_file)?);
                 match explain_file
                     .extension()
-                    .and_then(|e| e.to_str()) {
+                    .and_then(OsStr::to_str) {
                     Some("json") => {
                         explanation.write_in_json(file)?;
                     },
@@ -734,7 +734,7 @@ fn format_from_path<T>(
     path: &Path,
     from_extension: impl FnOnce(&str) -> anyhow::Result<T>,
 ) -> anyhow::Result<T> {
-    if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+    if let Some(ext) = path.extension().and_then(OsStr::to_str) {
         from_extension(ext).map_err(|e| {
             e.context(format!(
                 "Not able to guess the file format from file name extension '{ext}'"
@@ -1636,7 +1636,7 @@ impl<O: 'static, U: (Fn(O) -> io::Result<Option<O>>) + 'static> ReadForWrite<O, 
     ) -> Result<Response, HttpError> {
         let buffer = Rc::new(RefCell::new(Vec::new()));
         let state = initial_state_builder(ReadForWriteWriter {
-            buffer: buffer.clone(),
+            buffer: Rc::clone(&buffer),
         })
         .map_err(internal_server_error)?;
         Ok(Response::builder(Status::OK)

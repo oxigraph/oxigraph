@@ -45,12 +45,14 @@ impl Error for ParseError {
     }
 }
 
-#[allow(clippy::fallible_impl_from)]
 impl From<TurtleError> for ParseError {
     #[inline]
     fn from(error: TurtleError) -> Self {
         let error = io::Error::from(error);
-        if error.get_ref().map_or(false, |e| e.is::<TurtleError>()) {
+        if error.get_ref().map_or(
+            false,
+            <(dyn Error + Send + Sync + 'static)>::is::<TurtleError>,
+        ) {
             Self::Syntax(SyntaxError {
                 inner: SyntaxErrorKind::Turtle(*error.into_inner().unwrap().downcast().unwrap()),
             })
@@ -60,12 +62,14 @@ impl From<TurtleError> for ParseError {
     }
 }
 
-#[allow(clippy::fallible_impl_from)]
 impl From<RdfXmlError> for ParseError {
     #[inline]
     fn from(error: RdfXmlError) -> Self {
         let error = io::Error::from(error);
-        if error.get_ref().map_or(false, |e| e.is::<RdfXmlError>()) {
+        if error.get_ref().map_or(
+            false,
+            <(dyn Error + Send + Sync + 'static)>::is::<RdfXmlError>,
+        ) {
             Self::Syntax(SyntaxError {
                 inner: SyntaxErrorKind::RdfXml(*error.into_inner().unwrap().downcast().unwrap()),
             })

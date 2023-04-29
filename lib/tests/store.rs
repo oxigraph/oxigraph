@@ -175,7 +175,7 @@ fn test_load_dataset() -> Result<(), Box<dyn Error>> {
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
-    let store = Store::new().unwrap();
+    let store = Store::new()?;
     store
         .bulk_loader()
         .load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;

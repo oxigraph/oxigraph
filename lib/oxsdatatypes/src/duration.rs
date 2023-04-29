@@ -170,8 +170,10 @@ impl fmt::Display for Duration {
             let h = (s_int % 86400) / 3600;
             let m = (s_int % 3600) / 60;
             let s = ss
-                .checked_sub(Decimal::try_from(d * 86400 + h * 3600 + m * 60).unwrap())
-                .unwrap(); //could not fail
+                .checked_sub(
+                    Decimal::try_from(d * 86400 + h * 3600 + m * 60).map_err(|_| fmt::Error)?,
+                )
+                .ok_or(fmt::Error)?;
 
             if d != 0 {
                 write!(f, "{d}D")?;

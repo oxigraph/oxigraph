@@ -347,7 +347,7 @@ impl<'a> Iterator for RdfListIterator<'a> {
                 let result = self
                     .graph
                     .object_for_subject_predicate(current, rdf::FIRST)
-                    .map(|v| v.into_owned());
+                    .map(TermRef::into_owned);
                 self.current_node =
                     match self.graph.object_for_subject_predicate(current, rdf::REST) {
                         Some(TermRef::NamedNode(n)) if n == rdf::NIL => None,

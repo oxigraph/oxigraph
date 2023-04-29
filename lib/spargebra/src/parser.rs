@@ -352,7 +352,7 @@ impl<F, T: From<F>> From<FocusedTriplePattern<F>> for FocusedTripleOrPathPattern
     fn from(input: FocusedTriplePattern<F>) -> Self {
         Self {
             focus: input.focus.into(),
-            patterns: input.patterns.into_iter().map(|p| p.into()).collect(),
+            patterns: input.patterns.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -736,7 +736,7 @@ impl ParserState {
         let aggregates = self.aggregates.last_mut().ok_or("Unexpected aggregate")?;
         Ok(aggregates
             .iter()
-            .find_map(|(v, a)| if a == &agg { Some(v) } else { None })
+            .find_map(|(v, a)| (a == &agg).then(|| v))
             .cloned()
             .unwrap_or_else(|| {
                 let new_var = variable();
@@ -884,13 +884,14 @@ impl<'a> Iterator for UnescapeCharsIterator<'a> {
         }
         match self.iter.next()? {
             '\\' => match self.iter.next() {
-                Some(ch) => match self.replacement.get(ch) {
-                    Some(replace) => Some(replace),
-                    None => {
+                Some(ch) => {
+                    if let Some(replace) = self.replacement.get(ch) {
+                        Some(replace)
+                    } else {
                         self.buffer = Some(ch);
                         Some('\\')
                     }
-                },
+                }
                 None => Some('\\'),
             },
             c => Some(c),
@@ -1590,7 +1591,7 @@ parser! {
 
         //[74]
         rule ConstructTriples() -> Vec<TriplePattern> = p:ConstructTriples_item() ** ("." _) "."? {
-            p.into_iter().flat_map(|c| c.into_iter()).collect()
+            p.into_iter().flatten().collect()
         }
         rule ConstructTriples_item() -> Vec<TriplePattern> = t:TriplesSameSubject() _ { t }
 
@@ -1701,7 +1702,7 @@ parser! {
 
         //[83]
         rule PropertyListPathNotEmpty() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = hp:(VerbPath() / VerbSimple()) _ ho:ObjectListPath() _ t:PropertyListPathNotEmpty_item()* {
-                t.into_iter().flat_map(|e| e.into_iter()).fold(FocusedTripleOrPathPattern {
+                t.into_iter().flatten().fold(FocusedTripleOrPathPattern {
                     focus: vec![(hp, ho.focus)],
                     patterns: ho.patterns
                 }, |mut a, b| {
@@ -2036,7 +2037,7 @@ parser! {
 
         //[121]
         rule BuiltInCall() -> Expression =
-            a:Aggregate() {? state.new_aggregation(a).map(|v| v.into()) } /
+            a:Aggregate() {? state.new_aggregation(a).map(Into::into) } /
             i("STR") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Str, vec![e]) } /
             i("LANG") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Lang, vec![e]) } /
             i("LANGMATCHES") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::LangMatches, vec![a, b]) } /

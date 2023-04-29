@@ -225,7 +225,7 @@ impl PyQueryTriples {
         Ok(allow_threads_unsafe(|| self.inner.next())
             .transpose()
             .map_err(map_evaluation_error)?
-            .map(|t| t.into()))
+            .map(Into::into))
     }
 }
 

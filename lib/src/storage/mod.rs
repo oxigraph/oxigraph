@@ -1,3 +1,4 @@
+#![allow(clippy::same_name_method)]
 #[cfg(not(target_family = "wasm"))]
 use crate::model::Quad;
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
@@ -181,7 +182,7 @@ impl Storage {
         ]
     }
 
-    #[allow(clippy::unnecessary_wraps)]
+    #[allow(clippy::unnecessary_wraps, clippy::unwrap_in_result)]
     fn setup(db: Db) -> Result<Self, StorageError> {
         let this = Self {
             #[cfg(not(target_family = "wasm"))]
@@ -1305,7 +1306,7 @@ impl StorageBulkLoader {
         let mut buffer_to_load = Vec::with_capacity(batch_size);
         swap(buffer, &mut buffer_to_load);
         let storage = self.storage.clone();
-        let done_counter_clone = done_counter.clone();
+        let done_counter_clone = Arc::clone(done_counter);
         threads.push_back(spawn(move || {
             FileBulkLoader::new(storage, batch_size).load(buffer_to_load, &done_counter_clone)
         }));

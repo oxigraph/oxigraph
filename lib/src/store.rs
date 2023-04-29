@@ -565,7 +565,7 @@ impl Store {
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
     ) -> Result<(), StorageError> {
-        let quads = quads.into_iter().map(|q| q.into()).collect::<Vec<_>>();
+        let quads = quads.into_iter().map(Into::into).collect::<Vec<_>>();
         self.transaction(move |mut t| t.extend(&quads))
     }
 
@@ -1569,7 +1569,7 @@ impl BulkLoader {
         quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,
     ) -> Result<(), EO> {
         self.storage
-            .load(quads.into_iter().map(|q| q.map(|q| q.into())))
+            .load(quads.into_iter().map(|q| q.map(Into::into)))
     }
 }
 

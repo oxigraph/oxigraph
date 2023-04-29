@@ -228,10 +228,10 @@ impl PyStore {
             extract_quads_pattern(subject, predicate, object, graph_name)?;
         Ok(QuadIter {
             inner: self.inner.quads_for_pattern(
-                subject.as_ref().map(|p| p.into()),
-                predicate.as_ref().map(|p| p.into()),
-                object.as_ref().map(|p| p.into()),
-                graph_name.as_ref().map(|p| p.into()),
+                subject.as_ref().map(Into::into),
+                predicate.as_ref().map(Into::into),
+                object.as_ref().map(Into::into),
+                graph_name.as_ref().map(Into::into),
             ),
         })
     }

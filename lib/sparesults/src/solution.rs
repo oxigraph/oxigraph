@@ -18,6 +18,7 @@ use std::rc::Rc;
 /// assert_eq!(solution.get("foo"), Some(&Literal::from(1).into())); // Get the value of the variable ?foo if it exists (here yes).
 /// assert_eq!(solution.get(1), None); // Get the value of the second column if it exists (here no).
 /// ```
+#[allow(clippy::rc_buffer)]
 pub struct QuerySolution {
     variables: Rc<Vec<Variable>>,
     values: Vec<Option<Term>>,
@@ -69,7 +70,7 @@ impl QuerySolution {
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.values.iter().all(|v| v.is_none())
+        self.values.iter().all(Option::is_none)
     }
 
     /// Returns an iterator over bound variables.
