@@ -9,6 +9,7 @@ use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::wrap_pyfunction;
+use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Write};
 
@@ -289,11 +290,7 @@ impl Read for PyIo {
                 .map_err(to_io_err)?;
             let bytes = read
                 .extract::<&[u8]>(py)
-                .or_else(|e| {
-                    read.extract::<&str>(py)
-                        .map(|s| s.as_bytes())
-                        .map_err(|_| e)
-                })
+                .or_else(|e| read.extract::<&str>(py).map(str::as_bytes).map_err(|_| e))
                 .map_err(to_io_err)?;
             buf.write_all(bytes)?;
             Ok(bytes.len())
@@ -325,7 +322,10 @@ fn to_io_err(error: impl Into<PyErr>) -> io::Error {
 }
 
 pub fn map_io_err(error: io::Error) -> PyErr {
-    if error.get_ref().map_or(false, |s| s.is::<PyErr>()) {
+    if error
+        .get_ref()
+        .map_or(false, <(dyn Error + Send + Sync + 'static)>::is::<PyErr>)
+    {
         *error.into_inner().unwrap().downcast().unwrap()
     } else {
         PyIOError::new_err(error.to_string())

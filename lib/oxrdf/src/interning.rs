@@ -463,11 +463,10 @@ impl InternedTriple {
             predicate: InternedNamedNode::encoded_from(triple.predicate, interner)?,
             object: InternedTerm::encoded_from(triple.object, interner)?,
         };
-        if interner.triples.contains_key(&interned_triple) {
-            Some(interned_triple)
-        } else {
-            None
-        }
+        interner
+            .triples
+            .contains_key(&interned_triple)
+            .then(|| interned_triple)
     }
 
     pub fn next(&self) -> Self {

@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-#![deny(unsafe_code)]
 #![doc(test(attr(deny(warnings))))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
@@ -276,6 +275,7 @@ pub enum QueryResultsReader<R: BufRead> {
 /// }
 /// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
+#[allow(clippy::rc_buffer)]
 pub struct SolutionsReader<R: BufRead> {
     variables: Rc<Vec<Variable>>,
     solutions: SolutionsReaderKind<R>,
@@ -318,7 +318,7 @@ impl<R: BufRead> Iterator for SolutionsReader<R> {
                 SolutionsReaderKind::Tsv(reader) => reader.read_next(),
             }
             .transpose()?
-            .map(|values| (self.variables.clone(), values).into()),
+            .map(|values| (Rc::clone(&self.variables), values).into()),
         )
     }
 }

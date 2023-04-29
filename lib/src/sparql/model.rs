@@ -160,6 +160,7 @@ impl<R: BufRead + 'static> From<QueryResultsReader<R>> for QueryResults {
 /// }
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[allow(clippy::rc_buffer)]
 pub struct QuerySolutionIter {
     variables: Rc<Vec<Variable>>,
     iter: Box<dyn Iterator<Item = Result<QuerySolution, EvaluationError>>>,
@@ -171,8 +172,10 @@ impl QuerySolutionIter {
         iter: impl Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
     ) -> Self {
         Self {
-            variables: variables.clone(),
-            iter: Box::new(iter.map(move |t| t.map(|values| (variables.clone(), values).into()))),
+            variables: Rc::clone(&variables),
+            iter: Box::new(
+                iter.map(move |t| t.map(|values| (Rc::clone(&variables), values).into())),
+            ),
         }
     }
 

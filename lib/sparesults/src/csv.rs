@@ -160,7 +160,7 @@ fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io
             let value = literal.value();
             if let Some(language) = literal.language() {
                 write_tsv_quoted_str(value, sink)?;
-                write!(sink, "@{}", language)
+                write!(sink, "@{language}")
             } else {
                 match literal.datatype() {
                     xsd::BOOLEAN if is_turtle_boolean(value) => sink.write_all(value.as_bytes()),
@@ -216,7 +216,7 @@ fn is_turtle_integer(value: &str) -> bool {
     } else if let Some(v) = value.strip_prefix(b"-") {
         value = v;
     }
-    !value.is_empty() && value.iter().all(|c| c.is_ascii_digit())
+    !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
 fn is_turtle_decimal(value: &str) -> bool {
@@ -227,7 +227,7 @@ fn is_turtle_decimal(value: &str) -> bool {
     } else if let Some(v) = value.strip_prefix(b"-") {
         value = v;
     }
-    while value.first().map_or(false, |c| c.is_ascii_digit()) {
+    while value.first().map_or(false, u8::is_ascii_digit) {
         value = &value[1..];
     }
     if let Some(v) = value.strip_prefix(b".") {
@@ -235,7 +235,7 @@ fn is_turtle_decimal(value: &str) -> bool {
     } else {
         return false;
     }
-    !value.is_empty() && value.iter().all(|c| c.is_ascii_digit())
+    !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
 fn is_turtle_double(value: &str) -> bool {
@@ -248,14 +248,14 @@ fn is_turtle_double(value: &str) -> bool {
         value = v;
     }
     let mut with_before = false;
-    while value.first().map_or(false, |c| c.is_ascii_digit()) {
+    while value.first().map_or(false, u8::is_ascii_digit) {
         value = &value[1..];
         with_before = true;
     }
     let mut with_after = false;
     if let Some(v) = value.strip_prefix(b".") {
         value = v;
-        while value.first().map_or(false, |c| c.is_ascii_digit()) {
+        while value.first().map_or(false, u8::is_ascii_digit) {
             value = &value[1..];
             with_after = true;
         }
@@ -272,7 +272,7 @@ fn is_turtle_double(value: &str) -> bool {
     } else if let Some(v) = value.strip_prefix(b"-") {
         value = v;
     }
-    (with_before || with_after) && !value.is_empty() && value.iter().all(|c| c.is_ascii_digit())
+    (with_before || with_after) && !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
 pub enum TsvQueryResultsReader<R: BufRead> {

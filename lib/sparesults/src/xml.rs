@@ -482,20 +482,31 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                         }
                         state = State::Triple;
                     }
-                    State::Uri => state = self.stack.pop().unwrap(),
+                    State::Uri => {
+                        state = self
+                            .stack
+                            .pop()
+                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?
+                    }
                     State::BNode => {
                         if term.is_none() {
                             //We default to a random bnode
                             term = Some(BlankNode::default().into())
                         }
-                        state = self.stack.pop().unwrap()
+                        state = self
+                            .stack
+                            .pop()
+                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?
                     }
                     State::Literal => {
                         if term.is_none() {
                             //We default to the empty literal
                             term = Some(build_literal("", lang.take(), datatype.take())?.into())
                         }
-                        state = self.stack.pop().unwrap();
+                        state = self
+                            .stack
+                            .pop()
+                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?;
                     }
                     State::Triple => {
                         #[cfg(feature = "rdf-star")]
@@ -530,7 +541,10 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                                 )
                                 .into(),
                             );
-                            state = self.stack.pop().unwrap();
+                            state = self
+                                .stack
+                                .pop()
+                                .ok_or_else(|| SyntaxError::msg("Empty stack"))?;
                         } else {
                             return Err(
                                 SyntaxError::msg("A <triple> should contain a <subject>, a <predicate> and an <object>").into()

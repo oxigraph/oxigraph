@@ -40,7 +40,7 @@ impl DatasetView {
     ) -> impl Iterator<Item = Result<EncodedQuad, EvaluationError>> + 'static {
         self.reader
             .quads_for_pattern(subject, predicate, object, graph_name)
-            .map(|t| t.map_err(|e| e.into()))
+            .map(|t| t.map_err(Into::into))
     }
 
     #[allow(clippy::needless_collect)]

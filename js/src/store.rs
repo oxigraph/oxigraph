@@ -76,28 +76,28 @@ impl JsStore {
                     None
                 }
                 .as_ref()
-                .map(|t: &NamedOrBlankNode| t.into()),
+                .map(<&Subject>::into),
                 if let Some(predicate) = FROM_JS.with(|c| c.to_optional_term(predicate))? {
                     Some(NamedNode::try_from(predicate)?)
                 } else {
                     None
                 }
                 .as_ref()
-                .map(|t: &NamedNode| t.into()),
+                .map(<&NamedNode>::into),
                 if let Some(object) = FROM_JS.with(|c| c.to_optional_term(object))? {
                     Some(object.try_into()?)
                 } else {
                     None
                 }
                 .as_ref()
-                .map(|t: &Term| t.into()),
+                .map(<&Term>::into),
                 if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(graph_name))? {
                     Some(graph_name.try_into()?)
                 } else {
                     None
                 }
                 .as_ref()
-                .map(|t: &GraphName| t.into()),
+                .map(<&GraphName>::into),
             )
             .map(|v| v.map(|v| JsQuad::from(v).into()))
             .collect::<Result<Vec<_>, _>>()

@@ -29,20 +29,18 @@ impl Db {
         Ok(Self(Arc::new(RwLock::new(trees))))
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
         let name = ColumnFamily(name);
-        if self.0.read().unwrap().contains_key(&name) {
-            Some(name)
-        } else {
-            None
-        }
+        (self.0.read().unwrap().contains_key(&name)).then(|| name)
     }
 
     #[must_use]
     pub fn snapshot(&self) -> Reader {
-        Reader(InnerReader::Simple(self.0.clone()))
+        Reader(InnerReader::Simple(Arc::clone(&self.0)))
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
         &'b self,
         f: impl Fn(Transaction<'a>) -> Result<T, E>,
@@ -64,6 +62,7 @@ enum InnerReader {
 }
 
 impl Reader {
+    #[allow(clippy::unwrap_in_result)]
     pub fn get(
         &self,
         column_family: &ColumnFamily,
@@ -90,6 +89,7 @@ impl Reader {
         }
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn contains_key(
         &self,
         column_family: &ColumnFamily,
@@ -120,6 +120,7 @@ impl Reader {
         self.scan_prefix(column_family, &[])
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn scan_prefix(
         &self,
         column_family: &ColumnFamily,
@@ -176,19 +177,20 @@ impl Reader {
         Ok(Iter { iter, current })
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn len(&self, column_family: &ColumnFamily) -> Result<usize, StorageError> {
         match &self.0 {
             InnerReader::Simple(reader) => Ok(reader
                 .read()
                 .unwrap()
                 .get(column_family)
-                .map_or(0, |tree| tree.len())),
+                .map_or(0, BTreeMap::len)),
             InnerReader::Transaction(reader) => {
                 if let Some(reader) = reader.upgrade() {
                     Ok((*reader)
                         .borrow()
                         .get(column_family)
-                        .map_or(0, |tree| tree.len()))
+                        .map_or(0, BTreeMap::len))
                 } else {
                     Err(StorageError::Other(
                         "The transaction is already ended".into(),
@@ -198,19 +200,20 @@ impl Reader {
         }
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool, StorageError> {
         match &self.0 {
             InnerReader::Simple(reader) => Ok(reader
                 .read()
                 .unwrap()
                 .get(column_family)
-                .map_or(true, |tree| tree.is_empty())),
+                .map_or(true, BTreeMap::is_empty)),
             InnerReader::Transaction(reader) => {
                 if let Some(reader) = reader.upgrade() {
                     Ok((*reader)
                         .borrow()
                         .get(column_family)
-                        .map_or(true, |tree| tree.is_empty()))
+                        .map_or(true, BTreeMap::is_empty))
                 } else {
                     Err(StorageError::Other(
                         "The transaction is already ended".into(),
@@ -246,7 +249,7 @@ impl Transaction<'_> {
             .map_or(false, |cf| cf.contains_key(key)))
     }
 
-    #[allow(clippy::unnecessary_wraps)]
+    #[allow(clippy::unnecessary_wraps, clippy::unwrap_in_result)]
     pub fn insert(
         &mut self,
         column_family: &ColumnFamily,
@@ -269,7 +272,7 @@ impl Transaction<'_> {
         self.insert(column_family, key, &[])
     }
 
-    #[allow(clippy::unnecessary_wraps)]
+    #[allow(clippy::unnecessary_wraps, clippy::unwrap_in_result)]
     pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<(), StorageError> {
         self.0
             .borrow_mut()

@@ -19,7 +19,7 @@ thread_local! {
 #[wasm_bindgen(js_name = namedNode)]
 pub fn named_node(value: String) -> Result<JsNamedNode, JsValue> {
     NamedNode::new(value)
-        .map(|v| v.into())
+        .map(Into::into)
         .map_err(|v| UriError::new(&v.to_string()).into())
 }
 
