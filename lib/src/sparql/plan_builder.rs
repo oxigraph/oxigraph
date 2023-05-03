@@ -400,14 +400,14 @@ impl<'a> PlanBuilder<'a> {
                 plain: l.clone(),
             }),
             Expression::Variable(v) => PlanExpression::Variable(build_plan_variable(variables, v)),
-            Expression::Or(a, b) => PlanExpression::Or(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
-            ),
-            Expression::And(a, b) => PlanExpression::And(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
-            ),
+            Expression::Or(a, b) => PlanExpression::Or(vec![
+                self.build_for_expression(a, variables, graph_name)?,
+                self.build_for_expression(b, variables, graph_name)?,
+            ]),
+            Expression::And(a, b) => PlanExpression::And(vec![
+                self.build_for_expression(a, variables, graph_name)?,
+                self.build_for_expression(b, variables, graph_name)?,
+            ]),
             Expression::Equal(a, b) => PlanExpression::Equal(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
@@ -433,23 +433,23 @@ impl<'a> PlanBuilder<'a> {
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
             ),
             Expression::In(e, l) => {
+                if l.is_empty() {
+                    return Ok(PlanExpression::Literal(PlanTerm {
+                        encoded: false.into(),
+                        plain: false.into(),
+                    }));
+                }
                 let e = self.build_for_expression(e, variables, graph_name)?;
-                l.iter()
-                    .map(|v| {
-                        Ok(PlanExpression::Equal(
-                            Box::new(e.clone()),
-                            Box::new(self.build_for_expression(v, variables, graph_name)?),
-                        ))
-                    })
-                    .reduce(|a: Result<_, EvaluationError>, b| {
-                        Ok(PlanExpression::Or(Box::new(a?), Box::new(b?)))
-                    })
-                    .unwrap_or_else(|| {
-                        Ok(PlanExpression::Literal(PlanTerm {
-                            encoded: false.into(),
-                            plain: false.into(),
-                        }))
-                    })?
+                PlanExpression::Or(
+                    l.iter()
+                        .map(|v| {
+                            Ok(PlanExpression::Equal(
+                                Box::new(e.clone()),
+                                Box::new(self.build_for_expression(v, variables, graph_name)?),
+                            ))
+                        })
+                        .collect::<Result<_, EvaluationError>>()?,
+                )
             }
             Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
@@ -1402,8 +1402,12 @@ impl<'a> PlanBuilder<'a> {
                 expression: filter,
             };
         }
-        if let PlanExpression::And(f1, f2) = *filter {
-            return self.push_filter(Rc::new(self.push_filter(node, f1)), f2);
+        if let PlanExpression::And(filters) = *filter {
+            return filters
+                .into_iter()
+                .fold((*node.as_ref()).clone(), |acc, f| {
+                    self.push_filter(Rc::new(acc), Box::new(f))
+                });
         }
         let mut filter_variables = BTreeSet::new();
         filter.lookup_used_variables(&mut |v| {
@@ -1492,7 +1496,10 @@ impl<'a> PlanBuilder<'a> {
                 } else {
                     PlanNode::Filter {
                         child: Rc::clone(child),
-                        expression: Box::new(PlanExpression::And(expression.clone(), filter)),
+                        expression: Box::new(PlanExpression::And(vec![
+                            *expression.clone(),
+                            *filter,
+                        ])),
                     }
                 }
             }
