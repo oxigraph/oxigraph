@@ -954,23 +954,45 @@ impl SimpleEvaluator {
                 stat_children.push(stats);
                 Rc::new(move |tuple| Some(eval(tuple.clone()).next().is_some().into()))
             }
-            PlanExpression::Or(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
-                Rc::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
-                    Some(true) => Some(true.into()),
-                    Some(false) => b(tuple),
-                    None => (Some(true) == a(tuple).and_then(|v| to_bool(&v))).then(|| true.into()),
+            PlanExpression::Or(inner) => {
+                let children = inner
+                    .iter()
+                    .map(|i| self.expression_evaluator(i, stat_children))
+                    .collect::<Rc<[_]>>();
+                Rc::new(move |tuple| {
+                    let mut error = true;
+                    for child in children.iter() {
+                        match child(tuple).and_then(|v| to_bool(&v)) {
+                            Some(true) => return Some(true.into()),
+                            Some(false) => continue,
+                            None => error = true,
+                        }
+                    }
+                    if error {
+                        None
+                    } else {
+                        Some(false.into())
+                    }
                 })
             }
-            PlanExpression::And(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
-                Rc::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
-                    Some(true) => b(tuple),
-                    Some(false) => Some(false.into()),
-                    None => {
-                        (Some(false) == b(tuple).and_then(|v| to_bool(&v))).then(|| false.into())
+            PlanExpression::And(inner) => {
+                let children = inner
+                    .iter()
+                    .map(|i| self.expression_evaluator(i, stat_children))
+                    .collect::<Rc<[_]>>();
+                Rc::new(move |tuple| {
+                    let mut error = false;
+                    for child in children.iter() {
+                        match child(tuple).and_then(|v| to_bool(&v)) {
+                            Some(true) => continue,
+                            Some(false) => return Some(false.into()),
+                            None => error = true,
+                        }
+                    }
+                    if error {
+                        None
+                    } else {
+                        Some(true.into())
                     }
                 })
             }

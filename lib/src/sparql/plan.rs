@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::time::Duration;
 use std::{fmt, io};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PlanNode {
     StaticBindings {
         encoded_tuples: Vec<EncodedTuple>,
@@ -447,8 +447,8 @@ pub enum PlanExpression {
     Literal(PlanTerm<Literal>),
     Variable(PlanVariable),
     Exists(Rc<PlanNode>),
-    Or(Box<Self>, Box<Self>),
-    And(Box<Self>, Box<Self>),
+    Or(Vec<Self>),
+    And(Vec<Self>),
     Equal(Box<Self>, Box<Self>),
     Greater(Box<Self>, Box<Self>),
     GreaterOrEqual(Box<Self>, Box<Self>),
@@ -597,9 +597,7 @@ impl PlanExpression {
             | Self::YearMonthDurationCast(e)
             | Self::DayTimeDurationCast(e)
             | Self::StringCast(e) => e.lookup_used_variables(callback),
-            Self::Or(a, b)
-            | Self::And(a, b)
-            | Self::Equal(a, b)
+            Self::Equal(a, b)
             | Self::Greater(a, b)
             | Self::GreaterOrEqual(a, b)
             | Self::Less(a, b)
@@ -639,7 +637,11 @@ impl PlanExpression {
                 c.lookup_used_variables(callback);
                 d.lookup_used_variables(callback);
             }
-            Self::Concat(es) | Self::Coalesce(es) | Self::CustomFunction(_, es) => {
+            Self::Or(es)
+            | Self::And(es)
+            | Self::Concat(es)
+            | Self::Coalesce(es)
+            | Self::CustomFunction(_, es) => {
                 for e in es {
                     e.lookup_used_variables(callback);
                 }
@@ -723,8 +725,26 @@ impl fmt::Display for PlanExpression {
             Self::YearMonthDurationCast(e) => write!(f, "YearMonthDurationCast({e})"),
             Self::DayTimeDurationCast(e) => write!(f, "DayTimeDurationCast({e})"),
             Self::StringCast(e) => write!(f, "StringCast({e})"),
-            Self::Or(a, b) => write!(f, "Or({a}, {b})"),
-            Self::And(a, b) => write!(f, "And({a}, {b})"),
+            Self::Or(es) => {
+                write!(f, "Or(")?;
+                for (i, e) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, ")")
+            }
+            Self::And(es) => {
+                write!(f, "And(")?;
+                for (i, e) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, ")")
+            }
             Self::Equal(a, b) => write!(f, "Equal({a}, {b})"),
             Self::Greater(a, b) => write!(f, "Greater({a}, {b})"),
             Self::GreaterOrEqual(a, b) => write!(f, "GreaterOrEqual({a}, {b})"),
