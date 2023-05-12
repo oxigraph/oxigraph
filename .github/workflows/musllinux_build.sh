@@ -11,9 +11,9 @@ source venv/bin/activate
 pip install -r requirements.dev.txt
 maturin develop --release -m Cargo.toml
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
-maturin build --release -m Cargo.toml --features abi3 --compatibility musllinux_1_2
+maturin build --release -m Cargo.toml --features abi3 --compatibility musllinux_1_1
 if [ %for_each_version% ]; then
   for VERSION in 7 8 9 10 11; do
-    maturin build --release -m Cargo.toml --interpreter "python3.$VERSION" --compatibility musllinux_1_2
+    maturin build --release -m Cargo.toml --interpreter "python3.$VERSION" --compatibility musllinux_1_1
   done
 fi
