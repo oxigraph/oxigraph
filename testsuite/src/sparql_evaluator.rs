@@ -298,7 +298,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
     {
         StaticQueryResults::from_query_results(QueryResults::read(read_file(url)?, format)?, false)
     } else {
-        StaticQueryResults::from_graph(&load_graph(url, guess_graph_format(url)?)?)
+        StaticQueryResults::from_graph(&load_graph(url, guess_graph_format(url)?, false)?)
     }
 }
 

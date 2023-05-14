@@ -1,0 +1,129 @@
+@prefix mf: <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ox: <https://github.com/oxigraph/oxigraph/tests#> .
+
+<>
+	rdf:type mf:Manifest ;
+	rdfs:comment "Oxigraph parser recovery test cases" ;
+	mf:entries (
+	    <#invalid_iri_nt>
+	    <#invalid_iri_ttl>
+	    <#invalid_iri_n3>
+	    <#invalid_bnode_nt>
+	    <#invalid_bnode_ttl>
+	    <#invalid_bnode_n3>
+	    <#invalid_string_nt>
+	    <#invalid_string_ttl>
+	    <#invalid_string_n3>
+	    <#missing_dot_at_end_of_triple_with_iri_middle_nt>
+	    <#missing_dot_at_end_of_triple_with_iri_middle_ttl>
+	    <#missing_dot_at_end_of_triple_with_iri_end_nt>
+	    <#missing_dot_at_end_of_triple_with_iri_end_ttl>
+	    <#missing_dot_at_end_of_triple_with_string_middle_nt>
+	    <#missing_dot_at_end_of_triple_with_string_middle_ttl>
+	    <#missing_dot_at_end_of_triple_with_string_end_nt>
+	    <#missing_dot_at_end_of_triple_with_string_end_ttl>
+	) .
+
+<#invalid_iri_nt>
+	rdf:type ox:TestNTripleRecovery ;
+	mf:name "IRI with space" ;
+	mf:action <invalid_iri.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_iri_ttl>
+	rdf:type ox:TestTurtleRecovery ;
+	mf:name "IRI with space" ;
+	mf:action <invalid_iri.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_iri_n3>
+	rdf:type ox:TestN3Recovery ;
+	mf:name "IRI with space" ;
+	mf:action <invalid_iri.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_bnode_nt>
+	rdf:type ox:TestNTripleRecovery ;
+	mf:name "bad character in blank node" ;
+	mf:action <invalid_bnode.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_bnode_ttl>
+	rdf:type ox:TestTurtleRecovery ;
+	mf:name "bad character in blank node" ;
+	mf:action <invalid_bnode.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_bnode_n3>
+	rdf:type ox:TestN3Recovery ;
+	mf:name "bad character in blank node" ;
+	mf:action <invalid_bnode.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_string_nt>
+	rdf:type ox:TestNTripleRecovery ;
+	mf:name "invalid escape sequence in string" ;
+	mf:action <invalid_string.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_string_ttl>
+	rdf:type ox:TestTurtleRecovery ;
+	mf:name "invalid escape sequence in string" ;
+	mf:action <invalid_string.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#invalid_string_n3>
+	rdf:type ox:TestN3Recovery ;
+	mf:name "invalid escape sequence in string" ;
+	mf:action <invalid_string.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_iri_middle_nt>
+	rdf:type ox:TestNTripleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_iri_middle.nt> ;
+	mf:result <iri2_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_iri_middle_ttl>
+	rdf:type ox:TestTurtleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_iri_middle.nt> ;
+	mf:result <iri2_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_iri_end_nt>
+	rdf:type ox:TestNTripleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_iri_end.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_iri_end_ttl>
+	rdf:type ox:TestTurtleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_iri_end.nt> ;
+	mf:result <iri_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_string_middle_nt>
+	rdf:type ox:TestNTripleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_string_middle.nt> ;
+	mf:result <iri2_string_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_string_middle_ttl>
+	rdf:type ox:TestTurtleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_string_middle.nt> ;
+	mf:result <iri2_string_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_string_end_nt>
+	rdf:type ox:TestNTripleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_string_end.nt> ;
+	mf:result <iri_string_spo.nt> .
+
+<#missing_dot_at_end_of_triple_with_string_end_ttl>
+	rdf:type ox:TestTurtleRecovery ;
+	mf:name "missing dot at the end of a triple" ;
+	mf:action <missing_dot_at_end_of_triple_with_string_end.nt> ;
+	mf:result <iri_string_spo.nt> .

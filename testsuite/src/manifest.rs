@@ -279,7 +279,7 @@ impl TestManifest {
             return Ok(None);
         };
         self.graph.clear();
-        load_to_graph(&url, &mut self.graph, guess_graph_format(&url)?)?;
+        load_to_graph(&url, &mut self.graph, guess_graph_format(&url)?, false)?;
 
         let manifests = self
             .graph

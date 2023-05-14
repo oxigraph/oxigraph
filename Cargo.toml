@@ -4,6 +4,7 @@ members = [
     "lib",
     "lib/oxrdf",
     "lib/oxsdatatypes",
+    "lib/oxttl",
     "lib/spargebra",
     "lib/sparesults",
     "lib/sparopt",

@@ -1,0 +1,10 @@
+base <http://example.com/>
+prefix prefix: <prefix/>
+prefix base: <base/>
+prefix graph: <graph/>
+prefix true: <true/>
+prefix false: <false/>
+
+prefix:s prefix:p true:o .
+base:s base:p false:o .
+graph:g { graph:s graph:p graph:o . }

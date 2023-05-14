@@ -1,6 +1,8 @@
 use anyhow::{anyhow, bail, Result};
 use oxigraph::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use oxigraph::model::{Dataset, Graph};
+use oxttl::n3::N3Quad;
+use oxttl::N3Parser;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -18,6 +20,8 @@ pub fn read_file(url: &str) -> Result<impl BufRead> {
             "https://github.com/oxigraph/oxigraph/tests/",
             "oxigraph-tests/",
         )
+    } else if url.starts_with("http://drobilla.net/sw/serd/test/") {
+        url.replace("http://drobilla.net/sw/serd/test/", "serd-tests/")
     } else {
         bail!("Not supported url for file: {url}")
     });
@@ -30,17 +34,33 @@ pub fn read_file_to_string(url: &str) -> Result<String> {
     Ok(buf)
 }
 
-pub fn load_to_graph(url: &str, graph: &mut Graph, format: GraphFormat) -> Result<()> {
+pub fn load_to_graph(
+    url: &str,
+    graph: &mut Graph,
+    format: GraphFormat,
+    ignore_errors: bool,
+) -> Result<()> {
     let parser = GraphParser::from_format(format).with_base_iri(url)?;
-    for t in parser.read_triples(read_file(url)?)? {
-        graph.insert(&t?);
+    for t in parser.read_triples(read_file(url)?) {
+        match t {
+            Ok(t) => {
+                graph.insert(&t);
+            }
+            Err(e) => {
+                if ignore_errors {
+                    continue;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
     }
     Ok(())
 }
 
-pub fn load_graph(url: &str, format: GraphFormat) -> Result<Graph> {
+pub fn load_graph(url: &str, format: GraphFormat, ignore_errors: bool) -> Result<Graph> {
     let mut graph = Graph::new();
-    load_to_graph(url, &mut graph, format)?;
+    load_to_graph(url, &mut graph, format, ignore_errors)?;
     Ok(graph)
 }
 
@@ -50,17 +70,33 @@ pub fn guess_graph_format(url: &str) -> Result<GraphFormat> {
         .ok_or_else(|| anyhow!("Serialization type not found for {url}"))
 }
 
-pub fn load_to_dataset(url: &str, dataset: &mut Dataset, format: DatasetFormat) -> Result<()> {
+pub fn load_to_dataset(
+    url: &str,
+    dataset: &mut Dataset,
+    format: DatasetFormat,
+    ignore_errors: bool,
+) -> Result<()> {
     let parser = DatasetParser::from_format(format).with_base_iri(url)?;
-    for q in parser.read_quads(read_file(url)?)? {
-        dataset.insert(&q?);
+    for q in parser.read_quads(read_file(url)?) {
+        match q {
+            Ok(q) => {
+                dataset.insert(&q);
+            }
+            Err(e) => {
+                if ignore_errors {
+                    continue;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
     }
     Ok(())
 }
 
-pub fn load_dataset(url: &str, format: DatasetFormat) -> Result<Dataset> {
+pub fn load_dataset(url: &str, format: DatasetFormat, ignore_errors: bool) -> Result<Dataset> {
     let mut dataset = Dataset::new();
-    load_to_dataset(url, &mut dataset, format)?;
+    load_to_dataset(url, &mut dataset, format, ignore_errors)?;
     Ok(dataset)
 }
 
@@ -68,4 +104,25 @@ pub fn guess_dataset_format(url: &str) -> Result<DatasetFormat> {
     url.rsplit_once('.')
         .and_then(|(_, extension)| DatasetFormat::from_extension(extension))
         .ok_or_else(|| anyhow!("Serialization type not found for {url}"))
+}
+
+pub fn load_n3(url: &str, ignore_errors: bool) -> Result<Vec<N3Quad>> {
+    let mut quads = Vec::new();
+    for q in N3Parser::new()
+        .with_base_iri(url)?
+        .with_prefix("", format!("{url}#"))?
+        .parse_from_read(read_file(url)?)
+    {
+        match q {
+            Ok(q) => quads.push(q),
+            Err(e) => {
+                if ignore_errors {
+                    continue;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
+    Ok(quads)
 }

@@ -7,7 +7,7 @@ use oxigraph::store::Store;
 use rand::random;
 use std::env::temp_dir;
 use std::fs::{remove_dir_all, File};
-use std::io::{BufRead, BufReader, Cursor, Read};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 fn store_load(c: &mut Criterion) {
@@ -64,7 +64,7 @@ fn store_load(c: &mut Criterion) {
 fn do_load(store: &Store, data: &[u8]) {
     store
         .load_graph(
-            Cursor::new(&data),
+            data,
             GraphFormat::NTriples,
             GraphNameRef::DefaultGraph,
             None,
@@ -77,7 +77,7 @@ fn do_bulk_load(store: &Store, data: &[u8]) {
     store
         .bulk_loader()
         .load_graph(
-            Cursor::new(&data),
+            data,
             GraphFormat::NTriples,
             GraphNameRef::DefaultGraph,
             None,

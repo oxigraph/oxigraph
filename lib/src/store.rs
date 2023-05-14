@@ -480,9 +480,7 @@ impl Store {
                 .with_base_iri(base_iri)
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
-        let quads = parser
-            .read_triples(reader)?
-            .collect::<Result<Vec<_>, _>>()?;
+        let quads = parser.read_triples(reader).collect::<Result<Vec<_>, _>>()?;
         let to_graph_name = to_graph_name.into();
         self.storage.transaction(move |mut t| {
             for quad in &quads {
@@ -525,7 +523,7 @@ impl Store {
                 .with_base_iri(base_iri)
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
-        let quads = parser.read_quads(reader)?.collect::<Result<Vec<_>, _>>()?;
+        let quads = parser.read_quads(reader).collect::<Result<Vec<_>, _>>()?;
         self.storage.transaction(move |mut t| {
             for quad in &quads {
                 t.insert(quad.into())?;
@@ -647,7 +645,7 @@ impl Store {
         writer: impl Write,
         format: DatasetFormat,
     ) -> Result<(), SerializerError> {
-        let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
+        let mut writer = DatasetSerializer::from_format(format).quad_writer(writer);
         for quad in self.iter() {
             writer.write(&quad?)?;
         }
@@ -1091,7 +1089,7 @@ impl<'a> Transaction<'a> {
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         let to_graph_name = to_graph_name.into();
-        for triple in parser.read_triples(reader)? {
+        for triple in parser.read_triples(reader) {
             self.writer
                 .insert(triple?.as_ref().in_graph(to_graph_name))?;
         }
@@ -1131,7 +1129,7 @@ impl<'a> Transaction<'a> {
                 .with_base_iri(base_iri)
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
-        for quad in parser.read_quads(reader)? {
+        for quad in parser.read_quads(reader) {
             self.writer.insert(quad?.as_ref())?;
         }
         Ok(())
@@ -1470,7 +1468,7 @@ impl BulkLoader {
                 .with_base_iri(base_iri)
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
-        self.load_ok_quads(parser.read_quads(reader)?.filter_map(|r| match r {
+        self.load_ok_quads(parser.read_quads(reader).filter_map(|r| match r {
             Ok(q) => Some(Ok(q)),
             Err(e) => {
                 if let Some(callback) = &self.on_parse_error {
@@ -1527,7 +1525,7 @@ impl BulkLoader {
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
         let to_graph_name = to_graph_name.into();
-        self.load_ok_quads(parser.read_triples(reader)?.filter_map(|r| match r {
+        self.load_ok_quads(parser.read_triples(reader).filter_map(|r| match r {
             Ok(q) => Some(Ok(q.in_graph(to_graph_name.into_owned()))),
             Err(e) => {
                 if let Some(callback) = &self.on_parse_error {

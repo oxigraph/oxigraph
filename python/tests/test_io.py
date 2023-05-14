@@ -110,5 +110,5 @@ class TestSerialize(unittest.TestCase):
         serialize([EXAMPLE_QUAD], output, "application/trig")
         self.assertEqual(
             output.getvalue(),
-            b'<http://example.com/g> { <http://example.com/foo> <http://example.com/p> "1" }\n',
+            b'<http://example.com/g> {\n\t<http://example.com/foo> <http://example.com/p> "1" .\n}\n',
         )

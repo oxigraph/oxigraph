@@ -1,0 +1,90 @@
+@prefix mf: <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdft: <http://www.w3.org/ns/rdftest#> .
+
+<>
+	rdf:type mf:Manifest ;
+	rdfs:comment "Oxigraph parsers test case" ;
+	mf:entries (
+		<#blank_node_with_linebreak>
+		<#bad_lang>
+		<#language_normalization_ttl>
+		<#language_normalization_xml>
+		<#xml_entities>
+		<#xml_nested_entities>
+		<#literal_value_space>
+		<#bad_parentheses>
+		<#keyword_vs_prefix_ttl>
+        <#keyword_vs_prefix_trig>
+        <#at_keywords_as_lang_tag>
+	) .
+
+<#no_end_line_jump>
+	rdf:type rdft:TestNTriplesPositiveSyntax ;
+	mf:name "No line jump at the end of the file" ;
+	mf:action <no_end_line_jump.nt> .
+
+<#blank_node_with_linebreak>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "blank node with linebreak" ;
+	mf:action <blank_node_with_linebreak.ttl> ;
+	mf:result <blank_node_with_linebreak.nt> .
+
+<#language_normalization_ttl>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "language case normalization" ;
+	mf:action <language_normalization.ttl> ;
+	mf:result <language_normalization.nt> .
+
+<#language_normalization_xml>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "language case normalization" ;
+	mf:action <language_normalization.rdf> ;
+	mf:result <language_normalization.nt> .
+
+<#bad_lang>
+	rdf:type rdft:TestTurtleNegativeSyntax ;
+	mf:name "bad language tag" ;
+	mf:action <bad_lang.ttl> .
+
+<#xml_entities>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "custom XML entities" ;
+	mf:action <xml_entities.rdf> ;
+	mf:result <xml_entities.nt> .
+
+<#xml_nested_entities>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "custom XML entities with nested definitions" ;
+	mf:action <xml_nested_entities.rdf> ;
+	mf:result <xml_nested_entities.nt> .
+
+<#literal_value_space>
+	rdf:type rdft:TestXMLEval ;
+	mf:name "spaces in literal values" ;
+	mf:action <literal_value_space.rdf> ;
+	mf:result <literal_value_space.nt> .
+
+<#bad_parentheses>
+	rdf:type rdft:TestTurtleNegativeSyntax ;
+	mf:name "a lot of parentheses that might generate a stack overflow" ;
+	mf:action <bad_parentheses.ttl> .
+
+<#keyword_vs_prefix_ttl>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "usage of keywords as prefix" ;
+	mf:action <keyword_vs_prefix.ttl> ;
+	mf:result <keyword_vs_prefix.nt> .
+
+<#keyword_vs_prefix_trig>
+	rdf:type rdft:TestTrigEval ;
+	mf:name "usage of keywords as prefix" ;
+	mf:action <keyword_vs_prefix.trig> ;
+	mf:result <keyword_vs_prefix.nq> .
+
+<#at_keywords_as_lang_tag>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "usage of at keywords as language tags" ;
+	mf:action <at_keywords_as_lang_tag.ttl> ;
+	mf:result <at_keywords_as_lang_tag.nt> .
