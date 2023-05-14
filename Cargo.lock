@@ -948,10 +948,10 @@ dependencies = [
  "oxrdf",
  "oxrocksdb-sys",
  "oxsdatatypes",
+ "oxttl",
  "rand",
  "regex",
  "rio_api",
- "rio_turtle",
  "rio_xml",
  "sha-1",
  "sha2",
@@ -998,7 +998,11 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "criterion",
  "oxigraph",
+ "oxttl",
+ "rio_api",
+ "rio_turtle",
  "spargebra",
  "sparopt",
  "text-diff",
@@ -1041,6 +1045,16 @@ name = "oxsdatatypes"
 version = "0.2.0-alpha.1-dev"
 dependencies = [
  "js-sys",
+]
+
+[[package]]
+name = "oxttl"
+version = "0.1.0"
+dependencies = [
+ "memchr",
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
 ]
 
 [[package]]

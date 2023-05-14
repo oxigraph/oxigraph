@@ -305,7 +305,8 @@ class TestStore(unittest.TestCase):
         store.dump(output, "application/trig")
         self.assertEqual(
             output.getvalue(),
-            b"<http://foo> <http://bar> <http://baz> .\n<http://graph> { <http://foo> <http://bar> <http://baz> }\n",
+            b"<http://foo> <http://bar> <http://baz> .\n"
+            b"<http://graph> {\n\t<http://foo> <http://bar> <http://baz> .\n}\n",
         )
 
     def test_dump_file(self) -> None:

@@ -946,7 +946,7 @@ fn handle_request(
                 ReadForWrite::build_response(
                     move |w| {
                         Ok((
-                            DatasetSerializer::from_format(format).quad_writer(w)?,
+                            DatasetSerializer::from_format(format).quad_writer(w),
                             store.iter(),
                         ))
                     },

@@ -1,5 +1,4 @@
 use oxiri::IriParseError;
-use rio_turtle::TurtleError;
 use rio_xml::RdfXmlError;
 use std::error::Error;
 use std::{fmt, io};
@@ -45,23 +44,26 @@ impl Error for ParseError {
     }
 }
 
-impl From<TurtleError> for ParseError {
+impl From<oxttl::ParseError> for ParseError {
     #[inline]
-    fn from(error: TurtleError) -> Self {
-        let error = io::Error::from(error);
-        if error.get_ref().map_or(
-            false,
-            <(dyn Error + Send + Sync + 'static)>::is::<TurtleError>,
-        ) {
-            Self::Syntax(SyntaxError {
-                inner: SyntaxErrorKind::Turtle(*error.into_inner().unwrap().downcast().unwrap()),
-            })
-        } else {
-            Self::Io(error)
+    fn from(error: oxttl::ParseError) -> Self {
+        Self::Syntax(SyntaxError {
+            inner: SyntaxErrorKind::Turtle(error),
+        })
+    }
+}
+
+impl From<oxttl::ParseOrIoError> for ParseError {
+    #[inline]
+    fn from(error: oxttl::ParseOrIoError) -> Self {
+        match error {
+            oxttl::ParseOrIoError::Parse(e) => e.into(),
+            oxttl::ParseOrIoError::Io(e) => e.into(),
         }
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<RdfXmlError> for ParseError {
     #[inline]
     fn from(error: RdfXmlError) -> Self {
@@ -111,7 +113,7 @@ pub struct SyntaxError {
 
 #[derive(Debug)]
 enum SyntaxErrorKind {
-    Turtle(TurtleError),
+    Turtle(oxttl::ParseError),
     RdfXml(RdfXmlError),
     InvalidBaseIri { iri: String, error: IriParseError },
 }

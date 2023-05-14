@@ -1,0 +1,2 @@
+<http://example.com/s> <http://example.com/p> "foo"@base .
+<http://example.com/s> <http://example.com/p> "bar"@prefix .

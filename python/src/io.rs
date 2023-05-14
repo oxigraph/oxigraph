@@ -68,7 +68,7 @@ pub fn parse(
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyTripleReader {
-            inner: py.allow_threads(|| parser.read_triples(input).map_err(map_parse_error))?,
+            inner: parser.read_triples(input),
         }
         .into_py(py))
     } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
@@ -79,7 +79,7 @@ pub fn parse(
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
         Ok(PyQuadReader {
-            inner: py.allow_threads(|| parser.read_quads(input).map_err(map_parse_error))?,
+            inner: parser.read_quads(input),
         }
         .into_py(py))
     } else {
@@ -136,9 +136,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
         writer.finish().map_err(map_io_err)?;
         Ok(())
     } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-        let mut writer = DatasetSerializer::from_format(dataset_format)
-            .quad_writer(output)
-            .map_err(map_io_err)?;
+        let mut writer = DatasetSerializer::from_format(dataset_format).quad_writer(output);
         for i in input.iter()? {
             writer
                 .write(&*i?.extract::<PyRef<PyQuad>>()?)

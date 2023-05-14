@@ -2,6 +2,10 @@
 
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
+use oxttl::nquads::{NQuadsSerializer, ToWriteNQuadsWriter};
+use oxttl::ntriples::{NTriplesSerializer, ToWriteNTriplesWriter};
+use oxttl::trig::{ToWriteTriGWriter, TriGSerializer};
+use oxttl::turtle::{ToWriteTurtleWriter, TurtleSerializer};
 use rio_api::formatter::TriplesFormatter;
 use rio_api::model as rio;
 use rio_xml::RdfXmlFormatter;
@@ -45,7 +49,12 @@ impl GraphSerializer {
     pub fn triple_writer<W: Write>(&self, writer: W) -> io::Result<TripleWriter<W>> {
         Ok(TripleWriter {
             formatter: match self.format {
-                GraphFormat::NTriples | GraphFormat::Turtle => TripleWriterKind::NTriples(writer),
+                GraphFormat::NTriples => {
+                    TripleWriterKind::NTriples(NTriplesSerializer::new().serialize_to_write(writer))
+                }
+                GraphFormat::Turtle => {
+                    TripleWriterKind::Turtle(TurtleSerializer::new().serialize_to_write(writer))
+                }
                 GraphFormat::RdfXml => TripleWriterKind::RdfXml(RdfXmlFormatter::new(writer)?),
             },
         })
@@ -79,71 +88,73 @@ pub struct TripleWriter<W: Write> {
 }
 
 enum TripleWriterKind<W: Write> {
-    NTriples(W),
+    NTriples(ToWriteNTriplesWriter<W>),
+    Turtle(ToWriteTurtleWriter<W>),
     RdfXml(RdfXmlFormatter<W>),
 }
 
 impl<W: Write> TripleWriter<W> {
     /// Writes a triple
     pub fn write<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> io::Result<()> {
-        let triple = triple.into();
         match &mut self.formatter {
-            TripleWriterKind::NTriples(writer) => {
-                writeln!(writer, "{triple} .")?;
-            }
-            TripleWriterKind::RdfXml(formatter) => formatter.format(&rio::Triple {
-                subject: match triple.subject {
-                    SubjectRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
-                    SubjectRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
-                    SubjectRef::Triple(_) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "RDF/XML does not support RDF-star yet",
-                        ))
-                    }
-                },
-                predicate: rio::NamedNode {
-                    iri: triple.predicate.as_str(),
-                },
-                object: match triple.object {
-                    TermRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
-                    TermRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
-                    TermRef::Literal(literal) => if literal.is_plain() {
-                        if let Some(language) = literal.language() {
-                            rio::Literal::LanguageTaggedString {
-                                value: literal.value(),
-                                language,
+            TripleWriterKind::NTriples(writer) => writer.write_triple(triple),
+            TripleWriterKind::Turtle(writer) => writer.write_triple(triple),
+            TripleWriterKind::RdfXml(formatter) => {
+                let triple = triple.into();
+                formatter.format(&rio::Triple {
+                    subject: match triple.subject {
+                        SubjectRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
+                        SubjectRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
+                        SubjectRef::Triple(_) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "RDF/XML does not support RDF-star yet",
+                            ))
+                        }
+                    },
+                    predicate: rio::NamedNode {
+                        iri: triple.predicate.as_str(),
+                    },
+                    object: match triple.object {
+                        TermRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
+                        TermRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
+                        TermRef::Literal(literal) => if literal.is_plain() {
+                            if let Some(language) = literal.language() {
+                                rio::Literal::LanguageTaggedString {
+                                    value: literal.value(),
+                                    language,
+                                }
+                            } else {
+                                rio::Literal::Simple {
+                                    value: literal.value(),
+                                }
                             }
                         } else {
-                            rio::Literal::Simple {
+                            rio::Literal::Typed {
                                 value: literal.value(),
+                                datatype: rio::NamedNode {
+                                    iri: literal.datatype().as_str(),
+                                },
                             }
                         }
-                    } else {
-                        rio::Literal::Typed {
-                            value: literal.value(),
-                            datatype: rio::NamedNode {
-                                iri: literal.datatype().as_str(),
-                            },
+                        .into(),
+                        TermRef::Triple(_) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "RDF/XML does not support RDF-star yet",
+                            ))
                         }
-                    }
-                    .into(),
-                    TermRef::Triple(_) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "RDF/XML does not support RDF-star yet",
-                        ))
-                    }
-                },
-            })?,
+                    },
+                })
+            }
         }
-        Ok(())
     }
 
     /// Writes the last bytes of the file
     pub fn finish(self) -> io::Result<()> {
         match self.formatter {
-            TripleWriterKind::NTriples(mut writer) => writer.flush(),
+            TripleWriterKind::NTriples(writer) => writer.finish().flush(),
+            TripleWriterKind::Turtle(writer) => writer.finish()?.flush(),
             TripleWriterKind::RdfXml(formatter) => formatter.finish()?.flush(), //TODO: remove flush when the next version of Rio is going to be released
         }
     }
@@ -160,7 +171,7 @@ impl<W: Write> TripleWriter<W> {
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer)?;
+/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer);
 /// writer.write(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
@@ -184,14 +195,17 @@ impl DatasetSerializer {
     }
 
     /// Returns a [`QuadWriter`] allowing writing triples into the given [`Write`] implementation
-    #[allow(clippy::unnecessary_wraps)]
-    pub fn quad_writer<W: Write>(&self, writer: W) -> io::Result<QuadWriter<W>> {
-        Ok(QuadWriter {
+    pub fn quad_writer<W: Write>(&self, writer: W) -> QuadWriter<W> {
+        QuadWriter {
             formatter: match self.format {
-                DatasetFormat::NQuads => QuadWriterKind::NQuads(writer),
-                DatasetFormat::TriG => QuadWriterKind::TriG(writer),
+                DatasetFormat::NQuads => {
+                    QuadWriterKind::NQuads(NQuadsSerializer::new().serialize_to_write(writer))
+                }
+                DatasetFormat::TriG => {
+                    QuadWriterKind::TriG(TriGSerializer::new().serialize_to_write(writer))
+                }
             },
-        })
+        }
     }
 }
 
@@ -205,7 +219,7 @@ impl DatasetSerializer {
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer)?;
+/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer);
 /// writer.write(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
@@ -223,39 +237,24 @@ pub struct QuadWriter<W: Write> {
 }
 
 enum QuadWriterKind<W: Write> {
-    NQuads(W),
-    TriG(W),
+    NQuads(ToWriteNQuadsWriter<W>),
+    TriG(ToWriteTriGWriter<W>),
 }
 
 impl<W: Write> QuadWriter<W> {
     /// Writes a quad
     pub fn write<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
-        let quad = quad.into();
         match &mut self.formatter {
-            QuadWriterKind::NQuads(writer) => {
-                writeln!(writer, "{quad} .")?;
-            }
-            QuadWriterKind::TriG(writer) => {
-                if quad.graph_name.is_default_graph() {
-                    writeln!(writer, "{} .", TripleRef::from(quad))
-                } else {
-                    writeln!(
-                        writer,
-                        "{} {{ {} }}",
-                        quad.graph_name,
-                        TripleRef::from(quad)
-                    )
-                }?;
-            }
+            QuadWriterKind::NQuads(writer) => writer.write_quad(quad),
+            QuadWriterKind::TriG(writer) => writer.write_quad(quad),
         }
-        Ok(())
     }
 
     /// Writes the last bytes of the file
-    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     pub fn finish(self) -> io::Result<()> {
         match self.formatter {
-            QuadWriterKind::NQuads(mut writer) | QuadWriterKind::TriG(mut writer) => writer.flush(),
+            QuadWriterKind::NQuads(writer) => writer.finish().flush(),
+            QuadWriterKind::TriG(writer) => writer.finish()?.flush(),
         }
     }
 }
