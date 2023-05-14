@@ -1,8 +1,8 @@
 /* global describe, it */
 
 import { Store } from "../pkg/oxigraph.js";
-import assert from "assert";
 import dataModel from "@rdfjs/data-model";
+import assert from "assert";
 
 const ex = dataModel.namedNode("http://example.com");
 const triple = dataModel.quad(
