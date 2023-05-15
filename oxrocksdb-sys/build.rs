@@ -88,8 +88,6 @@ fn build_rocksdb() {
             config.define("HAVE_LZCNT", Some("1"));
             config.flag_if_supported("-mlzcnt");
         }
-    } else if target.contains("aarch64") {
-        lib_sources.push("util/crc32c_arm64.cc")
     }
 
     if target.contains("apple-ios") {
