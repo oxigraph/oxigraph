@@ -17,9 +17,13 @@ use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{max, min};
+#[cfg(target_os = "linux")]
+use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+#[cfg(target_os = "linux")]
+use std::os::unix::net::UnixDatagram;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -776,6 +780,8 @@ fn serve(store: Store, bind: String, read_only: bool, cors: bool) -> anyhow::Res
     };
     server.set_global_timeout(HTTP_TIMEOUT);
     server.set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))?;
+    #[cfg(target_os = "linux")]
+    systemd_notify_ready()?;
     eprintln!("Listening for requests at http://{}", &bind);
     server.listen(bind)?;
     Ok(())
@@ -1696,6 +1702,14 @@ impl Write for ReadForWriteWriter {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.buffer.borrow_mut().write_all(buf)
     }
+}
+
+#[cfg(target_os = "linux")]
+fn systemd_notify_ready() -> io::Result<()> {
+    if let Some(path) = env::var_os("NOTIFY_SOCKET") {
+        UnixDatagram::unbound()?.send_to(b"READY=1", path)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
