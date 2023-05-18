@@ -1537,19 +1537,24 @@ fn web_load_graph(
     format: GraphFormat,
     to_graph_name: GraphNameRef<'_>,
 ) -> Result<(), HttpError> {
+    let base_iri = if let GraphNameRef::NamedNode(graph_name) = to_graph_name {
+        Some(graph_name.as_str())
+    } else {
+        None
+    };
     if url_query_parameter(request, "no_transaction").is_some() {
         web_bulk_loader(store, request).load_graph(
             BufReader::new(request.body_mut()),
             format,
             to_graph_name,
-            None,
+            base_iri,
         )
     } else {
         store.load_graph(
             BufReader::new(request.body_mut()),
             format,
             to_graph_name,
-            None,
+            base_iri,
         )
     }
     .map_err(loader_to_http_error)
@@ -2378,6 +2383,53 @@ mod tests {
             )
             .build(),
             Status::NOT_FOUND,
+        )
+    }
+
+    #[test]
+    fn graph_store_base_url() -> Result<()> {
+        let server = ServerTest::new()?;
+
+        // POST
+        let request = Request::builder(
+            Method::POST,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<> <http://example.com/p> <http://example.com/o1> .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com> <http://example.com/p> <http://example.com/o1> .\n",
+        )?;
+
+        // PUT
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<> <http://example.com/p> <http://example.com/o2> .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com> <http://example.com/p> <http://example.com/o2> .\n",
         )
     }
 
