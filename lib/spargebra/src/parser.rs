@@ -1473,7 +1473,7 @@ parser! {
         rule InlineDataFull_value() -> Option<GroundTerm> = v:DataBlockValue() _ { v }
 
         rule DataBlockValue() -> Option<GroundTerm> =
-            t:EmbTriple() {?
+            t:QuotedTripleData() {?
                 #[cfg(feature = "rdf-star")]{Ok(Some(t.into()))}
                 #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
             } /
@@ -1522,7 +1522,7 @@ parser! {
         rule ConstructTriples_item() -> Vec<TriplePattern> = t:TriplesSameSubject() _ { t }
 
         rule TriplesSameSubject() -> Vec<TriplePattern> =
-            s:VarOrTermOrEmbTP() _ po:PropertyListNotEmpty() {?
+            s:VarOrTerm() _ po:PropertyListNotEmpty() {?
                 let mut patterns = po.patterns;
                 for (p, os) in po.focus {
                     for o in os {
@@ -1571,7 +1571,7 @@ parser! {
         }
         rule ObjectList_item() -> FocusedTriplePattern<AnnotatedTerm> = o:Object() _ { o }
 
-        rule Object() -> FocusedTriplePattern<AnnotatedTerm> = g:GraphNode() _ a:AnnotationPattern()? {
+        rule Object() -> FocusedTriplePattern<AnnotatedTerm> = g:GraphNode() _ a:Annotation()? {
             if let Some(a) = a {
                 let mut patterns = g.patterns;
                 patterns.extend(a.patterns);
@@ -1594,7 +1594,7 @@ parser! {
         }
 
         rule TriplesSameSubjectPath() -> Vec<TripleOrPathPattern> =
-            s:VarOrTermOrEmbTP() _ po:PropertyListPathNotEmpty() {?
+            s:VarOrTerm() _ po:PropertyListPathNotEmpty() {?
                 let mut patterns = po.patterns;
                 for (p, os) in po.focus {
                     for o in os {
@@ -1655,7 +1655,7 @@ parser! {
         }
         rule ObjectListPath_item() -> FocusedTripleOrPathPattern<AnnotatedTermPath> = o:ObjectPath() _ { o }
 
-        rule ObjectPath() -> FocusedTripleOrPathPattern<AnnotatedTermPath> = g:GraphNodePath() _ a:AnnotationPatternPath()? {
+        rule ObjectPath() -> FocusedTripleOrPathPattern<AnnotatedTermPath> = g:GraphNodePath() _ a:AnnotationPath()? {
              if let Some(a) = a {
                 let mut patterns = g.patterns;
                 patterns.extend(a.patterns);
@@ -1818,17 +1818,52 @@ parser! {
         }
         rule CollectionPath_item() -> FocusedTripleOrPathPattern<TermPattern> = p:GraphNodePath() _ { p }
 
+
+        rule Annotation() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> = "{|" _ a:PropertyListNotEmpty() _ "|}" { a }
+
+        rule AnnotationPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = "{|" _ a: PropertyListPathNotEmpty() _ "|}" { a }
+
         rule GraphNode() -> FocusedTriplePattern<TermPattern> =
-            t:VarOrTermOrEmbTP() { FocusedTriplePattern::new(t) } /
+            t:VarOrTerm() { FocusedTriplePattern::new(t) } /
             TriplesNode()
 
         rule GraphNodePath() -> FocusedTripleOrPathPattern<TermPattern> =
-            t:VarOrTermOrEmbTP() { FocusedTripleOrPathPattern::new(t) } /
+            t:VarOrTerm() { FocusedTripleOrPathPattern::new(t) } /
             TriplesNodePath()
 
         rule VarOrTerm() -> TermPattern =
             v:Var() { v.into() } /
+            t:QuotedTriple() {?
+                #[cfg(feature = "rdf-star")]{Ok(t.into())}
+                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
+            } /
             t:GraphTerm() { t.into() }
+
+        rule QuotedTriple() -> TriplePattern = "<<" _ s:VarOrTerm() _ p:Verb() _ o:VarOrTerm() _ ">>" {?
+            Ok(TriplePattern {
+                subject: s,
+                predicate: p,
+                object: o
+            })
+        }
+
+        rule QuotedTripleData() -> GroundTriple = "<<" _ s:DataValueTerm() _ p:QuotedTripleData_p() _ o:DataValueTerm() _ ">>" {?
+            Ok(GroundTriple {
+                subject: s.try_into().map_err(|_| "Literals are not allowed in subject position of nested patterns")?,
+                predicate: p,
+                object: o
+            })
+        }
+        rule QuotedTripleData_p() -> NamedNode = i: iri() { i } / "a" { rdf::TYPE.into() }
+
+        rule DataValueTerm() -> GroundTerm = i:iri() { i.into() } /
+            l:RDFLiteral() { l.into() } /
+            l:NumericLiteral() { l.into() } /
+            l:BooleanLiteral() { l.into() } /
+            t:QuotedTripleData() {?
+                #[cfg(feature = "rdf-star")]{Ok(t.into())}
+                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
+            }
 
         rule VarOrIri() -> NamedNodePattern =
             v:Var() { v.into() } /
@@ -1907,13 +1942,26 @@ parser! {
 
         rule PrimaryExpression() -> Expression =
             BrackettedExpression()  /
-            ExprEmbTP() /
+            ExprQuotedTriple() /
             iriOrFunction() /
             v:Var() { v.into() } /
             l:RDFLiteral() { l.into() } /
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
             BuiltInCall()
+
+        rule ExprVarOrTerm() -> Expression =
+            ExprQuotedTriple() /
+            i:iri() { i.into() } /
+            l:RDFLiteral() { l.into() } /
+            l:NumericLiteral() { l.into() } /
+            l:BooleanLiteral() { l.into() } /
+            v:Var() { v.into() }
+
+        rule ExprQuotedTriple() -> Expression = "<<" _ s:ExprVarOrTerm() _ p:Verb() _ o:ExprVarOrTerm() _ ">>" {?
+            #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p.into(), o]))}
+            #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
+        }
 
         rule BrackettedExpression() -> Expression = "(" _ e:Expression() _ ")" { e }
 
@@ -2194,65 +2242,6 @@ parser! {
         rule HEX() = ['0' ..= '9' | 'A' ..= 'F' | 'a' ..= 'f']
 
         rule PN_LOCAL_ESC() = ['\\'] ['_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%'] //TODO: added '/' to make tests pass but is it valid?
-
-        rule EmbTP() -> TriplePattern = "<<" _ s:EmbSubjectOrObject() _ p:Verb() _ o:EmbSubjectOrObject() _ ">>" {
-            TriplePattern { subject: s, predicate: p, object: o }
-        }
-
-        rule EmbTriple() -> GroundTriple = "<<" _ s:DataValueTerm() _ p:EmbTriple_p() _ o:DataValueTerm() _ ">>" {?
-            Ok(GroundTriple {
-                subject: s.try_into().map_err(|_| "Literals are not allowed in subject position of nested patterns")?,
-                predicate: p,
-                object: o
-            })
-        }
-        rule EmbTriple_p() -> NamedNode = i: iri() { i } / "a" { rdf::TYPE.into() }
-
-        rule EmbSubjectOrObject() -> TermPattern =
-            t:EmbTP() {?
-                #[cfg(feature = "rdf-star")]{Ok(t.into())}
-                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triple patterns are only available in SPARQL-star")}
-            } /
-            v:Var() { v.into() } /
-            b:BlankNode() { b.into() } /
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() }
-
-        rule DataValueTerm() -> GroundTerm = i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() } /
-            t:EmbTriple() {?
-                #[cfg(feature = "rdf-star")]{Ok(t.into())}
-                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
-            }
-
-        rule VarOrTermOrEmbTP() -> TermPattern =
-            t:EmbTP() {?
-                #[cfg(feature = "rdf-star")]{Ok(t.into())}
-                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triple patterns are only available in SPARQL-star")}
-            } /
-            v:Var() { v.into() } /
-            t:GraphTerm() { t.into() }
-
-        rule AnnotationPattern() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> = "{|" _ a:PropertyListNotEmpty() _ "|}" { a }
-
-        rule AnnotationPatternPath() -> FocusedTripleOrPathPattern<Vec<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)>> = "{|" _ a: PropertyListPathNotEmpty() _ "|}" { a }
-
-        rule ExprEmbTP() -> Expression = "<<" _ s:ExprVarOrTerm() _ p:Verb() _ o:ExprVarOrTerm() _ ">>" {?
-            #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p.into(), o]))}
-            #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
-        }
-
-        rule ExprVarOrTerm() -> Expression =
-            ExprEmbTP() /
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() } /
-            v:Var() { v.into() }
 
         //space
         rule _() = quiet! { ([' ' | '\t' | '\n' | '\r'] / comment())* }
