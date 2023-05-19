@@ -930,7 +930,6 @@ impl SimpleEvaluator {
         }
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn expression_evaluator(
         &self,
         expression: &PlanExpression,
@@ -1426,7 +1425,11 @@ impl SimpleEvaluator {
                 let arg = self.expression_evaluator(arg, stat_children);
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
-                    Some((to_string(&dataset, &arg(tuple)?)?.chars().count() as i64).into())
+                    Some(
+                        i64::try_from(to_string(&dataset, &arg(tuple)?)?.chars().count())
+                            .ok()?
+                            .into(),
+                    )
                 })
             }
             PlanExpression::StaticReplace(arg, regex, replacement) => {
@@ -2383,11 +2386,6 @@ fn encode_bindings(
     }))
 }
 
-#[allow(
-    clippy::float_cmp,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss
-)]
 fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
     match a {
         EncodedTerm::DefaultGraph
@@ -2655,7 +2653,6 @@ fn partial_cmp(dataset: &DatasetView, a: &EncodedTerm, b: &EncodedTerm) -> Optio
     }
 }
 
-#[allow(clippy::cast_precision_loss)]
 fn partial_cmp_literals(
     dataset: &DatasetView,
     a: &EncodedTerm,
@@ -2913,7 +2910,6 @@ enum NumericBinaryOperands {
 }
 
 impl NumericBinaryOperands {
-    #[allow(clippy::cast_precision_loss)]
     fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {

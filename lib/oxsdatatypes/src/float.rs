@@ -53,8 +53,14 @@ impl Float {
         self.value.round().into()
     }
 
+    #[deprecated(note = "Use .is_nan()")]
     #[inline]
     pub fn is_naan(self) -> bool {
+        self.value.is_nan()
+    }
+
+    #[inline]
+    pub fn is_nan(self) -> bool {
         self.value.is_nan()
     }
 
@@ -68,6 +74,20 @@ impl Float {
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.value.to_ne_bytes() == other.value.to_ne_bytes()
     }
+
+    pub const MIN: Self = Self { value: f32::MIN };
+
+    pub const MAX: Self = Self { value: f32::MAX };
+
+    pub const INFINITY: Self = Self {
+        value: f32::INFINITY,
+    };
+
+    pub const NEG_INFINITY: Self = Self {
+        value: f32::NEG_INFINITY,
+    };
+
+    pub const NAN: Self = Self { value: f32::NAN };
 }
 
 impl From<Float> for f32 {
@@ -233,7 +253,7 @@ mod tests {
     #[test]
     fn eq() {
         assert_eq!(Float::from(0.), Float::from(0.));
-        assert_ne!(Float::from(f32::NAN), Float::from(f32::NAN));
+        assert_ne!(Float::NAN, Float::NAN);
         assert_eq!(Float::from(-0.), Float::from(0.));
     }
 
@@ -244,18 +264,15 @@ mod tests {
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Float::from(f32::INFINITY).partial_cmp(&Float::from(f32::MAX)),
+            Float::INFINITY.partial_cmp(&Float::MAX),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Float::from(f32::NEG_INFINITY).partial_cmp(&Float::from(f32::MIN)),
+            Float::NEG_INFINITY.partial_cmp(&Float::MIN),
             Some(Ordering::Less)
         );
-        assert_eq!(Float::from(f32::NAN).partial_cmp(&Float::from(0.)), None);
-        assert_eq!(
-            Float::from(f32::NAN).partial_cmp(&Float::from(f32::NAN)),
-            None
-        );
+        assert_eq!(Float::NAN.partial_cmp(&Float::from(0.)), None);
+        assert_eq!(Float::NAN.partial_cmp(&Float::NAN), None);
         assert_eq!(
             Float::from(0.).partial_cmp(&Float::from(-0.)),
             Some(Ordering::Equal)
@@ -265,7 +282,7 @@ mod tests {
     #[test]
     fn is_identical_with() {
         assert!(Float::from(0.).is_identical_with(&Float::from(0.)));
-        assert!(Float::from(f32::NAN).is_identical_with(&Float::from(f32::NAN)));
+        assert!(Float::NAN.is_identical_with(&Float::NAN));
         assert!(!Float::from(-0.).is_identical_with(&Float::from(0.)));
     }
 
@@ -285,14 +302,8 @@ mod tests {
         assert_eq!(Float::from_str("-1")?.to_string(), "-1");
         assert_eq!(Float::from_str("1.")?.to_string(), "1");
         assert_eq!(Float::from_str("-1.")?.to_string(), "-1");
-        assert_eq!(
-            Float::from_str(&f32::MIN.to_string())?,
-            Float::from(f32::MIN)
-        );
-        assert_eq!(
-            Float::from_str(&f32::MAX.to_string())?,
-            Float::from(f32::MAX)
-        );
+        assert_eq!(Float::from_str(&f32::MIN.to_string())?, Float::MIN);
+        assert_eq!(Float::from_str(&f32::MAX.to_string())?, Float::MAX);
         Ok(())
     }
 }

@@ -44,6 +44,7 @@ impl DateTime {
         })
     }
 
+    /// [fn:current-dateTime](https://www.w3.org/TR/xpath-functions/#func-current-dateTime)
     #[inline]
     pub fn now() -> Result<Self, DateTimeError> {
         Ok(Self {
@@ -303,6 +304,12 @@ impl Time {
         }
     }
 
+    /// [fn:current-time](https://www.w3.org/TR/xpath-functions/#func-current-time)
+    #[inline]
+    pub fn now() -> Result<Self, DateTimeError> {
+        DateTime::now()?.try_into()
+    }
+
     /// [fn:hour-from-time](https://www.w3.org/TR/xpath-functions/#func-hour-from-time)
     #[inline]
     pub fn hour(&self) -> u8 {
@@ -496,6 +503,12 @@ impl Date {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
         }
+    }
+
+    /// [fn:current-date](https://www.w3.org/TR/xpath-functions/#func-current-date)
+    #[inline]
+    pub fn now() -> Result<Self, DateTimeError> {
+        DateTime::now()?.try_into()
     }
 
     /// [fn:year-from-date](https://www.w3.org/TR/xpath-functions/#func-year-from-date)

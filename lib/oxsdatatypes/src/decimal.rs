@@ -5,10 +5,9 @@ use std::fmt::Write;
 use std::ops::Neg;
 use std::str::FromStr;
 
-const DECIMAL_PART_DIGITS: usize = 18;
+const DECIMAL_PART_DIGITS: u32 = 18;
 const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;
 const DECIMAL_PART_POW_MINUS_ONE: i128 = 100_000_000_000_000_000;
-const DECIMAL_PART_HALF_POW: i128 = 1_000_000_000;
 
 /// [XML Schema `decimal` datatype](https://www.w3.org/TR/xmlschema11-2/#decimal)
 ///
@@ -22,10 +21,9 @@ pub struct Decimal {
 
 impl Decimal {
     /// Constructs the decimal i / 10^n
-    #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub fn new(i: i128, n: u32) -> Result<Self, DecimalOverflowError> {
-        let shift = (DECIMAL_PART_DIGITS as u32)
+        let shift = DECIMAL_PART_DIGITS
             .checked_sub(n)
             .ok_or(DecimalOverflowError)?;
         Ok(Self {
@@ -66,29 +64,69 @@ impl Decimal {
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply)
     #[inline]
     pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
-        //TODO: better algorithm to keep precision
+        // Idea: we shift right as much as possible to keep as much precision as possible
+        // Do the multiplication and do the required left shift
+        let mut left = self.value;
+        let mut shift_left = 0_u32;
+        if left != 0 {
+            while left % 10 == 0 {
+                left /= 10;
+                shift_left += 1;
+            }
+        }
+
+        let mut right = rhs.into().value;
+        let mut shift_right = 0_u32;
+        if right != 0 {
+            while right % 10 == 0 {
+                right /= 10;
+                shift_right += 1;
+            }
+        }
+
+        // We do multiplication + shift
+        let shift = (shift_left + shift_right).checked_sub(DECIMAL_PART_DIGITS)?;
         Some(Self {
-            value: self
-                .value
-                .checked_div(DECIMAL_PART_HALF_POW)?
-                .checked_mul(rhs.into().value.checked_div(DECIMAL_PART_HALF_POW)?)?,
+            value: left
+                .checked_mul(right)?
+                .checked_mul(10_i128.checked_pow(shift)?)?,
         })
     }
 
     /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide)
     #[inline]
     pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
-        //TODO: better algorithm to keep precision
+        // Idea: we shift the dividend left as much as possible to keep as much precision as possible
+        // And we shift right the divisor as much as possible
+        // Do the multiplication and do the required shift
+        let mut left = self.value;
+        let mut shift_left = 0_u32;
+        if left != 0 {
+            while let Some(r) = left.checked_mul(10) {
+                assert_eq!(r / 10, left);
+                left = r;
+                shift_left += 1;
+            }
+        }
+        let mut right = rhs.into().value;
+        let mut shift_right = 0_u32;
+        if right != 0 {
+            while right % 10 == 0 {
+                right /= 10;
+                shift_right += 1;
+            }
+        }
+
+        // We do division + shift
+        let shift = (shift_left + shift_right).checked_sub(DECIMAL_PART_DIGITS)?;
         Some(Self {
-            value: self
-                .value
-                .checked_mul(DECIMAL_PART_HALF_POW)?
-                .checked_div(rhs.into().value)?
-                .checked_mul(DECIMAL_PART_HALF_POW)?,
+            value: left
+                .checked_div(right)?
+                .checked_div(10_i128.checked_pow(shift)?)?,
         })
     }
 
-    /// TODO: XSD? is well defined for not integer
+    /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions/#func-numeric-mod)
     #[inline]
     pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -174,9 +212,7 @@ impl Decimal {
     pub const MAX: Self = Self { value: i128::MAX };
 
     #[cfg(test)]
-    pub(super) const fn step() -> Self {
-        Self { value: 1 }
-    }
+    pub const STEP: Self = Self { value: 1 };
 }
 
 impl From<bool> for Decimal {
@@ -316,13 +352,10 @@ impl TryFrom<Double> for Decimal {
     #[inline]
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     fn try_from(value: Double) -> Result<Self, DecimalOverflowError> {
-        let shifted = value * Double::from(DECIMAL_PART_POW as f64);
-        if shifted.is_finite()
-            && Double::from(i128::MIN as f64) <= shifted
-            && shifted <= Double::from(i128::MAX as f64)
-        {
+        let shifted = f64::from(value) * (DECIMAL_PART_POW as f64);
+        if shifted.is_finite() && (i128::MIN as f64) <= shifted && shifted <= (i128::MAX as f64) {
             Ok(Self {
-                value: f64::from(shifted) as i128,
+                value: shifted as i128,
             })
         } else {
             Err(DecimalOverflowError)
@@ -334,7 +367,7 @@ impl From<Decimal> for Float {
     #[inline]
     #[allow(clippy::cast_precision_loss)]
     fn from(value: Decimal) -> Self {
-        ((value.value as f32) / (DECIMAL_PART_POW as f32)).into()
+        Double::from(value).into()
     }
 }
 
@@ -342,7 +375,18 @@ impl From<Decimal> for Double {
     #[inline]
     #[allow(clippy::cast_precision_loss)]
     fn from(value: Decimal) -> Self {
-        ((value.value as f64) / (DECIMAL_PART_POW as f64)).into()
+        let mut value = value.value;
+        let mut shift = DECIMAL_PART_POW;
+
+        // Hack to improve precision
+        if value != 0 {
+            while shift != 1 && value % 10 == 0 {
+                value /= 10;
+                shift /= 10;
+            }
+        }
+
+        ((value as f64) / (shift as f64)).into()
     }
 }
 
@@ -374,8 +418,8 @@ impl FromStr for Decimal {
         }
 
         let (sign, mut input) = match input.first() {
-            Some(b'+') => (1, &input[1..]),
-            Some(b'-') => (-1, &input[1..]),
+            Some(b'+') => (1_i128, &input[1..]),
+            Some(b'-') => (-1_i128, &input[1..]),
             _ => (1, input),
         };
 
@@ -386,7 +430,7 @@ impl FromStr for Decimal {
                 value = value
                     .checked_mul(10)
                     .ok_or(PARSE_OVERFLOW)?
-                    .checked_add((*c - b'0').into())
+                    .checked_add(sign * i128::from(*c - b'0'))
                     .ok_or(PARSE_OVERFLOW)?;
                 input = &input[1..];
             } else {
@@ -414,7 +458,7 @@ impl FromStr for Decimal {
                     value = value
                         .checked_mul(10)
                         .ok_or(PARSE_OVERFLOW)?
-                        .checked_add((*c - b'0').into())
+                        .checked_add(sign * i128::from(*c - b'0'))
                         .ok_or(PARSE_OVERFLOW)?;
                     input = &input[1..];
                 } else {
@@ -431,11 +475,7 @@ impl FromStr for Decimal {
         }
 
         Ok(Self {
-            value: value
-                .checked_mul(sign)
-                .ok_or(PARSE_OVERFLOW)?
-                .checked_mul(exp)
-                .ok_or(PARSE_OVERFLOW)?,
+            value: value.checked_mul(exp).ok_or(PARSE_OVERFLOW)?,
         })
     }
 }
@@ -476,37 +516,38 @@ impl fmt::Display for Decimal {
             .find_map(|(i, v)| if v == b'0' { None } else { Some(i) })
             .unwrap_or(40);
 
-        if last_non_zero >= DECIMAL_PART_DIGITS {
+        let decimal_part_digits = usize::try_from(DECIMAL_PART_DIGITS).unwrap();
+        if last_non_zero >= decimal_part_digits {
             let end = if let Some(mut width) = f.width() {
                 if self.value.is_negative() {
                     width -= 1;
                 }
-                if last_non_zero - DECIMAL_PART_DIGITS + 1 < width {
-                    DECIMAL_PART_DIGITS + width
+                if last_non_zero - decimal_part_digits + 1 < width {
+                    decimal_part_digits + width
                 } else {
                     last_non_zero + 1
                 }
             } else {
                 last_non_zero + 1
             };
-            for c in digits[DECIMAL_PART_DIGITS..end].iter().rev() {
+            for c in digits[decimal_part_digits..end].iter().rev() {
                 f.write_char(char::from(*c))?;
             }
         } else {
             f.write_char('0')?
         }
-        if DECIMAL_PART_DIGITS > first_non_zero {
+        if decimal_part_digits > first_non_zero {
             f.write_char('.')?;
             let start = if let Some(precision) = f.precision() {
-                if DECIMAL_PART_DIGITS - first_non_zero > precision {
-                    DECIMAL_PART_DIGITS - precision
+                if decimal_part_digits - first_non_zero > precision {
+                    decimal_part_digits - precision
                 } else {
                     first_non_zero
                 }
             } else {
                 first_non_zero
             };
-            for c in digits[start..DECIMAL_PART_DIGITS].iter().rev() {
+            for c in digits[start..decimal_part_digits].iter().rev() {
                 f.write_char(char::from(*c))?;
             }
         }
@@ -626,15 +667,7 @@ mod tests {
         assert_eq!(Decimal::from_str("0")?.to_string(), "0");
         assert_eq!(Decimal::from_str("-0")?.to_string(), "0");
         assert_eq!(Decimal::from_str(&Decimal::MAX.to_string())?, Decimal::MAX);
-        assert_eq!(
-            Decimal::from_str(
-                &Decimal::MIN
-                    .checked_add(Decimal::step())
-                    .unwrap()
-                    .to_string()
-            )?,
-            Decimal::MIN.checked_add(Decimal::step()).unwrap()
-        );
+        assert_eq!(Decimal::from_str(&Decimal::MIN.to_string())?, Decimal::MIN);
         assert!(Decimal::from_str("0.0000000000000000001").is_err());
         assert!(Decimal::from_str("1000000000000000000000").is_err());
         assert_eq!(
@@ -663,58 +696,98 @@ mod tests {
 
     #[test]
     fn add() {
-        assert!(Decimal::MIN.checked_add(Decimal::step()).is_some());
-        assert!(Decimal::MAX.checked_add(Decimal::step()).is_none());
-        assert_eq!(
-            Decimal::MAX.checked_add(Decimal::MIN),
-            Some(-Decimal::step())
-        );
+        assert!(Decimal::MIN.checked_add(Decimal::STEP).is_some());
+        assert!(Decimal::MAX.checked_add(Decimal::STEP).is_none());
+        assert_eq!(Decimal::MAX.checked_add(Decimal::MIN), Some(-Decimal::STEP));
     }
 
     #[test]
     fn sub() {
-        assert!(Decimal::MIN.checked_sub(Decimal::step()).is_none());
-        assert!(Decimal::MAX.checked_sub(Decimal::step()).is_some());
+        assert!(Decimal::MIN.checked_sub(Decimal::STEP).is_none());
+        assert!(Decimal::MAX.checked_sub(Decimal::STEP).is_some());
     }
 
     #[test]
     fn mul() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::from(1).checked_mul(-1), Some(Decimal::from(-1)));
         assert_eq!(
-            Decimal::from_str("1")?.checked_mul(Decimal::from_str("-1")?),
-            Some(Decimal::from_str("-1")?)
-        );
-        assert_eq!(
-            Decimal::from_str("1000")?.checked_mul(Decimal::from_str("1000")?),
-            Some(Decimal::from_str("1000000")?)
+            Decimal::from(1000).checked_mul(1000),
+            Some(Decimal::from(1000000))
         );
         assert_eq!(
             Decimal::from_str("0.1")?.checked_mul(Decimal::from_str("0.01")?),
             Some(Decimal::from_str("0.001")?)
+        );
+        assert_eq!(Decimal::from(0).checked_mul(1), Some(Decimal::from(0)));
+        assert_eq!(Decimal::from(1).checked_mul(0), Some(Decimal::from(0)));
+        assert_eq!(Decimal::MAX.checked_mul(1), Some(Decimal::MAX));
+        assert_eq!(Decimal::MIN.checked_mul(1), Some(Decimal::MIN));
+        assert_eq!(
+            Decimal::from(1).checked_mul(Decimal::MAX),
+            Some(Decimal::MAX)
+        );
+        assert_eq!(
+            Decimal::from(1).checked_mul(Decimal::MIN),
+            Some(Decimal::MIN)
+        );
+        assert_eq!(
+            Decimal::MAX.checked_mul(-1),
+            Some(Decimal::MIN.checked_add(Decimal::STEP).unwrap())
+        );
+        assert_eq!(Decimal::MIN.checked_mul(-1), None);
+        assert_eq!(
+            Decimal::MIN
+                .checked_add(Decimal::STEP)
+                .unwrap()
+                .checked_mul(-1),
+            Some(Decimal::MAX)
         );
         Ok(())
     }
 
     #[test]
     fn div() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::from(1).checked_div(1), Some(Decimal::from(1)));
+        assert_eq!(Decimal::from(100).checked_div(10), Some(Decimal::from(10)));
         assert_eq!(
-            Decimal::from_str("1")?.checked_div(Decimal::from_str("1")?),
-            Some(Decimal::from_str("1")?)
-        );
-        assert_eq!(
-            Decimal::from_str("100")?.checked_div(Decimal::from_str("10")?),
-            Some(Decimal::from_str("10")?)
-        );
-        assert_eq!(
-            Decimal::from_str("10")?.checked_div(Decimal::from_str("100")?),
+            Decimal::from(10).checked_div(100),
             Some(Decimal::from_str("0.1")?)
+        );
+        assert_eq!(Decimal::from(1).checked_div(0), None);
+        assert_eq!(Decimal::from(0).checked_div(1), Some(Decimal::from(0)));
+        assert_eq!(Decimal::MAX.checked_div(1), Some(Decimal::MAX));
+        assert_eq!(Decimal::MIN.checked_div(1), Some(Decimal::MIN));
+        assert_eq!(
+            Decimal::MAX.checked_div(-1),
+            Some(Decimal::MIN.checked_add(Decimal::STEP).unwrap())
+        );
+        assert_eq!(Decimal::MIN.checked_div(-1), None);
+        assert_eq!(
+            Decimal::MIN
+                .checked_add(Decimal::STEP)
+                .unwrap()
+                .checked_div(-1),
+            Some(Decimal::MAX)
         );
         Ok(())
     }
 
     #[test]
+    fn rem() -> Result<(), ParseDecimalError> {
+        assert_eq!(Decimal::from(10).checked_rem(3), Some(Decimal::from(1)));
+        assert_eq!(Decimal::from(6).checked_rem(-2), Some(Decimal::from(0)));
+        assert_eq!(
+            Decimal::from_str("4.5")?.checked_rem(Decimal::from_str("1.2")?),
+            Some(Decimal::from_str("0.9")?)
+        );
+        assert_eq!(Decimal::from(1).checked_rem(0), None);
+        Ok(())
+    }
+
+    #[test]
     fn round() -> Result<(), ParseDecimalError> {
-        assert_eq!(Decimal::from_str("10")?.round(), Decimal::from(10));
-        assert_eq!(Decimal::from_str("-10")?.round(), Decimal::from(-10));
+        assert_eq!(Decimal::from(10).round(), Decimal::from(10));
+        assert_eq!(Decimal::from(-10).round(), Decimal::from(-10));
         assert_eq!(Decimal::from_str("2.5")?.round(), Decimal::from(3));
         assert_eq!(Decimal::from_str("2.4999")?.round(), Decimal::from(2));
         assert_eq!(Decimal::from_str("-2.5")?.round(), Decimal::from(-2));
@@ -725,8 +798,8 @@ mod tests {
 
     #[test]
     fn ceil() -> Result<(), ParseDecimalError> {
-        assert_eq!(Decimal::from_str("10")?.ceil(), Decimal::from(10));
-        assert_eq!(Decimal::from_str("-10")?.ceil(), Decimal::from(-10));
+        assert_eq!(Decimal::from(10).ceil(), Decimal::from(10));
+        assert_eq!(Decimal::from(-10).ceil(), Decimal::from(-10));
         assert_eq!(Decimal::from_str("10.5")?.ceil(), Decimal::from(11));
         assert_eq!(Decimal::from_str("-10.5")?.ceil(), Decimal::from(-10));
         assert_eq!(Decimal::from(i64::MIN).ceil(), Decimal::from(i64::MIN));
@@ -736,8 +809,8 @@ mod tests {
 
     #[test]
     fn floor() -> Result<(), ParseDecimalError> {
-        assert_eq!(Decimal::from_str("10")?.ceil(), Decimal::from(10));
-        assert_eq!(Decimal::from_str("-10")?.ceil(), Decimal::from(-10));
+        assert_eq!(Decimal::from(10).ceil(), Decimal::from(10));
+        assert_eq!(Decimal::from(-10).ceil(), Decimal::from(-10));
         assert_eq!(Decimal::from_str("10.5")?.floor(), Decimal::from(10));
         assert_eq!(Decimal::from_str("-10.5")?.floor(), Decimal::from(-11));
         assert_eq!(Decimal::from(i64::MIN).floor(), Decimal::from(i64::MIN));
@@ -780,11 +853,11 @@ mod tests {
     fn from_float() -> Result<(), ParseDecimalError> {
         assert_eq!(
             Decimal::try_from(Float::from(0.)).ok(),
-            Some(Decimal::from_str("0")?)
+            Some(Decimal::from(0))
         );
         assert_eq!(
             Decimal::try_from(Float::from(-0.)).ok(),
-            Some(Decimal::from_str("0.")?)
+            Some(Decimal::from(0))
         );
         assert_eq!(
             Decimal::try_from(Float::from(-123.5)).ok(),
@@ -798,10 +871,10 @@ mod tests {
         assert!(
             Decimal::try_from(Float::from(1_672_507_302_466.))
                 .unwrap()
-                .checked_sub(Decimal::from_str("1672507302466")?)
+                .checked_sub(Decimal::from(1_672_507_293_696_i64))
                 .unwrap()
                 .abs()
-                < Decimal::from(1_000_000)
+                < Decimal::from(1)
         );
         Ok(())
     }
@@ -810,11 +883,11 @@ mod tests {
     fn from_double() -> Result<(), ParseDecimalError> {
         assert_eq!(
             Decimal::try_from(Double::from(0.)).ok(),
-            Some(Decimal::from_str("0")?)
+            Some(Decimal::from(0))
         );
         assert_eq!(
             Decimal::try_from(Double::from(-0.)).ok(),
-            Some(Decimal::from_str("0")?)
+            Some(Decimal::from(0))
         );
         assert_eq!(
             Decimal::try_from(Double::from(-123.1)).ok(),
@@ -823,7 +896,7 @@ mod tests {
         assert!(
             Decimal::try_from(Double::from(1_672_507_302_466.))
                 .unwrap()
-                .checked_sub(Decimal::from_str("1672507302466")?)
+                .checked_sub(Decimal::from(1_672_507_302_466_i64))
                 .unwrap()
                 .abs()
                 < Decimal::from(1)
@@ -833,6 +906,34 @@ mod tests {
         assert!(Decimal::try_from(Double::from(f64::NEG_INFINITY)).is_err());
         assert!(Decimal::try_from(Double::from(f64::MIN)).is_err());
         assert!(Decimal::try_from(Double::from(f64::MAX)).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn to_float() -> Result<(), ParseDecimalError> {
+        assert_eq!(Float::from(Decimal::from(0)), Float::from(0.));
+        assert_eq!(Float::from(Decimal::from(1)), Float::from(1.));
+        assert_eq!(Float::from(Decimal::from(10)), Float::from(10.));
+        assert_eq!(Float::from(Decimal::from_str("0.1")?), Float::from(0.1));
+        assert!((Float::from(Decimal::MAX) - Float::from(1.701412e20)).abs() < Float::from(1.));
+        assert!((Float::from(Decimal::MIN) - Float::from(-1.701412e20)).abs() < Float::from(1.));
+        Ok(())
+    }
+
+    #[test]
+    fn to_double() -> Result<(), ParseDecimalError> {
+        assert_eq!(Double::from(Decimal::from(0)), Double::from(0.));
+        assert_eq!(Double::from(Decimal::from(1)), Double::from(1.));
+        assert_eq!(Double::from(Decimal::from(10)), Double::from(10.));
+        assert_eq!(Double::from(Decimal::from_str("0.1")?), Double::from(0.1));
+        assert!(
+            (Double::from(Decimal::MAX) - Double::from(1.7014118346046924e20)).abs()
+                < Double::from(1.)
+        );
+        assert!(
+            (Double::from(Decimal::MIN) - Double::from(-1.7014118346046924e20)).abs()
+                < Double::from(1.)
+        );
         Ok(())
     }
 
