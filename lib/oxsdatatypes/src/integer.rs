@@ -58,6 +58,7 @@ impl Integer {
         })
     }
 
+    /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions/#func-numeric-mod)
     #[inline]
     pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -95,6 +96,10 @@ impl Integer {
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self == other
     }
+
+    pub const MIN: Self = Self { value: i64::MIN };
+
+    pub const MAX: Self = Self { value: i64::MAX };
 }
 
 impl From<bool> for Integer {
@@ -311,5 +316,41 @@ mod tests {
         assert!(Integer::try_from(Decimal::MIN).is_err());
         assert!(Integer::try_from(Decimal::MAX).is_err());
         Ok(())
+    }
+
+    #[test]
+    fn add() {
+        assert_eq!(
+            Integer::MIN.checked_add(1),
+            Some(Integer::from(i64::MIN + 1))
+        );
+        assert_eq!(Integer::MAX.checked_add(1), None);
+    }
+
+    #[test]
+    fn sub() {
+        assert_eq!(Integer::MIN.checked_sub(1), None);
+        assert_eq!(
+            Integer::MAX.checked_sub(1),
+            Some(Integer::from(i64::MAX - 1))
+        );
+    }
+
+    #[test]
+    fn mul() {
+        assert_eq!(Integer::MIN.checked_mul(2), None);
+        assert_eq!(Integer::MAX.checked_mul(2), None);
+    }
+
+    #[test]
+    fn div() {
+        assert_eq!(Integer::from(1).checked_div(0), None);
+    }
+
+    #[test]
+    fn rem() {
+        assert_eq!(Integer::from(10).checked_rem(3), Some(Integer::from(1)));
+        assert_eq!(Integer::from(6).checked_rem(-2), Some(Integer::from(0)));
+        assert_eq!(Integer::from(1).checked_rem(0), None);
     }
 }

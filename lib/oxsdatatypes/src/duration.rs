@@ -601,7 +601,7 @@ mod tests {
     fn from_str() -> Result<(), XsdParseError> {
         let min = Duration::new(
             i64::MIN + 1,
-            Decimal::MIN.checked_add(Decimal::step()).unwrap(),
+            Decimal::MIN.checked_add(Decimal::STEP).unwrap(),
         );
         let max = Duration::new(i64::MAX, Decimal::MAX);
 
