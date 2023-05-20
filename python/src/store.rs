@@ -597,10 +597,31 @@ impl PyStore {
         }
     }
 
+    /// Returns if the store contains the given named graph.
+    ///
+    /// :param graph_name: the name of the named graph.
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
+    /// :rtype: None
+    /// :raises IOError: if an I/O error happens during the named graph lookup.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add_graph(NamedNode('http://example.com/g'))
+    /// >>> store.contains_named_graph(NamedNode('http://example.com/g'))
+    /// True
+    fn contains_named_graph(&self, graph_name: &PyAny) -> PyResult<bool> {
+        let graph_name = GraphName::from(&PyGraphNameRef::try_from(graph_name)?);
+        match graph_name {
+            GraphName::DefaultGraph => Ok(true),
+            GraphName::NamedNode(graph_name) => self.inner.contains_named_graph(&graph_name),
+            GraphName::BlankNode(graph_name) => self.inner.contains_named_graph(&graph_name),
+        }
+        .map_err(map_storage_error)
+    }
+
     /// Adds a named graph to the store.
     ///
     /// :param graph_name: the name of the name graph to add.
-    /// :type graph_name: NamedNode or BlankNode
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
     /// :raises IOError: if an I/O error happens during the named graph insertion.
     ///
