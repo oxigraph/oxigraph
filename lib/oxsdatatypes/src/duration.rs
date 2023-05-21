@@ -107,6 +107,14 @@ impl Duration {
         })
     }
 
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            year_month: self.year_month.checked_neg()?,
+            day_time: self.day_time.checked_neg()?,
+        })
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -301,6 +309,13 @@ impl YearMonthDuration {
         })
     }
 
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            months: self.months.checked_neg()?,
+        })
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -464,6 +479,13 @@ impl DayTimeDuration {
         let rhs = rhs.into();
         Some(Self {
             seconds: self.seconds.checked_sub(rhs.seconds)?,
+        })
+    }
+
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            seconds: self.seconds.checked_neg()?,
         })
     }
 

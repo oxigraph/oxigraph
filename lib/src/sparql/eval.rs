@@ -1189,11 +1189,13 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some((-value).into()),
                     EncodedTerm::DoubleLiteral(value) => Some((-value).into()),
-                    EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
-                    EncodedTerm::DecimalLiteral(value) => Some((-value).into()),
-                    EncodedTerm::DurationLiteral(value) => Some((-value).into()),
-                    EncodedTerm::YearMonthDurationLiteral(value) => Some((-value).into()),
-                    EncodedTerm::DayTimeDurationLiteral(value) => Some((-value).into()),
+                    EncodedTerm::IntegerLiteral(value) => Some(value.checked_neg()?.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.checked_neg()?.into()),
+                    EncodedTerm::DurationLiteral(value) => Some(value.checked_neg()?.into()),
+                    EncodedTerm::YearMonthDurationLiteral(value) => {
+                        Some(value.checked_neg()?.into())
+                    }
+                    EncodedTerm::DayTimeDurationLiteral(value) => Some(value.checked_neg()?.into()),
                     _ => None,
                 })
             }

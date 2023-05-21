@@ -73,6 +73,14 @@ impl Integer {
         })
     }
 
+    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus)
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_neg()?,
+        })
+    }
+
     /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
     #[inline]
     pub const fn abs(&self) -> Self {
