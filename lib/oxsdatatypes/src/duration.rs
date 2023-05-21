@@ -135,7 +135,7 @@ impl FromStr for Duration {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(duration_lexical_rep, input)
+        parse_duration(input)
     }
 }
 
@@ -350,7 +350,7 @@ impl FromStr for YearMonthDuration {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(year_month_duration_lexical_rep, input)
+        parse_year_month_duration(input)
     }
 }
 
@@ -537,7 +537,7 @@ impl FromStr for DayTimeDuration {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(day_time_duration_lexical_rep, input)
+        parse_day_time_duration(input)
     }
 }
 
