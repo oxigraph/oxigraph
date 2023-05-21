@@ -13,9 +13,6 @@ An implementation of some XSD datatypes for SPARQL implementations
 edition = "2021"
 rust-version = "1.60"
 
-[dependencies]
-nom = "7"
-
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
 

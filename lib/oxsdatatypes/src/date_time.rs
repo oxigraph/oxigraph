@@ -1,8 +1,7 @@
-use super::parser::{date_lexical_rep, date_time_lexical_rep, parse_value, time_lexical_rep};
 use super::{DayTimeDuration, Decimal, Duration, XsdParseError, YearMonthDuration};
 use crate::parser::{
-    g_day_lexical_rep, g_month_day_lexical_rep, g_month_lexical_rep, g_year_lexical_rep,
-    g_year_month_lexical_rep,
+    parse_date, parse_date_time, parse_g_day, parse_g_month, parse_g_month_day, parse_g_year,
+    parse_g_year_month, parse_time,
 };
 use std::cmp::{min, Ordering};
 use std::error::Error;
@@ -234,7 +233,7 @@ impl FromStr for DateTime {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(date_time_lexical_rep, input)
+        parse_date_time(input)
     }
 }
 
@@ -445,7 +444,7 @@ impl FromStr for Time {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(time_lexical_rep, input)
+        parse_time(input)
     }
 }
 
@@ -648,7 +647,7 @@ impl FromStr for Date {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(date_lexical_rep, input)
+        parse_date(input)
     }
 }
 
@@ -770,7 +769,7 @@ impl FromStr for GYearMonth {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(g_year_month_lexical_rep, input)
+        parse_g_year_month(input)
     }
 }
 
@@ -891,7 +890,7 @@ impl FromStr for GYear {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(g_year_lexical_rep, input)
+        parse_g_year(input)
     }
 }
 
@@ -1013,7 +1012,7 @@ impl FromStr for GMonthDay {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(g_month_day_lexical_rep, input)
+        parse_g_month_day(input)
     }
 }
 
@@ -1139,7 +1138,7 @@ impl FromStr for GMonth {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(g_month_lexical_rep, input)
+        parse_g_month(input)
     }
 }
 
@@ -1256,7 +1255,7 @@ impl FromStr for GDay {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(g_day_lexical_rep, input)
+        parse_g_day(input)
     }
 }
 

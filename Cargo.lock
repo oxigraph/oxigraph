@@ -1048,7 +1048,6 @@ name = "oxsdatatypes"
 version = "0.1.2-dev"
 dependencies = [
  "js-sys",
- "nom",
 ]
 
 [[package]]
