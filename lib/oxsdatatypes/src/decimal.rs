@@ -141,6 +141,14 @@ impl Decimal {
         })
     }
 
+    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus)
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_neg()?,
+        })
+    }
+
     /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
     #[inline]
     pub const fn abs(&self) -> Self {
@@ -698,7 +706,10 @@ mod tests {
     fn add() {
         assert!(Decimal::MIN.checked_add(Decimal::STEP).is_some());
         assert!(Decimal::MAX.checked_add(Decimal::STEP).is_none());
-        assert_eq!(Decimal::MAX.checked_add(Decimal::MIN), Some(-Decimal::STEP));
+        assert_eq!(
+            Decimal::MAX.checked_add(Decimal::MIN),
+            Decimal::STEP.checked_neg()
+        );
     }
 
     #[test]

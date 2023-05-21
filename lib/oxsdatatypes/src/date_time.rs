@@ -188,8 +188,11 @@ impl DateTime {
             self.checked_sub_day_time_duration(rhs)
         } else {
             Some(Self {
-                timestamp: Timestamp::new(&date_time_plus_duration(-rhs, &self.properties())?)
-                    .ok()?,
+                timestamp: Timestamp::new(&date_time_plus_duration(
+                    rhs.checked_neg()?,
+                    &self.properties(),
+                )?)
+                .ok()?,
             })
         }
     }
