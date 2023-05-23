@@ -1,7 +1,7 @@
 // Code from https://github.com/rust-rocksdb/rust-rocksdb/blob/eb2d302682418b361a80ad8f4dcf335ade60dcf5/librocksdb-sys/build.rs
 // License: https://github.com/rust-rocksdb/rust-rocksdb/blob/master/LICENSE
 
-use std::env::{set_var, var};
+use std::env::{remove_var, set_var, var};
 use std::path::PathBuf;
 
 fn link(name: &str, bundled: bool) {
@@ -98,11 +98,13 @@ fn build_rocksdb() {
         config.define("NPERF_CONTEXT", None);
         config.define("ROCKSDB_PLATFORM_POSIX", None);
         config.define("ROCKSDB_LIB_IO_POSIX", None);
+        remove_var("SDKROOT"); // We override SDKROOT for cross-compilation
         set_var("IPHONEOS_DEPLOYMENT_TARGET", "11.0");
     } else if target.contains("darwin") {
         config.define("OS_MACOSX", None);
         config.define("ROCKSDB_PLATFORM_POSIX", None);
         config.define("ROCKSDB_LIB_IO_POSIX", None);
+        remove_var("SDKROOT"); // We override SDKROOT for cross-compilation
     } else if target.contains("android") {
         config.define("OS_ANDROID", None);
         config.define("ROCKSDB_PLATFORM_POSIX", None);
@@ -177,6 +179,7 @@ fn build_rocksdb() {
         }
         config.file(&format!("rocksdb/{file}"));
     }
+
     config.compile("rocksdb");
 }
 
