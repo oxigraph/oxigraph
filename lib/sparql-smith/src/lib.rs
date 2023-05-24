@@ -1,6 +1,5 @@
 use arbitrary::{Arbitrary, Result, Unstructured};
 use std::fmt;
-use std::fmt::Debug;
 use std::iter::once;
 use std::ops::ControlFlow;
 
@@ -30,8 +29,12 @@ const LITERALS: [&str; 11] = [
     "1e0",
 ];
 
-#[derive(Arbitrary)]
 pub struct Query {
+    inner: QueryContent,
+}
+
+#[derive(Arbitrary)]
+struct QueryContent {
     // [1]  	QueryUnit	  ::=  	Query
     // [2]  	Query	  ::=  	Prologue ( SelectQuery | ConstructQuery | DescribeQuery | AskQuery ) ValuesClause
     variant: QueryVariant,
@@ -44,16 +47,34 @@ enum QueryVariant {
     //TODO: Other variants!
 }
 
-impl fmt::Display for Query {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.variant {
-            QueryVariant::Select(s) => write!(f, "{s}"),
-        }?;
-        write!(f, "{}", self.values_clause)
+impl<'a> Arbitrary<'a> for Query {
+    fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
+        Ok(Self {
+            inner: QueryContent::arbitrary(u)?,
+        })
+    }
+
+    fn arbitrary_take_rest(u: Unstructured<'a>) -> Result<Self> {
+        Ok(Self {
+            inner: QueryContent::arbitrary_take_rest(u)?,
+        })
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        (20, None)
     }
 }
 
-impl Debug for Query {
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.inner.variant {
+            QueryVariant::Select(s) => write!(f, "{s}"),
+        }?;
+        write!(f, "{}", self.inner.values_clause)
+    }
+}
+
+impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
