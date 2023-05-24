@@ -1087,7 +1087,9 @@ impl SimpleEvaluator {
                         NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
                             Some(v1.checked_add_day_time_duration(v2)?.into())
                         }
-                        _ => None,
+                        NumericBinaryOperands::DateTime(_, _)
+                        | NumericBinaryOperands::Time(_, _)
+                        | NumericBinaryOperands::Date(_, _) => None,
                     },
                 )
             }
@@ -4509,6 +4511,12 @@ impl Accumulator for SumAccumulator {
                     NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2).map(Into::into),
                     NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2).map(Into::into),
                     NumericBinaryOperands::Duration(v1, v2) => v1.checked_add(v2).map(Into::into),
+                    NumericBinaryOperands::YearMonthDuration(v1, v2) => {
+                        v1.checked_add(v2).map(Into::into)
+                    }
+                    NumericBinaryOperands::DayTimeDuration(v1, v2) => {
+                        v1.checked_add(v2).map(Into::into)
+                    }
                     _ => None,
                 };
             } else {
