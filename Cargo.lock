@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "sparql-smith"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4-dev"
 dependencies = [
  "arbitrary",
 ]

@@ -1,6 +1,6 @@
 [package]
 name = "sparql-smith"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -14,6 +14,8 @@ edition = "2021"
 
 [features]
 default = []
+limit-offset = ["order"]
+order = []
 sep-0006 = []
 
 [dependencies]
