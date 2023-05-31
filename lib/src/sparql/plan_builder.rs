@@ -1237,7 +1237,7 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn can_use_for_loop_left_join(node: &PlanNode) -> bool {
-        // We forbid MINUS and SERVICE in for loop left joins
+        // We forbid MINUS, SERVICE and everything that affects cardinality in for loop left joins
         match node {
             PlanNode::StaticBindings { .. }
             | PlanNode::QuadPattern { .. }
@@ -1245,10 +1245,6 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::Filter { child, .. }
             | PlanNode::Extend { child, .. }
             | PlanNode::Sort { child, .. }
-            | PlanNode::HashDeduplicate { child }
-            | PlanNode::Reduced { child }
-            | PlanNode::Skip { child, .. }
-            | PlanNode::Limit { child, .. }
             | PlanNode::Project { child, .. }
             | PlanNode::Aggregate { child, .. } => Self::can_use_for_loop_left_join(child),
             PlanNode::Union { children } => {
@@ -1260,7 +1256,12 @@ impl<'a> PlanBuilder<'a> {
             | PlanNode::HashLeftJoin { left, right, .. } => {
                 Self::can_use_for_loop_left_join(left) && Self::can_use_for_loop_left_join(right)
             }
-            PlanNode::AntiJoin { .. } | PlanNode::Service { .. } => false,
+            PlanNode::AntiJoin { .. }
+            | PlanNode::Service { .. }
+            | PlanNode::HashDeduplicate { .. }
+            | PlanNode::Reduced { .. }
+            | PlanNode::Skip { .. }
+            | PlanNode::Limit { .. } => false,
         }
     }
 
@@ -1326,7 +1327,8 @@ impl<'a> PlanBuilder<'a> {
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
-            | PlanNode::Reduced { child } => {
+            | PlanNode::Reduced { child }
+            | PlanNode::Project { child, .. } => {
                 Self::add_left_join_problematic_variables(child, set);
             }
             PlanNode::Skip { child, .. } | PlanNode::Limit { child, .. } => {
@@ -1342,15 +1344,6 @@ impl<'a> PlanBuilder<'a> {
                     });
                 } else {
                     Self::add_left_join_problematic_variables(child, set)
-                }
-            }
-            PlanNode::Project { mapping, child } => {
-                let mut child_bound = BTreeSet::new();
-                Self::add_left_join_problematic_variables(child, &mut child_bound);
-                for (child_i, output_i) in mapping.iter() {
-                    if child_bound.contains(&child_i.encoded) {
-                        set.insert(output_i.encoded);
-                    }
                 }
             }
             PlanNode::Aggregate {
