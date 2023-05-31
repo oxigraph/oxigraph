@@ -105,10 +105,9 @@ impl<'a> PlanBuilder<'a> {
                 let left = self.build_for_graph_pattern(left, variables, graph_name)?;
                 let right = self.build_for_graph_pattern(right, variables, graph_name)?;
 
-                let mut possible_problem_vars = BTreeSet::new();
-                Self::add_left_join_problematic_variables(&right, &mut possible_problem_vars);
-                if self.with_optimizations {
-                    // TODO: don't use if SERVICE is inside of for loop
+                if self.with_optimizations && Self::can_use_for_loop_left_join(&right) {
+                    let mut possible_problem_vars = BTreeSet::new();
+                    Self::add_left_join_problematic_variables(&right, &mut possible_problem_vars);
 
                     //We add the extra filter if needed
                     let right = if let Some(expr) = expression {
@@ -1225,6 +1224,34 @@ impl<'a> PlanBuilder<'a> {
         PlanVariable {
             encoded,
             plain: from_variable.plain.clone(),
+        }
+    }
+
+    fn can_use_for_loop_left_join(node: &PlanNode) -> bool {
+        // We forbid MINUS and SERVICE in for loop left joins
+        match node {
+            PlanNode::StaticBindings { .. }
+            | PlanNode::QuadPattern { .. }
+            | PlanNode::PathPattern { .. } => true,
+            PlanNode::Filter { child, .. }
+            | PlanNode::Extend { child, .. }
+            | PlanNode::Sort { child, .. }
+            | PlanNode::HashDeduplicate { child }
+            | PlanNode::Reduced { child }
+            | PlanNode::Skip { child, .. }
+            | PlanNode::Limit { child, .. }
+            | PlanNode::Project { child, .. }
+            | PlanNode::Aggregate { child, .. } => Self::can_use_for_loop_left_join(child),
+            PlanNode::Union { children } => {
+                children.iter().all(|c| Self::can_use_for_loop_left_join(c))
+            }
+            PlanNode::HashJoin { left, right }
+            | PlanNode::ForLoopJoin { left, right }
+            | PlanNode::ForLoopLeftJoin { left, right, .. }
+            | PlanNode::HashLeftJoin { left, right, .. } => {
+                Self::can_use_for_loop_left_join(left) && Self::can_use_for_loop_left_join(right)
+            }
+            PlanNode::AntiJoin { .. } | PlanNode::Service { .. } => false,
         }
     }
 
