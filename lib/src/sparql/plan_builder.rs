@@ -433,23 +433,32 @@ impl<'a> PlanBuilder<'a> {
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
             ),
             Expression::In(e, l) => {
-                if l.is_empty() {
-                    return Ok(PlanExpression::Literal(PlanTerm {
-                        encoded: false.into(),
-                        plain: false.into(),
-                    }));
-                }
                 let e = self.build_for_expression(e, variables, graph_name)?;
-                PlanExpression::Or(
-                    l.iter()
-                        .map(|v| {
-                            Ok(PlanExpression::Equal(
-                                Box::new(e.clone()),
-                                Box::new(self.build_for_expression(v, variables, graph_name)?),
-                            ))
-                        })
-                        .collect::<Result<_, EvaluationError>>()?,
-                )
+                if l.is_empty() {
+                    // False except on error
+                    PlanExpression::If(
+                        Box::new(e),
+                        Box::new(PlanExpression::Literal(PlanTerm {
+                            encoded: false.into(),
+                            plain: false.into(),
+                        })),
+                        Box::new(PlanExpression::Literal(PlanTerm {
+                            encoded: false.into(),
+                            plain: false.into(),
+                        })),
+                    )
+                } else {
+                    PlanExpression::Or(
+                        l.iter()
+                            .map(|v| {
+                                Ok(PlanExpression::Equal(
+                                    Box::new(e.clone()),
+                                    Box::new(self.build_for_expression(v, variables, graph_name)?),
+                                ))
+                            })
+                            .collect::<Result<_, EvaluationError>>()?,
+                    )
+                }
             }
             Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
