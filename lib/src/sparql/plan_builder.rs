@@ -1368,15 +1368,15 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn new_join(&self, mut left: PlanNode, mut right: PlanNode) -> PlanNode {
+        // We first use VALUES to filter the following patterns evaluation
+        if matches!(right, PlanNode::StaticBindings { .. }) {
+            swap(&mut left, &mut right);
+        }
+
         if self.with_optimizations
-            && Self::is_fit_for_for_loop_join(&left)
             && Self::is_fit_for_for_loop_join(&right)
             && Self::has_some_common_variables(&left, &right)
         {
-            // We first use VALUES to filter the following patterns evaluation
-            if matches!(right, PlanNode::StaticBindings { .. }) {
-                swap(&mut left, &mut right);
-            }
             PlanNode::ForLoopJoin {
                 left: Rc::new(left),
                 right: Rc::new(right),
@@ -1406,9 +1406,8 @@ impl<'a> PlanBuilder<'a> {
         match node {
             PlanNode::StaticBindings { .. }
             | PlanNode::QuadPattern { .. }
-            | PlanNode::PathPattern { .. }
-            | PlanNode::ForLoopJoin { .. } => true,
-            PlanNode::HashJoin { left, right } => {
+            | PlanNode::PathPattern { .. } => true,
+            PlanNode::ForLoopJoin { left, right } | PlanNode::HashJoin { left, right } => {
                 Self::is_fit_for_for_loop_join(left) && Self::is_fit_for_for_loop_join(right)
             }
             PlanNode::Filter { child, .. } | PlanNode::Extend { child, .. } => {
