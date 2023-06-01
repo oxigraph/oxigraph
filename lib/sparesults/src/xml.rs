@@ -186,6 +186,7 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
 
         //Read header
         loop {
+            buffer.clear();
             let event = reader.read_event_into(&mut buffer)?;
             match event {
                 Event::Start(event) => match state {
@@ -275,7 +276,6 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
                 Event::Eof => return Err(SyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
                 _ => (),
             }
-            buffer.clear();
         }
     }
 }
@@ -315,6 +315,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
         let mut lang = None;
         let mut datatype = None;
         loop {
+            self.buffer.clear();
             let event = self.reader.read_event_into(&mut self.buffer)?;
             match event {
                 Event::Start(event) => match state {
@@ -563,7 +564,6 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                 Event::Eof => return Ok(None),
                 _ => (),
             }
-            self.buffer.clear();
         }
     }
 }
