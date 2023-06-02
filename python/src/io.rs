@@ -48,7 +48,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
 /// [<Triple subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
 #[pyfunction]
-#[pyo3(text_signature = "(input, mime_type, *, base_iri = None)")]
+#[pyo3(signature = (input, mime_type, *, base_iri = None))]
 pub fn parse(
     input: PyObject,
     mime_type: &str,
