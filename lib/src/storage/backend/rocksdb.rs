@@ -628,7 +628,7 @@ impl Db {
                 let result = f(Transaction {
                     transaction: Rc::new(transaction),
                     read_options,
-                    _lifetime: PhantomData::default(),
+                    _lifetime: PhantomData,
                 });
                 match result {
                     Ok(result) => {

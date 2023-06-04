@@ -12,6 +12,7 @@ members = [
     "server",
     "testsuite"
 ]
+resolver = "2"
 
 [profile.release]
 lto = true

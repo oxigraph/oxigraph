@@ -723,7 +723,7 @@ mod tests {
         assert_eq!(Decimal::from(1).checked_mul(-1), Some(Decimal::from(-1)));
         assert_eq!(
             Decimal::from(1000).checked_mul(1000),
-            Some(Decimal::from(1000000))
+            Some(Decimal::from(1_000_000))
         );
         assert_eq!(
             Decimal::from_str("0.1")?.checked_mul(Decimal::from_str("0.01")?),
@@ -880,7 +880,7 @@ mod tests {
         assert!(Decimal::try_from(Float::from(f32::MIN)).is_err());
         assert!(Decimal::try_from(Float::from(f32::MAX)).is_err());
         assert!(
-            Decimal::try_from(Float::from(1_672_507_302_466.))
+            Decimal::try_from(Float::from(1_672_507_300_000.))
                 .unwrap()
                 .checked_sub(Decimal::from(1_672_507_293_696_i64))
                 .unwrap()
@@ -926,8 +926,8 @@ mod tests {
         assert_eq!(Float::from(Decimal::from(1)), Float::from(1.));
         assert_eq!(Float::from(Decimal::from(10)), Float::from(10.));
         assert_eq!(Float::from(Decimal::from_str("0.1")?), Float::from(0.1));
-        assert!((Float::from(Decimal::MAX) - Float::from(1.701412e20)).abs() < Float::from(1.));
-        assert!((Float::from(Decimal::MIN) - Float::from(-1.701412e20)).abs() < Float::from(1.));
+        assert!((Float::from(Decimal::MAX) - Float::from(1.701_412e20)).abs() < Float::from(1.));
+        assert!((Float::from(Decimal::MIN) - Float::from(-1.701_412e20)).abs() < Float::from(1.));
         Ok(())
     }
 
@@ -938,11 +938,11 @@ mod tests {
         assert_eq!(Double::from(Decimal::from(10)), Double::from(10.));
         assert_eq!(Double::from(Decimal::from_str("0.1")?), Double::from(0.1));
         assert!(
-            (Double::from(Decimal::MAX) - Double::from(1.7014118346046924e20)).abs()
+            (Double::from(Decimal::MAX) - Double::from(1.701_411_834_604_692_4e20)).abs()
                 < Double::from(1.)
         );
         assert!(
-            (Double::from(Decimal::MIN) - Double::from(-1.7014118346046924e20)).abs()
+            (Double::from(Decimal::MIN) - Double::from(-1.701_411_834_604_692_4e20)).abs()
                 < Double::from(1.)
         );
         Ok(())
