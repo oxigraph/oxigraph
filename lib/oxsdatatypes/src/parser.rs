@@ -432,12 +432,15 @@ fn year_frag(input: &str) -> Result<(i64, &str), XsdParseError> {
         (1, input)
     };
     let (number_str, input) = integer_prefix(input);
-    let number = i64::from_str(number_str)?;
-    if number < 1000 && number_str.len() != 4 {
+    if number_str.len() < 4 {
+        return Err(XsdParseError::msg("The year should be encoded on 4 digits"));
+    }
+    if number_str.len() > 4 && number_str.starts_with('0') {
         return Err(XsdParseError::msg(
-            "The years below 1000 must be encoded on exactly 4 digits",
+            "The years value must not start with 0 if it can be encoded in at least 4 digits",
         ));
     }
+    let number = i64::from_str(number_str)?;
     Ok((sign * number, input))
 }
 
