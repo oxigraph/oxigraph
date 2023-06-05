@@ -45,7 +45,7 @@ impl Decimal {
         self.value.to_be_bytes()
     }
 
-    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add)
+    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add)
     #[inline]
     pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -53,7 +53,7 @@ impl Decimal {
         })
     }
 
-    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract)
+    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract)
     #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -61,7 +61,7 @@ impl Decimal {
         })
     }
 
-    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply)
+    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply)
     #[inline]
     pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
         // Idea: we shift right as much as possible to keep as much precision as possible
@@ -93,7 +93,7 @@ impl Decimal {
         })
     }
 
-    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide)
+    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-divide)
     #[inline]
     pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
         // Idea: we shift the dividend left as much as possible to keep as much precision as possible
@@ -126,7 +126,7 @@ impl Decimal {
         })
     }
 
-    /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions/#func-numeric-mod)
+    /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
     #[inline]
     pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -141,7 +141,7 @@ impl Decimal {
         })
     }
 
-    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus)
+    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus)
     #[inline]
     pub fn checked_neg(&self) -> Option<Self> {
         Some(Self {
@@ -149,7 +149,7 @@ impl Decimal {
         })
     }
 
-    /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
+    /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
     #[inline]
     pub const fn abs(&self) -> Self {
         Self {
@@ -157,7 +157,7 @@ impl Decimal {
         }
     }
 
-    /// [fn:round](https://www.w3.org/TR/xpath-functions/#func-round)
+    /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
     #[inline]
     pub fn round(&self) -> Self {
         let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
@@ -170,7 +170,7 @@ impl Decimal {
         }
     }
 
-    /// [fn:ceiling](https://www.w3.org/TR/xpath-functions/#func-ceiling)
+    /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
     #[inline]
     pub fn ceil(&self) -> Self {
         Self {
@@ -182,7 +182,7 @@ impl Decimal {
         }
     }
 
-    /// [fn:floor](https://www.w3.org/TR/xpath-functions/#func-floor)
+    /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
     #[inline]
     pub fn floor(&self) -> Self {
         Self {

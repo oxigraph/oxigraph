@@ -29,25 +29,25 @@ impl Float {
         self.value.to_be_bytes()
     }
 
-    /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
+    /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
     #[inline]
     pub fn abs(self) -> Self {
         self.value.abs().into()
     }
 
-    /// [fn:ceiling](https://www.w3.org/TR/xpath-functions/#func-ceiling)
+    /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
     #[inline]
     pub fn ceil(self) -> Self {
         self.value.ceil().into()
     }
 
-    /// [fn:floor](https://www.w3.org/TR/xpath-functions/#func-floor)
+    /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
     #[inline]
     pub fn floor(self) -> Self {
         self.value.floor().into()
     }
 
-    /// [fn:round](https://www.w3.org/TR/xpath-functions/#func-round)
+    /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
     #[inline]
     pub fn round(self) -> Self {
         self.value.round().into()

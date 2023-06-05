@@ -1,4 +1,4 @@
-/// [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph) serialization formats.
+/// [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) serialization formats.
 ///
 /// This enumeration is non exhaustive. New formats like JSON-LD will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]

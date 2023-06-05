@@ -1,4 +1,4 @@
-//! [In-memory implementation](super::Graph) of  [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).
+//! [In-memory implementation](super::Graph) of  [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
 //!
 //! Usage example:
 //! ```
@@ -26,7 +26,7 @@ use crate::dataset::*;
 use crate::*;
 use std::fmt;
 
-/// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-graph).
+/// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
 ///
 /// It can accommodate a fairly large number of triples (in the few millions).
 /// Beware: it interns the string and does not do any garbage collection yet:

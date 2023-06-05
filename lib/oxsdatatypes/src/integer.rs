@@ -26,7 +26,7 @@ impl Integer {
         self.value.to_be_bytes()
     }
 
-    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions/#func-numeric-add)
+    /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add)
     #[inline]
     pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -34,7 +34,7 @@ impl Integer {
         })
     }
 
-    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions/#func-numeric-subtract)
+    /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract)
     #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -42,7 +42,7 @@ impl Integer {
         })
     }
 
-    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions/#func-numeric-multiply)
+    /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply)
     #[inline]
     pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -50,7 +50,7 @@ impl Integer {
         })
     }
 
-    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions/#func-numeric-divide)
+    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-divide)
     #[inline]
     pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -58,7 +58,7 @@ impl Integer {
         })
     }
 
-    /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions/#func-numeric-mod)
+    /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
     #[inline]
     pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
@@ -73,7 +73,7 @@ impl Integer {
         })
     }
 
-    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions/#func-numeric-unary-minus)
+    /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus)
     #[inline]
     pub fn checked_neg(&self) -> Option<Self> {
         Some(Self {
@@ -81,7 +81,7 @@ impl Integer {
         })
     }
 
-    /// [fn:abs](https://www.w3.org/TR/xpath-functions/#func-abs)
+    /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
     #[inline]
     pub const fn abs(&self) -> Self {
         Self {

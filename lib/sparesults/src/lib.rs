@@ -23,7 +23,7 @@ use std::rc::Rc;
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
 pub enum QueryResultsFormat {
-    /// [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
+    /// [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/)
     Xml,
     /// [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
     Json,
@@ -133,7 +133,7 @@ impl QueryResultsFormat {
 /// Parsers for [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) ([`QueryResultsFormat::Xml`](QueryResultsFormat::Xml)).
+/// * [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/) ([`QueryResultsFormat::Xml`](QueryResultsFormat::Xml)).
 /// * [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) ([`QueryResultsFormat::Json`](QueryResultsFormat::Json)).
 /// * [SPARQL Query Results TSV Format](https://www.w3.org/TR/sparql11-results-csv-tsv/) ([`QueryResultsFormat::Tsv`](QueryResultsFormat::Tsv)).
 ///
@@ -326,7 +326,7 @@ impl<R: BufRead> Iterator for SolutionsReader<R> {
 /// A serializer for [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/) ([`QueryResultsFormat::Xml`](QueryResultsFormat::Xml))
+/// * [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/) ([`QueryResultsFormat::Xml`](QueryResultsFormat::Xml))
 /// * [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) ([`QueryResultsFormat::Json`](QueryResultsFormat::Json))
 /// * [SPARQL Query Results CSV Format](https://www.w3.org/TR/sparql11-results-csv-tsv/) ([`QueryResultsFormat::Csv`](QueryResultsFormat::Csv))
 /// * [SPARQL Query Results TSV Format](https://www.w3.org/TR/sparql11-results-csv-tsv/) ([`QueryResultsFormat::Tsv`](QueryResultsFormat::Tsv))

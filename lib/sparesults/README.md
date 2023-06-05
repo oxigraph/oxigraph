@@ -9,9 +9,9 @@ Sparesults
 
 Sparesults is a set of parsers and serializers for [SPARQL](https://www.w3.org/TR/sparql11-overview/) query results formats.
 
-It supports [SPARQL Query Results XML Format (Second Edition)](http://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/2013/REC-sparql11-results-csv-tsv-20130321/).
+It supports [SPARQL Query Results XML Format (Second Edition)](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
 
-Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/#query-result-formats) is also available behind the `rdf-star` feature.
+Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#query-result-formats) is also available behind the `rdf-star` feature.
 
 This crate is intended to be a building piece for SPARQL client and server implementations in Rust like [Oxigraph](https://oxigraph.org).
 

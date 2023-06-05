@@ -83,7 +83,7 @@
 - SPARQL: If written explicitly in the SPARQL query, the regular expressions are now compiled once and not for each row.
 - SPARQL: Property path evaluation with both start and end variables bound has been optimized.
 - SPARQL: Casts to `xsd:decimal` from `xsd:float` and `xsd:double` now properly fails on overflow instead of overflowing the internal 128-bits representation.
-  This follows [XPath casting rules](https://www.w3.org/TR/xpath-functions/#casting-to-decimal).
+  This follows [XPath casting rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-decimal).
 - Rust: The minimal supported Rust version is set at 1.60 and enforced using the CI.
 - Python: Local builds will now target the specific Python version instead of [abi3](https://docs.python.org/3/c-api/stable.html).
   abi3 wheels are still released on Pypi alongside new Python-version specific builds for Linux+GNU.
@@ -254,7 +254,7 @@
 ## [0.3.0-beta.1] - 2022-01-29
 
 ### Added
-- [RDF-star](https://w3c.github.io/rdf-star/cg-spec) support. `Triple` is now a possible `Term`. Serialization formats and SPARQL support have been updated to match the [latest version of the specification draft](https://w3c.github.io/rdf-star/cg-spec/2021-07-01.html).
+- [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) support. `Triple` is now a possible `Term`. Serialization formats and SPARQL support have been updated to match the [latest version of the specification draft](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html).
 - Fast data bulk load with the `Store` `bulk_load_dataset` and `bulk_load_graph` methods and a special command line option of the server.
 - It is now possible to quickly backup the database using the `backup` method.
 - Rust: `*Syntax::from_extension` to easy guess a graph/dataset/sparql result format from a file extension.
@@ -264,7 +264,7 @@
 - `Store` operations are now transactional using the "repeatable read" isolation level:
   the store only exposes changes that have been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
   the `Store` `transaction` method now allows to do read/write transactions.
--`RDF-star <https://w3c.github.io/rdf-star/cg-spec>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
+-`RDF-star <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
 
 ### Changed
 - SPARQL: It is now possible to compare `rdf:langString` literals with the same language tag.
@@ -300,7 +300,7 @@ Many thanks to [Thad Guidry](https://github.com/thadguidry), [James Overton](htt
 ## [0.2.5] - 2021-07-11
 
 ### Added
-- [SPARQL 1.1 Query Results JSON Format](http://www.w3.org/TR/sparql11-results-json/) parser.
+- [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) parser.
 - Python wheels for macOS are now universal2 binaries.
 
 ### Changed

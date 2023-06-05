@@ -33,37 +33,37 @@ impl Duration {
         }
     }
 
-    /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions/#func-years-from-duration)
+    /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-years-from-duration)
     #[inline]
     pub fn years(&self) -> i64 {
         self.year_month.years()
     }
 
-    /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions/#func-months-from-duration)
+    /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-months-from-duration)
     #[inline]
     pub fn months(&self) -> i64 {
         self.year_month.months()
     }
 
-    /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions/#func-days-from-duration)
+    /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-days-from-duration)
     #[inline]
     pub fn days(&self) -> i64 {
         self.day_time.days()
     }
 
-    /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions/#func-hours-from-duration)
+    /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-duration)
     #[inline]
     pub fn hours(&self) -> i64 {
         self.day_time.hours()
     }
 
-    /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions/#func-minutes-from-duration)
+    /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-duration)
     #[inline]
     pub fn minutes(&self) -> i64 {
         self.day_time.minutes()
     }
 
-    /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions/#func-seconds-from-duration)
+    /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-duration)
     #[inline]
     pub fn seconds(&self) -> Decimal {
         self.day_time.seconds()
@@ -87,7 +87,7 @@ impl Duration {
         bytes
     }
 
-    /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDurations) and [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDurations)
+    /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDurations) and [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDurations)
     #[inline]
     pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -97,7 +97,7 @@ impl Duration {
         })
     }
 
-    /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDurations) and [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDurations)
+    /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDurations) and [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
     #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -269,13 +269,13 @@ impl YearMonthDuration {
         }
     }
 
-    /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions/#func-years-from-duration)
+    /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-years-from-duration)
     #[inline]
     pub fn years(self) -> i64 {
         self.months / 12
     }
 
-    /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions/#func-months-from-duration)
+    /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-months-from-duration)
     #[inline]
     pub fn months(self) -> i64 {
         self.months % 12
@@ -291,7 +291,7 @@ impl YearMonthDuration {
         self.months.to_be_bytes()
     }
 
-    /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDurations)
+    /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDurations)
     #[inline]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -300,7 +300,7 @@ impl YearMonthDuration {
         })
     }
 
-    /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDurations)
+    /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDurations)
     #[inline]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -427,28 +427,28 @@ impl DayTimeDuration {
         }
     }
 
-    /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions/#func-days-from-duration)
+    /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-days-from-duration)
     #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub fn days(&self) -> i64 {
         (self.seconds.as_i128() / 86400) as i64
     }
 
-    /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions/#func-hours-from-duration)
+    /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-duration)
     #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub fn hours(&self) -> i64 {
         ((self.seconds.as_i128() % 86400) / 3600) as i64
     }
 
-    /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions/#func-minutes-from-duration)
+    /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-duration)
     #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub fn minutes(&self) -> i64 {
         ((self.seconds.as_i128() % 3600) / 60) as i64
     }
 
-    /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions/#func-seconds-from-duration)
+    /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-duration)
     #[inline]
     pub fn seconds(&self) -> Decimal {
         self.seconds.checked_rem(60).unwrap()
@@ -464,7 +464,7 @@ impl DayTimeDuration {
         self.seconds.to_be_bytes()
     }
 
-    /// [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDurations)
+    /// [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDurations)
     #[inline]
     pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -473,7 +473,7 @@ impl DayTimeDuration {
         })
     }
 
-    /// [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDurations)
+    /// [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
     #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
