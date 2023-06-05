@@ -43,7 +43,7 @@ impl DateTime {
         })
     }
 
-    /// [fn:current-dateTime](https://www.w3.org/TR/xpath-functions/#func-current-dateTime)
+    /// [fn:current-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-current-dateTime)
     #[inline]
     pub fn now() -> Result<Self, DateTimeError> {
         Ok(Self {
@@ -58,43 +58,43 @@ impl DateTime {
         }
     }
 
-    /// [fn:year-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-year-from-dateTime)
+    /// [fn:year-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-year-from-dateTime)
     #[inline]
     pub fn year(&self) -> i64 {
         self.timestamp.year()
     }
 
-    /// [fn:month-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-month-from-dateTime)
+    /// [fn:month-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-month-from-dateTime)
     #[inline]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
-    /// [fn:day-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-day-from-dateTime)
+    /// [fn:day-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-day-from-dateTime)
     #[inline]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
-    /// [fn:hour-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-hour-from-dateTime)
+    /// [fn:hour-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-dateTime)
     #[inline]
     pub fn hour(&self) -> u8 {
         self.timestamp.hour()
     }
 
-    /// [fn:minute-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-minute-from-dateTime)
+    /// [fn:minute-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-dateTime)
     #[inline]
     pub fn minute(&self) -> u8 {
         self.timestamp.minute()
     }
 
-    /// [fn:second-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-second-from-dateTime)
+    /// [fn:second-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-dateTime)
     #[inline]
     pub fn second(&self) -> Decimal {
         self.timestamp.second()
     }
 
-    /// [fn:timezone-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-timezone-from-dateTime)
+    /// [fn:timezone-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-dateTime)
     #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
@@ -123,13 +123,13 @@ impl DateTime {
         self.timestamp.to_be_bytes()
     }
 
-    /// [op:subtract-dateTimes](https://www.w3.org/TR/xpath-functions/#func-subtract-dateTimes)
+    /// [op:subtract-dateTimes](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dateTimes)
     #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
-    /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-dateTime)
+    /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-dateTime)
     #[inline]
     pub fn checked_add_year_month_duration(
         &self,
@@ -138,7 +138,7 @@ impl DateTime {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-dateTime)
+    /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-dateTime)
     #[inline]
     pub fn checked_add_day_time_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
@@ -147,7 +147,7 @@ impl DateTime {
         })
     }
 
-    /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-dateTime) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-dateTime)
+    /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-dateTime) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-dateTime)
     #[inline]
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
@@ -161,7 +161,7 @@ impl DateTime {
         }
     }
 
-    /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-dateTime)
+    /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-dateTime)
     #[inline]
     pub fn checked_sub_year_month_duration(
         &self,
@@ -170,7 +170,7 @@ impl DateTime {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-dateTime)
+    /// [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-dateTime)
     #[inline]
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         let rhs = rhs.into();
@@ -179,7 +179,7 @@ impl DateTime {
         })
     }
 
-    /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-dateTime) and [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-dateTime)
+    /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-dateTime) and [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-dateTime)
     #[inline]
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
@@ -196,7 +196,7 @@ impl DateTime {
         }
     }
 
-    /// [fn:adjust-dateTime-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-dateTime-to-timezone)
+    /// [fn:adjust-dateTime-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-dateTime-to-timezone)
     #[inline]
     pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
@@ -211,7 +211,7 @@ impl DateTime {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<Date> for DateTime {
     type Error = DateTimeError;
 
@@ -306,31 +306,31 @@ impl Time {
         }
     }
 
-    /// [fn:current-time](https://www.w3.org/TR/xpath-functions/#func-current-time)
+    /// [fn:current-time](https://www.w3.org/TR/xpath-functions-31/#func-current-time)
     #[inline]
     pub fn now() -> Result<Self, DateTimeError> {
         DateTime::now()?.try_into()
     }
 
-    /// [fn:hour-from-time](https://www.w3.org/TR/xpath-functions/#func-hour-from-time)
+    /// [fn:hour-from-time](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-time)
     #[inline]
     pub fn hour(&self) -> u8 {
         self.timestamp.hour()
     }
 
-    /// [fn:minute-from-time](https://www.w3.org/TR/xpath-functions/#func-minute-from-time)
+    /// [fn:minute-from-time](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-time)
     #[inline]
     pub fn minute(&self) -> u8 {
         self.timestamp.minute()
     }
 
-    /// [fn:second-from-time](https://www.w3.org/TR/xpath-functions/#func-second-from-time)
+    /// [fn:second-from-time](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-time)
     #[inline]
     pub fn second(&self) -> Decimal {
         self.timestamp.second()
     }
 
-    /// [fn:timezone-from-time](https://www.w3.org/TR/xpath-functions/#func-timezone-from-time)
+    /// [fn:timezone-from-time](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-time)
     #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
@@ -346,19 +346,19 @@ impl Time {
         self.timestamp.to_be_bytes()
     }
 
-    /// [op:subtract-times](https://www.w3.org/TR/xpath-functions/#func-subtract-times)
+    /// [op:subtract-times](https://www.w3.org/TR/xpath-functions-31/#func-subtract-times)
     #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
-    /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-time)
+    /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-time)
     #[inline]
     pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-time)
+    /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-time)
     #[inline]
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
@@ -376,13 +376,13 @@ impl Time {
         .ok()
     }
 
-    /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-time)
+    /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
     #[inline]
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-time)
+    /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
     #[inline]
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
@@ -400,7 +400,7 @@ impl Time {
         .ok()
     }
 
-    // [fn:adjust-time-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-time-to-timezone)
+    // [fn:adjust-time-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-time-to-timezone)
     #[inline]
     pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         DateTime::new(
@@ -425,7 +425,7 @@ impl Time {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<DateTime> for Time {
     type Error = DateTimeError;
 
@@ -507,31 +507,31 @@ impl Date {
         }
     }
 
-    /// [fn:current-date](https://www.w3.org/TR/xpath-functions/#func-current-date)
+    /// [fn:current-date](https://www.w3.org/TR/xpath-functions-31/#func-current-date)
     #[inline]
     pub fn now() -> Result<Self, DateTimeError> {
         DateTime::now()?.try_into()
     }
 
-    /// [fn:year-from-date](https://www.w3.org/TR/xpath-functions/#func-year-from-date)
+    /// [fn:year-from-date](https://www.w3.org/TR/xpath-functions-31/#func-year-from-date)
     #[inline]
     pub fn year(&self) -> i64 {
         self.timestamp.year()
     }
 
-    /// [fn:month-from-date](https://www.w3.org/TR/xpath-functions/#func-month-from-date)
+    /// [fn:month-from-date](https://www.w3.org/TR/xpath-functions-31/#func-month-from-date)
     #[inline]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
-    /// [fn:day-from-date](https://www.w3.org/TR/xpath-functions/#func-day-from-date)
+    /// [fn:day-from-date](https://www.w3.org/TR/xpath-functions-31/#func-day-from-date)
     #[inline]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
-    /// [fn:timezone-from-date](https://www.w3.org/TR/xpath-functions/#func-timezone-from-date)
+    /// [fn:timezone-from-date](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-date)
     #[inline]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
@@ -547,13 +547,13 @@ impl Date {
         self.timestamp.to_be_bytes()
     }
 
-    /// [op:subtract-dates](https://www.w3.org/TR/xpath-functions/#func-subtract-dates)
+    /// [op:subtract-dates](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dates)
     #[inline]
     pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
-    /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-date)
+    /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-date)
     #[inline]
     pub fn checked_add_year_month_duration(
         &self,
@@ -562,13 +562,13 @@ impl Date {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-date)
+    /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
     #[inline]
     pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions/#func-add-dayTimeDuration-to-date)
+    /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
     #[inline]
     pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(*self)
@@ -578,7 +578,7 @@ impl Date {
             .ok()
     }
 
-    /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-date)
+    /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-date)
     #[inline]
     pub fn checked_sub_year_month_duration(
         &self,
@@ -587,13 +587,13 @@ impl Date {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-date)
+    /// [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
     #[inline]
     pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
-    /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-yearMonthDuration-from-date) and [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions/#func-subtract-dayTimeDuration-from-date)
+    /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-date) and [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
     #[inline]
     pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(*self)
@@ -603,7 +603,7 @@ impl Date {
             .ok()
     }
 
-    // [fn:adjust-date-to-timezone](https://www.w3.org/TR/xpath-functions/#func-adjust-date-to-timezone)
+    // [fn:adjust-date-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-date-to-timezone)
     #[inline]
     pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         DateTime::new(
@@ -628,7 +628,7 @@ impl Date {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<DateTime> for Date {
     type Error = DateTimeError;
 
@@ -741,7 +741,7 @@ impl GYearMonth {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<DateTime> for GYearMonth {
     type Error = DateTimeError;
 
@@ -755,7 +755,7 @@ impl TryFrom<DateTime> for GYearMonth {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<Date> for GYearMonth {
     type Error = DateTimeError;
 
@@ -857,7 +857,7 @@ impl GYear {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<DateTime> for GYear {
     type Error = DateTimeError;
 
@@ -867,7 +867,7 @@ impl TryFrom<DateTime> for GYear {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<Date> for GYear {
     type Error = DateTimeError;
 
@@ -984,7 +984,7 @@ impl GMonthDay {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<DateTime> for GMonthDay {
     type Error = DateTimeError;
 
@@ -998,7 +998,7 @@ impl TryFrom<DateTime> for GMonthDay {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<Date> for GMonthDay {
     type Error = DateTimeError;
 
@@ -1096,7 +1096,7 @@ impl GMonth {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<DateTime> for GMonth {
     type Error = DateTimeError;
 
@@ -1106,7 +1106,7 @@ impl TryFrom<DateTime> for GMonth {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<Date> for GMonth {
     type Error = DateTimeError;
 
@@ -1222,7 +1222,7 @@ impl GDay {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<DateTime> for GDay {
     type Error = DateTimeError;
 
@@ -1232,7 +1232,7 @@ impl TryFrom<DateTime> for GDay {
     }
 }
 
-/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions/#casting-to-datetimes).
+/// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
 impl TryFrom<Date> for GDay {
     type Error = DateTimeError;
 

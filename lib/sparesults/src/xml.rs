@@ -1,4 +1,4 @@
-//! Implementation of [SPARQL Query Results XML Format](http://www.w3.org/TR/rdf-sparql-XMLres/)
+//! Implementation of [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/)
 
 use crate::error::{ParseError, SyntaxError};
 use oxrdf::vocab::rdf;

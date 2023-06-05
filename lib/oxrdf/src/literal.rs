@@ -112,17 +112,17 @@ impl Literal {
 
     /// The literal [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
     ///
-    /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](http://www.w3.org/1999/02/22-rdf-syntax-ns#langString).
-    /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
+    /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
     pub fn datatype(&self) -> NamedNodeRef<'_> {
         self.as_ref().datatype()
     }
 
-    /// Checks if this literal could be seen as an RDF 1.0 [plain literal](https://www.w3.org/TR/rdf-concepts/#dfn-plain-literal).
+    /// Checks if this literal could be seen as an RDF 1.0 [plain literal](https://www.w3.org/TR/2004/REC-rdf-concepts-20040210/#dfn-plain-literal).
     ///
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
-    /// or has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    /// or has the datatype [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
     pub fn is_plain(&self) -> bool {
         self.as_ref().is_plain()
@@ -510,8 +510,8 @@ impl<'a> LiteralRef<'a> {
 
     /// The literal [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
     ///
-    /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](http://www.w3.org/1999/02/22-rdf-syntax-ns#langString).
-    /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
+    /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
     pub fn datatype(self) -> NamedNodeRef<'a> {
         match self.0 {
@@ -521,10 +521,10 @@ impl<'a> LiteralRef<'a> {
         }
     }
 
-    /// Checks if this literal could be seen as an RDF 1.0 [plain literal](https://www.w3.org/TR/rdf-concepts/#dfn-plain-literal).
+    /// Checks if this literal could be seen as an RDF 1.0 [plain literal](https://www.w3.org/TR/2004/REC-rdf-concepts-20040210/#dfn-plain-literal).
     ///
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
-    /// or has the datatype [xsd:string](http://www.w3.org/2001/XMLSchema#string).
+    /// or has the datatype [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
     pub fn is_plain(self) -> bool {
         matches!(

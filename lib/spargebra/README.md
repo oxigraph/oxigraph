@@ -15,7 +15,7 @@ The emitted tree is based on [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sp
 
 The API entry point for SPARQL queries is the [`Query`] struct and the API entry point for SPARQL updates is the [`Update`] struct.
 
-Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/#sparql-star) is also available behind the `rdf-star` feature.
+Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#sparql-star) is also available behind the `rdf-star` feature.
 
 This crate is intended to be a building piece for SPARQL implementations in Rust like [Oxigraph](https://oxigraph.org).
 

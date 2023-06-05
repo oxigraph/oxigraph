@@ -28,7 +28,7 @@ Each datatype provides:
 * `PartialEq`, and `Eq` if possible, implementations following its [equality relation](https://www.w3.org/TR/xmlschema11-2/#equality).
 * `PartialOrd`, and `Ord` if possible, implementations following its [order relation](https://www.w3.org/TR/xmlschema11-2/#order).
 * `From` and `TryFrom` implementations to implement [XPath casting](https://www.w3.org/TR/xpath-functions-31/#casting).
-* Various methods implementing [XPath functions](https://www.w3.org/TR/xpath-functions/).
+* Various methods implementing [XPath functions](https://www.w3.org/TR/xpath-functions-31/).
 * `from_be_bytes` and `to_be_bytes` methods for serialization.
 
 
