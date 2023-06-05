@@ -2024,6 +2024,10 @@ mod tests {
         assert_eq!(GDay::from_str("---01")?.to_string(), "---01");
         assert_eq!(GMonth::from_str("--01+01:00")?.to_string(), "--01+01:00");
         assert_eq!(GMonth::from_str("--01")?.to_string(), "--01");
+
+        assert!(GYear::from_str("02020").is_err());
+        assert!(GYear::from_str("+2020").is_err());
+        assert!(GYear::from_str("33").is_err());
         Ok(())
     }
 
