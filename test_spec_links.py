@@ -14,7 +14,7 @@ base_path = Path(__file__).parent
 spec_cache = {}
 errors = set()
 
-for ext in ("md", "rs"):
+for ext in ("md", "rs", "rst"):
     for file in Path(__file__).parent.rglob(f"*.{ext}"):
         content = file.read_text()
         for link_regex in LINK_REGEXES:

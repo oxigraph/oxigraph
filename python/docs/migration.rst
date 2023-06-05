@@ -31,4 +31,4 @@ From 0.2 to 0.3
 * :py:class:`.Store` operations are now transactional using the "repeatable read" isolation level:
   the store only exposes changes that have been "committed" (i.e. no partial writes)
   and the exposed state does not change for the complete duration of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
-* `RDF-star <https://w3c.github.io/rdf-star/cg-spec>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
+* `RDF-star <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
