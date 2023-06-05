@@ -705,9 +705,7 @@ impl Dataset {
         InternedTerm,
         InternedGraphName,
     )> {
-        let b_prime = partition
-            .iter()
-            .find_map(|(_, b)| if b.len() > 1 { Some(b) } else { None });
+        let b_prime = partition.iter().find_map(|(_, b)| (b.len() > 1).then(|| b));
         if let Some(b_prime) = b_prime {
             b_prime
                 .iter()

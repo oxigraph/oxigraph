@@ -54,6 +54,12 @@ impl Double {
     }
 
     #[inline]
+    pub fn is_nan(self) -> bool {
+        self.value.is_nan()
+    }
+
+    #[deprecated(note = "Use .is_nan()")]
+    #[inline]
     pub fn is_naan(self) -> bool {
         self.value.is_nan()
     }
@@ -68,6 +74,20 @@ impl Double {
     pub fn is_identical_with(&self, other: &Self) -> bool {
         self.value.to_ne_bytes() == other.value.to_ne_bytes()
     }
+
+    pub const MIN: Self = Self { value: f64::MIN };
+
+    pub const MAX: Self = Self { value: f64::MAX };
+
+    pub const INFINITY: Self = Self {
+        value: f64::INFINITY,
+    };
+
+    pub const NEG_INFINITY: Self = Self {
+        value: f64::NEG_INFINITY,
+    };
+
+    pub const NAN: Self = Self { value: f64::NAN };
 }
 
 impl From<Double> for f64 {
@@ -243,7 +263,7 @@ mod tests {
     #[test]
     fn eq() {
         assert_eq!(Double::from(0_f64), Double::from(0_f64));
-        assert_ne!(Double::from(f64::NAN), Double::from(f64::NAN));
+        assert_ne!(Double::NAN, Double::NAN);
         assert_eq!(Double::from(-0.), Double::from(0.));
     }
 
@@ -254,18 +274,15 @@ mod tests {
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Double::from(f64::INFINITY).partial_cmp(&Double::from(f64::MAX)),
+            Double::INFINITY.partial_cmp(&Double::MAX),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Double::from(f64::NEG_INFINITY).partial_cmp(&Double::from(f64::MIN)),
+            Double::NEG_INFINITY.partial_cmp(&Double::MIN),
             Some(Ordering::Less)
         );
-        assert_eq!(Double::from(f64::NAN).partial_cmp(&Double::from(0.)), None);
-        assert_eq!(
-            Double::from(f64::NAN).partial_cmp(&Double::from(f64::NAN)),
-            None
-        );
+        assert_eq!(Double::NAN.partial_cmp(&Double::from(0.)), None);
+        assert_eq!(Double::NAN.partial_cmp(&Double::NAN), None);
         assert_eq!(
             Double::from(0.).partial_cmp(&Double::from(-0.)),
             Some(Ordering::Equal)
@@ -275,7 +292,7 @@ mod tests {
     #[test]
     fn is_identical_with() {
         assert!(Double::from(0.).is_identical_with(&Double::from(0.)));
-        assert!(Double::from(f64::NAN).is_identical_with(&Double::from(f64::NAN)));
+        assert!(Double::NAN.is_identical_with(&Double::NAN));
         assert!(!Double::from(-0.).is_identical_with(&Double::from(0.)));
     }
 
@@ -297,11 +314,11 @@ mod tests {
         assert_eq!(Double::from_str("-1.")?.to_string(), "-1");
         assert_eq!(
             Double::from_str(&f64::MIN.to_string()).unwrap(),
-            Double::from(f64::MIN)
+            Double::MIN
         );
         assert_eq!(
             Double::from_str(&f64::MAX.to_string()).unwrap(),
-            Double::from(f64::MAX)
+            Double::MAX
         );
         Ok(())
     }

@@ -9,3 +9,8 @@ updates:
     versioning-strategy: increase-if-necessary
     schedule:
       interval: weekly
+  - package-ecosystem: "npm"
+    directory: "/js/"
+    versioning-strategy: increase-if-necessary
+    schedule:
+      interval: weekly

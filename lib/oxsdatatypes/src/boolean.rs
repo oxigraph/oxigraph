@@ -43,14 +43,14 @@ impl From<Decimal> for Boolean {
 impl From<Float> for Boolean {
     #[inline]
     fn from(value: Float) -> Self {
-        (value != Float::from(0.) && !value.is_naan()).into()
+        (value != Float::from(0.) && !value.is_nan()).into()
     }
 }
 
 impl From<Double> for Boolean {
     #[inline]
     fn from(value: Double) -> Self {
-        (value != Double::from(0.) && !value.is_naan()).into()
+        (value != Double::from(0.) && !value.is_nan()).into()
     }
 }
 

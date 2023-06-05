@@ -8,7 +8,9 @@ use oxigraph::io::{
 use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
+use pyo3::{intern, wrap_pyfunction};
+use std::cmp::max;
+use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Write};
 
@@ -46,7 +48,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
 /// [<Triple subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
 #[pyfunction]
-#[pyo3(text_signature = "(input, mime_type, *, base_iri = None)")]
+#[pyo3(signature = (input, mime_type, *, base_iri = None))]
 pub fn parse(
     input: PyObject,
     mime_type: &str,
@@ -281,21 +283,22 @@ impl Write for PyWritable {
 pub struct PyIo(PyObject);
 
 impl Read for PyIo {
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         Python::with_gil(|py| {
+            if buf.is_empty() {
+                return Ok(0);
+            }
+            let to_read = max(1, buf.len() / 4); // We divide by 4 because TextIO works with number of characters and not with number of bytes
             let read = self
                 .0
-                .call_method(py, "read", (buf.len(),), None)
+                .as_ref(py)
+                .call_method1(intern!(py, "read"), (to_read,))
                 .map_err(to_io_err)?;
             let bytes = read
-                .extract::<&[u8]>(py)
-                .or_else(|e| {
-                    read.extract::<&str>(py)
-                        .map(|s| s.as_bytes())
-                        .map_err(|_| e)
-                })
+                .extract::<&[u8]>()
+                .or_else(|e| read.extract::<&str>().map(str::as_bytes).map_err(|_| e))
                 .map_err(to_io_err)?;
-            buf.write_all(bytes)?;
+            buf[..bytes.len()].copy_from_slice(bytes);
             Ok(bytes.len())
         })
     }
@@ -305,16 +308,17 @@ impl Write for PyIo {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         Python::with_gil(|py| {
             self.0
-                .call_method(py, "write", (PyBytes::new(py, buf),), None)
+                .as_ref(py)
+                .call_method1(intern!(py, "write"), (PyBytes::new(py, buf),))
                 .map_err(to_io_err)?
-                .extract::<usize>(py)
+                .extract::<usize>()
                 .map_err(to_io_err)
         })
     }
 
     fn flush(&mut self) -> io::Result<()> {
         Python::with_gil(|py| {
-            self.0.call_method(py, "flush", (), None)?;
+            self.0.as_ref(py).call_method0(intern!(py, "flush"))?;
             Ok(())
         })
     }
@@ -325,7 +329,10 @@ fn to_io_err(error: impl Into<PyErr>) -> io::Error {
 }
 
 pub fn map_io_err(error: io::Error) -> PyErr {
-    if error.get_ref().map_or(false, |s| s.is::<PyErr>()) {
+    if error
+        .get_ref()
+        .map_or(false, <(dyn Error + Send + Sync + 'static)>::is::<PyErr>)
+    {
         *error.into_inner().unwrap().downcast().unwrap()
     } else {
         PyIOError::new_err(error.to_string())

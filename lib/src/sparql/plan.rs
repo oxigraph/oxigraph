@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::time::Duration;
 use std::{fmt, io};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PlanNode {
     StaticBindings {
         encoded_tuples: Vec<EncodedTuple>,
@@ -22,7 +22,7 @@ pub enum PlanNode {
     },
     Service {
         service_name: PatternValue,
-        variables: Rc<Vec<Variable>>,
+        variables: Rc<[Variable]>,
         child: Rc<Self>,
         graph_pattern: Rc<GraphPattern>,
         silent: bool,
@@ -71,7 +71,7 @@ pub enum PlanNode {
     ForLoopLeftJoin {
         left: Rc<Self>,
         right: Rc<Self>,
-        possible_problem_vars: Rc<Vec<usize>>, //Variables that should not be part of the entry of the left join
+        possible_problem_vars: Rc<[usize]>, //Variables that should not be part of the entry of the left join
     },
     Extend {
         child: Rc<Self>,
@@ -99,13 +99,13 @@ pub enum PlanNode {
     },
     Project {
         child: Rc<Self>,
-        mapping: Rc<Vec<(PlanVariable, PlanVariable)>>, // pairs of (variable key in child, variable key in output)
+        mapping: Rc<[(PlanVariable, PlanVariable)]>, // pairs of (variable key in child, variable key in output)
     },
     Aggregate {
         // By definition the group by key are the range 0..key_mapping.len()
         child: Rc<Self>,
-        key_variables: Rc<Vec<PlanVariable>>,
-        aggregates: Rc<Vec<(PlanAggregation, PlanVariable)>>,
+        key_variables: Rc<[PlanVariable]>,
+        aggregates: Rc<[(PlanAggregation, PlanVariable)]>,
     },
 }
 
@@ -236,7 +236,10 @@ impl PlanNode {
         match self {
             Self::StaticBindings { encoded_tuples, .. } => {
                 let mut variables = BTreeMap::default(); // value true iff always bound
-                let max_tuple_length = encoded_tuples.iter().map(|t| t.capacity()).fold(0, max);
+                let max_tuple_length = encoded_tuples
+                    .iter()
+                    .map(EncodedTuple::capacity)
+                    .fold(0, max);
                 for tuple in encoded_tuples {
                     for key in 0..max_tuple_length {
                         match variables.entry(key) {
@@ -444,8 +447,8 @@ pub enum PlanExpression {
     Literal(PlanTerm<Literal>),
     Variable(PlanVariable),
     Exists(Rc<PlanNode>),
-    Or(Box<Self>, Box<Self>),
-    And(Box<Self>, Box<Self>),
+    Or(Vec<Self>),
+    And(Vec<Self>),
     Equal(Box<Self>, Box<Self>),
     Greater(Box<Self>, Box<Self>),
     GreaterOrEqual(Box<Self>, Box<Self>),
@@ -594,9 +597,7 @@ impl PlanExpression {
             | Self::YearMonthDurationCast(e)
             | Self::DayTimeDurationCast(e)
             | Self::StringCast(e) => e.lookup_used_variables(callback),
-            Self::Or(a, b)
-            | Self::And(a, b)
-            | Self::Equal(a, b)
+            Self::Equal(a, b)
             | Self::Greater(a, b)
             | Self::GreaterOrEqual(a, b)
             | Self::Less(a, b)
@@ -636,7 +637,11 @@ impl PlanExpression {
                 c.lookup_used_variables(callback);
                 d.lookup_used_variables(callback);
             }
-            Self::Concat(es) | Self::Coalesce(es) | Self::CustomFunction(_, es) => {
+            Self::Or(es)
+            | Self::And(es)
+            | Self::Concat(es)
+            | Self::Coalesce(es)
+            | Self::CustomFunction(_, es) => {
                 for e in es {
                     e.lookup_used_variables(callback);
                 }
@@ -649,6 +654,7 @@ impl PlanExpression {
 }
 
 impl fmt::Display for PlanExpression {
+    #[allow(clippy::many_single_char_names)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Variable(v) => {
@@ -719,8 +725,26 @@ impl fmt::Display for PlanExpression {
             Self::YearMonthDurationCast(e) => write!(f, "YearMonthDurationCast({e})"),
             Self::DayTimeDurationCast(e) => write!(f, "DayTimeDurationCast({e})"),
             Self::StringCast(e) => write!(f, "StringCast({e})"),
-            Self::Or(a, b) => write!(f, "Or({a}, {b})"),
-            Self::And(a, b) => write!(f, "And({a}, {b})"),
+            Self::Or(es) => {
+                write!(f, "Or(")?;
+                for (i, e) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, ")")
+            }
+            Self::And(es) => {
+                write!(f, "And(")?;
+                for (i, e) in es.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{e}")?;
+                }
+                write!(f, ")")
+            }
             Self::Equal(a, b) => write!(f, "Equal({a}, {b})"),
             Self::Greater(a, b) => write!(f, "Greater({a}, {b})"),
             Self::GreaterOrEqual(a, b) => write!(f, "GreaterOrEqual({a}, {b})"),
@@ -838,7 +862,7 @@ pub enum PlanAggregationFunction {
     Max,
     Avg,
     Sample,
-    GroupConcat { separator: Rc<String> },
+    GroupConcat { separator: Rc<str> },
 }
 
 #[derive(Debug, Clone)]
@@ -850,7 +874,7 @@ pub enum PlanPropertyPath {
     ZeroOrMore(Rc<Self>),
     OneOrMore(Rc<Self>),
     ZeroOrOne(Rc<Self>),
-    NegatedPropertySet(Rc<Vec<PlanTerm<NamedNode>>>),
+    NegatedPropertySet(Rc<[PlanTerm<NamedNode>]>),
 }
 
 impl fmt::Display for PlanPropertyPath {
@@ -1046,7 +1070,7 @@ impl PlanNodeWithStats {
                 "Aggregate({})",
                 key_variables
                     .iter()
-                    .map(|c| c.to_string())
+                    .map(ToString::to_string)
                     .chain(aggregates.iter().map(|(agg, v)| format!("{agg} -> {v}")))
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -1107,7 +1131,7 @@ impl PlanNodeWithStats {
                 format!(
                     "Sort({})",
                     by.iter()
-                        .map(|c| c.to_string())
+                        .map(ToString::to_string)
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
@@ -1117,7 +1141,7 @@ impl PlanNodeWithStats {
                     "StaticBindings({})",
                     variables
                         .iter()
-                        .map(|v| v.to_string())
+                        .map(ToString::to_string)
                         .collect::<Vec<_>>()
                         .join(", ")
                 )

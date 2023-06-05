@@ -2,15 +2,6 @@ use super::date_time::{DateTimeError, GDay, GMonth, GMonthDay, GYear, GYearMonth
 use super::decimal::ParseDecimalError;
 use super::duration::{DayTimeDuration, YearMonthDuration};
 use super::*;
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take_while, take_while_m_n};
-use nom::character::complete::{char, digit0, digit1};
-use nom::combinator::{map, opt, recognize};
-use nom::error::{ErrorKind, ParseError};
-use nom::multi::many1;
-use nom::sequence::{preceded, terminated, tuple};
-use nom::Err;
-use nom::{IResult, Needed};
 use std::error::Error;
 use std::fmt;
 use std::num::ParseIntError;
@@ -24,46 +15,35 @@ pub struct XsdParseError {
 
 #[derive(Debug, Clone)]
 enum XsdParseErrorKind {
-    NomKind(ErrorKind),
-    NomChar(char),
-    MissingData(Needed),
-    TooMuchData { count: usize },
-    Overflow,
     ParseInt(ParseIntError),
     ParseDecimal(ParseDecimalError),
-    OutOfIntegerRange { value: u8, min: u8, max: u8 },
     DateTime(DateTimeError),
+    Message(&'static str),
 }
+
+const OVERFLOW_ERROR: XsdParseError = XsdParseError {
+    kind: XsdParseErrorKind::Message("Overflow error"),
+};
 
 impl fmt::Display for XsdParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            XsdParseErrorKind::NomKind(kind) => {
-                write!(f, "Invalid XML Schema value: {}", kind.description())
-            }
-            XsdParseErrorKind::NomChar(c) => {
-                write!(f, "Unexpected character in XML Schema value: '{c}'")
-            }
-            XsdParseErrorKind::MissingData(Needed::Unknown) => {
-                write!(f, "Too small XML Schema value")
-            }
-            XsdParseErrorKind::MissingData(Needed::Size(size)) => {
-                write!(f, "Too small XML Schema value: missing {size} chars")
-            }
-            XsdParseErrorKind::TooMuchData { count } => {
-                write!(f, "Too long XML Schema value: {count} extra chars")
-            }
-            XsdParseErrorKind::Overflow => write!(f, "Computation overflow or underflow"),
             XsdParseErrorKind::ParseInt(error) => {
                 write!(f, "Error while parsing integer: {error}")
             }
             XsdParseErrorKind::ParseDecimal(error) => {
                 write!(f, "Error while parsing decimal: {error}")
             }
-            XsdParseErrorKind::OutOfIntegerRange { value, min, max } => {
-                write!(f, "The integer {value} is not between {min} and {max}")
-            }
             XsdParseErrorKind::DateTime(error) => error.fmt(f),
+            XsdParseErrorKind::Message(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl XsdParseError {
+    const fn msg(message: &'static str) -> Self {
+        Self {
+            kind: XsdParseErrorKind::Message(message),
         }
     }
 }
@@ -74,30 +54,8 @@ impl Error for XsdParseError {
             XsdParseErrorKind::ParseInt(error) => Some(error),
             XsdParseErrorKind::ParseDecimal(error) => Some(error),
             XsdParseErrorKind::DateTime(error) => Some(error),
-            _ => None,
+            XsdParseErrorKind::Message(_) => None,
         }
-    }
-}
-
-impl ParseError<&str> for XsdParseError {
-    fn from_error_kind(_input: &str, kind: ErrorKind) -> Self {
-        Self {
-            kind: XsdParseErrorKind::NomKind(kind),
-        }
-    }
-
-    fn append(_input: &str, _kind: ErrorKind, other: Self) -> Self {
-        other
-    }
-
-    fn from_char(_input: &str, c: char) -> Self {
-        Self {
-            kind: XsdParseErrorKind::NomChar(c),
-        }
-    }
-
-    fn or(self, other: Self) -> Self {
-        other
     }
 }
 
@@ -125,412 +83,538 @@ impl From<DateTimeError> for XsdParseError {
     }
 }
 
-impl From<Err<Self>> for XsdParseError {
-    fn from(err: Err<Self>) -> Self {
-        match err {
-            Err::Incomplete(needed) => Self {
-                kind: XsdParseErrorKind::MissingData(needed),
-            },
-            Err::Error(e) | Err::Failure(e) => e,
+// [6]   duYearFrag ::= unsignedNoDecimalPtNumeral 'Y'
+// [7]   duMonthFrag ::= unsignedNoDecimalPtNumeral 'M'
+// [8]   duDayFrag ::= unsignedNoDecimalPtNumeral 'D'
+// [9]   duHourFrag ::= unsignedNoDecimalPtNumeral 'H'
+// [10]   duMinuteFrag ::= unsignedNoDecimalPtNumeral 'M'
+// [11]   duSecondFrag ::= (unsignedNoDecimalPtNumeral | unsignedDecimalPtNumeral) 'S'
+// [12]   duYearMonthFrag ::= (duYearFrag duMonthFrag?) | duMonthFrag
+// [13]   duTimeFrag ::= 'T' ((duHourFrag duMinuteFrag? duSecondFrag?) | (duMinuteFrag duSecondFrag?) | duSecondFrag)
+// [14]   duDayTimeFrag ::= (duDayFrag duTimeFrag?) | duTimeFrag
+// [15]   durationLexicalRep ::= '-'? 'P' ((duYearMonthFrag duDayTimeFrag?) | duDayTimeFrag)
+struct DurationParts {
+    year_month: Option<i64>,
+    day_time: Option<Decimal>,
+}
+
+fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
+    // States
+    const START: u32 = 0;
+    const AFTER_YEAR: u32 = 1;
+    const AFTER_MONTH: u32 = 2;
+    const AFTER_DAY: u32 = 3;
+    const AFTER_T: u32 = 4;
+    const AFTER_HOUR: u32 = 5;
+    const AFTER_MINUTE: u32 = 6;
+    const AFTER_SECOND: u32 = 7;
+
+    let (negative, input) = if let Some(left) = input.strip_prefix('-') {
+        (true, left)
+    } else {
+        (false, input)
+    };
+    let mut input = expect_char(input, 'P', "Durations must start with 'P'")?;
+    let mut state = START;
+    let mut year_month: Option<i64> = None;
+    let mut day_time: Option<Decimal> = None;
+    while !input.is_empty() {
+        if let Some(left) = input.strip_prefix('T') {
+            if state >= AFTER_T {
+                return Err(XsdParseError::msg("Duplicated time separator 'T'"));
+            }
+            state = AFTER_T;
+            input = left;
+        } else {
+            let (number_str, left) = decimal_prefix(input);
+            match left.chars().next() {
+                Some('Y') if state < AFTER_YEAR => {
+                    year_month = Some(
+                        year_month
+                            .unwrap_or_default()
+                            .checked_add(
+                                i64::from_str(number_str)?
+                                    .checked_mul(12)
+                                    .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_YEAR;
+                }
+                Some('M') if state < AFTER_MONTH => {
+                    year_month = Some(
+                        year_month
+                            .unwrap_or_default()
+                            .checked_add(i64::from_str(number_str)?)
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_MONTH;
+                }
+                Some('D') if state < AFTER_DAY => {
+                    if number_str.contains('.') {
+                        return Err(XsdParseError::msg(
+                            "Decimal numbers are not allowed for days",
+                        ));
+                    }
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(
+                                Decimal::from_str(number_str)?
+                                    .checked_mul(86400)
+                                    .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_DAY;
+                }
+                Some('H') if state == AFTER_T => {
+                    if number_str.contains('.') {
+                        return Err(XsdParseError::msg(
+                            "Decimal numbers are not allowed for hours",
+                        ));
+                    }
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(
+                                Decimal::from_str(number_str)?
+                                    .checked_mul(3600)
+                                    .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_HOUR;
+                }
+                Some('M') if (AFTER_T..AFTER_MINUTE).contains(&state) => {
+                    if number_str.contains('.') {
+                        return Err(XsdParseError::msg(
+                            "Decimal numbers are not allowed for minutes",
+                        ));
+                    }
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(
+                                Decimal::from_str(number_str)?
+                                    .checked_mul(60)
+                                    .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_MINUTE;
+                }
+                Some('S') if (AFTER_T..AFTER_SECOND).contains(&state) => {
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(Decimal::from_str(number_str)?)
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_SECOND;
+                }
+                Some(_) => return Err(XsdParseError::msg("Unexpected type character")),
+                None => {
+                    return Err(XsdParseError::msg(
+                        "Numbers in durations must be followed by a type character",
+                    ))
+                }
+            }
+            input = &left[1..];
         }
     }
-}
 
-type XsdResult<'a, T> = IResult<&'a str, T, XsdParseError>;
-
-const OVERFLOW_ERROR: XsdParseError = XsdParseError {
-    kind: XsdParseErrorKind::Overflow,
-};
-
-pub fn parse_value<'a, T>(
-    mut f: impl FnMut(&'a str) -> XsdResult<'a, T>,
-    input: &'a str,
-) -> Result<T, XsdParseError> {
-    let (left, result) = f(input)?;
-    if left.is_empty() {
-        Ok(result)
-    } else {
-        Err(XsdParseError {
-            kind: XsdParseErrorKind::TooMuchData { count: left.len() },
-        })
-    }
-}
-
-//TODO: check every computation
-
-// [6]   duYearFrag ::= unsignedNoDecimalPtNumeral 'Y'
-fn du_year_frag(input: &str) -> XsdResult<'_, i64> {
-    terminated(unsigned_no_decimal_pt_numeral, char('Y'))(input)
-}
-
-// [7]   duMonthFrag ::= unsignedNoDecimalPtNumeral 'M'
-fn du_month_frag(input: &str) -> XsdResult<'_, i64> {
-    terminated(unsigned_no_decimal_pt_numeral, char('M'))(input)
-}
-
-//  [8]   duDayFrag ::= unsignedNoDecimalPtNumeral 'D'
-fn du_day_frag(input: &str) -> XsdResult<'_, i64> {
-    terminated(unsigned_no_decimal_pt_numeral, char('D'))(input)
-}
-
-// [9]   duHourFrag ::= unsignedNoDecimalPtNumeral 'H'
-fn du_hour_frag(input: &str) -> XsdResult<'_, i64> {
-    terminated(unsigned_no_decimal_pt_numeral, char('H'))(input)
-}
-
-// [10]   duMinuteFrag ::= unsignedNoDecimalPtNumeral 'M'
-fn du_minute_frag(input: &str) -> XsdResult<'_, i64> {
-    terminated(unsigned_no_decimal_pt_numeral, char('M'))(input)
-}
-
-// [11]   duSecondFrag ::= (unsignedNoDecimalPtNumeral | unsignedDecimalPtNumeral) 'S'
-fn du_second_frag(input: &str) -> XsdResult<'_, Decimal> {
-    terminated(
-        map_res(
-            recognize(tuple((digit0, opt(preceded(char('.'), digit0))))),
-            Decimal::from_str,
-        ),
-        char('S'),
-    )(input)
-}
-
-// [12]   duYearMonthFrag ::= (duYearFrag duMonthFrag?) | duMonthFrag
-fn du_year_month_frag(input: &str) -> XsdResult<'_, i64> {
-    alt((
-        map(tuple((du_year_frag, opt(du_month_frag))), |(y, m)| {
-            12 * y + m.unwrap_or(0)
-        }),
-        du_month_frag,
-    ))(input)
-}
-
-// [13]   duTimeFrag ::= 'T' ((duHourFrag duMinuteFrag? duSecondFrag?) | (duMinuteFrag duSecondFrag?) | duSecondFrag)
-fn du_time_frag(input: &str) -> XsdResult<'_, Decimal> {
-    preceded(
-        char('T'),
-        alt((
-            map_res(
-                tuple((du_hour_frag, opt(du_minute_frag), opt(du_second_frag))),
-                |(h, m, s)| {
-                    Decimal::from(3600 * h + 60 * m.unwrap_or(0))
-                        .checked_add(s.unwrap_or_default())
-                        .ok_or(OVERFLOW_ERROR)
-                },
-            ),
-            map_res(tuple((du_minute_frag, opt(du_second_frag))), |(m, s)| {
-                Decimal::from(m * 60)
-                    .checked_add(s.unwrap_or_default())
-                    .ok_or(OVERFLOW_ERROR)
-            }),
-            du_second_frag,
-        )),
-    )(input)
-}
-
-// [14]   duDayTimeFrag ::= (duDayFrag duTimeFrag?) | duTimeFrag
-fn du_day_time_frag(input: &str) -> XsdResult<'_, Decimal> {
-    alt((
-        map_res(tuple((du_day_frag, opt(du_time_frag))), |(d, t)| {
-            Decimal::from(d)
-                .checked_mul(Decimal::from(86400))
-                .ok_or(OVERFLOW_ERROR)?
-                .checked_add(t.unwrap_or_default())
-                .ok_or(OVERFLOW_ERROR)
-        }),
-        du_time_frag,
-    ))(input)
-}
-
-// [15]   durationLexicalRep ::= '-'? 'P' ((duYearMonthFrag duDayTimeFrag?) | duDayTimeFrag)
-pub fn duration_lexical_rep(input: &str) -> XsdResult<'_, Duration> {
-    map(
-        tuple((
-            opt(char('-')),
-            preceded(
-                char('P'),
-                alt((
-                    map(
-                        tuple((du_year_month_frag, opt(du_day_time_frag))),
-                        |(y, d)| Duration::new(y, d.unwrap_or_default()),
-                    ),
-                    map(du_day_time_frag, |d| Duration::new(0, d)),
-                )),
-            ),
-        )),
-        |(sign, duration)| {
-            if sign == Some('-') {
-                -duration
+    Ok((
+        DurationParts {
+            year_month: if let Some(v) = year_month {
+                Some(if negative {
+                    v.checked_neg().ok_or(OVERFLOW_ERROR)?
+                } else {
+                    v
+                })
             } else {
-                duration
-            }
+                None
+            },
+            day_time: if let Some(v) = day_time {
+                Some(if negative {
+                    v.checked_neg().ok_or(OVERFLOW_ERROR)?
+                } else {
+                    v
+                })
+            } else {
+                None
+            },
         },
-    )(input)
+        input,
+    ))
+}
+
+pub fn parse_duration(input: &str) -> Result<Duration, XsdParseError> {
+    let parts = ensure_complete(input, duration_parts)?;
+    if parts.year_month.is_none() && parts.day_time.is_none() {
+        return Err(XsdParseError::msg("Empty duration"));
+    }
+    Ok(Duration::new(
+        parts.year_month.unwrap_or(0),
+        parts.day_time.unwrap_or_default(),
+    ))
+}
+
+pub fn parse_year_month_duration(input: &str) -> Result<YearMonthDuration, XsdParseError> {
+    let parts = ensure_complete(input, duration_parts)?;
+    if parts.day_time.is_some() {
+        return Err(XsdParseError::msg(
+            "There must not be any day or time component in a yearMonthDuration",
+        ));
+    }
+    Ok(YearMonthDuration::new(parts.year_month.ok_or(
+        XsdParseError::msg("No year and month values found"),
+    )?))
+}
+
+pub fn parse_day_time_duration(input: &str) -> Result<DayTimeDuration, XsdParseError> {
+    let parts = ensure_complete(input, duration_parts)?;
+    if parts.year_month.is_some() {
+        return Err(XsdParseError::msg(
+            "There must not be any year or month component in a dayTimeDuration",
+        ));
+    }
+    Ok(DayTimeDuration::new(parts.day_time.ok_or(
+        XsdParseError::msg("No day or time values found"),
+    )?))
 }
 
 // [16]   dateTimeLexicalRep ::= yearFrag '-' monthFrag '-' dayFrag 'T' ((hourFrag ':' minuteFrag ':' secondFrag) | endOfDayFrag) timezoneFrag?
-pub fn date_time_lexical_rep(input: &str) -> XsdResult<'_, DateTime> {
-    map_res(
-        tuple((
-            year_frag,
-            char('-'),
-            month_frag,
-            char('-'),
-            day_frag,
-            char('T'),
-            alt((
-                map(
-                    tuple((hour_frag, char(':'), minute_frag, char(':'), second_frag)),
-                    |(h, _, m, _, s)| (h, m, s),
-                ),
-                end_of_day_frag,
-            )),
-            opt(timezone_frag),
-        )),
-        |(year, _, month, _, day, _, (hours, minutes, seconds), timezone)| {
-            DateTime::new(year, month, day, hours, minutes, seconds, timezone)
-        },
-    )(input)
+fn date_time_lexical_rep(input: &str) -> Result<(DateTime, &str), XsdParseError> {
+    let (year, input) = year_frag(input)?;
+    let input = expect_char(input, '-', "The year and month must be separated by '-'")?;
+    let (month, input) = month_frag(input)?;
+    let input = expect_char(input, '-', "The month and day must be separated by '-'")?;
+    let (day, input) = day_frag(input)?;
+    let input = expect_char(input, 'T', "The date and time must be separated by 'T'")?;
+    let (hour, input) = hour_frag(input)?;
+    let input = expect_char(input, ':', "The hours and minutes must be separated by ':'")?;
+    let (minute, input) = minute_frag(input)?;
+    let input = expect_char(
+        input,
+        ':',
+        "The minutes and seconds must be separated by ':'",
+    )?;
+    let (second, input) = second_frag(input)?;
+    // We validate 24:00:00
+    if hour == 24 && minute != 0 && second != Decimal::from(0) {
+        return Err(XsdParseError::msg(
+            "Times are not allowed to be after 24:00:00",
+        ));
+    }
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((
+        DateTime::new(year, month, day, hour, minute, second, timezone_offset)?,
+        input,
+    ))
+}
+
+pub fn parse_date_time(input: &str) -> Result<DateTime, XsdParseError> {
+    ensure_complete(input, date_time_lexical_rep)
 }
 
 // [17]   timeLexicalRep ::= ((hourFrag ':' minuteFrag ':' secondFrag) | endOfDayFrag) timezoneFrag?
-pub fn time_lexical_rep(input: &str) -> XsdResult<'_, Time> {
-    map_res(
-        tuple((
-            alt((
-                map(
-                    tuple((hour_frag, char(':'), minute_frag, char(':'), second_frag)),
-                    |(h, _, m, _, s)| (h, m, s),
-                ),
-                end_of_day_frag,
-            )),
-            opt(timezone_frag),
-        )),
-        |((hours, minutes, seconds), timezone)| Time::new(hours, minutes, seconds, timezone),
-    )(input)
+fn time_lexical_rep(input: &str) -> Result<(Time, &str), XsdParseError> {
+    let (hour, input) = hour_frag(input)?;
+    let input = expect_char(input, ':', "The hours and minutes must be separated by ':'")?;
+    let (minute, input) = minute_frag(input)?;
+    let input = expect_char(
+        input,
+        ':',
+        "The minutes and seconds must be separated by ':'",
+    )?;
+    let (second, input) = second_frag(input)?;
+    // We validate 24:00:00
+    if hour == 24 && minute != 0 && second != Decimal::from(0) {
+        return Err(XsdParseError::msg(
+            "Times are not allowed to be after 24:00:00",
+        ));
+    }
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((Time::new(hour, minute, second, timezone_offset)?, input))
+}
+
+pub fn parse_time(input: &str) -> Result<Time, XsdParseError> {
+    ensure_complete(input, time_lexical_rep)
 }
 
 // [18]   dateLexicalRep ::= yearFrag '-' monthFrag '-' dayFrag timezoneFrag?   Constraint:  Day-of-month Representations
-pub fn date_lexical_rep(input: &str) -> XsdResult<'_, Date> {
-    map_res(
-        tuple((
-            year_frag,
-            char('-'),
-            month_frag,
-            char('-'),
-            day_frag,
-            opt(timezone_frag),
-        )),
-        |(year, _, month, _, day, timezone)| Date::new(year, month, day, timezone),
-    )(input)
+fn date_lexical_rep(input: &str) -> Result<(Date, &str), XsdParseError> {
+    let (year, input) = year_frag(input)?;
+    let input = expect_char(input, '-', "The year and month must be separated by '-'")?;
+    let (month, input) = month_frag(input)?;
+    let input = expect_char(input, '-', "The month and day must be separated by '-'")?;
+    let (day, input) = day_frag(input)?;
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((Date::new(year, month, day, timezone_offset)?, input))
+}
+
+pub fn parse_date(input: &str) -> Result<Date, XsdParseError> {
+    ensure_complete(input, date_lexical_rep)
 }
 
 // [19]   gYearMonthLexicalRep ::= yearFrag '-' monthFrag timezoneFrag?
-pub fn g_year_month_lexical_rep(input: &str) -> XsdResult<'_, GYearMonth> {
-    map_res(
-        tuple((year_frag, char('-'), month_frag, opt(timezone_frag))),
-        |(year, _, month, timezone)| GYearMonth::new(year, month, timezone),
-    )(input)
+fn g_year_month_lexical_rep(input: &str) -> Result<(GYearMonth, &str), XsdParseError> {
+    let (year, input) = year_frag(input)?;
+    let input = expect_char(input, '-', "The year and month must be separated by '-'")?;
+    let (month, input) = month_frag(input)?;
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((GYearMonth::new(year, month, timezone_offset)?, input))
+}
+
+pub fn parse_g_year_month(input: &str) -> Result<GYearMonth, XsdParseError> {
+    ensure_complete(input, g_year_month_lexical_rep)
 }
 
 // [20]   gYearLexicalRep ::= yearFrag timezoneFrag?
-pub fn g_year_lexical_rep(input: &str) -> XsdResult<'_, GYear> {
-    map_res(
-        tuple((year_frag, opt(timezone_frag))),
-        |(year, timezone)| GYear::new(year, timezone),
-    )(input)
+fn g_year_lexical_rep(input: &str) -> Result<(GYear, &str), XsdParseError> {
+    let (year, input) = year_frag(input)?;
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((GYear::new(year, timezone_offset)?, input))
+}
+
+pub fn parse_g_year(input: &str) -> Result<GYear, XsdParseError> {
+    ensure_complete(input, g_year_lexical_rep)
 }
 
 // [21]   gMonthDayLexicalRep ::= '--' monthFrag '-' dayFrag timezoneFrag?   Constraint:  Day-of-month Representations
-pub fn g_month_day_lexical_rep(input: &str) -> XsdResult<'_, GMonthDay> {
-    map_res(
-        tuple((
-            char('-'),
-            char('-'),
-            month_frag,
-            char('-'),
-            day_frag,
-            opt(timezone_frag),
-        )),
-        |(_, _, month, _, day, timezone)| GMonthDay::new(month, day, timezone),
-    )(input)
+fn g_month_day_lexical_rep(input: &str) -> Result<(GMonthDay, &str), XsdParseError> {
+    let input = expect_char(input, '-', "gMonthDay values must start with '--'")?;
+    let input = expect_char(input, '-', "gMonthDay values must start with '--'")?;
+    let (month, input) = month_frag(input)?;
+    let input = expect_char(input, '-', "The month and day must be separated by '-'")?;
+    let (day, input) = day_frag(input)?;
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((GMonthDay::new(month, day, timezone_offset)?, input))
+}
+
+pub fn parse_g_month_day(input: &str) -> Result<GMonthDay, XsdParseError> {
+    ensure_complete(input, g_month_day_lexical_rep)
 }
 
 // [22]   gDayLexicalRep ::= '---' dayFrag timezoneFrag?
-pub fn g_day_lexical_rep(input: &str) -> XsdResult<'_, GDay> {
-    map_res(
-        tuple((
-            char('-'),
-            char('-'),
-            char('-'),
-            day_frag,
-            opt(timezone_frag),
-        )),
-        |(_, _, _, day, timezone)| GDay::new(day, timezone),
-    )(input)
+fn g_day_lexical_rep(input: &str) -> Result<(GDay, &str), XsdParseError> {
+    let input = expect_char(input, '-', "gDay values must start with '---'")?;
+    let input = expect_char(input, '-', "gDay values must start with '---'")?;
+    let input = expect_char(input, '-', "gDay values must start with '---'")?;
+    let (day, input) = day_frag(input)?;
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((GDay::new(day, timezone_offset)?, input))
+}
+
+pub fn parse_g_day(input: &str) -> Result<GDay, XsdParseError> {
+    ensure_complete(input, g_day_lexical_rep)
 }
 
 // [23]   gMonthLexicalRep ::= '--' monthFrag timezoneFrag?
-pub fn g_month_lexical_rep(input: &str) -> XsdResult<'_, GMonth> {
-    map_res(
-        tuple((char('-'), char('-'), month_frag, opt(timezone_frag))),
-        |(_, _, month, timezone)| GMonth::new(month, timezone),
-    )(input)
+fn g_month_lexical_rep(input: &str) -> Result<(GMonth, &str), XsdParseError> {
+    let input = expect_char(input, '-', "gMonth values must start with '--'")?;
+    let input = expect_char(input, '-', "gMonth values must start with '--'")?;
+    let (month, input) = month_frag(input)?;
+    let (timezone_offset, input) = optional_end(input, timezone_frag)?;
+    Ok((GMonth::new(month, timezone_offset)?, input))
 }
 
-// [42]   yearMonthDurationLexicalRep ::= '-'? 'P' duYearMonthFrag
-pub fn year_month_duration_lexical_rep(input: &str) -> XsdResult<'_, YearMonthDuration> {
-    map(
-        tuple((opt(char('-')), preceded(char('P'), du_year_month_frag))),
-        |(sign, duration)| {
-            YearMonthDuration::new(if sign == Some('-') {
-                -duration
-            } else {
-                duration
-            })
-        },
-    )(input)
-}
-
-// [43]   dayTimeDurationLexicalRep ::= '-'? 'P' duDayTimeFrag
-pub fn day_time_duration_lexical_rep(input: &str) -> XsdResult<'_, DayTimeDuration> {
-    map(
-        tuple((opt(char('-')), preceded(char('P'), du_day_time_frag))),
-        |(sign, duration)| {
-            DayTimeDuration::new(if sign == Some('-') {
-                -duration
-            } else {
-                duration
-            })
-        },
-    )(input)
-}
-
-// [46]   unsignedNoDecimalPtNumeral ::= digit+
-fn unsigned_no_decimal_pt_numeral(input: &str) -> XsdResult<'_, i64> {
-    map_res(digit1, i64::from_str)(input)
+pub fn parse_g_month(input: &str) -> Result<GMonth, XsdParseError> {
+    ensure_complete(input, g_month_lexical_rep)
 }
 
 // [56]   yearFrag ::= '-'? (([1-9] digit digit digit+)) | ('0' digit digit digit))
-fn year_frag(input: &str) -> XsdResult<'_, i64> {
-    map_res(
-        recognize(tuple((
-            opt(char('-')),
-            take_while_m_n(4, usize::MAX, |c: char| c.is_ascii_digit()),
-        ))),
-        i64::from_str,
-    )(input)
+fn year_frag(input: &str) -> Result<(i64, &str), XsdParseError> {
+    let (sign, input) = if let Some(left) = input.strip_prefix('-') {
+        (-1, left)
+    } else {
+        (1, input)
+    };
+    let (number_str, input) = integer_prefix(input);
+    let number = i64::from_str(number_str)?;
+    if number < 1000 && number_str.len() != 4 {
+        return Err(XsdParseError::msg(
+            "The years below 1000 must be encoded on exactly 4 digits",
+        ));
+    }
+    Ok((sign * number, input))
 }
 
 // [57]   monthFrag ::= ('0' [1-9]) | ('1' [0-2])
-fn month_frag(input: &str) -> XsdResult<'_, u8> {
-    map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
-        parsed_u8_range(v, 1, 12)
-    })(input)
+fn month_frag(input: &str) -> Result<(u8, &str), XsdParseError> {
+    let (number_str, input) = integer_prefix(input);
+    if number_str.len() != 2 {
+        return Err(XsdParseError::msg("Month must be encoded with two digits"));
+    }
+    let number = u8::from_str(number_str)?;
+    if !(1..=12).contains(&number) {
+        return Err(XsdParseError::msg("Month must be between 01 and 12"));
+    }
+    Ok((number, input))
 }
 
 // [58]   dayFrag ::= ('0' [1-9]) | ([12] digit) | ('3' [01])
-fn day_frag(input: &str) -> XsdResult<'_, u8> {
-    map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
-        parsed_u8_range(v, 1, 31)
-    })(input)
+fn day_frag(input: &str) -> Result<(u8, &str), XsdParseError> {
+    let (number_str, input) = integer_prefix(input);
+    if number_str.len() != 2 {
+        return Err(XsdParseError::msg("Day must be encoded with two digits"));
+    }
+    let number = u8::from_str(number_str)?;
+    if !(1..=31).contains(&number) {
+        return Err(XsdParseError::msg("Day must be between 01 and 31"));
+    }
+    Ok((number, input))
 }
 
 // [59]   hourFrag ::= ([01] digit) | ('2' [0-3])
-fn hour_frag(input: &str) -> XsdResult<'_, u8> {
-    map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
-        parsed_u8_range(v, 0, 23)
-    })(input)
+// We also allow 24 for ease of parsing
+fn hour_frag(input: &str) -> Result<(u8, &str), XsdParseError> {
+    let (number_str, input) = integer_prefix(input);
+    if number_str.len() != 2 {
+        return Err(XsdParseError::msg("Hours must be encoded with two digits"));
+    }
+    let number = u8::from_str(number_str)?;
+    if !(0..=24).contains(&number) {
+        return Err(XsdParseError::msg("Hours must be between 00 and 24"));
+    }
+    Ok((number, input))
 }
 
 // [60]   minuteFrag ::= [0-5] digit
-fn minute_frag(input: &str) -> XsdResult<'_, u8> {
-    map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
-        parsed_u8_range(v, 0, 59)
-    })(input)
+fn minute_frag(input: &str) -> Result<(u8, &str), XsdParseError> {
+    let (number_str, input) = integer_prefix(input);
+    if number_str.len() != 2 {
+        return Err(XsdParseError::msg(
+            "Minutes must be encoded with two digits",
+        ));
+    }
+    let number = u8::from_str(number_str)?;
+    if !(0..=59).contains(&number) {
+        return Err(XsdParseError::msg("Minutes must be between 00 and 59"));
+    }
+    Ok((number, input))
 }
 
 // [61]   secondFrag ::= ([0-5] digit) ('.' digit+)?
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn second_frag(input: &str) -> XsdResult<'_, Decimal> {
-    map_res(
-        recognize(tuple((
-            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
-            opt(preceded(
-                char('.'),
-                take_while(|c: char| c.is_ascii_digit()),
-            )),
-        ))),
-        |v| {
-            let value = Decimal::from_str(v)?;
-            if Decimal::from(0) <= value && value < Decimal::from(60) {
-                Ok(value)
-            } else {
-                Err(XsdParseError {
-                    kind: XsdParseErrorKind::OutOfIntegerRange {
-                        value: value.as_i128() as u8,
-                        min: 0,
-                        max: 60,
-                    },
-                })
-            }
-        },
-    )(input)
-}
-
-// [62]   endOfDayFrag ::= '24:00:00' ('.' '0'+)?
-fn end_of_day_frag(input: &str) -> XsdResult<'_, (u8, u8, Decimal)> {
-    map(
-        recognize(tuple((
-            tag("24:00:00"),
-            opt(preceded(char('.'), many1(char('0')))),
-        ))),
-        |_| (24, 0, 0.into()),
-    )(input)
+fn second_frag(input: &str) -> Result<(Decimal, &str), XsdParseError> {
+    let (number_str, input) = decimal_prefix(input);
+    let (before_dot_str, _) = number_str.split_once('.').unwrap_or((number_str, ""));
+    if before_dot_str.len() != 2 {
+        return Err(XsdParseError::msg(
+            "Seconds must be encoded with two digits",
+        ));
+    }
+    let number = Decimal::from_str(number_str)?;
+    if number < Decimal::from(0) || number >= Decimal::from(60) {
+        return Err(XsdParseError::msg("Seconds must be between 00 and 60"));
+    }
+    if number_str.ends_with('.') {
+        return Err(XsdParseError::msg(
+            "Seconds are not allowed to end with a dot",
+        ));
+    }
+    Ok((number, input))
 }
 
 // [63]   timezoneFrag ::= 'Z' | ('+' | '-') (('0' digit | '1' [0-3]) ':' minuteFrag | '14:00')
-fn timezone_frag(input: &str) -> XsdResult<'_, TimezoneOffset> {
-    alt((
-        map(char('Z'), |_| TimezoneOffset::UTC),
-        map_res(
-            tuple((
-                alt((map(char('+'), |_| 1), map(char('-'), |_| -1))),
-                alt((
-                    map(
-                        tuple((
-                            map_res(take_while_m_n(2, 2, |c: char| c.is_ascii_digit()), |v| {
-                                parsed_u8_range(v, 0, 13)
-                            }),
-                            char(':'),
-                            minute_frag,
-                        )),
-                        |(hours, _, minutes)| i16::from(hours) * 60 + i16::from(minutes),
-                    ),
-                    map(tag("14:00"), |_| 14 * 60),
-                )),
-            )),
-            |(sign, value)| TimezoneOffset::new(sign * value),
-        ),
-    ))(input)
-}
-
-fn parsed_u8_range(input: &str, min: u8, max: u8) -> Result<u8, XsdParseError> {
-    let value = u8::from_str(input)?;
-    if min <= value && value <= max {
-        Ok(value)
+fn timezone_frag(input: &str) -> Result<(TimezoneOffset, &str), XsdParseError> {
+    if let Some(left) = input.strip_prefix('Z') {
+        return Ok((TimezoneOffset::UTC, left));
+    }
+    let (sign, input) = if let Some(left) = input.strip_prefix('-') {
+        (-1, left)
+    } else if let Some(left) = input.strip_prefix('+') {
+        (1, left)
     } else {
-        Err(XsdParseError {
-            kind: XsdParseErrorKind::OutOfIntegerRange { value, min, max },
-        })
+        (1, input)
+    };
+
+    let (hour_str, input) = integer_prefix(input);
+    if hour_str.len() != 2 {
+        return Err(XsdParseError::msg(
+            "The timezone hours must be encoded with two digits",
+        ));
+    }
+    let hours = i16::from_str(hour_str)?;
+
+    let input = expect_char(
+        input,
+        ':',
+        "The timezone hours and minutes must be separated by ':'",
+    )?;
+    let (minutes, input) = minute_frag(input)?;
+
+    if hours > 13 && !(hours == 14 && minutes == 0) {
+        return Err(XsdParseError::msg(
+            "The timezone hours must be between 00 and 13",
+        ));
+    }
+
+    Ok((
+        TimezoneOffset::new(sign * (hours * 60 + i16::from(minutes)))?,
+        input,
+    ))
+}
+
+fn ensure_complete<T>(
+    input: &str,
+    parse: impl FnOnce(&str) -> Result<(T, &str), XsdParseError>,
+) -> Result<T, XsdParseError> {
+    let (result, left) = parse(input)?;
+    if !left.is_empty() {
+        return Err(XsdParseError::msg("Unrecognized value suffix"));
+    }
+    Ok(result)
+}
+
+fn expect_char<'a>(
+    input: &'a str,
+    constant: char,
+    error_message: &'static str,
+) -> Result<&'a str, XsdParseError> {
+    if let Some(left) = input.strip_prefix(constant) {
+        Ok(left)
+    } else {
+        Err(XsdParseError::msg(error_message))
     }
 }
 
-fn map_res<'a, O1, O2, E2: Into<XsdParseError>>(
-    mut first: impl FnMut(&'a str) -> XsdResult<'a, O1>,
-    mut second: impl FnMut(O1) -> Result<O2, E2>,
-) -> impl FnMut(&'a str) -> XsdResult<'a, O2> {
-    move |input| {
-        let (input, o1) = first(input)?;
-        Ok((input, second(o1).map_err(|e| Err::Error(e.into()))?))
+fn integer_prefix(input: &str) -> (&str, &str) {
+    let mut end = input.len();
+    for (i, c) in input.char_indices() {
+        if !c.is_ascii_digit() {
+            end = i;
+            break;
+        }
     }
+    input.split_at(end)
+}
+
+fn decimal_prefix(input: &str) -> (&str, &str) {
+    let mut end = input.len();
+    let mut dot_seen = false;
+    for (i, c) in input.char_indices() {
+        if c.is_ascii_digit() {
+            // Ok
+        } else if c == '.' && !dot_seen {
+            dot_seen = true;
+        } else {
+            end = i;
+            break;
+        }
+    }
+    input.split_at(end)
+}
+
+fn optional_end<T>(
+    input: &str,
+    parse: impl FnOnce(&str) -> Result<(T, &str), XsdParseError>,
+) -> Result<(Option<T>, &str), XsdParseError> {
+    Ok(if input.is_empty() {
+        (None, input)
+    } else {
+        let (result, input) = parse(input)?;
+        (Some(result), input)
+    })
 }

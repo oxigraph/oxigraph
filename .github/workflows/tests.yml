@@ -281,7 +281,7 @@ jobs:
           python-version: "3.10"
           cache: pip
           cache-dependency-path: '**/requirements.dev.txt'
-      - run: pip install "maturin~=0.14.0"
+      - run: pip install "maturin~=0.15.0"
       - run: maturin build -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
@@ -347,31 +347,20 @@ jobs:
           minimize-crashes: true
           parallel-fuzzing: true
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
+        continue-on-error: true
+      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 3600
+          mode: prune
+          storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
+        continue-on-error: true
 
-  fuzz_prune:
+  fuzz_coverage:
     if: github.event_name != 'pull_request'
     needs: fuzz_repo
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
-        with:
-          language: rust
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 14400
-          mode: prune
-          storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
-
-  fuzz_coverage:
-    if: github.event_name != 'pull_request'
-    needs: fuzz_prune
-    runs-on: ubuntu-latest
-    steps:
       - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
@@ -379,7 +368,14 @@ jobs:
       - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 600
+          fuzz-seconds: 3600
           mode: coverage
           sanitizer: coverage
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: sudo apt install -y shellcheck
+      - run: git grep -l '^#\( *shellcheck \|!\(/bin/\|/usr/bin/env \)\(sh\|bash\|dash\|ksh\)\)' | xargs shellcheck

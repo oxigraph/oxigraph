@@ -35,8 +35,7 @@ use pyo3::prelude::*;
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// >>> str(store)
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g> .\n'
-#[pyclass(name = "Store", module = "pyoxigraph")]
-#[pyo3(text_signature = "(path = None)")]
+#[pyclass(frozen, name = "Store", module = "pyoxigraph")]
 #[derive(Clone)]
 pub struct PyStore {
     inner: Store,
@@ -94,7 +93,7 @@ impl PyStore {
     /// :rtype: Store
     /// :raises IOError: if the target directories contain invalid data or could not be accessed.
     #[staticmethod]
-    #[pyo3(signature = (primary_path, secondary_path = None), text_signature = "(primary_path, secondary_path = None)")]
+    #[pyo3(signature = (primary_path, secondary_path = None))]
     fn secondary(
         primary_path: &str,
         secondary_path: Option<&str>,
@@ -216,7 +215,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.quads_for_pattern(NamedNode('http://example.com'), None, None, None))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (subject, predicate, object, graph_name = None), text_signature = "($self, subject, predicate, object, graph_name = None)")]
+    #[pyo3(signature = (subject, predicate, object, graph_name = None))]
     fn quads_for_pattern(
         &self,
         subject: &PyAny,
@@ -228,10 +227,10 @@ impl PyStore {
             extract_quads_pattern(subject, predicate, object, graph_name)?;
         Ok(QuadIter {
             inner: self.inner.quads_for_pattern(
-                subject.as_ref().map(|p| p.into()),
-                predicate.as_ref().map(|p| p.into()),
-                object.as_ref().map(|p| p.into()),
-                graph_name.as_ref().map(|p| p.into()),
+                subject.as_ref().map(Into::into),
+                predicate.as_ref().map(Into::into),
+                object.as_ref().map(Into::into),
+                graph_name.as_ref().map(Into::into),
             ),
         })
     }
@@ -273,10 +272,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> store.query('ASK { ?s ?p ?o }')
     /// True
-    #[pyo3(
-        signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None),
-        text_signature = "($self, query, *, base_iri = None, use_default_graph_as_union = False, default_graph = None, named_graphs = None)"
-    )]
+    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None))]
     fn query(
         &self,
         query: &str,
@@ -332,7 +328,7 @@ impl PyStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[pyo3(signature = (update, *, base_iri = None), text_signature = "($self, update, *, base_iri = None)")]
+    #[pyo3(signature = (update, *, base_iri = None))]
     fn update(&self, update: &str, base_iri: Option<&str>, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             let update =
@@ -377,7 +373,7 @@ impl PyStore {
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None), text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
+    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None))]
     fn load(
         &self,
         input: PyObject,
@@ -459,7 +455,7 @@ impl PyStore {
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None), text_signature = "($self, input, mime_type, *, base_iri = None, to_graph = None)")]
+    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None))]
     fn bulk_load(
         &self,
         input: PyObject,
@@ -537,7 +533,7 @@ impl PyStore {
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(signature = (output, mime_type, *, from_graph = None), text_signature = "($self, output, mime_type, *, from_graph = None)")]
+    #[pyo3(signature = (output, mime_type, *, from_graph = None))]
     fn dump(
         &self,
         output: PyObject,
@@ -597,10 +593,31 @@ impl PyStore {
         }
     }
 
+    /// Returns if the store contains the given named graph.
+    ///
+    /// :param graph_name: the name of the named graph.
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
+    /// :rtype: None
+    /// :raises IOError: if an I/O error happens during the named graph lookup.
+    ///
+    /// >>> store = Store()
+    /// >>> store.add_graph(NamedNode('http://example.com/g'))
+    /// >>> store.contains_named_graph(NamedNode('http://example.com/g'))
+    /// True
+    fn contains_named_graph(&self, graph_name: &PyAny) -> PyResult<bool> {
+        let graph_name = GraphName::from(&PyGraphNameRef::try_from(graph_name)?);
+        match graph_name {
+            GraphName::DefaultGraph => Ok(true),
+            GraphName::NamedNode(graph_name) => self.inner.contains_named_graph(&graph_name),
+            GraphName::BlankNode(graph_name) => self.inner.contains_named_graph(&graph_name),
+        }
+        .map_err(map_storage_error)
+    }
+
     /// Adds a named graph to the store.
     ///
     /// :param graph_name: the name of the name graph to add.
-    /// :type graph_name: NamedNode or BlankNode
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
     /// :raises IOError: if an I/O error happens during the named graph insertion.
     ///

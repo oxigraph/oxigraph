@@ -287,21 +287,11 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
 }
 
 fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
-    if url.ends_with(".srx") {
-        StaticQueryResults::from_query_results(
-            QueryResults::read(read_file(url)?, QueryResultsFormat::Xml)?,
-            false,
-        )
-    } else if url.ends_with(".srj") {
-        StaticQueryResults::from_query_results(
-            QueryResults::read(read_file(url)?, QueryResultsFormat::Json)?,
-            false,
-        )
-    } else if url.ends_with(".tsv") {
-        StaticQueryResults::from_query_results(
-            QueryResults::read(read_file(url)?, QueryResultsFormat::Tsv)?,
-            false,
-        )
+    if let Some(format) = url
+        .rsplit_once('.')
+        .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))
+    {
+        StaticQueryResults::from_query_results(QueryResults::read(read_file(url)?, format)?, false)
     } else {
         StaticQueryResults::from_graph(&load_graph(url, guess_graph_format(url)?)?)
     }
@@ -505,7 +495,7 @@ impl StaticQueryResults {
 
     fn from_graph(graph: &Graph) -> Result<Self> {
         // Hack to normalize literals
-        let store = Store::new().unwrap();
+        let store = Store::new()?;
         for t in graph.iter() {
             store
                 .insert(t.in_graph(GraphNameRef::DefaultGraph))
@@ -617,12 +607,12 @@ fn results_diff(expected: StaticQueryResults, actual: StaticQueryResults) -> Str
                         format_diff(
                             &expected_variables
                                 .iter()
-                                .map(|v| v.to_string())
+                                .map(ToString::to_string)
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                             &actual_variables
                                 .iter()
-                                .map(|v| v.to_string())
+                                .map(ToString::to_string)
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                             "variables",

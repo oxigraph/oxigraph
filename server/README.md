@@ -220,6 +220,25 @@ brew install oxigraph
 It installs the `oxigraph_server` binary. [See the usage documentation to know how to use it](#usage).
 
 
+## Systemd
+
+It is possible to run Oxigraph in the background using systemd.
+
+For that, you can use the following `oxigraph_server.service` file (it might be inserted into `/etc/systemd/system/` or `$HOME/.config/systemd/user`):
+```ini
+[Unit]
+Description=Oxigraph database server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/PATH/TO/oxigraph_server serve --location /PATH/TO/OXIGRAPH/DATA
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## Migration guide
 
 ### From 0.2 to 0.3

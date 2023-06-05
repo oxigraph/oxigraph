@@ -88,7 +88,7 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObjec
 /// >>> s, p, o = solution
 /// >>> s
 /// <NamedNode value=http://example.com>
-#[pyclass(unsendable, name = "QuerySolution", module = "pyoxigraph")]
+#[pyclass(frozen, unsendable, name = "QuerySolution", module = "pyoxigraph")]
 pub struct PyQuerySolution {
     inner: QuerySolution,
 }
@@ -225,7 +225,7 @@ impl PyQueryTriples {
         Ok(allow_threads_unsafe(|| self.inner.next())
             .transpose()
             .map_err(map_evaluation_error)?
-            .map(|t| t.into()))
+            .map(Into::into))
     }
 }
 

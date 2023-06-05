@@ -107,6 +107,14 @@ impl Duration {
         })
     }
 
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            year_month: self.year_month.checked_neg()?,
+            day_time: self.day_time.checked_neg()?,
+        })
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -127,7 +135,7 @@ impl FromStr for Duration {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(duration_lexical_rep, input)
+        parse_duration(input)
     }
 }
 
@@ -170,8 +178,10 @@ impl fmt::Display for Duration {
             let h = (s_int % 86400) / 3600;
             let m = (s_int % 3600) / 60;
             let s = ss
-                .checked_sub(Decimal::try_from(d * 86400 + h * 3600 + m * 60).unwrap())
-                .unwrap(); //could not fail
+                .checked_sub(
+                    Decimal::try_from(d * 86400 + h * 3600 + m * 60).map_err(|_| fmt::Error)?,
+                )
+                .ok_or(fmt::Error)?;
 
             if d != 0 {
                 write!(f, "{d}D")?;
@@ -299,6 +309,13 @@ impl YearMonthDuration {
         })
     }
 
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            months: self.months.checked_neg()?,
+        })
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -333,7 +350,7 @@ impl FromStr for YearMonthDuration {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(year_month_duration_lexical_rep, input)
+        parse_year_month_duration(input)
     }
 }
 
@@ -465,6 +482,13 @@ impl DayTimeDuration {
         })
     }
 
+    #[inline]
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self {
+            seconds: self.seconds.checked_neg()?,
+        })
+    }
+
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
     pub fn is_identical_with(&self, other: &Self) -> bool {
@@ -513,7 +537,7 @@ impl FromStr for DayTimeDuration {
     type Err = XsdParseError;
 
     fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_value(day_time_duration_lexical_rep, input)
+        parse_day_time_duration(input)
     }
 }
 
@@ -599,7 +623,7 @@ mod tests {
     fn from_str() -> Result<(), XsdParseError> {
         let min = Duration::new(
             i64::MIN + 1,
-            Decimal::MIN.checked_add(Decimal::step()).unwrap(),
+            Decimal::MIN.checked_add(Decimal::STEP).unwrap(),
         );
         let max = Duration::new(i64::MAX, Decimal::MAX);
 

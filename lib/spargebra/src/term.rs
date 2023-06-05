@@ -577,6 +577,7 @@ pub enum GroundTermPattern {
     NamedNode(NamedNode),
     Literal(Literal),
     Variable(Variable),
+    #[cfg(feature = "rdf-star")]
     Triple(Box<GroundTriplePattern>),
 }
 
@@ -587,6 +588,7 @@ impl GroundTermPattern {
             Self::NamedNode(term) => write!(f, "{term}"),
             Self::Literal(term) => write!(f, "{term}"),
             Self::Variable(var) => write!(f, "{var}"),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
@@ -599,6 +601,7 @@ impl fmt::Display for GroundTermPattern {
             Self::NamedNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
             Self::Variable(var) => var.fmt(f),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => write!(f, "<<{triple}>>"),
         }
     }
@@ -618,6 +621,7 @@ impl From<Literal> for GroundTermPattern {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<GroundTriplePattern> for GroundTermPattern {
     #[inline]
     fn from(triple: GroundTriplePattern) -> Self {
@@ -818,6 +822,7 @@ pub struct GroundTriplePattern {
 
 impl GroundTriplePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    #[allow(dead_code)]
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         write!(f, "(triple ")?;
         self.subject.fmt_sse(f)?;

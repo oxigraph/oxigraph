@@ -105,10 +105,9 @@ impl<'a> PlanBuilder<'a> {
                 let left = self.build_for_graph_pattern(left, variables, graph_name)?;
                 let right = self.build_for_graph_pattern(right, variables, graph_name)?;
 
-                let mut possible_problem_vars = BTreeSet::new();
-                Self::add_left_join_problematic_variables(&right, &mut possible_problem_vars);
-                if self.with_optimizations {
-                    // TODO: don't use if SERVICE is inside of for loop
+                if self.with_optimizations && Self::can_use_for_loop_left_join(&right) {
+                    let mut possible_problem_vars = BTreeSet::new();
+                    Self::add_left_join_problematic_variables(&right, &mut possible_problem_vars);
 
                     //We add the extra filter if needed
                     let right = if let Some(expr) = expression {
@@ -122,7 +121,7 @@ impl<'a> PlanBuilder<'a> {
                     PlanNode::ForLoopLeftJoin {
                         left: Rc::new(left),
                         right: Rc::new(right),
-                        possible_problem_vars: Rc::new(possible_problem_vars.into_iter().collect()),
+                        possible_problem_vars: possible_problem_vars.into_iter().collect(),
                     }
                 } else {
                     PlanNode::HashLeftJoin {
@@ -191,7 +190,7 @@ impl<'a> PlanBuilder<'a> {
                 let service_name = self.pattern_value_from_named_node_or_variable(name, variables);
                 PlanNode::Service {
                     service_name,
-                    variables: Rc::new(variables.clone()),
+                    variables: Rc::from(variables.as_slice()),
                     child: Rc::new(child),
                     graph_pattern: Rc::new(inner.as_ref().clone()),
                     silent: *silent,
@@ -203,22 +202,19 @@ impl<'a> PlanBuilder<'a> {
                 aggregates,
             } => PlanNode::Aggregate {
                 child: Rc::new(self.build_for_graph_pattern(inner, variables, graph_name)?),
-                key_variables: Rc::new(
-                    by.iter()
-                        .map(|k| build_plan_variable(variables, k))
-                        .collect(),
-                ),
-                aggregates: Rc::new(
-                    aggregates
-                        .iter()
-                        .map(|(v, a)| {
-                            Ok((
-                                self.build_for_aggregate(a, variables, graph_name)?,
-                                build_plan_variable(variables, v),
-                            ))
-                        })
-                        .collect::<Result<Vec<_>, EvaluationError>>()?,
-                ),
+                key_variables: by
+                    .iter()
+                    .map(|k| build_plan_variable(variables, k))
+                    .collect(),
+                aggregates: aggregates
+                    .iter()
+                    .map(|(v, a)| {
+                        Ok((
+                            self.build_for_aggregate(a, variables, graph_name)?,
+                            build_plan_variable(variables, v),
+                        ))
+                    })
+                    .collect::<Result<_, EvaluationError>>()?,
             },
             GraphPattern::Values {
                 variables: table_variables,
@@ -283,21 +279,19 @@ impl<'a> PlanBuilder<'a> {
                         &mut inner_variables,
                         &inner_graph_name,
                     )?),
-                    mapping: Rc::new(
-                        projection
-                            .iter()
-                            .enumerate()
-                            .map(|(new_variable, variable)| {
-                                (
-                                    PlanVariable {
-                                        encoded: new_variable,
-                                        plain: variable.clone(),
-                                    },
-                                    build_plan_variable(variables, variable),
-                                )
-                            })
-                            .collect(),
-                    ),
+                    mapping: projection
+                        .iter()
+                        .enumerate()
+                        .map(|(new_variable, variable)| {
+                            (
+                                PlanVariable {
+                                    encoded: new_variable,
+                                    plain: variable.clone(),
+                                },
+                                build_plan_variable(variables, variable),
+                            )
+                        })
+                        .collect(),
                 }
             }
             GraphPattern::Distinct { inner } => PlanNode::HashDeduplicate {
@@ -378,16 +372,14 @@ impl<'a> PlanBuilder<'a> {
             PropertyPathExpression::ZeroOrOne(p) => {
                 PlanPropertyPath::ZeroOrOne(Rc::new(self.build_for_path(p)))
             }
-            PropertyPathExpression::NegatedPropertySet(p) => {
-                PlanPropertyPath::NegatedPropertySet(Rc::new(
-                    p.iter()
-                        .map(|p| PlanTerm {
-                            encoded: self.build_term(p),
-                            plain: p.clone(),
-                        })
-                        .collect(),
-                ))
-            }
+            PropertyPathExpression::NegatedPropertySet(p) => PlanPropertyPath::NegatedPropertySet(
+                p.iter()
+                    .map(|p| PlanTerm {
+                        encoded: self.build_term(p),
+                        plain: p.clone(),
+                    })
+                    .collect(),
+            ),
         }
     }
 
@@ -407,14 +399,14 @@ impl<'a> PlanBuilder<'a> {
                 plain: l.clone(),
             }),
             Expression::Variable(v) => PlanExpression::Variable(build_plan_variable(variables, v)),
-            Expression::Or(a, b) => PlanExpression::Or(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
-            ),
-            Expression::And(a, b) => PlanExpression::And(
-                Box::new(self.build_for_expression(a, variables, graph_name)?),
-                Box::new(self.build_for_expression(b, variables, graph_name)?),
-            ),
+            Expression::Or(a, b) => PlanExpression::Or(vec![
+                self.build_for_expression(a, variables, graph_name)?,
+                self.build_for_expression(b, variables, graph_name)?,
+            ]),
+            Expression::And(a, b) => PlanExpression::And(vec![
+                self.build_for_expression(a, variables, graph_name)?,
+                self.build_for_expression(b, variables, graph_name)?,
+            ]),
             Expression::Equal(a, b) => PlanExpression::Equal(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
                 Box::new(self.build_for_expression(b, variables, graph_name)?),
@@ -441,22 +433,31 @@ impl<'a> PlanBuilder<'a> {
             ),
             Expression::In(e, l) => {
                 let e = self.build_for_expression(e, variables, graph_name)?;
-                l.iter()
-                    .map(|v| {
-                        Ok(PlanExpression::Equal(
-                            Box::new(e.clone()),
-                            Box::new(self.build_for_expression(v, variables, graph_name)?),
-                        ))
-                    })
-                    .reduce(|a: Result<_, EvaluationError>, b| {
-                        Ok(PlanExpression::Or(Box::new(a?), Box::new(b?)))
-                    })
-                    .unwrap_or_else(|| {
-                        Ok(PlanExpression::Literal(PlanTerm {
+                if l.is_empty() {
+                    // False except on error
+                    PlanExpression::If(
+                        Box::new(e),
+                        Box::new(PlanExpression::Literal(PlanTerm {
                             encoded: false.into(),
                             plain: false.into(),
-                        }))
-                    })?
+                        })),
+                        Box::new(PlanExpression::Literal(PlanTerm {
+                            encoded: false.into(),
+                            plain: false.into(),
+                        })),
+                    )
+                } else {
+                    PlanExpression::Or(
+                        l.iter()
+                            .map(|v| {
+                                Ok(PlanExpression::Equal(
+                                    Box::new(e.clone()),
+                                    Box::new(self.build_for_expression(v, variables, graph_name)?),
+                                ))
+                            })
+                            .collect::<Result<_, EvaluationError>>()?,
+                    )
+                }
             }
             Expression::Add(a, b) => PlanExpression::Add(
                 Box::new(self.build_for_expression(a, variables, graph_name)?),
@@ -1084,7 +1085,7 @@ impl<'a> PlanBuilder<'a> {
                 separator,
             } => Ok(PlanAggregation {
                 function: PlanAggregationFunction::GroupConcat {
-                    separator: Rc::new(separator.clone().unwrap_or_else(|| " ".to_owned())),
+                    separator: Rc::from(separator.as_deref().unwrap_or(" ")),
                 },
                 parameter: Some(self.build_for_expression(expr, variables, graph_name)?),
                 distinct: *distinct,
@@ -1219,13 +1220,11 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn convert_plan_variable(from_variable: &PlanVariable, to: &mut Vec<Variable>) -> PlanVariable {
-        let encoded = if let Some(to_id) = to.iter().enumerate().find_map(|(to_id, var)| {
-            if *var == from_variable.plain {
-                Some(to_id)
-            } else {
-                None
-            }
-        }) {
+        let encoded = if let Some(to_id) = to
+            .iter()
+            .enumerate()
+            .find_map(|(to_id, var)| (*var == from_variable.plain).then(|| to_id))
+        {
             to_id
         } else {
             to.push(Variable::new_unchecked(format!("{:x}", random::<u128>())));
@@ -1234,6 +1233,35 @@ impl<'a> PlanBuilder<'a> {
         PlanVariable {
             encoded,
             plain: from_variable.plain.clone(),
+        }
+    }
+
+    fn can_use_for_loop_left_join(node: &PlanNode) -> bool {
+        // We forbid MINUS, SERVICE and everything that affects cardinality in for loop left joins
+        match node {
+            PlanNode::StaticBindings { .. }
+            | PlanNode::QuadPattern { .. }
+            | PlanNode::PathPattern { .. } => true,
+            PlanNode::Filter { child, .. }
+            | PlanNode::Extend { child, .. }
+            | PlanNode::Sort { child, .. }
+            | PlanNode::Project { child, .. }
+            | PlanNode::Aggregate { child, .. } => Self::can_use_for_loop_left_join(child),
+            PlanNode::Union { children } => {
+                children.iter().all(|c| Self::can_use_for_loop_left_join(c))
+            }
+            PlanNode::HashJoin { left, right }
+            | PlanNode::ForLoopJoin { left, right }
+            | PlanNode::ForLoopLeftJoin { left, right, .. }
+            | PlanNode::HashLeftJoin { left, right, .. } => {
+                Self::can_use_for_loop_left_join(left) && Self::can_use_for_loop_left_join(right)
+            }
+            PlanNode::AntiJoin { .. }
+            | PlanNode::Service { .. }
+            | PlanNode::HashDeduplicate { .. }
+            | PlanNode::Reduced { .. }
+            | PlanNode::Skip { .. }
+            | PlanNode::Limit { .. } => false,
         }
     }
 
@@ -1299,7 +1327,8 @@ impl<'a> PlanBuilder<'a> {
             }
             PlanNode::Sort { child, .. }
             | PlanNode::HashDeduplicate { child }
-            | PlanNode::Reduced { child } => {
+            | PlanNode::Reduced { child }
+            | PlanNode::Project { child, .. } => {
                 Self::add_left_join_problematic_variables(child, set);
             }
             PlanNode::Skip { child, .. } | PlanNode::Limit { child, .. } => {
@@ -1317,15 +1346,6 @@ impl<'a> PlanBuilder<'a> {
                     Self::add_left_join_problematic_variables(child, set)
                 }
             }
-            PlanNode::Project { mapping, child } => {
-                let mut child_bound = BTreeSet::new();
-                Self::add_left_join_problematic_variables(child, &mut child_bound);
-                for (child_i, output_i) in mapping.iter() {
-                    if child_bound.contains(&child_i.encoded) {
-                        set.insert(output_i.encoded);
-                    }
-                }
-            }
             PlanNode::Aggregate {
                 key_variables,
                 aggregates,
@@ -1341,15 +1361,15 @@ impl<'a> PlanBuilder<'a> {
     }
 
     fn new_join(&self, mut left: PlanNode, mut right: PlanNode) -> PlanNode {
+        // We first use VALUES to filter the following patterns evaluation
+        if matches!(right, PlanNode::StaticBindings { .. }) {
+            swap(&mut left, &mut right);
+        }
+
         if self.with_optimizations
-            && Self::is_fit_for_for_loop_join(&left)
             && Self::is_fit_for_for_loop_join(&right)
             && Self::has_some_common_variables(&left, &right)
         {
-            // We first use VALUES to filter the following patterns evaluation
-            if matches!(right, PlanNode::StaticBindings { .. }) {
-                swap(&mut left, &mut right);
-            }
             PlanNode::ForLoopJoin {
                 left: Rc::new(left),
                 right: Rc::new(right),
@@ -1379,9 +1399,8 @@ impl<'a> PlanBuilder<'a> {
         match node {
             PlanNode::StaticBindings { .. }
             | PlanNode::QuadPattern { .. }
-            | PlanNode::PathPattern { .. }
-            | PlanNode::ForLoopJoin { .. } => true,
-            PlanNode::HashJoin { left, right } => {
+            | PlanNode::PathPattern { .. } => true,
+            PlanNode::ForLoopJoin { left, right } | PlanNode::HashJoin { left, right } => {
                 Self::is_fit_for_for_loop_join(left) && Self::is_fit_for_for_loop_join(right)
             }
             PlanNode::Filter { child, .. } | PlanNode::Extend { child, .. } => {
@@ -1411,8 +1430,12 @@ impl<'a> PlanBuilder<'a> {
                 expression: filter,
             };
         }
-        if let PlanExpression::And(f1, f2) = *filter {
-            return self.push_filter(Rc::new(self.push_filter(node, f1)), f2);
+        if let PlanExpression::And(filters) = *filter {
+            return filters
+                .into_iter()
+                .fold((*node.as_ref()).clone(), |acc, f| {
+                    self.push_filter(Rc::new(acc), Box::new(f))
+                });
         }
         let mut filter_variables = BTreeSet::new();
         filter.lookup_used_variables(&mut |v| {
@@ -1423,25 +1446,25 @@ impl<'a> PlanBuilder<'a> {
                 if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
                     if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
                         PlanNode::HashJoin {
-                            left: Rc::new(self.push_filter(left.clone(), filter.clone())),
-                            right: Rc::new(self.push_filter(right.clone(), filter)),
+                            left: Rc::new(self.push_filter(Rc::clone(left), filter.clone())),
+                            right: Rc::new(self.push_filter(Rc::clone(right), filter)),
                         }
                     } else {
                         PlanNode::HashJoin {
-                            left: Rc::new(self.push_filter(left.clone(), filter)),
-                            right: right.clone(),
+                            left: Rc::new(self.push_filter(Rc::clone(left), filter)),
+                            right: Rc::clone(right),
                         }
                     }
                 } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
                     PlanNode::HashJoin {
-                        left: left.clone(),
-                        right: Rc::new(self.push_filter(right.clone(), filter)),
+                        left: Rc::clone(left),
+                        right: Rc::new(self.push_filter(Rc::clone(right), filter)),
                     }
                 } else {
                     PlanNode::Filter {
                         child: Rc::new(PlanNode::HashJoin {
-                            left: left.clone(),
-                            right: right.clone(),
+                            left: Rc::clone(left),
+                            right: Rc::clone(right),
                         }),
                         expression: filter,
                     }
@@ -1450,20 +1473,20 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::ForLoopJoin { left, right } => {
                 if filter_variables.iter().all(|v| left.is_variable_bound(*v)) {
                     PlanNode::ForLoopJoin {
-                        left: Rc::new(self.push_filter(left.clone(), filter)),
-                        right: right.clone(),
+                        left: Rc::new(self.push_filter(Rc::clone(left), filter)),
+                        right: Rc::clone(right),
                     }
                 } else if filter_variables.iter().all(|v| right.is_variable_bound(*v)) {
                     PlanNode::ForLoopJoin {
                         //TODO: should we do that always?
-                        left: left.clone(),
-                        right: Rc::new(self.push_filter(right.clone(), filter)),
+                        left: Rc::clone(left),
+                        right: Rc::new(self.push_filter(Rc::clone(right), filter)),
                     }
                 } else {
                     PlanNode::Filter {
                         child: Rc::new(PlanNode::HashJoin {
-                            left: left.clone(),
-                            right: right.clone(),
+                            left: Rc::clone(left),
+                            right: Rc::clone(right),
                         }),
                         expression: filter,
                     }
@@ -1477,14 +1500,14 @@ impl<'a> PlanBuilder<'a> {
                 //TODO: handle the case where the filter generates an expression variable
                 if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
                     PlanNode::Extend {
-                        child: Rc::new(self.push_filter(child.clone(), filter)),
+                        child: Rc::new(self.push_filter(Rc::clone(child), filter)),
                         expression: expression.clone(),
                         variable: variable.clone(),
                     }
                 } else {
                     PlanNode::Filter {
                         child: Rc::new(PlanNode::Extend {
-                            child: child.clone(),
+                            child: Rc::clone(child),
                             expression: expression.clone(),
                             variable: variable.clone(),
                         }),
@@ -1495,20 +1518,23 @@ impl<'a> PlanBuilder<'a> {
             PlanNode::Filter { child, expression } => {
                 if filter_variables.iter().all(|v| child.is_variable_bound(*v)) {
                     PlanNode::Filter {
-                        child: Rc::new(self.push_filter(child.clone(), filter)),
+                        child: Rc::new(self.push_filter(Rc::clone(child), filter)),
                         expression: expression.clone(),
                     }
                 } else {
                     PlanNode::Filter {
-                        child: child.clone(),
-                        expression: Box::new(PlanExpression::And(expression.clone(), filter)),
+                        child: Rc::clone(child),
+                        expression: Box::new(PlanExpression::And(vec![
+                            *expression.clone(),
+                            *filter,
+                        ])),
                     }
                 }
             }
             PlanNode::Union { children } => PlanNode::Union {
                 children: children
                     .iter()
-                    .map(|c| Rc::new(self.push_filter(c.clone(), filter.clone())))
+                    .map(|c| Rc::new(self.push_filter(Rc::clone(c), filter.clone())))
                     .collect(),
             },
             _ => PlanNode::Filter {
@@ -1541,12 +1567,11 @@ impl<'a> PlanBuilder<'a> {
 }
 
 fn build_plan_variable(variables: &mut Vec<Variable>, variable: &Variable) -> PlanVariable {
-    let encoded = match slice_key(variables, variable) {
-        Some(key) => key,
-        None => {
-            variables.push(variable.clone());
-            variables.len() - 1
-        }
+    let encoded = if let Some(key) = slice_key(variables, variable) {
+        key
+    } else {
+        variables.push(variable.clone());
+        variables.len() - 1
     };
     PlanVariable {
         plain: variable.clone(),
@@ -1555,12 +1580,11 @@ fn build_plan_variable(variables: &mut Vec<Variable>, variable: &Variable) -> Pl
 }
 
 fn bnode_key(blank_nodes: &mut Vec<BlankNode>, blank_node: &BlankNode) -> usize {
-    match slice_key(blank_nodes, blank_node) {
-        Some(key) => key,
-        None => {
-            blank_nodes.push(blank_node.clone());
-            blank_nodes.len() - 1
-        }
+    if let Some(key) = slice_key(blank_nodes, blank_node) {
+        key
+    } else {
+        blank_nodes.push(blank_node.clone());
+        blank_nodes.len() - 1
     }
 }
 
@@ -1673,21 +1697,13 @@ fn compile_static_pattern_if_exists(
     options: Option<&Expression>,
 ) -> Option<Regex> {
     let static_pattern = if let Expression::Literal(pattern) = pattern {
-        if pattern.datatype() == xsd::STRING {
-            Some(pattern.value())
-        } else {
-            None
-        }
+        (pattern.datatype() == xsd::STRING).then(|| pattern.value())
     } else {
         None
     };
     let static_options = if let Some(options) = options {
         if let Expression::Literal(options) = options {
-            if options.datatype() == xsd::STRING {
-                Some(Some(options.value()))
-            } else {
-                None
-            }
+            (options.datatype() == xsd::STRING).then(|| Some(options.value()))
         } else {
             None
         }

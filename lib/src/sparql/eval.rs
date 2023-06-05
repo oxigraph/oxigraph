@@ -65,6 +65,7 @@ impl SimpleEvaluator {
         }
     }
 
+    #[allow(clippy::rc_buffer)]
     pub fn evaluate_select_plan(
         &self,
         plan: Rc<PlanNode>,
@@ -73,7 +74,7 @@ impl SimpleEvaluator {
         let (eval, stats) = self.plan_evaluator(plan);
         (
             QueryResults::Solutions(decode_bindings(
-                self.dataset.clone(),
+                Rc::clone(&self.dataset),
                 eval(EncodedTuple::with_capacity(variables.len())),
                 variables,
             )),
@@ -164,16 +165,16 @@ impl SimpleEvaluator {
                 graph_pattern,
                 ..
             } => {
-                let variables = variables.clone();
+                let variables = Rc::clone(variables);
                 let silent = *silent;
                 let service_name = service_name.clone();
-                let graph_pattern = graph_pattern.clone();
+                let graph_pattern = Rc::clone(graph_pattern);
                 let eval = self.clone();
                 Rc::new(move |from| {
                     match eval.evaluate_service(
                         &service_name,
                         &graph_pattern,
-                        variables.clone(),
+                        Rc::clone(&variables),
                         &from,
                     ) {
                         Ok(result) => Box::new(result.filter_map(move |binding| {
@@ -201,7 +202,7 @@ impl SimpleEvaluator {
                 let predicate = TupleSelector::from(predicate);
                 let object = TupleSelector::from(object);
                 let graph_name = TupleSelector::from(graph_name);
-                let dataset = self.dataset.clone();
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |from| {
                     let iter = dataset.encoded_quads_for_pattern(
                         get_pattern_value(&subject, &from).as_ref(),
@@ -233,16 +234,16 @@ impl SimpleEvaluator {
                 graph_name,
             } => {
                 let subject = TupleSelector::from(subject);
-                let path = path.clone();
+                let path = Rc::clone(path);
                 let object = TupleSelector::from(object);
                 let graph_name = TupleSelector::from(graph_name);
-                let dataset = self.dataset.clone();
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |from| {
                     let input_subject = get_pattern_value(&subject, &from);
                     let input_object = get_pattern_value(&object, &from);
                     let input_graph_name = get_pattern_value(&graph_name, &from);
                     let path_eval = PathEvaluator {
-                        dataset: dataset.clone(),
+                        dataset: Rc::clone(&dataset),
                     };
                     match (input_subject, input_object, input_graph_name) {
                         (Some(input_subject), Some(input_object), Some(input_graph_name)) => {
@@ -384,9 +385,9 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let (left, left_stats) = self.plan_evaluator(left.clone());
+                let (left, left_stats) = self.plan_evaluator(Rc::clone(left));
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right.clone());
+                let (right, right_stats) = self.plan_evaluator(Rc::clone(right));
                 stat_children.push(right_stats);
                 if join_keys.is_empty() {
                     // Cartesian product
@@ -430,12 +431,12 @@ impl SimpleEvaluator {
                 }
             }
             PlanNode::ForLoopJoin { left, right } => {
-                let (left, left_stats) = self.plan_evaluator(left.clone());
+                let (left, left_stats) = self.plan_evaluator(Rc::clone(left));
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right.clone());
+                let (right, right_stats) = self.plan_evaluator(Rc::clone(right));
                 stat_children.push(right_stats);
                 Rc::new(move |from| {
-                    let right = right.clone();
+                    let right = Rc::clone(&right);
                     Box::new(left(from).flat_map(move |t| match t {
                         Ok(t) => right(t),
                         Err(e) => Box::new(once(Err(e))),
@@ -448,9 +449,9 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let (left, left_stats) = self.plan_evaluator(left.clone());
+                let (left, left_stats) = self.plan_evaluator(Rc::clone(left));
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right.clone());
+                let (right, right_stats) = self.plan_evaluator(Rc::clone(right));
                 stat_children.push(right_stats);
                 if join_keys.is_empty() {
                     Rc::new(move |from| {
@@ -491,11 +492,11 @@ impl SimpleEvaluator {
                     .intersection(&right.always_bound_variables())
                     .copied()
                     .collect();
-                let (left, left_stats) = self.plan_evaluator(left.clone());
+                let (left, left_stats) = self.plan_evaluator(Rc::clone(left));
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right.clone());
+                let (right, right_stats) = self.plan_evaluator(Rc::clone(right));
                 stat_children.push(right_stats);
-                let expression = self.expression_evaluator(expression);
+                let expression = self.expression_evaluator(expression, &mut stat_children);
                 // Real hash join
                 Rc::new(move |from| {
                     let mut errors = Vec::default();
@@ -511,7 +512,7 @@ impl SimpleEvaluator {
                         left_iter: left(from),
                         right: right_values,
                         buffered_results: errors,
-                        expression: expression.clone(),
+                        expression: Rc::clone(&expression),
                     })
                 })
             }
@@ -520,36 +521,36 @@ impl SimpleEvaluator {
                 right,
                 possible_problem_vars,
             } => {
-                let (left, left_stats) = self.plan_evaluator(left.clone());
+                let (left, left_stats) = self.plan_evaluator(Rc::clone(left));
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right.clone());
+                let (right, right_stats) = self.plan_evaluator(Rc::clone(right));
                 stat_children.push(right_stats);
-                let possible_problem_vars = possible_problem_vars.clone();
+                let possible_problem_vars = Rc::clone(possible_problem_vars);
                 Rc::new(move |from| {
                     if possible_problem_vars.is_empty() {
                         Box::new(ForLoopLeftJoinIterator {
-                            right_evaluator: right.clone(),
+                            right_evaluator: Rc::clone(&right),
                             left_iter: left(from),
                             current_right: Box::new(empty()),
                         })
                     } else {
                         Box::new(BadForLoopLeftJoinIterator {
                             from_tuple: from.clone(),
-                            right_evaluator: right.clone(),
+                            right_evaluator: Rc::clone(&right),
                             left_iter: left(from),
-                            current_left: None,
+                            current_left: EncodedTuple::with_capacity(0),
                             current_right: Box::new(empty()),
-                            problem_vars: possible_problem_vars.clone(),
+                            problem_vars: Rc::clone(&possible_problem_vars),
                         })
                     }
                 })
             }
             PlanNode::Filter { child, expression } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
-                let expression = self.expression_evaluator(expression);
+                let expression = self.expression_evaluator(expression, &mut stat_children);
                 Rc::new(move |from| {
-                    let expression = expression.clone();
+                    let expression = Rc::clone(&expression);
                     Box::new(child(from).filter(move |tuple| {
                         match tuple {
                             Ok(tuple) => expression(tuple)
@@ -564,7 +565,7 @@ impl SimpleEvaluator {
                 let children: Vec<_> = children
                     .iter()
                     .map(|child| {
-                        let (child, child_stats) = self.plan_evaluator(child.clone());
+                        let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                         stat_children.push(child_stats);
                         child
                     })
@@ -583,12 +584,12 @@ impl SimpleEvaluator {
                 variable,
                 expression,
             } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
                 let position = variable.encoded;
-                let expression = self.expression_evaluator(expression);
+                let expression = self.expression_evaluator(expression, &mut stat_children);
                 Rc::new(move |from| {
-                    let expression = expression.clone();
+                    let expression = Rc::clone(&expression);
                     Box::new(child(from).map(move |tuple| {
                         let mut tuple = tuple?;
                         if let Some(value) = expression(&tuple) {
@@ -599,20 +600,20 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Sort { child, by } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
                 let by: Vec<_> = by
                     .iter()
                     .map(|comp| match comp {
-                        Comparator::Asc(expression) => {
-                            ComparatorFunction::Asc(self.expression_evaluator(expression))
-                        }
-                        Comparator::Desc(expression) => {
-                            ComparatorFunction::Desc(self.expression_evaluator(expression))
-                        }
+                        Comparator::Asc(expression) => ComparatorFunction::Asc(
+                            self.expression_evaluator(expression, &mut stat_children),
+                        ),
+                        Comparator::Desc(expression) => ComparatorFunction::Desc(
+                            self.expression_evaluator(expression, &mut stat_children),
+                        ),
                     })
                     .collect();
-                let dataset = self.dataset.clone();
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |from| {
                     let mut errors = Vec::default();
                     let mut values = child(from)
@@ -657,12 +658,12 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::HashDeduplicate { child } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
                 Rc::new(move |from| Box::new(hash_deduplicate(child(from))))
             }
             PlanNode::Reduced { child } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
                 Rc::new(move |from| {
                     Box::new(ConsecutiveDeduplication {
@@ -672,23 +673,23 @@ impl SimpleEvaluator {
                 })
             }
             PlanNode::Skip { child, count } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
                 let count = *count;
                 Rc::new(move |from| Box::new(child(from).skip(count)))
             }
             PlanNode::Limit { child, count } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
                 let count = *count;
                 Rc::new(move |from| Box::new(child(from).take(count)))
             }
             PlanNode::Project { child, mapping } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
-                let mapping = mapping.clone();
+                let mapping = Rc::clone(mapping);
                 Rc::new(move |from| {
-                    let mapping = mapping.clone();
+                    let mapping = Rc::clone(&mapping);
                     let mut input_tuple = EncodedTuple::with_capacity(mapping.len());
                     for (input_key, output_key) in mapping.iter() {
                         if let Some(value) = from.get(output_key.encoded) {
@@ -724,16 +725,16 @@ impl SimpleEvaluator {
                 key_variables,
                 aggregates,
             } => {
-                let (child, child_stats) = self.plan_evaluator(child.clone());
+                let (child, child_stats) = self.plan_evaluator(Rc::clone(child));
                 stat_children.push(child_stats);
-                let key_variables = key_variables.clone();
+                let key_variables = Rc::clone(key_variables);
                 let aggregate_input_expressions: Vec<_> = aggregates
                     .iter()
                     .map(|(aggregate, _)| {
                         aggregate
                             .parameter
                             .as_ref()
-                            .map(|p| self.expression_evaluator(p))
+                            .map(|p| self.expression_evaluator(p, &mut stat_children))
                     })
                     .collect();
                 let accumulator_builders: Vec<_> = aggregates
@@ -750,7 +751,7 @@ impl SimpleEvaluator {
                     aggregates.iter().map(|(_, var)| var.encoded).collect();
                 Rc::new(move |from| {
                     let tuple_size = from.capacity();
-                    let key_variables = key_variables.clone();
+                    let key_variables = Rc::clone(&key_variables);
                     let mut errors = Vec::default();
                     let mut accumulators_for_group =
                         HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
@@ -825,7 +826,7 @@ impl SimpleEvaluator {
             exec_duration: Cell::new(std::time::Duration::from_secs(0)),
         });
         if self.run_stats {
-            let stats = stats.clone();
+            let stats = Rc::clone(&stats);
             evaluator = Rc::new(move |tuple| {
                 let start = Timer::now();
                 let inner = evaluator(tuple);
@@ -834,7 +835,7 @@ impl SimpleEvaluator {
                     .set(stats.exec_duration.get() + start.elapsed());
                 Box::new(StatsIterator {
                     inner,
-                    stats: stats.clone(),
+                    stats: Rc::clone(&stats),
                 })
             })
         }
@@ -845,7 +846,7 @@ impl SimpleEvaluator {
         &self,
         service_name: &PatternValue,
         graph_pattern: &GraphPattern,
-        variables: Rc<Vec<Variable>>,
+        variables: Rc<[Variable]>,
         from: &EncodedTuple,
     ) -> Result<EncodedTuplesIterator, EvaluationError> {
         let service_name = get_pattern_value(&service_name.into(), from)
@@ -862,7 +863,7 @@ impl SimpleEvaluator {
                 parsing_duration: None,
             },
         )? {
-            Ok(encode_bindings(self.dataset.clone(), variables, iter))
+            Ok(encode_bindings(Rc::clone(&self.dataset), variables, iter))
         } else {
             Err(EvaluationError::msg(
                 "The service call has not returned a set of solutions",
@@ -892,12 +893,12 @@ impl SimpleEvaluator {
                 }
             }
             PlanAggregationFunction::Min => {
-                let dataset = dataset.clone();
-                Box::new(move || Box::new(MinAccumulator::new(dataset.clone())))
+                let dataset = Rc::clone(dataset);
+                Box::new(move || Box::new(MinAccumulator::new(Rc::clone(&dataset))))
             } // DISTINCT does not make sense with min
             PlanAggregationFunction::Max => {
-                let dataset = dataset.clone();
-                Box::new(move || Box::new(MaxAccumulator::new(dataset.clone())))
+                let dataset = Rc::clone(dataset);
+                Box::new(move || Box::new(MaxAccumulator::new(Rc::clone(&dataset))))
             } // DISTINCT does not make sense with max
             PlanAggregationFunction::Avg => {
                 if distinct {
@@ -908,20 +909,20 @@ impl SimpleEvaluator {
             }
             PlanAggregationFunction::Sample => Box::new(|| Box::<SampleAccumulator>::default()), // DISTINCT does not make sense with sample
             PlanAggregationFunction::GroupConcat { separator } => {
-                let dataset = dataset.clone();
-                let separator = separator.clone();
+                let dataset = Rc::clone(dataset);
+                let separator = Rc::clone(separator);
                 if distinct {
                     Box::new(move || {
                         Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
-                            dataset.clone(),
-                            separator.clone(),
+                            Rc::clone(&dataset),
+                            Rc::clone(&separator),
                         )))
                     })
                 } else {
                     Box::new(move || {
                         Box::new(GroupConcatAccumulator::new(
-                            dataset.clone(),
-                            separator.clone(),
+                            Rc::clone(&dataset),
+                            Rc::clone(&separator),
                         ))
                     })
                 }
@@ -929,10 +930,10 @@ impl SimpleEvaluator {
         }
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn expression_evaluator(
         &self,
         expression: &PlanExpression,
+        stat_children: &mut Vec<Rc<PlanNodeWithStats>>,
     ) -> Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
         match expression {
             PlanExpression::NamedNode(t) => {
@@ -948,48 +949,61 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| tuple.get(v).cloned())
             }
             PlanExpression::Exists(plan) => {
-                let (eval, _) = self.plan_evaluator(plan.clone()); //TODO: stats
+                let (eval, stats) = self.plan_evaluator(Rc::clone(plan));
+                stat_children.push(stats);
                 Rc::new(move |tuple| Some(eval(tuple.clone()).next().is_some().into()))
             }
-            PlanExpression::Or(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                Rc::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
-                    Some(true) => Some(true.into()),
-                    Some(false) => b(tuple),
-                    None => {
-                        if Some(true) == a(tuple).and_then(|v| to_bool(&v)) {
-                            Some(true.into())
-                        } else {
-                            None
+            PlanExpression::Or(inner) => {
+                let children = inner
+                    .iter()
+                    .map(|i| self.expression_evaluator(i, stat_children))
+                    .collect::<Rc<[_]>>();
+                Rc::new(move |tuple| {
+                    let mut error = true;
+                    for child in children.iter() {
+                        match child(tuple).and_then(|v| to_bool(&v)) {
+                            Some(true) => return Some(true.into()),
+                            Some(false) => continue,
+                            None => error = true,
                         }
+                    }
+                    if error {
+                        None
+                    } else {
+                        Some(false.into())
                     }
                 })
             }
-            PlanExpression::And(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                Rc::new(move |tuple| match a(tuple).and_then(|v| to_bool(&v)) {
-                    Some(true) => b(tuple),
-                    Some(false) => Some(false.into()),
-                    None => {
-                        if Some(false) == b(tuple).and_then(|v| to_bool(&v)) {
-                            Some(false.into())
-                        } else {
-                            None
+            PlanExpression::And(inner) => {
+                let children = inner
+                    .iter()
+                    .map(|i| self.expression_evaluator(i, stat_children))
+                    .collect::<Rc<[_]>>();
+                Rc::new(move |tuple| {
+                    let mut error = false;
+                    for child in children.iter() {
+                        match child(tuple).and_then(|v| to_bool(&v)) {
+                            Some(true) => continue,
+                            Some(false) => return Some(false.into()),
+                            None => error = true,
                         }
+                    }
+                    if error {
+                        None
+                    } else {
+                        Some(true.into())
                     }
                 })
             }
             PlanExpression::Equal(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                Rc::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(|v| v.into()))
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
+                Rc::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(Into::into))
             }
             PlanExpression::Greater(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                let dataset = self.dataset.clone();
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(
                         (partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? == Ordering::Greater)
@@ -998,9 +1012,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::GreaterOrEqual(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                let dataset = self.dataset.clone();
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(
                         match partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? {
@@ -1012,17 +1026,17 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Less(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                let dataset = self.dataset.clone();
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some((partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? == Ordering::Less).into())
                 })
             }
             PlanExpression::LessOrEqual(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                let dataset = self.dataset.clone();
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(
                         match partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? {
@@ -1034,8 +1048,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Add(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
                 Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
@@ -1073,13 +1087,15 @@ impl SimpleEvaluator {
                         NumericBinaryOperands::TimeDayTimeDuration(v1, v2) => {
                             Some(v1.checked_add_day_time_duration(v2)?.into())
                         }
-                        _ => None,
+                        NumericBinaryOperands::DateTime(_, _)
+                        | NumericBinaryOperands::Time(_, _)
+                        | NumericBinaryOperands::Date(_, _) => None,
                     },
                 )
             }
             PlanExpression::Subtract(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
                 Rc::new(move |tuple| {
                     Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
@@ -1130,8 +1146,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Multiply(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
                 Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
@@ -1143,8 +1159,8 @@ impl SimpleEvaluator {
                 )
             }
             PlanExpression::Divide(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
                 Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
@@ -1158,7 +1174,7 @@ impl SimpleEvaluator {
                 )
             }
             PlanExpression::UnaryPlus(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(value.into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.into()),
@@ -1171,25 +1187,27 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::UnaryMinus(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some((-value).into()),
                     EncodedTerm::DoubleLiteral(value) => Some((-value).into()),
-                    EncodedTerm::IntegerLiteral(value) => Some((-value).into()),
-                    EncodedTerm::DecimalLiteral(value) => Some((-value).into()),
-                    EncodedTerm::DurationLiteral(value) => Some((-value).into()),
-                    EncodedTerm::YearMonthDurationLiteral(value) => Some((-value).into()),
-                    EncodedTerm::DayTimeDurationLiteral(value) => Some((-value).into()),
+                    EncodedTerm::IntegerLiteral(value) => Some(value.checked_neg()?.into()),
+                    EncodedTerm::DecimalLiteral(value) => Some(value.checked_neg()?.into()),
+                    EncodedTerm::DurationLiteral(value) => Some(value.checked_neg()?.into()),
+                    EncodedTerm::YearMonthDurationLiteral(value) => {
+                        Some(value.checked_neg()?.into())
+                    }
+                    EncodedTerm::DayTimeDurationLiteral(value) => Some(value.checked_neg()?.into()),
                     _ => None,
                 })
             }
             PlanExpression::Not(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| to_bool(&e(tuple)?).map(|v| (!v).into()))
             }
             PlanExpression::Str(e) | PlanExpression::StringCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(build_string_literal_from_id(to_string_id(
                         &dataset,
@@ -1198,8 +1216,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Lang(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::SmallSmallLangStringLiteral { language, .. }
                     | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
@@ -1214,9 +1232,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::LangMatches(language_tag, language_range) => {
-                let language_tag = self.expression_evaluator(language_tag);
-                let language_range = self.expression_evaluator(language_range);
-                let dataset = self.dataset.clone();
+                let language_tag = self.expression_evaluator(language_tag, stat_children);
+                let language_range = self.expression_evaluator(language_range, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let mut language_tag = to_simple_string(&dataset, &language_tag(tuple)?)?;
                     language_tag.make_ascii_lowercase();
@@ -1240,8 +1258,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Datatype(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| datatype(&dataset, &e(tuple)?))
             }
             PlanExpression::Bound(v) => {
@@ -1249,8 +1267,8 @@ impl SimpleEvaluator {
                 Rc::new(move |tuple| Some(tuple.contains(v).into()))
             }
             PlanExpression::Iri(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 let base_iri = self.base_iri.clone();
                 Rc::new(move |tuple| {
                     let e = e(tuple)?;
@@ -1273,8 +1291,8 @@ impl SimpleEvaluator {
             }
             PlanExpression::BNode(id) => match id {
                 Some(id) => {
-                    let id = self.expression_evaluator(id);
-                    let dataset = self.dataset.clone();
+                    let id = self.expression_evaluator(id, stat_children);
+                    let dataset = Rc::clone(&self.dataset);
                     Rc::new(move |tuple| {
                         Some(
                             dataset.encode_term(
@@ -1293,7 +1311,7 @@ impl SimpleEvaluator {
             },
             PlanExpression::Rand => Rc::new(|_| Some(random::<f64>().into())),
             PlanExpression::Abs(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.abs().into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
@@ -1303,7 +1321,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Ceil(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
@@ -1313,7 +1331,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Floor(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
@@ -1323,7 +1341,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Round(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::IntegerLiteral(value) => Some(value.into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
@@ -1333,8 +1351,11 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Concat(l) => {
-                let l: Vec<_> = l.iter().map(|e| self.expression_evaluator(e)).collect();
-                let dataset = self.dataset.clone();
+                let l: Vec<_> = l
+                    .iter()
+                    .map(|e| self.expression_evaluator(e, stat_children))
+                    .collect();
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let mut result = String::default();
                     let mut language = None;
@@ -1357,10 +1378,12 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::SubStr(source, starting_loc, length) => {
-                let source = self.expression_evaluator(source);
-                let starting_loc = self.expression_evaluator(starting_loc);
-                let length = length.as_ref().map(|l| self.expression_evaluator(l));
-                let dataset = self.dataset.clone();
+                let source = self.expression_evaluator(source, stat_children);
+                let starting_loc = self.expression_evaluator(starting_loc, stat_children);
+                let length = length
+                    .as_ref()
+                    .map(|l| self.expression_evaluator(l, stat_children));
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (source, language) = to_string_and_language(&dataset, &source(tuple)?)?;
 
@@ -1403,17 +1426,21 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrLen(arg) => {
-                let arg = self.expression_evaluator(arg);
-                let dataset = self.dataset.clone();
+                let arg = self.expression_evaluator(arg, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
-                    Some((to_string(&dataset, &arg(tuple)?)?.chars().count() as i64).into())
+                    Some(
+                        i64::try_from(to_string(&dataset, &arg(tuple)?)?.chars().count())
+                            .ok()?
+                            .into(),
+                    )
                 })
             }
             PlanExpression::StaticReplace(arg, regex, replacement) => {
-                let arg = self.expression_evaluator(arg);
+                let arg = self.expression_evaluator(arg, stat_children);
                 let regex = regex.clone();
-                let replacement = self.expression_evaluator(replacement);
-                let dataset = self.dataset.clone();
+                let replacement = self.expression_evaluator(replacement, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (text, language) = to_string_and_language(&dataset, &arg(tuple)?)?;
                     let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
@@ -1425,11 +1452,13 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DynamicReplace(arg, pattern, replacement, flags) => {
-                let arg = self.expression_evaluator(arg);
-                let pattern = self.expression_evaluator(pattern);
-                let replacement = self.expression_evaluator(replacement);
-                let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
-                let dataset = self.dataset.clone();
+                let arg = self.expression_evaluator(arg, stat_children);
+                let pattern = self.expression_evaluator(pattern, stat_children);
+                let replacement = self.expression_evaluator(replacement, stat_children);
+                let flags = flags
+                    .as_ref()
+                    .map(|flags| self.expression_evaluator(flags, stat_children));
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
                     let options = if let Some(flags) = &flags {
@@ -1448,8 +1477,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::UCase(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
                     Some(build_plain_literal(
@@ -1460,8 +1489,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::LCase(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
                     Some(build_plain_literal(
@@ -1472,9 +1501,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrStarts(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1);
-                let arg2 = self.expression_evaluator(arg2);
-                let dataset = self.dataset.clone();
+                let arg1 = self.expression_evaluator(arg1, stat_children);
+                let arg2 = self.expression_evaluator(arg2, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
@@ -1482,8 +1511,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::EncodeForUri(ltrl) => {
-                let ltrl = self.expression_evaluator(ltrl);
-                let dataset = self.dataset.clone();
+                let ltrl = self.expression_evaluator(ltrl, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let ltlr = to_string(&dataset, &ltrl(tuple)?)?;
                     let mut result = Vec::with_capacity(ltlr.len());
@@ -1516,9 +1545,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrEnds(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1);
-                let arg2 = self.expression_evaluator(arg2);
-                let dataset = self.dataset.clone();
+                let arg1 = self.expression_evaluator(arg1, stat_children);
+                let arg2 = self.expression_evaluator(arg2, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
@@ -1526,9 +1555,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Contains(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1);
-                let arg2 = self.expression_evaluator(arg2);
-                let dataset = self.dataset.clone();
+                let arg1 = self.expression_evaluator(arg1, stat_children);
+                let arg2 = self.expression_evaluator(arg2, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (arg1, arg2, _) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
@@ -1536,9 +1565,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrBefore(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1);
-                let arg2 = self.expression_evaluator(arg2);
-                let dataset = self.dataset.clone();
+                let arg1 = self.expression_evaluator(arg1, stat_children);
+                let arg2 = self.expression_evaluator(arg2, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
@@ -1550,9 +1579,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrAfter(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1);
-                let arg2 = self.expression_evaluator(arg2);
-                let dataset = self.dataset.clone();
+                let arg1 = self.expression_evaluator(arg1, stat_children);
+                let arg2 = self.expression_evaluator(arg2, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let (arg1, arg2, language) =
                         to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
@@ -1564,7 +1593,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Year(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
                     EncodedTerm::DateLiteral(date) => Some(date.year().into()),
@@ -1574,7 +1603,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Month(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
                     EncodedTerm::DateLiteral(date) => Some(date.month().into()),
@@ -1585,7 +1614,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Day(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
                     EncodedTerm::DateLiteral(date) => Some(date.day().into()),
@@ -1595,7 +1624,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Hours(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
                     EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
@@ -1603,7 +1632,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Minutes(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
                     EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
@@ -1611,7 +1640,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Seconds(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
                     EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
@@ -1619,7 +1648,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Timezone(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| {
                     Some(
                         match e(tuple)? {
@@ -1638,8 +1667,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Tz(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let timezone_offset = match e(tuple)? {
                         EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
@@ -1662,8 +1691,8 @@ impl SimpleEvaluator {
             }
 
             PlanExpression::Adjust(dt, tz) => {
-                let dt = self.expression_evaluator(dt);
-                let tz = self.expression_evaluator(tz);
+                let dt = self.expression_evaluator(dt, stat_children);
+                let tz = self.expression_evaluator(tz, stat_children);
                 Rc::new(move |tuple| {
                     let timezone_offset = Some(
                         match tz(tuple)? {
@@ -1697,7 +1726,7 @@ impl SimpleEvaluator {
                 Rc::new(move |_| Some(now.into()))
             }
             PlanExpression::Uuid => {
-                let dataset = self.dataset.clone();
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |_| {
                     let mut buffer = String::with_capacity(44);
                     buffer.push_str("urn:uuid:");
@@ -1706,20 +1735,23 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrUuid => {
-                let dataset = self.dataset.clone();
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |_| {
                     let mut buffer = String::with_capacity(36);
                     generate_uuid(&mut buffer);
                     Some(build_string_literal(&dataset, &buffer))
                 })
             }
-            PlanExpression::Md5(arg) => self.hash::<Md5>(arg),
-            PlanExpression::Sha1(arg) => self.hash::<Sha1>(arg),
-            PlanExpression::Sha256(arg) => self.hash::<Sha256>(arg),
-            PlanExpression::Sha384(arg) => self.hash::<Sha384>(arg),
-            PlanExpression::Sha512(arg) => self.hash::<Sha512>(arg),
+            PlanExpression::Md5(arg) => self.hash::<Md5>(arg, stat_children),
+            PlanExpression::Sha1(arg) => self.hash::<Sha1>(arg, stat_children),
+            PlanExpression::Sha256(arg) => self.hash::<Sha256>(arg, stat_children),
+            PlanExpression::Sha384(arg) => self.hash::<Sha384>(arg, stat_children),
+            PlanExpression::Sha512(arg) => self.hash::<Sha512>(arg, stat_children),
             PlanExpression::Coalesce(l) => {
-                let l: Vec<_> = l.iter().map(|e| self.expression_evaluator(e)).collect();
+                let l: Vec<_> = l
+                    .iter()
+                    .map(|e| self.expression_evaluator(e, stat_children))
+                    .collect();
                 Rc::new(move |tuple| {
                     for e in &l {
                         if let Some(result) = e(tuple) {
@@ -1730,9 +1762,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::If(a, b, c) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
-                let c = self.expression_evaluator(c);
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
+                let c = self.expression_evaluator(c, stat_children);
                 Rc::new(move |tuple| {
                     if to_bool(&a(tuple)?)? {
                         b(tuple)
@@ -1742,9 +1774,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrLang(lexical_form, lang_tag) => {
-                let lexical_form = self.expression_evaluator(lexical_form);
-                let lang_tag = self.expression_evaluator(lang_tag);
-                let dataset = self.dataset.clone();
+                let lexical_form = self.expression_evaluator(lexical_form, stat_children);
+                let lang_tag = self.expression_evaluator(lang_tag, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(build_lang_string_literal_from_id(
                         to_simple_string_id(&lexical_form(tuple)?)?,
@@ -1753,9 +1785,9 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StrDt(lexical_form, datatype) => {
-                let lexical_form = self.expression_evaluator(lexical_form);
-                let datatype = self.expression_evaluator(datatype);
-                let dataset = self.dataset.clone();
+                let lexical_form = self.expression_evaluator(lexical_form, stat_children);
+                let datatype = self.expression_evaluator(datatype, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let value = to_simple_string(&dataset, &lexical_form(tuple)?)?;
                     let datatype = if let EncodedTerm::NamedNode { iri_id } = datatype(tuple)? {
@@ -1770,24 +1802,24 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::SameTerm(a, b) => {
-                let a = self.expression_evaluator(a);
-                let b = self.expression_evaluator(b);
+                let a = self.expression_evaluator(a, stat_children);
+                let b = self.expression_evaluator(b, stat_children);
                 Rc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
             }
             PlanExpression::IsIri(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| Some(e(tuple)?.is_named_node().into()))
             }
             PlanExpression::IsBlank(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| Some(e(tuple)?.is_blank_node().into()))
             }
             PlanExpression::IsLiteral(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| Some(e(tuple)?.is_literal().into()))
             }
             PlanExpression::IsNumeric(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| {
                     Some(
                         matches!(
@@ -1802,8 +1834,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::StaticRegex(text, regex) => {
-                let text = self.expression_evaluator(text);
-                let dataset = self.dataset.clone();
+                let text = self.expression_evaluator(text, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 let regex = regex.clone();
                 Rc::new(move |tuple| {
                     let text = to_string(&dataset, &text(tuple)?)?;
@@ -1811,10 +1843,12 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DynamicRegex(text, pattern, flags) => {
-                let text = self.expression_evaluator(text);
-                let pattern = self.expression_evaluator(pattern);
-                let flags = flags.as_ref().map(|flags| self.expression_evaluator(flags));
-                let dataset = self.dataset.clone();
+                let text = self.expression_evaluator(text, stat_children);
+                let pattern = self.expression_evaluator(pattern, stat_children);
+                let flags = flags
+                    .as_ref()
+                    .map(|flags| self.expression_evaluator(flags, stat_children));
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
                     let options = if let Some(flags) = &flags {
@@ -1828,26 +1862,22 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Triple(s, p, o) => {
-                let s = self.expression_evaluator(s);
-                let p = self.expression_evaluator(p);
-                let o = self.expression_evaluator(o);
+                let s = self.expression_evaluator(s, stat_children);
+                let p = self.expression_evaluator(p, stat_children);
+                let o = self.expression_evaluator(o, stat_children);
                 Rc::new(move |tuple| {
                     let s = s(tuple)?;
                     let p = p(tuple)?;
                     let o = o(tuple)?;
-                    if !s.is_literal()
+                    (!s.is_literal()
                         && !s.is_default_graph()
                         && p.is_named_node()
-                        && !o.is_default_graph()
-                    {
-                        Some(EncodedTriple::new(s, p, o).into())
-                    } else {
-                        None
-                    }
+                        && !o.is_default_graph())
+                    .then(|| EncodedTriple::new(s, p, o).into())
                 })
             }
             PlanExpression::Subject(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| {
                     if let EncodedTerm::Triple(t) = e(tuple)? {
                         Some(t.subject.clone())
@@ -1857,7 +1887,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Predicate(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| {
                     if let EncodedTerm::Triple(t) = e(tuple)? {
                         Some(t.predicate.clone())
@@ -1867,7 +1897,7 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::Object(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| {
                     if let EncodedTerm::Triple(t) = e(tuple)? {
                         Some(t.object.clone())
@@ -1877,11 +1907,11 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::IsTriple(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| Some(e(tuple)?.is_triple().into()))
             }
             PlanExpression::BooleanCast(e) => {
-                let e = self.expression_evaluator(e);
+                let e = self.expression_evaluator(e, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::BooleanLiteral(value) => Some(value.into()),
                     EncodedTerm::FloatLiteral(value) => Some(Boolean::from(value).into()),
@@ -1893,8 +1923,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DoubleCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(Double::from(value).into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.into()),
@@ -1909,8 +1939,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::FloatCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(value.into()),
                     EncodedTerm::DoubleLiteral(value) => Some(Float::from(value).into()),
@@ -1925,8 +1955,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::IntegerCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(Integer::try_from(value).ok()?.into()),
                     EncodedTerm::DoubleLiteral(value) => {
@@ -1945,8 +1975,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DecimalCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(Decimal::try_from(value).ok()?.into()),
                     EncodedTerm::DoubleLiteral(value) => {
@@ -1965,8 +1995,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DateCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateLiteral(value) => Some(value.into()),
                     EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
@@ -1978,8 +2008,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::TimeCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::TimeLiteral(value) => Some(value.into()),
                     EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
@@ -1991,8 +2021,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DateTimeCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
                     EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
@@ -2004,8 +2034,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DurationCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DurationLiteral(value) => Some(value.into()),
                     EncodedTerm::YearMonthDurationLiteral(value) => {
@@ -2022,8 +2052,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::YearMonthDurationCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DurationLiteral(value) => {
                         Some(YearMonthDuration::try_from(value).ok()?.into())
@@ -2037,8 +2067,8 @@ impl SimpleEvaluator {
                 })
             }
             PlanExpression::DayTimeDurationCast(e) => {
-                let e = self.expression_evaluator(e);
-                let dataset = self.dataset.clone();
+                let e = self.expression_evaluator(e, stat_children);
+                let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::DurationLiteral(value) => {
                         Some(DayTimeDuration::try_from(value).ok()?.into())
@@ -2055,9 +2085,9 @@ impl SimpleEvaluator {
                 if let Some(function) = self.custom_functions.get(function_name).cloned() {
                     let args = args
                         .iter()
-                        .map(|e| self.expression_evaluator(e))
+                        .map(|e| self.expression_evaluator(e, stat_children))
                         .collect::<Vec<_>>();
-                    let dataset = self.dataset.clone();
+                    let dataset = Rc::clone(&self.dataset);
                     Rc::new(move |tuple| {
                         let args = args
                             .iter()
@@ -2075,9 +2105,10 @@ impl SimpleEvaluator {
     fn hash<H: Digest>(
         &self,
         arg: &PlanExpression,
+        stat_children: &mut Vec<Rc<PlanNodeWithStats>>,
     ) -> Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
-        let arg = self.expression_evaluator(arg);
-        let dataset = self.dataset.clone();
+        let arg = self.expression_evaluator(arg, stat_children);
+        let dataset = Rc::clone(&self.dataset);
         Rc::new(move |tuple| {
             let input = to_simple_string(&dataset, &arg(tuple)?)?;
             let hash = hex::encode(H::new().chain_update(input.as_str()).finalize());
@@ -2290,11 +2321,7 @@ fn to_argument_compatible_strings(
 ) -> Option<(String, String, Option<SmallStringOrId>)> {
     let (value1, language1) = to_string_and_language(dataset, arg1)?;
     let (value2, language2) = to_string_and_language(dataset, arg2)?;
-    if language2.is_none() || language1 == language2 {
-        Some((value1, value2, language1))
-    } else {
-        None
-    }
+    (language2.is_none() || language1 == language2).then(|| (value1, value2, language1))
 }
 
 pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
@@ -2322,6 +2349,7 @@ pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Rege
     regex_builder.build().ok()
 }
 
+#[allow(clippy::rc_buffer)]
 fn decode_bindings(
     dataset: Rc<DatasetView>,
     iter: EncodedTuplesIterator,
@@ -2345,7 +2373,7 @@ fn decode_bindings(
 // this is used to encode results from a BindingIterator into an EncodedTuplesIterator. This happens when SERVICE clauses are evaluated
 fn encode_bindings(
     dataset: Rc<DatasetView>,
-    variables: Rc<Vec<Variable>>,
+    variables: Rc<[Variable]>,
     iter: QuerySolutionIter,
 ) -> EncodedTuplesIterator {
     Box::new(iter.map(move |solution| {
@@ -2362,11 +2390,6 @@ fn encode_bindings(
     }))
 }
 
-#[allow(
-    clippy::float_cmp,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss
-)]
 fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
     match a {
         EncodedTerm::DefaultGraph
@@ -2634,7 +2657,6 @@ fn partial_cmp(dataset: &DatasetView, a: &EncodedTerm, b: &EncodedTerm) -> Optio
     }
 }
 
-#[allow(clippy::cast_precision_loss)]
 fn partial_cmp_literals(
     dataset: &DatasetView,
     a: &EncodedTerm,
@@ -2892,7 +2914,6 @@ enum NumericBinaryOperands {
 }
 
 impl NumericBinaryOperands {
-    #[allow(clippy::cast_precision_loss)]
     fn new(a: EncodedTerm, b: EncodedTerm) -> Option<Self> {
         match (a, b) {
             (EncodedTerm::FloatLiteral(v1), EncodedTerm::FloatLiteral(v2)) => {
@@ -3059,20 +3080,10 @@ fn put_pattern_value(
     tuple: &mut EncodedTuple,
 ) -> Option<()> {
     match selector {
-        TupleSelector::Constant(c) => {
-            if *c == value {
-                Some(())
-            } else {
-                None
-            }
-        }
+        TupleSelector::Constant(c) => (*c == value).then(|| ()),
         TupleSelector::Variable(v) => {
             if let Some(old) = tuple.get(*v) {
-                if value == *old {
-                    Some(())
-                } else {
-                    None
-                }
+                (value == *old).then(|| ())
             } else {
                 tuple.set(*v, value);
                 Some(())
@@ -3148,11 +3159,9 @@ impl PathEvaluator {
                 .find_map(|middle| {
                     middle
                         .and_then(|middle| {
-                            Ok(if self.eval_closed_in_graph(b, &middle, end, graph_name)? {
-                                Some(())
-                            } else {
-                                None
-                            })
+                            Ok(self
+                                .eval_closed_in_graph(b, &middle, end, graph_name)?
+                                .then(|| ()))
                         })
                         .transpose()
                 })
@@ -3218,12 +3227,12 @@ impl PathEvaluator {
             PlanPropertyPath::Reverse(p) => self.eval_closed_in_unknown_graph(p, end, start),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
-                let b = b.clone();
+                let b = Rc::clone(b);
                 let end = end.clone();
                 Box::new(self.eval_from_in_unknown_graph(a, start).flat_map_ok(
                     move |(middle, graph_name)| {
                         eval.eval_closed_in_graph(&b, &middle, &end, &graph_name)
-                            .map(|is_found| if is_found { Some(graph_name) } else { None })
+                            .map(|is_found| is_found.then(|| graph_name))
                             .transpose()
                     },
                 ))
@@ -3236,21 +3245,21 @@ impl PathEvaluator {
                 let eval = self.clone();
                 let start2 = start.clone();
                 let end = end.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 self.run_if_term_is_a_dataset_node(start, move |graph_name| {
                     look_in_transitive_closure(
                         Some(Ok(start2.clone())),
                         |e| eval.eval_from_in_graph(&p, &e, &graph_name),
                         &end,
                     )
-                    .map(|is_found| if is_found { Some(graph_name) } else { None })
+                    .map(|is_found| is_found.then(|| graph_name))
                     .transpose()
                 })
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let end = end.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 Box::new(
                     self.eval_from_in_unknown_graph(&p, start)
                         .filter_map(move |r| {
@@ -3260,13 +3269,7 @@ impl PathEvaluator {
                                     |e| eval.eval_from_in_graph(&p, &e, &graph_name),
                                     &end,
                                 )
-                                .map(|is_found| {
-                                    if is_found {
-                                        Some(graph_name)
-                                    } else {
-                                        None
-                                    }
-                                })
+                                .map(|is_found| is_found.then(|| graph_name))
                             })
                             .transpose()
                         }),
@@ -3279,16 +3282,16 @@ impl PathEvaluator {
                     let eval = self.clone();
                     let start2 = start.clone();
                     let end = end.clone();
-                    let p = p.clone();
+                    let p = Rc::clone(p);
                     self.run_if_term_is_a_dataset_node(start, move |graph_name| {
                         eval.eval_closed_in_graph(&p, &start2, &end, &graph_name)
-                            .map(|is_found| if is_found { Some(graph_name) } else { None })
+                            .map(|is_found| is_found.then(|| graph_name))
                             .transpose()
                     })
                 }
             }
             PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
+                let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(start), None, Some(end), None)
@@ -3327,7 +3330,7 @@ impl PathEvaluator {
             PlanPropertyPath::Reverse(p) => self.eval_to_in_graph(p, start, graph_name),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
-                let b = b.clone();
+                let b = Rc::clone(b);
                 let graph_name2 = graph_name.clone();
                 Box::new(
                     self.eval_from_in_graph(a, start, graph_name)
@@ -3343,7 +3346,7 @@ impl PathEvaluator {
             PlanPropertyPath::ZeroOrMore(p) => {
                 self.run_if_term_is_a_graph_node(start, graph_name, || {
                     let eval = self.clone();
-                    let p = p.clone();
+                    let p = Rc::clone(p);
                     let graph_name2 = graph_name.clone();
                     transitive_closure(Some(Ok(start.clone())), move |e| {
                         eval.eval_from_in_graph(&p, &e, &graph_name2)
@@ -3352,7 +3355,7 @@ impl PathEvaluator {
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.eval_from_in_graph(&p, start, graph_name),
@@ -3368,7 +3371,7 @@ impl PathEvaluator {
                 })
             }
             PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
+                let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(start), None, None, Some(graph_name))
@@ -3404,7 +3407,7 @@ impl PathEvaluator {
             PlanPropertyPath::Reverse(p) => self.eval_to_in_unknown_graph(p, start),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
-                let b = b.clone();
+                let b = Rc::clone(b);
                 Box::new(self.eval_from_in_unknown_graph(a, start).flat_map_ok(
                     move |(middle, graph_name)| {
                         eval.eval_from_in_graph(&b, &middle, &graph_name)
@@ -3419,10 +3422,10 @@ impl PathEvaluator {
             PlanPropertyPath::ZeroOrMore(p) => {
                 let start2 = start.clone();
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 self.run_if_term_is_a_dataset_node(start, move |graph_name| {
                     let eval = eval.clone();
-                    let p = p.clone();
+                    let p = Rc::clone(&p);
                     let graph_name2 = graph_name.clone();
                     transitive_closure(Some(Ok(start2.clone())), move |e| {
                         eval.eval_from_in_graph(&p, &e, &graph_name2)
@@ -3432,7 +3435,7 @@ impl PathEvaluator {
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 Box::new(transitive_closure(
                     self.eval_from_in_unknown_graph(&p, start),
                     move |(e, graph_name)| {
@@ -3444,7 +3447,7 @@ impl PathEvaluator {
             PlanPropertyPath::ZeroOrOne(p) => {
                 let eval = self.clone();
                 let start2 = start.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 self.run_if_term_is_a_dataset_node(start, move |graph_name| {
                     hash_deduplicate(once(Ok(start2.clone())).chain(eval.eval_from_in_graph(
                         &p,
@@ -3455,7 +3458,7 @@ impl PathEvaluator {
                 })
             }
             PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
+                let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(start), None, None, None)
@@ -3489,7 +3492,7 @@ impl PathEvaluator {
             PlanPropertyPath::Reverse(p) => self.eval_from_in_graph(p, end, graph_name),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
-                let a = a.clone();
+                let a = Rc::clone(a);
                 let graph_name2 = graph_name.clone();
                 Box::new(
                     self.eval_to_in_graph(b, end, graph_name)
@@ -3505,7 +3508,7 @@ impl PathEvaluator {
             PlanPropertyPath::ZeroOrMore(p) => {
                 self.run_if_term_is_a_graph_node(end, graph_name, || {
                     let eval = self.clone();
-                    let p = p.clone();
+                    let p = Rc::clone(p);
                     let graph_name2 = graph_name.clone();
                     transitive_closure(Some(Ok(end.clone())), move |e| {
                         eval.eval_to_in_graph(&p, &e, &graph_name2)
@@ -3514,7 +3517,7 @@ impl PathEvaluator {
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.eval_to_in_graph(&p, end, graph_name),
@@ -3529,7 +3532,7 @@ impl PathEvaluator {
                 })
             }
             PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
+                let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(None, None, Some(end), Some(graph_name))
@@ -3564,7 +3567,7 @@ impl PathEvaluator {
             PlanPropertyPath::Reverse(p) => self.eval_from_in_unknown_graph(p, end),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
-                let a = a.clone();
+                let a = Rc::clone(a);
                 Box::new(self.eval_to_in_unknown_graph(b, end).flat_map_ok(
                     move |(middle, graph_name)| {
                         eval.eval_from_in_graph(&a, &middle, &graph_name)
@@ -3579,10 +3582,10 @@ impl PathEvaluator {
             PlanPropertyPath::ZeroOrMore(p) => {
                 let end2 = end.clone();
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 self.run_if_term_is_a_dataset_node(end, move |graph_name| {
                     let eval = eval.clone();
-                    let p = p.clone();
+                    let p = Rc::clone(&p);
                     let graph_name2 = graph_name.clone();
                     transitive_closure(Some(Ok(end2.clone())), move |e| {
                         eval.eval_to_in_graph(&p, &e, &graph_name2)
@@ -3592,7 +3595,7 @@ impl PathEvaluator {
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 Box::new(transitive_closure(
                     self.eval_to_in_unknown_graph(&p, end),
                     move |(e, graph_name)| {
@@ -3604,7 +3607,7 @@ impl PathEvaluator {
             PlanPropertyPath::ZeroOrOne(p) => {
                 let eval = self.clone();
                 let end2 = end.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 self.run_if_term_is_a_dataset_node(end, move |graph_name| {
                     hash_deduplicate(once(Ok(end2.clone())).chain(eval.eval_to_in_graph(
                         &p,
@@ -3615,7 +3618,7 @@ impl PathEvaluator {
                 })
             }
             PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
+                let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(end), None, None, None)
@@ -3651,7 +3654,7 @@ impl PathEvaluator {
             ),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
-                let b = b.clone();
+                let b = Rc::clone(b);
                 let graph_name2 = graph_name.clone();
                 Box::new(self.eval_open_in_graph(a, graph_name).flat_map_ok(
                     move |(start, middle)| {
@@ -3666,7 +3669,7 @@ impl PathEvaluator {
             )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.get_subject_or_object_identity_pairs_in_graph(graph_name),
@@ -3678,7 +3681,7 @@ impl PathEvaluator {
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
                 Box::new(transitive_closure(
                     self.eval_open_in_graph(&p, graph_name),
@@ -3693,7 +3696,7 @@ impl PathEvaluator {
                     .chain(self.eval_open_in_graph(p, graph_name)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
+                let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(None, None, None, Some(graph_name))
@@ -3729,7 +3732,7 @@ impl PathEvaluator {
             ),
             PlanPropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
-                let b = b.clone();
+                let b = Rc::clone(b);
                 Box::new(self.eval_open_in_unknown_graph(a).flat_map_ok(
                     move |(start, middle, graph_name)| {
                         eval.eval_from_in_graph(&b, &middle, &graph_name)
@@ -3743,7 +3746,7 @@ impl PathEvaluator {
             )),
             PlanPropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 Box::new(transitive_closure(
                     self.get_subject_or_object_identity_pairs_in_dataset(),
                     move |(start, middle, graph_name)| {
@@ -3754,7 +3757,7 @@ impl PathEvaluator {
             }
             PlanPropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
-                let p = p.clone();
+                let p = Rc::clone(p);
                 Box::new(transitive_closure(
                     self.eval_open_in_unknown_graph(&p),
                     move |(start, middle, graph_name)| {
@@ -3768,7 +3771,7 @@ impl PathEvaluator {
                     .chain(self.eval_open_in_unknown_graph(p)),
             )),
             PlanPropertyPath::NegatedPropertySet(ps) => {
-                let ps = ps.clone();
+                let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(None, None, None, None)
@@ -4035,9 +4038,9 @@ struct BadForLoopLeftJoinIterator {
     from_tuple: EncodedTuple,
     right_evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
     left_iter: EncodedTuplesIterator,
-    current_left: Option<EncodedTuple>,
+    current_left: EncodedTuple,
     current_right: EncodedTuplesIterator,
-    problem_vars: Rc<Vec<usize>>,
+    problem_vars: Rc<[usize]>,
 }
 
 impl Iterator for BadForLoopLeftJoinIterator {
@@ -4047,9 +4050,7 @@ impl Iterator for BadForLoopLeftJoinIterator {
         for right_tuple in &mut self.current_right {
             match right_tuple {
                 Ok(right_tuple) => {
-                    if let Some(combined) =
-                        right_tuple.combine_with(self.current_left.as_ref().unwrap())
-                    {
+                    if let Some(combined) = right_tuple.combine_with(&self.current_left) {
                         return Some(Ok(combined));
                     }
                 }
@@ -4071,7 +4072,7 @@ impl Iterator for BadForLoopLeftJoinIterator {
                     match right_tuple {
                         Ok(right_tuple) => {
                             if let Some(combined) = right_tuple.combine_with(&left_tuple) {
-                                self.current_left = Some(left_tuple);
+                                self.current_left = left_tuple;
                                 return Some(Ok(combined));
                             }
                         }
@@ -4255,8 +4256,8 @@ impl Iterator for DescribeIterator {
                         .eval
                         .dataset
                         .decode_quad(&quad)
-                        .map(|q| q.into())
-                        .map_err(|e| e.into()),
+                        .map(Into::into)
+                        .map_err(Into::into),
                     Err(error) => Err(error),
                 });
             }
@@ -4507,9 +4508,15 @@ impl Accumulator for SumAccumulator {
                 self.sum = match operands {
                     NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
                     NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
-                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
-                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
-                    NumericBinaryOperands::Duration(v1, v2) => v1.checked_add(v2).map(|v| v.into()),
+                    NumericBinaryOperands::Integer(v1, v2) => v1.checked_add(v2).map(Into::into),
+                    NumericBinaryOperands::Decimal(v1, v2) => v1.checked_add(v2).map(Into::into),
+                    NumericBinaryOperands::Duration(v1, v2) => v1.checked_add(v2).map(Into::into),
+                    NumericBinaryOperands::YearMonthDuration(v1, v2) => {
+                        v1.checked_add(v2).map(Into::into)
+                    }
+                    NumericBinaryOperands::DayTimeDuration(v1, v2) => {
+                        v1.checked_add(v2).map(Into::into)
+                    }
                     _ => None,
                 };
             } else {
@@ -4547,9 +4554,9 @@ impl Accumulator for AvgAccumulator {
                 NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
                 NumericBinaryOperands::Integer(v1, v2) => {
-                    Decimal::from(v1).checked_div(v2).map(|v| v.into())
+                    Decimal::from(v1).checked_div(v2).map(Into::into)
                 }
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2).map(|v| v.into()),
+                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2).map(Into::into),
                 _ => None,
             }
         }
@@ -4634,14 +4641,14 @@ struct GroupConcatAccumulator {
     dataset: Rc<DatasetView>,
     concat: Option<String>,
     language: Option<Option<SmallStringOrId>>,
-    separator: Rc<String>,
+    separator: Rc<str>,
 }
 
 impl GroupConcatAccumulator {
-    fn new(dataset: Rc<DatasetView>, separator: Rc<String>) -> Self {
+    fn new(dataset: Rc<DatasetView>, separator: Rc<str>) -> Self {
         Self {
             dataset,
-            concat: Some("".to_owned()),
+            concat: Some(String::new()),
             language: None,
             separator,
         }

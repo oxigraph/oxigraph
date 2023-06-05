@@ -1,9 +1,3 @@
-#![allow(
-    clippy::redundant_pub_crate,
-    clippy::used_underscore_binding,
-    clippy::unused_self,
-    clippy::trivially_copy_pass_by_ref
-)]
 mod io;
 mod model;
 mod sparql;

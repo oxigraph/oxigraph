@@ -1,6 +1,5 @@
 use arbitrary::{Arbitrary, Result, Unstructured};
 use std::fmt;
-use std::fmt::Debug;
 use std::iter::once;
 use std::ops::ControlFlow;
 
@@ -30,8 +29,12 @@ const LITERALS: [&str; 11] = [
     "1e0",
 ];
 
-#[derive(Arbitrary)]
 pub struct Query {
+    inner: QueryContent,
+}
+
+#[derive(Arbitrary)]
+struct QueryContent {
     // [1]  	QueryUnit	  ::=  	Query
     // [2]  	Query	  ::=  	Prologue ( SelectQuery | ConstructQuery | DescribeQuery | AskQuery ) ValuesClause
     variant: QueryVariant,
@@ -44,16 +47,34 @@ enum QueryVariant {
     //TODO: Other variants!
 }
 
-impl fmt::Display for Query {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.variant {
-            QueryVariant::Select(s) => write!(f, "{s}"),
-        }?;
-        write!(f, "{}", self.values_clause)
+impl<'a> Arbitrary<'a> for Query {
+    fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
+        Ok(Self {
+            inner: QueryContent::arbitrary(u)?,
+        })
+    }
+
+    fn arbitrary_take_rest(u: Unstructured<'a>) -> Result<Self> {
+        Ok(Self {
+            inner: QueryContent::arbitrary_take_rest(u)?,
+        })
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        (20, None)
     }
 }
 
-impl Debug for Query {
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.inner.variant {
+            QueryVariant::Select(s) => write!(f, "{s}"),
+        }?;
+        write!(f, "{}", self.inner.values_clause)
+    }
+}
+
+impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
@@ -169,7 +190,9 @@ struct SolutionModifier {
     // [18]  	SolutionModifier	  ::=  	GroupClause? HavingClause? OrderClause? LimitOffsetClauses?
     group: Option<GroupClause>,
     having: Option<HavingClause>,
+    #[cfg(feature = "order")]
     order: Option<OrderClause>,
+    #[cfg(feature = "limit-offset")]
     limit_offset: Option<LimitOffsetClauses>,
 }
 
@@ -181,9 +204,11 @@ impl fmt::Display for SolutionModifier {
         if let Some(having) = &self.having {
             write!(f, " {having}")?;
         }
+        #[cfg(feature = "order")]
         if let Some(order) = &self.order {
             write!(f, " {order}")?;
         }
+        #[cfg(feature = "limit-offset")]
         if let Some(limit_offset) = &self.limit_offset {
             write!(f, " {limit_offset}")?;
         }
@@ -254,6 +279,7 @@ impl fmt::Display for HavingClause {
 // [22]  	HavingCondition	  ::=  	Constraint
 type HavingCondition = Constraint;
 
+#[cfg(feature = "order")]
 #[derive(Arbitrary)]
 struct OrderClause {
     // [23]  	OrderClause	  ::=  	'ORDER' 'BY' OrderCondition+
@@ -261,6 +287,7 @@ struct OrderClause {
     others: Vec<OrderCondition>,
 }
 
+#[cfg(feature = "order")]
 impl fmt::Display for OrderClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ORDER BY {}", self.start)?;
@@ -271,6 +298,7 @@ impl fmt::Display for OrderClause {
     }
 }
 
+#[cfg(feature = "order")]
 #[derive(Arbitrary)]
 enum OrderCondition {
     // [24]  	OrderCondition	  ::=  	( ( 'ASC' | 'DESC' ) BrackettedExpression ) | ( Constraint | Var )
@@ -282,6 +310,7 @@ enum OrderCondition {
     Var(Var),
 }
 
+#[cfg(feature = "order")]
 impl fmt::Display for OrderCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -298,6 +327,7 @@ impl fmt::Display for OrderCondition {
     }
 }
 
+#[cfg(feature = "limit-offset")]
 #[derive(Arbitrary)]
 enum LimitOffsetClauses {
     // [25]  	LimitOffsetClauses	  ::=  	LimitClause OffsetClause? | OffsetClause LimitClause?
@@ -305,6 +335,7 @@ enum LimitOffsetClauses {
     OffsetLimit(OffsetClause, Option<LimitClause>),
 }
 
+#[cfg(feature = "limit-offset")]
 impl fmt::Display for LimitOffsetClauses {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -316,24 +347,28 @@ impl fmt::Display for LimitOffsetClauses {
     }
 }
 
+#[cfg(feature = "limit-offset")]
 #[derive(Arbitrary)]
 struct LimitClause {
     // [26]  	LimitClause	  ::=  	'LIMIT' INTEGER
     value: u8,
 }
 
+#[cfg(feature = "limit-offset")]
 impl fmt::Display for LimitClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "LIMIT {}", self.value)
     }
 }
 
+#[cfg(feature = "limit-offset")]
 #[derive(Arbitrary)]
 struct OffsetClause {
     // [27]  	OffsetClause	  ::=  	'OFFSET' INTEGER
     value: u8,
 }
 
+#[cfg(feature = "limit-offset")]
 impl fmt::Display for OffsetClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "OFFSET {}", self.value)

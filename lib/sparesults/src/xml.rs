@@ -186,6 +186,7 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
 
         //Read header
         loop {
+            buffer.clear();
             let event = reader.read_event_into(&mut buffer)?;
             match event {
                 Event::Start(event) => match state {
@@ -275,7 +276,6 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
                 Event::Eof => return Err(SyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
                 _ => (),
             }
-            buffer.clear();
         }
     }
 }
@@ -315,6 +315,7 @@ impl<R: BufRead> XmlSolutionsReader<R> {
         let mut lang = None;
         let mut datatype = None;
         loop {
+            self.buffer.clear();
             let event = self.reader.read_event_into(&mut self.buffer)?;
             match event {
                 Event::Start(event) => match state {
@@ -482,20 +483,31 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                         }
                         state = State::Triple;
                     }
-                    State::Uri => state = self.stack.pop().unwrap(),
+                    State::Uri => {
+                        state = self
+                            .stack
+                            .pop()
+                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?
+                    }
                     State::BNode => {
                         if term.is_none() {
                             //We default to a random bnode
                             term = Some(BlankNode::default().into())
                         }
-                        state = self.stack.pop().unwrap()
+                        state = self
+                            .stack
+                            .pop()
+                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?
                     }
                     State::Literal => {
                         if term.is_none() {
                             //We default to the empty literal
                             term = Some(build_literal("", lang.take(), datatype.take())?.into())
                         }
-                        state = self.stack.pop().unwrap();
+                        state = self
+                            .stack
+                            .pop()
+                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?;
                     }
                     State::Triple => {
                         #[cfg(feature = "rdf-star")]
@@ -530,7 +542,10 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                                 )
                                 .into(),
                             );
-                            state = self.stack.pop().unwrap();
+                            state = self
+                                .stack
+                                .pop()
+                                .ok_or_else(|| SyntaxError::msg("Empty stack"))?;
                         } else {
                             return Err(
                                 SyntaxError::msg("A <triple> should contain a <subject>, a <predicate> and an <object>").into()
@@ -549,7 +564,6 @@ impl<R: BufRead> XmlSolutionsReader<R> {
                 Event::Eof => return Ok(None),
                 _ => (),
             }
-            self.buffer.clear();
         }
     }
 }

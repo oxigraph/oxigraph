@@ -5,10 +5,10 @@
   "devDependencies": {
     "@rdfjs/data-model": "^2.0.1",
     "mocha": "^10.0.0",
-    "rome": "^11.0.0"
+    "rome": "^12.0.0"
   },
   "scripts": {
-    "fmt": "rome format . --write && rome check . --apply-suggested",
+    "fmt": "rome format . --write && rome check . --apply-unsafe",
     "test": "rome ci . && wasm-pack build --debug --target nodejs && mocha",
     "build": "rm -rf pkg && wasm-pack build --release --target web --out-name web && mv pkg pkg-web && wasm-pack build --release --target nodejs --out-name node && mv pkg pkg-node && node build_package.js && rm -r pkg-web && rm -r pkg-node",
     "release": "npm run build && npm publish ./pkg",

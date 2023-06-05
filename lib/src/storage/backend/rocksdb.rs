@@ -4,7 +4,7 @@
 
 use crate::storage::error::{CorruptionError, StorageError};
 use lazy_static::lazy_static;
-use libc::{self, c_char, c_void, free};
+use libc::{self, c_void, free};
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
@@ -241,7 +241,7 @@ impl Db {
                     .map(|cf| cf.as_ptr())
                     .collect::<Vec<_>>()
                     .as_ptr(),
-                cf_options.as_ptr() as *const *const rocksdb_options_t,
+                cf_options.as_ptr().cast(),
                 cf_handles.as_mut_ptr(),
             ))
             .map_err(|e| {
@@ -359,7 +359,7 @@ impl Db {
                     .map(|cf| cf.as_ptr())
                     .collect::<Vec<_>>()
                     .as_ptr(),
-                cf_options.as_ptr() as *const *const rocksdb_options_t,
+                cf_options.as_ptr().cast(),
                 cf_handles.as_mut_ptr(),
             ))
             .map_err(|e| {
@@ -393,11 +393,7 @@ impl Db {
                     cf_handles,
                     cf_options,
                     is_secondary: true,
-                    path_to_remove: if in_memory {
-                        Some(secondary_path)
-                    } else {
-                        None
-                    },
+                    path_to_remove: in_memory.then(|| secondary_path),
                 })),
             })
         }
@@ -424,7 +420,7 @@ impl Db {
                     .map(|cf| cf.as_ptr())
                     .collect::<Vec<_>>()
                     .as_ptr(),
-                cf_options.as_ptr() as *const *const rocksdb_options_t,
+                cf_options.as_ptr().cast(),
                 cf_handles.as_mut_ptr(),
                 0, // false
             ))
@@ -580,7 +576,7 @@ impl Db {
                     }
                     let options = rocksdb_readoptions_create_copy(db.read_options);
                     Reader {
-                        inner: InnerReader::PlainDb(db.clone()),
+                        inner: InnerReader::PlainDb(Arc::clone(db)),
                         options,
                     }
                 }
@@ -594,7 +590,7 @@ impl Db {
                     rocksdb_readoptions_set_snapshot(options, snapshot);
                     Reader {
                         inner: InnerReader::TransactionalSnapshot(Rc::new(TransactionalSnapshot {
-                            db: db.clone(),
+                            db: Arc::clone(db),
                             snapshot,
                         })),
                         options,
@@ -632,7 +628,7 @@ impl Db {
                 let result = f(Transaction {
                     transaction: Rc::new(transaction),
                     read_options,
-                    _lifetime: PhantomData::default(),
+                    _lifetime: PhantomData,
                 });
                 match result {
                     Ok(result) => {
@@ -698,7 +694,7 @@ impl Db {
                         db.db,
                         db.read_options,
                         column_family.0,
-                        key.as_ptr() as *const c_char,
+                        key.as_ptr().cast(),
                         key.len(),
                     ))
                 }
@@ -707,7 +703,7 @@ impl Db {
                         db.db,
                         db.read_options,
                         column_family.0,
-                        key.as_ptr() as *const c_char,
+                        key.as_ptr().cast(),
                         key.len()
                     ))
                 }
@@ -740,9 +736,9 @@ impl Db {
                     db.db,
                     db.write_options,
                     column_family.0,
-                    key.as_ptr() as *const c_char,
+                    key.as_ptr().cast(),
                     key.len(),
-                    value.as_ptr() as *const c_char,
+                    value.as_ptr().cast(),
                     value.len(),
                 ))
             }?;
@@ -940,7 +936,7 @@ impl Reader {
                         inner.db.db,
                         self.options,
                         column_family.0,
-                        key.as_ptr() as *const c_char,
+                        key.as_ptr().cast(),
                         key.len()
                     ))
                 }
@@ -950,7 +946,7 @@ impl Reader {
                             *inner,
                             self.options,
                             column_family.0,
-                            key.as_ptr() as *const c_char,
+                            key.as_ptr().cast(),
                             key.len()
                         ))
                     } else {
@@ -964,7 +960,7 @@ impl Reader {
                         inner.db,
                         self.options,
                         column_family.0,
-                        key.as_ptr() as *const c_char,
+                        key.as_ptr().cast(),
                         key.len()
                     ))
                 }
@@ -1005,11 +1001,7 @@ impl Reader {
                     break;
                 }
             }
-            if found {
-                Some(bound)
-            } else {
-                None
-            }
+            found.then(|| bound)
         };
 
         unsafe {
@@ -1021,7 +1013,7 @@ impl Reader {
             if let Some(upper_bound) = &upper_bound {
                 rocksdb_readoptions_set_iterate_upper_bound(
                     options,
-                    upper_bound.as_ptr() as *const c_char,
+                    upper_bound.as_ptr().cast(),
                     upper_bound.len(),
                 );
             }
@@ -1046,7 +1038,7 @@ impl Reader {
             if prefix.is_empty() {
                 rocksdb_iter_seek_to_first(iter);
             } else {
-                rocksdb_iter_seek(iter, prefix.as_ptr() as *const c_char, prefix.len());
+                rocksdb_iter_seek(iter, prefix.as_ptr().cast(), prefix.len());
             }
             let is_currently_valid = rocksdb_iter_valid(iter) != 0;
             Ok(Iter {
@@ -1101,7 +1093,7 @@ impl Transaction<'_> {
                 *self.transaction,
                 self.read_options,
                 column_family.0,
-                key.as_ptr() as *const c_char,
+                key.as_ptr().cast(),
                 key.len()
             ))?;
             Ok(if slice.is_null() {
@@ -1130,9 +1122,9 @@ impl Transaction<'_> {
             ffi_result!(rocksdb_transaction_put_cf_with_status(
                 *self.transaction,
                 column_family.0,
-                key.as_ptr() as *const c_char,
+                key.as_ptr().cast(),
                 key.len(),
-                value.as_ptr() as *const c_char,
+                value.as_ptr().cast(),
                 value.len(),
             ))?;
         }
@@ -1152,7 +1144,7 @@ impl Transaction<'_> {
             ffi_result!(rocksdb_transaction_delete_cf_with_status(
                 *self.transaction,
                 column_family.0,
-                key.as_ptr() as *const c_char,
+                key.as_ptr().cast(),
                 key.len(),
             ))?;
         }
@@ -1177,7 +1169,7 @@ impl Deref for PinnableSlice {
         unsafe {
             let mut len = 0;
             let val = rocksdb_pinnableslice_value(self.0, &mut len);
-            slice::from_raw_parts(val as *const u8, len)
+            slice::from_raw_parts(val.cast(), len)
         }
     }
 }
@@ -1208,7 +1200,7 @@ pub struct Buffer {
 impl Drop for Buffer {
     fn drop(&mut self) {
         unsafe {
-            free(self.base as *mut c_void);
+            free(self.base.cast());
         }
     }
 }
@@ -1285,7 +1277,7 @@ impl Iter {
             unsafe {
                 let mut len = 0;
                 let val = rocksdb_iter_key(self.iter, &mut len);
-                Some(slice::from_raw_parts(val as *const u8, len))
+                Some(slice::from_raw_parts(val.cast(), len))
             }
         } else {
             None
@@ -1311,9 +1303,9 @@ impl SstFileWriter {
         unsafe {
             ffi_result!(rocksdb_sstfilewriter_put_with_status(
                 self.writer,
-                key.as_ptr() as *const c_char,
+                key.as_ptr().cast(),
                 key.len(),
-                value.as_ptr() as *const c_char,
+                value.as_ptr().cast(),
                 value.len(),
             ))?;
         }

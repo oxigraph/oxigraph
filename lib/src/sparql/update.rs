@@ -71,7 +71,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 insert,
                 pattern,
                 ..
-            } => self.eval_delete_insert(delete, insert, using_dataset.as_ref().unwrap(), pattern),
+            } => self.eval_delete_insert(
+                delete,
+                insert,
+                using_dataset
+                    .as_ref()
+                    .ok_or_else(|| EvaluationError::msg("No dataset"))?,
+                pattern,
+            ),
             GraphUpdateOperation::Load {
                 silent,
                 source,
@@ -119,14 +126,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     ) -> Result<(), EvaluationError> {
         let dataset = Rc::new(DatasetView::new(self.transaction.reader(), using));
         let (plan, variables) = PlanBuilder::build(
-            dataset.as_ref(),
+            &dataset,
             algebra,
             false,
             &self.options.query_options.custom_functions,
             !self.options.query_options.without_optimizations,
         )?;
         let evaluator = SimpleEvaluator::new(
-            dataset.clone(),
+            Rc::clone(&dataset),
             self.base_iri.clone(),
             self.options.query_options.service_handler(),
             Rc::new(self.options.query_options.custom_functions.clone()),
@@ -374,7 +381,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             TermPattern::Literal(term) => Some(term.clone().into()),
             TermPattern::Triple(triple) => {
                 Self::convert_triple_pattern(triple, variables, values, dataset, bnodes)?
-                    .map(|t| t.into())
+                    .map(Into::into)
             }
             TermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
                 .map(|node| dataset.decode_term(&node))
@@ -507,7 +514,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             GroundTermPattern::Literal(term) => Some(term.clone().into()),
             GroundTermPattern::Triple(triple) => {
                 Self::convert_ground_triple_pattern(triple, variables, values, dataset)?
-                    .map(|t| t.into())
+                    .map(Into::into)
             }
             GroundTermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
                 .map(|node| dataset.decode_term(&node))

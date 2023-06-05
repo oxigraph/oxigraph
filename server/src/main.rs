@@ -17,9 +17,13 @@ use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{max, min};
+#[cfg(target_os = "linux")]
+use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+#[cfg(target_os = "linux")]
+use std::os::unix::net::UnixDatagram;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -591,7 +595,7 @@ pub fn main() -> anyhow::Result<()> {
                 let mut file = BufWriter::new(File::create(&explain_file)?);
                 match explain_file
                     .extension()
-                    .and_then(|e| e.to_str()) {
+                    .and_then(OsStr::to_str) {
                     Some("json") => {
                         explanation.write_in_json(file)?;
                     },
@@ -734,7 +738,7 @@ fn format_from_path<T>(
     path: &Path,
     from_extension: impl FnOnce(&str) -> anyhow::Result<T>,
 ) -> anyhow::Result<T> {
-    if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+    if let Some(ext) = path.extension().and_then(OsStr::to_str) {
         from_extension(ext).map_err(|e| {
             e.context(format!(
                 "Not able to guess the file format from file name extension '{ext}'"
@@ -776,6 +780,8 @@ fn serve(store: Store, bind: String, read_only: bool, cors: bool) -> anyhow::Res
     };
     server.set_global_timeout(HTTP_TIMEOUT);
     server.set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))?;
+    #[cfg(target_os = "linux")]
+    systemd_notify_ready()?;
     eprintln!("Listening for requests at http://{}", &bind);
     server.listen(bind)?;
     Ok(())
@@ -1531,19 +1537,24 @@ fn web_load_graph(
     format: GraphFormat,
     to_graph_name: GraphNameRef<'_>,
 ) -> Result<(), HttpError> {
+    let base_iri = if let GraphNameRef::NamedNode(graph_name) = to_graph_name {
+        Some(graph_name.as_str())
+    } else {
+        None
+    };
     if url_query_parameter(request, "no_transaction").is_some() {
         web_bulk_loader(store, request).load_graph(
             BufReader::new(request.body_mut()),
             format,
             to_graph_name,
-            None,
+            base_iri,
         )
     } else {
         store.load_graph(
             BufReader::new(request.body_mut()),
             format,
             to_graph_name,
-            None,
+            base_iri,
         )
     }
     .map_err(loader_to_http_error)
@@ -1636,7 +1647,7 @@ impl<O: 'static, U: (Fn(O) -> io::Result<Option<O>>) + 'static> ReadForWrite<O, 
     ) -> Result<Response, HttpError> {
         let buffer = Rc::new(RefCell::new(Vec::new()));
         let state = initial_state_builder(ReadForWriteWriter {
-            buffer: buffer.clone(),
+            buffer: Rc::clone(&buffer),
         })
         .map_err(internal_server_error)?;
         Ok(Response::builder(Status::OK)
@@ -1696,6 +1707,14 @@ impl Write for ReadForWriteWriter {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.buffer.borrow_mut().write_all(buf)
     }
+}
+
+#[cfg(target_os = "linux")]
+fn systemd_notify_ready() -> io::Result<()> {
+    if let Some(path) = env::var_os("NOTIFY_SOCKET") {
+        UnixDatagram::unbound()?.send_to(b"READY=1", path)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2364,6 +2383,53 @@ mod tests {
             )
             .build(),
             Status::NOT_FOUND,
+        )
+    }
+
+    #[test]
+    fn graph_store_base_url() -> Result<()> {
+        let server = ServerTest::new()?;
+
+        // POST
+        let request = Request::builder(
+            Method::POST,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<> <http://example.com/p> <http://example.com/o1> .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com> <http://example.com/p> <http://example.com/o1> .\n",
+        )?;
+
+        // PUT
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<> <http://example.com/p> <http://example.com/o2> .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com> <http://example.com/p> <http://example.com/o2> .\n",
         )
     }
 
