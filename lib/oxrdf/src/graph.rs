@@ -1,4 +1,4 @@
-//! [In-memory implementation](super::Graph) of  [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
+//! [In-memory implementation](Graph) of [RDF graphs](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
 //!
 //! Usage example:
 //! ```
@@ -20,7 +20,7 @@
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
-//! See also [`Dataset`](super::Dataset) if you want to get support of multiple RDF graphs at the same time.
+//! See also [`Dataset`] if you want to get support of multiple RDF graphs at the same time.
 
 use crate::dataset::*;
 use crate::*;

@@ -363,7 +363,7 @@ impl QueryResultsSerializer {
         Self { format }
     }
 
-    /// Write a boolean query result (from an `ASK` query)  into the given [`Write`](std::io::Write) implementation.
+    /// Write a boolean query result (from an `ASK` query)  into the given [`Write`] implementation.
     ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
@@ -384,7 +384,7 @@ impl QueryResultsSerializer {
         }
     }
 
-    /// Returns a `SolutionsWriter` allowing writing query solutions into the given [`Write`](std::io::Write) implementation.
+    /// Returns a `SolutionsWriter` allowing writing query solutions into the given [`Write`] implementation.
     ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```

@@ -1,4 +1,4 @@
-//! [In-memory implementation](super::Dataset) of [RDF datasets](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
+//! [In-memory implementation](Dataset) of [RDF datasets](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 //!
 //! Usage example:
 //! ```
@@ -24,7 +24,7 @@
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
-//! See also [`Graph`](super::Graph) if you only care about plain triples.
+//! See also [`Graph`] if you only care about plain triples.
 
 use crate::interning::*;
 use crate::SubjectRef;
