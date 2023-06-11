@@ -1,6 +1,6 @@
 [package]
 name = "spargebra"
-version = "0.2.8"
+version = "0.3.0-alpha.1-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -24,7 +24,7 @@ peg = "0.8"
 rand = "0.8"
 oxiri = "0.2"
 oxilangtag = "0.1"
-oxrdf = { version = "0.1.6", path="../oxrdf" }
+oxrdf = { version = "0.2.0-alpha.1-dev", path="../oxrdf" }
 
 [package.metadata.docs.rs]
 all-features = true
