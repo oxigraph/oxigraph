@@ -4533,30 +4533,30 @@ impl Accumulator for SumAccumulator {
 #[derive(Debug, Default)]
 struct AvgAccumulator {
     sum: SumAccumulator,
-    count: CountAccumulator,
+    count: i64,
 }
 
 impl Accumulator for AvgAccumulator {
     fn add(&mut self, element: Option<EncodedTerm>) {
-        self.sum.add(element.clone());
-        self.count.add(element);
+        self.sum.add(element);
+        self.count += 1;
     }
 
     fn state(&self) -> Option<EncodedTerm> {
         let sum = self.sum.state()?;
-        let count = self.count.state()?;
-        if count == EncodedTerm::from(0) {
+        if self.count == 0 {
             Some(0.into())
         } else {
             //TODO: deduplicate?
             //TODO: duration?
-            match NumericBinaryOperands::new(sum, count)? {
-                NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
-                NumericBinaryOperands::Double(v1, v2) => Some((v1 / v2).into()),
-                NumericBinaryOperands::Integer(v1, v2) => {
-                    Decimal::from(v1).checked_div(v2).map(Into::into)
+            let count = Integer::from(self.count);
+            match sum {
+                EncodedTerm::FloatLiteral(sum) => Some((sum / Float::from(count)).into()),
+                EncodedTerm::DoubleLiteral(sum) => Some((sum / Double::from(count)).into()),
+                EncodedTerm::IntegerLiteral(sum) => {
+                    Some(Decimal::from(sum).checked_div(count)?.into())
                 }
-                NumericBinaryOperands::Decimal(v1, v2) => v1.checked_div(v2).map(Into::into),
+                EncodedTerm::DecimalLiteral(sum) => Some(sum.checked_div(count)?.into()),
                 _ => None,
             }
         }
