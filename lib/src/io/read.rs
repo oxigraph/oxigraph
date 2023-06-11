@@ -14,9 +14,9 @@ use std::io::BufRead;
 /// Parsers for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`](super::GraphFormat::NTriples))
-/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`](super::GraphFormat::Turtle))
-/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`](super::GraphFormat::RdfXml))
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`])
+/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`])
+/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`])
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphParser};
@@ -67,7 +67,7 @@ impl GraphParser {
         Ok(self)
     }
 
-    /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of triples.
+    /// Executes the parsing itself on a [`BufRead`] implementation and returns an iterator of triples.
     #[allow(clippy::unnecessary_wraps)]
     pub fn read_triples<R: BufRead>(&self, reader: R) -> Result<TripleReader<R>, ParseError> {
         Ok(TripleReader {
@@ -167,8 +167,8 @@ impl<R: BufRead> TripleReader<R> {
 /// A parser for RDF dataset serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`](super::DatasetFormat::NQuads))
-/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`](super::DatasetFormat::TriG))
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`])
+/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`])
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetParser};
@@ -219,7 +219,7 @@ impl DatasetParser {
         Ok(self)
     }
 
-    /// Executes the parsing itself on a [`BufRead`](std::io::BufRead) implementation and returns an iterator of quads.
+    /// Executes the parsing itself on a [`BufRead`] implementation and returns an iterator of quads.
     #[allow(clippy::unnecessary_wraps)]
     pub fn read_quads<R: BufRead>(&self, reader: R) -> Result<QuadReader<R>, ParseError> {
         Ok(QuadReader {

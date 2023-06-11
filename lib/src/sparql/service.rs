@@ -52,7 +52,7 @@ use std::time::Duration;
 pub trait ServiceHandler {
     type Error: Error + Send + Sync + 'static;
 
-    /// Evaluates a [`Query`] against a given service identified by a [`NamedNode`](crate::model::NamedNode).
+    /// Evaluates a [`Query`] against a given service identified by a [`NamedNode`].
     fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error>;
 }
 

@@ -10,9 +10,9 @@ use std::io::{self, Write};
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`](super::GraphFormat::NTriples))
-/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`](super::GraphFormat::Turtle))
-/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`](super::GraphFormat::RdfXml))
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`GraphFormat::NTriples`])
+/// * [Turtle](https://www.w3.org/TR/turtle/) ([`GraphFormat::Turtle`])
+/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`GraphFormat::RdfXml`])
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphSerializer};
@@ -41,7 +41,7 @@ impl GraphSerializer {
         Self { format }
     }
 
-    /// Returns a [`TripleWriter`] allowing writing triples into the given [`Write`](std::io::Write) implementation
+    /// Returns a [`TripleWriter`] allowing writing triples into the given [`Write`] implementation
     pub fn triple_writer<W: Write>(&self, writer: W) -> io::Result<TripleWriter<W>> {
         Ok(TripleWriter {
             formatter: match self.format {
@@ -152,8 +152,8 @@ impl<W: Write> TripleWriter<W> {
 /// A serializer for RDF graph serialization formats.
 ///
 /// It currently supports the following formats:
-/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`](super::DatasetFormat::NQuads))
-/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`](super::DatasetFormat::TriG))
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`DatasetFormat::NQuads`])
+/// * [TriG](https://www.w3.org/TR/trig/) ([`DatasetFormat::TriG`])
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetSerializer};
@@ -183,7 +183,7 @@ impl DatasetSerializer {
         Self { format }
     }
 
-    /// Returns a [`QuadWriter`] allowing writing triples into the given [`Write`](std::io::Write) implementation
+    /// Returns a [`QuadWriter`] allowing writing triples into the given [`Write`] implementation
     #[allow(clippy::unnecessary_wraps)]
     pub fn quad_writer<W: Write>(&self, writer: W) -> io::Result<QuadWriter<W>> {
         Ok(QuadWriter {
