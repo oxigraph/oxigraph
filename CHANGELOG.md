@@ -1,3 +1,28 @@
+## [0.3.17] - 2023-06-11
+
+### Added
+- SPARQL: support of `xsd:duration` to SPARQL `SUM` aggregate function.
+- Server: support for systemd "notify" service option.
+- Server: uses the target graph name as base URI when `POST`ing and `PUT`ing data.
+- Python: `Store.contains_named_graph` method.
+
+### Changed
+- SPARQL: `xsd:decimal` multiplication and division have been improved to avoid raising overflow because of internal operations in some cases.
+- SPARQL: `xsd:decimal` parser is now able to properly parse all numbers that can be internally represented by the encoding used by Oxigraph.
+- SPARQL: `xsd:decimal` avoids bad overflow on unary `-` operator.
+- SPARQL: reduces loss of precision when casting `xsd:decimal` to `xsd:float` or `xsd:double`.
+- SPARQL: improves a bit the AST in case of a lot of `&&`, `||` or `IN` operators.
+- SPARQL: fixes some optimization bugs around `MINUS` inside `OPTIONAL`.
+- SPARQL: makes for loop join choice instead of hash join a bit more aggressive.
+- Avoids random crashes when building RocksDB for aarch64. 
+- Python: fixes support of text I/O with not-ASCII char.
+- Python: upgrades PyO3 to 0.19.
+- `spargebra`: `GroundTermPattern::Triple` is now properly gated behind the `"rdf-star"` feature.
+- `oxsdatatypes`: Deprecates `is_naan` that is renamed to `is_nan` (we like bread but prefer numbers).
+- `oxsdatatypes`: Adds `checked_neg` methods on numerical types.
+- `oxsdatatypes`: Drops `nom` dependency and uses hand-written parsers instead.
+
+
 ## [0.3.16] - 2023-04-29
 
 ### Changed
