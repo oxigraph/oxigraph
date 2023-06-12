@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update && rustup override set 1.60.0 && rustup component add clippy
+      - run: rustup update && rustup override set 1.65.0 && rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --  -D warnings -D clippy::all
         working-directory: ./lib/oxsdatatypes
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update && rustup override set 1.60.0 && rustup target add wasm32-unknown-unknown && rustup component add clippy
+      - run: rustup update && rustup override set 1.65.0 && rustup target add wasm32-unknown-unknown && rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown -- -D warnings -D clippy::all
         working-directory: ./js
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update && rustup override set 1.60.0 && rustup target add wasm32-wasi && rustup component add clippy
+      - run: rustup update && rustup override set 1.65.0 && rustup target add wasm32-wasi && rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --lib --tests --target wasm32-wasi -- -D warnings -D clippy::all
         working-directory: ./lib
@@ -191,7 +191,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update && rustup override set 1.60.0
+      - run: rustup update && rustup override set 1.65.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --all-features
         working-directory: ./lib
