@@ -479,7 +479,7 @@ impl InternedTriple {
 }
 
 #[derive(Default)]
-struct IdentityHasherBuilder {}
+struct IdentityHasherBuilder;
 
 impl BuildHasher for IdentityHasherBuilder {
     type Hasher = IdentityHasher;

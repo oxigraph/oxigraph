@@ -3,7 +3,7 @@
 use std::io::{Empty, Error, ErrorKind, Result};
 use std::time::Duration;
 
-pub struct Client {}
+pub struct Client;
 
 impl Client {
     pub fn new(_timeout: Option<Duration>, _redirection_limit: usize) -> Self {
