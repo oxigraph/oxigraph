@@ -143,13 +143,11 @@ impl fmt::Display for Duration {
     #[allow(clippy::many_single_char_names)]
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut ym = self.year_month.months;
-        let mut ss = self.day_time.seconds;
+        let ym = self.year_month.months;
+        let ss = self.day_time.seconds;
 
         if ym < 0 || ss < 0.into() {
             write!(f, "-")?;
-            ym = -ym;
-            ss = -ss;
         }
         write!(f, "P")?;
 
@@ -163,12 +161,12 @@ impl fmt::Display for Duration {
 
             if y != 0 {
                 if m == 0 {
-                    write!(f, "{y}Y")?;
+                    write!(f, "{}Y", y.abs())?;
                 } else {
-                    write!(f, "{y}Y{m}M")?;
+                    write!(f, "{}Y{}M", y.abs(), m.abs())?;
                 }
             } else if m != 0 || ss == 0.into() {
-                write!(f, "{m}M")?;
+                write!(f, "{}M", m.abs())?;
             }
         }
 
@@ -184,19 +182,19 @@ impl fmt::Display for Duration {
                 .ok_or(fmt::Error)?;
 
             if d != 0 {
-                write!(f, "{d}D")?;
+                write!(f, "{}D", d.abs())?;
             }
 
             if h != 0 || m != 0 || s != 0.into() {
                 write!(f, "T")?;
                 if h != 0 {
-                    write!(f, "{h}H")?;
+                    write!(f, "{}H", h.abs())?;
                 }
                 if m != 0 {
-                    write!(f, "{m}M")?;
+                    write!(f, "{}M", m.abs())?;
                 }
                 if s != 0.into() {
-                    write!(f, "{s}S")?;
+                    write!(f, "{}S", s.abs())?;
                 }
             }
         }
@@ -621,10 +619,7 @@ mod tests {
 
     #[test]
     fn from_str() -> Result<(), XsdParseError> {
-        let min = Duration::new(
-            i64::MIN + 1,
-            Decimal::MIN.checked_add(Decimal::STEP).unwrap(),
-        );
+        let min = Duration::new(i64::MIN, Decimal::MIN);
         let max = Duration::new(i64::MAX, Decimal::MAX);
 
         assert_eq!(YearMonthDuration::from_str("P1Y")?.to_string(), "P1Y");

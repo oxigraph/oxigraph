@@ -109,7 +109,7 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
     const AFTER_MINUTE: u32 = 6;
     const AFTER_SECOND: u32 = 7;
 
-    let (negative, input) = if let Some(left) = input.strip_prefix('-') {
+    let (is_negative, input) = if let Some(left) = input.strip_prefix('-') {
         (true, left)
     } else {
         (false, input)
@@ -133,7 +133,7 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
                         year_month
                             .unwrap_or_default()
                             .checked_add(
-                                i64::from_str(number_str)?
+                                apply_i64_neg(i64::from_str(number_str)?, is_negative)?
                                     .checked_mul(12)
                                     .ok_or(OVERFLOW_ERROR)?,
                             )
@@ -145,7 +145,7 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
                     year_month = Some(
                         year_month
                             .unwrap_or_default()
-                            .checked_add(i64::from_str(number_str)?)
+                            .checked_add(apply_i64_neg(i64::from_str(number_str)?, is_negative)?)
                             .ok_or(OVERFLOW_ERROR)?,
                     );
                     state = AFTER_MONTH;
@@ -160,7 +160,7 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
                         day_time
                             .unwrap_or_default()
                             .checked_add(
-                                Decimal::from_str(number_str)?
+                                apply_decimal_neg(Decimal::from_str(number_str)?, is_negative)?
                                     .checked_mul(86400)
                                     .ok_or(OVERFLOW_ERROR)?,
                             )
@@ -178,7 +178,7 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
                         day_time
                             .unwrap_or_default()
                             .checked_add(
-                                Decimal::from_str(number_str)?
+                                apply_decimal_neg(Decimal::from_str(number_str)?, is_negative)?
                                     .checked_mul(3600)
                                     .ok_or(OVERFLOW_ERROR)?,
                             )
@@ -196,7 +196,7 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
                         day_time
                             .unwrap_or_default()
                             .checked_add(
-                                Decimal::from_str(number_str)?
+                                apply_decimal_neg(Decimal::from_str(number_str)?, is_negative)?
                                     .checked_mul(60)
                                     .ok_or(OVERFLOW_ERROR)?,
                             )
@@ -208,7 +208,10 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
                     day_time = Some(
                         day_time
                             .unwrap_or_default()
-                            .checked_add(Decimal::from_str(number_str)?)
+                            .checked_add(apply_decimal_neg(
+                                Decimal::from_str(number_str)?,
+                                is_negative,
+                            )?)
                             .ok_or(OVERFLOW_ERROR)?,
                     );
                     state = AFTER_SECOND;
@@ -226,27 +229,27 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), XsdParseError> {
 
     Ok((
         DurationParts {
-            year_month: if let Some(v) = year_month {
-                Some(if negative {
-                    v.checked_neg().ok_or(OVERFLOW_ERROR)?
-                } else {
-                    v
-                })
-            } else {
-                None
-            },
-            day_time: if let Some(v) = day_time {
-                Some(if negative {
-                    v.checked_neg().ok_or(OVERFLOW_ERROR)?
-                } else {
-                    v
-                })
-            } else {
-                None
-            },
+            year_month,
+            day_time,
         },
         input,
     ))
+}
+
+fn apply_i64_neg(value: i64, is_negative: bool) -> Result<i64, XsdParseError> {
+    if is_negative {
+        value.checked_neg().ok_or(OVERFLOW_ERROR)
+    } else {
+        Ok(value)
+    }
+}
+
+fn apply_decimal_neg(value: Decimal, is_negative: bool) -> Result<Decimal, XsdParseError> {
+    if is_negative {
+        value.checked_neg().ok_or(OVERFLOW_ERROR)
+    } else {
+        Ok(value)
+    }
 }
 
 pub fn parse_duration(input: &str) -> Result<Duration, XsdParseError> {
