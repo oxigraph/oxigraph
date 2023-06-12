@@ -343,7 +343,7 @@ fn to_integer_id(id: &str) -> Option<u128> {
 
 /// An error raised during [`BlankNode`] IDs validation.
 #[derive(Debug)]
-pub struct BlankNodeIdParseError {}
+pub struct BlankNodeIdParseError;
 
 impl fmt::Display for BlankNodeIdParseError {
     #[inline]

@@ -302,7 +302,7 @@ impl From<JsLiteral> for Term {
 
 #[wasm_bindgen(js_name = DefaultGraph)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct JsDefaultGraph {}
+pub struct JsDefaultGraph;
 
 #[wasm_bindgen(js_class = DefaultGraph)]
 impl JsDefaultGraph {
@@ -313,7 +313,7 @@ impl JsDefaultGraph {
 
     #[wasm_bindgen(getter)]
     pub fn value(&self) -> String {
-        "".to_owned()
+        String::new()
     }
 
     #[wasm_bindgen(js_name = toString)]
@@ -393,7 +393,7 @@ impl JsQuad {
 
     #[wasm_bindgen(getter)]
     pub fn value(&self) -> String {
-        "".to_owned()
+        String::new()
     }
 
     #[wasm_bindgen(getter = subject)]

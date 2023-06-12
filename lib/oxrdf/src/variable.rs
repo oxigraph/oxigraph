@@ -219,7 +219,7 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
 
 /// An error raised during [`Variable`] name validation.
 #[derive(Debug)]
-pub struct VariableNameParseError {}
+pub struct VariableNameParseError;
 
 impl fmt::Display for VariableNameParseError {
     #[inline]
