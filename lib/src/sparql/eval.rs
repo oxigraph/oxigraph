@@ -2321,7 +2321,7 @@ fn to_argument_compatible_strings(
 ) -> Option<(String, String, Option<SmallStringOrId>)> {
     let (value1, language1) = to_string_and_language(dataset, arg1)?;
     let (value2, language2) = to_string_and_language(dataset, arg2)?;
-    (language2.is_none() || language1 == language2).then(|| (value1, value2, language1))
+    (language2.is_none() || language1 == language2).then_some((value1, value2, language1))
 }
 
 pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
@@ -3080,10 +3080,10 @@ fn put_pattern_value(
     tuple: &mut EncodedTuple,
 ) -> Option<()> {
     match selector {
-        TupleSelector::Constant(c) => (*c == value).then(|| ()),
+        TupleSelector::Constant(c) => (*c == value).then_some(()),
         TupleSelector::Variable(v) => {
             if let Some(old) = tuple.get(*v) {
-                (value == *old).then(|| ())
+                (value == *old).then_some(())
             } else {
                 tuple.set(*v, value);
                 Some(())
@@ -3161,7 +3161,7 @@ impl PathEvaluator {
                         .and_then(|middle| {
                             Ok(self
                                 .eval_closed_in_graph(b, &middle, end, graph_name)?
-                                .then(|| ()))
+                                .then_some(()))
                         })
                         .transpose()
                 })
@@ -3232,7 +3232,7 @@ impl PathEvaluator {
                 Box::new(self.eval_from_in_unknown_graph(a, start).flat_map_ok(
                     move |(middle, graph_name)| {
                         eval.eval_closed_in_graph(&b, &middle, &end, &graph_name)
-                            .map(|is_found| is_found.then(|| graph_name))
+                            .map(|is_found| is_found.then_some(graph_name))
                             .transpose()
                     },
                 ))
@@ -3252,7 +3252,7 @@ impl PathEvaluator {
                         |e| eval.eval_from_in_graph(&p, &e, &graph_name),
                         &end,
                     )
-                    .map(|is_found| is_found.then(|| graph_name))
+                    .map(|is_found| is_found.then_some(graph_name))
                     .transpose()
                 })
             }
@@ -3269,7 +3269,7 @@ impl PathEvaluator {
                                     |e| eval.eval_from_in_graph(&p, &e, &graph_name),
                                     &end,
                                 )
-                                .map(|is_found| is_found.then(|| graph_name))
+                                .map(|is_found| is_found.then_some(graph_name))
                             })
                             .transpose()
                         }),
@@ -3285,7 +3285,7 @@ impl PathEvaluator {
                     let p = Rc::clone(p);
                     self.run_if_term_is_a_dataset_node(start, move |graph_name| {
                         eval.eval_closed_in_graph(&p, &start2, &end, &graph_name)
-                            .map(|is_found| is_found.then(|| graph_name))
+                            .map(|is_found| is_found.then_some(graph_name))
                             .transpose()
                     })
                 }
