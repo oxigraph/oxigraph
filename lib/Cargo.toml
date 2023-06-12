@@ -12,7 +12,7 @@ description = """
 a SPARQL database and RDF toolkit
 """
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.65"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -53,7 +53,7 @@ getrandom = { version = "0.2", features = ["js"] }
 js-sys = "0.3"
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
 oxhttp = "0.1"
 zstd = "0.12"
 

@@ -11,7 +11,7 @@ description = """
 A library providing basic data structures related to RDF
 """
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.65"
 
 [features]
 default = []
