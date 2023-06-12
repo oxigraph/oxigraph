@@ -167,6 +167,7 @@ pub struct QuerySolutionIter {
 }
 
 impl QuerySolutionIter {
+    #[allow(clippy::rc_buffer)]
     pub fn new(
         variables: Rc<Vec<Variable>>,
         iter: impl Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,

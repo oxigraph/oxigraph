@@ -183,24 +183,24 @@ impl PartialEq for EncodedTerm {
                 },
             ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
             (Self::BooleanLiteral(a), Self::BooleanLiteral(b)) => a == b,
-            (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a.is_identical_with(b),
-            (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a.is_identical_with(b),
-            (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a.is_identical_with(b),
-            (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a.is_identical_with(b),
-            (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a.is_identical_with(b),
-            (Self::TimeLiteral(a), Self::TimeLiteral(b)) => a.is_identical_with(b),
-            (Self::DateLiteral(a), Self::DateLiteral(b)) => a.is_identical_with(b),
-            (Self::GYearMonthLiteral(a), Self::GYearMonthLiteral(b)) => a.is_identical_with(b),
-            (Self::GYearLiteral(a), Self::GYearLiteral(b)) => a.is_identical_with(b),
-            (Self::GMonthDayLiteral(a), Self::GMonthDayLiteral(b)) => a.is_identical_with(b),
-            (Self::GMonthLiteral(a), Self::GMonthLiteral(b)) => a.is_identical_with(b),
-            (Self::GDayLiteral(a), Self::GDayLiteral(b)) => a.is_identical_with(b),
-            (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a.is_identical_with(b),
+            (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a.is_identical_with(*b),
+            (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a.is_identical_with(*b),
+            (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a.is_identical_with(*b),
+            (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a.is_identical_with(*b),
+            (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a.is_identical_with(*b),
+            (Self::TimeLiteral(a), Self::TimeLiteral(b)) => a.is_identical_with(*b),
+            (Self::DateLiteral(a), Self::DateLiteral(b)) => a.is_identical_with(*b),
+            (Self::GYearMonthLiteral(a), Self::GYearMonthLiteral(b)) => a.is_identical_with(*b),
+            (Self::GYearLiteral(a), Self::GYearLiteral(b)) => a.is_identical_with(*b),
+            (Self::GMonthDayLiteral(a), Self::GMonthDayLiteral(b)) => a.is_identical_with(*b),
+            (Self::GMonthLiteral(a), Self::GMonthLiteral(b)) => a.is_identical_with(*b),
+            (Self::GDayLiteral(a), Self::GDayLiteral(b)) => a.is_identical_with(*b),
+            (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a.is_identical_with(*b),
             (Self::YearMonthDurationLiteral(a), Self::YearMonthDurationLiteral(b)) => {
-                a.is_identical_with(b)
+                a.is_identical_with(*b)
             }
             (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => {
-                a.is_identical_with(b)
+                a.is_identical_with(*b)
             }
             (Self::Triple(a), Self::Triple(b)) => a == b,
             (_, _) => false,
