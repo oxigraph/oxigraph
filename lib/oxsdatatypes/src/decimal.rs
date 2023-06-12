@@ -47,7 +47,7 @@ impl Decimal {
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add)
     #[inline]
-    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_add(rhs.into().value)?,
         })
@@ -55,7 +55,7 @@ impl Decimal {
 
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_sub(rhs.into().value)?,
         })
@@ -63,7 +63,7 @@ impl Decimal {
 
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply)
     #[inline]
-    pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_mul(self, rhs: impl Into<Self>) -> Option<Self> {
         // Idea: we shift right as much as possible to keep as much precision as possible
         // Do the multiplication and do the required left shift
         let mut left = self.value;
@@ -95,7 +95,7 @@ impl Decimal {
 
     /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-divide)
     #[inline]
-    pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_div(self, rhs: impl Into<Self>) -> Option<Self> {
         // Idea: we shift the dividend left as much as possible to keep as much precision as possible
         // And we shift right the divisor as much as possible
         // Do the multiplication and do the required shift
@@ -128,14 +128,14 @@ impl Decimal {
 
     /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
     #[inline]
-    pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_rem(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem(rhs.into().value)?,
         })
     }
 
     #[inline]
-    pub fn checked_rem_euclid(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_rem_euclid(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem_euclid(rhs.into().value)?,
         })
@@ -143,7 +143,7 @@ impl Decimal {
 
     /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus)
     #[inline]
-    pub fn checked_neg(&self) -> Option<Self> {
+    pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
             value: self.value.checked_neg()?,
         })
@@ -151,7 +151,7 @@ impl Decimal {
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
     #[inline]
-    pub const fn abs(&self) -> Self {
+    pub const fn abs(self) -> Self {
         Self {
             value: self.value.abs(),
         }
@@ -159,7 +159,7 @@ impl Decimal {
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
     #[inline]
-    pub fn round(&self) -> Self {
+    pub fn round(self) -> Self {
         let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
         Self {
             value: if value >= 0 {
@@ -172,7 +172,7 @@ impl Decimal {
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
     #[inline]
-    pub fn ceil(&self) -> Self {
+    pub fn ceil(self) -> Self {
         Self {
             value: if self.value >= 0 && self.value % DECIMAL_PART_POW != 0 {
                 (self.value / DECIMAL_PART_POW + 1) * DECIMAL_PART_POW
@@ -184,7 +184,7 @@ impl Decimal {
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
     #[inline]
-    pub fn floor(&self) -> Self {
+    pub fn floor(self) -> Self {
         Self {
             value: if self.value >= 0 || self.value % DECIMAL_PART_POW == 0 {
                 (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
@@ -195,23 +195,23 @@ impl Decimal {
     }
 
     #[inline]
-    pub const fn is_negative(&self) -> bool {
+    pub const fn is_negative(self) -> bool {
         self.value < 0
     }
 
     #[inline]
-    pub const fn is_positive(&self) -> bool {
+    pub const fn is_positive(self) -> bool {
         self.value > 0
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
 
     #[inline]
-    pub(super) const fn as_i128(&self) -> i128 {
+    pub(super) const fn as_i128(self) -> i128 {
         self.value / DECIMAL_PART_POW
     }
 

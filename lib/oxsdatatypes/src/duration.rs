@@ -35,47 +35,47 @@ impl Duration {
 
     /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-years-from-duration)
     #[inline]
-    pub fn years(&self) -> i64 {
+    pub fn years(self) -> i64 {
         self.year_month.years()
     }
 
     /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-months-from-duration)
     #[inline]
-    pub fn months(&self) -> i64 {
+    pub fn months(self) -> i64 {
         self.year_month.months()
     }
 
     /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-days-from-duration)
     #[inline]
-    pub fn days(&self) -> i64 {
+    pub fn days(self) -> i64 {
         self.day_time.days()
     }
 
     /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-duration)
     #[inline]
-    pub fn hours(&self) -> i64 {
+    pub fn hours(self) -> i64 {
         self.day_time.hours()
     }
 
     /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-duration)
     #[inline]
-    pub fn minutes(&self) -> i64 {
+    pub fn minutes(self) -> i64 {
         self.day_time.minutes()
     }
 
     /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-duration)
     #[inline]
-    pub fn seconds(&self) -> Decimal {
+    pub fn seconds(self) -> Decimal {
         self.day_time.seconds()
     }
 
     #[inline]
-    pub(super) const fn all_months(&self) -> i64 {
+    pub(super) const fn all_months(self) -> i64 {
         self.year_month.all_months()
     }
 
     #[inline]
-    pub(super) const fn all_seconds(&self) -> Decimal {
+    pub(super) const fn all_seconds(self) -> Decimal {
         self.day_time.all_seconds()
     }
 
@@ -89,7 +89,7 @@ impl Duration {
 
     /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDurations) and [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDurations)
     #[inline]
-    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             year_month: self.year_month.checked_add(rhs.year_month)?,
@@ -99,7 +99,7 @@ impl Duration {
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDurations) and [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             year_month: self.year_month.checked_sub(rhs.year_month)?,
@@ -108,7 +108,7 @@ impl Duration {
     }
 
     #[inline]
-    pub fn checked_neg(&self) -> Option<Self> {
+    pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
             year_month: self.year_month.checked_neg()?,
             day_time: self.day_time.checked_neg()?,
@@ -117,7 +117,7 @@ impl Duration {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
 }
@@ -310,7 +310,7 @@ impl YearMonthDuration {
     }
 
     #[inline]
-    pub fn checked_neg(&self) -> Option<Self> {
+    pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
             months: self.months.checked_neg()?,
         })
@@ -318,7 +318,7 @@ impl YearMonthDuration {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
 }
@@ -430,32 +430,32 @@ impl DayTimeDuration {
     /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-days-from-duration)
     #[allow(clippy::cast_possible_truncation)]
     #[inline]
-    pub fn days(&self) -> i64 {
+    pub fn days(self) -> i64 {
         (self.seconds.as_i128() / 86400) as i64
     }
 
     /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-duration)
     #[allow(clippy::cast_possible_truncation)]
     #[inline]
-    pub fn hours(&self) -> i64 {
+    pub fn hours(self) -> i64 {
         ((self.seconds.as_i128() % 86400) / 3600) as i64
     }
 
     /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-duration)
     #[allow(clippy::cast_possible_truncation)]
     #[inline]
-    pub fn minutes(&self) -> i64 {
+    pub fn minutes(self) -> i64 {
         ((self.seconds.as_i128() % 3600) / 60) as i64
     }
 
     /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-duration)
     #[inline]
-    pub fn seconds(&self) -> Decimal {
+    pub fn seconds(self) -> Decimal {
         self.seconds.checked_rem(60).unwrap()
     }
 
     #[inline]
-    pub(super) const fn all_seconds(&self) -> Decimal {
+    pub(super) const fn all_seconds(self) -> Decimal {
         self.seconds
     }
 
@@ -466,7 +466,7 @@ impl DayTimeDuration {
 
     /// [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDurations)
     #[inline]
-    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             seconds: self.seconds.checked_add(rhs.seconds)?,
@@ -475,7 +475,7 @@ impl DayTimeDuration {
 
     /// [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             seconds: self.seconds.checked_sub(rhs.seconds)?,
@@ -483,7 +483,7 @@ impl DayTimeDuration {
     }
 
     #[inline]
-    pub fn checked_neg(&self) -> Option<Self> {
+    pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
             seconds: self.seconds.checked_neg()?,
         })
@@ -491,7 +491,7 @@ impl DayTimeDuration {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
 }

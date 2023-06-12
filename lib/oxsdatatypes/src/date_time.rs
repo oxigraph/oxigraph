@@ -60,53 +60,53 @@ impl DateTime {
 
     /// [fn:year-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-year-from-dateTime)
     #[inline]
-    pub fn year(&self) -> i64 {
+    pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     /// [fn:month-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-month-from-dateTime)
     #[inline]
-    pub fn month(&self) -> u8 {
+    pub fn month(self) -> u8 {
         self.timestamp.month()
     }
 
     /// [fn:day-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-day-from-dateTime)
     #[inline]
-    pub fn day(&self) -> u8 {
+    pub fn day(self) -> u8 {
         self.timestamp.day()
     }
 
     /// [fn:hour-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-dateTime)
     #[inline]
-    pub fn hour(&self) -> u8 {
+    pub fn hour(self) -> u8 {
         self.timestamp.hour()
     }
 
     /// [fn:minute-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-dateTime)
     #[inline]
-    pub fn minute(&self) -> u8 {
+    pub fn minute(self) -> u8 {
         self.timestamp.minute()
     }
 
     /// [fn:second-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-dateTime)
     #[inline]
-    pub fn second(&self) -> Decimal {
+    pub fn second(self) -> Decimal {
         self.timestamp.second()
     }
 
     /// [fn:timezone-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-dateTime)
     #[inline]
-    pub fn timezone(&self) -> Option<DayTimeDuration> {
+    pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
-    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+    pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
-    fn properties(&self) -> DateTimeSevenPropertyModel {
+    fn properties(self) -> DateTimeSevenPropertyModel {
         DateTimeSevenPropertyModel {
             year: Some(self.year()),
             month: Some(self.month()),
@@ -125,14 +125,14 @@ impl DateTime {
 
     /// [op:subtract-dateTimes](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dateTimes)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-dateTime)
     #[inline]
     pub fn checked_add_year_month_duration(
-        &self,
+        self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
@@ -140,7 +140,7 @@ impl DateTime {
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-dateTime)
     #[inline]
-    pub fn checked_add_day_time_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
+    pub fn checked_add_day_time_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             timestamp: self.timestamp.checked_add_seconds(rhs.all_seconds())?,
@@ -149,7 +149,7 @@ impl DateTime {
 
     /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-dateTime) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-dateTime)
     #[inline]
-    pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
+    pub fn checked_add_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
             self.checked_add_day_time_duration(rhs)
@@ -164,7 +164,7 @@ impl DateTime {
     /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-dateTime)
     #[inline]
     pub fn checked_sub_year_month_duration(
-        &self,
+        self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
@@ -172,7 +172,7 @@ impl DateTime {
 
     /// [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-dateTime)
     #[inline]
-    pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+    pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
             timestamp: self.timestamp.checked_sub_seconds(rhs.all_seconds())?,
@@ -181,7 +181,7 @@ impl DateTime {
 
     /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-dateTime) and [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-dateTime)
     #[inline]
-    pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
+    pub fn checked_sub_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
             self.checked_sub_day_time_duration(rhs)
@@ -198,7 +198,7 @@ impl DateTime {
 
     /// [fn:adjust-dateTime-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-dateTime-to-timezone)
     #[inline]
-    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+    pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
         })
@@ -206,8 +206,8 @@ impl DateTime {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -314,30 +314,30 @@ impl Time {
 
     /// [fn:hour-from-time](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-time)
     #[inline]
-    pub fn hour(&self) -> u8 {
+    pub fn hour(self) -> u8 {
         self.timestamp.hour()
     }
 
     /// [fn:minute-from-time](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-time)
     #[inline]
-    pub fn minute(&self) -> u8 {
+    pub fn minute(self) -> u8 {
         self.timestamp.minute()
     }
 
     /// [fn:second-from-time](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-time)
     #[inline]
-    pub fn second(&self) -> Decimal {
+    pub fn second(self) -> Decimal {
         self.timestamp.second()
     }
 
     /// [fn:timezone-from-time](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-time)
     #[inline]
-    pub fn timezone(&self) -> Option<DayTimeDuration> {
+    pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
-    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+    pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
@@ -348,19 +348,19 @@ impl Time {
 
     /// [op:subtract-times](https://www.w3.org/TR/xpath-functions-31/#func-subtract-times)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-time)
     #[inline]
-    pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+    pub fn checked_add_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-time)
     #[inline]
-    pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
+    pub fn checked_add_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
             12,
@@ -378,13 +378,13 @@ impl Time {
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
     #[inline]
-    pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+    pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
     #[inline]
-    pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
+    pub fn checked_sub_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
             12,
@@ -402,7 +402,7 @@ impl Time {
 
     // [fn:adjust-time-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-time-to-timezone)
     #[inline]
-    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+    pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         DateTime::new(
             1972,
             12,
@@ -420,8 +420,8 @@ impl Time {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -515,30 +515,30 @@ impl Date {
 
     /// [fn:year-from-date](https://www.w3.org/TR/xpath-functions-31/#func-year-from-date)
     #[inline]
-    pub fn year(&self) -> i64 {
+    pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     /// [fn:month-from-date](https://www.w3.org/TR/xpath-functions-31/#func-month-from-date)
     #[inline]
-    pub fn month(&self) -> u8 {
+    pub fn month(self) -> u8 {
         self.timestamp.month()
     }
 
     /// [fn:day-from-date](https://www.w3.org/TR/xpath-functions-31/#func-day-from-date)
     #[inline]
-    pub fn day(&self) -> u8 {
+    pub fn day(self) -> u8 {
         self.timestamp.day()
     }
 
     /// [fn:timezone-from-date](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-date)
     #[inline]
-    pub fn timezone(&self) -> Option<DayTimeDuration> {
+    pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
-    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+    pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
@@ -549,14 +549,14 @@ impl Date {
 
     /// [op:subtract-dates](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dates)
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-date)
     #[inline]
     pub fn checked_add_year_month_duration(
-        &self,
+        self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
@@ -564,14 +564,14 @@ impl Date {
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
     #[inline]
-    pub fn checked_add_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+    pub fn checked_add_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
     #[inline]
-    pub fn checked_add_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
-        DateTime::try_from(*self)
+    pub fn checked_add_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
+        DateTime::try_from(self)
             .ok()?
             .checked_add_duration(rhs)?
             .try_into()
@@ -581,7 +581,7 @@ impl Date {
     /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-date)
     #[inline]
     pub fn checked_sub_year_month_duration(
-        &self,
+        self,
         rhs: impl Into<YearMonthDuration>,
     ) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
@@ -589,14 +589,14 @@ impl Date {
 
     /// [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
     #[inline]
-    pub fn checked_sub_day_time_duration(&self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
+    pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-date) and [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
     #[inline]
-    pub fn checked_sub_duration(&self, rhs: impl Into<Duration>) -> Option<Self> {
-        DateTime::try_from(*self)
+    pub fn checked_sub_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
+        DateTime::try_from(self)
             .ok()?
             .checked_sub_duration(rhs)?
             .try_into()
@@ -605,7 +605,7 @@ impl Date {
 
     // [fn:adjust-date-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-date-to-timezone)
     #[inline]
-    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+    pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         DateTime::new(
             self.year(),
             self.month(),
@@ -623,8 +623,8 @@ impl Date {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -703,27 +703,27 @@ impl GYearMonth {
     }
 
     #[inline]
-    pub fn year(&self) -> i64 {
+    pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     #[inline]
-    pub fn month(&self) -> u8 {
+    pub fn month(self) -> u8 {
         self.timestamp.month()
     }
 
     #[inline]
-    pub fn timezone(&self) -> Option<DayTimeDuration> {
+    pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
-    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+    pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
-    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+    pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
         })
@@ -736,8 +736,8 @@ impl GYearMonth {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -824,22 +824,22 @@ impl GYear {
     }
 
     #[inline]
-    pub fn year(&self) -> i64 {
+    pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     #[inline]
-    pub fn timezone(&self) -> Option<DayTimeDuration> {
+    pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
-    pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
+    pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
-    pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
+    pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
         })
@@ -852,8 +852,8 @@ impl GYear {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -979,8 +979,8 @@ impl GMonthDay {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -1091,8 +1091,8 @@ impl GMonth {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -1217,8 +1217,8 @@ impl GDay {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.timestamp.is_identical_with(&other.timestamp)
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.timestamp.is_identical_with(other.timestamp)
     }
 }
 
@@ -1650,7 +1650,7 @@ impl Timestamp {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    pub fn is_identical_with(self, other: Self) -> bool {
         self.value == other.value && self.timezone_offset == other.timezone_offset
     }
 }

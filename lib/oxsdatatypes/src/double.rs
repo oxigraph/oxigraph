@@ -71,7 +71,7 @@ impl Double {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    pub fn is_identical_with(self, other: Self) -> bool {
         self.value.to_ne_bytes() == other.value.to_ne_bytes()
     }
 
@@ -291,9 +291,9 @@ mod tests {
 
     #[test]
     fn is_identical_with() {
-        assert!(Double::from(0.).is_identical_with(&Double::from(0.)));
-        assert!(Double::NAN.is_identical_with(&Double::NAN));
-        assert!(!Double::from(-0.).is_identical_with(&Double::from(0.)));
+        assert!(Double::from(0.).is_identical_with(Double::from(0.)));
+        assert!(Double::NAN.is_identical_with(Double::NAN));
+        assert!(!Double::from(-0.).is_identical_with(Double::from(0.)));
     }
 
     #[test]
