@@ -1223,7 +1223,7 @@ impl<'a> PlanBuilder<'a> {
         let encoded = if let Some(to_id) = to
             .iter()
             .enumerate()
-            .find_map(|(to_id, var)| (*var == from_variable.plain).then(|| to_id))
+            .find_map(|(to_id, var)| (*var == from_variable.plain).then_some(to_id))
         {
             to_id
         } else {

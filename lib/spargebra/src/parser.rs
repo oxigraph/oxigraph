@@ -736,7 +736,7 @@ impl ParserState {
         let aggregates = self.aggregates.last_mut().ok_or("Unexpected aggregate")?;
         Ok(aggregates
             .iter()
-            .find_map(|(v, a)| (a == &agg).then(|| v))
+            .find_map(|(v, a)| (a == &agg).then_some(v))
             .cloned()
             .unwrap_or_else(|| {
                 let new_var = variable();
