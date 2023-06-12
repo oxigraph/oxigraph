@@ -29,6 +29,7 @@
 use crate::interning::*;
 use crate::SubjectRef;
 use crate::*;
+use std::cmp::min;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::collections::{HashMap, HashSet};
@@ -705,7 +706,7 @@ impl Dataset {
         InternedTerm,
         InternedGraphName,
     )> {
-        let b_prime = partition.iter().find_map(|(_, b)| (b.len() > 1).then(|| b));
+        let b_prime = partition.iter().map(|(_, b)| b).find(|b| b.len() > 1);
         if let Some(b_prime) = b_prime {
             b_prime
                 .iter()
@@ -715,17 +716,7 @@ impl Dataset {
                     let (hash_prime_prime, partition_prime) = self.hash_bnodes(hash_prime);
                     self.distinguish(&hash_prime_prime, &partition_prime)
                 })
-                .fold(None, |a, b| {
-                    Some(if let Some(a) = a {
-                        if a <= b {
-                            a
-                        } else {
-                            b
-                        }
-                    } else {
-                        b
-                    })
-                })
+                .reduce(min)
                 .unwrap_or_default()
         } else {
             self.label(hash)

@@ -393,7 +393,7 @@ impl Db {
                     cf_handles,
                     cf_options,
                     is_secondary: true,
-                    path_to_remove: in_memory.then(|| secondary_path),
+                    path_to_remove: in_memory.then_some(secondary_path),
                 })),
             })
         }
@@ -1001,7 +1001,7 @@ impl Reader {
                     break;
                 }
             }
-            found.then(|| bound)
+            found.then_some(bound)
         };
 
         unsafe {

@@ -32,7 +32,7 @@ impl Db {
     #[allow(clippy::unwrap_in_result)]
     pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
         let name = ColumnFamily(name);
-        (self.0.read().unwrap().contains_key(&name)).then(|| name)
+        self.0.read().unwrap().contains_key(&name).then_some(name)
     }
 
     #[must_use]

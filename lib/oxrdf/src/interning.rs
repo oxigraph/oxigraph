@@ -466,7 +466,7 @@ impl InternedTriple {
         interner
             .triples
             .contains_key(&interned_triple)
-            .then(|| interned_triple)
+            .then_some(interned_triple)
     }
 
     pub fn next(&self) -> Self {
