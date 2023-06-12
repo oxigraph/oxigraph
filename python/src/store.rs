@@ -597,7 +597,7 @@ impl PyStore {
     ///
     /// :param graph_name: the name of the named graph.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
-    /// :rtype: None
+    /// :rtype: bool
     /// :raises IOError: if an I/O error happens during the named graph lookup.
     ///
     /// >>> store = Store()
