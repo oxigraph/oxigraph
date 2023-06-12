@@ -19,6 +19,8 @@ Oxigraph is in heavy development and SPARQL query evaluation has not been optimi
 The development roadmap is using [GitHub milestones](https://github.com/oxigraph/oxigraph/milestones?direction=desc&sort=completeness&state=open).
 Oxigraph internal design [is described on the wiki](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
+The future 0.4 release is currently in development in the [next branch](https://github.com/oxigraph/oxigraph/tree/next).
+
 It is split into multiple parts:
 
 - [The database written as a Rust library](https://crates.io/crates/oxigraph). Its source code is in the `lib` directory.
