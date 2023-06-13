@@ -53,12 +53,6 @@ impl Float {
         self.value.round().into()
     }
 
-    #[deprecated(note = "Use .is_nan()")]
-    #[inline]
-    pub fn is_naan(self) -> bool {
-        self.value.is_nan()
-    }
-
     #[inline]
     pub fn is_nan(self) -> bool {
         self.value.is_nan()

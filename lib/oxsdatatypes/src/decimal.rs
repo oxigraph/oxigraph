@@ -2,7 +2,6 @@ use crate::{Boolean, Double, Float, Integer};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
-use std::ops::Neg;
 use std::str::FromStr;
 
 const DECIMAL_PART_DIGITS: u32 = 18;
@@ -561,17 +560,6 @@ impl fmt::Display for Decimal {
         }
 
         Ok(())
-    }
-}
-
-impl Neg for Decimal {
-    type Output = Self;
-
-    #[inline]
-    fn neg(self) -> Self {
-        Self {
-            value: self.value.neg(),
-        }
     }
 }
 
