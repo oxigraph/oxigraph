@@ -3,7 +3,6 @@ use super::parser::*;
 use super::*;
 use std::cmp::Ordering;
 use std::fmt;
-use std::ops::Neg;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
@@ -232,18 +231,6 @@ impl PartialOrd for Duration {
     }
 }
 
-impl Neg for Duration {
-    type Output = Self;
-
-    #[inline]
-    fn neg(self) -> Self {
-        Self {
-            year_month: self.year_month.neg(),
-            day_time: self.day_time.neg(),
-        }
-    }
-}
-
 /// [XML Schema `yearMonthDuration` datatype](https://www.w3.org/TR/xmlschema11-2/#yearMonthDuration)
 ///
 /// It stores the duration as a number of months encoded using a [`i64`].
@@ -388,17 +375,6 @@ impl PartialOrd<YearMonthDuration> for Duration {
     #[inline]
     fn partial_cmp(&self, other: &YearMonthDuration) -> Option<Ordering> {
         self.partial_cmp(&Self::from(*other))
-    }
-}
-
-impl Neg for YearMonthDuration {
-    type Output = Self;
-
-    #[inline]
-    fn neg(self) -> Self {
-        Self {
-            months: self.months.neg(),
-        }
     }
 }
 
@@ -599,17 +575,6 @@ impl PartialOrd<DayTimeDuration> for YearMonthDuration {
     #[inline]
     fn partial_cmp(&self, other: &DayTimeDuration) -> Option<Ordering> {
         Duration::from(*self).partial_cmp(&Duration::from(*other))
-    }
-}
-
-impl Neg for DayTimeDuration {
-    type Output = Self;
-
-    #[inline]
-    fn neg(self) -> Self {
-        Self {
-            seconds: self.seconds.neg(),
-        }
     }
 }
 

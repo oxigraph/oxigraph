@@ -1,7 +1,6 @@
 use crate::{Boolean, Decimal, DecimalOverflowError, Double, Float};
 use std::fmt;
 use std::num::ParseIntError;
-use std::ops::Neg;
 use std::str::FromStr;
 
 /// [XML Schema `integer` datatype](https://www.w3.org/TR/xmlschema11-2/#integer)
@@ -207,15 +206,6 @@ impl fmt::Display for Integer {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.value.fmt(f)
-    }
-}
-
-impl Neg for Integer {
-    type Output = Self;
-
-    #[inline]
-    fn neg(self) -> Self {
-        (-self.value).into()
     }
 }
 

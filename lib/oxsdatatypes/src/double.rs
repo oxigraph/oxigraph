@@ -58,12 +58,6 @@ impl Double {
         self.value.is_nan()
     }
 
-    #[deprecated(note = "Use .is_nan()")]
-    #[inline]
-    pub fn is_naan(self) -> bool {
-        self.value.is_nan()
-    }
-
     #[inline]
     pub fn is_finite(self) -> bool {
         self.value.is_finite()
