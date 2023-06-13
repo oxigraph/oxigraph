@@ -50,7 +50,7 @@ impl Integer {
         })
     }
 
-    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-divide)
+    /// [op:numeric-integer-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-integer-divide)
     #[inline]
     pub fn checked_div(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
