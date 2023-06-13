@@ -853,10 +853,11 @@ impl<'a> From<TripleRef<'a>> for Triple {
 
 /// A possible owned graph name.
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub enum GraphName {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
+    #[default]
     DefaultGraph,
 }
 
@@ -940,10 +941,11 @@ impl From<NamedOrBlankNodeRef<'_>> for GraphName {
 
 /// A possible borrowed graph name.
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
 pub enum GraphNameRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     BlankNode(BlankNodeRef<'a>),
+    #[default]
     DefaultGraph,
 }
 

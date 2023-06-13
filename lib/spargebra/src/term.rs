@@ -183,9 +183,10 @@ impl TryFrom<Triple> for GroundTriple {
 /// A possible graph name.
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub enum GraphName {
     NamedNode(NamedNode),
+    #[default]
     DefaultGraph,
 }
 
