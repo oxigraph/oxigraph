@@ -1,3 +1,11 @@
+## [0.3.18] - 2023-06-13
+
+### Changed
+- SPARQL: fixes evaluation of `||` when all alternatives are `false`. The results must be `false` and not an error.
+- SPARQL: `xsd:duration` it is now possible to properly parse and serialize all numbers that can be internally represented by the encoding used by Oxigraph.
+- Python: fixes `Store.contains_named_graph` return type annotation.
+
+
 ## [0.3.17] - 2023-06-11
 
 ### Added
