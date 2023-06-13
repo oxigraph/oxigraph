@@ -1089,15 +1089,9 @@ impl SimpleEvaluator {
                         NumericBinaryOperands::Double(v1, v2) => (v1 - v2).into(),
                         NumericBinaryOperands::Integer(v1, v2) => v1.checked_sub(v2)?.into(),
                         NumericBinaryOperands::Decimal(v1, v2) => v1.checked_sub(v2)?.into(),
-                        NumericBinaryOperands::DateTime(v1, v2) => {
-                            Duration::from(v1.checked_sub(v2)?).into()
-                        }
-                        NumericBinaryOperands::Date(v1, v2) => {
-                            Duration::from(v1.checked_sub(v2)?).into()
-                        }
-                        NumericBinaryOperands::Time(v1, v2) => {
-                            Duration::from(v1.checked_sub(v2)?).into()
-                        }
+                        NumericBinaryOperands::DateTime(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::Date(v1, v2) => v1.checked_sub(v2)?.into(),
+                        NumericBinaryOperands::Time(v1, v2) => v1.checked_sub(v2)?.into(),
                         NumericBinaryOperands::Duration(v1, v2) => v1.checked_sub(v2)?.into(),
                         NumericBinaryOperands::YearMonthDuration(v1, v2) => {
                             v1.checked_sub(v2)?.into()
