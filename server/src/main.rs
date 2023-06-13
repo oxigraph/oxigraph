@@ -471,10 +471,7 @@ pub fn main() -> anyhow::Result<()> {
                     format!("Not able to read query file {}", query_file.display())
                 })?
             } else {
-                // TODO: use io::read_to_string
-                let mut query = String::new();
-                stdin().lock().read_to_string(&mut query)?;
-                query
+                io::read_to_string(stdin().lock())?
             };
             let query = Query::parse(&query, query_base.as_deref())?;
             let store = Store::open_read_only(
@@ -621,10 +618,7 @@ pub fn main() -> anyhow::Result<()> {
                     format!("Not able to read update file {}", update_file.display())
                 })?
             } else {
-                // TODO: use io::read_to_string
-                let mut update = String::new();
-                stdin().lock().read_to_string(&mut update)?;
-                update
+                io::read_to_string(stdin().lock())?
             };
             let update = Update::parse(&update, update_base.as_deref())?;
             let store = Store::open(
@@ -862,16 +856,12 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-query" {
-                let mut buffer = String::new();
-                request
-                    .body_mut()
-                    .take(MAX_SPARQL_BODY_SIZE)
-                    .read_to_string(&mut buffer)
+                let query = io::read_to_string(request.body_mut().take(MAX_SPARQL_BODY_SIZE))
                     .map_err(bad_request)?;
                 configure_and_evaluate_sparql_query(
                     &store,
                     &[url_query(request)],
-                    Some(buffer),
+                    Some(query),
                     request,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
@@ -898,16 +888,12 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-update" {
-                let mut buffer = String::new();
-                request
-                    .body_mut()
-                    .take(MAX_SPARQL_BODY_SIZE)
-                    .read_to_string(&mut buffer)
+                let update = io::read_to_string(request.body_mut().take(MAX_SPARQL_BODY_SIZE))
                     .map_err(bad_request)?;
                 configure_and_evaluate_sparql_update(
                     &store,
                     &[url_query(request)],
-                    Some(buffer),
+                    Some(update),
                     request,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
@@ -1728,6 +1714,7 @@ mod tests {
     use oxhttp::model::Method;
     use predicates::prelude::*;
     use std::fs::remove_dir_all;
+    use std::io::read_to_string;
 
     fn cli_command() -> Result<Command> {
         Ok(Command::from_std(
@@ -2748,18 +2735,16 @@ mod tests {
         }
 
         fn check_status(mut response: Response, expected_status: Status) -> Result<()> {
-            let mut buf = String::new();
-            response.body_mut().read_to_string(&mut buf)?;
-            assert_eq!(response.status(), expected_status, "Error message: {buf}");
+            let body = read_to_string(response.body_mut())?;
+            assert_eq!(response.status(), expected_status, "Error message: {body}");
             Ok(())
         }
 
         fn test_body(&self, request: Request, expected_body: &str) -> Result<()> {
             let mut response = self.exec(request);
-            let mut buf = String::new();
-            response.body_mut().read_to_string(&mut buf)?;
-            assert_eq!(response.status(), Status::OK, "Error message: {buf}");
-            assert_eq!(&buf, expected_body);
+            let body = read_to_string(response.body_mut())?;
+            assert_eq!(response.status(), Status::OK, "Error message: {body}");
+            assert_eq!(&body, expected_body);
             Ok(())
         }
     }
