@@ -959,7 +959,7 @@ impl SimpleEvaluator {
                     .map(|i| self.expression_evaluator(i, stat_children))
                     .collect::<Rc<[_]>>();
                 Rc::new(move |tuple| {
-                    let mut error = true;
+                    let mut error = false;
                     for child in children.iter() {
                         match child(tuple).and_then(|v| to_bool(&v)) {
                             Some(true) => return Some(true.into()),
