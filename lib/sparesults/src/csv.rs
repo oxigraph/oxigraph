@@ -375,7 +375,6 @@ impl<R: BufRead> TsvSolutionsReader<R> {
 mod tests {
     use super::*;
     use std::error::Error;
-    use std::io::Cursor;
     use std::rc::Rc;
     use std::str;
 
@@ -466,7 +465,7 @@ mod tests {
         if let TsvQueryResultsReader::Solutions {
             solutions: mut solutions_iter,
             variables: actual_variables,
-        } = TsvQueryResultsReader::read(Cursor::new(result))?
+        } = TsvQueryResultsReader::read(result.as_slice())?
         {
             assert_eq!(actual_variables.as_slice(), variables.as_slice());
             let mut rows = Vec::new();
@@ -499,7 +498,7 @@ mod tests {
         bad_tsvs.push(&a_lot_of_strings);
         for bad_tsv in bad_tsvs {
             if let Ok(TsvQueryResultsReader::Solutions { mut solutions, .. }) =
-                TsvQueryResultsReader::read(Cursor::new(bad_tsv))
+                TsvQueryResultsReader::read(bad_tsv.as_bytes())
             {
                 while let Ok(Some(_)) = solutions.read_next() {}
             }

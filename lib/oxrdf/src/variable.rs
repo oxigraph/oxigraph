@@ -169,7 +169,7 @@ impl PartialOrd<VariableRef<'_>> for Variable {
 
 fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> {
     let mut chars = id.chars();
-    let front = chars.next().ok_or(VariableNameParseError {})?;
+    let front = chars.next().ok_or(VariableNameParseError)?;
     match front {
         '0'..='9'
         | '_'
@@ -188,7 +188,7 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
         | '\u{F900}'..='\u{FDCF}'
         | '\u{FDF0}'..='\u{FFFD}'
         | '\u{10000}'..='\u{EFFFF}' => (),
-        _ => return Err(VariableNameParseError {}),
+        _ => return Err(VariableNameParseError),
     }
     for c in chars {
         match c {
@@ -211,7 +211,7 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
             | '\u{F900}'..='\u{FDCF}'
             | '\u{FDF0}'..='\u{FFFD}'
             | '\u{10000}'..='\u{EFFFF}' => (),
-            _ => return Err(VariableNameParseError {}),
+            _ => return Err(VariableNameParseError),
         }
     }
     Ok(())
