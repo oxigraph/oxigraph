@@ -56,7 +56,7 @@ pub fn literal(
 
 #[wasm_bindgen(js_name = defaultGraph)]
 pub fn default_graph() -> JsDefaultGraph {
-    JsDefaultGraph {}
+    JsDefaultGraph
 }
 
 #[wasm_bindgen(js_name = variable)]
@@ -532,7 +532,7 @@ impl From<GraphName> for JsTerm {
         match name {
             GraphName::NamedNode(node) => node.into(),
             GraphName::BlankNode(node) => node.into(),
-            GraphName::DefaultGraph => Self::DefaultGraph(JsDefaultGraph {}),
+            GraphName::DefaultGraph => Self::DefaultGraph(JsDefaultGraph),
         }
     }
 }
@@ -744,7 +744,7 @@ impl FromJsConverter {
                         ))
                     }
                 }
-                "DefaultGraph" => Ok(JsTerm::DefaultGraph(JsDefaultGraph {})),
+                "DefaultGraph" => Ok(JsTerm::DefaultGraph(JsDefaultGraph)),
                 "Variable" => Ok(Variable::new(
                     Reflect::get(value, &self.value)?
                         .as_string()
@@ -754,8 +754,7 @@ impl FromJsConverter {
                 .into()),
                 "Quad" => Ok(self.to_quad(value)?.into()),
                 _ => Err(format_err!(
-                    "The termType {} is not supported by Oxigraph",
-                    term_type
+                    "The termType {term_type} is not supported by Oxigraph"
                 )),
             }
         } else if term_type.is_undefined() {

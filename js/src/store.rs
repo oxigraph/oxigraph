@@ -8,7 +8,6 @@ use oxigraph::io::{DatasetFormat, GraphFormat};
 use oxigraph::model::*;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::Store;
-use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(js_name = Store)]
@@ -171,7 +170,7 @@ impl JsStore {
         if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
             self.store
                 .load_graph(
-                    Cursor::new(data),
+                    data.as_bytes(),
                     graph_format,
                     &to_graph_name.unwrap_or(GraphName::DefaultGraph),
                     base_iri.as_deref(),
@@ -184,10 +183,10 @@ impl JsStore {
                 ));
             }
             self.store
-                .load_dataset(Cursor::new(data), dataset_format, base_iri.as_deref())
+                .load_dataset(data.as_bytes(), dataset_format, base_iri.as_deref())
                 .map_err(to_err)
         } else {
-            Err(format_err!("Not supported MIME type: {}", mime_type))
+            Err(format_err!("Not supported MIME type: {mime_type}"))
         }
     }
 
@@ -218,7 +217,7 @@ impl JsStore {
                 .dump_dataset(&mut buffer, dataset_format)
                 .map_err(to_err)?;
         } else {
-            return Err(format_err!("Not supported MIME type: {}", mime_type));
+            return Err(format_err!("Not supported MIME type: {mime_type}"));
         }
         String::from_utf8(buffer).map_err(to_err)
     }

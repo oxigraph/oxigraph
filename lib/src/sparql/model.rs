@@ -98,16 +98,15 @@ impl QueryResults {
     /// use oxigraph::store::Store;
     /// use oxigraph::io::GraphFormat;
     /// use oxigraph::model::*;
-    /// use std::io::Cursor;
     ///
-    /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n";
     ///
     /// let store = Store::new()?;
-    /// store.load_graph(Cursor::new(graph), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
+    /// store.load_graph(graph.as_bytes(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
     ///
     /// let mut results = Vec::new();
     /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, GraphFormat::NTriples)?;
-    /// assert_eq!(results, graph);
+    /// assert_eq!(results, graph.as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write_graph(

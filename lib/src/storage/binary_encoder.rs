@@ -2,7 +2,7 @@ use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, EncodedTriple, StrHash};
 use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::mem::size_of;
 
 #[cfg(not(target_family = "wasm"))]
@@ -62,24 +62,23 @@ pub enum QuadEncoding {
 }
 
 impl QuadEncoding {
-    pub fn decode(self, buffer: &[u8]) -> Result<EncodedQuad, StorageError> {
-        let mut cursor = Cursor::new(&buffer);
+    pub fn decode(self, mut buffer: &[u8]) -> Result<EncodedQuad, StorageError> {
         match self {
-            Self::Spog => cursor.read_spog_quad(),
-            Self::Posg => cursor.read_posg_quad(),
-            Self::Ospg => cursor.read_ospg_quad(),
-            Self::Gspo => cursor.read_gspo_quad(),
-            Self::Gpos => cursor.read_gpos_quad(),
-            Self::Gosp => cursor.read_gosp_quad(),
-            Self::Dspo => cursor.read_dspo_quad(),
-            Self::Dpos => cursor.read_dpos_quad(),
-            Self::Dosp => cursor.read_dosp_quad(),
+            Self::Spog => buffer.read_spog_quad(),
+            Self::Posg => buffer.read_posg_quad(),
+            Self::Ospg => buffer.read_ospg_quad(),
+            Self::Gspo => buffer.read_gspo_quad(),
+            Self::Gpos => buffer.read_gpos_quad(),
+            Self::Gosp => buffer.read_gosp_quad(),
+            Self::Dspo => buffer.read_dspo_quad(),
+            Self::Dpos => buffer.read_dpos_quad(),
+            Self::Dosp => buffer.read_dosp_quad(),
         }
     }
 }
 
-pub fn decode_term(buffer: &[u8]) -> Result<EncodedTerm, StorageError> {
-    Cursor::new(&buffer).read_term()
+pub fn decode_term(mut buffer: &[u8]) -> Result<EncodedTerm, StorageError> {
+    buffer.read_term()
 }
 
 pub trait TermReader {
@@ -740,7 +739,7 @@ mod tests {
 
             let mut buffer = Vec::new();
             write_term(&mut buffer, &encoded);
-            assert_eq!(encoded, Cursor::new(&buffer).read_term().unwrap());
+            assert_eq!(encoded, buffer.as_slice().read_term().unwrap());
         }
     }
 }

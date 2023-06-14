@@ -264,7 +264,7 @@ impl IdStr {
 
 fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError> {
     let mut chars = id.chars();
-    let front = chars.next().ok_or(BlankNodeIdParseError {})?;
+    let front = chars.next().ok_or(BlankNodeIdParseError)?;
     match front {
         '0'..='9'
         | '_'
@@ -283,7 +283,7 @@ fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError>
         | '\u{F900}'..='\u{FDCF}'
         | '\u{FDF0}'..='\u{FFFD}'
         | '\u{10000}'..='\u{EFFFF}' => (),
-        _ => return Err(BlankNodeIdParseError {}),
+        _ => return Err(BlankNodeIdParseError),
     }
     for c in chars {
         match c {
@@ -309,13 +309,13 @@ fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError>
             | '\u{F900}'..='\u{FDCF}'
             | '\u{FDF0}'..='\u{FFFD}'
             | '\u{10000}'..='\u{EFFFF}' => (),
-            _ => return Err(BlankNodeIdParseError {}),
+            _ => return Err(BlankNodeIdParseError),
         }
     }
 
     // Could not end with a dot
     if id.ends_with('.') {
-        Err(BlankNodeIdParseError {})
+        Err(BlankNodeIdParseError)
     } else {
         Ok(())
     }

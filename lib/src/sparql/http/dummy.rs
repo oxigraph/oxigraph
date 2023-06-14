@@ -7,7 +7,7 @@ pub struct Client;
 
 impl Client {
     pub fn new(_timeout: Option<Duration>, _redirection_limit: usize) -> Self {
-        Self {}
+        Self
     }
 
     #[allow(clippy::unused_self)]

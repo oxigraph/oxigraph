@@ -9,7 +9,6 @@ use std::env::temp_dir;
 use std::error::Error;
 #[cfg(not(target_family = "wasm"))]
 use std::fs::{create_dir, remove_dir_all, File};
-use std::io::Cursor;
 #[cfg(not(target_family = "wasm"))]
 use std::io::Write;
 #[cfg(target_os = "linux")]
@@ -109,7 +108,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.load_graph(
-        Cursor::new(DATA),
+        DATA.as_bytes(),
         GraphFormat::Turtle,
         GraphNameRef::DefaultGraph,
         None,
@@ -126,7 +125,7 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().load_graph(
-        Cursor::new(DATA),
+        DATA.as_bytes(),
         GraphFormat::Turtle,
         GraphNameRef::DefaultGraph,
         None,
@@ -143,7 +142,7 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().on_parse_error(|_| Ok(())).load_graph(
-        Cursor::new(b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> ."),
+        b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> .".as_slice(),
         GraphFormat::NTriples,
         GraphNameRef::DefaultGraph,
         None,
@@ -162,7 +161,7 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
+    store.load_dataset(GRAPH_DATA.as_bytes(), DatasetFormat::TriG, None)?;
     for q in quads(NamedNodeRef::new_unchecked(
         "http://www.wikidata.org/wiki/Special:EntityData/Q90",
     )) {
@@ -178,7 +177,7 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
         .bulk_loader()
-        .load_dataset(Cursor::new(GRAPH_DATA), DatasetFormat::TriG, None)?;
+        .load_dataset(GRAPH_DATA.as_bytes(), DatasetFormat::TriG, None)?;
     let graph_name =
         NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
     for q in quads(graph_name) {
@@ -194,7 +193,7 @@ fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     for _ in 0..2 {
         store.load_graph(
-            Cursor::new("_:a <http://example.com/p> <http://example.com/p> ."),
+            "_:a <http://example.com/p> <http://example.com/p> .".as_bytes(),
             GraphFormat::NTriples,
             GraphNameRef::DefaultGraph,
             None,
