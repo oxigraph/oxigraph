@@ -129,9 +129,7 @@ impl Reader {
         let data: Vec<_> = match &self.0 {
             InnerReader::Simple(reader) => {
                 let trees = reader.read().unwrap();
-                let tree = if let Some(tree) = trees.get(column_family) {
-                    tree
-                } else {
+                let Some(tree) = trees.get(column_family) else {
                     return Ok(Iter {
                         iter: Vec::new().into_iter(),
                         current: None,
@@ -147,28 +145,25 @@ impl Reader {
                 }
             }
             InnerReader::Transaction(reader) => {
-                if let Some(reader) = reader.upgrade() {
-                    let trees = (*reader).borrow();
-                    let tree = if let Some(tree) = trees.get(column_family) {
-                        tree
-                    } else {
-                        return Ok(Iter {
-                            iter: Vec::new().into_iter(),
-                            current: None,
-                        });
-                    };
-                    if prefix.is_empty() {
-                        tree.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-                    } else {
-                        tree.range(prefix.to_vec()..)
-                            .take_while(|(k, _)| k.starts_with(prefix))
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect()
-                    }
-                } else {
+                let Some(reader) = reader.upgrade() else {
                     return Err(StorageError::Other(
                         "The transaction is already ended".into(),
                     ));
+                };
+                let trees = (*reader).borrow();
+                let Some(tree) = trees.get(column_family) else {
+                    return Ok(Iter {
+                        iter: Vec::new().into_iter(),
+                        current: None,
+                    });
+                };
+                if prefix.is_empty() {
+                    tree.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+                } else {
+                    tree.range(prefix.to_vec()..)
+                        .take_while(|(k, _)| k.starts_with(prefix))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect()
                 }
             }
         };

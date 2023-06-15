@@ -941,19 +941,18 @@ impl Reader {
                     ))
                 }
                 InnerReader::Transaction(inner) => {
-                    if let Some(inner) = inner.upgrade() {
-                        ffi_result!(rocksdb_transaction_get_pinned_cf_with_status(
-                            *inner,
-                            self.options,
-                            column_family.0,
-                            key.as_ptr().cast(),
-                            key.len()
-                        ))
-                    } else {
-                        return Err(StorageError::Other(
-                            "The transaction is already ended".into(),
-                        ));
-                    }
+                    let Some(inner) = inner.upgrade() else {
+                         return Err(StorageError::Other(
+                             "The transaction is already ended".into(),
+                         ));
+                     };
+                    ffi_result!(rocksdb_transaction_get_pinned_cf_with_status(
+                        *inner,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len()
+                    ))
                 }
                 InnerReader::PlainDb(inner) => {
                     ffi_result!(rocksdb_get_pinned_cf_with_status(
@@ -1022,13 +1021,12 @@ impl Reader {
                     rocksdb_transactiondb_create_iterator_cf(inner.db.db, options, column_family.0)
                 }
                 InnerReader::Transaction(inner) => {
-                    if let Some(inner) = inner.upgrade() {
-                        rocksdb_transaction_create_iterator_cf(*inner, options, column_family.0)
-                    } else {
+                    let Some(inner) = inner.upgrade() else {
                         return Err(StorageError::Other(
                             "The transaction is already ended".into(),
                         ));
-                    }
+                    };
+                    rocksdb_transaction_create_iterator_cf(*inner, options, column_family.0)
                 }
                 InnerReader::PlainDb(inner) => {
                     rocksdb_create_iterator_cf(inner.db, options, column_family.0)

@@ -230,11 +230,9 @@ fn is_turtle_decimal(value: &str) -> bool {
     while value.first().map_or(false, u8::is_ascii_digit) {
         value = &value[1..];
     }
-    if let Some(v) = value.strip_prefix(b".") {
-        value = v;
-    } else {
+    let Some(value) = value.strip_prefix(b".") else {
         return false;
-    }
+    };
     !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
