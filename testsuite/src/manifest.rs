@@ -84,9 +84,7 @@ impl TestManifest {
 
     fn next_test(&mut self) -> Result<Option<Test>> {
         loop {
-            let test_node = if let Some(test_node) = self.tests_to_do.pop_front() {
-                test_node
-            } else {
+            let Some(test_node) = self.tests_to_do.pop_front() else {
                 return Ok(None);
             };
             let test_node = if let Term::NamedNode(test_node) = test_node {
@@ -273,9 +271,7 @@ impl TestManifest {
     }
 
     fn load_next_manifest(&mut self) -> Result<Option<()>> {
-        let url = if let Some(url) = self.manifests_to_do.pop_front() {
-            url
-        } else {
+        let Some(url) = self.manifests_to_do.pop_front() else {
             return Ok(None);
         };
         self.graph.clear();
