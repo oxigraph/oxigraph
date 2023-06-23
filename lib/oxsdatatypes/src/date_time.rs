@@ -52,6 +52,7 @@ impl DateTime {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -60,47 +61,55 @@ impl DateTime {
 
     /// [fn:year-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-year-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     /// [fn:month-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-month-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn month(self) -> u8 {
         self.timestamp.month()
     }
 
     /// [fn:day-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-day-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn day(self) -> u8 {
         self.timestamp.day()
     }
 
     /// [fn:hour-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn hour(self) -> u8 {
         self.timestamp.hour()
     }
 
     /// [fn:minute-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn minute(self) -> u8 {
         self.timestamp.minute()
     }
 
     /// [fn:second-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn second(self) -> Decimal {
         self.timestamp.second()
     }
 
     /// [fn:timezone-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
@@ -119,18 +128,21 @@ impl DateTime {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-dateTimes](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dateTimes)
     #[inline]
+    #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-dateTime)
     #[inline]
+    #[must_use]
     pub fn checked_add_year_month_duration(
         self,
         rhs: impl Into<YearMonthDuration>,
@@ -140,6 +152,7 @@ impl DateTime {
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-dateTime)
     #[inline]
+    #[must_use]
     pub fn checked_add_day_time_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -149,6 +162,7 @@ impl DateTime {
 
     /// [op:add-yearMonthDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-dateTime) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-dateTime)
     #[inline]
+    #[must_use]
     pub fn checked_add_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
@@ -163,6 +177,7 @@ impl DateTime {
 
     /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn checked_sub_year_month_duration(
         self,
         rhs: impl Into<YearMonthDuration>,
@@ -172,6 +187,7 @@ impl DateTime {
 
     /// [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -181,6 +197,7 @@ impl DateTime {
 
     /// [op:subtract-yearMonthDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-dateTime) and [op:subtract-dayTimeDuration-from-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-dateTime)
     #[inline]
+    #[must_use]
     pub fn checked_sub_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         let rhs = rhs.into();
         if let Ok(rhs) = DayTimeDuration::try_from(rhs) {
@@ -198,6 +215,7 @@ impl DateTime {
 
     /// [fn:adjust-dateTime-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-dateTime-to-timezone)
     #[inline]
+    #[must_use]
     pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
@@ -206,6 +224,7 @@ impl DateTime {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -300,6 +319,7 @@ impl Time {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -314,52 +334,61 @@ impl Time {
 
     /// [fn:hour-from-time](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-time)
     #[inline]
+    #[must_use]
     pub fn hour(self) -> u8 {
         self.timestamp.hour()
     }
 
     /// [fn:minute-from-time](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-time)
     #[inline]
+    #[must_use]
     pub fn minute(self) -> u8 {
         self.timestamp.minute()
     }
 
     /// [fn:second-from-time](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-time)
     #[inline]
+    #[must_use]
     pub fn second(self) -> Decimal {
         self.timestamp.second()
     }
 
     /// [fn:timezone-from-time](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-time)
     #[inline]
+    #[must_use]
     pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-times](https://www.w3.org/TR/xpath-functions-31/#func-subtract-times)
     #[inline]
+    #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-time)
     #[inline]
+    #[must_use]
     pub fn checked_add_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
     /// [op:add-dayTimeDuration-to-time](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-time)
     #[inline]
+    #[must_use]
     pub fn checked_add_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
@@ -378,12 +407,14 @@ impl Time {
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
     #[inline]
+    #[must_use]
     pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
     #[inline]
+    #[must_use]
     pub fn checked_sub_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::new(
             1972,
@@ -402,6 +433,7 @@ impl Time {
 
     // [fn:adjust-time-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-time-to-timezone)
     #[inline]
+    #[must_use]
     pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         DateTime::new(
             1972,
@@ -420,6 +452,7 @@ impl Time {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -501,6 +534,7 @@ impl Date {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -515,46 +549,54 @@ impl Date {
 
     /// [fn:year-from-date](https://www.w3.org/TR/xpath-functions-31/#func-year-from-date)
     #[inline]
+    #[must_use]
     pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     /// [fn:month-from-date](https://www.w3.org/TR/xpath-functions-31/#func-month-from-date)
     #[inline]
+    #[must_use]
     pub fn month(self) -> u8 {
         self.timestamp.month()
     }
 
     /// [fn:day-from-date](https://www.w3.org/TR/xpath-functions-31/#func-day-from-date)
     #[inline]
+    #[must_use]
     pub fn day(self) -> u8 {
         self.timestamp.day()
     }
 
     /// [fn:timezone-from-date](https://www.w3.org/TR/xpath-functions-31/#func-timezone-from-date)
     #[inline]
+    #[must_use]
     pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// [op:subtract-dates](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dates)
     #[inline]
+    #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<DayTimeDuration> {
         self.timestamp.checked_sub(rhs.into().timestamp)
     }
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-date)
     #[inline]
+    #[must_use]
     pub fn checked_add_year_month_duration(
         self,
         rhs: impl Into<YearMonthDuration>,
@@ -564,12 +606,14 @@ impl Date {
 
     /// [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
     #[inline]
+    #[must_use]
     pub fn checked_add_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_add_duration(Duration::from(rhs.into()))
     }
 
     /// [op:add-yearMonthDuration-to-date](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDuration-to-date) and [op:add-dayTimeDuration-to-dateTime](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDuration-to-date)
     #[inline]
+    #[must_use]
     pub fn checked_add_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(self)
             .ok()?
@@ -580,6 +624,7 @@ impl Date {
 
     /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-date)
     #[inline]
+    #[must_use]
     pub fn checked_sub_year_month_duration(
         self,
         rhs: impl Into<YearMonthDuration>,
@@ -589,12 +634,14 @@ impl Date {
 
     /// [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
     #[inline]
+    #[must_use]
     pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         self.checked_sub_duration(Duration::from(rhs.into()))
     }
 
     /// [op:subtract-yearMonthDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDuration-from-date) and [op:subtract-dayTimeDuration-from-date](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-date)
     #[inline]
+    #[must_use]
     pub fn checked_sub_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
         DateTime::try_from(self)
             .ok()?
@@ -605,6 +652,7 @@ impl Date {
 
     // [fn:adjust-date-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-date-to-timezone)
     #[inline]
+    #[must_use]
     pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         DateTime::new(
             self.year(),
@@ -623,6 +671,7 @@ impl Date {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -696,6 +745,7 @@ impl GYearMonth {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -703,26 +753,31 @@ impl GYearMonth {
     }
 
     #[inline]
+    #[must_use]
     pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     #[inline]
+    #[must_use]
     pub fn month(self) -> u8 {
         self.timestamp.month()
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
+    #[must_use]
     pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
@@ -730,12 +785,14 @@ impl GYearMonth {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -817,6 +874,7 @@ impl GYear {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -824,21 +882,25 @@ impl GYear {
     }
 
     #[inline]
+    #[must_use]
     pub fn year(self) -> i64 {
         self.timestamp.year()
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone(self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
+    #[must_use]
     pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
@@ -846,12 +908,14 @@ impl GYear {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -939,6 +1003,7 @@ impl GMonthDay {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -946,26 +1011,31 @@ impl GMonthDay {
     }
 
     #[inline]
+    #[must_use]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
     #[inline]
+    #[must_use]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
+    #[must_use]
     pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
@@ -973,12 +1043,14 @@ impl GMonthDay {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -1056,6 +1128,7 @@ impl GMonth {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -1063,21 +1136,25 @@ impl GMonth {
     }
 
     #[inline]
+    #[must_use]
     pub fn month(&self) -> u8 {
         self.timestamp.month()
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
+    #[must_use]
     pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
@@ -1085,12 +1162,14 @@ impl GMonth {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -1182,6 +1261,7 @@ impl GDay {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 18]) -> Self {
         Self {
             timestamp: Timestamp::from_be_bytes(bytes),
@@ -1189,21 +1269,25 @@ impl GDay {
     }
 
     #[inline]
+    #[must_use]
     pub fn day(&self) -> u8 {
         self.timestamp.day()
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone(&self) -> Option<DayTimeDuration> {
         Some(self.timezone_offset()?.into())
     }
 
     #[inline]
+    #[must_use]
     pub fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timestamp.timezone_offset()
     }
 
     #[inline]
+    #[must_use]
     pub fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(Self {
             timestamp: self.timestamp.adjust(timezone_offset)?,
@@ -1211,12 +1295,14 @@ impl GDay {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 18] {
         self.timestamp.to_be_bytes()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
@@ -1293,6 +1379,7 @@ impl TimezoneOffset {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 2]) -> Self {
         Self {
             offset: i16::from_be_bytes(bytes),
@@ -1300,6 +1387,7 @@ impl TimezoneOffset {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 2] {
         self.offset.to_be_bytes()
     }
@@ -1486,6 +1574,7 @@ impl Timestamp {
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     #[inline]
+    #[must_use]
     fn year_month_day(&self) -> (i64, u8, u8) {
         let mut days = (self.value.as_i128()
             + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
@@ -1537,18 +1626,21 @@ impl Timestamp {
     }
 
     #[inline]
+    #[must_use]
     fn year(&self) -> i64 {
         let (year, _, _) = self.year_month_day();
         year
     }
 
     #[inline]
+    #[must_use]
     fn month(&self) -> u8 {
         let (_, month, _) = self.year_month_day();
         month
     }
 
     #[inline]
+    #[must_use]
     fn day(&self) -> u8 {
         let (_, _, day) = self.year_month_day();
         day
@@ -1556,6 +1648,7 @@ impl Timestamp {
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     #[inline]
+    #[must_use]
     fn hour(&self) -> u8 {
         (((self.value.as_i128()
             + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
@@ -1565,6 +1658,7 @@ impl Timestamp {
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     #[inline]
+    #[must_use]
     fn minute(&self) -> u8 {
         (((self.value.as_i128()
             + i128::from(self.timezone_offset.unwrap_or(TimezoneOffset::UTC).offset) * 60)
@@ -1573,16 +1667,19 @@ impl Timestamp {
     }
 
     #[inline]
+    #[must_use]
     fn second(&self) -> Decimal {
         self.value.checked_rem_euclid(60).unwrap().abs()
     }
 
     #[inline]
+    #[must_use]
     const fn timezone_offset(&self) -> Option<TimezoneOffset> {
         self.timezone_offset
     }
 
     #[inline]
+    #[must_use]
     fn checked_add_seconds(&self, seconds: impl Into<Decimal>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_add(seconds.into())?,
@@ -1591,6 +1688,7 @@ impl Timestamp {
     }
 
     #[inline]
+    #[must_use]
     fn checked_sub(&self, rhs: Self) -> Option<DayTimeDuration> {
         match (self.timezone_offset, rhs.timezone_offset) {
             (Some(_), Some(_)) | (None, None) => {
@@ -1601,6 +1699,7 @@ impl Timestamp {
     }
 
     #[inline]
+    #[must_use]
     fn checked_sub_seconds(&self, seconds: Decimal) -> Option<Self> {
         Some(Self {
             value: self.value.checked_sub(seconds)?,
@@ -1609,6 +1708,7 @@ impl Timestamp {
     }
 
     #[inline]
+    #[must_use]
     fn adjust(&self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
         Some(if let Some(from_timezone) = self.timezone_offset {
             if let Some(to_timezone) = timezone_offset {
@@ -1638,6 +1738,7 @@ impl Timestamp {
     }
 
     #[inline]
+    #[must_use]
     fn to_be_bytes(self) -> [u8; 18] {
         let mut bytes = [0; 18];
         bytes[0..16].copy_from_slice(&self.value.to_be_bytes());
@@ -1650,6 +1751,7 @@ impl Timestamp {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.value == other.value && self.timezone_offset == other.timezone_offset
     }

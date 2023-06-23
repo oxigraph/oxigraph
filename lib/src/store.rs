@@ -1390,6 +1390,7 @@ impl BulkLoader {
     /// This number must be at last 2 (one for parsing and one for loading).
     ///
     /// The default value is 2.
+    #[must_use]
     pub fn set_num_threads(mut self, num_threads: usize) -> Self {
         self.storage = self.storage.set_num_threads(num_threads);
         self
@@ -1404,6 +1405,7 @@ impl BulkLoader {
     /// (for example if the data contains very long IRIs or literals).
     ///
     /// By default, a target 2GB per used thread is used.
+    #[must_use]
     pub fn set_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
         self.storage = self
             .storage
@@ -1412,6 +1414,7 @@ impl BulkLoader {
     }
 
     /// Adds a `callback` evaluated from time to time with the number of loaded triples.
+    #[must_use]
     pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
         self.storage = self.storage.on_progress(callback);
         self
@@ -1421,6 +1424,7 @@ impl BulkLoader {
     /// by returning `Ok` or fail by returning `Err`.
     ///
     /// By default the parsing fails.
+    #[must_use]
     pub fn on_parse_error(
         mut self,
         callback: impl Fn(ParseError) -> Result<(), ParseError> + 'static,

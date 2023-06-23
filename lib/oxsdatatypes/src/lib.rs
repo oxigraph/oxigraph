@@ -3,7 +3,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
-#![allow(clippy::return_self_not_must_use)]
 
 mod boolean;
 mod date_time;
