@@ -18,6 +18,7 @@ pub struct Float {
 
 impl Float {
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 4]) -> Self {
         Self {
             value: f32::from_be_bytes(bytes),
@@ -25,46 +26,54 @@ impl Float {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 4] {
         self.value.to_be_bytes()
     }
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
     #[inline]
+    #[must_use]
     pub fn abs(self) -> Self {
         self.value.abs().into()
     }
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
     #[inline]
+    #[must_use]
     pub fn ceil(self) -> Self {
         self.value.ceil().into()
     }
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
     #[inline]
+    #[must_use]
     pub fn floor(self) -> Self {
         self.value.floor().into()
     }
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
     #[inline]
+    #[must_use]
     pub fn round(self) -> Self {
         self.value.round().into()
     }
 
     #[inline]
+    #[must_use]
     pub fn is_nan(self) -> bool {
         self.value.is_nan()
     }
 
     #[inline]
+    #[must_use]
     pub fn is_finite(self) -> bool {
         self.value.is_finite()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self.value.to_ne_bytes() == other.value.to_ne_bytes()
     }

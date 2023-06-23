@@ -1212,16 +1212,19 @@ impl StorageBulkLoader {
         }
     }
 
+    #[must_use]
     pub fn set_num_threads(mut self, num_threads: usize) -> Self {
         self.num_threads = Some(num_threads);
         self
     }
 
+    #[must_use]
     pub fn set_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
         self.max_memory_size = Some(max_memory_size);
         self
     }
 
+    #[must_use]
     pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
         self.hooks.push(Box::new(callback));
         self

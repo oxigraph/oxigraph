@@ -14,6 +14,7 @@ pub struct Integer {
 
 impl Integer {
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 8]) -> Self {
         Self {
             value: i64::from_be_bytes(bytes),
@@ -21,12 +22,14 @@ impl Integer {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 8] {
         self.value.to_be_bytes()
     }
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add)
     #[inline]
+    #[must_use]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_add(rhs.into().value)?,
@@ -35,6 +38,7 @@ impl Integer {
 
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract)
     #[inline]
+    #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_sub(rhs.into().value)?,
@@ -43,6 +47,7 @@ impl Integer {
 
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply)
     #[inline]
+    #[must_use]
     pub fn checked_mul(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_mul(rhs.into().value)?,
@@ -51,6 +56,7 @@ impl Integer {
 
     /// [op:numeric-integer-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-integer-divide)
     #[inline]
+    #[must_use]
     pub fn checked_div(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_div(rhs.into().value)?,
@@ -59,6 +65,7 @@ impl Integer {
 
     /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
     #[inline]
+    #[must_use]
     pub fn checked_rem(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem(rhs.into().value)?,
@@ -66,6 +73,7 @@ impl Integer {
     }
 
     #[inline]
+    #[must_use]
     pub fn checked_rem_euclid(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem_euclid(rhs.into().value)?,
@@ -74,6 +82,7 @@ impl Integer {
 
     /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus)
     #[inline]
+    #[must_use]
     pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
             value: self.value.checked_neg()?,
@@ -82,6 +91,7 @@ impl Integer {
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
     #[inline]
+    #[must_use]
     pub const fn abs(self) -> Self {
         Self {
             value: self.value.abs(),
@@ -89,17 +99,20 @@ impl Integer {
     }
 
     #[inline]
+    #[must_use]
     pub const fn is_negative(self) -> bool {
         self.value < 0
     }
 
     #[inline]
+    #[must_use]
     pub const fn is_positive(self) -> bool {
         self.value > 0
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }

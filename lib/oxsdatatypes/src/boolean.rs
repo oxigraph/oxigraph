@@ -14,6 +14,7 @@ pub struct Boolean {
 impl Boolean {
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }

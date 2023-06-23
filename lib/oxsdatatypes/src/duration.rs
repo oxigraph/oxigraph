@@ -17,6 +17,7 @@ pub struct Duration {
 
 impl Duration {
     #[inline]
+    #[must_use]
     pub fn new(months: impl Into<i64>, seconds: impl Into<Decimal>) -> Self {
         Self {
             year_month: YearMonthDuration::new(months),
@@ -25,6 +26,7 @@ impl Duration {
     }
 
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 24]) -> Self {
         Self {
             year_month: YearMonthDuration::from_be_bytes(bytes[0..8].try_into().unwrap()),
@@ -34,51 +36,60 @@ impl Duration {
 
     /// [fn:years-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-years-from-duration)
     #[inline]
+    #[must_use]
     pub fn years(self) -> i64 {
         self.year_month.years()
     }
 
     /// [fn:months-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-months-from-duration)
     #[inline]
+    #[must_use]
     pub fn months(self) -> i64 {
         self.year_month.months()
     }
 
     /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-days-from-duration)
     #[inline]
+    #[must_use]
     pub fn days(self) -> i64 {
         self.day_time.days()
     }
 
     /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-duration)
     #[inline]
+    #[must_use]
     pub fn hours(self) -> i64 {
         self.day_time.hours()
     }
 
     /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-duration)
     #[inline]
+    #[must_use]
     pub fn minutes(self) -> i64 {
         self.day_time.minutes()
     }
 
     /// [fn:seconds-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-seconds-from-duration)
     #[inline]
+    #[must_use]
     pub fn seconds(self) -> Decimal {
         self.day_time.seconds()
     }
 
     #[inline]
+    #[must_use]
     pub(super) const fn all_months(self) -> i64 {
         self.year_month.all_months()
     }
 
     #[inline]
+    #[must_use]
     pub(super) const fn all_seconds(self) -> Decimal {
         self.day_time.all_seconds()
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 24] {
         let mut bytes = [0; 24];
         bytes[0..8].copy_from_slice(&self.year_month.to_be_bytes());
@@ -88,6 +99,7 @@ impl Duration {
 
     /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDurations) and [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDurations)
     #[inline]
+    #[must_use]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -98,6 +110,7 @@ impl Duration {
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDurations) and [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
     #[inline]
+    #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
@@ -107,6 +120,7 @@ impl Duration {
     }
 
     #[inline]
+    #[must_use]
     pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
             year_month: self.year_month.checked_neg()?,
@@ -116,6 +130,7 @@ impl Duration {
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
+    #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
