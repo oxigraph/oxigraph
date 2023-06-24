@@ -12,20 +12,19 @@ use std::io::{self, Read, Write};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{NTriplesParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::NTriplesParser;
 ///
 /// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for triple in NTriplesParser::new().parse_from_read(file.as_ref()) {
 ///     let triple = triple?;
-///     if triple.predicate == rdf_type && triple.object == schema_person.into() {
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
 ///     }
 /// }
@@ -58,20 +57,19 @@ impl NTriplesParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
-    /// use oxttl::{NTriplesParser, ParseError};
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::NTriplesParser;
     ///
     /// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
     ///
-    /// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for triple in NTriplesParser::new().parse_from_read(file.as_ref()) {
     ///     let triple = triple?;
-    ///     if triple.predicate == rdf_type && triple.object == schema_person.into() {
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
     ///     }
     /// }
@@ -88,8 +86,8 @@ impl NTriplesParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
-    /// use oxttl::{NTriplesParser, ParseError};
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::NTriplesParser;
     ///
     /// let file: [&[u8]; 4] = [
     ///     b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
@@ -98,7 +96,6 @@ impl NTriplesParser {
     ///     b"<http://example.com/bar> <http://schema.org/name> \"Bar\" .\n"
     /// ];
     ///
-    /// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = NTriplesParser::new().parse();
@@ -113,7 +110,7 @@ impl NTriplesParser {
     ///     // We read as many triples from the parser as possible
     ///     while let Some(triple) = parser.read_next() {
     ///         let triple = triple?;
-    ///         if triple.predicate == rdf_type && triple.object == schema_person.into() {
+    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///             count += 1;
     ///         }
     ///     }
@@ -137,20 +134,19 @@ impl NTriplesParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{NTriplesParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::NTriplesParser;
 ///
 /// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for triple in NTriplesParser::new().parse_from_read(file.as_ref()) {
 ///     let triple = triple?;
-///     if triple.predicate == rdf_type && triple.object == schema_person.into() {
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
 ///     }
 /// }
@@ -173,8 +169,8 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{NTriplesParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::NTriplesParser;
 ///
 /// let file: [&[u8]; 4] = [
 ///     b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
@@ -183,7 +179,6 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 ///     b"<http://example.com/bar> <http://schema.org/name> \"Bar\" .\n"
 /// ];
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = NTriplesParser::new().parse();
@@ -198,7 +193,7 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 ///     // We read as many triples from the parser as possible
 ///     while let Some(triple) = parser.read_next() {
 ///         let triple = triple?;
-///         if triple.predicate == rdf_type && triple.object == schema_person.into() {
+///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///             count += 1;
 ///         }
 ///     }
@@ -245,8 +240,7 @@ impl LowLevelNTriplesReader {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::NTriplesSerializer;
 ///
-/// let mut buf = Vec::new();
-/// let mut writer = NTriplesSerializer::new().serialize_to_write(buf);
+/// let mut writer = NTriplesSerializer::new().serialize_to_write(Vec::new());
 /// writer.write_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -274,8 +268,7 @@ impl NTriplesSerializer {
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::NTriplesSerializer;
     ///
-    /// let mut buf = Vec::new();
-    /// let mut writer = NTriplesSerializer::new().serialize_to_write(buf);
+    /// let mut writer = NTriplesSerializer::new().serialize_to_write(Vec::new());
     /// writer.write_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -325,8 +318,7 @@ impl NTriplesSerializer {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::NTriplesSerializer;
 ///
-/// let mut buf = Vec::new();
-/// let mut writer = NTriplesSerializer::new().serialize_to_write(buf);
+/// let mut writer = NTriplesSerializer::new().serialize_to_write(Vec::new());
 /// writer.write_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,

@@ -177,8 +177,7 @@ impl From<Quad> for N3Quad {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNode;
-/// use oxttl::ParseError;
+/// use oxrdf::{NamedNode, vocab::rdf};
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = b"@base <http://example.com/> .
@@ -188,7 +187,7 @@ impl From<Quad> for N3Quad {
 /// <bar> a schema:Person ;
 ///     schema:name \"Bar\" .";
 ///
-/// let rdf_type = N3Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
+/// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
 /// let mut count = 0;
 /// for triple in N3Parser::new().parse_from_read(file.as_ref()) {
@@ -235,7 +234,6 @@ impl N3Parser {
     /// Count the number of people:
     /// ```
     /// use oxrdf::NamedNode;
-    /// use oxttl::ParseError;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
     /// let file = b"@base <http://example.com/> .
@@ -267,8 +265,7 @@ impl N3Parser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNode;
-    /// use oxttl::ParseError;
+    /// use oxrdf::{NamedNode, vocab::rdf};
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
     /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
@@ -278,7 +275,7 @@ impl N3Parser {
     ///     b" a schema:Person ; schema:name \"Bar\" ."
     /// ];
     ///
-    /// let rdf_type = N3Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
+    /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
     /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
     /// let mut count = 0;
     /// let mut parser = N3Parser::new().parse();
@@ -312,8 +309,7 @@ impl N3Parser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNode;
-/// use oxttl::ParseError;
+/// use oxrdf::{NamedNode, vocab::rdf};
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = b"@base <http://example.com/> .
@@ -323,7 +319,7 @@ impl N3Parser {
 /// <bar> a schema:Person ;
 ///     schema:name \"Bar\" .";
 ///
-/// let rdf_type = N3Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
+/// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
 /// let mut count = 0;
 /// for triple in N3Parser::new().parse_from_read(file.as_ref()) {
@@ -351,8 +347,7 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNode;
-/// use oxttl::ParseError;
+/// use oxrdf::{NamedNode, vocab::rdf};
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
@@ -362,7 +357,7 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 ///     b" a schema:Person ; schema:name \"Bar\" ."
 /// ];
 ///
-/// let rdf_type = N3Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
+/// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
 /// let mut count = 0;
 /// let mut parser = N3Parser::new().parse();
