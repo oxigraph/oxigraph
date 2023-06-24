@@ -1,0 +1,23 @@
+[package]
+name = "oxrdfxml"
+version = "0.1.0-alpha.1-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["RDF/XML", "RDF"]
+repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
+homepage = "https://oxigraph.org/"
+description = """
+Parser for the RDF/XML language
+"""
+edition = "2021"
+rust-version = "1.65"
+
+[dependencies]
+oxrdf = { version = "0.2.0-alpha.1-dev", path = "../oxrdf" }
+oxilangtag = "0.1"
+oxiri = "0.2"
+quick-xml = "0.29"
+
+[package.metadata.docs.rs]
+all-features = true

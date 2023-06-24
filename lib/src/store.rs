@@ -616,7 +616,7 @@ impl Store {
         format: GraphFormat,
         from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), SerializerError> {
-        let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
+        let mut writer = GraphSerializer::from_format(format).triple_writer(writer);
         for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
             writer.write(quad?.as_ref())?;
         }

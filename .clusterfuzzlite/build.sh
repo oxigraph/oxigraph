@@ -15,7 +15,7 @@ function build_seed_corpus() {
 
 cd "$SRC"/oxigraph
 cargo fuzz build -O --debug-assertions
-for TARGET in sparql_eval sparql_results_json sparql_results_tsv n3 nquads trig # sparql_results_xml https://github.com/tafia/quick-xml/issues/608
+for TARGET in sparql_eval sparql_results_json sparql_results_tsv sparql_results_xml n3 nquads trig rdf_xml
 do
   cp fuzz/target/x86_64-unknown-linux-gnu/release/$TARGET "$OUT"/
 done
@@ -25,4 +25,4 @@ build_seed_corpus sparql_results_xml srx
 build_seed_corpus n3 n3
 build_seed_corpus nquads nq
 build_seed_corpus trig trig
-
+build_seed_corpus rdf_xml rdf

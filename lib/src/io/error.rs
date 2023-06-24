@@ -1,5 +1,5 @@
 use oxiri::IriParseError;
-use rio_xml::RdfXmlError;
+use oxrdfxml::RdfXmlError;
 use std::error::Error;
 use std::{fmt, io};
 

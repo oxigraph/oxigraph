@@ -125,9 +125,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
         PyWritable::from_data(output)
     };
     if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-        let mut writer = GraphSerializer::from_format(graph_format)
-            .triple_writer(output)
-            .map_err(map_io_err)?;
+        let mut writer = GraphSerializer::from_format(graph_format).triple_writer(output);
         for i in input.iter()? {
             writer
                 .write(&*i?.extract::<PyRef<PyTriple>>()?)

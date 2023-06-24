@@ -4,8 +4,11 @@
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
-pub use crate::optimizer::Optimizer;
+mod error;
+mod parser;
+mod serializer;
+mod utils;
 
-pub mod algebra;
-mod optimizer;
-mod type_inference;
+pub use crate::serializer::{RdfXmlSerializer, ToWriteRdfXmlWriter};
+pub use error::RdfXmlError;
+pub use parser::{FromReadRdfXmlReader, RdfXmlParser};

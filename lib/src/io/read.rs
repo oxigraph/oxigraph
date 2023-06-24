@@ -3,14 +3,12 @@
 pub use crate::io::error::{ParseError, SyntaxError};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use oxiri::{Iri, IriParseError};
+use oxiri::IriParseError;
+use oxrdfxml::{FromReadRdfXmlReader, RdfXmlParser};
 use oxttl::nquads::{FromReadNQuadsReader, NQuadsParser};
 use oxttl::ntriples::{FromReadNTriplesReader, NTriplesParser};
 use oxttl::trig::{FromReadTriGReader, TriGParser};
 use oxttl::turtle::{FromReadTurtleReader, TurtleParser};
-use rio_api::model as rio;
-use rio_api::parser::TriplesParser;
-use rio_xml::RdfXmlParser;
 use std::collections::HashMap;
 use std::io::BufRead;
 
@@ -40,7 +38,7 @@ pub struct GraphParser {
 enum GraphParserKind {
     NTriples(NTriplesParser),
     Turtle(TurtleParser),
-    RdfXml { base_iri: Option<Iri<String>> },
+    RdfXml(RdfXmlParser),
 }
 
 impl GraphParser {
@@ -55,7 +53,7 @@ impl GraphParser {
                 GraphFormat::Turtle => {
                     GraphParserKind::Turtle(TurtleParser::new().with_quoted_triples())
                 }
-                GraphFormat::RdfXml => GraphParserKind::RdfXml { base_iri: None },
+                GraphFormat::RdfXml => GraphParserKind::RdfXml(RdfXmlParser::new()),
             },
         }
     }
@@ -80,9 +78,7 @@ impl GraphParser {
             inner: match self.inner {
                 GraphParserKind::NTriples(p) => GraphParserKind::NTriples(p),
                 GraphParserKind::Turtle(p) => GraphParserKind::Turtle(p.with_base_iri(base_iri)?),
-                GraphParserKind::RdfXml { .. } => GraphParserKind::RdfXml {
-                    base_iri: Some(Iri::parse(base_iri.into())?),
-                },
+                GraphParserKind::RdfXml(p) => GraphParserKind::RdfXml(p.with_base_iri(base_iri)?),
             },
         })
     }
@@ -96,11 +92,8 @@ impl GraphParser {
                     TripleReaderKind::NTriples(p.parse_from_read(reader))
                 }
                 GraphParserKind::Turtle(p) => TripleReaderKind::Turtle(p.parse_from_read(reader)),
-                GraphParserKind::RdfXml { base_iri } => {
-                    TripleReaderKind::RdfXml(RdfXmlParser::new(reader, base_iri.clone()))
-                }
+                GraphParserKind::RdfXml(p) => TripleReaderKind::RdfXml(p.parse_from_read(reader)),
             },
-            buffer: Vec::new(),
         }
     }
 }
@@ -124,48 +117,33 @@ impl GraphParser {
 pub struct TripleReader<R: BufRead> {
     mapper: BlankNodeMapper,
     parser: TripleReaderKind<R>,
-    buffer: Vec<Triple>,
 }
 
 #[allow(clippy::large_enum_variant)]
 enum TripleReaderKind<R: BufRead> {
     NTriples(FromReadNTriplesReader<R>),
     Turtle(FromReadTurtleReader<R>),
-    RdfXml(RdfXmlParser<R>),
+    RdfXml(FromReadRdfXmlReader<R>),
 }
 
 impl<R: BufRead> Iterator for TripleReader<R> {
     type Item = Result<Triple, ParseError>;
 
     fn next(&mut self) -> Option<Result<Triple, ParseError>> {
-        loop {
-            if let Some(r) = self.buffer.pop() {
-                return Some(Ok(r));
-            }
-
-            return Some(match &mut self.parser {
-                TripleReaderKind::NTriples(parser) => match parser.next()? {
-                    Ok(triple) => Ok(self.mapper.triple(triple)),
-                    Err(e) => Err(e.into()),
-                },
-                TripleReaderKind::Turtle(parser) => match parser.next()? {
-                    Ok(triple) => Ok(self.mapper.triple(triple)),
-                    Err(e) => Err(e.into()),
-                },
-                TripleReaderKind::RdfXml(parser) => {
-                    if parser.is_end() {
-                        return None;
-                    } else if let Err(e) = parser.parse_step(&mut |t| {
-                        self.buffer.push(self.mapper.triple(RioMapper::triple(&t)));
-                        Ok(())
-                    }) {
-                        Err(e)
-                    } else {
-                        continue;
-                    }
-                }
-            });
-        }
+        Some(match &mut self.parser {
+            TripleReaderKind::NTriples(parser) => match parser.next()? {
+                Ok(triple) => Ok(self.mapper.triple(triple)),
+                Err(e) => Err(e.into()),
+            },
+            TripleReaderKind::Turtle(parser) => match parser.next()? {
+                Ok(triple) => Ok(self.mapper.triple(triple)),
+                Err(e) => Err(e.into()),
+            },
+            TripleReaderKind::RdfXml(parser) => match parser.next()? {
+                Ok(triple) => Ok(self.mapper.triple(triple)),
+                Err(e) => Err(e.into()),
+            },
+        })
     }
 }
 
@@ -288,55 +266,6 @@ impl<R: BufRead> Iterator for QuadReader<R> {
                 Err(e) => Err(e.into()),
             },
         })
-    }
-}
-
-struct RioMapper;
-
-impl<'a> RioMapper {
-    fn named_node(node: rio::NamedNode<'a>) -> NamedNode {
-        NamedNode::new_unchecked(node.iri)
-    }
-
-    fn blank_node(node: rio::BlankNode<'a>) -> BlankNode {
-        BlankNode::new_unchecked(node.id)
-    }
-
-    fn literal(literal: rio::Literal<'a>) -> Literal {
-        match literal {
-            rio::Literal::Simple { value } => Literal::new_simple_literal(value),
-            rio::Literal::LanguageTaggedString { value, language } => {
-                Literal::new_language_tagged_literal_unchecked(value, language)
-            }
-            rio::Literal::Typed { value, datatype } => {
-                Literal::new_typed_literal(value, Self::named_node(datatype))
-            }
-        }
-    }
-
-    fn subject(node: rio::Subject<'a>) -> Subject {
-        match node {
-            rio::Subject::NamedNode(node) => Self::named_node(node).into(),
-            rio::Subject::BlankNode(node) => Self::blank_node(node).into(),
-            rio::Subject::Triple(triple) => Self::triple(triple).into(),
-        }
-    }
-
-    fn term(node: rio::Term<'a>) -> Term {
-        match node {
-            rio::Term::NamedNode(node) => Self::named_node(node).into(),
-            rio::Term::BlankNode(node) => Self::blank_node(node).into(),
-            rio::Term::Literal(literal) => Self::literal(literal).into(),
-            rio::Term::Triple(triple) => Self::triple(triple).into(),
-        }
-    }
-
-    fn triple(triple: &rio::Triple<'a>) -> Triple {
-        Triple {
-            subject: Self::subject(triple.subject),
-            predicate: Self::named_node(triple.predicate),
-            object: Self::term(triple.object),
-        }
     }
 }
 

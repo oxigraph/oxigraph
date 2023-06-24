@@ -946,13 +946,12 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
+ "oxrdfxml",
  "oxrocksdb-sys",
  "oxsdatatypes",
  "oxttl",
  "rand",
  "regex",
- "rio_api",
- "rio_xml",
  "sha-1",
  "sha2",
  "siphasher",
@@ -1029,6 +1028,16 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
+]
+
+[[package]]
+name = "oxrdfxml"
+version = "0.1.0-alpha.1-dev"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "quick-xml",
 ]
 
 [[package]]
@@ -1279,9 +1288,9 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.28.2"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ce5e73202a820a31f8a0ee32ada5e21029c81fd9e3ebf668a40832e4219d9d1"
+checksum = "81b9228215d82c7b61490fec1de287136b5de6f5700f6e58ea9ad61a7964ca51"
 dependencies = [
  "memchr",
 ]
@@ -1408,18 +1417,6 @@ checksum = "5cec59971eafd99b9c7e3544bfcabafea81a7072ac51c9f46985ca0bd7ba6016"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "rio_api",
-]
-
-[[package]]
-name = "rio_xml"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2edda57b877119dc326c612ba822e3ca1ee22bfc86781a4e9dc0884756b58c3"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "quick-xml",
  "rio_api",
 ]
 
