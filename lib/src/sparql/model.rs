@@ -115,7 +115,7 @@ impl QueryResults {
         format: GraphFormat,
     ) -> Result<(), EvaluationError> {
         if let Self::Graph(triples) = self {
-            let mut writer = GraphSerializer::from_format(format).triple_writer(write)?;
+            let mut writer = GraphSerializer::from_format(format).triple_writer(write);
             for triple in triples {
                 writer.write(&triple?)?;
             }

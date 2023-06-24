@@ -512,9 +512,11 @@ pub fn main() -> anyhow::Result<()> {
                             }
                             writer.finish()?;
                         } else {
-                            let stdout = stdout(); // Not needed in Rust 1.61
                             let mut writer = QueryResultsSerializer::from_format(format)
-                                .solutions_writer(stdout.lock(), solutions.variables().to_vec())?;
+                                .solutions_writer(
+                                    stdout().lock(),
+                                    solutions.variables().to_vec(),
+                                )?;
                             for solution in solutions {
                                 writer.write(&solution?)?;
                             }
@@ -570,15 +572,14 @@ pub fn main() -> anyhow::Result<()> {
                         };
                         if let Some(results_file) = results_file {
                             let mut writer = GraphSerializer::from_format(format)
-                                .triple_writer(BufWriter::new(File::create(results_file)?))?;
+                                .triple_writer(BufWriter::new(File::create(results_file)?));
                             for triple in triples {
                                 writer.write(triple?.as_ref())?;
                             }
                             writer.finish()?;
                         } else {
-                            let stdout = stdout(); // Not needed in Rust 1.61
-                            let mut writer = GraphSerializer::from_format(format)
-                                .triple_writer(stdout.lock())?;
+                            let mut writer =
+                                GraphSerializer::from_format(format).triple_writer(stdout().lock());
                             for triple in triples {
                                 writer.write(triple?.as_ref())?;
                             }
@@ -926,7 +927,7 @@ fn handle_request(
                 ReadForWrite::build_response(
                     move |w| {
                         Ok((
-                            GraphSerializer::from_format(format).triple_writer(w)?,
+                            GraphSerializer::from_format(format).triple_writer(w),
                             triples,
                         ))
                     },
@@ -1232,7 +1233,7 @@ fn evaluate_sparql_query(
             ReadForWrite::build_response(
                 move |w| {
                     Ok((
-                        GraphSerializer::from_format(format).triple_writer(w)?,
+                        GraphSerializer::from_format(format).triple_writer(w),
                         triples,
                     ))
                 },

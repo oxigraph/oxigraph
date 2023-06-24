@@ -13,6 +13,7 @@ anyhow = "1"
 lazy_static = "1"
 libfuzzer-sys = "0.4"
 oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
+oxrdfxml = { path = "../lib/oxrdfxml" }
 spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
 sparesults = { path = "../lib/sparesults", features = ["rdf-star"] }
 sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
@@ -31,6 +32,10 @@ path = "fuzz_targets/nquads.rs"
 [[bin]]
 name = "n3"
 path = "fuzz_targets/n3.rs"
+
+[[bin]]
+name = "rdf_xml"
+path = "fuzz_targets/rdf_xml.rs"
 
 [[bin]]
 name = "sparql_eval"

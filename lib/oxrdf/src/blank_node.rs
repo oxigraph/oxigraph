@@ -111,7 +111,14 @@ impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id.
     #[inline]
     fn default() -> Self {
-        Self::new_from_unique_id(random::<u128>())
+        // We ensure the ID does not start with a number to be also valid with RDF/XML
+        loop {
+            let id = random();
+            let str = IdStr::new(id);
+            if matches!(str.as_str().as_bytes().first(), Some(b'a'..=b'f')) {
+                return Self(BlankNodeContent::Anonymous { id, str });
+            }
+        }
     }
 }
 

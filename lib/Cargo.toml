@@ -31,13 +31,12 @@ digest = "0.10"
 regex = "1"
 oxilangtag = "0.1"
 oxiri = "0.2"
-rio_api = "0.8"
-rio_xml = "0.8"
 hex = "0.4"
 siphasher = "0.3"
 lazy_static = "1"
 json-event-parser = "0.1"
 oxrdf = { version = "0.2.0-alpha.1-dev", path = "oxrdf", features = ["rdf-star", "oxsdatatypes"] }
+oxrdfxml = { version = "0.1.0-alpha.1-dev", path = "oxrdfxml" }
 oxsdatatypes = { version = "0.2.0-alpha.1-dev", path="oxsdatatypes" }
 oxttl = { version = "0.1.0-alpha.1-dev" , path = "oxttl", features = ["rdf-star"] }
 spargebra = { version = "0.3.0-alpha.1-dev", path = "spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }

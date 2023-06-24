@@ -2,13 +2,11 @@
 
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
+use oxrdfxml::{RdfXmlSerializer, ToWriteRdfXmlWriter};
 use oxttl::nquads::{NQuadsSerializer, ToWriteNQuadsWriter};
 use oxttl::ntriples::{NTriplesSerializer, ToWriteNTriplesWriter};
 use oxttl::trig::{ToWriteTriGWriter, TriGSerializer};
 use oxttl::turtle::{ToWriteTurtleWriter, TurtleSerializer};
-use rio_api::formatter::TriplesFormatter;
-use rio_api::model as rio;
-use rio_xml::RdfXmlFormatter;
 use std::io::{self, Write};
 
 /// A serializer for RDF graph serialization formats.
@@ -23,7 +21,7 @@ use std::io::{self, Write};
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer)?;
+/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
 /// writer.write(&Triple {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
@@ -46,8 +44,8 @@ impl GraphSerializer {
     }
 
     /// Returns a [`TripleWriter`] allowing writing triples into the given [`Write`] implementation
-    pub fn triple_writer<W: Write>(&self, writer: W) -> io::Result<TripleWriter<W>> {
-        Ok(TripleWriter {
+    pub fn triple_writer<W: Write>(&self, writer: W) -> TripleWriter<W> {
+        TripleWriter {
             formatter: match self.format {
                 GraphFormat::NTriples => {
                     TripleWriterKind::NTriples(NTriplesSerializer::new().serialize_to_write(writer))
@@ -55,9 +53,11 @@ impl GraphSerializer {
                 GraphFormat::Turtle => {
                     TripleWriterKind::Turtle(TurtleSerializer::new().serialize_to_write(writer))
                 }
-                GraphFormat::RdfXml => TripleWriterKind::RdfXml(RdfXmlFormatter::new(writer)?),
+                GraphFormat::RdfXml => {
+                    TripleWriterKind::RdfXml(RdfXmlSerializer::new().serialize_to_write(writer))
+                }
             },
-        })
+        }
     }
 }
 
@@ -71,7 +71,7 @@ impl GraphSerializer {
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer)?;
+/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
 /// writer.write(&Triple {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
@@ -90,7 +90,7 @@ pub struct TripleWriter<W: Write> {
 enum TripleWriterKind<W: Write> {
     NTriples(ToWriteNTriplesWriter<W>),
     Turtle(ToWriteTurtleWriter<W>),
-    RdfXml(RdfXmlFormatter<W>),
+    RdfXml(ToWriteRdfXmlWriter<W>),
 }
 
 impl<W: Write> TripleWriter<W> {
@@ -99,54 +99,7 @@ impl<W: Write> TripleWriter<W> {
         match &mut self.formatter {
             TripleWriterKind::NTriples(writer) => writer.write_triple(triple),
             TripleWriterKind::Turtle(writer) => writer.write_triple(triple),
-            TripleWriterKind::RdfXml(formatter) => {
-                let triple = triple.into();
-                formatter.format(&rio::Triple {
-                    subject: match triple.subject {
-                        SubjectRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
-                        SubjectRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
-                        SubjectRef::Triple(_) => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "RDF/XML does not support RDF-star yet",
-                            ))
-                        }
-                    },
-                    predicate: rio::NamedNode {
-                        iri: triple.predicate.as_str(),
-                    },
-                    object: match triple.object {
-                        TermRef::NamedNode(node) => rio::NamedNode { iri: node.as_str() }.into(),
-                        TermRef::BlankNode(node) => rio::BlankNode { id: node.as_str() }.into(),
-                        TermRef::Literal(literal) => if literal.is_plain() {
-                            if let Some(language) = literal.language() {
-                                rio::Literal::LanguageTaggedString {
-                                    value: literal.value(),
-                                    language,
-                                }
-                            } else {
-                                rio::Literal::Simple {
-                                    value: literal.value(),
-                                }
-                            }
-                        } else {
-                            rio::Literal::Typed {
-                                value: literal.value(),
-                                datatype: rio::NamedNode {
-                                    iri: literal.datatype().as_str(),
-                                },
-                            }
-                        }
-                        .into(),
-                        TermRef::Triple(_) => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "RDF/XML does not support RDF-star yet",
-                            ))
-                        }
-                    },
-                })
-            }
+            TripleWriterKind::RdfXml(writer) => writer.write_triple(triple),
         }
     }
 
@@ -155,7 +108,7 @@ impl<W: Write> TripleWriter<W> {
         match self.formatter {
             TripleWriterKind::NTriples(writer) => writer.finish().flush(),
             TripleWriterKind::Turtle(writer) => writer.finish()?.flush(),
-            TripleWriterKind::RdfXml(formatter) => formatter.finish()?.flush(), //TODO: remove flush when the next version of Rio is going to be released
+            TripleWriterKind::RdfXml(formatter) => formatter.finish()?.flush(),
         }
     }
 }
