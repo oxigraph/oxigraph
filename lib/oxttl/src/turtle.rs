@@ -15,8 +15,8 @@ use std::io::{self, Read, Write};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{TurtleParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::TurtleParser;
 ///
 /// let file = b"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
@@ -25,12 +25,11 @@ use std::io::{self, Read, Write};
 /// <bar> a schema:Person ;
 ///     schema:name \"Bar\" .";
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for triple in TurtleParser::new().parse_from_read(file.as_ref()) {
 ///     let triple = triple?;
-///     if triple.predicate == rdf_type && triple.object == schema_person.into() {
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
 ///     }
 /// }
@@ -82,8 +81,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
-    /// use oxttl::{TurtleParser, ParseError};
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::TurtleParser;
     ///
     /// let file = b"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
@@ -92,12 +91,11 @@ impl TurtleParser {
     /// <bar> a schema:Person ;
     ///     schema:name \"Bar\" .";
     ///
-    /// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for triple in TurtleParser::new().parse_from_read(file.as_ref()) {
     ///     let triple = triple?;
-    ///     if triple.predicate == rdf_type && triple.object == schema_person.into() {
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
     ///     }
     /// }
@@ -114,8 +112,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
-    /// use oxttl::{TurtleParser, ParseError};
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::TurtleParser;
     ///
     /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
     ///     b". @prefix schema: <http://schema.org/> .",
@@ -124,7 +122,6 @@ impl TurtleParser {
     ///     b" a schema:Person ; schema:name \"Bar\" ."
     /// ];
     ///
-    /// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = TurtleParser::new().parse();
@@ -139,7 +136,7 @@ impl TurtleParser {
     ///     // We read as many triples from the parser as possible
     ///     while let Some(triple) = parser.read_next() {
     ///         let triple = triple?;
-    ///         if triple.predicate == rdf_type && triple.object == schema_person.into() {
+    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///             count += 1;
     ///         }
     ///     }
@@ -164,8 +161,8 @@ impl TurtleParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{TurtleParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::TurtleParser;
 ///
 /// let file = b"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
@@ -174,12 +171,11 @@ impl TurtleParser {
 /// <bar> a schema:Person ;
 ///     schema:name \"Bar\" .";
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for triple in TurtleParser::new().parse_from_read(file.as_ref()) {
 ///     let triple = triple?;
-///     if triple.predicate == rdf_type && triple.object == schema_person.into() {
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
 ///     }
 /// }
@@ -202,8 +198,8 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{TurtleParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::TurtleParser;
 ///
 /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
 ///     b". @prefix schema: <http://schema.org/> .",
@@ -212,7 +208,6 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 ///     b" a schema:Person ; schema:name \"Bar\" ."
 /// ];
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = TurtleParser::new().parse();
@@ -227,7 +222,7 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 ///     // We read as many triples from the parser as possible
 ///     while let Some(triple) = parser.read_next() {
 ///         let triple = triple?;
-///         if triple.predicate == rdf_type && triple.object == schema_person.into() {
+///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///             count += 1;
 ///         }
 ///     }
@@ -274,8 +269,7 @@ impl LowLevelTurtleReader {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
-/// let mut buf = Vec::new();
-/// let mut writer = TurtleSerializer::new().serialize_to_write(buf);
+/// let mut writer = TurtleSerializer::new().serialize_to_write(Vec::new());
 /// writer.write_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -305,8 +299,7 @@ impl TurtleSerializer {
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
     ///
-    /// let mut buf = Vec::new();
-    /// let mut writer = TurtleSerializer::new().serialize_to_write(buf);
+    /// let mut writer = TurtleSerializer::new().serialize_to_write(Vec::new());
     /// writer.write_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -357,8 +350,7 @@ impl TurtleSerializer {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
-/// let mut buf = Vec::new();
-/// let mut writer = TurtleSerializer::new().serialize_to_write(buf);
+/// let mut writer = TurtleSerializer::new().serialize_to_write(Vec::new());
 /// writer.write_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,

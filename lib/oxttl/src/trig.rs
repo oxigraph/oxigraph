@@ -14,8 +14,8 @@ use std::io::{self, Read, Write};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{TriGParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::TriGParser;
 ///
 /// let file = b"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
@@ -24,12 +24,11 @@ use std::io::{self, Read, Write};
 /// <bar> a schema:Person ;
 ///     schema:name \"Bar\" .";
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in TriGParser::new().parse_from_read(file.as_ref()) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf_type && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
 ///     }
 /// }
@@ -81,8 +80,8 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
-    /// use oxttl::{TriGParser, ParseError};
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::TriGParser;
     ///
     /// let file = b"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
@@ -91,12 +90,11 @@ impl TriGParser {
     /// <bar> a schema:Person ;
     ///     schema:name \"Bar\" .";
     ///
-    /// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in TriGParser::new().parse_from_read(file.as_ref()) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf_type && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
     ///         count += 1;
     ///     }
     /// }
@@ -113,8 +111,8 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::NamedNodeRef;
-    /// use oxttl::{TriGParser, ParseError};
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::TriGParser;
     ///
     /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
     ///     b". @prefix schema: <http://schema.org/> .",
@@ -123,7 +121,6 @@ impl TriGParser {
     ///     b" a schema:Person ; schema:name \"Bar\" ."
     /// ];
     ///
-    /// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = TriGParser::new().parse();
@@ -138,7 +135,7 @@ impl TriGParser {
     ///     // We read as many quads from the parser as possible
     ///     while let Some(quad) = parser.read_next() {
     ///         let quad = quad?;
-    ///         if quad.predicate == rdf_type && quad.object == schema_person.into() {
+    ///         if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
     ///             count += 1;
     ///         }
     ///     }
@@ -163,8 +160,8 @@ impl TriGParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{TriGParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::TriGParser;
 ///
 /// let file = b"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
@@ -173,12 +170,11 @@ impl TriGParser {
 /// <bar> a schema:Person ;
 ///     schema:name \"Bar\" .";
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// for quad in TriGParser::new().parse_from_read(file.as_ref()) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf_type && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
 ///     }
 /// }
@@ -201,8 +197,8 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::NamedNodeRef;
-/// use oxttl::{TriGParser, ParseError};
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::TriGParser;
 ///
 /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
 ///     b". @prefix schema: <http://schema.org/> .",
@@ -211,7 +207,6 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 ///     b" a schema:Person ; schema:name \"Bar\" ."
 /// ];
 ///
-/// let rdf_type = NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = TriGParser::new().parse();
@@ -226,7 +221,7 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 ///     // We read as many quads from the parser as possible
 ///     while let Some(quad) = parser.read_next() {
 ///         let quad = quad?;
-///         if quad.predicate == rdf_type && quad.object == schema_person.into() {
+///         if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///             count += 1;
 ///         }
 ///     }
@@ -273,8 +268,7 @@ impl LowLevelTriGReader {
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::TriGSerializer;
 ///
-/// let mut buf = Vec::new();
-/// let mut writer = TriGSerializer::new().serialize_to_write(buf);
+/// let mut writer = TriGSerializer::new().serialize_to_write(Vec::new());
 /// writer.write_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -303,8 +297,7 @@ impl TriGSerializer {
     /// use oxrdf::{NamedNodeRef, QuadRef};
     /// use oxttl::TriGSerializer;
     ///
-    /// let mut buf = Vec::new();
-    /// let mut writer = TriGSerializer::new().serialize_to_write(buf);
+    /// let mut writer = TriGSerializer::new().serialize_to_write(Vec::new());
     /// writer.write_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -360,8 +353,7 @@ impl TriGSerializer {
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::TriGSerializer;
 ///
-/// let mut buf = Vec::new();
-/// let mut writer = TriGSerializer::new().serialize_to_write(buf);
+/// let mut writer = TriGSerializer::new().serialize_to_write(Vec::new());
 /// writer.write_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
