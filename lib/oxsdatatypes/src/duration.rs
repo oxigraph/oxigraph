@@ -85,7 +85,7 @@ impl Duration {
     #[inline]
     #[must_use]
     pub(super) const fn all_seconds(self) -> Decimal {
-        self.day_time.all_seconds()
+        self.day_time.as_seconds()
     }
 
     #[inline]
@@ -443,8 +443,9 @@ impl DayTimeDuration {
         self.seconds.checked_rem(60).unwrap()
     }
 
+    /// The duration in seconds.
     #[inline]
-    pub(super) const fn all_seconds(self) -> Decimal {
+    pub const fn as_seconds(self) -> Decimal {
         self.seconds
     }
 

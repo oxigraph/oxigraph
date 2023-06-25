@@ -191,7 +191,7 @@ impl DateTime {
     pub fn checked_sub_day_time_duration(self, rhs: impl Into<DayTimeDuration>) -> Option<Self> {
         let rhs = rhs.into();
         Some(Self {
-            timestamp: self.timestamp.checked_sub_seconds(rhs.all_seconds())?,
+            timestamp: self.timestamp.checked_sub_seconds(rhs.as_seconds())?,
         })
     }
 
@@ -1757,7 +1757,22 @@ impl Timestamp {
     }
 }
 
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+#[cfg(feature = "custom-now")]
+#[allow(unsafe_code)]
+pub fn since_unix_epoch() -> Result<Duration, DateTimeError> {
+    extern "Rust" {
+        fn custom_ox_now() -> Result<Duration, DateTimeError>;
+    }
+
+    unsafe { custom_ox_now() }
+}
+
+#[cfg(all(
+    feature = "js",
+    not(feature = "custom-now"),
+    target_family = "wasm",
+    target_os = "unknown"
+))]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     Ok(Duration::new(
         0,
@@ -1766,7 +1781,10 @@ fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     ))
 }
 
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+#[cfg(not(any(
+    feature = "custom-now",
+    all(feature = "js", target_family = "wasm", target_os = "unknown")
+)))]
 fn since_unix_epoch() -> Result<Duration, DateTimeError> {
     use std::time::SystemTime;
 
@@ -2605,6 +2623,17 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "custom-now")]
+    #[test]
+    fn custom_now() {
+        #[no_mangle]
+        fn custom_ox_now() -> Result<Duration, DateTimeError> {
+            Ok(Duration::default())
+        }
+        assert!(DateTime::now().is_ok());
+    }
+
+    #[cfg(not(feature = "custom-now"))]
     #[test]
     fn now() -> Result<(), XsdParseError> {
         let now = DateTime::now().unwrap();
