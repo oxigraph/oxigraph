@@ -522,6 +522,34 @@ impl TryFrom<StdDuration> for DayTimeDuration {
     }
 }
 
+impl TryFrom<DayTimeDuration> for StdDuration {
+    type Error = DecimalOverflowError;
+
+    #[inline]
+    fn try_from(value: DayTimeDuration) -> Result<Self, DecimalOverflowError> {
+        if value.seconds.is_negative() {
+            return Err(DecimalOverflowError);
+        }
+        let secs = value.seconds.floor();
+        let nanos = value
+            .seconds
+            .checked_sub(secs)
+            .ok_or(DecimalOverflowError)?
+            .checked_mul(1_000_000_000)
+            .ok_or(DecimalOverflowError)?
+            .floor();
+        Ok(StdDuration::new(
+            secs.as_i128()
+                .try_into()
+                .map_err(|_| DecimalOverflowError)?,
+            nanos
+                .as_i128()
+                .try_into()
+                .map_err(|_| DecimalOverflowError)?,
+        ))
+    }
+}
+
 impl FromStr for DayTimeDuration {
     type Err = XsdParseError;
 
@@ -645,6 +673,14 @@ mod tests {
                 .to_string(),
             "PT10.00000001S"
         );
+    }
+
+    #[test]
+    fn to_std() -> Result<(), XsdParseError> {
+        let duration = StdDuration::try_from(DayTimeDuration::from_str("PT10.00000001S")?).unwrap();
+        assert_eq!(duration.as_secs(), 10);
+        assert_eq!(duration.subsec_nanos(), 10);
+        Ok(())
     }
 
     #[test]
