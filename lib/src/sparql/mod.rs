@@ -23,6 +23,7 @@ pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::StorageReader;
 use json_event_parser::{JsonEvent, JsonWriter};
 pub use oxrdf::{Variable, VariableNameParseError};
+use oxsdatatypes::{DayTimeDuration, Float};
 pub use sparesults::QueryResultsFormat;
 pub use spargebra::ParseError;
 use sparopt::algebra::GraphPattern;
@@ -272,8 +273,8 @@ impl From<QueryOptions> for UpdateOptions {
 pub struct QueryExplanation {
     inner: Rc<EvalNodeWithStats>,
     with_stats: bool,
-    parsing_duration: Option<Duration>,
-    planning_duration: Duration,
+    parsing_duration: Option<DayTimeDuration>,
+    planning_duration: Option<DayTimeDuration>,
 }
 
 impl QueryExplanation {
@@ -284,13 +285,15 @@ impl QueryExplanation {
         if let Some(parsing_duration) = self.parsing_duration {
             writer.write_event(JsonEvent::ObjectKey("parsing duration in seconds"))?;
             writer.write_event(JsonEvent::Number(
-                &parsing_duration.as_secs_f32().to_string(),
+                &parsing_duration.as_seconds().to_string(),
             ))?;
         }
-        writer.write_event(JsonEvent::ObjectKey("planning duration in seconds"))?;
-        writer.write_event(JsonEvent::Number(
-            &self.planning_duration.as_secs_f32().to_string(),
-        ))?;
+        if let Some(planning_duration) = self.planning_duration {
+            writer.write_event(JsonEvent::ObjectKey("planning duration in seconds"))?;
+            writer.write_event(JsonEvent::Number(
+                &planning_duration.as_seconds().to_string(),
+            ))?;
+        }
         writer.write_event(JsonEvent::ObjectKey("plan"))?;
         self.inner.json_node(&mut writer, self.with_stats)?;
         writer.write_event(JsonEvent::EndObject)
@@ -299,6 +302,20 @@ impl QueryExplanation {
 
 impl fmt::Debug for QueryExplanation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.inner)
+        let mut obj = f.debug_struct("QueryExplanation");
+        if let Some(parsing_duration) = self.parsing_duration {
+            obj.field(
+                "parsing duration in seconds",
+                &f32::from(Float::from(parsing_duration.as_seconds())),
+            );
+        }
+        if let Some(planning_duration) = self.planning_duration {
+            obj.field(
+                "planning duration in seconds",
+                &f32::from(Float::from(planning_duration.as_seconds())),
+            );
+        }
+        obj.field("tree", &self.inner);
+        obj.finish()
     }
 }

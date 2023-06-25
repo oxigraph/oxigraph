@@ -75,6 +75,17 @@ jobs:
       - run: cargo clippy --lib --tests --target wasm32-wasi
         working-directory: ./lib
 
+  clippy_wasm_unknown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update && rustup target add wasm32-unknown-unknown && rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --features getrandom/custom --features oxsdatatypes/custom-now
+        working-directory: ./lib
+
   clippy_msv:
     runs-on: ubuntu-latest
     steps:
@@ -158,7 +169,7 @@ jobs:
           submodules: true
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --all-features
+      - run: cargo test
         env:
           RUST_BACKTRACE: 1
 
@@ -185,7 +196,7 @@ jobs:
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: cargo test --all-features
+      - run: cargo test
         env:
           RUST_BACKTRACE: 1
 

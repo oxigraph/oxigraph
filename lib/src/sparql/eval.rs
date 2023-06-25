@@ -35,9 +35,6 @@ use std::hash::{Hash, Hasher};
 use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::rc::Rc;
-use std::time::Duration as StdDuration;
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-use std::time::Instant;
 use std::{fmt, io, str};
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
@@ -258,16 +255,19 @@ impl SimpleEvaluator {
             label: eval_node_label(pattern),
             children: stat_children,
             exec_count: Cell::new(0),
-            exec_duration: Cell::new(StdDuration::from_secs(0)),
+            exec_duration: Cell::new(self.run_stats.then(DayTimeDuration::default)),
         });
         if self.run_stats {
             let stats = Rc::clone(&stats);
             evaluator = Rc::new(move |tuple| {
                 let start = Timer::now();
                 let inner = evaluator(tuple);
-                stats
-                    .exec_duration
-                    .set(stats.exec_duration.get() + start.elapsed());
+                stats.exec_duration.set(
+                    stats
+                        .exec_duration
+                        .get()
+                        .and_then(|stat| stat.checked_add(start.elapsed()?)),
+                );
                 Box::new(StatsIterator {
                     inner,
                     stats: Rc::clone(&stats),
@@ -5648,9 +5648,12 @@ impl Iterator for StatsIterator {
     fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
         let start = Timer::now();
         let result = self.inner.next();
-        self.stats
-            .exec_duration
-            .set(self.stats.exec_duration.get() + start.elapsed());
+        self.stats.exec_duration.set(
+            self.stats
+                .exec_duration
+                .get()
+                .and_then(|stat| stat.checked_add(start.elapsed()?)),
+        );
         if matches!(result, Some(Ok(_))) {
             self.stats.exec_count.set(self.stats.exec_count.get() + 1);
         }
@@ -5662,7 +5665,7 @@ pub struct EvalNodeWithStats {
     pub label: String,
     pub children: Vec<Rc<EvalNodeWithStats>>,
     pub exec_count: Cell<usize>,
-    pub exec_duration: Cell<StdDuration>,
+    pub exec_duration: Cell<Option<DayTimeDuration>>,
 }
 
 impl EvalNodeWithStats {
@@ -5677,10 +5680,10 @@ impl EvalNodeWithStats {
         if with_stats {
             writer.write_event(JsonEvent::ObjectKey("number of results"))?;
             writer.write_event(JsonEvent::Number(&self.exec_count.get().to_string()))?;
-            writer.write_event(JsonEvent::ObjectKey("duration in seconds"))?;
-            writer.write_event(JsonEvent::Number(
-                &self.exec_duration.get().as_secs_f32().to_string(),
-            ))?;
+            if let Some(duration) = self.exec_duration.get() {
+                writer.write_event(JsonEvent::ObjectKey("duration in seconds"))?;
+                writer.write_event(JsonEvent::Number(&duration.as_seconds().to_string()))?;
+            }
         }
         writer.write_event(JsonEvent::ObjectKey("children"))?;
         writer.write_event(JsonEvent::StartArray)?;
@@ -5696,9 +5699,12 @@ impl fmt::Debug for EvalNodeWithStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut obj = f.debug_struct("Node");
         obj.field("name", &self.label);
-        if self.exec_duration.get() > StdDuration::default() {
+        if let Some(exec_duration) = self.exec_duration.get() {
             obj.field("number of results", &self.exec_count.get());
-            obj.field("duration in seconds", &self.exec_duration.get());
+            obj.field(
+                "duration in seconds",
+                &f32::from(Float::from(exec_duration.as_seconds())),
+            );
         }
         if !self.children.is_empty() {
             obj.field("children", &self.children);
@@ -5844,39 +5850,19 @@ fn format_list<T: ToString>(values: impl IntoIterator<Item = T>) -> String {
         .join(", ")
 }
 
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
 pub struct Timer {
-    timestamp_ms: f64,
+    start: Option<DateTime>,
 }
 
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
 impl Timer {
     pub fn now() -> Self {
         Self {
-            timestamp_ms: js_sys::Date::now(),
+            start: DateTime::now().ok(),
         }
     }
 
-    pub fn elapsed(&self) -> StdDuration {
-        StdDuration::from_secs_f64((js_sys::Date::now() - self.timestamp_ms) / 1000.)
-    }
-}
-
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-pub struct Timer {
-    instant: Instant,
-}
-
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-impl Timer {
-    pub fn now() -> Self {
-        Self {
-            instant: Instant::now(),
-        }
-    }
-
-    pub fn elapsed(&self) -> StdDuration {
-        self.instant.elapsed()
+    pub fn elapsed(&self) -> Option<DayTimeDuration> {
+        DateTime::now().ok()?.checked_sub(self.start?)
     }
 }
 

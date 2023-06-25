@@ -32,6 +32,22 @@ Each datatype provides:
 * `from_be_bytes` and `to_be_bytes` methods for serialization.
 
 
+### `DateTime::now` behavior
+
+The `DateTime::now()` function needs special OS support.
+Currently:
+- If the `custom-now` feature is enabled, a function computing `now` must be set:
+  ```rust
+  use oxsdatatypes::{DateTimeError, Duration};
+  
+  #[no_mangle]
+  fn custom_ox_now() -> Result<Duration, DateTimeError> {
+    unimplemented!("now implementation")
+  }
+  ```
+- For `wasm32-unknown-unknown` if the `js` feature is enabled the `Date.now()` ECMAScript API is used.
+- For all other targets `SystemTime::now()` is used.
+
 ## License
 
 This project is licensed under either of

@@ -6,10 +6,10 @@
 
 use crate::model::*;
 use crate::sparql::eval::Timer;
+use oxsdatatypes::DayTimeDuration;
 use spargebra::GraphUpdateOperation;
 use std::fmt;
 use std::str::FromStr;
-use std::time::Duration;
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 ///
@@ -32,7 +32,7 @@ use std::time::Duration;
 pub struct Query {
     pub(super) inner: spargebra::Query,
     pub(super) dataset: QueryDataset,
-    pub(super) parsing_duration: Option<Duration>,
+    pub(super) parsing_duration: Option<DayTimeDuration>,
 }
 
 impl Query {
@@ -43,7 +43,7 @@ impl Query {
         Ok(Self {
             dataset: query.dataset,
             inner: query.inner,
-            parsing_duration: Some(start.elapsed()),
+            parsing_duration: start.elapsed(),
         })
     }
 
