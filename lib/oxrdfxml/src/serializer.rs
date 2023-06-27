@@ -5,6 +5,8 @@ use quick_xml::Writer;
 use std::io;
 use std::io::Write;
 use std::sync::Arc;
+#[cfg(feature = "async-tokio")]
+use tokio::io::AsyncWrite;
 
 /// A [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) serializer.
 ///
@@ -34,7 +36,9 @@ impl RdfXmlSerializer {
         Self
     }
 
-    /// Writes a RdfXml file to a [`Write`] implementation.
+    /// Writes a RDF/XML file to a [`Write`] implementation.
+    ///
+    /// This writer does unbuffered writes.
     ///
     /// ```
     /// use oxrdf::{NamedNodeRef, TripleRef};
@@ -56,7 +60,47 @@ impl RdfXmlSerializer {
     pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteRdfXmlWriter<W> {
         ToWriteRdfXmlWriter {
             writer: Writer::new_with_indent(write, b'\t', 1),
-            current_subject: None,
+            inner: InnerRdfXmlWriter {
+                current_subject: None,
+            },
+        }
+    }
+
+    /// Writes a RDF/XML file to a [`AsyncWrite`] implementation.
+    ///
+    /// This writer does unbuffered writes.
+    ///
+    /// ```
+    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxrdfxml::RdfXmlSerializer;
+    /// use std::io::Result;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<()> {
+    ///     let mut writer = RdfXmlSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    ///     writer.write_triple(TripleRef::new(
+    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///     )).await?;
+    ///     assert_eq!(
+    ///         b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+    ///         writer.finish().await?.as_slice()
+    ///     );
+    ///     Ok(())
+    /// }
+    /// ```
+    #[allow(clippy::unused_self)]
+    #[cfg(feature = "async-tokio")]
+    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+        &self,
+        write: W,
+    ) -> ToTokioAsyncWriteRdfXmlWriter<W> {
+        ToTokioAsyncWriteRdfXmlWriter {
+            writer: Writer::new_with_indent(write, b'\t', 1),
+            inner: InnerRdfXmlWriter {
+                current_subject: None,
+            },
         }
     }
 }
@@ -81,24 +125,111 @@ impl RdfXmlSerializer {
 /// ```
 pub struct ToWriteRdfXmlWriter<W: Write> {
     writer: Writer<W>,
-    current_subject: Option<Subject>,
+    inner: InnerRdfXmlWriter,
 }
 
 impl<W: Write> ToWriteRdfXmlWriter<W> {
     /// Writes an extra triple.
     #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
     pub fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        let mut buffer = Vec::new();
+        self.inner.write_triple(t, &mut buffer)?;
+        self.flush_buffer(&mut buffer)
+    }
+
+    /// Ends the write process and returns the underlying [`Write`].
+    pub fn finish(mut self) -> io::Result<W> {
+        let mut buffer = Vec::new();
+        self.inner.finish(&mut buffer);
+        self.flush_buffer(&mut buffer)?;
+        Ok(self.writer.into_inner())
+    }
+
+    fn flush_buffer(&mut self, buffer: &mut Vec<Event<'_>>) -> io::Result<()> {
+        for event in buffer.drain(0..) {
+            self.writer.write_event(event).map_err(map_err)?;
+        }
+        Ok(())
+    }
+}
+
+/// Writes a RDF/XML file to a [`AsyncWrite`] implementation. Can be built using [`RdfXmlSerializer::serialize_to_tokio_async_write`].
+///
+/// ```
+/// use oxrdf::{NamedNodeRef, TripleRef};
+/// use oxrdfxml::RdfXmlSerializer;
+/// use std::io::Result;
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<()> {
+///     let mut writer = RdfXmlSerializer::new().serialize_to_tokio_async_write(Vec::new());
+///     writer.write_triple(TripleRef::new(
+///         NamedNodeRef::new_unchecked("http://example.com#me"),
+///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+///     )).await?;
+///     assert_eq!(
+///         b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+///         writer.finish().await?.as_slice()
+///     );
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteRdfXmlWriter<W: AsyncWrite + Unpin> {
+    writer: Writer<W>,
+    inner: InnerRdfXmlWriter,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteRdfXmlWriter<W> {
+    /// Writes an extra triple.
+    #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
+    pub async fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        let mut buffer = Vec::new();
+        self.inner.write_triple(t, &mut buffer)?;
+        self.flush_buffer(&mut buffer).await
+    }
+
+    /// Ends the write process and returns the underlying [`Write`].
+    pub async fn finish(mut self) -> io::Result<W> {
+        let mut buffer = Vec::new();
+        self.inner.finish(&mut buffer);
+        self.flush_buffer(&mut buffer).await?;
+        Ok(self.writer.into_inner())
+    }
+
+    async fn flush_buffer(&mut self, buffer: &mut Vec<Event<'_>>) -> io::Result<()> {
+        for event in buffer.drain(0..) {
+            self.writer
+                .write_event_async(event)
+                .await
+                .map_err(map_err)?;
+        }
+        Ok(())
+    }
+}
+
+pub struct InnerRdfXmlWriter {
+    current_subject: Option<Subject>,
+}
+
+impl InnerRdfXmlWriter {
+    #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
+    fn write_triple<'a>(
+        &mut self,
+        t: impl Into<TripleRef<'a>>,
+        output: &mut Vec<Event<'a>>,
+    ) -> io::Result<()> {
         if self.current_subject.is_none() {
-            self.write_start()?;
+            Self::write_start(output);
         }
 
         let triple = t.into();
         // We open a new rdf:Description if useful
         if self.current_subject.as_ref().map(Subject::as_ref) != Some(triple.subject) {
             if self.current_subject.is_some() {
-                self.writer
-                    .write_event(Event::End(BytesEnd::new("rdf:Description")))
-                    .map_err(map_err)?;
+                output.push(Event::End(BytesEnd::new("rdf:Description")));
             }
 
             let mut description_open = BytesStart::new("rdf:Description");
@@ -116,10 +247,9 @@ impl<W: Write> ToWriteRdfXmlWriter<W> {
                     ))
                 }
             }
-            self.writer
-                .write_event(Event::Start(description_open))
-                .map_err(map_err)?;
+            output.push(Event::Start(description_open));
         }
+        self.current_subject = Some(triple.subject.into_owned());
 
         let (prop_prefix, prop_value) = split_iri(triple.predicate.as_str());
         let (prop_qname, prop_xmlns) = if prop_value.is_empty() {
@@ -127,25 +257,24 @@ impl<W: Write> ToWriteRdfXmlWriter<W> {
         } else {
             (prop_value, ("xmlns", prop_prefix))
         };
-        let property_element = self.writer.create_element(prop_qname);
-        let property_element = property_element.with_attribute(prop_xmlns);
-
-        match triple.object {
-            TermRef::NamedNode(node) => property_element
-                .with_attribute(("rdf:resource", node.as_str()))
-                .write_empty(),
-            TermRef::BlankNode(node) => property_element
-                .with_attribute(("rdf:nodeID", node.as_str()))
-                .write_empty(),
+        let mut property_open = BytesStart::new(prop_qname);
+        property_open.push_attribute(prop_xmlns);
+        let content = match triple.object {
+            TermRef::NamedNode(node) => {
+                property_open.push_attribute(("rdf:resource", node.as_str()));
+                None
+            }
+            TermRef::BlankNode(node) => {
+                property_open.push_attribute(("rdf:nodeID", node.as_str()));
+                None
+            }
             TermRef::Literal(literal) => {
-                let property_element = if let Some(language) = literal.language() {
-                    property_element.with_attribute(("xml:lang", language))
+                if let Some(language) = literal.language() {
+                    property_open.push_attribute(("xml:lang", language));
                 } else if !literal.is_plain() {
-                    property_element.with_attribute(("rdf:datatype", literal.datatype().as_str()))
-                } else {
-                    property_element
-                };
-                property_element.write_text_content(BytesText::new(literal.value()))
+                    property_open.push_attribute(("rdf:datatype", literal.datatype().as_str()));
+                }
+                Some(literal.value())
             }
             _ => {
                 return Err(io::Error::new(
@@ -153,37 +282,31 @@ impl<W: Write> ToWriteRdfXmlWriter<W> {
                     "RDF/XML only supports named, blank or literal object",
                 ))
             }
+        };
+        if let Some(content) = content {
+            output.push(Event::Start(property_open));
+            output.push(Event::Text(BytesText::new(content)));
+            output.push(Event::End(BytesEnd::new(prop_qname)));
+        } else {
+            output.push(Event::Empty(property_open));
         }
-        .map_err(map_err)?;
-        self.current_subject = Some(triple.subject.into_owned());
         Ok(())
     }
 
-    pub fn write_start(&mut self) -> io::Result<()> {
-        // We open the file
-        self.writer
-            .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
-            .map_err(map_err)?;
+    fn write_start(output: &mut Vec<Event<'_>>) {
+        output.push(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)));
         let mut rdf_open = BytesStart::new("rdf:RDF");
         rdf_open.push_attribute(("xmlns:rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"));
-        self.writer
-            .write_event(Event::Start(rdf_open))
-            .map_err(map_err)
+        output.push(Event::Start(rdf_open))
     }
 
-    /// Ends the write process and returns the underlying [`Write`].
-    pub fn finish(mut self) -> io::Result<W> {
+    fn finish(&self, output: &mut Vec<Event<'static>>) {
         if self.current_subject.is_some() {
-            self.writer
-                .write_event(Event::End(BytesEnd::new("rdf:Description")))
-                .map_err(map_err)?;
+            output.push(Event::End(BytesEnd::new("rdf:Description")));
         } else {
-            self.write_start()?;
+            Self::write_start(output);
         }
-        self.writer
-            .write_event(Event::End(BytesEnd::new("rdf:RDF")))
-            .map_err(map_err)?;
-        Ok(self.writer.into_inner())
+        output.push(Event::End(BytesEnd::new("rdf:RDF")));
     }
 }
 

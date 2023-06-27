@@ -6,6 +6,8 @@ mod lexer;
 mod parser;
 
 pub use self::lexer::{Lexer, LexerError, TokenRecognizer, TokenRecognizerError};
+#[cfg(feature = "async-tokio")]
+pub use self::parser::FromTokioAsyncReadIterator;
 pub use self::parser::{
     FromReadIterator, ParseError, Parser, RuleRecognizer, RuleRecognizerError, SyntaxError,
 };

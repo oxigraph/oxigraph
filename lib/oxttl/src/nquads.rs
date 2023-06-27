@@ -1,9 +1,13 @@
 //! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`].
 
 use crate::line_formats::NQuadsRecognizer;
+#[cfg(feature = "async-tokio")]
+use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxrdf::{Quad, QuadRef};
 use std::io::{self, Read, Write};
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser.
 ///
@@ -78,6 +82,43 @@ impl NQuadsParser {
     pub fn parse_from_read<R: Read>(&self, read: R) -> FromReadNQuadsReader<R> {
         FromReadNQuadsReader {
             inner: self.parse().parser.parse_from_read(read),
+        }
+    }
+
+    /// Parses a N-Quads file from a [`AsyncRead`] implementation.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::{ParseError, NQuadsParser};
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<(), ParseError> {
+    ///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+    /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+    ///
+    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    ///     let mut count = 0;
+    ///     let mut parser = NQuadsParser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     while let Some(triple) = parser.next().await {
+    ///         let triple = triple?;
+    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///             count += 1;
+    ///         }
+    ///     }
+    ///     assert_eq!(2, count);
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+        &self,
+        read: R,
+    ) -> FromTokioAsyncReadNQuadsReader<R> {
+        FromTokioAsyncReadNQuadsReader {
+            inner: self.parse().parser.parse_from_tokio_async_read(read),
         }
     }
 
@@ -161,6 +202,46 @@ impl<R: Read> Iterator for FromReadNQuadsReader<R> {
 
     fn next(&mut self) -> Option<Result<Quad, ParseError>> {
         self.inner.next()
+    }
+}
+
+/// Parses a N-Quads file from a [`AsyncRead`] implementation. Can be built using [`NQuadsParser::parse_from_tokio_async_read`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::{ParseError, NQuadsParser};
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<(), ParseError> {
+///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+/// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+///
+///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+///     let mut count = 0;
+///     let mut parser = NQuadsParser::new().parse_from_tokio_async_read(file.as_ref());
+///     while let Some(triple) = parser.next().await {
+///         let triple = triple?;
+///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///             count += 1;
+///         }
+///     }
+///     assert_eq!(2, count);
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadNQuadsReader<R: AsyncRead + Unpin> {
+    inner: FromTokioAsyncReadIterator<R, NQuadsRecognizer>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
+    /// Reads the next triple or returns `None` if the file is finished.
+    pub async fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+        Some(self.inner.next().await?.map(Into::into))
     }
 }
 
@@ -288,6 +369,41 @@ impl NQuadsSerializer {
         }
     }
 
+    /// Writes a N-Quads file to a [`AsyncWrite`] implementation.
+    ///
+    /// ```
+    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxttl::NQuadsSerializer;
+    /// use std::io::Result;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<()> {
+    ///     let mut writer = NQuadsSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    ///     writer.write_quad(QuadRef::new(
+    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///         NamedNodeRef::new_unchecked("http://example.com"),
+    ///     )).await?;
+    ///     assert_eq!(
+    ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
+    ///         writer.finish().as_slice()
+    ///     );
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+        &self,
+        write: W,
+    ) -> ToTokioAsyncWriteNQuadsWriter<W> {
+        ToTokioAsyncWriteNQuadsWriter {
+            write,
+            writer: self.serialize(),
+            buffer: Vec::new(),
+        }
+    }
+
     /// Builds a low-level N-Quads writer.
     ///
     /// ```
@@ -342,6 +458,52 @@ impl<W: Write> ToWriteNQuadsWriter<W> {
     /// Writes an extra quad.
     pub fn write_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
         self.writer.write_quad(q, &mut self.write)
+    }
+
+    /// Ends the write process and returns the underlying [`Write`].
+    pub fn finish(self) -> W {
+        self.write
+    }
+}
+
+/// Writes a N-Quads file to a [`AsyncWrite`] implementation. Can be built using [`NQuadsSerializer::serialize_to_tokio_async_write`].
+///
+/// ```
+/// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxttl::NQuadsSerializer;
+/// use std::io::Result;
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<()> {
+///     let mut writer = NQuadsSerializer::new().serialize_to_tokio_async_write(Vec::new());
+///     writer.write_quad(QuadRef::new(
+///         NamedNodeRef::new_unchecked("http://example.com#me"),
+///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+///         NamedNodeRef::new_unchecked("http://example.com"),
+///     )).await?;
+///     assert_eq!(
+///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
+///         writer.finish().as_slice()
+///     );
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteNQuadsWriter<W: AsyncWrite + Unpin> {
+    write: W,
+    writer: LowLevelNQuadsWriter,
+    buffer: Vec<u8>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNQuadsWriter<W> {
+    /// Writes an extra quad.
+    pub async fn write_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        self.writer.write_quad(q, &mut self.buffer)?;
+        self.write.write_all(&self.buffer).await?;
+        self.buffer.clear();
+        Ok(())
     }
 
     /// Ends the write process and returns the underlying [`Write`].

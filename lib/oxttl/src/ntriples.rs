@@ -2,9 +2,13 @@
 //! and a serializer implemented by [`NTriplesSerializer`].
 
 use crate::line_formats::NQuadsRecognizer;
+#[cfg(feature = "async-tokio")]
+use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxrdf::{Triple, TripleRef};
 use std::io::{self, Read, Write};
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// A [N-Triples](https://www.w3.org/TR/n-triples/) streaming parser.
 ///
@@ -79,6 +83,43 @@ impl NTriplesParser {
     pub fn parse_from_read<R: Read>(&self, read: R) -> FromReadNTriplesReader<R> {
         FromReadNTriplesReader {
             inner: self.parse().parser.parse_from_read(read),
+        }
+    }
+
+    /// Parses a N-Triples file from a [`AsyncRead`] implementation.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::{ParseError, NTriplesParser};
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<(), ParseError> {
+    ///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+    /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+    ///
+    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    ///     let mut count = 0;
+    ///     let mut parser = NTriplesParser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     while let Some(triple) = parser.next().await {
+    ///         let triple = triple?;
+    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///             count += 1;
+    ///         }
+    ///     }
+    ///     assert_eq!(2, count);
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+        &self,
+        read: R,
+    ) -> FromTokioAsyncReadNTriplesReader<R> {
+        FromTokioAsyncReadNTriplesReader {
+            inner: self.parse().parser.parse_from_tokio_async_read(read),
         }
     }
 
@@ -162,6 +203,46 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 
     fn next(&mut self) -> Option<Result<Triple, ParseError>> {
         Some(self.inner.next()?.map(Into::into))
+    }
+}
+
+/// Parses a N-Triples file from a [`AsyncRead`] implementation. Can be built using [`NTriplesParser::parse_from_tokio_async_read`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::{ParseError, NTriplesParser};
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<(), ParseError> {
+///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+/// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+///
+///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+///     let mut count = 0;
+///     let mut parser = NTriplesParser::new().parse_from_tokio_async_read(file.as_ref());
+///     while let Some(triple) = parser.next().await {
+///         let triple = triple?;
+///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///             count += 1;
+///         }
+///     }
+///     assert_eq!(2, count);
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadNTriplesReader<R: AsyncRead + Unpin> {
+    inner: FromTokioAsyncReadIterator<R, NQuadsRecognizer>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadNTriplesReader<R> {
+    /// Reads the next triple or returns `None` if the file is finished.
+    pub async fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+        Some(self.inner.next().await?.map(Into::into))
     }
 }
 
@@ -287,6 +368,40 @@ impl NTriplesSerializer {
         }
     }
 
+    /// Writes a N-Triples file to a [`AsyncWrite`] implementation.
+    ///
+    /// ```
+    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxttl::NTriplesSerializer;
+    /// use std::io::Result;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<()> {
+    ///     let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    ///     writer.write_triple(TripleRef::new(
+    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///     )).await?;
+    ///     assert_eq!(
+    ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+    ///         writer.finish().as_slice()
+    ///     );
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+        &self,
+        write: W,
+    ) -> ToTokioAsyncWriteNTriplesWriter<W> {
+        ToTokioAsyncWriteNTriplesWriter {
+            write,
+            writer: self.serialize(),
+            buffer: Vec::new(),
+        }
+    }
+
     /// Builds a low-level N-Triples writer.
     ///
     /// ```
@@ -339,6 +454,51 @@ impl<W: Write> ToWriteNTriplesWriter<W> {
     /// Writes an extra triple.
     pub fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
         self.writer.write_triple(t, &mut self.write)
+    }
+
+    /// Ends the write process and returns the underlying [`Write`].
+    pub fn finish(self) -> W {
+        self.write
+    }
+}
+
+/// Writes a N-Triples file to a [`AsyncWrite`] implementation. Can be built using [`NTriplesSerializer::serialize_to_tokio_async_write`].
+///
+/// ```
+/// use oxrdf::{NamedNodeRef, TripleRef};
+/// use oxttl::NTriplesSerializer;
+/// use std::io::Result;
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<()> {
+///     let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
+///     writer.write_triple(TripleRef::new(
+///         NamedNodeRef::new_unchecked("http://example.com#me"),
+///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///         NamedNodeRef::new_unchecked("http://schema.org/Person")
+///     )).await?;
+///     assert_eq!(
+///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///         writer.finish().as_slice()
+///     );
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteNTriplesWriter<W: AsyncWrite + Unpin> {
+    write: W,
+    writer: LowLevelNTriplesWriter,
+    buffer: Vec<u8>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNTriplesWriter<W> {
+    /// Writes an extra triple.
+    pub async fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        self.writer.write_triple(t, &mut self.buffer)?;
+        self.write.write_all(&self.buffer).await?;
+        self.buffer.clear();
+        Ok(())
     }
 
     /// Ends the write process and returns the underlying [`Write`].

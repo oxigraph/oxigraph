@@ -10,8 +10,10 @@ use quick_xml::events::*;
 use quick_xml::name::{LocalName, QName, ResolveResult};
 use quick_xml::{NsReader, Writer};
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufReader, Read};
 use std::str;
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 
 /// A [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) streaming parser.
 ///
@@ -93,21 +95,68 @@ impl RdfXmlParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse_from_read<R: Read>(&self, read: R) -> FromReadRdfXmlReader<R> {
-        let mut reader = NsReader::from_reader(BufReader::new(read));
-        reader.expand_empty_elements(true);
         FromReadRdfXmlReader {
             results: Vec::new(),
-            reader: RdfXmlReader {
-                reader,
-                state: vec![RdfXmlState::Doc {
-                    base_iri: self.base.clone(),
-                }],
-                custom_entities: HashMap::default(),
-                in_literal_depth: 0,
-                known_rdf_id: HashSet::default(),
-                is_end: false,
-            },
+            reader: self.parse(BufReader::new(read)),
             reader_buffer: Vec::default(),
+        }
+    }
+
+    /// Parses a RDF/XML file from a [`AsyncRead`] implementation.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    ///  use oxrdfxml::{RdfXmlParser, ParseError};
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<(), ParseError> {
+    /// let file = b"<?xml version=\"1.0\"?>
+    ///     <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
+    ///       <rdf:Description rdf:about=\"http://example.com/foo\">
+    ///         <rdf:type rdf:resource=\"http://schema.org/Person\" />
+    ///         <schema:name>Foo</schema:name>
+    ///       </rdf:Description>
+    ///       <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
+    ///     </rdf:RDF>";
+    ///
+    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    ///     let mut count = 0;
+    ///     let mut parser = RdfXmlParser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     while let Some(triple) = parser.next().await {
+    ///         let triple = triple?;
+    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///             count += 1;
+    ///         }
+    ///     }
+    ///     assert_eq!(2, count);
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+        &self,
+        read: R,
+    ) -> FromTokioAsyncReadRdfXmlReader<R> {
+        FromTokioAsyncReadRdfXmlReader {
+            results: Vec::new(),
+            reader: self.parse(AsyncBufReader::new(read)),
+            reader_buffer: Vec::default(),
+        }
+    }
+
+    fn parse<T>(&self, reader: T) -> RdfXmlReader<T> {
+        let mut reader = NsReader::from_reader(reader);
+        reader.expand_empty_elements(true);
+        RdfXmlReader {
+            reader,
+            state: vec![RdfXmlState::Doc {
+                base_iri: self.base.clone(),
+            }],
+            custom_entities: HashMap::default(),
+            in_literal_depth: 0,
+            known_rdf_id: HashSet::default(),
+            is_end: false,
         }
     }
 }
@@ -174,6 +223,76 @@ impl<R: Read> FromReadRdfXmlReader<R> {
             .reader
             .reader
             .read_event_into(&mut self.reader_buffer)?;
+        self.reader.parse_event(event, &mut self.results)
+    }
+}
+
+/// Parses a RDF/XML file from a [`AsyncRead`] implementation. Can be built using [`RdfXmlParser::parse_from_tokio_async_read`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+///  use oxrdfxml::{RdfXmlParser, ParseError};
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<(), ParseError> {
+/// let file = b"<?xml version=\"1.0\"?>
+///     <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
+///       <rdf:Description rdf:about=\"http://example.com/foo\">
+///         <rdf:type rdf:resource=\"http://schema.org/Person\" />
+///         <schema:name>Foo</schema:name>
+///       </rdf:Description>
+///       <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
+///     </rdf:RDF>";
+///
+///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+///     let mut count = 0;
+///     let mut parser = RdfXmlParser::new().parse_from_tokio_async_read(file.as_ref());
+///     while let Some(triple) = parser.next().await {
+///         let triple = triple?;
+///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///             count += 1;
+///         }
+///     }
+///     assert_eq!(2, count);
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadRdfXmlReader<R: AsyncRead + Unpin> {
+    results: Vec<Triple>,
+    reader: RdfXmlReader<AsyncBufReader<R>>,
+    reader_buffer: Vec<u8>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
+    /// Reads the next triple or returns `None` if the file is finished.
+    pub async fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+        loop {
+            if let Some(triple) = self.results.pop() {
+                return Some(Ok(triple));
+            } else if self.reader.is_end {
+                return None;
+            }
+            if let Err(e) = self.parse_step().await {
+                return Some(Err(e));
+            }
+        }
+    }
+
+    /// The current byte position in the input data.
+    pub fn buffer_position(&self) -> usize {
+        self.reader.reader.buffer_position()
+    }
+
+    async fn parse_step(&mut self) -> Result<(), ParseError> {
+        self.reader_buffer.clear();
+        let event = self
+            .reader
+            .reader
+            .read_event_into_async(&mut self.reader_buffer)
+            .await?;
         self.reader.parse_event(event, &mut self.results)
     }
 }
@@ -285,7 +404,7 @@ impl RdfXmlState {
     }
 }
 
-struct RdfXmlReader<R: BufRead> {
+struct RdfXmlReader<R> {
     reader: NsReader<R>,
     state: Vec<RdfXmlState>,
     custom_entities: HashMap<String, String>,
@@ -294,7 +413,7 @@ struct RdfXmlReader<R: BufRead> {
     is_end: bool,
 }
 
-impl<R: BufRead> RdfXmlReader<R> {
+impl<R> RdfXmlReader<R> {
     fn parse_event(&mut self, event: Event, results: &mut Vec<Triple>) -> Result<(), ParseError> {
         match event {
             Event::Start(event) => self.parse_start_event(&event, results),
