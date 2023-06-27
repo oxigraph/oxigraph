@@ -4,6 +4,8 @@ use std::error::Error;
 use std::io::Read;
 use std::ops::Range;
 use std::{fmt, io};
+#[cfg(feature = "async-tokio")]
+use tokio::io::AsyncRead;
 
 pub trait RuleRecognizer: Sized {
     type TokenRecognizer: TokenRecognizer;
@@ -113,6 +115,14 @@ impl<RR: RuleRecognizer> Parser<RR> {
 
     pub fn parse_from_read<R: Read>(self, read: R) -> FromReadIterator<R, RR> {
         FromReadIterator { read, parser: self }
+    }
+
+    #[cfg(feature = "async-tokio")]
+    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+        self,
+        read: R,
+    ) -> FromTokioAsyncReadIterator<R, RR> {
+        FromTokioAsyncReadIterator { read, parser: self }
     }
 }
 
@@ -252,6 +262,32 @@ impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
                 return Some(result.map_err(ParseError::Syntax));
             }
             if let Err(e) = self.parser.lexer.extend_from_read(&mut self.read) {
+                return Some(Err(e.into()));
+            }
+        }
+        None
+    }
+}
+
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadIterator<R: AsyncRead + Unpin, RR: RuleRecognizer> {
+    read: R,
+    parser: Parser<RR>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin, RR: RuleRecognizer> FromTokioAsyncReadIterator<R, RR> {
+    pub async fn next(&mut self) -> Option<Result<RR::Output, ParseError>> {
+        while !self.parser.is_end() {
+            if let Some(result) = self.parser.read_next() {
+                return Some(result.map_err(ParseError::Syntax));
+            }
+            if let Err(e) = self
+                .parser
+                .lexer
+                .extend_from_tokio_async_read(&mut self.read)
+                .await
+            {
                 return Some(Err(e.into()));
             }
         }

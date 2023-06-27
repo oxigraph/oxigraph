@@ -3,6 +3,8 @@ use std::error::Error;
 use std::fmt;
 use std::io::{self, Read};
 use std::ops::{Range, RangeInclusive};
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 pub trait TokenRecognizer {
     type Token<'a>
@@ -117,6 +119,35 @@ impl<R: TokenRecognizer> Lexer<R> {
             self.data.resize(self.data.capacity(), 0);
         }
         let read = read.read(&mut self.data[self.end..])?;
+        self.end += read;
+        self.is_ending = read == 0;
+        Ok(())
+    }
+
+    #[cfg(feature = "async-tokio")]
+    pub async fn extend_from_tokio_async_read(
+        &mut self,
+        read: &mut (impl AsyncRead + Unpin),
+    ) -> io::Result<()> {
+        self.shrink_if_useful();
+        let min_end = self.end + self.min_buffer_size;
+        if min_end > self.max_buffer_size {
+            return Err(io::Error::new(
+                io::ErrorKind::OutOfMemory,
+                format!(
+                    "The buffer maximal size is {} < {min_end}",
+                    self.max_buffer_size
+                ),
+            ));
+        }
+        if self.data.len() < min_end {
+            self.data.resize(min_end, 0);
+        }
+        if self.data.len() < self.data.capacity() {
+            // We keep extending to have as much space as available without reallocation
+            self.data.resize(self.data.capacity(), 0);
+        }
+        let read = read.read(&mut self.data[self.end..]).await?;
         self.end += read;
         self.is_ending = read == 0;
         Ok(())

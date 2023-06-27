@@ -1,6 +1,8 @@
 //! A [N3](https://w3c.github.io/N3/spec/) streaming parser implemented by [`N3Parser`].
 
 use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
+#[cfg(feature = "async-tokio")]
+use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
     FromReadIterator, Lexer, Parser, RuleRecognizer, RuleRecognizerError, SyntaxError,
 };
@@ -16,6 +18,8 @@ use oxrdf::{
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Read;
+#[cfg(feature = "async-tokio")]
+use tokio::io::AsyncRead;
 
 /// A N3 term i.e. a RDF `Term` or a `Variable`.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -261,6 +265,47 @@ impl N3Parser {
         }
     }
 
+    /// Parses a N3 file from a [`AsyncRead`] implementation.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::{NamedNode, vocab::rdf};
+    /// use oxttl::n3::{N3Parser, N3Term};
+    /// use oxttl::ParseError;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<(), ParseError> {
+    ///     let file = b"@base <http://example.com/> .
+    ///     @prefix schema: <http://schema.org/> .
+    ///     <foo> a schema:Person ;
+    ///         schema:name \"Foo\" .
+    ///     <bar> a schema:Person ;
+    ///         schema:name \"Bar\" .";
+    ///
+    ///     let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
+    ///     let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
+    ///     let mut count = 0;
+    ///     let mut parser = N3Parser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     while let Some(triple) = parser.next().await {
+    ///         let triple = triple?;
+    ///         if triple.predicate == rdf_type && triple.object == schema_person {
+    ///             count += 1;
+    ///         }
+    ///     }
+    ///     assert_eq!(2, count);
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+        &self,
+        read: R,
+    ) -> FromTokioAsyncReadN3Reader<R> {
+        FromTokioAsyncReadN3Reader {
+            inner: self.parse().parser.parse_from_tokio_async_read(read),
+        }
+    }
+
     /// Allows to parse a N3 file by using a low-level API.
     ///
     /// Count the number of people:
@@ -340,6 +385,50 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 
     fn next(&mut self) -> Option<Result<N3Quad, ParseError>> {
         self.inner.next()
+    }
+}
+
+/// Parses a N3 file from a [`AsyncRead`] implementation. Can be built using [`N3Parser::parse_from_tokio_async_read`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::{NamedNode, vocab::rdf};
+/// use oxttl::n3::{N3Parser, N3Term};
+/// use oxttl::ParseError;
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<(), ParseError> {
+///     let file = b"@base <http://example.com/> .
+///     @prefix schema: <http://schema.org/> .
+///     <foo> a schema:Person ;
+///         schema:name \"Foo\" .
+///     <bar> a schema:Person ;
+///         schema:name \"Bar\" .";
+///
+///     let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
+///     let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
+///     let mut count = 0;
+///     let mut parser = N3Parser::new().parse_from_tokio_async_read(file.as_ref());
+///     while let Some(triple) = parser.next().await {
+///         let triple = triple?;
+///         if triple.predicate == rdf_type && triple.object == schema_person {
+///             count += 1;
+///         }
+///     }
+///     assert_eq!(2, count);
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadN3Reader<R: AsyncRead + Unpin> {
+    inner: FromTokioAsyncReadIterator<R, N3Recognizer>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
+    /// Reads the next triple or returns `None` if the file is finished.
+    pub async fn next(&mut self) -> Option<Result<N3Quad, ParseError>> {
+        Some(self.inner.next().await?.map(Into::into))
     }
 }
 

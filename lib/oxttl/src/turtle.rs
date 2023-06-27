@@ -1,13 +1,18 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`].
 
 use crate::terse::TriGRecognizer;
+#[cfg(feature = "async-tokio")]
+use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
-use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter};
-use crate::TriGSerializer;
+#[cfg(feature = "async-tokio")]
+use crate::trig::ToTokioAsyncWriteTriGWriter;
+use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// A [Turtle](https://www.w3.org/TR/turtle/) streaming parser.
 ///
@@ -108,6 +113,45 @@ impl TurtleParser {
         }
     }
 
+    /// Parses a Turtle file from a [`AsyncRead`] implementation.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::{ParseError, TurtleParser};
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<(), ParseError> {
+    ///     let file = b"@base <http://example.com/> .
+    ///     @prefix schema: <http://schema.org/> .
+    ///     <foo> a schema:Person ;
+    ///         schema:name \"Foo\" .
+    ///     <bar> a schema:Person ;
+    ///         schema:name \"Bar\" .";
+    ///
+    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    ///     let mut count = 0;
+    ///     let mut parser = TurtleParser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     while let Some(triple) = parser.next().await {
+    ///         let triple = triple?;
+    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///             count += 1;
+    ///         }
+    ///     }
+    ///     assert_eq!(2, count);
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+        &self,
+        read: R,
+    ) -> FromTokioAsyncReadTurtleReader<R> {
+        FromTokioAsyncReadTurtleReader {
+            inner: self.parse().parser.parse_from_tokio_async_read(read),
+        }
+    }
+
     /// Allows to parse a Turtle file by using a low-level API.
     ///
     /// Count the number of people:
@@ -191,6 +235,48 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 
     fn next(&mut self) -> Option<Result<Triple, ParseError>> {
         Some(self.inner.next()?.map(Into::into))
+    }
+}
+
+/// Parses a Turtle file from a [`AsyncRead`] implementation. Can be built using [`TurtleParser::parse_from_tokio_async_read`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::{ParseError, TurtleParser};
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<(), ParseError> {
+///     let file = b"@base <http://example.com/> .
+///     @prefix schema: <http://schema.org/> .
+///     <foo> a schema:Person ;
+///         schema:name \"Foo\" .
+///     <bar> a schema:Person ;
+///         schema:name \"Bar\" .";
+///
+///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+///     let mut count = 0;
+///     let mut parser = TurtleParser::new().parse_from_tokio_async_read(file.as_ref());
+///     while let Some(triple) = parser.next().await {
+///         let triple = triple?;
+///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///             count += 1;
+///         }
+///     }
+///     assert_eq!(2, count);
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadTurtleReader<R: AsyncRead + Unpin> {
+    inner: FromTokioAsyncReadIterator<R, TriGRecognizer>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
+    /// Reads the next triple or returns `None` if the file is finished.
+    pub async fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+        Some(self.inner.next().await?.map(Into::into))
     }
 }
 
@@ -317,6 +403,38 @@ impl TurtleSerializer {
         }
     }
 
+    /// Writes a Turtle file to a [`AsyncWrite`] implementation.
+    ///
+    /// ```
+    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxttl::TurtleSerializer;
+    /// use std::io::Result;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<()> {
+    ///     let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    ///     writer.write_triple(TripleRef::new(
+    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///     )).await?;
+    ///     assert_eq!(
+    ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+    ///         writer.finish().await?.as_slice()
+    ///     );
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+        &self,
+        write: W,
+    ) -> ToTokioAsyncWriteTurtleWriter<W> {
+        ToTokioAsyncWriteTurtleWriter {
+            inner: self.inner.serialize_to_tokio_async_write(write),
+        }
+    }
+
     /// Builds a low-level Turtle writer.
     ///
     /// ```
@@ -376,6 +494,48 @@ impl<W: Write> ToWriteTurtleWriter<W> {
     /// Ends the write process and returns the underlying [`Write`].
     pub fn finish(self) -> io::Result<W> {
         self.inner.finish()
+    }
+}
+
+/// Writes a Turtle file to a [`AsyncWrite`] implementation. Can be built using [`TurtleSerializer::serialize_to_tokio_async_write`].
+///
+/// ```
+/// use oxrdf::{NamedNodeRef, TripleRef};
+/// use oxttl::TurtleSerializer;
+/// use std::io::Result;
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<()> {
+///     let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
+///     writer.write_triple(TripleRef::new(
+///         NamedNodeRef::new_unchecked("http://example.com#me"),
+///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///         NamedNodeRef::new_unchecked("http://schema.org/Person")
+///     )).await?;
+///     assert_eq!(
+///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///         writer.finish().await?.as_slice()
+///     );
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteTurtleWriter<W: AsyncWrite + Unpin> {
+    inner: ToTokioAsyncWriteTriGWriter<W>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTurtleWriter<W> {
+    /// Writes an extra triple.
+    pub async fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        self.inner
+            .write_quad(t.into().in_graph(GraphNameRef::DefaultGraph))
+            .await
+    }
+
+    /// Ends the write process and returns the underlying [`Write`].
+    pub async fn finish(self) -> io::Result<W> {
+        self.inner.finish().await
     }
 }
 

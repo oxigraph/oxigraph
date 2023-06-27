@@ -1,12 +1,16 @@
 //! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`].
 
 use crate::terse::TriGRecognizer;
+#[cfg(feature = "async-tokio")]
+use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{vocab::xsd, GraphName, NamedNode, Quad, QuadRef, Subject, TermRef};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// A [TriG](https://www.w3.org/TR/trig/) streaming parser.
 ///
@@ -107,6 +111,45 @@ impl TriGParser {
         }
     }
 
+    /// Parses a TriG file from a [`AsyncRead`] implementation.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::{ParseError, TriGParser};
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<(), ParseError> {
+    ///     let file = b"@base <http://example.com/> .
+    ///     @prefix schema: <http://schema.org/> .
+    ///     <foo> a schema:Person ;
+    ///         schema:name \"Foo\" .
+    ///     <bar> a schema:Person ;
+    ///         schema:name \"Bar\" .";
+    ///
+    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    ///     let mut count = 0;
+    ///     let mut parser = TriGParser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     while let Some(triple) = parser.next().await {
+    ///         let triple = triple?;
+    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///             count += 1;
+    ///         }
+    ///     }
+    ///     assert_eq!(2, count);
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+        &self,
+        read: R,
+    ) -> FromTokioAsyncReadTriGReader<R> {
+        FromTokioAsyncReadTriGReader {
+            inner: self.parse().parser.parse_from_tokio_async_read(read),
+        }
+    }
+
     /// Allows to parse a TriG file by using a low-level API.
     ///
     /// Count the number of people:
@@ -190,6 +233,48 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 
     fn next(&mut self) -> Option<Result<Quad, ParseError>> {
         self.inner.next()
+    }
+}
+
+/// Parses a TriG file from a [`AsyncRead`] implementation. Can be built using [`TriGParser::parse_from_tokio_async_read`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::{ParseError, TriGParser};
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<(), ParseError> {
+///     let file = b"@base <http://example.com/> .
+///     @prefix schema: <http://schema.org/> .
+///     <foo> a schema:Person ;
+///         schema:name \"Foo\" .
+///     <bar> a schema:Person ;
+///         schema:name \"Bar\" .";
+///
+///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+///     let mut count = 0;
+///     let mut parser = TriGParser::new().parse_from_tokio_async_read(file.as_ref());
+///     while let Some(triple) = parser.next().await {
+///         let triple = triple?;
+///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///             count += 1;
+///         }
+///     }
+///     assert_eq!(2, count);
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadTriGReader<R: AsyncRead + Unpin> {
+    inner: FromTokioAsyncReadIterator<R, TriGRecognizer>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
+    /// Reads the next triple or returns `None` if the file is finished.
+    pub async fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+        Some(self.inner.next().await?.map(Into::into))
     }
 }
 
@@ -317,6 +402,41 @@ impl TriGSerializer {
         }
     }
 
+    /// Writes a TriG file to a [`AsyncWrite`] implementation.
+    ///
+    /// ```
+    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxttl::TriGSerializer;
+    /// use std::io::Result;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<()> {
+    ///     let mut writer = TriGSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    ///     writer.write_quad(QuadRef::new(
+    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///         NamedNodeRef::new_unchecked("http://example.com"),
+    ///     )).await?;
+    ///     assert_eq!(
+    ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+    ///         writer.finish().await?.as_slice()
+    ///     );
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+        &self,
+        write: W,
+    ) -> ToTokioAsyncWriteTriGWriter<W> {
+        ToTokioAsyncWriteTriGWriter {
+            write,
+            writer: self.serialize(),
+            buffer: Vec::new(),
+        }
+    }
+
     /// Builds a low-level TriG writer.
     ///
     /// ```
@@ -380,6 +500,55 @@ impl<W: Write> ToWriteTriGWriter<W> {
     /// Ends the write process and returns the underlying [`Write`].
     pub fn finish(mut self) -> io::Result<W> {
         self.writer.finish(&mut self.write)?;
+        Ok(self.write)
+    }
+}
+
+/// Writes a TriG file to a [`AsyncWrite`] implementation. Can be built using [`TriGSerializer::serialize_to_tokio_async_write`].
+///
+/// ```
+/// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxttl::TriGSerializer;
+/// use std::io::Result;
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> Result<()> {
+///     let mut writer = TriGSerializer::new().serialize_to_tokio_async_write(Vec::new());
+///     writer.write_quad(QuadRef::new(
+///         NamedNodeRef::new_unchecked("http://example.com#me"),
+///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+///         NamedNodeRef::new_unchecked("http://example.com"),
+///     )).await?;
+///     assert_eq!(
+///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+///         writer.finish().await?.as_slice()
+///     );
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteTriGWriter<W: AsyncWrite + Unpin> {
+    write: W,
+    writer: LowLevelTriGWriter,
+    buffer: Vec<u8>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTriGWriter<W> {
+    /// Writes an extra quad.
+    pub async fn write_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        self.writer.write_quad(q, &mut self.buffer)?;
+        self.write.write_all(&self.buffer).await?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    /// Ends the write process and returns the underlying [`Write`].
+    pub async fn finish(mut self) -> io::Result<W> {
+        self.writer.finish(&mut self.buffer)?;
+        self.write.write_all(&self.buffer).await?;
+        self.buffer.clear();
         Ok(self.write)
     }
 }
