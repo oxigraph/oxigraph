@@ -646,37 +646,41 @@ impl Dataset {
         Vec<(u64, Vec<InternedBlankNode>)>,
     ) {
         let mut to_hash = Vec::new();
-        let mut to_do = hashes.keys().copied().collect::<Vec<_>>();
+        let mut to_do = hashes
+            .keys()
+            .map(|bnode| (*bnode, true))
+            .collect::<HashMap<_, _>>();
         let mut partition = HashMap::<_, Vec<_>>::with_capacity(hashes.len());
-        let mut partition_count = to_do.len();
-        while !to_do.is_empty() {
+        let mut old_partition_count = usize::MAX;
+        while old_partition_count != partition.len() {
+            old_partition_count = partition.len();
             partition.clear();
             let mut new_hashes = hashes.clone();
-            let mut new_todo = Vec::with_capacity(to_do.len());
-            for bnode in to_do {
-                for (s, p, o, g) in &quads_per_blank_node[&bnode] {
-                    to_hash.push((
-                        self.hash_subject(s, bnode, &hashes),
-                        self.hash_named_node(*p),
-                        self.hash_term(o, bnode, &hashes),
-                        self.hash_graph_name(g, bnode, &hashes),
-                    ));
-                }
-                to_hash.sort_unstable();
-                let hash = Self::hash_tuple((&to_hash,));
-                to_hash.clear();
-                if hash != hashes[&bnode] {
-                    new_hashes.insert(bnode, hash);
-                    new_todo.push(bnode);
-                }
-                partition.entry(hash).or_default().push(bnode);
+            for bnode in hashes.keys() {
+                let hash = if to_do.contains_key(bnode) {
+                    for (s, p, o, g) in &quads_per_blank_node[bnode] {
+                        to_hash.push((
+                            self.hash_subject(s, *bnode, &hashes),
+                            self.hash_named_node(*p),
+                            self.hash_term(o, *bnode, &hashes),
+                            self.hash_graph_name(g, *bnode, &hashes),
+                        ));
+                    }
+                    to_hash.sort_unstable();
+                    let hash = Self::hash_tuple((&to_hash, hashes[bnode]));
+                    to_hash.clear();
+                    if hash == hashes[bnode] {
+                        to_do.insert(*bnode, false);
+                    } else {
+                        new_hashes.insert(*bnode, hash);
+                    }
+                    hash
+                } else {
+                    hashes[bnode]
+                };
+                partition.entry(hash).or_default().push(*bnode);
             }
             hashes = new_hashes;
-            to_do = new_todo;
-            if partition_count == partition.len() {
-                break; // no improvement
-            }
-            partition_count = partition.len();
         }
         let mut partition: Vec<_> = partition.into_iter().collect();
         partition.sort_unstable_by(|(h1, b1), (h2, b2)| (b1.len(), h1).cmp(&(b2.len(), h2)));

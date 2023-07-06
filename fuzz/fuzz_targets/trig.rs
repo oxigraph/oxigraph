@@ -74,7 +74,16 @@ fuzz_target!(|data: &[u8]| {
         .filter(|c| *c != 0xFF)
         .collect::<Vec<_>>()
         .as_slice()]);
-    if quads.iter().map(count_quad_blank_nodes).sum::<usize>() < 2 {
+    let bnodes_count = quads.iter().map(count_quad_blank_nodes).sum::<usize>();
+    if bnodes_count == 0 {
+        assert_eq!(
+            quads,
+            quads_without_split,
+            "With split:\n{}\nWithout split:\n{}",
+            String::from_utf8_lossy(&serialize_quads(&quads)),
+            String::from_utf8_lossy(&serialize_quads(&quads_without_split))
+        );
+    } else if bnodes_count <= 4 {
         let mut dataset_with_split = quads.iter().collect::<Dataset>();
         let mut dataset_without_split = quads_without_split.iter().collect::<Dataset>();
         dataset_with_split.canonicalize();
