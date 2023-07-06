@@ -3,5 +3,5 @@ use libfuzzer_sys::fuzz_target;
 use spargebra::Query;
 
 fuzz_target!(|data: &str| {
-    Query::parse(data, None);
+    let _ = Query::parse(data, None);
 });

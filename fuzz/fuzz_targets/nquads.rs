@@ -1,27 +1,45 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use oxttl::{NQuadsParser, NQuadsSerializer};
+use oxrdf::Quad;
+use oxttl::{NQuadsParser, NQuadsSerializer, SyntaxError};
 
-fuzz_target!(|data: &[u8]| {
-    // We parse
+fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<SyntaxError>) {
     let mut quads = Vec::new();
+    let mut errors = Vec::new();
     let mut parser = NQuadsParser::new().with_quoted_triples().parse();
-    for chunk in data.split(|c| *c == 0xFF) {
+    for chunk in chunks {
         parser.extend_from_slice(chunk);
         while let Some(result) = parser.read_next() {
-            if let Ok(quad) = result {
-                quads.push(quad);
+            match result {
+                Ok(quad) => quads.push(quad),
+                Err(error) => errors.push(error),
             }
         }
     }
     parser.end();
     while let Some(result) = parser.read_next() {
-        if let Ok(quad) = result {
-            quads.push(quad);
+        match result {
+            Ok(quad) => quads.push(quad),
+            Err(error) => errors.push(error),
         }
     }
     assert!(parser.is_end());
+    (quads, errors)
+}
+
+fuzz_target!(|data: &[u8]| {
+    // We parse with splitting
+    let (quads, errors) = parse(data.split(|c| *c == 0xFF));
+    // We parse without splitting
+    let (quads_without_split, errors_without_split) = parse([data
+        .iter()
+        .copied()
+        .filter(|c| *c != 0xFF)
+        .collect::<Vec<_>>()
+        .as_slice()]);
+    assert_eq!(quads, quads_without_split);
+    assert_eq!(errors.len(), errors_without_split.len());
 
     // We serialize
     let mut writer = NQuadsSerializer::new().serialize_to_write(Vec::new());
