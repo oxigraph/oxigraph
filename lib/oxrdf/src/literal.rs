@@ -272,7 +272,7 @@ impl From<f32> for Literal {
             } else if value == f32::NEG_INFINITY {
                 "-INF".to_owned()
             } else {
-                value.to_string()
+                format!("{value:E}")
             },
             datatype: xsd::FLOAT.into(),
         })
@@ -288,7 +288,7 @@ impl From<f64> for Literal {
             } else if value == f64::NEG_INFINITY {
                 "-INF".to_owned()
             } else {
-                value.to_string()
+                format!("{value:E}")
             },
             datatype: xsd::DOUBLE.into(),
         })
@@ -667,10 +667,12 @@ mod tests {
         assert_eq!("-INF", Literal::from(f64::NEG_INFINITY).value());
         assert_eq!("NaN", Literal::from(f32::NAN).value());
         assert_eq!("NaN", Literal::from(f64::NAN).value());
+        assert_eq!("11E-1", Literal::from(1.1_f32).value());
+        assert_eq!("11E-1", Literal::from(1.1_f64).value());
     }
 
     #[test]
-    fn test_canoincal_escaping() {
+    fn test_canonical_escaping() {
         assert_eq!(
             Literal::from_str(r#""\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f""#).unwrap().to_string(),
             r###""\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000B\f\r\u000E\u000F""###

@@ -202,7 +202,7 @@ impl fmt::Display for Double {
         } else if self.value == f64::NEG_INFINITY {
             f.write_str("-INF")
         } else {
-            self.value.fmt(f)
+            write!(f, "{:E}", self.value)
         }
     }
 }
@@ -305,16 +305,18 @@ mod tests {
         assert_eq!(Double::from_str("INF")?.to_string(), "INF");
         assert_eq!(Double::from_str("+INF")?.to_string(), "INF");
         assert_eq!(Double::from_str("-INF")?.to_string(), "-INF");
-        assert_eq!(Double::from_str("0.0E0")?.to_string(), "0");
-        assert_eq!(Double::from_str("-0.0E0")?.to_string(), "-0");
-        assert_eq!(Double::from_str("0.1e1")?.to_string(), "1");
-        assert_eq!(Double::from_str("-0.1e1")?.to_string(), "-1");
-        assert_eq!(Double::from_str("1.e1")?.to_string(), "10");
-        assert_eq!(Double::from_str("-1.e1")?.to_string(), "-10");
-        assert_eq!(Double::from_str("1")?.to_string(), "1");
-        assert_eq!(Double::from_str("-1")?.to_string(), "-1");
-        assert_eq!(Double::from_str("1.")?.to_string(), "1");
-        assert_eq!(Double::from_str("-1.")?.to_string(), "-1");
+        assert_eq!(Double::from_str("0")?.to_string(), "0E0");
+        assert_eq!(Double::from_str("0.0E0")?.to_string(), "0E0");
+        assert_eq!(Double::from_str("-0.0E0")?.to_string(), "-0E0");
+        assert_eq!(Double::from_str("-0")?.to_string(), "-0E0");
+        assert_eq!(Double::from_str("0.1e1")?.to_string(), "1E0");
+        assert_eq!(Double::from_str("-0.1e1")?.to_string(), "-1E0");
+        assert_eq!(Double::from_str("1.e1")?.to_string(), "1E1");
+        assert_eq!(Double::from_str("-1.e1")?.to_string(), "-1E1");
+        assert_eq!(Double::from_str("1")?.to_string(), "1E0");
+        assert_eq!(Double::from_str("-1")?.to_string(), "-1E0");
+        assert_eq!(Double::from_str("1.")?.to_string(), "1E0");
+        assert_eq!(Double::from_str("-1.")?.to_string(), "-1E0");
         assert_eq!(
             Double::from_str(&f64::MIN.to_string()).unwrap(),
             Double::MIN

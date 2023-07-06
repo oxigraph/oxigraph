@@ -192,7 +192,7 @@ impl fmt::Display for Float {
         } else if self.value == f32::NEG_INFINITY {
             f.write_str("-INF")
         } else {
-            self.value.fmt(f)
+            write!(f, "{:E}", self.value)
         }
     }
 }
@@ -295,16 +295,16 @@ mod tests {
         assert_eq!(Float::from_str("INF")?.to_string(), "INF");
         assert_eq!(Float::from_str("+INF")?.to_string(), "INF");
         assert_eq!(Float::from_str("-INF")?.to_string(), "-INF");
-        assert_eq!(Float::from_str("0.0E0")?.to_string(), "0");
-        assert_eq!(Float::from_str("-0.0E0")?.to_string(), "-0");
-        assert_eq!(Float::from_str("0.1e1")?.to_string(), "1");
-        assert_eq!(Float::from_str("-0.1e1")?.to_string(), "-1");
-        assert_eq!(Float::from_str("1.e1")?.to_string(), "10");
-        assert_eq!(Float::from_str("-1.e1")?.to_string(), "-10");
-        assert_eq!(Float::from_str("1")?.to_string(), "1");
-        assert_eq!(Float::from_str("-1")?.to_string(), "-1");
-        assert_eq!(Float::from_str("1.")?.to_string(), "1");
-        assert_eq!(Float::from_str("-1.")?.to_string(), "-1");
+        assert_eq!(Float::from_str("0.0E0")?.to_string(), "0E0");
+        assert_eq!(Float::from_str("-0.0E0")?.to_string(), "-0E0");
+        assert_eq!(Float::from_str("0.1e1")?.to_string(), "1E0");
+        assert_eq!(Float::from_str("-0.1e1")?.to_string(), "-1E0");
+        assert_eq!(Float::from_str("1.e1")?.to_string(), "1E1");
+        assert_eq!(Float::from_str("-1.e1")?.to_string(), "-1E1");
+        assert_eq!(Float::from_str("1")?.to_string(), "1E0");
+        assert_eq!(Float::from_str("-1")?.to_string(), "-1E0");
+        assert_eq!(Float::from_str("1.")?.to_string(), "1E0");
+        assert_eq!(Float::from_str("-1.")?.to_string(), "-1E0");
         assert_eq!(Float::from_str(&f32::MIN.to_string())?, Float::MIN);
         assert_eq!(Float::from_str(&f32::MAX.to_string())?, Float::MAX);
         Ok(())
