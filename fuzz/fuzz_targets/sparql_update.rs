@@ -4,5 +4,5 @@ use spargebra::Update;
 use std::str;
 
 fuzz_target!(|data: &str| {
-    Update::parse(data, None);
+    let _ = Update::parse(data, None);
 });

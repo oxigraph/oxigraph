@@ -1,7 +1,6 @@
 [package]
 name = "oxigraph-fuzz"
 version = "0.0.0"
-authors = ["Automatically generated"]
 publish = false
 edition = "2021"
 
@@ -12,6 +11,7 @@ cargo-fuzz = true
 anyhow = "1"
 lazy_static = "1"
 libfuzzer-sys = "0.4"
+oxrdf = { path = "../lib/oxrdf", features = ["rdf-star"] }
 oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
 oxrdfxml = { path = "../lib/oxrdfxml" }
 spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
