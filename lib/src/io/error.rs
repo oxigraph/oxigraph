@@ -1,5 +1,4 @@
 use oxiri::IriParseError;
-use oxrdfxml::RdfXmlError;
 use std::error::Error;
 use std::{fmt, io};
 
@@ -44,39 +43,40 @@ impl Error for ParseError {
     }
 }
 
-impl From<oxttl::ParseError> for ParseError {
+impl From<oxttl::SyntaxError> for SyntaxError {
     #[inline]
-    fn from(error: oxttl::ParseError) -> Self {
-        Self::Syntax(SyntaxError {
+    fn from(error: oxttl::SyntaxError) -> Self {
+        SyntaxError {
             inner: SyntaxErrorKind::Turtle(error),
-        })
-    }
-}
-
-impl From<oxttl::ParseOrIoError> for ParseError {
-    #[inline]
-    fn from(error: oxttl::ParseOrIoError) -> Self {
-        match error {
-            oxttl::ParseOrIoError::Parse(e) => e.into(),
-            oxttl::ParseOrIoError::Io(e) => e.into(),
         }
     }
 }
 
-#[allow(clippy::fallible_impl_from)]
-impl From<RdfXmlError> for ParseError {
+impl From<oxttl::ParseError> for ParseError {
     #[inline]
-    fn from(error: RdfXmlError) -> Self {
-        let error = io::Error::from(error);
-        if error.get_ref().map_or(
-            false,
-            <(dyn Error + Send + Sync + 'static)>::is::<RdfXmlError>,
-        ) {
-            Self::Syntax(SyntaxError {
-                inner: SyntaxErrorKind::RdfXml(*error.into_inner().unwrap().downcast().unwrap()),
-            })
-        } else {
-            Self::Io(error)
+    fn from(error: oxttl::ParseError) -> Self {
+        match error {
+            oxttl::ParseError::Syntax(e) => Self::Syntax(e.into()),
+            oxttl::ParseError::Io(e) => Self::Io(e),
+        }
+    }
+}
+
+impl From<oxrdfxml::SyntaxError> for SyntaxError {
+    #[inline]
+    fn from(error: oxrdfxml::SyntaxError) -> Self {
+        SyntaxError {
+            inner: SyntaxErrorKind::RdfXml(error),
+        }
+    }
+}
+
+impl From<oxrdfxml::ParseError> for ParseError {
+    #[inline]
+    fn from(error: oxrdfxml::ParseError) -> Self {
+        match error {
+            oxrdfxml::ParseError::Syntax(e) => Self::Syntax(e.into()),
+            oxrdfxml::ParseError::Io(e) => Self::Io(e),
         }
     }
 }
@@ -113,8 +113,8 @@ pub struct SyntaxError {
 
 #[derive(Debug)]
 enum SyntaxErrorKind {
-    Turtle(oxttl::ParseError),
-    RdfXml(RdfXmlError),
+    Turtle(oxttl::SyntaxError),
+    RdfXml(oxrdfxml::SyntaxError),
     InvalidBaseIri { iri: String, error: IriParseError },
 }
 

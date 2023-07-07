@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 use std::str;
+use std::sync::Arc;
 
 pub fn write_boolean_xml_result<W: Write>(sink: W, value: bool) -> io::Result<W> {
     do_write_boolean_xml_result(sink, value).map_err(map_xml_error)
@@ -604,7 +605,10 @@ fn decode<'a, T>(
 
 fn map_xml_error(error: quick_xml::Error) -> io::Error {
     match error {
-        quick_xml::Error::Io(error) => io::Error::new(error.kind(), error),
+        quick_xml::Error::Io(error) => match Arc::try_unwrap(error) {
+            Ok(error) => error,
+            Err(error) => io::Error::new(error.kind(), error),
+        },
         quick_xml::Error::UnexpectedEof(_) => io::Error::new(io::ErrorKind::UnexpectedEof, error),
         _ => io::Error::new(io::ErrorKind::InvalidData, error),
     }

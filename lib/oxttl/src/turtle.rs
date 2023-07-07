@@ -1,7 +1,7 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`].
 
 use crate::terse::TriGRecognizer;
-use crate::toolkit::{FromReadIterator, ParseError, ParseOrIoError, Parser};
+use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter};
 use crate::TriGSerializer;
 use oxiri::{Iri, IriParseError};
@@ -187,9 +187,9 @@ pub struct FromReadTurtleReader<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadTurtleReader<R> {
-    type Item = Result<Triple, ParseOrIoError>;
+    type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseOrIoError>> {
+    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
         Some(self.inner.next()?.map(Into::into))
     }
 }
@@ -256,7 +256,7 @@ impl LowLevelTurtleReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Triple, ParseError>> {
+    pub fn read_next(&mut self) -> Option<Result<Triple, SyntaxError>> {
         Some(self.parser.read_next()?.map(Into::into))
     }
 }

@@ -17,7 +17,7 @@ pub mod turtle;
 pub use crate::n3::N3Parser;
 pub use crate::nquads::{NQuadsParser, NQuadsSerializer};
 pub use crate::ntriples::{NTriplesParser, NTriplesSerializer};
-pub use crate::toolkit::{ParseError, ParseOrIoError};
+pub use crate::toolkit::{ParseError, SyntaxError};
 pub use crate::trig::{TriGParser, TriGSerializer};
 pub use crate::turtle::{TurtleParser, TurtleSerializer};
 

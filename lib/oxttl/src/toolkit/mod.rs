@@ -7,5 +7,5 @@ mod parser;
 
 pub use self::lexer::{Lexer, LexerError, TokenRecognizer, TokenRecognizerError};
 pub use self::parser::{
-    FromReadIterator, ParseError, ParseOrIoError, Parser, RuleRecognizer, RuleRecognizerError,
+    FromReadIterator, ParseError, Parser, RuleRecognizer, RuleRecognizerError, SyntaxError,
 };

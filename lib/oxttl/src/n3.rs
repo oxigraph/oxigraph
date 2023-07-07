@@ -2,9 +2,9 @@
 
 use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
 use crate::toolkit::{
-    FromReadIterator, Lexer, ParseError, Parser, RuleRecognizer, RuleRecognizerError,
+    FromReadIterator, Lexer, Parser, RuleRecognizer, RuleRecognizerError, SyntaxError,
 };
-use crate::{ParseOrIoError, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
+use crate::{ParseError, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "rdf-star")]
@@ -336,9 +336,9 @@ pub struct FromReadN3Reader<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadN3Reader<R> {
-    type Item = Result<N3Quad, ParseOrIoError>;
+    type Item = Result<N3Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<N3Quad, ParseOrIoError>> {
+    fn next(&mut self) -> Option<Result<N3Quad, ParseError>> {
         self.inner.next()
     }
 }
@@ -406,7 +406,7 @@ impl LowLevelN3Reader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<N3Quad, ParseError>> {
+    pub fn read_next(&mut self) -> Option<Result<N3Quad, SyntaxError>> {
         self.parser.read_next()
     }
 }

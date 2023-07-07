@@ -2,7 +2,7 @@
 //! and a serializer implemented by [`NTriplesSerializer`].
 
 use crate::line_formats::NQuadsRecognizer;
-use crate::toolkit::{FromReadIterator, ParseError, ParseOrIoError, Parser};
+use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxrdf::{Triple, TripleRef};
 use std::io::{self, Read, Write};
 
@@ -158,9 +158,9 @@ pub struct FromReadNTriplesReader<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadNTriplesReader<R> {
-    type Item = Result<Triple, ParseOrIoError>;
+    type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseOrIoError>> {
+    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
         Some(self.inner.next()?.map(Into::into))
     }
 }
@@ -227,7 +227,7 @@ impl LowLevelNTriplesReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Triple, ParseError>> {
+    pub fn read_next(&mut self) -> Option<Result<Triple, SyntaxError>> {
         Some(self.parser.read_next()?.map(Into::into))
     }
 }

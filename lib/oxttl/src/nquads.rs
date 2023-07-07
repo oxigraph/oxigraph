@@ -1,7 +1,7 @@
 //! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`].
 
 use crate::line_formats::NQuadsRecognizer;
-use crate::toolkit::{FromReadIterator, ParseError, ParseOrIoError, Parser};
+use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxrdf::{Quad, QuadRef};
 use std::io::{self, Read, Write};
 
@@ -157,9 +157,9 @@ pub struct FromReadNQuadsReader<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadNQuadsReader<R> {
-    type Item = Result<Quad, ParseOrIoError>;
+    type Item = Result<Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Quad, ParseOrIoError>> {
+    fn next(&mut self) -> Option<Result<Quad, ParseError>> {
         self.inner.next()
     }
 }
@@ -226,7 +226,7 @@ impl LowLevelNQuadsReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Quad, ParseError>> {
+    pub fn read_next(&mut self) -> Option<Result<Quad, SyntaxError>> {
         self.parser.read_next()
     }
 }
