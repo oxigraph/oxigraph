@@ -1,7 +1,10 @@
-use crate::algebra::{Expression, GraphPattern, JoinAlgorithm, OrderExpression};
+use crate::algebra::{
+    Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm, OrderExpression,
+};
 use crate::type_inference::{
     infer_expression_type, infer_graph_pattern_types, VariableType, VariableTypes,
 };
+use oxrdf::Variable;
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{GroundTermPattern, NamedNodePattern};
 use std::cmp::{max, min};
@@ -53,6 +56,7 @@ impl Optimizer {
                 left,
                 right,
                 expression,
+                algorithm,
             } => {
                 let left = Self::normalize_pattern(*left, input_types);
                 let right = Self::normalize_pattern(*right, input_types);
@@ -62,6 +66,7 @@ impl Optimizer {
                     left,
                     right,
                     Self::normalize_expression(expression, &inner_types),
+                    algorithm,
                 )
             }
             #[cfg(feature = "sep-0006")]
@@ -103,9 +108,14 @@ impl Optimizer {
                     GraphPattern::extend(inner, variable, expression)
                 }
             }
-            GraphPattern::Minus { left, right } => GraphPattern::minus(
+            GraphPattern::Minus {
+                left,
+                right,
+                algorithm,
+            } => GraphPattern::minus(
                 Self::normalize_pattern(*left, input_types),
                 Self::normalize_pattern(*right, input_types),
+                algorithm,
             ),
             GraphPattern::Values {
                 variables,
@@ -336,6 +346,7 @@ impl Optimizer {
                 left,
                 right,
                 expression,
+                algorithm,
             } => {
                 let left_types = infer_graph_pattern_types(&left, input_types.clone());
                 let right_types = infer_graph_pattern_types(&right, input_types.clone());
@@ -364,13 +375,19 @@ impl Optimizer {
                         Self::push_filters(*left, left_filters, input_types),
                         Self::push_filters(*right, right_filters, input_types),
                         expression,
+                        algorithm,
                     ),
                     Expression::and_all(final_filters),
                 )
             }
-            GraphPattern::Minus { left, right } => GraphPattern::minus(
+            GraphPattern::Minus {
+                left,
+                right,
+                algorithm,
+            } => GraphPattern::minus(
                 Self::push_filters(*left, filters, input_types),
                 Self::push_filters(*right, Vec::new(), input_types),
+                algorithm,
             ),
             GraphPattern::Extend {
                 inner,
@@ -503,11 +520,7 @@ impl Optimizer {
                         .enumerate()
                         .filter_map(|(i, v)| v.then(|| i))
                         .filter(|i| {
-                            count_common_variables(
-                                &output_types,
-                                &to_reorder_types[*i],
-                                input_types,
-                            ) > 0
+                            has_common_variables(&output_types, &to_reorder_types[*i], input_types)
                         })
                         .min_by_key(|i| {
                             // Estimation of the join cost
@@ -527,10 +540,14 @@ impl Optimizer {
                             } else {
                                 estimate_join_cost(
                                     &output,
-                                    &output_types,
                                     &to_reorder[*i],
-                                    &to_reorder_types[*i],
-                                    JoinAlgorithm::HashBuildLeftProbeRight,
+                                    &JoinAlgorithm::HashBuildLeftProbeRight {
+                                        keys: join_key_variables(
+                                            &output_types,
+                                            &to_reorder_types[*i],
+                                            input_types,
+                                        ),
+                                    },
                                     input_types,
                                 )
                             }
@@ -547,7 +564,13 @@ impl Optimizer {
                                 GraphPattern::join(
                                     output,
                                     next,
-                                    JoinAlgorithm::HashBuildLeftProbeRight,
+                                    JoinAlgorithm::HashBuildLeftProbeRight {
+                                        keys: join_key_variables(
+                                            &output_types,
+                                            &to_reorder_types[next_id],
+                                            input_types,
+                                        ),
+                                    },
                                 )
                             };
                         }
@@ -556,7 +579,13 @@ impl Optimizer {
                             output = GraphPattern::join(
                                 output,
                                 next,
-                                JoinAlgorithm::HashBuildLeftProbeRight,
+                                JoinAlgorithm::HashBuildLeftProbeRight {
+                                    keys: join_key_variables(
+                                        &output_types,
+                                        &to_reorder_types[next_id],
+                                        input_types,
+                                    ),
+                                },
                             );
                         }
                         output_types.intersect_with(to_reorder_types[next_id].clone());
@@ -566,12 +595,25 @@ impl Optimizer {
                 output_cartesian_product_joins
                     .into_iter()
                     .reduce(|left, right| {
+                        let keys = join_key_variables(
+                            &infer_graph_pattern_types(&left, input_types.clone()),
+                            &infer_graph_pattern_types(&right, input_types.clone()),
+                            input_types,
+                        );
                         if estimate_graph_pattern_size(&left, input_types)
                             <= estimate_graph_pattern_size(&right, input_types)
                         {
-                            GraphPattern::join(left, right, JoinAlgorithm::HashBuildLeftProbeRight)
+                            GraphPattern::join(
+                                left,
+                                right,
+                                JoinAlgorithm::HashBuildLeftProbeRight { keys },
+                            )
                         } else {
-                            GraphPattern::join(right, left, JoinAlgorithm::HashBuildLeftProbeRight)
+                            GraphPattern::join(
+                                right,
+                                left,
+                                JoinAlgorithm::HashBuildLeftProbeRight { keys },
+                            )
                         }
                     })
                     .unwrap()
@@ -588,15 +630,16 @@ impl Optimizer {
                 left,
                 right,
                 expression,
+                ..
             } => {
                 let left = Self::reorder_joins(*left, input_types);
+                let left_types = infer_graph_pattern_types(&left, input_types.clone());
                 let right = Self::reorder_joins(*right, input_types);
+                let right_types = infer_graph_pattern_types(&right, input_types.clone());
                 #[cfg(feature = "sep-0006")]
                 {
-                    let left_types = infer_graph_pattern_types(&left, input_types.clone());
-                    let right_types = infer_graph_pattern_types(&right, input_types.clone());
                     if is_fit_for_for_loop_join(&right, input_types, &left_types)
-                        && count_common_variables(&left_types, &right_types, input_types) > 0
+                        && has_common_variables(&left_types, &right_types, input_types)
                     {
                         return GraphPattern::lateral(
                             left,
@@ -604,16 +647,33 @@ impl Optimizer {
                                 GraphPattern::empty_singleton(),
                                 right,
                                 expression,
+                                LeftJoinAlgorithm::HashBuildRightProbeLeft { keys: Vec::new() },
                             ),
                         );
                     }
                 }
-                GraphPattern::left_join(left, right, expression)
+                GraphPattern::left_join(
+                    left,
+                    right,
+                    expression,
+                    LeftJoinAlgorithm::HashBuildRightProbeLeft {
+                        keys: join_key_variables(&left_types, &right_types, input_types),
+                    },
+                )
             }
-            GraphPattern::Minus { left, right } => GraphPattern::minus(
-                Self::reorder_joins(*left, input_types),
-                Self::reorder_joins(*right, input_types),
-            ),
+            GraphPattern::Minus { left, right, .. } => {
+                let left = Self::reorder_joins(*left, input_types);
+                let left_types = infer_graph_pattern_types(&left, input_types.clone());
+                let right = Self::reorder_joins(*right, input_types);
+                let right_types = infer_graph_pattern_types(&right, input_types.clone());
+                GraphPattern::minus(
+                    left,
+                    right,
+                    MinusAlgorithm::HashBuildRightProbeLeft {
+                        keys: join_key_variables(&left_types, &right_types, input_types),
+                    },
+                )
+            }
             GraphPattern::Extend {
                 inner,
                 expression,
@@ -685,6 +745,7 @@ fn is_fit_for_for_loop_join(
             left,
             right,
             expression,
+            ..
         } => {
             if !is_fit_for_for_loop_join(left, global_input_types, entry_types) {
                 return false;
@@ -802,17 +863,28 @@ fn is_expression_fit_for_for_loop_join(
     }
 }
 
-fn count_common_variables(
+fn has_common_variables(
     left: &VariableTypes,
     right: &VariableTypes,
     input_types: &VariableTypes,
-) -> usize {
+) -> bool {
     // TODO: we should be smart and count as shared variables FILTER(?a = ?b)
+    left.iter().any(|(variable, left_type)| {
+        !left_type.undef && !right.get(variable).undef && input_types.get(variable).undef
+    })
+}
+
+fn join_key_variables(
+    left: &VariableTypes,
+    right: &VariableTypes,
+    input_types: &VariableTypes,
+) -> Vec<Variable> {
     left.iter()
         .filter(|(variable, left_type)| {
             !left_type.undef && !right.get(variable).undef && input_types.get(variable).undef
         })
-        .count()
+        .map(|(variable, _)| variable.clone())
+        .collect()
 }
 
 fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTypes) -> usize {
@@ -842,35 +914,26 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             left,
             right,
             algorithm,
-        } => {
-            let left_types = infer_graph_pattern_types(left, input_types.clone());
-            let right_types = infer_graph_pattern_types(right, input_types.clone());
-            estimate_join_cost(
-                left,
-                &left_types,
-                right,
-                &right_types,
-                *algorithm,
-                input_types,
-            )
-        }
-        GraphPattern::LeftJoin { left, right, .. } => {
-            let left_size = estimate_graph_pattern_size(left, input_types);
-            let left_types = infer_graph_pattern_types(left, input_types.clone());
-            let right_types = infer_graph_pattern_types(right, input_types.clone());
-            max(
-                left_size,
-                left_size
-                    .saturating_mul(estimate_graph_pattern_size(right, &right_types))
-                    .saturating_div(
-                        1_000_usize.saturating_pow(
-                            count_common_variables(&left_types, &right_types, input_types)
-                                .try_into()
-                                .unwrap(),
-                        ),
-                    ),
-            )
-        }
+        } => estimate_join_cost(left, right, algorithm, input_types),
+        GraphPattern::LeftJoin {
+            left,
+            right,
+            algorithm,
+            ..
+        } => match algorithm {
+            LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => {
+                let left_size = estimate_graph_pattern_size(left, input_types);
+                max(
+                    left_size,
+                    left_size
+                        .saturating_mul(estimate_graph_pattern_size(
+                            right,
+                            &infer_graph_pattern_types(right, input_types.clone()),
+                        ))
+                        .saturating_div(1_000_usize.saturating_pow(keys.len().try_into().unwrap())),
+                )
+            }
+        },
         #[cfg(feature = "sep-0006")]
         GraphPattern::Lateral { left, right } => estimate_lateral_cost(
             left,
@@ -908,22 +971,16 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
 
 fn estimate_join_cost(
     left: &GraphPattern,
-    left_types: &VariableTypes,
     right: &GraphPattern,
-    right_types: &VariableTypes,
-    algorithm: JoinAlgorithm,
+    algorithm: &JoinAlgorithm,
     input_types: &VariableTypes,
 ) -> usize {
     match algorithm {
-        JoinAlgorithm::HashBuildLeftProbeRight => estimate_graph_pattern_size(left, input_types)
-            .saturating_mul(estimate_graph_pattern_size(right, input_types))
-            .saturating_div(
-                1_000_usize.saturating_pow(
-                    count_common_variables(left_types, right_types, input_types)
-                        .try_into()
-                        .unwrap(),
-                ),
-            ),
+        JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
+            estimate_graph_pattern_size(left, input_types)
+                .saturating_mul(estimate_graph_pattern_size(right, input_types))
+                .saturating_div(1_000_usize.saturating_pow(keys.len().try_into().unwrap()))
+        }
     }
 }
 fn estimate_lateral_cost(

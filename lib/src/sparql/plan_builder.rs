@@ -106,25 +106,37 @@ impl<'a> PlanBuilder<'a> {
                 right,
                 algorithm,
             } => match algorithm {
-                JoinAlgorithm::HashBuildLeftProbeRight => PlanNode::HashJoin {
+                JoinAlgorithm::HashBuildLeftProbeRight { keys } => PlanNode::HashJoin {
                     build_child: Rc::new(self.build_for_graph_pattern(left, variables)?),
                     probe_child: Rc::new(self.build_for_graph_pattern(right, variables)?),
+                    keys: keys
+                        .iter()
+                        .map(|v| build_plan_variable(variables, v))
+                        .collect(),
                 },
             },
             GraphPattern::LeftJoin {
                 left,
                 right,
                 expression,
-            } => PlanNode::HashLeftJoin {
-                left: Rc::new(self.build_for_graph_pattern(left, variables)?),
-                right: Rc::new(self.build_for_graph_pattern(right, variables)?),
-                expression: Box::new(self.build_for_expression(expression, variables)?),
+                algorithm,
+            } => match algorithm {
+                LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => PlanNode::HashLeftJoin {
+                    left: Rc::new(self.build_for_graph_pattern(left, variables)?),
+                    right: Rc::new(self.build_for_graph_pattern(right, variables)?),
+                    expression: Box::new(self.build_for_expression(expression, variables)?),
+                    keys: keys
+                        .iter()
+                        .map(|v| build_plan_variable(variables, v))
+                        .collect(),
+                },
             },
             GraphPattern::Lateral { left, right } => {
                 if let GraphPattern::LeftJoin {
                     left: nested_left,
                     right: nested_right,
                     expression,
+                    ..
                 } = right.as_ref()
                 {
                     if nested_left.is_empty_singleton() {
@@ -167,9 +179,19 @@ impl<'a> PlanBuilder<'a> {
                 variable: build_plan_variable(variables, variable),
                 expression: Box::new(self.build_for_expression(expression, variables)?),
             },
-            GraphPattern::Minus { left, right } => PlanNode::AntiJoin {
-                left: Rc::new(self.build_for_graph_pattern(left, variables)?),
-                right: Rc::new(self.build_for_graph_pattern(right, variables)?),
+            GraphPattern::Minus {
+                left,
+                right,
+                algorithm,
+            } => match algorithm {
+                MinusAlgorithm::HashBuildRightProbeLeft { keys } => PlanNode::AntiJoin {
+                    left: Rc::new(self.build_for_graph_pattern(left, variables)?),
+                    right: Rc::new(self.build_for_graph_pattern(right, variables)?),
+                    keys: keys
+                        .iter()
+                        .map(|v| build_plan_variable(variables, v))
+                        .collect(),
+                },
             },
             GraphPattern::Service {
                 name,

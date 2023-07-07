@@ -380,12 +380,9 @@ impl SimpleEvaluator {
             PlanNode::HashJoin {
                 probe_child,
                 build_child,
+                keys,
             } => {
-                let join_keys: Vec<_> = probe_child
-                    .always_bound_variables()
-                    .intersection(&build_child.always_bound_variables())
-                    .copied()
-                    .collect();
+                let join_keys = keys.iter().map(|v| v.encoded).collect::<Vec<_>>();
                 let (probe, probe_stats) = self.plan_evaluator(probe_child);
                 stat_children.push(probe_stats);
                 let (build, build_stats) = self.plan_evaluator(build_child);
@@ -444,12 +441,8 @@ impl SimpleEvaluator {
                     }))
                 })
             }
-            PlanNode::AntiJoin { left, right } => {
-                let join_keys: Vec<_> = left
-                    .always_bound_variables()
-                    .intersection(&right.always_bound_variables())
-                    .copied()
-                    .collect();
+            PlanNode::AntiJoin { left, right, keys } => {
+                let join_keys = keys.iter().map(|v| v.encoded).collect::<Vec<_>>();
                 let (left, left_stats) = self.plan_evaluator(left);
                 stat_children.push(left_stats);
                 let (right, right_stats) = self.plan_evaluator(right);
@@ -487,12 +480,9 @@ impl SimpleEvaluator {
                 left,
                 right,
                 expression,
+                keys,
             } => {
-                let join_keys: Vec<_> = left
-                    .always_bound_variables()
-                    .intersection(&right.always_bound_variables())
-                    .copied()
-                    .collect();
+                let join_keys = keys.iter().map(|v| v.encoded).collect::<Vec<_>>();
                 let (left, left_stats) = self.plan_evaluator(left);
                 stat_children.push(left_stats);
                 let (right, right_stats) = self.plan_evaluator(right);
