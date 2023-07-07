@@ -4,9 +4,7 @@ use crate::storage::numeric_encoder::EncodedTerm;
 use regex::Regex;
 use spargebra::algebra::GraphPattern;
 use spargebra::term::GroundTerm;
-use std::cmp::max;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt;
 use std::rc::Rc;
 
@@ -40,6 +38,7 @@ pub enum PlanNode {
     HashJoin {
         probe_child: Rc<Self>,
         build_child: Rc<Self>,
+        keys: Vec<PlanVariable>,
     },
     /// Right nested in left loop
     ForLoopJoin {
@@ -50,6 +49,7 @@ pub enum PlanNode {
     AntiJoin {
         left: Rc<Self>,
         right: Rc<Self>,
+        keys: Vec<PlanVariable>,
     },
     Filter {
         child: Rc<Self>,
@@ -63,6 +63,7 @@ pub enum PlanNode {
         left: Rc<Self>,
         right: Rc<Self>,
         expression: Box<PlanExpression>,
+        keys: Vec<PlanVariable>,
     },
     /// right nested in left loop
     ForLoopLeftJoin {
@@ -159,9 +160,10 @@ impl PlanNode {
             Self::HashJoin {
                 probe_child: left,
                 build_child: right,
+                ..
             }
             | Self::ForLoopJoin { left, right, .. }
-            | Self::AntiJoin { left, right }
+            | Self::AntiJoin { left, right, .. }
             | Self::ForLoopLeftJoin { left, right, .. } => {
                 left.lookup_used_variables(callback);
                 right.lookup_used_variables(callback);
@@ -170,6 +172,7 @@ impl PlanNode {
                 left,
                 right,
                 expression,
+                ..
             } => {
                 left.lookup_used_variables(callback);
                 right.lookup_used_variables(callback);
@@ -216,134 +219,6 @@ impl PlanNode {
                 for (_, var) in aggregates.iter() {
                     callback(var.encoded);
                 }
-            }
-        }
-    }
-
-    /// Returns subset of the set of variables that are always bound in the result set
-    ///
-    /// (subset because this function is not perfect yet)
-    pub fn always_bound_variables(&self) -> BTreeSet<usize> {
-        let mut set = BTreeSet::default();
-        self.lookup_always_bound_variables(&mut |v| {
-            set.insert(v);
-        });
-        set
-    }
-
-    pub fn lookup_always_bound_variables(&self, callback: &mut impl FnMut(usize)) {
-        match self {
-            Self::StaticBindings { encoded_tuples, .. } => {
-                let mut variables = BTreeMap::default(); // value true iff always bound
-                let max_tuple_length = encoded_tuples
-                    .iter()
-                    .map(EncodedTuple::capacity)
-                    .fold(0, max);
-                for tuple in encoded_tuples {
-                    for key in 0..max_tuple_length {
-                        match variables.entry(key) {
-                            Entry::Vacant(e) => {
-                                e.insert(tuple.contains(key));
-                            }
-                            Entry::Occupied(mut e) => {
-                                if !tuple.contains(key) {
-                                    e.insert(false);
-                                }
-                            }
-                        }
-                    }
-                }
-                for (k, v) in variables {
-                    if v {
-                        callback(k);
-                    }
-                }
-            }
-            Self::QuadPattern {
-                subject,
-                predicate,
-                object,
-                graph_name,
-            } => {
-                subject.lookup_variables(callback);
-                predicate.lookup_variables(callback);
-                object.lookup_variables(callback);
-                graph_name.lookup_variables(callback);
-            }
-            Self::PathPattern {
-                subject,
-                object,
-                graph_name,
-                ..
-            } => {
-                subject.lookup_variables(callback);
-                object.lookup_variables(callback);
-                graph_name.lookup_variables(callback);
-            }
-            Self::Filter { child, .. } => {
-                //TODO: have a look at the expression to know if it filters out unbound variables
-                child.lookup_always_bound_variables(callback);
-            }
-            Self::Union { children } => {
-                if let Some(vars) = children
-                    .iter()
-                    .map(|c| c.always_bound_variables())
-                    .reduce(|a, b| a.intersection(&b).copied().collect())
-                {
-                    for v in vars {
-                        callback(v);
-                    }
-                }
-            }
-            Self::HashJoin {
-                probe_child: left,
-                build_child: right,
-            }
-            | Self::ForLoopJoin { left, right, .. } => {
-                left.lookup_always_bound_variables(callback);
-                right.lookup_always_bound_variables(callback);
-            }
-            Self::AntiJoin { left, .. }
-            | Self::HashLeftJoin { left, .. }
-            | Self::ForLoopLeftJoin { left, .. } => {
-                left.lookup_always_bound_variables(callback);
-            }
-            Self::Extend {
-                child,
-                variable,
-                expression,
-            } => {
-                if matches!(
-                    expression.as_ref(),
-                    PlanExpression::NamedNode(_) | PlanExpression::Literal(_)
-                ) {
-                    // TODO: more cases?
-                    callback(variable.encoded);
-                }
-                child.lookup_always_bound_variables(callback);
-            }
-            Self::Sort { child, .. }
-            | Self::HashDeduplicate { child }
-            | Self::Reduced { child }
-            | Self::Skip { child, .. }
-            | Self::Limit { child, .. } => child.lookup_always_bound_variables(callback),
-            Self::Service { child, silent, .. } => {
-                if *silent {
-                    // none, might return a null tuple
-                } else {
-                    child.lookup_always_bound_variables(callback)
-                }
-            }
-            Self::Project { mapping, child } => {
-                let child_bound = child.always_bound_variables();
-                for (child_i, output_i) in mapping.iter() {
-                    if child_bound.contains(&child_i.encoded) {
-                        callback(output_i.encoded);
-                    }
-                }
-            }
-            Self::Aggregate { .. } => {
-                //TODO
             }
         }
     }

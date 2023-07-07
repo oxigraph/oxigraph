@@ -660,6 +660,7 @@ pub enum GraphPattern {
         left: Box<Self>,
         right: Box<Self>,
         expression: Expression,
+        algorithm: LeftJoinAlgorithm,
     },
     /// Lateral join i.e. evaluate right for all result row of left
     #[cfg(feature = "sep-0006")]
@@ -678,7 +679,11 @@ pub enum GraphPattern {
         expression: Expression,
     },
     /// [Minus](https://www.w3.org/TR/sparql11-query/#defn_algMinus).
-    Minus { left: Box<Self>, right: Box<Self> },
+    Minus {
+        left: Box<Self>,
+        right: Box<Self>,
+        algorithm: MinusAlgorithm,
+    },
     /// A table used to provide inline values
     Values {
         variables: Vec<Variable>,
@@ -784,7 +789,12 @@ impl GraphPattern {
         }
     }
 
-    pub fn left_join(left: Self, right: Self, expression: Expression) -> Self {
+    pub fn left_join(
+        left: Self,
+        right: Self,
+        expression: Expression,
+        algorithm: LeftJoinAlgorithm,
+    ) -> Self {
         let expression_ebv = expression.effective_boolean_value();
         if left.is_empty()
             || right.is_empty()
@@ -801,10 +811,11 @@ impl GraphPattern {
             } else {
                 expression
             },
+            algorithm,
         }
     }
 
-    pub fn minus(left: Self, right: Self) -> Self {
+    pub fn minus(left: Self, right: Self, algorithm: MinusAlgorithm) -> Self {
         if left.is_empty() {
             return Self::empty();
         }
@@ -814,6 +825,7 @@ impl GraphPattern {
         Self::Minus {
             left: Box::new(left),
             right: Box::new(right),
+            algorithm,
         }
     }
 
@@ -1046,7 +1058,7 @@ impl GraphPattern {
                     child.lookup_used_variables(callback);
                 }
             }
-            Self::Join { left, right, .. } | Self::Minus { left, right } => {
+            Self::Join { left, right, .. } | Self::Minus { left, right, .. } => {
                 left.lookup_used_variables(callback);
                 right.lookup_used_variables(callback);
             }
@@ -1059,6 +1071,7 @@ impl GraphPattern {
                 left,
                 right,
                 expression,
+                ..
             } => {
                 expression.lookup_used_variables(callback);
                 left.lookup_used_variables(callback);
@@ -1148,6 +1161,7 @@ impl GraphPattern {
                     || true.into(),
                     |e| Expression::from_sparql_algebra(e, graph_name),
                 ),
+                algorithm: LeftJoinAlgorithm::default(),
             },
             #[cfg(feature = "sep-0006")]
             AlGraphPattern::Lateral { left, right } => Self::Lateral {
@@ -1179,6 +1193,7 @@ impl GraphPattern {
             AlGraphPattern::Minus { left, right } => Self::Minus {
                 left: Box::new(Self::from_sparql_algebra(left, graph_name, blank_nodes)),
                 right: Box::new(Self::from_sparql_algebra(right, graph_name, blank_nodes)),
+                algorithm: MinusAlgorithm::default(),
             },
             AlGraphPattern::Values {
                 variables,
@@ -1365,6 +1380,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                 left,
                 right,
                 expression,
+                ..
             } => {
                 let empty_expr = if let Expression::Literal(l) = expression {
                     l.datatype() == xsd::BOOLEAN && l.value() == "true"
@@ -1418,7 +1434,7 @@ impl From<&GraphPattern> for AlGraphPattern {
                 expression: expression.into(),
                 variable: variable.clone(),
             },
-            GraphPattern::Minus { left, right } => Self::Minus {
+            GraphPattern::Minus { left, right, .. } => Self::Minus {
                 left: Box::new(left.as_ref().into()),
                 right: Box::new(right.as_ref().into()),
             },
@@ -1478,14 +1494,44 @@ impl From<&GraphPattern> for AlGraphPattern {
 }
 
 /// The join algorithm used (c.f. [`GraphPattern::Join`]).
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum JoinAlgorithm {
-    HashBuildLeftProbeRight,
+    HashBuildLeftProbeRight { keys: Vec<Variable> },
 }
 
 impl Default for JoinAlgorithm {
     fn default() -> Self {
-        Self::HashBuildLeftProbeRight
+        Self::HashBuildLeftProbeRight {
+            keys: Vec::default(),
+        }
+    }
+}
+
+/// The left join algorithm used (c.f. [`GraphPattern::LeftJoin`]).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum LeftJoinAlgorithm {
+    HashBuildRightProbeLeft { keys: Vec<Variable> },
+}
+
+impl Default for LeftJoinAlgorithm {
+    fn default() -> Self {
+        Self::HashBuildRightProbeLeft {
+            keys: Vec::default(),
+        }
+    }
+}
+
+/// The left join algorithm used (c.f. [`GraphPattern::Minus`]).
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum MinusAlgorithm {
+    HashBuildRightProbeLeft { keys: Vec<Variable> },
+}
+
+impl Default for MinusAlgorithm {
+    fn default() -> Self {
+        Self::HashBuildRightProbeLeft {
+            keys: Vec::default(),
+        }
     }
 }
 
