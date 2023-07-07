@@ -3,10 +3,8 @@ use crate::io::{GraphFormat, GraphParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::dataset::DatasetView;
-use crate::sparql::eval::SimpleEvaluator;
+use crate::sparql::eval::{EncodedTuple, SimpleEvaluator};
 use crate::sparql::http::Client;
-use crate::sparql::plan::EncodedTuple;
-use crate::sparql::plan_builder::PlanBuilder;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
 use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::StorageWriter;
@@ -18,6 +16,7 @@ use spargebra::term::{
     Quad, QuadPattern, Subject, Term, TermPattern, Triple, TriplePattern, Variable,
 };
 use spargebra::GraphUpdateOperation;
+use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::io::BufReader;
 use std::rc::Rc;
@@ -125,13 +124,12 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
         let dataset = Rc::new(DatasetView::new(self.transaction.reader(), using));
-        let (plan, variables) = PlanBuilder::build(
-            &dataset,
-            algebra,
-            false,
-            &self.options.query_options.custom_functions,
-            !self.options.query_options.without_optimizations,
-        )?;
+        let mut pattern = sparopt::algebra::GraphPattern::from(algebra);
+        if !self.options.query_options.without_optimizations {
+            pattern = Optimizer::optimize_graph_pattern(sparopt::algebra::GraphPattern::Reduced {
+                inner: Box::new(pattern),
+            });
+        }
         let evaluator = SimpleEvaluator::new(
             Rc::clone(&dataset),
             self.base_iri.clone(),
@@ -139,8 +137,9 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             Rc::new(self.options.query_options.custom_functions.clone()),
             false,
         );
+        let mut variables = Vec::new();
         let mut bnodes = HashMap::new();
-        let (eval, _) = evaluator.plan_evaluator(&plan);
+        let (eval, _) = evaluator.graph_pattern_evaluator(&pattern, &mut variables);
         let tuples =
             eval(EncodedTuple::with_capacity(variables.len())).collect::<Result<Vec<_>, _>>()?; //TODO: would be much better to stream
         for tuple in tuples {
