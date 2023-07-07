@@ -1,7 +1,7 @@
 //! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`].
 
 use crate::terse::TriGRecognizer;
-use crate::toolkit::{FromReadIterator, ParseError, ParseOrIoError, Parser};
+use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{vocab::xsd, GraphName, NamedNode, Quad, QuadRef, Subject, TermRef};
 use std::collections::HashMap;
@@ -186,9 +186,9 @@ pub struct FromReadTriGReader<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadTriGReader<R> {
-    type Item = Result<Quad, ParseOrIoError>;
+    type Item = Result<Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Quad, ParseOrIoError>> {
+    fn next(&mut self) -> Option<Result<Quad, ParseError>> {
         self.inner.next()
     }
 }
@@ -255,7 +255,7 @@ impl LowLevelTriGReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Quad, ParseError>> {
+    pub fn read_next(&mut self) -> Option<Result<Quad, SyntaxError>> {
         self.parser.read_next()
     }
 }

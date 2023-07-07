@@ -60,18 +60,20 @@ impl<RR: RuleRecognizer> Parser<RR> {
         self.lexer.extend_from_slice(other)
     }
 
+    #[inline]
     pub fn end(&mut self) {
         self.lexer.end()
     }
 
+    #[inline]
     pub fn is_end(&self) -> bool {
         self.state.is_none() && self.results.is_empty() && self.errors.is_empty()
     }
 
-    pub fn read_next(&mut self) -> Option<Result<RR::Output, ParseError>> {
+    pub fn read_next(&mut self) -> Option<Result<RR::Output, SyntaxError>> {
         loop {
             if let Some(error) = self.errors.pop() {
-                return Some(Err(ParseError {
+                return Some(Err(SyntaxError {
                     position: self.position.clone(),
                     message: error.message,
                 }));
@@ -114,33 +116,37 @@ impl<RR: RuleRecognizer> Parser<RR> {
     }
 }
 
-/// An error from parsing.
+/// An error in the syntax of the parsed file.
 ///
 /// It is composed of a message and a byte range in the input.
 #[derive(Debug)]
-pub struct ParseError {
+pub struct SyntaxError {
     position: Range<usize>,
     message: String,
 }
 
-impl ParseError {
+impl SyntaxError {
     /// The invalid byte range in the input.
+    #[inline]
     pub fn position(&self) -> Range<usize> {
         self.position.clone()
     }
 
     /// The error message.
+    #[inline]
     pub fn message(&self) -> &str {
         &self.message
     }
 
     /// Converts this error to an error message.
+    #[inline]
     pub fn into_message(self) -> String {
         self.message
     }
 }
 
-impl fmt::Display for ParseError {
+impl fmt::Display for SyntaxError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.position.start + 1 == self.position.end {
             write!(
@@ -158,15 +164,17 @@ impl fmt::Display for ParseError {
     }
 }
 
-impl Error for ParseError {}
+impl Error for SyntaxError {}
 
-impl From<ParseError> for io::Error {
-    fn from(error: ParseError) -> Self {
+impl From<SyntaxError> for io::Error {
+    #[inline]
+    fn from(error: SyntaxError) -> Self {
         io::Error::new(io::ErrorKind::InvalidData, error)
     }
 }
 
-impl From<LexerError> for ParseError {
+impl From<LexerError> for SyntaxError {
+    #[inline]
     fn from(e: LexerError) -> Self {
         Self {
             position: e.position(),
@@ -175,48 +183,57 @@ impl From<LexerError> for ParseError {
     }
 }
 
-/// The union of [`ParseError`] and [`std::io::Error`].
+/// A parsing error.
+///
+/// It is the union of [`SyntaxError`] and [`std::io::Error`].
 #[derive(Debug)]
-pub enum ParseOrIoError {
-    Parse(ParseError),
+pub enum ParseError {
+    /// I/O error during parsing (file not found...).
     Io(io::Error),
+    /// An error in the file syntax.
+    Syntax(SyntaxError),
 }
 
-impl fmt::Display for ParseOrIoError {
+impl fmt::Display for ParseError {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Parse(e) => e.fmt(f),
             Self::Io(e) => e.fmt(f),
+            Self::Syntax(e) => e.fmt(f),
         }
     }
 }
 
-impl Error for ParseOrIoError {
+impl Error for ParseError {
+    #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(match self {
-            Self::Parse(e) => e,
             Self::Io(e) => e,
+            Self::Syntax(e) => e,
         })
     }
 }
 
-impl From<ParseError> for ParseOrIoError {
-    fn from(error: ParseError) -> Self {
-        Self::Parse(error)
+impl From<SyntaxError> for ParseError {
+    #[inline]
+    fn from(error: SyntaxError) -> Self {
+        Self::Syntax(error)
     }
 }
 
-impl From<io::Error> for ParseOrIoError {
+impl From<io::Error> for ParseError {
+    #[inline]
     fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
 }
 
-impl From<ParseOrIoError> for io::Error {
-    fn from(error: ParseOrIoError) -> Self {
+impl From<ParseError> for io::Error {
+    #[inline]
+    fn from(error: ParseError) -> Self {
         match error {
-            ParseOrIoError::Parse(e) => e.into(),
-            ParseOrIoError::Io(e) => e,
+            ParseError::Syntax(e) => e.into(),
+            ParseError::Io(e) => e,
         }
     }
 }
@@ -227,12 +244,12 @@ pub struct FromReadIterator<R: Read, RR: RuleRecognizer> {
 }
 
 impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
-    type Item = Result<RR::Output, ParseOrIoError>;
+    type Item = Result<RR::Output, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.parser.is_end() {
             if let Some(result) = self.parser.read_next() {
-                return Some(result.map_err(ParseOrIoError::Parse));
+                return Some(result.map_err(ParseError::Syntax));
             }
             if let Err(e) = self.parser.lexer.extend_from_read(&mut self.read) {
                 return Some(Err(e.into()));

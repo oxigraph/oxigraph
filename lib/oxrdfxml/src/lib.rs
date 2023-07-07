@@ -10,5 +10,5 @@ mod serializer;
 mod utils;
 
 pub use crate::serializer::{RdfXmlSerializer, ToWriteRdfXmlWriter};
-pub use error::RdfXmlError;
+pub use error::{ParseError, SyntaxError};
 pub use parser::{FromReadRdfXmlReader, RdfXmlParser};

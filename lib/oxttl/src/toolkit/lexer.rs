@@ -92,6 +92,7 @@ impl<R: TokenRecognizer> Lexer<R> {
         self.end = self.data.len();
     }
 
+    #[inline]
     pub fn end(&mut self) {
         self.is_ending = true;
     }
