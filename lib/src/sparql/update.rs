@@ -140,7 +140,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             false,
         );
         let mut bnodes = HashMap::new();
-        let (eval, _) = evaluator.plan_evaluator(Rc::new(plan));
+        let (eval, _) = evaluator.plan_evaluator(&plan);
         let tuples =
             eval(EncodedTuple::with_capacity(variables.len())).collect::<Result<Vec<_>, _>>()?; //TODO: would be much better to stream
         for tuple in tuples {

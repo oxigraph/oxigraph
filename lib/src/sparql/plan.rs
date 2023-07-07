@@ -1,17 +1,14 @@
 use crate::model::{BlankNode, Literal, NamedNode, Term, Triple};
 use crate::sparql::Variable;
 use crate::storage::numeric_encoder::EncodedTerm;
-use json_event_parser::{JsonEvent, JsonWriter};
 use regex::Regex;
 use spargebra::algebra::GraphPattern;
 use spargebra::term::GroundTerm;
-use std::cell::Cell;
 use std::cmp::max;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::rc::Rc;
-use std::time::Duration;
-use std::{fmt, io};
 
 #[derive(Debug, Clone)]
 pub enum PlanNode {
@@ -1020,144 +1017,5 @@ impl IntoIterator for EncodedTuple {
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
-    }
-}
-
-pub struct PlanNodeWithStats {
-    pub node: Rc<PlanNode>,
-    pub children: Vec<Rc<PlanNodeWithStats>>,
-    pub exec_count: Cell<usize>,
-    pub exec_duration: Cell<Duration>,
-}
-
-impl PlanNodeWithStats {
-    pub fn json_node(
-        &self,
-        writer: &mut JsonWriter<impl io::Write>,
-        with_stats: bool,
-    ) -> io::Result<()> {
-        writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("name"))?;
-        writer.write_event(JsonEvent::String(&self.node_label()))?;
-        if with_stats {
-            writer.write_event(JsonEvent::ObjectKey("number of results"))?;
-            writer.write_event(JsonEvent::Number(&self.exec_count.get().to_string()))?;
-            writer.write_event(JsonEvent::ObjectKey("duration in seconds"))?;
-            writer.write_event(JsonEvent::Number(
-                &self.exec_duration.get().as_secs_f32().to_string(),
-            ))?;
-        }
-        writer.write_event(JsonEvent::ObjectKey("children"))?;
-        writer.write_event(JsonEvent::StartArray)?;
-        for child in &self.children {
-            child.json_node(writer, with_stats)?;
-        }
-        writer.write_event(JsonEvent::EndArray)?;
-        writer.write_event(JsonEvent::EndObject)
-    }
-
-    fn node_label(&self) -> String {
-        match self.node.as_ref() {
-            PlanNode::Aggregate {
-                key_variables,
-                aggregates,
-                ..
-            } => format!(
-                "Aggregate({})",
-                key_variables
-                    .iter()
-                    .map(ToString::to_string)
-                    .chain(aggregates.iter().map(|(agg, v)| format!("{agg} -> {v}")))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            PlanNode::AntiJoin { .. } => "AntiJoin".to_owned(),
-            PlanNode::Extend {
-                expression,
-                variable,
-                ..
-            } => format!("Extend({expression} -> {variable})"),
-            PlanNode::Filter { expression, .. } => format!("Filter({expression})"),
-            PlanNode::ForLoopJoin { .. } => "ForLoopJoin".to_owned(),
-            PlanNode::ForLoopLeftJoin { .. } => "ForLoopLeftJoin".to_owned(),
-            PlanNode::HashDeduplicate { .. } => "HashDeduplicate".to_owned(),
-            PlanNode::HashJoin { .. } => "HashJoin".to_owned(),
-            PlanNode::HashLeftJoin { expression, .. } => format!("HashLeftJoin({expression})"),
-            PlanNode::Limit { count, .. } => format!("Limit({count})"),
-            PlanNode::PathPattern {
-                subject,
-                path,
-                object,
-                graph_name,
-            } => format!("PathPattern({subject} {path} {object} {graph_name})"),
-            PlanNode::Project { mapping, .. } => {
-                format!(
-                    "Project({})",
-                    mapping
-                        .iter()
-                        .map(|(f, t)| if f.plain == t.plain {
-                            f.to_string()
-                        } else {
-                            format!("{f} -> {t}")
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            PlanNode::QuadPattern {
-                subject,
-                predicate,
-                object,
-                graph_name,
-            } => format!("QuadPattern({subject} {predicate} {object} {graph_name})"),
-            PlanNode::Reduced { .. } => "Reduced".to_owned(),
-            PlanNode::Service {
-                service_name,
-                silent,
-                ..
-            } => {
-                if *silent {
-                    format!("SilentService({service_name})")
-                } else {
-                    format!("Service({service_name})")
-                }
-            }
-            PlanNode::Skip { count, .. } => format!("Skip({count})"),
-            PlanNode::Sort { by, .. } => {
-                format!(
-                    "Sort({})",
-                    by.iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            PlanNode::StaticBindings { variables, .. } => {
-                format!(
-                    "StaticBindings({})",
-                    variables
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            PlanNode::Union { .. } => "Union".to_owned(),
-        }
-    }
-}
-
-impl fmt::Debug for PlanNodeWithStats {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut obj = f.debug_struct("Node");
-        obj.field("name", &self.node_label());
-        if self.exec_duration.get() > Duration::default() {
-            obj.field("number of results", &self.exec_count.get());
-            obj.field("duration in seconds", &self.exec_duration.get());
-        }
-        if !self.children.is_empty() {
-            obj.field("children", &self.children);
-        }
-        obj.finish()
     }
 }

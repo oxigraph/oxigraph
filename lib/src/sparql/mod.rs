@@ -17,9 +17,8 @@ use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::{EvaluationError, QueryError};
-use crate::sparql::eval::{SimpleEvaluator, Timer};
+use crate::sparql::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
-use crate::sparql::plan::PlanNodeWithStats;
 use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
@@ -63,7 +62,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_select_plan(Rc::new(plan), Rc::new(variables));
+            .evaluate_select_plan(&plan, Rc::new(variables));
             (Ok(results), explanation, planning_duration)
         }
         spargebra::Query::Ask {
@@ -84,7 +83,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_ask_plan(Rc::new(plan));
+            .evaluate_ask_plan(&plan);
             (results, explanation, planning_duration)
         }
         spargebra::Query::Construct {
@@ -114,7 +113,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_construct_plan(Rc::new(plan), construct);
+            .evaluate_construct_plan(&plan, construct);
             (Ok(results), explanation, planning_duration)
         }
         spargebra::Query::Describe {
@@ -135,7 +134,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_describe_plan(Rc::new(plan));
+            .evaluate_describe_plan(&plan);
             (Ok(results), explanation, planning_duration)
         }
     };
@@ -284,7 +283,7 @@ impl From<QueryOptions> for UpdateOptions {
 /// The explanation of a query.
 #[derive(Clone)]
 pub struct QueryExplanation {
-    inner: Rc<PlanNodeWithStats>,
+    inner: Rc<EvalNodeWithStats>,
     with_stats: bool,
     parsing_duration: Option<Duration>,
     planning_duration: Duration,
