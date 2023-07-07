@@ -8,8 +8,6 @@ mod error;
 mod eval;
 mod http;
 mod model;
-mod plan;
-mod plan_builder;
 mod service;
 mod update;
 
@@ -19,7 +17,6 @@ use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::{EvaluationError, QueryError};
 use crate::sparql::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
-use crate::sparql::plan_builder::PlanBuilder;
 pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 pub(crate) use crate::sparql::update::evaluate_update;
@@ -28,6 +25,8 @@ use json_event_parser::{JsonEvent, JsonWriter};
 pub use oxrdf::{Variable, VariableNameParseError};
 pub use sparesults::QueryResultsFormat;
 pub use spargebra::ParseError;
+use sparopt::algebra::GraphPattern;
+use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -47,13 +46,10 @@ pub(crate) fn evaluate_query(
         spargebra::Query::Select {
             pattern, base_iri, ..
         } => {
-            let (plan, variables) = PlanBuilder::build(
-                &dataset,
-                &pattern,
-                true,
-                &options.custom_functions,
-                options.without_optimizations,
-            )?;
+            let mut pattern = GraphPattern::from(&pattern);
+            if !options.without_optimizations {
+                pattern = Optimizer::optimize_graph_pattern(pattern);
+            }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -62,19 +58,18 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_select_plan(&plan, Rc::new(variables));
+            .evaluate_select(&pattern);
             (Ok(results), explanation, planning_duration)
         }
         spargebra::Query::Ask {
             pattern, base_iri, ..
         } => {
-            let (plan, _) = PlanBuilder::build(
-                &dataset,
-                &pattern,
-                false,
-                &options.custom_functions,
-                options.without_optimizations,
-            )?;
+            let mut pattern = GraphPattern::from(&pattern);
+            if !options.without_optimizations {
+                pattern = Optimizer::optimize_graph_pattern(GraphPattern::Reduced {
+                    inner: Box::new(pattern),
+                });
+            }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -83,7 +78,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_ask_plan(&plan);
+            .evaluate_ask(&pattern);
             (results, explanation, planning_duration)
         }
         spargebra::Query::Construct {
@@ -92,19 +87,12 @@ pub(crate) fn evaluate_query(
             base_iri,
             ..
         } => {
-            let (plan, variables) = PlanBuilder::build(
-                &dataset,
-                &pattern,
-                false,
-                &options.custom_functions,
-                options.without_optimizations,
-            )?;
-            let construct = PlanBuilder::build_graph_template(
-                &dataset,
-                &template,
-                variables,
-                &options.custom_functions,
-            );
+            let mut pattern = GraphPattern::from(&pattern);
+            if !options.without_optimizations {
+                pattern = Optimizer::optimize_graph_pattern(GraphPattern::Reduced {
+                    inner: Box::new(pattern),
+                });
+            }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -113,19 +101,18 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_construct_plan(&plan, construct);
+            .evaluate_construct(&pattern, &template);
             (Ok(results), explanation, planning_duration)
         }
         spargebra::Query::Describe {
             pattern, base_iri, ..
         } => {
-            let (plan, _) = PlanBuilder::build(
-                &dataset,
-                &pattern,
-                false,
-                &options.custom_functions,
-                options.without_optimizations,
-            )?;
+            let mut pattern = GraphPattern::from(&pattern);
+            if !options.without_optimizations {
+                pattern = Optimizer::optimize_graph_pattern(GraphPattern::Reduced {
+                    inner: Box::new(pattern),
+                });
+            }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
                 Rc::new(dataset),
@@ -134,7 +121,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(options.custom_functions),
                 run_stats,
             )
-            .evaluate_describe_plan(&plan);
+            .evaluate_describe(&pattern);
             (Ok(results), explanation, planning_duration)
         }
     };

@@ -4,7 +4,6 @@ use crate::sparql::algebra::{Query, QueryDataset};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
-use crate::sparql::plan::*;
 use crate::sparql::service::ServiceHandler;
 use crate::storage::numeric_encoder::*;
 use crate::storage::small_string::SmallString;
@@ -13,13 +12,21 @@ use json_event_parser::{JsonEvent, JsonWriter};
 use md5::Md5;
 use oxilangtag::LanguageTag;
 use oxiri::Iri;
-use oxrdf::Variable;
+use oxrdf::{TermRef, Variable};
 use oxsdatatypes::*;
 use rand::random;
 use regex::{Regex, RegexBuilder};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{Function, PropertyPathExpression};
+use spargebra::term::{
+    GroundSubject, GroundTerm, GroundTermPattern, GroundTriple, NamedNodePattern, TermPattern,
+    TriplePattern,
+};
+use sparopt::algebra::{
+    AggregateExpression, Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm,
+    MinusAlgorithm, OrderExpression,
+};
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
@@ -34,6 +41,85 @@ use std::time::Instant;
 use std::{fmt, io, str};
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
+
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct EncodedTuple {
+    inner: Vec<Option<EncodedTerm>>,
+}
+
+impl EncodedTuple {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            inner: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
+
+    pub fn contains(&self, index: usize) -> bool {
+        self.inner.get(index).map_or(false, Option::is_some)
+    }
+
+    pub fn get(&self, index: usize) -> Option<&EncodedTerm> {
+        self.inner.get(index).unwrap_or(&None).as_ref()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = Option<EncodedTerm>> + '_ {
+        self.inner.iter().cloned()
+    }
+
+    pub fn set(&mut self, index: usize, value: EncodedTerm) {
+        if self.inner.len() <= index {
+            self.inner.resize(index + 1, None);
+        }
+        self.inner[index] = Some(value);
+    }
+
+    pub fn combine_with(&self, other: &Self) -> Option<Self> {
+        if self.inner.len() < other.inner.len() {
+            let mut result = other.inner.clone();
+            for (key, self_value) in self.inner.iter().enumerate() {
+                if let Some(self_value) = self_value {
+                    match &other.inner[key] {
+                        Some(other_value) => {
+                            if self_value != other_value {
+                                return None;
+                            }
+                        }
+                        None => result[key] = Some(self_value.clone()),
+                    }
+                }
+            }
+            Some(Self { inner: result })
+        } else {
+            let mut result = self.inner.clone();
+            for (key, other_value) in other.inner.iter().enumerate() {
+                if let Some(other_value) = other_value {
+                    match &self.inner[key] {
+                        Some(self_value) => {
+                            if self_value != other_value {
+                                return None;
+                            }
+                        }
+                        None => result[key] = Some(other_value.clone()),
+                    }
+                }
+            }
+            Some(Self { inner: result })
+        }
+    }
+}
+
+impl IntoIterator for EncodedTuple {
+    type Item = Option<EncodedTerm>;
+    type IntoIter = std::vec::IntoIter<Option<EncodedTerm>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
 
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
 type CustomFunctionRegistry = HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>;
@@ -67,28 +153,27 @@ impl SimpleEvaluator {
     }
 
     #[allow(clippy::rc_buffer)]
-    pub fn evaluate_select_plan(
-        &self,
-        plan: &PlanNode,
-        variables: Rc<Vec<Variable>>,
-    ) -> (QueryResults, Rc<EvalNodeWithStats>) {
-        let (eval, stats) = self.plan_evaluator(plan);
+    pub fn evaluate_select(&self, pattern: &GraphPattern) -> (QueryResults, Rc<EvalNodeWithStats>) {
+        let mut variables = Vec::new();
+        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let from = EncodedTuple::with_capacity(variables.len());
         (
             QueryResults::Solutions(decode_bindings(
                 Rc::clone(&self.dataset),
-                eval(EncodedTuple::with_capacity(variables.len())),
-                variables,
+                eval(from),
+                Rc::from(variables),
             )),
             stats,
         )
     }
 
-    pub fn evaluate_ask_plan(
+    pub fn evaluate_ask(
         &self,
-        plan: &PlanNode,
+        pattern: &GraphPattern,
     ) -> (Result<QueryResults, EvaluationError>, Rc<EvalNodeWithStats>) {
-        let from = EncodedTuple::with_capacity(plan.used_variables().len());
-        let (eval, stats) = self.plan_evaluator(plan);
+        let mut variables = Vec::new();
+        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let from = EncodedTuple::with_capacity(variables.len());
         (
             match eval(from).next() {
                 Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
@@ -99,13 +184,32 @@ impl SimpleEvaluator {
         )
     }
 
-    pub fn evaluate_construct_plan(
+    pub fn evaluate_construct(
         &self,
-        plan: &PlanNode,
-        template: Vec<TripleTemplate>,
+        pattern: &GraphPattern,
+        template: &[TriplePattern],
     ) -> (QueryResults, Rc<EvalNodeWithStats>) {
-        let from = EncodedTuple::with_capacity(plan.used_variables().len());
-        let (eval, stats) = self.plan_evaluator(plan);
+        let mut variables = Vec::new();
+        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let mut bnodes = Vec::new();
+        let template = template
+            .iter()
+            .map(|t| TripleTemplate {
+                subject: self.template_value_from_term_or_variable(
+                    &t.subject,
+                    &mut variables,
+                    &mut bnodes,
+                ),
+                predicate: self
+                    .template_value_from_named_node_or_variable(&t.predicate, &mut variables),
+                object: self.template_value_from_term_or_variable(
+                    &t.object,
+                    &mut variables,
+                    &mut bnodes,
+                ),
+            })
+            .collect();
+        let from = EncodedTuple::with_capacity(variables.len());
         (
             QueryResults::Graph(QueryTripleIter {
                 iter: Box::new(ConstructIterator {
@@ -120,9 +224,13 @@ impl SimpleEvaluator {
         )
     }
 
-    pub fn evaluate_describe_plan(&self, plan: &PlanNode) -> (QueryResults, Rc<EvalNodeWithStats>) {
-        let from = EncodedTuple::with_capacity(plan.used_variables().len());
-        let (eval, stats) = self.plan_evaluator(plan);
+    pub fn evaluate_describe(
+        &self,
+        pattern: &GraphPattern,
+    ) -> (QueryResults, Rc<EvalNodeWithStats>) {
+        let mut variables = Vec::new();
+        let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
+        let from = EncodedTuple::with_capacity(variables.len());
         (
             QueryResults::Graph(QueryTripleIter {
                 iter: Box::new(DescribeIterator {
@@ -135,20 +243,77 @@ impl SimpleEvaluator {
         )
     }
 
-    pub fn plan_evaluator(
+    pub fn graph_pattern_evaluator(
         &self,
-        node: &PlanNode,
+        pattern: &GraphPattern,
+        encoded_variables: &mut Vec<Variable>,
     ) -> (
         Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut stat_children = Vec::new();
-        let mut evaluator: Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> = match node {
-            PlanNode::StaticBindings { encoded_tuples, .. } => {
-                let tuples = encoded_tuples.clone();
+        let mut evaluator =
+            self.build_graph_pattern_evaluator(pattern, encoded_variables, &mut stat_children);
+        let stats = Rc::new(EvalNodeWithStats {
+            label: eval_node_label(pattern),
+            children: stat_children,
+            exec_count: Cell::new(0),
+            exec_duration: Cell::new(StdDuration::from_secs(0)),
+        });
+        if self.run_stats {
+            let stats = Rc::clone(&stats);
+            evaluator = Rc::new(move |tuple| {
+                let start = Timer::now();
+                let inner = evaluator(tuple);
+                stats
+                    .exec_duration
+                    .set(stats.exec_duration.get() + start.elapsed());
+                Box::new(StatsIterator {
+                    inner,
+                    stats: Rc::clone(&stats),
+                })
+            })
+        }
+        (evaluator, stats)
+    }
+
+    fn build_graph_pattern_evaluator(
+        &self,
+        pattern: &GraphPattern,
+        encoded_variables: &mut Vec<Variable>,
+        stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
+    ) -> Rc<dyn Fn(EncodedTuple) -> EncodedTuplesIterator> {
+        match pattern {
+            GraphPattern::Values {
+                variables,
+                bindings,
+            } => {
+                let encoding = variables
+                    .iter()
+                    .map(|v| encode_variable(encoded_variables, v))
+                    .collect::<Vec<_>>();
+                let encoded_tuples = bindings
+                    .iter()
+                    .map(|row| {
+                        let mut result = EncodedTuple::with_capacity(variables.len());
+                        for (key, value) in row.iter().enumerate() {
+                            if let Some(term) = value {
+                                result.set(
+                                    encoding[key],
+                                    match term {
+                                        GroundTerm::NamedNode(node) => self.encode_term(node),
+                                        GroundTerm::Literal(literal) => self.encode_term(literal),
+                                        GroundTerm::Triple(triple) => self.encode_triple(triple),
+                                    },
+                                );
+                            }
+                        }
+                        result
+                    })
+                    .collect::<Vec<_>>();
                 Rc::new(move |from| {
                     Box::new(
-                        tuples
+                        encoded_tuples
                             .iter()
                             .filter_map(move |t| Some(Ok(t.combine_with(&from)?)))
                             .collect::<Vec<_>>()
@@ -156,17 +321,18 @@ impl SimpleEvaluator {
                     )
                 })
             }
-            PlanNode::Service {
-                variables,
+            GraphPattern::Service {
+                name,
+                inner,
                 silent,
-                service_name,
-                graph_pattern,
-                ..
             } => {
-                let variables = Rc::clone(variables);
                 let silent = *silent;
-                let service_name = service_name.clone();
-                let graph_pattern = Rc::clone(graph_pattern);
+                let service_name =
+                    TupleSelector::from_named_node_pattern(name, encoded_variables, &self.dataset);
+                let _ =
+                    self.build_graph_pattern_evaluator(inner, encoded_variables, &mut Vec::new()); // We call recursively to fill "encoded_variables"
+                let graph_pattern = spargebra::algebra::GraphPattern::from(inner.as_ref());
+                let variables = Rc::from(encoded_variables.as_slice());
                 let eval = self.clone();
                 Rc::new(move |from| {
                     match eval.evaluate_service(
@@ -190,23 +356,39 @@ impl SimpleEvaluator {
                     }
                 })
             }
-            PlanNode::QuadPattern {
+            GraphPattern::QuadPattern {
                 subject,
                 predicate,
                 object,
                 graph_name,
             } => {
-                let subject = TupleSelector::from(subject);
-                let predicate = TupleSelector::from(predicate);
-                let object = TupleSelector::from(object);
-                let graph_name = TupleSelector::from(graph_name);
+                let subject = TupleSelector::from_ground_term_pattern(
+                    subject,
+                    encoded_variables,
+                    &self.dataset,
+                );
+                let predicate = TupleSelector::from_named_node_pattern(
+                    predicate,
+                    encoded_variables,
+                    &self.dataset,
+                );
+                let object = TupleSelector::from_ground_term_pattern(
+                    object,
+                    encoded_variables,
+                    &self.dataset,
+                );
+                let graph_name = TupleSelector::from_graph_name_pattern(
+                    graph_name,
+                    encoded_variables,
+                    &self.dataset,
+                );
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |from| {
                     let iter = dataset.encoded_quads_for_pattern(
-                        get_pattern_value(&subject, &from).as_ref(),
-                        get_pattern_value(&predicate, &from).as_ref(),
-                        get_pattern_value(&object, &from).as_ref(),
-                        get_pattern_value(&graph_name, &from).as_ref(),
+                        subject.get_pattern_value(&from).as_ref(),
+                        predicate.get_pattern_value(&from).as_ref(),
+                        object.get_pattern_value(&from).as_ref(),
+                        graph_name.get_pattern_value(&from).as_ref(),
                     );
                     let subject = subject.clone();
                     let predicate = predicate.clone();
@@ -225,21 +407,34 @@ impl SimpleEvaluator {
                     }))
                 })
             }
-            PlanNode::PathPattern {
+            GraphPattern::Path {
                 subject,
                 path,
                 object,
                 graph_name,
             } => {
-                let subject = TupleSelector::from(subject);
-                let path = Rc::clone(path);
-                let object = TupleSelector::from(object);
-                let graph_name = TupleSelector::from(graph_name);
+                let subject = TupleSelector::from_ground_term_pattern(
+                    subject,
+                    encoded_variables,
+                    &self.dataset,
+                );
+                let path = self.encode_property_path(path);
+
+                let object = TupleSelector::from_ground_term_pattern(
+                    object,
+                    encoded_variables,
+                    &self.dataset,
+                );
+                let graph_name = TupleSelector::from_graph_name_pattern(
+                    graph_name,
+                    encoded_variables,
+                    &self.dataset,
+                );
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |from| {
-                    let input_subject = get_pattern_value(&subject, &from);
-                    let input_object = get_pattern_value(&object, &from);
-                    let input_graph_name = get_pattern_value(&graph_name, &from);
+                    let input_subject = subject.get_pattern_value(&from);
+                    let input_object = object.get_pattern_value(&from);
+                    let input_graph_name = graph_name.get_pattern_value(&from);
                     let path_eval = PathEvaluator {
                         dataset: Rc::clone(&dataset),
                     };
@@ -377,61 +572,95 @@ impl SimpleEvaluator {
                     }
                 })
             }
-            PlanNode::HashJoin {
-                probe_child,
-                build_child,
-                keys,
+            GraphPattern::Join {
+                left,
+                right,
+                algorithm,
             } => {
-                let join_keys = keys.iter().map(|v| v.encoded).collect::<Vec<_>>();
-                let (probe, probe_stats) = self.plan_evaluator(probe_child);
-                stat_children.push(probe_stats);
-                let (build, build_stats) = self.plan_evaluator(build_child);
-                stat_children.push(build_stats);
-                if join_keys.is_empty() {
-                    // Cartesian product
-                    Rc::new(move |from| {
-                        let mut errors = Vec::default();
-                        let build_values = build(from.clone())
-                            .filter_map(|result| match result {
-                                Ok(result) => Some(result),
-                                Err(error) => {
-                                    errors.push(Err(error));
-                                    None
-                                }
+                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
+                stat_children.push(left_stats);
+                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
+                stat_children.push(right_stats);
+
+                match algorithm {
+                    JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
+                        let build = left;
+                        let probe = right;
+                        if keys.is_empty() {
+                            // Cartesian product
+                            Rc::new(move |from| {
+                                let mut errors = Vec::default();
+                                let build_values = build(from.clone())
+                                    .filter_map(|result| match result {
+                                        Ok(result) => Some(result),
+                                        Err(error) => {
+                                            errors.push(Err(error));
+                                            None
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+                                Box::new(CartesianProductJoinIterator {
+                                    probe_iter: probe(from),
+                                    built: build_values,
+                                    buffered_results: errors,
+                                })
                             })
-                            .collect::<Vec<_>>();
-                        Box::new(CartesianProductJoinIterator {
-                            probe_iter: probe(from),
-                            built: build_values,
-                            buffered_results: errors,
-                        })
-                    })
-                } else {
-                    // Real hash join
-                    Rc::new(move |from| {
-                        let mut errors = Vec::default();
-                        let mut built_values = EncodedTupleSet::new(join_keys.clone());
-                        built_values.extend(build(from.clone()).filter_map(
-                            |result| match result {
-                                Ok(result) => Some(result),
-                                Err(error) => {
-                                    errors.push(Err(error));
-                                    None
-                                }
-                            },
-                        ));
-                        Box::new(HashJoinIterator {
-                            probe_iter: probe(from),
-                            built: built_values,
-                            buffered_results: errors,
-                        })
-                    })
+                        } else {
+                            // Real hash join
+                            let keys = keys
+                                .iter()
+                                .map(|v| encode_variable(encoded_variables, v))
+                                .collect::<Vec<_>>();
+                            Rc::new(move |from| {
+                                let mut errors = Vec::default();
+                                let mut built_values = EncodedTupleSet::new(keys.clone());
+                                built_values.extend(build(from.clone()).filter_map(|result| {
+                                    match result {
+                                        Ok(result) => Some(result),
+                                        Err(error) => {
+                                            errors.push(Err(error));
+                                            None
+                                        }
+                                    }
+                                }));
+                                Box::new(HashJoinIterator {
+                                    probe_iter: probe(from),
+                                    built: built_values,
+                                    buffered_results: errors,
+                                })
+                            })
+                        }
+                    }
                 }
             }
-            PlanNode::ForLoopJoin { left, right } => {
-                let (left, left_stats) = self.plan_evaluator(left);
+            GraphPattern::Lateral { left, right } => {
+                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right);
+
+                if let GraphPattern::LeftJoin {
+                    left: nested_left,
+                    right: nested_right,
+                    expression,
+                    ..
+                } = right.as_ref()
+                {
+                    if nested_left.is_empty_singleton() {
+                        // We are in a ForLoopLeftJoin
+                        let right =
+                            GraphPattern::filter(nested_right.as_ref().clone(), expression.clone());
+                        let (right, right_stats) =
+                            self.graph_pattern_evaluator(&right, encoded_variables);
+                        stat_children.push(right_stats);
+                        return Rc::new(move |from| {
+                            Box::new(ForLoopLeftJoinIterator {
+                                right_evaluator: Rc::clone(&right),
+                                left_iter: left(from),
+                                current_right: Box::new(empty()),
+                            })
+                        });
+                    }
+                }
+                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
                 stat_children.push(right_stats);
                 Rc::new(move |from| {
                     let right = Rc::clone(&right);
@@ -441,89 +670,108 @@ impl SimpleEvaluator {
                     }))
                 })
             }
-            PlanNode::AntiJoin { left, right, keys } => {
-                let join_keys = keys.iter().map(|v| v.encoded).collect::<Vec<_>>();
-                let (left, left_stats) = self.plan_evaluator(left);
+            GraphPattern::Minus {
+                left,
+                right,
+                algorithm,
+            } => {
+                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right);
+                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
                 stat_children.push(right_stats);
-                if join_keys.is_empty() {
-                    Rc::new(move |from| {
-                        let right: Vec<_> = right(from.clone()).filter_map(Result::ok).collect();
-                        Box::new(left(from).filter(move |left_tuple| {
-                            if let Ok(left_tuple) = left_tuple {
-                                !right.iter().any(|right_tuple| {
-                                    are_compatible_and_not_disjointed(left_tuple, right_tuple)
-                                })
-                            } else {
-                                true
-                            }
-                        }))
-                    })
-                } else {
-                    Rc::new(move |from| {
-                        let mut right_values = EncodedTupleSet::new(join_keys.clone());
-                        right_values.extend(right(from.clone()).filter_map(Result::ok));
-                        Box::new(left(from).filter(move |left_tuple| {
-                            if let Ok(left_tuple) = left_tuple {
-                                !right_values.get(left_tuple).iter().any(|right_tuple| {
-                                    are_compatible_and_not_disjointed(left_tuple, right_tuple)
-                                })
-                            } else {
-                                true
-                            }
-                        }))
-                    })
+
+                match algorithm {
+                    MinusAlgorithm::HashBuildRightProbeLeft { keys } => {
+                        if keys.is_empty() {
+                            Rc::new(move |from| {
+                                let right: Vec<_> =
+                                    right(from.clone()).filter_map(Result::ok).collect();
+                                Box::new(left(from).filter(move |left_tuple| {
+                                    if let Ok(left_tuple) = left_tuple {
+                                        !right.iter().any(|right_tuple| {
+                                            are_compatible_and_not_disjointed(
+                                                left_tuple,
+                                                right_tuple,
+                                            )
+                                        })
+                                    } else {
+                                        true
+                                    }
+                                }))
+                            })
+                        } else {
+                            let keys = keys
+                                .iter()
+                                .map(|v| encode_variable(encoded_variables, v))
+                                .collect::<Vec<_>>();
+                            Rc::new(move |from| {
+                                let mut right_values = EncodedTupleSet::new(keys.clone());
+                                right_values.extend(right(from.clone()).filter_map(Result::ok));
+                                Box::new(left(from).filter(move |left_tuple| {
+                                    if let Ok(left_tuple) = left_tuple {
+                                        !right_values.get(left_tuple).iter().any(|right_tuple| {
+                                            are_compatible_and_not_disjointed(
+                                                left_tuple,
+                                                right_tuple,
+                                            )
+                                        })
+                                    } else {
+                                        true
+                                    }
+                                }))
+                            })
+                        }
+                    }
                 }
             }
-            PlanNode::HashLeftJoin {
+            GraphPattern::LeftJoin {
                 left,
                 right,
                 expression,
-                keys,
+                algorithm,
             } => {
-                let join_keys = keys.iter().map(|v| v.encoded).collect::<Vec<_>>();
-                let (left, left_stats) = self.plan_evaluator(left);
+                let (left, left_stats) = self.graph_pattern_evaluator(left, encoded_variables);
                 stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right);
+                let (right, right_stats) = self.graph_pattern_evaluator(right, encoded_variables);
                 stat_children.push(right_stats);
-                let expression = self.expression_evaluator(expression, &mut stat_children);
-                // Real hash join
-                Rc::new(move |from| {
-                    let mut errors = Vec::default();
-                    let mut right_values = EncodedTupleSet::new(join_keys.clone());
-                    right_values.extend(right(from.clone()).filter_map(|result| match result {
-                        Ok(result) => Some(result),
-                        Err(error) => {
-                            errors.push(Err(error));
-                            None
-                        }
-                    }));
-                    Box::new(HashLeftJoinIterator {
-                        left_iter: left(from),
-                        right: right_values,
-                        buffered_results: errors,
-                        expression: Rc::clone(&expression),
-                    })
-                })
+                let expression =
+                    self.expression_evaluator(expression, encoded_variables, stat_children);
+
+                match algorithm {
+                    LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => {
+                        // Real hash join
+                        let keys = keys
+                            .iter()
+                            .map(|v| encode_variable(encoded_variables, v))
+                            .collect::<Vec<_>>();
+                        Rc::new(move |from| {
+                            let mut errors = Vec::default();
+                            let mut right_values = EncodedTupleSet::new(keys.clone());
+                            right_values.extend(right(from.clone()).filter_map(
+                                |result| match result {
+                                    Ok(result) => Some(result),
+                                    Err(error) => {
+                                        errors.push(Err(error));
+                                        None
+                                    }
+                                },
+                            ));
+                            Box::new(HashLeftJoinIterator {
+                                left_iter: left(from),
+                                right: right_values,
+                                buffered_results: errors,
+                                expression: Rc::clone(&expression),
+                            })
+                        })
+                    }
+                }
             }
-            PlanNode::ForLoopLeftJoin { left, right } => {
-                let (left, left_stats) = self.plan_evaluator(left);
-                stat_children.push(left_stats);
-                let (right, right_stats) = self.plan_evaluator(right);
-                stat_children.push(right_stats);
-                Rc::new(move |from| {
-                    Box::new(ForLoopLeftJoinIterator {
-                        right_evaluator: Rc::clone(&right),
-                        left_iter: left(from),
-                        current_right: Box::new(empty()),
-                    })
-                })
-            }
-            PlanNode::Filter { child, expression } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+            GraphPattern::Filter { inner, expression } => {
+                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
-                let expression = self.expression_evaluator(expression, &mut stat_children);
+                let expression =
+                    self.expression_evaluator(expression, encoded_variables, stat_children);
+
                 Rc::new(move |from| {
                     let expression = Rc::clone(&expression);
                     Box::new(child(from).filter(move |tuple| {
@@ -536,15 +784,17 @@ impl SimpleEvaluator {
                     }))
                 })
             }
-            PlanNode::Union { children } => {
-                let children: Vec<_> = children
+            GraphPattern::Union { inner } => {
+                let children = inner
                     .iter()
                     .map(|child| {
-                        let (child, child_stats) = self.plan_evaluator(child);
+                        let (child, child_stats) =
+                            self.graph_pattern_evaluator(child, encoded_variables);
                         stat_children.push(child_stats);
                         child
                     })
-                    .collect();
+                    .collect::<Vec<_>>();
+
                 Rc::new(move |from| {
                     Box::new(UnionIterator {
                         plans: children.clone(),
@@ -554,15 +804,17 @@ impl SimpleEvaluator {
                     })
                 })
             }
-            PlanNode::Extend {
-                child,
+            GraphPattern::Extend {
+                inner,
                 variable,
                 expression,
             } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
-                let position = variable.encoded;
-                let expression = self.expression_evaluator(expression, &mut stat_children);
+
+                let position = encode_variable(encoded_variables, variable);
+                let expression =
+                    self.expression_evaluator(expression, encoded_variables, stat_children);
                 Rc::new(move |from| {
                     let expression = Rc::clone(&expression);
                     Box::new(child(from).map(move |tuple| {
@@ -574,20 +826,20 @@ impl SimpleEvaluator {
                     }))
                 })
             }
-            PlanNode::Sort { child, by } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+            GraphPattern::OrderBy { inner, expression } => {
+                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
-                let by: Vec<_> = by
+                let by = expression
                     .iter()
                     .map(|comp| match comp {
-                        Comparator::Asc(expression) => ComparatorFunction::Asc(
-                            self.expression_evaluator(expression, &mut stat_children),
+                        OrderExpression::Asc(expression) => ComparatorFunction::Asc(
+                            self.expression_evaluator(expression, encoded_variables, stat_children),
                         ),
-                        Comparator::Desc(expression) => ComparatorFunction::Desc(
-                            self.expression_evaluator(expression, &mut stat_children),
+                        OrderExpression::Desc(expression) => ComparatorFunction::Desc(
+                            self.expression_evaluator(expression, encoded_variables, stat_children),
                         ),
                     })
-                    .collect();
+                    .collect::<Vec<_>>();
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |from| {
                     let mut errors = Vec::default();
@@ -632,13 +884,13 @@ impl SimpleEvaluator {
                     Box::new(errors.into_iter().chain(values.into_iter().map(Ok)))
                 })
             }
-            PlanNode::HashDeduplicate { child } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+            GraphPattern::Distinct { inner } => {
+                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 Rc::new(move |from| Box::new(hash_deduplicate(child(from))))
             }
-            PlanNode::Reduced { child } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+            GraphPattern::Reduced { inner } => {
+                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
                 Rc::new(move |from| {
                     Box::new(ConsecutiveDeduplication {
@@ -647,44 +899,56 @@ impl SimpleEvaluator {
                     })
                 })
             }
-            PlanNode::Skip { child, count } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+            GraphPattern::Slice {
+                inner,
+                start,
+                length,
+            } => {
+                let (mut child, child_stats) =
+                    self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
-                let count = *count;
-                Rc::new(move |from| Box::new(child(from).skip(count)))
+                let start = *start;
+                if start > 0 {
+                    child = Rc::new(move |from| Box::new(child(from).skip(start)));
+                }
+                if let Some(length) = *length {
+                    child = Rc::new(move |from| Box::new(child(from).take(length)));
+                }
+                child
             }
-            PlanNode::Limit { child, count } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+            GraphPattern::Project { inner, variables } => {
+                let mut inner_encoded_variables = variables.clone();
+                let (child, child_stats) =
+                    self.graph_pattern_evaluator(inner, &mut inner_encoded_variables);
                 stat_children.push(child_stats);
-                let count = *count;
-                Rc::new(move |from| Box::new(child(from).take(count)))
-            }
-            PlanNode::Project { child, mapping } => {
-                let (child, child_stats) = self.plan_evaluator(child);
-                stat_children.push(child_stats);
-                let mapping = Rc::clone(mapping);
+                let mapping = variables
+                    .iter()
+                    .enumerate()
+                    .map(|(new_variable, variable)| {
+                        (new_variable, encode_variable(encoded_variables, variable))
+                    })
+                    .collect::<Rc<[(usize, usize)]>>();
                 Rc::new(move |from| {
                     let mapping = Rc::clone(&mapping);
                     let mut input_tuple = EncodedTuple::with_capacity(mapping.len());
-                    for (input_key, output_key) in mapping.iter() {
-                        if let Some(value) = from.get(output_key.encoded) {
-                            input_tuple.set(input_key.encoded, value.clone());
+                    for (input_key, output_key) in &*mapping {
+                        if let Some(value) = from.get(*output_key) {
+                            input_tuple.set(*input_key, value.clone());
                         }
                     }
                     Box::new(child(input_tuple).filter_map(move |tuple| {
                         match tuple {
                             Ok(tuple) => {
                                 let mut output_tuple = from.clone();
-                                for (input_key, output_key) in mapping.iter() {
-                                    if let Some(value) = tuple.get(input_key.encoded) {
-                                        if let Some(existing_value) =
-                                            output_tuple.get(output_key.encoded)
+                                for (input_key, output_key) in &*mapping {
+                                    if let Some(value) = tuple.get(*input_key) {
+                                        if let Some(existing_value) = output_tuple.get(*output_key)
                                         {
                                             if existing_value != value {
                                                 return None; // Conflict
                                             }
                                         } else {
-                                            output_tuple.set(output_key.encoded, value.clone());
+                                            output_tuple.set(*output_key, value.clone());
                                         }
                                     }
                                 }
@@ -695,35 +959,42 @@ impl SimpleEvaluator {
                     }))
                 })
             }
-            PlanNode::Aggregate {
-                child,
-                key_variables,
+            GraphPattern::Group {
+                inner,
                 aggregates,
+                variables,
             } => {
-                let (child, child_stats) = self.plan_evaluator(child);
+                let (child, child_stats) = self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
-                let key_variables = Rc::clone(key_variables);
-                let aggregate_input_expressions: Vec<_> = aggregates
+                let key_variables = variables
                     .iter()
-                    .map(|(aggregate, _)| {
-                        aggregate
-                            .parameter
-                            .as_ref()
-                            .map(|p| self.expression_evaluator(p, &mut stat_children))
-                    })
-                    .collect();
-                let accumulator_builders: Vec<_> = aggregates
+                    .map(|k| encode_variable(encoded_variables, k))
+                    .collect::<Rc<[_]>>();
+                let aggregate_input_expressions = aggregates
                     .iter()
-                    .map(|(aggregate, _)| {
-                        Self::accumulator_builder(
-                            &self.dataset,
-                            &aggregate.function,
-                            aggregate.distinct,
-                        )
+                    .map(|(_, expression)| match expression {
+                        AggregateExpression::Count { expr, .. } => expr.as_ref().map(|e| {
+                            self.expression_evaluator(e, encoded_variables, stat_children)
+                        }),
+                        AggregateExpression::Sum { expr, .. }
+                        | AggregateExpression::Avg { expr, .. }
+                        | AggregateExpression::Min { expr, .. }
+                        | AggregateExpression::Max { expr, .. }
+                        | AggregateExpression::GroupConcat { expr, .. }
+                        | AggregateExpression::Sample { expr, .. }
+                        | AggregateExpression::Custom { expr, .. } => {
+                            Some(self.expression_evaluator(expr, encoded_variables, stat_children))
+                        }
                     })
-                    .collect();
-                let accumulator_variables: Vec<_> =
-                    aggregates.iter().map(|(_, var)| var.encoded).collect();
+                    .collect::<Vec<_>>();
+                let accumulator_builders = aggregates
+                    .iter()
+                    .map(|(_, aggregate)| Self::accumulator_builder(&self.dataset, aggregate))
+                    .collect::<Vec<_>>();
+                let accumulator_variables = aggregates
+                    .iter()
+                    .map(|(variable, _)| encode_variable(encoded_variables, variable))
+                    .collect::<Vec<_>>();
                 Rc::new(move |from| {
                     let tuple_size = from.capacity();
                     let key_variables = Rc::clone(&key_variables);
@@ -749,7 +1020,7 @@ impl SimpleEvaluator {
                             //TODO avoid copy for key?
                             let key = key_variables
                                 .iter()
-                                .map(|v| tuple.get(v.encoded).cloned())
+                                .map(|v| tuple.get(*v).cloned())
                                 .collect();
 
                             let key_accumulators =
@@ -777,7 +1048,7 @@ impl SimpleEvaluator {
                                     let mut result = EncodedTuple::with_capacity(tuple_size);
                                     for (variable, value) in key_variables.iter().zip(key) {
                                         if let Some(value) = value {
-                                            result.set(variable.encoded, value);
+                                            result.set(*variable, value);
                                         }
                                     }
                                     for (accumulator, variable) in
@@ -793,38 +1064,18 @@ impl SimpleEvaluator {
                     )
                 })
             }
-        };
-        let stats = Rc::new(EvalNodeWithStats {
-            label: eval_node_label(node),
-            children: stat_children,
-            exec_count: Cell::new(0),
-            exec_duration: Cell::new(StdDuration::from_secs(0)),
-        });
-        if self.run_stats {
-            let stats = Rc::clone(&stats);
-            evaluator = Rc::new(move |tuple| {
-                let start = Timer::now();
-                let inner = evaluator(tuple);
-                stats
-                    .exec_duration
-                    .set(stats.exec_duration.get() + start.elapsed());
-                Box::new(StatsIterator {
-                    inner,
-                    stats: Rc::clone(&stats),
-                })
-            })
         }
-        (evaluator, stats)
     }
 
     fn evaluate_service(
         &self,
-        service_name: &PatternValue,
-        graph_pattern: &GraphPattern,
+        service_name: &TupleSelector,
+        graph_pattern: &spargebra::algebra::GraphPattern,
         variables: Rc<[Variable]>,
         from: &EncodedTuple,
     ) -> Result<EncodedTuplesIterator, EvaluationError> {
-        let service_name = get_pattern_value(&service_name.into(), from)
+        let service_name = service_name
+            .get_pattern_value(from)
             .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?;
         if let QueryResults::Solutions(iter) = self.service_handler.handle(
             self.dataset.decode_named_node(&service_name)?,
@@ -849,44 +1100,47 @@ impl SimpleEvaluator {
     #[allow(clippy::redundant_closure)] // False positive in 1.60
     fn accumulator_builder(
         dataset: &Rc<DatasetView>,
-        function: &PlanAggregationFunction,
-        distinct: bool,
+        expression: &AggregateExpression,
     ) -> Box<dyn Fn() -> Box<dyn Accumulator>> {
-        match function {
-            PlanAggregationFunction::Count => {
-                if distinct {
+        match expression {
+            AggregateExpression::Count { distinct, .. } => {
+                if *distinct {
                     Box::new(|| Box::new(DistinctAccumulator::new(CountAccumulator::default())))
                 } else {
                     Box::new(|| Box::<CountAccumulator>::default())
                 }
             }
-            PlanAggregationFunction::Sum => {
-                if distinct {
+            AggregateExpression::Sum { distinct, .. } => {
+                if *distinct {
                     Box::new(|| Box::new(DistinctAccumulator::new(SumAccumulator::default())))
                 } else {
                     Box::new(|| Box::<SumAccumulator>::default())
                 }
             }
-            PlanAggregationFunction::Min => {
+            AggregateExpression::Min { .. } => {
                 let dataset = Rc::clone(dataset);
                 Box::new(move || Box::new(MinAccumulator::new(Rc::clone(&dataset))))
             } // DISTINCT does not make sense with min
-            PlanAggregationFunction::Max => {
+            AggregateExpression::Max { .. } => {
                 let dataset = Rc::clone(dataset);
                 Box::new(move || Box::new(MaxAccumulator::new(Rc::clone(&dataset))))
             } // DISTINCT does not make sense with max
-            PlanAggregationFunction::Avg => {
-                if distinct {
+            AggregateExpression::Avg { distinct, .. } => {
+                if *distinct {
                     Box::new(|| Box::new(DistinctAccumulator::new(AvgAccumulator::default())))
                 } else {
                     Box::new(|| Box::<AvgAccumulator>::default())
                 }
             }
-            PlanAggregationFunction::Sample => Box::new(|| Box::<SampleAccumulator>::default()), // DISTINCT does not make sense with sample
-            PlanAggregationFunction::GroupConcat { separator } => {
+            AggregateExpression::Sample { .. } => Box::new(|| Box::<SampleAccumulator>::default()), // DISTINCT does not make sense with sample
+            AggregateExpression::GroupConcat {
+                distinct,
+                separator,
+                ..
+            } => {
                 let dataset = Rc::clone(dataset);
-                let separator = Rc::clone(separator);
-                if distinct {
+                let separator = Rc::from(separator.as_deref().unwrap_or(" "));
+                if *distinct {
                     Box::new(move || {
                         Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
                             Rc::clone(&dataset),
@@ -902,40 +1156,46 @@ impl SimpleEvaluator {
                     })
                 }
             }
+            AggregateExpression::Custom { .. } => Box::new(|| Box::new(FailingAccumulator)),
         }
     }
 
     fn expression_evaluator(
         &self,
-        expression: &PlanExpression,
+        expression: &Expression,
+        encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
     ) -> Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
         match expression {
-            PlanExpression::NamedNode(t) => {
-                let t = t.encoded.clone();
+            Expression::NamedNode(t) => {
+                let t = self.encode_term(t);
                 Rc::new(move |_| Some(t.clone()))
             }
-            PlanExpression::Literal(t) => {
-                let t = t.encoded.clone();
+            Expression::Literal(t) => {
+                let t = self.encode_term(t);
                 Rc::new(move |_| Some(t.clone()))
             }
-            PlanExpression::Variable(v) => {
-                let v = v.encoded;
+            Expression::Variable(v) => {
+                let v = encode_variable(encoded_variables, v);
                 Rc::new(move |tuple| tuple.get(v).cloned())
             }
-            PlanExpression::Exists(plan) => {
-                let (eval, stats) = self.plan_evaluator(plan);
+            Expression::Bound(v) => {
+                let v = encode_variable(encoded_variables, v);
+                Rc::new(move |tuple| Some(tuple.contains(v).into()))
+            }
+            Expression::Exists(plan) => {
+                let (eval, stats) = self.graph_pattern_evaluator(plan, encoded_variables);
                 stat_children.push(stats);
                 Rc::new(move |tuple| Some(eval(tuple.clone()).next().is_some().into()))
             }
-            PlanExpression::Or(inner) => {
+            Expression::Or(inner) => {
                 let children = inner
                     .iter()
-                    .map(|i| self.expression_evaluator(i, stat_children))
+                    .map(|i| self.expression_evaluator(i, encoded_variables, stat_children))
                     .collect::<Rc<[_]>>();
                 Rc::new(move |tuple| {
                     let mut error = false;
-                    for child in children.iter() {
+                    for child in &*children {
                         match child(tuple).and_then(|v| to_bool(&v)) {
                             Some(true) => return Some(true.into()),
                             Some(false) => continue,
@@ -949,14 +1209,14 @@ impl SimpleEvaluator {
                     }
                 })
             }
-            PlanExpression::And(inner) => {
+            Expression::And(inner) => {
                 let children = inner
                     .iter()
-                    .map(|i| self.expression_evaluator(i, stat_children))
+                    .map(|i| self.expression_evaluator(i, encoded_variables, stat_children))
                     .collect::<Rc<[_]>>();
                 Rc::new(move |tuple| {
                     let mut error = false;
-                    for child in children.iter() {
+                    for child in &*children {
                         match child(tuple).and_then(|v| to_bool(&v)) {
                             Some(true) => continue,
                             Some(false) => return Some(false.into()),
@@ -970,14 +1230,19 @@ impl SimpleEvaluator {
                     }
                 })
             }
-            PlanExpression::Equal(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::Equal(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 Rc::new(move |tuple| equals(&a(tuple)?, &b(tuple)?).map(Into::into))
             }
-            PlanExpression::Greater(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::SameTerm(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
+                Rc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
+            }
+            Expression::Greater(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(
@@ -986,9 +1251,9 @@ impl SimpleEvaluator {
                     )
                 })
             }
-            PlanExpression::GreaterOrEqual(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::GreaterOrEqual(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(
@@ -1000,17 +1265,17 @@ impl SimpleEvaluator {
                     )
                 })
             }
-            PlanExpression::Less(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::Less(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some((partial_cmp(&dataset, &a(tuple)?, &b(tuple)?)? == Ordering::Less).into())
                 })
             }
-            PlanExpression::LessOrEqual(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::LessOrEqual(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     Some(
@@ -1022,9 +1287,9 @@ impl SimpleEvaluator {
                     )
                 })
             }
-            PlanExpression::Add(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::Add(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
@@ -1068,9 +1333,9 @@ impl SimpleEvaluator {
                     },
                 )
             }
-            PlanExpression::Subtract(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::Subtract(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 Rc::new(move |tuple| {
                     Some(match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => (v1 - v2).into(),
@@ -1114,9 +1379,9 @@ impl SimpleEvaluator {
                     })
                 })
             }
-            PlanExpression::Multiply(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::Multiply(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 * v2).into()),
@@ -1127,9 +1392,9 @@ impl SimpleEvaluator {
                     },
                 )
             }
-            PlanExpression::Divide(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
+            Expression::Divide(a, b) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
                 Rc::new(
                     move |tuple| match NumericBinaryOperands::new(a(tuple)?, b(tuple)?)? {
                         NumericBinaryOperands::Float(v1, v2) => Some((v1 / v2).into()),
@@ -1142,8 +1407,8 @@ impl SimpleEvaluator {
                     },
                 )
             }
-            PlanExpression::UnaryPlus(e) => {
-                let e = self.expression_evaluator(e, stat_children);
+            Expression::UnaryPlus(e) => {
+                let e = self.expression_evaluator(e, encoded_variables, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some(value.into()),
                     EncodedTerm::DoubleLiteral(value) => Some(value.into()),
@@ -1155,8 +1420,8 @@ impl SimpleEvaluator {
                     _ => None,
                 })
             }
-            PlanExpression::UnaryMinus(e) => {
-                let e = self.expression_evaluator(e, stat_children);
+            Expression::UnaryMinus(e) => {
+                let e = self.expression_evaluator(e, encoded_variables, stat_children);
                 Rc::new(move |tuple| match e(tuple)? {
                     EncodedTerm::FloatLiteral(value) => Some((-value).into()),
                     EncodedTerm::DoubleLiteral(value) => Some((-value).into()),
@@ -1170,556 +1435,14 @@ impl SimpleEvaluator {
                     _ => None,
                 })
             }
-            PlanExpression::Not(e) => {
-                let e = self.expression_evaluator(e, stat_children);
+            Expression::Not(e) => {
+                let e = self.expression_evaluator(e, encoded_variables, stat_children);
                 Rc::new(move |tuple| to_bool(&e(tuple)?).map(|v| (!v).into()))
             }
-            PlanExpression::Str(e) | PlanExpression::StringCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    Some(build_string_literal_from_id(to_string_id(
-                        &dataset,
-                        &e(tuple)?,
-                    )?))
-                })
-            }
-            PlanExpression::Lang(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::SmallSmallLangStringLiteral { language, .. }
-                    | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
-                        Some(build_string_literal_from_id(language.into()))
-                    }
-                    EncodedTerm::SmallBigLangStringLiteral { language_id, .. }
-                    | EncodedTerm::BigBigLangStringLiteral { language_id, .. } => {
-                        Some(build_string_literal_from_id(language_id.into()))
-                    }
-                    e if e.is_literal() => Some(build_string_literal(&dataset, "")),
-                    _ => None,
-                })
-            }
-            PlanExpression::LangMatches(language_tag, language_range) => {
-                let language_tag = self.expression_evaluator(language_tag, stat_children);
-                let language_range = self.expression_evaluator(language_range, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let mut language_tag = to_simple_string(&dataset, &language_tag(tuple)?)?;
-                    language_tag.make_ascii_lowercase();
-                    let mut language_range = to_simple_string(&dataset, &language_range(tuple)?)?;
-                    language_range.make_ascii_lowercase();
-                    Some(
-                        if &*language_range == "*" {
-                            !language_tag.is_empty()
-                        } else {
-                            !ZipLongest::new(language_range.split('-'), language_tag.split('-'))
-                                .any(|parts| match parts {
-                                    (Some(range_subtag), Some(language_subtag)) => {
-                                        range_subtag != language_subtag
-                                    }
-                                    (Some(_), None) => true,
-                                    (None, _) => false,
-                                })
-                        }
-                        .into(),
-                    )
-                })
-            }
-            PlanExpression::Datatype(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| datatype(&dataset, &e(tuple)?))
-            }
-            PlanExpression::Bound(v) => {
-                let v = v.encoded;
-                Rc::new(move |tuple| Some(tuple.contains(v).into()))
-            }
-            PlanExpression::Iri(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                let base_iri = self.base_iri.clone();
-                Rc::new(move |tuple| {
-                    let e = e(tuple)?;
-                    if e.is_named_node() {
-                        Some(e)
-                    } else {
-                        let iri = to_simple_string(&dataset, &e)?;
-                        Some(build_named_node(
-                            &dataset,
-                            &if let Some(base_iri) = &base_iri {
-                                base_iri.resolve(&iri)
-                            } else {
-                                Iri::parse(iri)
-                            }
-                            .ok()?
-                            .into_inner(),
-                        ))
-                    }
-                })
-            }
-            PlanExpression::BNode(id) => match id {
-                Some(id) => {
-                    let id = self.expression_evaluator(id, stat_children);
-                    let dataset = Rc::clone(&self.dataset);
-                    Rc::new(move |tuple| {
-                        Some(
-                            dataset.encode_term(
-                                BlankNode::new(to_simple_string(&dataset, &id(tuple)?)?)
-                                    .ok()?
-                                    .as_ref(),
-                            ),
-                        )
-                    })
-                }
-                None => Rc::new(|_| {
-                    Some(EncodedTerm::NumericalBlankNode {
-                        id: random::<u128>(),
-                    })
-                }),
-            },
-            PlanExpression::Rand => Rc::new(|_| Some(random::<f64>().into())),
-            PlanExpression::Abs(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::IntegerLiteral(value) => Some(value.abs().into()),
-                    EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
-                    EncodedTerm::FloatLiteral(value) => Some(value.abs().into()),
-                    EncodedTerm::DoubleLiteral(value) => Some(value.abs().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Ceil(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                    EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
-                    EncodedTerm::FloatLiteral(value) => Some(value.ceil().into()),
-                    EncodedTerm::DoubleLiteral(value) => Some(value.ceil().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Floor(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                    EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
-                    EncodedTerm::FloatLiteral(value) => Some(value.floor().into()),
-                    EncodedTerm::DoubleLiteral(value) => Some(value.floor().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Round(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                    EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
-                    EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
-                    EncodedTerm::DoubleLiteral(value) => Some(value.round().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Concat(l) => {
+            Expression::Coalesce(l) => {
                 let l: Vec<_> = l
                     .iter()
-                    .map(|e| self.expression_evaluator(e, stat_children))
-                    .collect();
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let mut result = String::default();
-                    let mut language = None;
-                    for e in &l {
-                        let (value, e_language) = to_string_and_language(&dataset, &e(tuple)?)?;
-                        if let Some(lang) = language {
-                            if lang != e_language {
-                                language = Some(None)
-                            }
-                        } else {
-                            language = Some(e_language)
-                        }
-                        result += &value
-                    }
-                    Some(build_plain_literal(
-                        &dataset,
-                        &result,
-                        language.and_then(|v| v),
-                    ))
-                })
-            }
-            PlanExpression::SubStr(source, starting_loc, length) => {
-                let source = self.expression_evaluator(source, stat_children);
-                let starting_loc = self.expression_evaluator(starting_loc, stat_children);
-                let length = length
-                    .as_ref()
-                    .map(|l| self.expression_evaluator(l, stat_children));
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (source, language) = to_string_and_language(&dataset, &source(tuple)?)?;
-
-                    let starting_location: usize =
-                        if let EncodedTerm::IntegerLiteral(v) = starting_loc(tuple)? {
-                            i64::from(v).try_into().ok()?
-                        } else {
-                            return None;
-                        };
-                    let length: Option<usize> = if let Some(length) = &length {
-                        if let EncodedTerm::IntegerLiteral(v) = length(tuple)? {
-                            Some(i64::from(v).try_into().ok()?)
-                        } else {
-                            return None;
-                        }
-                    } else {
-                        None
-                    };
-
-                    // We want to slice on char indices, not byte indices
-                    let mut start_iter = source
-                        .char_indices()
-                        .skip(starting_location.checked_sub(1)?)
-                        .peekable();
-                    let result = if let Some((start_position, _)) = start_iter.peek().copied() {
-                        if let Some(length) = length {
-                            let mut end_iter = start_iter.skip(length).peekable();
-                            if let Some((end_position, _)) = end_iter.peek() {
-                                &source[start_position..*end_position]
-                            } else {
-                                &source[start_position..]
-                            }
-                        } else {
-                            &source[start_position..]
-                        }
-                    } else {
-                        ""
-                    };
-                    Some(build_plain_literal(&dataset, result, language))
-                })
-            }
-            PlanExpression::StrLen(arg) => {
-                let arg = self.expression_evaluator(arg, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    Some(
-                        i64::try_from(to_string(&dataset, &arg(tuple)?)?.chars().count())
-                            .ok()?
-                            .into(),
-                    )
-                })
-            }
-            PlanExpression::StaticReplace(arg, regex, replacement) => {
-                let arg = self.expression_evaluator(arg, stat_children);
-                let regex = regex.clone();
-                let replacement = self.expression_evaluator(replacement, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (text, language) = to_string_and_language(&dataset, &arg(tuple)?)?;
-                    let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
-                    Some(build_plain_literal(
-                        &dataset,
-                        &regex.replace_all(&text, replacement.as_str()),
-                        language,
-                    ))
-                })
-            }
-            PlanExpression::DynamicReplace(arg, pattern, replacement, flags) => {
-                let arg = self.expression_evaluator(arg, stat_children);
-                let pattern = self.expression_evaluator(pattern, stat_children);
-                let replacement = self.expression_evaluator(replacement, stat_children);
-                let flags = flags
-                    .as_ref()
-                    .map(|flags| self.expression_evaluator(flags, stat_children));
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
-                    let options = if let Some(flags) = &flags {
-                        Some(to_simple_string(&dataset, &flags(tuple)?)?)
-                    } else {
-                        None
-                    };
-                    let regex = compile_pattern(&pattern, options.as_deref())?;
-                    let (text, language) = to_string_and_language(&dataset, &arg(tuple)?)?;
-                    let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
-                    Some(build_plain_literal(
-                        &dataset,
-                        &regex.replace_all(&text, replacement.as_str()),
-                        language,
-                    ))
-                })
-            }
-            PlanExpression::UCase(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
-                    Some(build_plain_literal(
-                        &dataset,
-                        &value.to_uppercase(),
-                        language,
-                    ))
-                })
-            }
-            PlanExpression::LCase(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
-                    Some(build_plain_literal(
-                        &dataset,
-                        &value.to_lowercase(),
-                        language,
-                    ))
-                })
-            }
-            PlanExpression::StrStarts(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1, stat_children);
-                let arg2 = self.expression_evaluator(arg2, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (arg1, arg2, _) =
-                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some(arg1.starts_with(arg2.as_str()).into())
-                })
-            }
-            PlanExpression::EncodeForUri(ltrl) => {
-                let ltrl = self.expression_evaluator(ltrl, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let ltlr = to_string(&dataset, &ltrl(tuple)?)?;
-                    let mut result = Vec::with_capacity(ltlr.len());
-                    for c in ltlr.bytes() {
-                        match c {
-                            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                                result.push(c)
-                            }
-                            _ => {
-                                result.push(b'%');
-                                let high = c / 16;
-                                let low = c % 16;
-                                result.push(if high < 10 {
-                                    b'0' + high
-                                } else {
-                                    b'A' + (high - 10)
-                                });
-                                result.push(if low < 10 {
-                                    b'0' + low
-                                } else {
-                                    b'A' + (low - 10)
-                                });
-                            }
-                        }
-                    }
-                    Some(build_string_literal(
-                        &dataset,
-                        str::from_utf8(&result).ok()?,
-                    ))
-                })
-            }
-            PlanExpression::StrEnds(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1, stat_children);
-                let arg2 = self.expression_evaluator(arg2, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (arg1, arg2, _) =
-                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some(arg1.ends_with(arg2.as_str()).into())
-                })
-            }
-            PlanExpression::Contains(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1, stat_children);
-                let arg2 = self.expression_evaluator(arg2, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (arg1, arg2, _) =
-                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some(arg1.contains(arg2.as_str()).into())
-                })
-            }
-            PlanExpression::StrBefore(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1, stat_children);
-                let arg2 = self.expression_evaluator(arg2, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (arg1, arg2, language) =
-                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some(if let Some(position) = arg1.find(arg2.as_str()) {
-                        build_plain_literal(&dataset, &arg1[..position], language)
-                    } else {
-                        build_string_literal(&dataset, "")
-                    })
-                })
-            }
-            PlanExpression::StrAfter(arg1, arg2) => {
-                let arg1 = self.expression_evaluator(arg1, stat_children);
-                let arg2 = self.expression_evaluator(arg2, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let (arg1, arg2, language) =
-                        to_argument_compatible_strings(&dataset, &arg1(tuple)?, &arg2(tuple)?)?;
-                    Some(if let Some(position) = arg1.find(arg2.as_str()) {
-                        build_plain_literal(&dataset, &arg1[position + arg2.len()..], language)
-                    } else {
-                        build_string_literal(&dataset, "")
-                    })
-                })
-            }
-            PlanExpression::Year(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.year().into()),
-                    EncodedTerm::DateLiteral(date) => Some(date.year().into()),
-                    EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.year().into()),
-                    EncodedTerm::GYearLiteral(year) => Some(year.year().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Month(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.month().into()),
-                    EncodedTerm::DateLiteral(date) => Some(date.month().into()),
-                    EncodedTerm::GYearMonthLiteral(year_month) => Some(year_month.month().into()),
-                    EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.month().into()),
-                    EncodedTerm::GMonthLiteral(month) => Some(month.month().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Day(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
-                    EncodedTerm::DateLiteral(date) => Some(date.day().into()),
-                    EncodedTerm::GMonthDayLiteral(month_day) => Some(month_day.day().into()),
-                    EncodedTerm::GDayLiteral(day) => Some(day.day().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Hours(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.hour().into()),
-                    EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Minutes(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.minute().into()),
-                    EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Seconds(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.second().into()),
-                    EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
-                    _ => None,
-                })
-            }
-            PlanExpression::Timezone(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| {
-                    Some(
-                        match e(tuple)? {
-                            EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
-                            EncodedTerm::TimeLiteral(time) => time.timezone(),
-                            EncodedTerm::DateLiteral(date) => date.timezone(),
-                            EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone(),
-                            EncodedTerm::GYearLiteral(year) => year.timezone(),
-                            EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone(),
-                            EncodedTerm::GDayLiteral(day) => day.timezone(),
-                            EncodedTerm::GMonthLiteral(month) => month.timezone(),
-                            _ => None,
-                        }?
-                        .into(),
-                    )
-                })
-            }
-            PlanExpression::Tz(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let timezone_offset = match e(tuple)? {
-                        EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone_offset(),
-                        EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
-                        EncodedTerm::DateLiteral(date) => date.timezone_offset(),
-                        EncodedTerm::GYearMonthLiteral(year_month) => year_month.timezone_offset(),
-                        EncodedTerm::GYearLiteral(year) => year.timezone_offset(),
-                        EncodedTerm::GMonthDayLiteral(month_day) => month_day.timezone_offset(),
-                        EncodedTerm::GDayLiteral(day) => day.timezone_offset(),
-                        EncodedTerm::GMonthLiteral(month) => month.timezone_offset(),
-                        _ => return None,
-                    };
-                    Some(match timezone_offset {
-                        Some(timezone_offset) => {
-                            build_string_literal(&dataset, &timezone_offset.to_string())
-                        }
-                        None => build_string_literal(&dataset, ""),
-                    })
-                })
-            }
-
-            PlanExpression::Adjust(dt, tz) => {
-                let dt = self.expression_evaluator(dt, stat_children);
-                let tz = self.expression_evaluator(tz, stat_children);
-                Rc::new(move |tuple| {
-                    let timezone_offset = Some(
-                        match tz(tuple)? {
-                            EncodedTerm::DayTimeDurationLiteral(tz) => TimezoneOffset::try_from(tz),
-                            EncodedTerm::DurationLiteral(tz) => TimezoneOffset::try_from(tz),
-                            _ => return None,
-                        }
-                        .ok()?,
-                    );
-                    Some(match dt(tuple)? {
-                        EncodedTerm::DateTimeLiteral(date_time) => {
-                            date_time.adjust(timezone_offset)?.into()
-                        }
-                        EncodedTerm::TimeLiteral(time) => time.adjust(timezone_offset)?.into(),
-                        EncodedTerm::DateLiteral(date) => date.adjust(timezone_offset)?.into(),
-                        EncodedTerm::GYearMonthLiteral(year_month) => {
-                            year_month.adjust(timezone_offset)?.into()
-                        }
-                        EncodedTerm::GYearLiteral(year) => year.adjust(timezone_offset)?.into(),
-                        EncodedTerm::GMonthDayLiteral(month_day) => {
-                            month_day.adjust(timezone_offset)?.into()
-                        }
-                        EncodedTerm::GDayLiteral(day) => day.adjust(timezone_offset)?.into(),
-                        EncodedTerm::GMonthLiteral(month) => month.adjust(timezone_offset)?.into(),
-                        _ => return None,
-                    })
-                })
-            }
-            PlanExpression::Now => {
-                let now = self.now;
-                Rc::new(move |_| Some(now.into()))
-            }
-            PlanExpression::Uuid => {
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |_| {
-                    let mut buffer = String::with_capacity(44);
-                    buffer.push_str("urn:uuid:");
-                    generate_uuid(&mut buffer);
-                    Some(build_named_node(&dataset, &buffer))
-                })
-            }
-            PlanExpression::StrUuid => {
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |_| {
-                    let mut buffer = String::with_capacity(36);
-                    generate_uuid(&mut buffer);
-                    Some(build_string_literal(&dataset, &buffer))
-                })
-            }
-            PlanExpression::Md5(arg) => self.hash::<Md5>(arg, stat_children),
-            PlanExpression::Sha1(arg) => self.hash::<Sha1>(arg, stat_children),
-            PlanExpression::Sha256(arg) => self.hash::<Sha256>(arg, stat_children),
-            PlanExpression::Sha384(arg) => self.hash::<Sha384>(arg, stat_children),
-            PlanExpression::Sha512(arg) => self.hash::<Sha512>(arg, stat_children),
-            PlanExpression::Coalesce(l) => {
-                let l: Vec<_> = l
-                    .iter()
-                    .map(|e| self.expression_evaluator(e, stat_children))
+                    .map(|e| self.expression_evaluator(e, encoded_variables, stat_children))
                     .collect();
                 Rc::new(move |tuple| {
                     for e in &l {
@@ -1730,10 +1453,10 @@ impl SimpleEvaluator {
                     None
                 })
             }
-            PlanExpression::If(a, b, c) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
-                let c = self.expression_evaluator(c, stat_children);
+            Expression::If(a, b, c) => {
+                let a = self.expression_evaluator(a, encoded_variables, stat_children);
+                let b = self.expression_evaluator(b, encoded_variables, stat_children);
+                let c = self.expression_evaluator(c, encoded_variables, stat_children);
                 Rc::new(move |tuple| {
                     if to_bool(&a(tuple)?)? {
                         b(tuple)
@@ -1742,330 +1465,1303 @@ impl SimpleEvaluator {
                     }
                 })
             }
-            PlanExpression::StrLang(lexical_form, lang_tag) => {
-                let lexical_form = self.expression_evaluator(lexical_form, stat_children);
-                let lang_tag = self.expression_evaluator(lang_tag, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    Some(build_lang_string_literal_from_id(
-                        to_simple_string_id(&lexical_form(tuple)?)?,
-                        build_language_id(&dataset, &lang_tag(tuple)?)?,
-                    ))
-                })
-            }
-            PlanExpression::StrDt(lexical_form, datatype) => {
-                let lexical_form = self.expression_evaluator(lexical_form, stat_children);
-                let datatype = self.expression_evaluator(datatype, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let value = to_simple_string(&dataset, &lexical_form(tuple)?)?;
-                    let datatype = if let EncodedTerm::NamedNode { iri_id } = datatype(tuple)? {
-                        dataset.get_str(&iri_id).ok()?
-                    } else {
-                        None
-                    }?;
-                    Some(dataset.encode_term(LiteralRef::new_typed_literal(
-                        &value,
-                        NamedNodeRef::new_unchecked(&datatype),
-                    )))
-                })
-            }
-            PlanExpression::SameTerm(a, b) => {
-                let a = self.expression_evaluator(a, stat_children);
-                let b = self.expression_evaluator(b, stat_children);
-                Rc::new(move |tuple| Some((a(tuple)? == b(tuple)?).into()))
-            }
-            PlanExpression::IsIri(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| Some(e(tuple)?.is_named_node().into()))
-            }
-            PlanExpression::IsBlank(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| Some(e(tuple)?.is_blank_node().into()))
-            }
-            PlanExpression::IsLiteral(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| Some(e(tuple)?.is_literal().into()))
-            }
-            PlanExpression::IsNumeric(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| {
-                    Some(
-                        matches!(
-                            e(tuple)?,
-                            EncodedTerm::FloatLiteral(_)
-                                | EncodedTerm::DoubleLiteral(_)
-                                | EncodedTerm::IntegerLiteral(_)
-                                | EncodedTerm::DecimalLiteral(_)
-                        )
-                        .into(),
-                    )
-                })
-            }
-            PlanExpression::StaticRegex(text, regex) => {
-                let text = self.expression_evaluator(text, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                let regex = regex.clone();
-                Rc::new(move |tuple| {
-                    let text = to_string(&dataset, &text(tuple)?)?;
-                    Some(regex.is_match(&text).into())
-                })
-            }
-            PlanExpression::DynamicRegex(text, pattern, flags) => {
-                let text = self.expression_evaluator(text, stat_children);
-                let pattern = self.expression_evaluator(pattern, stat_children);
-                let flags = flags
-                    .as_ref()
-                    .map(|flags| self.expression_evaluator(flags, stat_children));
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| {
-                    let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
-                    let options = if let Some(flags) = &flags {
-                        Some(to_simple_string(&dataset, &flags(tuple)?)?)
-                    } else {
-                        None
-                    };
-                    let regex = compile_pattern(&pattern, options.as_deref())?;
-                    let text = to_string(&dataset, &text(tuple)?)?;
-                    Some(regex.is_match(&text).into())
-                })
-            }
-            PlanExpression::Triple(s, p, o) => {
-                let s = self.expression_evaluator(s, stat_children);
-                let p = self.expression_evaluator(p, stat_children);
-                let o = self.expression_evaluator(o, stat_children);
-                Rc::new(move |tuple| {
-                    let s = s(tuple)?;
-                    let p = p(tuple)?;
-                    let o = o(tuple)?;
-                    (!s.is_literal()
-                        && !s.is_default_graph()
-                        && p.is_named_node()
-                        && !o.is_default_graph())
-                    .then(|| EncodedTriple::new(s, p, o).into())
-                })
-            }
-            PlanExpression::Subject(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| {
-                    if let EncodedTerm::Triple(t) = e(tuple)? {
-                        Some(t.subject.clone())
-                    } else {
-                        None
+            Expression::FunctionCall(function, parameters) => {
+                match function {
+                    Function::Str => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            Some(build_string_literal_from_id(to_string_id(
+                                &dataset,
+                                &e(tuple)?,
+                            )?))
+                        })
                     }
-                })
-            }
-            PlanExpression::Predicate(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| {
-                    if let EncodedTerm::Triple(t) = e(tuple)? {
-                        Some(t.predicate.clone())
-                    } else {
-                        None
+                    Function::Lang => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::SmallSmallLangStringLiteral { language, .. }
+                            | EncodedTerm::BigSmallLangStringLiteral { language, .. } => {
+                                Some(build_string_literal_from_id(language.into()))
+                            }
+                            EncodedTerm::SmallBigLangStringLiteral { language_id, .. }
+                            | EncodedTerm::BigBigLangStringLiteral { language_id, .. } => {
+                                Some(build_string_literal_from_id(language_id.into()))
+                            }
+                            e if e.is_literal() => Some(build_string_literal(&dataset, "")),
+                            _ => None,
+                        })
                     }
-                })
-            }
-            PlanExpression::Object(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| {
-                    if let EncodedTerm::Triple(t) = e(tuple)? {
-                        Some(t.object.clone())
-                    } else {
-                        None
+                    Function::LangMatches => {
+                        let language_tag = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let language_range = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let mut language_tag =
+                                to_simple_string(&dataset, &language_tag(tuple)?)?;
+                            language_tag.make_ascii_lowercase();
+                            let mut language_range =
+                                to_simple_string(&dataset, &language_range(tuple)?)?;
+                            language_range.make_ascii_lowercase();
+                            Some(
+                                if &*language_range == "*" {
+                                    !language_tag.is_empty()
+                                } else {
+                                    !ZipLongest::new(
+                                        language_range.split('-'),
+                                        language_tag.split('-'),
+                                    )
+                                    .any(|parts| match parts {
+                                        (Some(range_subtag), Some(language_subtag)) => {
+                                            range_subtag != language_subtag
+                                        }
+                                        (Some(_), None) => true,
+                                        (None, _) => false,
+                                    })
+                                }
+                                .into(),
+                            )
+                        })
                     }
-                })
-            }
-            PlanExpression::IsTriple(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| Some(e(tuple)?.is_triple().into()))
-            }
-            PlanExpression::BooleanCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::BooleanLiteral(value) => Some(value.into()),
-                    EncodedTerm::FloatLiteral(value) => Some(Boolean::from(value).into()),
-                    EncodedTerm::DoubleLiteral(value) => Some(Boolean::from(value).into()),
-                    EncodedTerm::IntegerLiteral(value) => Some(Boolean::from(value).into()),
-                    EncodedTerm::DecimalLiteral(value) => Some(Boolean::from(value).into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_boolean_str(&value),
-                    _ => None,
-                })
-            }
-            PlanExpression::DoubleCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::FloatLiteral(value) => Some(Double::from(value).into()),
-                    EncodedTerm::DoubleLiteral(value) => Some(value.into()),
-                    EncodedTerm::IntegerLiteral(value) => Some(Double::from(value).into()),
-                    EncodedTerm::DecimalLiteral(value) => Some(Double::from(value).into()),
-                    EncodedTerm::BooleanLiteral(value) => Some(Double::from(value).into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_double_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_double_str(&dataset.get_str(&value_id).ok()??)
+                    Function::Datatype => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| datatype(&dataset, &e(tuple)?))
                     }
-                    _ => None,
-                })
-            }
-            PlanExpression::FloatCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::FloatLiteral(value) => Some(value.into()),
-                    EncodedTerm::DoubleLiteral(value) => Some(Float::from(value).into()),
-                    EncodedTerm::IntegerLiteral(value) => Some(Float::from(value).into()),
-                    EncodedTerm::DecimalLiteral(value) => Some(Float::from(value).into()),
-                    EncodedTerm::BooleanLiteral(value) => Some(Float::from(value).into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_float_str(&dataset.get_str(&value_id).ok()??)
+                    Function::Iri => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        let base_iri = self.base_iri.clone();
+                        Rc::new(move |tuple| {
+                            let e = e(tuple)?;
+                            if e.is_named_node() {
+                                Some(e)
+                            } else {
+                                let iri = to_simple_string(&dataset, &e)?;
+                                Some(build_named_node(
+                                    &dataset,
+                                    &if let Some(base_iri) = &base_iri {
+                                        base_iri.resolve(&iri)
+                                    } else {
+                                        Iri::parse(iri)
+                                    }
+                                    .ok()?
+                                    .into_inner(),
+                                ))
+                            }
+                        })
                     }
-                    _ => None,
-                })
-            }
-            PlanExpression::IntegerCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::FloatLiteral(value) => Some(Integer::try_from(value).ok()?.into()),
-                    EncodedTerm::DoubleLiteral(value) => {
-                        Some(Integer::try_from(value).ok()?.into())
+                    Function::BNode => match parameters.get(0) {
+                        Some(id) => {
+                            let id =
+                                self.expression_evaluator(id, encoded_variables, stat_children);
+                            let dataset = Rc::clone(&self.dataset);
+                            Rc::new(move |tuple| {
+                                Some(
+                                    dataset.encode_term(
+                                        BlankNode::new(to_simple_string(&dataset, &id(tuple)?)?)
+                                            .ok()?
+                                            .as_ref(),
+                                    ),
+                                )
+                            })
+                        }
+                        None => Rc::new(|_| {
+                            Some(EncodedTerm::NumericalBlankNode {
+                                id: random::<u128>(),
+                            })
+                        }),
+                    },
+                    Function::Rand => Rc::new(|_| Some(random::<f64>().into())),
+                    Function::Abs => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::IntegerLiteral(value) => Some(value.abs().into()),
+                            EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
+                            EncodedTerm::FloatLiteral(value) => Some(value.abs().into()),
+                            EncodedTerm::DoubleLiteral(value) => Some(value.abs().into()),
+                            _ => None,
+                        })
                     }
-                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                    EncodedTerm::DecimalLiteral(value) => {
-                        Some(Integer::try_from(value).ok()?.into())
+                    Function::Ceil => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                            EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
+                            EncodedTerm::FloatLiteral(value) => Some(value.ceil().into()),
+                            EncodedTerm::DoubleLiteral(value) => Some(value.ceil().into()),
+                            _ => None,
+                        })
                     }
-                    EncodedTerm::BooleanLiteral(value) => Some(Integer::from(value).into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_integer_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_integer_str(&dataset.get_str(&value_id).ok()??)
+                    Function::Floor => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                            EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
+                            EncodedTerm::FloatLiteral(value) => Some(value.floor().into()),
+                            EncodedTerm::DoubleLiteral(value) => Some(value.floor().into()),
+                            _ => None,
+                        })
                     }
-                    _ => None,
-                })
-            }
-            PlanExpression::DecimalCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::FloatLiteral(value) => Some(Decimal::try_from(value).ok()?.into()),
-                    EncodedTerm::DoubleLiteral(value) => {
-                        Some(Decimal::try_from(value).ok()?.into())
+                    Function::Round => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                            EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
+                            EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
+                            EncodedTerm::DoubleLiteral(value) => Some(value.round().into()),
+                            _ => None,
+                        })
                     }
-                    EncodedTerm::IntegerLiteral(value) => {
-                        Some(Decimal::try_from(value).ok()?.into())
-                    }
-                    EncodedTerm::DecimalLiteral(value) => Some(value.into()),
-                    EncodedTerm::BooleanLiteral(value) => Some(Decimal::from(value).into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_decimal_str(&dataset.get_str(&value_id).ok()??)
-                    }
-                    _ => None,
-                })
-            }
-            PlanExpression::DateCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateLiteral(value) => Some(value.into()),
-                    EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_date_str(&dataset.get_str(&value_id).ok()??)
-                    }
-                    _ => None,
-                })
-            }
-            PlanExpression::TimeCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::TimeLiteral(value) => Some(value.into()),
-                    EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_time_str(&dataset.get_str(&value_id).ok()??)
-                    }
-                    _ => None,
-                })
-            }
-            PlanExpression::DateTimeCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
-                    EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_date_time_str(&dataset.get_str(&value_id).ok()??)
-                    }
-                    _ => None,
-                })
-            }
-            PlanExpression::DurationCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DurationLiteral(value) => Some(value.into()),
-                    EncodedTerm::YearMonthDurationLiteral(value) => {
-                        Some(Duration::from(value).into())
-                    }
-                    EncodedTerm::DayTimeDurationLiteral(value) => {
-                        Some(Duration::from(value).into())
-                    }
-                    EncodedTerm::SmallStringLiteral(value) => parse_duration_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_duration_str(&dataset.get_str(&value_id).ok()??)
-                    }
-                    _ => None,
-                })
-            }
-            PlanExpression::YearMonthDurationCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DurationLiteral(value) => {
-                        Some(YearMonthDuration::try_from(value).ok()?.into())
-                    }
-                    EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_year_month_duration_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_year_month_duration_str(&dataset.get_str(&value_id).ok()??)
-                    }
-                    _ => None,
-                })
-            }
-            PlanExpression::DayTimeDurationCast(e) => {
-                let e = self.expression_evaluator(e, stat_children);
-                let dataset = Rc::clone(&self.dataset);
-                Rc::new(move |tuple| match e(tuple)? {
-                    EncodedTerm::DurationLiteral(value) => {
-                        Some(DayTimeDuration::try_from(value).ok()?.into())
-                    }
-                    EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
-                    EncodedTerm::SmallStringLiteral(value) => parse_day_time_duration_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_day_time_duration_str(&dataset.get_str(&value_id).ok()??)
-                    }
-                    _ => None,
-                })
-            }
-            PlanExpression::CustomFunction(function_name, args) => {
-                if let Some(function) = self.custom_functions.get(function_name).cloned() {
-                    let args = args
-                        .iter()
-                        .map(|e| self.expression_evaluator(e, stat_children))
-                        .collect::<Vec<_>>();
-                    let dataset = Rc::clone(&self.dataset);
-                    Rc::new(move |tuple| {
-                        let args = args
+                    Function::Concat => {
+                        let l: Vec<_> = parameters
                             .iter()
-                            .map(|f| dataset.decode_term(&f(tuple)?).ok())
-                            .collect::<Option<Vec<_>>>()?;
-                        Some(dataset.encode_term(&function(&args)?))
-                    })
-                } else {
-                    Rc::new(|_| None)
+                            .map(|e| self.expression_evaluator(e, encoded_variables, stat_children))
+                            .collect();
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let mut result = String::default();
+                            let mut language = None;
+                            for e in &l {
+                                let (value, e_language) =
+                                    to_string_and_language(&dataset, &e(tuple)?)?;
+                                if let Some(lang) = language {
+                                    if lang != e_language {
+                                        language = Some(None)
+                                    }
+                                } else {
+                                    language = Some(e_language)
+                                }
+                                result += &value
+                            }
+                            Some(build_plain_literal(
+                                &dataset,
+                                &result,
+                                language.and_then(|v| v),
+                            ))
+                        })
+                    }
+                    Function::SubStr => {
+                        let source = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let starting_loc = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let length = parameters.get(2).map(|l| {
+                            self.expression_evaluator(l, encoded_variables, stat_children)
+                        });
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (source, language) =
+                                to_string_and_language(&dataset, &source(tuple)?)?;
+
+                            let starting_location: usize =
+                                if let EncodedTerm::IntegerLiteral(v) = starting_loc(tuple)? {
+                                    i64::from(v).try_into().ok()?
+                                } else {
+                                    return None;
+                                };
+                            let length: Option<usize> = if let Some(length) = &length {
+                                if let EncodedTerm::IntegerLiteral(v) = length(tuple)? {
+                                    Some(i64::from(v).try_into().ok()?)
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                None
+                            };
+
+                            // We want to slice on char indices, not byte indices
+                            let mut start_iter = source
+                                .char_indices()
+                                .skip(starting_location.checked_sub(1)?)
+                                .peekable();
+                            let result =
+                                if let Some((start_position, _)) = start_iter.peek().copied() {
+                                    if let Some(length) = length {
+                                        let mut end_iter = start_iter.skip(length).peekable();
+                                        if let Some((end_position, _)) = end_iter.peek() {
+                                            &source[start_position..*end_position]
+                                        } else {
+                                            &source[start_position..]
+                                        }
+                                    } else {
+                                        &source[start_position..]
+                                    }
+                                } else {
+                                    ""
+                                };
+                            Some(build_plain_literal(&dataset, result, language))
+                        })
+                    }
+                    Function::StrLen => {
+                        let arg = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            Some(
+                                i64::try_from(to_string(&dataset, &arg(tuple)?)?.chars().count())
+                                    .ok()?
+                                    .into(),
+                            )
+                        })
+                    }
+                    Function::Replace => {
+                        let arg = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let replacement = self.expression_evaluator(
+                            &parameters[2],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        if let Some(regex) =
+                            compile_static_pattern_if_exists(&parameters[1], parameters.get(3))
+                        {
+                            Rc::new(move |tuple| {
+                                let (text, language) =
+                                    to_string_and_language(&dataset, &arg(tuple)?)?;
+                                let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
+                                Some(build_plain_literal(
+                                    &dataset,
+                                    &regex.replace_all(&text, replacement.as_str()),
+                                    language,
+                                ))
+                            })
+                        } else {
+                            let pattern = self.expression_evaluator(
+                                &parameters[1],
+                                encoded_variables,
+                                stat_children,
+                            );
+                            let flags = parameters.get(3).map(|flags| {
+                                self.expression_evaluator(flags, encoded_variables, stat_children)
+                            });
+                            Rc::new(move |tuple| {
+                                let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
+                                let options = if let Some(flags) = &flags {
+                                    Some(to_simple_string(&dataset, &flags(tuple)?)?)
+                                } else {
+                                    None
+                                };
+                                let regex = compile_pattern(&pattern, options.as_deref())?;
+                                let (text, language) =
+                                    to_string_and_language(&dataset, &arg(tuple)?)?;
+                                let replacement = to_simple_string(&dataset, &replacement(tuple)?)?;
+                                Some(build_plain_literal(
+                                    &dataset,
+                                    &regex.replace_all(&text, replacement.as_str()),
+                                    language,
+                                ))
+                            })
+                        }
+                    }
+                    Function::UCase => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
+                            Some(build_plain_literal(
+                                &dataset,
+                                &value.to_uppercase(),
+                                language,
+                            ))
+                        })
+                    }
+                    Function::LCase => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (value, language) = to_string_and_language(&dataset, &e(tuple)?)?;
+                            Some(build_plain_literal(
+                                &dataset,
+                                &value.to_lowercase(),
+                                language,
+                            ))
+                        })
+                    }
+                    Function::StrStarts => {
+                        let arg1 = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let arg2 = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (arg1, arg2, _) = to_argument_compatible_strings(
+                                &dataset,
+                                &arg1(tuple)?,
+                                &arg2(tuple)?,
+                            )?;
+                            Some(arg1.starts_with(arg2.as_str()).into())
+                        })
+                    }
+                    Function::EncodeForUri => {
+                        let ltrl = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let ltlr = to_string(&dataset, &ltrl(tuple)?)?;
+                            let mut result = Vec::with_capacity(ltlr.len());
+                            for c in ltlr.bytes() {
+                                match c {
+                                    b'A'..=b'Z'
+                                    | b'a'..=b'z'
+                                    | b'0'..=b'9'
+                                    | b'-'
+                                    | b'_'
+                                    | b'.'
+                                    | b'~' => result.push(c),
+                                    _ => {
+                                        result.push(b'%');
+                                        let high = c / 16;
+                                        let low = c % 16;
+                                        result.push(if high < 10 {
+                                            b'0' + high
+                                        } else {
+                                            b'A' + (high - 10)
+                                        });
+                                        result.push(if low < 10 {
+                                            b'0' + low
+                                        } else {
+                                            b'A' + (low - 10)
+                                        });
+                                    }
+                                }
+                            }
+                            Some(build_string_literal(
+                                &dataset,
+                                str::from_utf8(&result).ok()?,
+                            ))
+                        })
+                    }
+                    Function::StrEnds => {
+                        let arg1 = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let arg2 = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (arg1, arg2, _) = to_argument_compatible_strings(
+                                &dataset,
+                                &arg1(tuple)?,
+                                &arg2(tuple)?,
+                            )?;
+                            Some(arg1.ends_with(arg2.as_str()).into())
+                        })
+                    }
+                    Function::Contains => {
+                        let arg1 = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let arg2 = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (arg1, arg2, _) = to_argument_compatible_strings(
+                                &dataset,
+                                &arg1(tuple)?,
+                                &arg2(tuple)?,
+                            )?;
+                            Some(arg1.contains(arg2.as_str()).into())
+                        })
+                    }
+                    Function::StrBefore => {
+                        let arg1 = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let arg2 = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (arg1, arg2, language) = to_argument_compatible_strings(
+                                &dataset,
+                                &arg1(tuple)?,
+                                &arg2(tuple)?,
+                            )?;
+                            Some(if let Some(position) = arg1.find(arg2.as_str()) {
+                                build_plain_literal(&dataset, &arg1[..position], language)
+                            } else {
+                                build_string_literal(&dataset, "")
+                            })
+                        })
+                    }
+                    Function::StrAfter => {
+                        let arg1 = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let arg2 = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let (arg1, arg2, language) = to_argument_compatible_strings(
+                                &dataset,
+                                &arg1(tuple)?,
+                                &arg2(tuple)?,
+                            )?;
+                            Some(if let Some(position) = arg1.find(arg2.as_str()) {
+                                build_plain_literal(
+                                    &dataset,
+                                    &arg1[position + arg2.len()..],
+                                    language,
+                                )
+                            } else {
+                                build_string_literal(&dataset, "")
+                            })
+                        })
+                    }
+                    Function::Year => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::DateTimeLiteral(date_time) => {
+                                Some(date_time.year().into())
+                            }
+                            EncodedTerm::DateLiteral(date) => Some(date.year().into()),
+                            EncodedTerm::GYearMonthLiteral(year_month) => {
+                                Some(year_month.year().into())
+                            }
+                            EncodedTerm::GYearLiteral(year) => Some(year.year().into()),
+                            _ => None,
+                        })
+                    }
+                    Function::Month => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::DateTimeLiteral(date_time) => {
+                                Some(date_time.month().into())
+                            }
+                            EncodedTerm::DateLiteral(date) => Some(date.month().into()),
+                            EncodedTerm::GYearMonthLiteral(year_month) => {
+                                Some(year_month.month().into())
+                            }
+                            EncodedTerm::GMonthDayLiteral(month_day) => {
+                                Some(month_day.month().into())
+                            }
+                            EncodedTerm::GMonthLiteral(month) => Some(month.month().into()),
+                            _ => None,
+                        })
+                    }
+                    Function::Day => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::DateTimeLiteral(date_time) => Some(date_time.day().into()),
+                            EncodedTerm::DateLiteral(date) => Some(date.day().into()),
+                            EncodedTerm::GMonthDayLiteral(month_day) => {
+                                Some(month_day.day().into())
+                            }
+                            EncodedTerm::GDayLiteral(day) => Some(day.day().into()),
+                            _ => None,
+                        })
+                    }
+                    Function::Hours => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::DateTimeLiteral(date_time) => {
+                                Some(date_time.hour().into())
+                            }
+                            EncodedTerm::TimeLiteral(time) => Some(time.hour().into()),
+                            _ => None,
+                        })
+                    }
+                    Function::Minutes => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::DateTimeLiteral(date_time) => {
+                                Some(date_time.minute().into())
+                            }
+                            EncodedTerm::TimeLiteral(time) => Some(time.minute().into()),
+                            _ => None,
+                        })
+                    }
+                    Function::Seconds => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| match e(tuple)? {
+                            EncodedTerm::DateTimeLiteral(date_time) => {
+                                Some(date_time.second().into())
+                            }
+                            EncodedTerm::TimeLiteral(time) => Some(time.second().into()),
+                            _ => None,
+                        })
+                    }
+                    Function::Timezone => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| {
+                            Some(
+                                match e(tuple)? {
+                                    EncodedTerm::DateTimeLiteral(date_time) => date_time.timezone(),
+                                    EncodedTerm::TimeLiteral(time) => time.timezone(),
+                                    EncodedTerm::DateLiteral(date) => date.timezone(),
+                                    EncodedTerm::GYearMonthLiteral(year_month) => {
+                                        year_month.timezone()
+                                    }
+                                    EncodedTerm::GYearLiteral(year) => year.timezone(),
+                                    EncodedTerm::GMonthDayLiteral(month_day) => {
+                                        month_day.timezone()
+                                    }
+                                    EncodedTerm::GDayLiteral(day) => day.timezone(),
+                                    EncodedTerm::GMonthLiteral(month) => month.timezone(),
+                                    _ => None,
+                                }?
+                                .into(),
+                            )
+                        })
+                    }
+                    Function::Tz => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let timezone_offset = match e(tuple)? {
+                                EncodedTerm::DateTimeLiteral(date_time) => {
+                                    date_time.timezone_offset()
+                                }
+                                EncodedTerm::TimeLiteral(time) => time.timezone_offset(),
+                                EncodedTerm::DateLiteral(date) => date.timezone_offset(),
+                                EncodedTerm::GYearMonthLiteral(year_month) => {
+                                    year_month.timezone_offset()
+                                }
+                                EncodedTerm::GYearLiteral(year) => year.timezone_offset(),
+                                EncodedTerm::GMonthDayLiteral(month_day) => {
+                                    month_day.timezone_offset()
+                                }
+                                EncodedTerm::GDayLiteral(day) => day.timezone_offset(),
+                                EncodedTerm::GMonthLiteral(month) => month.timezone_offset(),
+                                _ => return None,
+                            };
+                            Some(match timezone_offset {
+                                Some(timezone_offset) => {
+                                    build_string_literal(&dataset, &timezone_offset.to_string())
+                                }
+                                None => build_string_literal(&dataset, ""),
+                            })
+                        })
+                    }
+                    Function::Adjust => {
+                        let dt = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let tz = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| {
+                            let timezone_offset = Some(
+                                match tz(tuple)? {
+                                    EncodedTerm::DayTimeDurationLiteral(tz) => {
+                                        TimezoneOffset::try_from(tz)
+                                    }
+                                    EncodedTerm::DurationLiteral(tz) => {
+                                        TimezoneOffset::try_from(tz)
+                                    }
+                                    _ => return None,
+                                }
+                                .ok()?,
+                            );
+                            Some(match dt(tuple)? {
+                                EncodedTerm::DateTimeLiteral(date_time) => {
+                                    date_time.adjust(timezone_offset)?.into()
+                                }
+                                EncodedTerm::TimeLiteral(time) => {
+                                    time.adjust(timezone_offset)?.into()
+                                }
+                                EncodedTerm::DateLiteral(date) => {
+                                    date.adjust(timezone_offset)?.into()
+                                }
+                                EncodedTerm::GYearMonthLiteral(year_month) => {
+                                    year_month.adjust(timezone_offset)?.into()
+                                }
+                                EncodedTerm::GYearLiteral(year) => {
+                                    year.adjust(timezone_offset)?.into()
+                                }
+                                EncodedTerm::GMonthDayLiteral(month_day) => {
+                                    month_day.adjust(timezone_offset)?.into()
+                                }
+                                EncodedTerm::GDayLiteral(day) => {
+                                    day.adjust(timezone_offset)?.into()
+                                }
+                                EncodedTerm::GMonthLiteral(month) => {
+                                    month.adjust(timezone_offset)?.into()
+                                }
+                                _ => return None,
+                            })
+                        })
+                    }
+                    Function::Now => {
+                        let now = self.now;
+                        Rc::new(move |_| Some(now.into()))
+                    }
+                    Function::Uuid => {
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |_| {
+                            let mut buffer = String::with_capacity(44);
+                            buffer.push_str("urn:uuid:");
+                            generate_uuid(&mut buffer);
+                            Some(build_named_node(&dataset, &buffer))
+                        })
+                    }
+                    Function::StrUuid => {
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |_| {
+                            let mut buffer = String::with_capacity(36);
+                            generate_uuid(&mut buffer);
+                            Some(build_string_literal(&dataset, &buffer))
+                        })
+                    }
+                    Function::Md5 => self.hash::<Md5>(parameters, encoded_variables, stat_children),
+                    Function::Sha1 => {
+                        self.hash::<Sha1>(parameters, encoded_variables, stat_children)
+                    }
+                    Function::Sha256 => {
+                        self.hash::<Sha256>(parameters, encoded_variables, stat_children)
+                    }
+                    Function::Sha384 => {
+                        self.hash::<Sha384>(parameters, encoded_variables, stat_children)
+                    }
+                    Function::Sha512 => {
+                        self.hash::<Sha512>(parameters, encoded_variables, stat_children)
+                    }
+                    Function::StrLang => {
+                        let lexical_form = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let lang_tag = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            Some(build_lang_string_literal_from_id(
+                                to_simple_string_id(&lexical_form(tuple)?)?,
+                                build_language_id(&dataset, &lang_tag(tuple)?)?,
+                            ))
+                        })
+                    }
+                    Function::StrDt => {
+                        let lexical_form = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let datatype = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        Rc::new(move |tuple| {
+                            let value = to_simple_string(&dataset, &lexical_form(tuple)?)?;
+                            let datatype =
+                                if let EncodedTerm::NamedNode { iri_id } = datatype(tuple)? {
+                                    dataset.get_str(&iri_id).ok()?
+                                } else {
+                                    None
+                                }?;
+                            Some(dataset.encode_term(LiteralRef::new_typed_literal(
+                                &value,
+                                NamedNodeRef::new_unchecked(&datatype),
+                            )))
+                        })
+                    }
+                    Function::IsIri => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| Some(e(tuple)?.is_named_node().into()))
+                    }
+                    Function::IsBlank => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| Some(e(tuple)?.is_blank_node().into()))
+                    }
+                    Function::IsLiteral => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| Some(e(tuple)?.is_literal().into()))
+                    }
+                    Function::IsNumeric => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| {
+                            Some(
+                                matches!(
+                                    e(tuple)?,
+                                    EncodedTerm::FloatLiteral(_)
+                                        | EncodedTerm::DoubleLiteral(_)
+                                        | EncodedTerm::IntegerLiteral(_)
+                                        | EncodedTerm::DecimalLiteral(_)
+                                )
+                                .into(),
+                            )
+                        })
+                    }
+                    Function::Regex => {
+                        let text = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let dataset = Rc::clone(&self.dataset);
+                        if let Some(regex) =
+                            compile_static_pattern_if_exists(&parameters[1], parameters.get(2))
+                        {
+                            Rc::new(move |tuple| {
+                                let text = to_string(&dataset, &text(tuple)?)?;
+                                Some(regex.is_match(&text).into())
+                            })
+                        } else {
+                            let pattern = self.expression_evaluator(
+                                &parameters[0],
+                                encoded_variables,
+                                stat_children,
+                            );
+                            let flags = parameters.get(2).map(|flags| {
+                                self.expression_evaluator(flags, encoded_variables, stat_children)
+                            });
+                            Rc::new(move |tuple| {
+                                let pattern = to_simple_string(&dataset, &pattern(tuple)?)?;
+                                let options = if let Some(flags) = &flags {
+                                    Some(to_simple_string(&dataset, &flags(tuple)?)?)
+                                } else {
+                                    None
+                                };
+                                let regex = compile_pattern(&pattern, options.as_deref())?;
+                                let text = to_string(&dataset, &text(tuple)?)?;
+                                Some(regex.is_match(&text).into())
+                            })
+                        }
+                    }
+                    Function::Triple => {
+                        let s = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let p = self.expression_evaluator(
+                            &parameters[1],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        let o = self.expression_evaluator(
+                            &parameters[2],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| {
+                            let s = s(tuple)?;
+                            let p = p(tuple)?;
+                            let o = o(tuple)?;
+                            (!s.is_literal()
+                                && !s.is_default_graph()
+                                && p.is_named_node()
+                                && !o.is_default_graph())
+                            .then(|| EncodedTriple::new(s, p, o).into())
+                        })
+                    }
+                    Function::Subject => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| {
+                            if let EncodedTerm::Triple(t) = e(tuple)? {
+                                Some(t.subject.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    }
+                    Function::Predicate => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| {
+                            if let EncodedTerm::Triple(t) = e(tuple)? {
+                                Some(t.predicate.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    }
+                    Function::Object => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| {
+                            if let EncodedTerm::Triple(t) = e(tuple)? {
+                                Some(t.object.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    }
+                    Function::IsTriple => {
+                        let e = self.expression_evaluator(
+                            &parameters[0],
+                            encoded_variables,
+                            stat_children,
+                        );
+                        Rc::new(move |tuple| Some(e(tuple)?.is_triple().into()))
+                    }
+                    Function::Custom(function_name) => {
+                        if let Some(function) = self.custom_functions.get(function_name).cloned() {
+                            let args = parameters
+                                .iter()
+                                .map(|e| {
+                                    self.expression_evaluator(e, encoded_variables, stat_children)
+                                })
+                                .collect::<Vec<_>>();
+                            let dataset = Rc::clone(&self.dataset);
+                            return Rc::new(move |tuple| {
+                                let args = args
+                                    .iter()
+                                    .map(|f| dataset.decode_term(&f(tuple)?).ok())
+                                    .collect::<Option<Vec<_>>>()?;
+                                Some(dataset.encode_term(&function(&args)?))
+                            });
+                        }
+                        match function_name.as_ref() {
+                            xsd::STRING => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| {
+                                    Some(build_string_literal_from_id(to_string_id(
+                                        &dataset,
+                                        &e(tuple)?,
+                                    )?))
+                                })
+                            }
+                            xsd::BOOLEAN => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::BooleanLiteral(value) => Some(value.into()),
+                                    EncodedTerm::FloatLiteral(value) => {
+                                        Some(Boolean::from(value).into())
+                                    }
+                                    EncodedTerm::DoubleLiteral(value) => {
+                                        Some(Boolean::from(value).into())
+                                    }
+                                    EncodedTerm::IntegerLiteral(value) => {
+                                        Some(Boolean::from(value).into())
+                                    }
+                                    EncodedTerm::DecimalLiteral(value) => {
+                                        Some(Boolean::from(value).into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_boolean_str(&value)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::DOUBLE => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::FloatLiteral(value) => {
+                                        Some(Double::from(value).into())
+                                    }
+                                    EncodedTerm::DoubleLiteral(value) => Some(value.into()),
+                                    EncodedTerm::IntegerLiteral(value) => {
+                                        Some(Double::from(value).into())
+                                    }
+                                    EncodedTerm::DecimalLiteral(value) => {
+                                        Some(Double::from(value).into())
+                                    }
+                                    EncodedTerm::BooleanLiteral(value) => {
+                                        Some(Double::from(value).into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_double_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_double_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::FLOAT => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::FloatLiteral(value) => Some(value.into()),
+                                    EncodedTerm::DoubleLiteral(value) => {
+                                        Some(Float::from(value).into())
+                                    }
+                                    EncodedTerm::IntegerLiteral(value) => {
+                                        Some(Float::from(value).into())
+                                    }
+                                    EncodedTerm::DecimalLiteral(value) => {
+                                        Some(Float::from(value).into())
+                                    }
+                                    EncodedTerm::BooleanLiteral(value) => {
+                                        Some(Float::from(value).into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_float_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_float_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::INTEGER => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::FloatLiteral(value) => {
+                                        Some(Integer::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::DoubleLiteral(value) => {
+                                        Some(Integer::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::IntegerLiteral(value) => Some(value.into()),
+                                    EncodedTerm::DecimalLiteral(value) => {
+                                        Some(Integer::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::BooleanLiteral(value) => {
+                                        Some(Integer::from(value).into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_integer_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_integer_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::DECIMAL => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::FloatLiteral(value) => {
+                                        Some(Decimal::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::DoubleLiteral(value) => {
+                                        Some(Decimal::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::IntegerLiteral(value) => {
+                                        Some(Decimal::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::DecimalLiteral(value) => Some(value.into()),
+                                    EncodedTerm::BooleanLiteral(value) => {
+                                        Some(Decimal::from(value).into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_decimal_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_decimal_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::DATE => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::DateLiteral(value) => Some(value.into()),
+                                    EncodedTerm::DateTimeLiteral(value) => {
+                                        Some(Date::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_date_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_date_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::TIME => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::TimeLiteral(value) => Some(value.into()),
+                                    EncodedTerm::DateTimeLiteral(value) => {
+                                        Some(Time::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_time_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_time_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::DATE_TIME => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
+                                    EncodedTerm::DateLiteral(value) => {
+                                        Some(DateTime::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_date_time_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_date_time_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::DURATION => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::DurationLiteral(value) => Some(value.into()),
+                                    EncodedTerm::YearMonthDurationLiteral(value) => {
+                                        Some(Duration::from(value).into())
+                                    }
+                                    EncodedTerm::DayTimeDurationLiteral(value) => {
+                                        Some(Duration::from(value).into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_duration_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_duration_str(&dataset.get_str(&value_id).ok()??)
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::YEAR_MONTH_DURATION => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::DurationLiteral(value) => {
+                                        Some(YearMonthDuration::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::YearMonthDurationLiteral(value) => {
+                                        Some(value.into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_year_month_duration_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_year_month_duration_str(
+                                            &dataset.get_str(&value_id).ok()??,
+                                        )
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            xsd::DAY_TIME_DURATION => {
+                                let e = self.expression_evaluator(
+                                    &parameters[0],
+                                    encoded_variables,
+                                    stat_children,
+                                );
+                                let dataset = Rc::clone(&self.dataset);
+                                Rc::new(move |tuple| match e(tuple)? {
+                                    EncodedTerm::DurationLiteral(value) => {
+                                        Some(DayTimeDuration::try_from(value).ok()?.into())
+                                    }
+                                    EncodedTerm::DayTimeDurationLiteral(value) => {
+                                        Some(value.into())
+                                    }
+                                    EncodedTerm::SmallStringLiteral(value) => {
+                                        parse_day_time_duration_str(&value)
+                                    }
+                                    EncodedTerm::BigStringLiteral { value_id } => {
+                                        parse_day_time_duration_str(
+                                            &dataset.get_str(&value_id).ok()??,
+                                        )
+                                    }
+                                    _ => None,
+                                })
+                            }
+                            _ => Rc::new(|_| None),
+                        }
+                    }
                 }
             }
         }
@@ -2073,16 +2769,125 @@ impl SimpleEvaluator {
 
     fn hash<H: Digest>(
         &self,
-        arg: &PlanExpression,
+        parameters: &[Expression],
+        encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
     ) -> Rc<dyn Fn(&EncodedTuple) -> Option<EncodedTerm>> {
-        let arg = self.expression_evaluator(arg, stat_children);
+        let arg = self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
         let dataset = Rc::clone(&self.dataset);
         Rc::new(move |tuple| {
             let input = to_simple_string(&dataset, &arg(tuple)?)?;
             let hash = hex::encode(H::new().chain_update(input.as_str()).finalize());
             Some(build_string_literal(&dataset, &hash))
         })
+    }
+
+    fn encode_term<'b>(&self, term: impl Into<TermRef<'b>>) -> EncodedTerm {
+        self.dataset.encode_term(term)
+    }
+
+    fn encode_triple(&self, triple: &GroundTriple) -> EncodedTerm {
+        EncodedTriple::new(
+            match &triple.subject {
+                GroundSubject::NamedNode(node) => self.encode_term(node),
+                GroundSubject::Triple(triple) => self.encode_triple(triple),
+            },
+            self.encode_term(&triple.predicate),
+            match &triple.object {
+                GroundTerm::NamedNode(node) => self.encode_term(node),
+                GroundTerm::Literal(literal) => self.encode_term(literal),
+                GroundTerm::Triple(triple) => self.encode_triple(triple),
+            },
+        )
+        .into()
+    }
+
+    fn encode_property_path(&self, path: &PropertyPathExpression) -> Rc<PropertyPath> {
+        Rc::new(match path {
+            PropertyPathExpression::NamedNode(node) => PropertyPath::Path(self.encode_term(node)),
+            PropertyPathExpression::Reverse(p) => {
+                PropertyPath::Reverse(self.encode_property_path(p))
+            }
+            PropertyPathExpression::Sequence(a, b) => {
+                PropertyPath::Sequence(self.encode_property_path(a), self.encode_property_path(b))
+            }
+            PropertyPathExpression::Alternative(a, b) => PropertyPath::Alternative(
+                self.encode_property_path(a),
+                self.encode_property_path(b),
+            ),
+            PropertyPathExpression::ZeroOrMore(p) => {
+                PropertyPath::ZeroOrMore(self.encode_property_path(p))
+            }
+            PropertyPathExpression::OneOrMore(p) => {
+                PropertyPath::OneOrMore(self.encode_property_path(p))
+            }
+            PropertyPathExpression::ZeroOrOne(p) => {
+                PropertyPath::ZeroOrOne(self.encode_property_path(p))
+            }
+            PropertyPathExpression::NegatedPropertySet(ps) => {
+                PropertyPath::NegatedPropertySet(ps.iter().map(|p| self.encode_term(p)).collect())
+            }
+        })
+    }
+
+    fn template_value_from_term_or_variable(
+        &self,
+        term_or_variable: &TermPattern,
+        variables: &mut Vec<Variable>,
+        bnodes: &mut Vec<BlankNode>,
+    ) -> TripleTemplateValue {
+        match term_or_variable {
+            TermPattern::Variable(variable) => {
+                TripleTemplateValue::Variable(encode_variable(variables, variable))
+            }
+            TermPattern::NamedNode(node) => TripleTemplateValue::Constant(self.encode_term(node)),
+            TermPattern::BlankNode(bnode) => {
+                TripleTemplateValue::BlankNode(bnode_key(bnodes, bnode))
+            }
+            TermPattern::Literal(literal) => {
+                TripleTemplateValue::Constant(self.encode_term(literal))
+            }
+            TermPattern::Triple(triple) => match (
+                self.template_value_from_term_or_variable(&triple.subject, variables, bnodes),
+                self.template_value_from_named_node_or_variable(&triple.predicate, variables),
+                self.template_value_from_term_or_variable(&triple.object, variables, bnodes),
+            ) {
+                (
+                    TripleTemplateValue::Constant(subject),
+                    TripleTemplateValue::Constant(predicate),
+                    TripleTemplateValue::Constant(object),
+                ) => TripleTemplateValue::Constant(
+                    EncodedTriple {
+                        subject,
+                        predicate,
+                        object,
+                    }
+                    .into(),
+                ),
+                (subject, predicate, object) => {
+                    TripleTemplateValue::Triple(Box::new(TripleTemplate {
+                        subject,
+                        predicate,
+                        object,
+                    }))
+                }
+            },
+        }
+    }
+
+    fn template_value_from_named_node_or_variable(
+        &self,
+        named_node_or_variable: &NamedNodePattern,
+        variables: &mut Vec<Variable>,
+    ) -> TripleTemplateValue {
+        match named_node_or_variable {
+            NamedNodePattern::Variable(variable) => {
+                TripleTemplateValue::Variable(encode_variable(variables, variable))
+            }
+            NamedNodePattern::NamedNode(term) => {
+                TripleTemplateValue::Constant(self.encode_term(term))
+            }
+        }
     }
 }
 
@@ -2291,6 +3096,31 @@ fn to_argument_compatible_strings(
     let (value1, language1) = to_string_and_language(dataset, arg1)?;
     let (value2, language2) = to_string_and_language(dataset, arg2)?;
     (language2.is_none() || language1 == language2).then_some((value1, value2, language1))
+}
+
+fn compile_static_pattern_if_exists(
+    pattern: &Expression,
+    options: Option<&Expression>,
+) -> Option<Regex> {
+    let static_pattern = if let Expression::Literal(pattern) = pattern {
+        (pattern.datatype() == xsd::STRING).then(|| pattern.value())
+    } else {
+        None
+    };
+    let static_options = if let Some(options) = options {
+        if let Expression::Literal(options) = options {
+            (options.datatype() == xsd::STRING).then(|| Some(options.value()))
+        } else {
+            None
+        }
+    } else {
+        Some(None)
+    };
+    if let (Some(static_pattern), Some(static_options)) = (static_pattern, static_options) {
+        compile_pattern(static_pattern, static_options)
+    } else {
+        None
+    }
 }
 
 pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
@@ -3008,32 +3838,86 @@ enum TupleSelector {
     TriplePattern(Rc<TripleTupleSelector>),
 }
 
-impl From<&PatternValue> for TupleSelector {
-    fn from(value: &PatternValue) -> Self {
-        match value {
-            PatternValue::Constant(c) => Self::Constant(c.encoded.clone()),
-            PatternValue::Variable(v) => Self::Variable(v.encoded),
-            PatternValue::TriplePattern(p) => Self::TriplePattern(Rc::new(TripleTupleSelector {
-                subject: (&p.subject).into(),
-                predicate: (&p.predicate).into(),
-                object: (&p.object).into(),
-            })),
+impl TupleSelector {
+    fn from_ground_term_pattern(
+        term_pattern: &GroundTermPattern,
+        variables: &mut Vec<Variable>,
+        dataset: &DatasetView,
+    ) -> Self {
+        match term_pattern {
+            GroundTermPattern::Variable(variable) => {
+                Self::Variable(encode_variable(variables, variable))
+            }
+            GroundTermPattern::NamedNode(term) => Self::Constant(dataset.encode_term(term)),
+            GroundTermPattern::Literal(term) => Self::Constant(dataset.encode_term(term)),
+            GroundTermPattern::Triple(triple) => {
+                match (
+                    Self::from_ground_term_pattern(&triple.subject, variables, dataset),
+                    Self::from_named_node_pattern(&triple.predicate, variables, dataset),
+                    Self::from_ground_term_pattern(&triple.object, variables, dataset),
+                ) {
+                    (
+                        Self::Constant(subject),
+                        Self::Constant(predicate),
+                        Self::Constant(object),
+                    ) => Self::Constant(
+                        EncodedTriple {
+                            subject,
+                            predicate,
+                            object,
+                        }
+                        .into(),
+                    ),
+                    (subject, predicate, object) => {
+                        Self::TriplePattern(Rc::new(TripleTupleSelector {
+                            subject,
+                            predicate,
+                            object,
+                        }))
+                    }
+                }
+            }
         }
     }
-}
 
-fn get_pattern_value(selector: &TupleSelector, tuple: &EncodedTuple) -> Option<EncodedTerm> {
-    match selector {
-        TupleSelector::Constant(c) => Some(c.clone()),
-        TupleSelector::Variable(v) => tuple.get(*v).cloned(),
-        TupleSelector::TriplePattern(triple) => Some(
-            EncodedTriple {
-                subject: get_pattern_value(&triple.subject, tuple)?,
-                predicate: get_pattern_value(&triple.predicate, tuple)?,
-                object: get_pattern_value(&triple.object, tuple)?,
+    fn from_named_node_pattern(
+        named_node_pattern: &NamedNodePattern,
+        variables: &mut Vec<Variable>,
+        dataset: &DatasetView,
+    ) -> Self {
+        match named_node_pattern {
+            NamedNodePattern::Variable(variable) => {
+                Self::Variable(encode_variable(variables, variable))
             }
-            .into(),
-        ),
+            NamedNodePattern::NamedNode(term) => Self::Constant(dataset.encode_term(term)),
+        }
+    }
+
+    fn from_graph_name_pattern(
+        graph_name_pattern: &Option<NamedNodePattern>,
+        variables: &mut Vec<Variable>,
+        dataset: &DatasetView,
+    ) -> Self {
+        if let Some(graph_name_pattern) = graph_name_pattern {
+            Self::from_named_node_pattern(graph_name_pattern, variables, dataset)
+        } else {
+            Self::Constant(EncodedTerm::DefaultGraph)
+        }
+    }
+
+    fn get_pattern_value(&self, tuple: &EncodedTuple) -> Option<EncodedTerm> {
+        match self {
+            TupleSelector::Constant(c) => Some(c.clone()),
+            TupleSelector::Variable(v) => tuple.get(*v).cloned(),
+            TupleSelector::TriplePattern(triple) => Some(
+                EncodedTriple {
+                    subject: triple.subject.get_pattern_value(tuple)?,
+                    predicate: triple.predicate.get_pattern_value(tuple)?,
+                    object: triple.object.get_pattern_value(tuple)?,
+                }
+                .into(),
+            ),
+        }
     }
 }
 
@@ -3097,6 +3981,17 @@ pub fn are_compatible_and_not_disjointed(a: &EncodedTuple, b: &EncodedTuple) -> 
     found_intersection
 }
 
+pub enum PropertyPath {
+    Path(EncodedTerm),
+    Reverse(Rc<Self>),
+    Sequence(Rc<Self>, Rc<Self>),
+    Alternative(Rc<Self>, Rc<Self>),
+    ZeroOrMore(Rc<Self>),
+    OneOrMore(Rc<Self>),
+    ZeroOrOne(Rc<Self>),
+    NegatedPropertySet(Rc<[EncodedTerm]>),
+}
+
 #[derive(Clone)]
 struct PathEvaluator {
     dataset: Rc<DatasetView>,
@@ -3105,25 +4000,20 @@ struct PathEvaluator {
 impl PathEvaluator {
     fn eval_closed_in_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
         start: &EncodedTerm,
         end: &EncodedTerm,
         graph_name: &EncodedTerm,
     ) -> Result<bool, EvaluationError> {
         Ok(match path {
-            PlanPropertyPath::Path(p) => self
+            PropertyPath::Path(p) => self
                 .dataset
-                .encoded_quads_for_pattern(
-                    Some(start),
-                    Some(&p.encoded),
-                    Some(end),
-                    Some(graph_name),
-                )
+                .encoded_quads_for_pattern(Some(start), Some(p), Some(end), Some(graph_name))
                 .next()
                 .transpose()?
                 .is_some(),
-            PlanPropertyPath::Reverse(p) => self.eval_closed_in_graph(p, end, start, graph_name)?,
-            PlanPropertyPath::Sequence(a, b) => self
+            PropertyPath::Reverse(p) => self.eval_closed_in_graph(p, end, start, graph_name)?,
+            PropertyPath::Sequence(a, b) => self
                 .eval_from_in_graph(a, start, graph_name)
                 .find_map(|middle| {
                     middle
@@ -3136,11 +4026,11 @@ impl PathEvaluator {
                 })
                 .transpose()?
                 .is_some(),
-            PlanPropertyPath::Alternative(a, b) => {
+            PropertyPath::Alternative(a, b) => {
                 self.eval_closed_in_graph(a, start, end, graph_name)?
                     || self.eval_closed_in_graph(b, start, end, graph_name)?
             }
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 if start == end {
                     self.is_subject_or_object_in_graph(start, graph_name)?
                 } else {
@@ -3151,24 +4041,24 @@ impl PathEvaluator {
                     )?
                 }
             }
-            PlanPropertyPath::OneOrMore(p) => look_in_transitive_closure(
+            PropertyPath::OneOrMore(p) => look_in_transitive_closure(
                 self.eval_from_in_graph(p, start, graph_name),
                 move |e| self.eval_from_in_graph(p, &e, graph_name),
                 end,
             )?,
-            PlanPropertyPath::ZeroOrOne(p) => {
+            PropertyPath::ZeroOrOne(p) => {
                 if start == end {
                     self.is_subject_or_object_in_graph(start, graph_name)
                 } else {
                     self.eval_closed_in_graph(p, start, end, graph_name)
                 }?
             }
-            PlanPropertyPath::NegatedPropertySet(ps) => self
+            PropertyPath::NegatedPropertySet(ps) => self
                 .dataset
                 .encoded_quads_for_pattern(Some(start), None, Some(end), Some(graph_name))
                 .find_map(move |t| match t {
                     Ok(t) => {
-                        if ps.iter().any(|p| p.encoded == t.predicate) {
+                        if ps.iter().any(|p| *p == t.predicate) {
                             None
                         } else {
                             Some(Ok(()))
@@ -3183,18 +4073,18 @@ impl PathEvaluator {
 
     fn eval_closed_in_unknown_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
         start: &EncodedTerm,
         end: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
-            PlanPropertyPath::Path(p) => Box::new(
+            PropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(Some(start), Some(&p.encoded), Some(end), None)
+                    .encoded_quads_for_pattern(Some(start), Some(p), Some(end), None)
                     .map(|t| Ok(t?.graph_name)),
             ),
-            PlanPropertyPath::Reverse(p) => self.eval_closed_in_unknown_graph(p, end, start),
-            PlanPropertyPath::Sequence(a, b) => {
+            PropertyPath::Reverse(p) => self.eval_closed_in_unknown_graph(p, end, start),
+            PropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = Rc::clone(b);
                 let end = end.clone();
@@ -3206,11 +4096,11 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
+            PropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_closed_in_unknown_graph(a, start, end)
                     .chain(self.eval_closed_in_unknown_graph(b, start, end)),
             )),
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let start2 = start.clone();
                 let end = end.clone();
@@ -3225,7 +4115,7 @@ impl PathEvaluator {
                     .transpose()
                 })
             }
-            PlanPropertyPath::OneOrMore(p) => {
+            PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let end = end.clone();
                 let p = Rc::clone(p);
@@ -3244,7 +4134,7 @@ impl PathEvaluator {
                         }),
                 )
             }
-            PlanPropertyPath::ZeroOrOne(p) => {
+            PropertyPath::ZeroOrOne(p) => {
                 if start == end {
                     self.run_if_term_is_a_dataset_node(start, |graph_name| Some(Ok(graph_name)))
                 } else {
@@ -3259,14 +4149,14 @@ impl PathEvaluator {
                     })
                 }
             }
-            PlanPropertyPath::NegatedPropertySet(ps) => {
+            PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(start), None, Some(end), None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| p.encoded == t.predicate) {
+                                if ps.iter().any(|p| *p == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.graph_name))
@@ -3281,23 +4171,18 @@ impl PathEvaluator {
 
     fn eval_from_in_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
         start: &EncodedTerm,
         graph_name: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
-            PlanPropertyPath::Path(p) => Box::new(
+            PropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(
-                        Some(start),
-                        Some(&p.encoded),
-                        None,
-                        Some(graph_name),
-                    )
+                    .encoded_quads_for_pattern(Some(start), Some(p), None, Some(graph_name))
                     .map(|t| Ok(t?.object)),
             ),
-            PlanPropertyPath::Reverse(p) => self.eval_to_in_graph(p, start, graph_name),
-            PlanPropertyPath::Sequence(a, b) => {
+            PropertyPath::Reverse(p) => self.eval_to_in_graph(p, start, graph_name),
+            PropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = Rc::clone(b);
                 let graph_name2 = graph_name.clone();
@@ -3308,11 +4193,11 @@ impl PathEvaluator {
                         }),
                 )
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
+            PropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_from_in_graph(a, start, graph_name)
                     .chain(self.eval_from_in_graph(b, start, graph_name)),
             )),
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 self.run_if_term_is_a_graph_node(start, graph_name, || {
                     let eval = self.clone();
                     let p = Rc::clone(p);
@@ -3322,7 +4207,7 @@ impl PathEvaluator {
                     })
                 })
             }
-            PlanPropertyPath::OneOrMore(p) => {
+            PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
@@ -3331,7 +4216,7 @@ impl PathEvaluator {
                     move |e| eval.eval_from_in_graph(&p, &e, &graph_name2),
                 ))
             }
-            PlanPropertyPath::ZeroOrOne(p) => {
+            PropertyPath::ZeroOrOne(p) => {
                 self.run_if_term_is_a_graph_node(start, graph_name, || {
                     hash_deduplicate(
                         once(Ok(start.clone()))
@@ -3339,14 +4224,14 @@ impl PathEvaluator {
                     )
                 })
             }
-            PlanPropertyPath::NegatedPropertySet(ps) => {
+            PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(start), None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| p.encoded == t.predicate) {
+                                if ps.iter().any(|p| *p == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.object))
@@ -3361,20 +4246,20 @@ impl PathEvaluator {
 
     fn eval_from_in_unknown_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
         start: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
         match path {
-            PlanPropertyPath::Path(p) => Box::new(
+            PropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(Some(start), Some(&p.encoded), None, None)
+                    .encoded_quads_for_pattern(Some(start), Some(p), None, None)
                     .map(|t| {
                         let t = t?;
                         Ok((t.object, t.graph_name))
                     }),
             ),
-            PlanPropertyPath::Reverse(p) => self.eval_to_in_unknown_graph(p, start),
-            PlanPropertyPath::Sequence(a, b) => {
+            PropertyPath::Reverse(p) => self.eval_to_in_unknown_graph(p, start),
+            PropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = Rc::clone(b);
                 Box::new(self.eval_from_in_unknown_graph(a, start).flat_map_ok(
@@ -3384,11 +4269,11 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
+            PropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_from_in_unknown_graph(a, start)
                     .chain(self.eval_from_in_unknown_graph(b, start)),
             )),
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 let start2 = start.clone();
                 let eval = self.clone();
                 let p = Rc::clone(p);
@@ -3402,7 +4287,7 @@ impl PathEvaluator {
                     .map(move |e| Ok((e?, graph_name.clone())))
                 })
             }
-            PlanPropertyPath::OneOrMore(p) => {
+            PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 Box::new(transitive_closure(
@@ -3413,7 +4298,7 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::ZeroOrOne(p) => {
+            PropertyPath::ZeroOrOne(p) => {
                 let eval = self.clone();
                 let start2 = start.clone();
                 let p = Rc::clone(p);
@@ -3426,14 +4311,14 @@ impl PathEvaluator {
                     .map(move |e| Ok((e?, graph_name.clone())))
                 })
             }
-            PlanPropertyPath::NegatedPropertySet(ps) => {
+            PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(start), None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| p.encoded == t.predicate) {
+                                if ps.iter().any(|p| *p == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.object, t.graph_name)))
@@ -3448,18 +4333,18 @@ impl PathEvaluator {
 
     fn eval_to_in_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
         end: &EncodedTerm,
         graph_name: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<EncodedTerm, EvaluationError>>> {
         match path {
-            PlanPropertyPath::Path(p) => Box::new(
+            PropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(&p.encoded), Some(end), Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(p), Some(end), Some(graph_name))
                     .map(|t| Ok(t?.subject)),
             ),
-            PlanPropertyPath::Reverse(p) => self.eval_from_in_graph(p, end, graph_name),
-            PlanPropertyPath::Sequence(a, b) => {
+            PropertyPath::Reverse(p) => self.eval_from_in_graph(p, end, graph_name),
+            PropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let a = Rc::clone(a);
                 let graph_name2 = graph_name.clone();
@@ -3470,11 +4355,11 @@ impl PathEvaluator {
                         }),
                 )
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
+            PropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_to_in_graph(a, end, graph_name)
                     .chain(self.eval_to_in_graph(b, end, graph_name)),
             )),
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 self.run_if_term_is_a_graph_node(end, graph_name, || {
                     let eval = self.clone();
                     let p = Rc::clone(p);
@@ -3484,7 +4369,7 @@ impl PathEvaluator {
                     })
                 })
             }
-            PlanPropertyPath::OneOrMore(p) => {
+            PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
@@ -3493,21 +4378,19 @@ impl PathEvaluator {
                     move |e| eval.eval_to_in_graph(&p, &e, &graph_name2),
                 ))
             }
-            PlanPropertyPath::ZeroOrOne(p) => {
-                self.run_if_term_is_a_graph_node(end, graph_name, || {
-                    hash_deduplicate(
-                        once(Ok(end.clone())).chain(self.eval_to_in_graph(p, end, graph_name)),
-                    )
-                })
-            }
-            PlanPropertyPath::NegatedPropertySet(ps) => {
+            PropertyPath::ZeroOrOne(p) => self.run_if_term_is_a_graph_node(end, graph_name, || {
+                hash_deduplicate(
+                    once(Ok(end.clone())).chain(self.eval_to_in_graph(p, end, graph_name)),
+                )
+            }),
+            PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(None, None, Some(end), Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| p.encoded == t.predicate) {
+                                if ps.iter().any(|p| *p == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.subject))
@@ -3521,20 +4404,20 @@ impl PathEvaluator {
     }
     fn eval_to_in_unknown_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
         end: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
         match path {
-            PlanPropertyPath::Path(p) => Box::new(
+            PropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(&p.encoded), Some(end), None)
+                    .encoded_quads_for_pattern(None, Some(p), Some(end), None)
                     .map(|t| {
                         let t = t?;
                         Ok((t.subject, t.graph_name))
                     }),
             ),
-            PlanPropertyPath::Reverse(p) => self.eval_from_in_unknown_graph(p, end),
-            PlanPropertyPath::Sequence(a, b) => {
+            PropertyPath::Reverse(p) => self.eval_from_in_unknown_graph(p, end),
+            PropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let a = Rc::clone(a);
                 Box::new(self.eval_to_in_unknown_graph(b, end).flat_map_ok(
@@ -3544,11 +4427,11 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
+            PropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_to_in_unknown_graph(a, end)
                     .chain(self.eval_to_in_unknown_graph(b, end)),
             )),
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 let end2 = end.clone();
                 let eval = self.clone();
                 let p = Rc::clone(p);
@@ -3562,7 +4445,7 @@ impl PathEvaluator {
                     .map(move |e| Ok((e?, graph_name.clone())))
                 })
             }
-            PlanPropertyPath::OneOrMore(p) => {
+            PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 Box::new(transitive_closure(
@@ -3573,7 +4456,7 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::ZeroOrOne(p) => {
+            PropertyPath::ZeroOrOne(p) => {
                 let eval = self.clone();
                 let end2 = end.clone();
                 let p = Rc::clone(p);
@@ -3586,14 +4469,14 @@ impl PathEvaluator {
                     .map(move |e| Ok((e?, graph_name.clone())))
                 })
             }
-            PlanPropertyPath::NegatedPropertySet(ps) => {
+            PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(Some(end), None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| p.encoded == t.predicate) {
+                                if ps.iter().any(|p| *p == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.graph_name)))
@@ -3608,20 +4491,20 @@ impl PathEvaluator {
 
     fn eval_open_in_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
         graph_name: &EncodedTerm,
     ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm), EvaluationError>>> {
         match path {
-            PlanPropertyPath::Path(p) => Box::new(
+            PropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(&p.encoded), None, Some(graph_name))
+                    .encoded_quads_for_pattern(None, Some(p), None, Some(graph_name))
                     .map(|t| t.map(|t| (t.subject, t.object))),
             ),
-            PlanPropertyPath::Reverse(p) => Box::new(
+            PropertyPath::Reverse(p) => Box::new(
                 self.eval_open_in_graph(p, graph_name)
                     .map(|t| t.map(|(s, o)| (o, s))),
             ),
-            PlanPropertyPath::Sequence(a, b) => {
+            PropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = Rc::clone(b);
                 let graph_name2 = graph_name.clone();
@@ -3632,11 +4515,11 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
+            PropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_open_in_graph(a, graph_name)
                     .chain(self.eval_open_in_graph(b, graph_name)),
             )),
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
@@ -3648,7 +4531,7 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::OneOrMore(p) => {
+            PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 let graph_name2 = graph_name.clone();
@@ -3660,18 +4543,18 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
+            PropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 self.get_subject_or_object_identity_pairs_in_graph(graph_name)
                     .chain(self.eval_open_in_graph(p, graph_name)),
             )),
-            PlanPropertyPath::NegatedPropertySet(ps) => {
+            PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(None, None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| p.encoded == t.predicate) {
+                                if ps.iter().any(|p| *p == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.object)))
@@ -3686,20 +4569,20 @@ impl PathEvaluator {
 
     fn eval_open_in_unknown_graph(
         &self,
-        path: &PlanPropertyPath,
+        path: &PropertyPath,
     ) -> Box<dyn Iterator<Item = Result<(EncodedTerm, EncodedTerm, EncodedTerm), EvaluationError>>>
     {
         match path {
-            PlanPropertyPath::Path(p) => Box::new(
+            PropertyPath::Path(p) => Box::new(
                 self.dataset
-                    .encoded_quads_for_pattern(None, Some(&p.encoded), None, None)
+                    .encoded_quads_for_pattern(None, Some(p), None, None)
                     .map(|t| t.map(|t| (t.subject, t.object, t.graph_name))),
             ),
-            PlanPropertyPath::Reverse(p) => Box::new(
+            PropertyPath::Reverse(p) => Box::new(
                 self.eval_open_in_unknown_graph(p)
                     .map(|t| t.map(|(s, o, g)| (o, s, g))),
             ),
-            PlanPropertyPath::Sequence(a, b) => {
+            PropertyPath::Sequence(a, b) => {
                 let eval = self.clone();
                 let b = Rc::clone(b);
                 Box::new(self.eval_open_in_unknown_graph(a).flat_map_ok(
@@ -3709,11 +4592,11 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
+            PropertyPath::Alternative(a, b) => Box::new(hash_deduplicate(
                 self.eval_open_in_unknown_graph(a)
                     .chain(self.eval_open_in_unknown_graph(b)),
             )),
-            PlanPropertyPath::ZeroOrMore(p) => {
+            PropertyPath::ZeroOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 Box::new(transitive_closure(
@@ -3724,7 +4607,7 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::OneOrMore(p) => {
+            PropertyPath::OneOrMore(p) => {
                 let eval = self.clone();
                 let p = Rc::clone(p);
                 Box::new(transitive_closure(
@@ -3735,18 +4618,18 @@ impl PathEvaluator {
                     },
                 ))
             }
-            PlanPropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
+            PropertyPath::ZeroOrOne(p) => Box::new(hash_deduplicate(
                 self.get_subject_or_object_identity_pairs_in_dataset()
                     .chain(self.eval_open_in_unknown_graph(p)),
             )),
-            PlanPropertyPath::NegatedPropertySet(ps) => {
+            PropertyPath::NegatedPropertySet(ps) => {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
                         .encoded_quads_for_pattern(None, None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| p.encoded == t.predicate) {
+                                if ps.iter().any(|p| *p == t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.object, t.graph_name)))
@@ -4114,19 +4997,32 @@ impl Iterator for ConstructIterator {
     }
 }
 
+pub struct TripleTemplate {
+    pub subject: TripleTemplateValue,
+    pub predicate: TripleTemplateValue,
+    pub object: TripleTemplateValue,
+}
+
+pub enum TripleTemplateValue {
+    Constant(EncodedTerm),
+    BlankNode(usize),
+    Variable(usize),
+    Triple(Box<TripleTemplate>),
+}
+
 fn get_triple_template_value<'a>(
     selector: &'a TripleTemplateValue,
     tuple: &'a EncodedTuple,
     bnodes: &'a mut Vec<EncodedTerm>,
 ) -> Option<EncodedTerm> {
     match selector {
-        TripleTemplateValue::Constant(term) => Some(term.encoded.clone()),
-        TripleTemplateValue::Variable(v) => tuple.get(v.encoded).cloned(),
+        TripleTemplateValue::Constant(term) => Some(term.clone()),
+        TripleTemplateValue::Variable(v) => tuple.get(*v).cloned(),
         TripleTemplateValue::BlankNode(bnode) => {
-            if bnode.encoded >= bnodes.len() {
-                bnodes.resize_with(bnode.encoded + 1, new_bnode)
+            if *bnode >= bnodes.len() {
+                bnodes.resize_with(*bnode + 1, new_bnode)
             }
-            Some(bnodes[bnode.encoded].clone())
+            Some(bnodes[*bnode].clone())
         }
         TripleTemplateValue::Triple(triple) => Some(
             EncodedTriple {
@@ -4403,7 +5299,6 @@ impl Accumulator for CountAccumulator {
     }
 }
 
-#[derive(Debug)]
 struct SumAccumulator {
     sum: Option<EncodedTerm>,
 }
@@ -4447,7 +5342,7 @@ impl Accumulator for SumAccumulator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct AvgAccumulator {
     sum: SumAccumulator,
     count: i64,
@@ -4536,7 +5431,7 @@ impl Accumulator for MaxAccumulator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct SampleAccumulator {
     value: Option<EncodedTerm>,
 }
@@ -4596,6 +5491,43 @@ impl Accumulator for GroupConcatAccumulator {
             .as_ref()
             .map(|result| build_plain_literal(&self.dataset, result, self.language.and_then(|v| v)))
     }
+}
+
+struct FailingAccumulator;
+
+impl Accumulator for FailingAccumulator {
+    fn add(&mut self, _: Option<EncodedTerm>) {}
+
+    fn state(&self) -> Option<EncodedTerm> {
+        None
+    }
+}
+
+fn encode_variable(variables: &mut Vec<Variable>, variable: &Variable) -> usize {
+    if let Some(key) = slice_key(variables, variable) {
+        key
+    } else {
+        variables.push(variable.clone());
+        variables.len() - 1
+    }
+}
+
+fn bnode_key(blank_nodes: &mut Vec<BlankNode>, blank_node: &BlankNode) -> usize {
+    if let Some(key) = slice_key(blank_nodes, blank_node) {
+        key
+    } else {
+        blank_nodes.push(blank_node.clone());
+        blank_nodes.len() - 1
+    }
+}
+
+fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
+    for (i, item) in slice.iter().enumerate() {
+        if item == element {
+            return Some(i);
+        }
+    }
+    None
 }
 
 fn generate_uuid(buffer: &mut String) {
@@ -4775,94 +5707,141 @@ impl fmt::Debug for EvalNodeWithStats {
     }
 }
 
-fn eval_node_label(node: &PlanNode) -> String {
+fn eval_node_label(node: &GraphPattern) -> String {
     match node {
-        PlanNode::Aggregate {
-            key_variables,
-            aggregates,
-            ..
-        } => format!(
-            "Aggregate({})",
-            key_variables
-                .iter()
-                .map(ToString::to_string)
-                .chain(aggregates.iter().map(|(agg, v)| format!("{agg} -> {v}")))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        PlanNode::AntiJoin { .. } => "AntiJoin".to_owned(),
-        PlanNode::Extend {
+        GraphPattern::Distinct { .. } => "Distinct(Hash)".to_owned(),
+        GraphPattern::Extend {
             expression,
             variable,
             ..
-        } => format!("Extend({expression} -> {variable})"),
-        PlanNode::Filter { expression, .. } => format!("Filter({expression})"),
-        PlanNode::ForLoopJoin { .. } => "ForLoopJoin".to_owned(),
-        PlanNode::ForLoopLeftJoin { .. } => "ForLoopLeftJoin".to_owned(),
-        PlanNode::HashDeduplicate { .. } => "HashDeduplicate".to_owned(),
-        PlanNode::HashJoin { .. } => "HashJoin".to_owned(),
-        PlanNode::HashLeftJoin { expression, .. } => format!("HashLeftJoin({expression})"),
-        PlanNode::Limit { count, .. } => format!("Limit({count})"),
-        PlanNode::PathPattern {
+        } => format!(
+            "Extend({} -> {variable})",
+            spargebra::algebra::Expression::from(expression)
+        ),
+        GraphPattern::Filter { expression, .. } => format!(
+            "Filter({})",
+            spargebra::algebra::Expression::from(expression)
+        ),
+        GraphPattern::Group {
+            variables,
+            aggregates,
+            ..
+        } => {
+            format!(
+                "Aggregate({})",
+                format_list(variables.iter().map(ToString::to_string).chain(
+                    aggregates.iter().map(|(v, agg)| format!(
+                        "{} -> {v}",
+                        spargebra::algebra::AggregateExpression::from(agg)
+                    ))
+                ))
+            )
+        }
+        GraphPattern::Join { algorithm, .. } => match algorithm {
+            JoinAlgorithm::HashBuildLeftProbeRight { keys } => format!(
+                "LeftJoin(HashBuildLeftProbeRight, keys = {})",
+                format_list(keys)
+            ),
+        },
+        GraphPattern::Lateral { right, .. } => {
+            if let GraphPattern::LeftJoin {
+                left: nested_left,
+                expression,
+                ..
+            } = right.as_ref()
+            {
+                if nested_left.is_empty_singleton() {
+                    // We are in a ForLoopLeftJoin
+                    return format!(
+                        "ForLoopLeftJoin(expression = {})",
+                        spargebra::algebra::Expression::from(expression)
+                    );
+                }
+            }
+            "Lateral".to_owned()
+        }
+        GraphPattern::LeftJoin {
+            algorithm,
+            expression,
+            ..
+        } => match algorithm {
+            LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => format!(
+                "LeftJoin(HashBuildRightProbeLeft, keys = {}, expression = {})",
+                format_list(keys),
+                spargebra::algebra::Expression::from(expression)
+            ),
+        },
+        GraphPattern::Minus { algorithm, .. } => match algorithm {
+            MinusAlgorithm::HashBuildRightProbeLeft { keys } => format!(
+                "AntiJoin(HashBuildRightProbeLeft, keys = {})",
+                format_list(keys)
+            ),
+        },
+        GraphPattern::OrderBy { expression, .. } => {
+            format!(
+                "Sort({})",
+                format_list(
+                    expression
+                        .iter()
+                        .map(spargebra::algebra::OrderExpression::from)
+                )
+            )
+        }
+        GraphPattern::Path {
             subject,
             path,
             object,
             graph_name,
-        } => format!("PathPattern({subject} {path} {object} {graph_name})"),
-        PlanNode::Project { mapping, .. } => {
-            format!(
-                "Project({})",
-                mapping
-                    .iter()
-                    .map(|(f, t)| if f.plain == t.plain {
-                        f.to_string()
-                    } else {
-                        format!("{f} -> {t}")
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
+        } => {
+            if let Some(graph_name) = graph_name {
+                format!("Path({subject} {path} {object} {graph_name})")
+            } else {
+                format!("Path({subject} {path} {object})")
+            }
         }
-        PlanNode::QuadPattern {
+        GraphPattern::Project { variables, .. } => {
+            format!("Project({})", format_list(variables))
+        }
+        GraphPattern::QuadPattern {
             subject,
             predicate,
             object,
             graph_name,
-        } => format!("QuadPattern({subject} {predicate} {object} {graph_name})"),
-        PlanNode::Reduced { .. } => "Reduced".to_owned(),
-        PlanNode::Service {
-            service_name,
-            silent,
-            ..
         } => {
-            if *silent {
-                format!("SilentService({service_name})")
+            if let Some(graph_name) = graph_name {
+                format!("QuadPattern({subject} {predicate} {object} {graph_name})")
             } else {
-                format!("Service({service_name})")
+                format!("QuadPattern({subject} {predicate} {object})")
             }
         }
-        PlanNode::Skip { count, .. } => format!("Skip({count})"),
-        PlanNode::Sort { by, .. } => {
-            format!(
-                "Sort({})",
-                by.iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
+        GraphPattern::Reduced { .. } => "Reduced".to_owned(),
+        GraphPattern::Service { name, silent, .. } => {
+            if *silent {
+                format!("Service({name}, Silent)")
+            } else {
+                format!("Service({name})")
+            }
         }
-        PlanNode::StaticBindings { variables, .. } => {
-            format!(
-                "StaticBindings({})",
-                variables
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
+        GraphPattern::Slice { start, length, .. } => {
+            if let Some(length) = length {
+                format!("Slice(start = {start}, length = {length})")
+            } else {
+                format!("Slice(start = {start})")
+            }
         }
-        PlanNode::Union { .. } => "Union".to_owned(),
+        GraphPattern::Union { .. } => "Union".to_owned(),
+        GraphPattern::Values { variables, .. } => {
+            format!("StaticBindings({})", format_list(variables))
+        }
     }
+}
+
+fn format_list<T: ToString>(values: impl IntoIterator<Item = T>) -> String {
+    values
+        .into_iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]

@@ -26,7 +26,7 @@ impl JsStore {
             store: Store::new().map_err(to_err)?,
         };
         if let Some(quads) = quads {
-            for quad in quads.iter() {
+            for quad in &*quads {
                 store.add(quad)?;
             }
         }
