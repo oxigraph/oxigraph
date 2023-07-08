@@ -42,7 +42,16 @@ jobs:
         working-directory: ./lib/spargebra
       - run: cargo clippy
         working-directory: ./lib/sparopt
+      - run: cargo clippy
+        working-directory: ./lib
       - run: cargo clippy --all-targets --all-features
+        working-directory: ./lib
+      - run: cargo clippy
+        working-directory: ./python
+      - run: cargo clippy
+        working-directory: ./server
+      - run: cargo clippy
+        working-directory: ./testsuite
 
   clippy_wasm_js:
     runs-on: ubuntu-latest
@@ -88,8 +97,16 @@ jobs:
         working-directory: ./lib/spargebra
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./lib/sparopt
-      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./lib
+      - run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
+        working-directory: ./lib
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./python
+      - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./server
+      - run: cargo clippy -- -D warnings -D clippy::all
+        working-directory: ./testsuite
 
   clippy_msv_wasm_js:
     runs-on: ubuntu-latest

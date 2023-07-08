@@ -47,9 +47,7 @@ pub fn load_to_graph(
                 graph.insert(&t);
             }
             Err(e) => {
-                if ignore_errors {
-                    continue;
-                } else {
+                if !ignore_errors {
                     return Err(e.into());
                 }
             }
@@ -83,9 +81,7 @@ pub fn load_to_dataset(
                 dataset.insert(&q);
             }
             Err(e) => {
-                if ignore_errors {
-                    continue;
-                } else {
+                if !ignore_errors {
                     return Err(e.into());
                 }
             }
@@ -116,9 +112,7 @@ pub fn load_n3(url: &str, ignore_errors: bool) -> Result<Vec<N3Quad>> {
         match q {
             Ok(q) => quads.push(q),
             Err(e) => {
-                if ignore_errors {
-                    continue;
-                } else {
+                if !ignore_errors {
                     return Err(e.into());
                 }
             }

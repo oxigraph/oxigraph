@@ -673,35 +673,35 @@ mod tests {
     fn test_canoincal_escaping() {
         assert_eq!(
             Literal::from_str(r#""\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f""#).unwrap().to_string(),
-            r###""\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000B\f\r\u000E\u000F""###
+            r#""\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000B\f\r\u000E\u000F""#
         );
         assert_eq!(
             Literal::from_str(r#""\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f""#).unwrap().to_string(),
-            r###""\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F""###
+            r#""\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F""#
         );
         assert_eq!(
             Literal::from_str(r#""\u0020\u0021\u0022\u0023\u0024\u0025\u0026\u0027\u0028\u0029\u002a\u002b\u002c\u002d\u002e\u002f""#).unwrap().to_string(),
-            r###"" !\"#$%&'()*+,-./""###
+            r##"" !\"#$%&'()*+,-./""##
         );
         assert_eq!(
             Literal::from_str(r#""\u0030\u0031\u0032\u0033\u0034\u0035\u0036\u0037\u0038\u0039\u003a\u003b\u003c\u003d\u003e\u003f""#).unwrap().to_string(),
-            r###""0123456789:;<=>?""###
+            r#""0123456789:;<=>?""#
         );
         assert_eq!(
             Literal::from_str(r#""\u0040\u0041\u0042\u0043\u0044\u0045\u0046\u0047\u0048\u0049\u004a\u004b\u004c\u004d\u004e\u004f""#).unwrap().to_string(),
-            r###""@ABCDEFGHIJKLMNO""###
+            r#""@ABCDEFGHIJKLMNO""#
         );
         assert_eq!(
             Literal::from_str(r#""\u0050\u0051\u0052\u0053\u0054\u0055\u0056\u0057\u0058\u0059\u005a\u005b\u005c\u005d\u005e\u005f""#).unwrap().to_string(),
-            r###""PQRSTUVWXYZ[\\]^_""###
+            r#""PQRSTUVWXYZ[\\]^_""#
         );
         assert_eq!(
             Literal::from_str(r#""\u0060\u0061\u0062\u0063\u0064\u0065\u0066\u0067\u0068\u0069\u006a\u006b\u006c\u006d\u006e\u006f""#).unwrap().to_string(),
-            r###""`abcdefghijklmno""###
+            r#""`abcdefghijklmno""#
         );
         assert_eq!(
             Literal::from_str(r#""\u0070\u0071\u0072\u0073\u0074\u0075\u0076\u0077\u0078\u0079\u007a\u007b\u007c\u007d\u007e\u007f""#).unwrap().to_string(),
-            r###""pqrstuvwxyz{|}~\u007F""###
+            r#""pqrstuvwxyz{|}~\u007F""#
         );
         assert_eq!(
             Literal::from_str(r#""\u0080\u0081\u0082\u0083\u0084\u0085\u0086\u0087\u0088\u0089\u008a\u008b\u008c\u008d\u008e\u008f""#).unwrap().to_string(),
