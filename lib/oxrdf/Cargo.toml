@@ -25,3 +25,4 @@ oxsdatatypes = { version = "0.2.0-alpha.1-dev", path="../oxsdatatypes", optional
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

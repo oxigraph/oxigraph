@@ -25,3 +25,4 @@ oxilangtag = "0.1"
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
