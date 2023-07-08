@@ -26,3 +26,4 @@ spargebra = { version = "0.3.0-alpha.1-dev", path="../spargebra" }
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
