@@ -426,7 +426,7 @@ impl PyLiteral {
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
 #[pyclass(frozen, name = "DefaultGraph", module = "pyoxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct PyDefaultGraph {}
+pub struct PyDefaultGraph;
 
 impl From<PyDefaultGraph> for GraphName {
     fn from(_: PyDefaultGraph) -> Self {
