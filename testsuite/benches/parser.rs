@@ -1,3 +1,5 @@
+#![allow(clippy::print_stderr)]
+
 use anyhow::Result;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxigraph_testsuite::files::read_file;
@@ -40,7 +42,7 @@ fn parse_bench(
     c: &mut Criterion,
     parser_name: &str,
     data_name: &str,
-    data: Vec<u8>,
+    data: &[u8],
     bench: impl Fn(&[u8]),
 ) {
     let mut group = c.benchmark_group(parser_name);
@@ -51,7 +53,7 @@ fn parse_bench(
     group.finish();
 }
 
-fn parse_oxttl_ntriples(c: &mut Criterion, name: &str, data: Vec<u8>) {
+fn parse_oxttl_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "oxttl ntriples", name, data, |data| {
         let mut parser = oxttl::NTriplesParser::new().parse();
         parser.extend_from_slice(data);
@@ -62,7 +64,7 @@ fn parse_oxttl_ntriples(c: &mut Criterion, name: &str, data: Vec<u8>) {
     });
 }
 
-fn parse_oxttl_turtle(c: &mut Criterion, name: &str, data: Vec<u8>) {
+fn parse_oxttl_turtle(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "oxttl turtle", name, data, |data| {
         let mut parser = oxttl::TurtleParser::new().parse();
         parser.extend_from_slice(data);
@@ -73,25 +75,25 @@ fn parse_oxttl_turtle(c: &mut Criterion, name: &str, data: Vec<u8>) {
     });
 }
 
-fn parse_rio_ntriples(c: &mut Criterion, name: &str, data: Vec<u8>) {
+fn parse_rio_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "rio ntriples", name, data, |data| {
         let mut count: u64 = 0;
         NTriplesParser::new(data)
-            .parse_all(&mut |_| {
+            .parse_all::<TurtleError>(&mut |_| {
                 count += 1;
-                Ok(()) as Result<(), TurtleError>
+                Ok(())
             })
             .unwrap();
     });
 }
 
-fn parse_rio_turtle(c: &mut Criterion, name: &str, data: Vec<u8>) {
+fn parse_rio_turtle(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "rio turtle", name, data, |data| {
         let mut count: u64 = 0;
         TurtleParser::new(data, None)
-            .parse_all(&mut |_| {
+            .parse_all::<TurtleError>(&mut |_| {
                 count += 1;
-                Ok(()) as Result<(), TurtleError>
+                Ok(())
             })
             .unwrap();
     });
@@ -101,7 +103,7 @@ fn bench_parse_oxttl_ntriples_with_ntriples(c: &mut Criterion) {
     parse_oxttl_ntriples(
         c,
         "ntriples",
-        match ntriples_test_data() {
+        &match ntriples_test_data() {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("{e}");
@@ -115,7 +117,7 @@ fn bench_parse_oxttl_ntriples_with_turtle(c: &mut Criterion) {
     parse_oxttl_turtle(
         c,
         "ntriples",
-        match ntriples_test_data() {
+        &match ntriples_test_data() {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("{e}");
@@ -129,7 +131,7 @@ fn bench_parse_oxttl_turtle_with_turtle(c: &mut Criterion) {
     parse_oxttl_turtle(
         c,
         "turtle",
-        match turtle_test_data() {
+        &match turtle_test_data() {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("{e}");
@@ -143,7 +145,7 @@ fn bench_parse_rio_ntriples_with_ntriples(c: &mut Criterion) {
     parse_rio_ntriples(
         c,
         "ntriples",
-        match ntriples_test_data() {
+        &match ntriples_test_data() {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("{e}");
@@ -157,7 +159,7 @@ fn bench_parse_rio_ntriples_with_turtle(c: &mut Criterion) {
     parse_rio_turtle(
         c,
         "ntriples",
-        match ntriples_test_data() {
+        &match ntriples_test_data() {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("{e}");
@@ -171,7 +173,7 @@ fn bench_parse_rio_turtle_with_turtle(c: &mut Criterion) {
     parse_rio_turtle(
         c,
         "turtle",
-        match turtle_test_data() {
+        &match turtle_test_data() {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("{e}");

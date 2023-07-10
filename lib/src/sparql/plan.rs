@@ -155,7 +155,7 @@ impl PlanNode {
                 child.lookup_used_variables(callback);
             }
             Self::Union { children } => {
-                for child in children.iter() {
+                for child in children {
                     child.lookup_used_variables(callback);
                 }
             }

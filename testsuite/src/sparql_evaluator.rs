@@ -501,7 +501,7 @@ impl StaticQueryResults {
     fn from_graph(graph: &Graph) -> Result<Self> {
         // Hack to normalize literals
         let store = Store::new()?;
-        for t in graph.iter() {
+        for t in graph {
             store
                 .insert(t.in_graph(GraphNameRef::DefaultGraph))
                 .unwrap();
