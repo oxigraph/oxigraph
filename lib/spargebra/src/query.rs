@@ -210,7 +210,7 @@ impl fmt::Display for Query {
                     writeln!(f, "BASE <{base_iri}>")?;
                 }
                 write!(f, "CONSTRUCT {{ ")?;
-                for triple in template.iter() {
+                for triple in template {
                     write!(f, "{triple} . ")?;
                 }
                 write!(f, "}}")?;
