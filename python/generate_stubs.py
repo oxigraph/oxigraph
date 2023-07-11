@@ -473,7 +473,7 @@ def build_doc_comment(doc: str) -> Optional[ast.Expr]:
 
 def format_with_black(code: str) -> str:
     result = subprocess.run(
-        ["python", "-m", "black", "-t", "py37", "--pyi", "-"],
+        ["python", "-m", "black", "-t", "py38", "--pyi", "-"],
         input=code.encode(),
         capture_output=True,
     )
@@ -498,9 +498,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     stub_content = ast.unparse(module_stubs(importlib.import_module(args.module_name)))
-    stub_content = stub_content.replace(
-        ", /", ""
-    )  # TODO: remove when targeting Python 3.8+
     if args.black:
         stub_content = format_with_black(stub_content)
     args.out.write(stub_content)

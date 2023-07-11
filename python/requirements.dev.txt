@@ -3,4 +3,4 @@ furo
 maturin~=1.0
 mypy~=1.0
 ruff~=0.0.255
-sphinx~=5.3
+sphinx~=7.0
