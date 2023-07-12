@@ -8,11 +8,9 @@ use oxrdf::vocab::{rdf, xsd};
 use peg::parser;
 use peg::str::LineCol;
 use rand::random;
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::mem::take;
-use std::str::Chars;
 use std::str::FromStr;
 use std::{char, fmt};
 
@@ -32,7 +30,7 @@ pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseEr
         aggregates: Vec::new(),
     };
 
-    parser::QueryUnit(&unescape_unicode_codepoints(query), &mut state).map_err(|e| ParseError {
+    parser::QueryUnit(query, &mut state).map_err(|e| ParseError {
         inner: ParseErrorKind::Parser(e),
     })
 }
@@ -53,12 +51,9 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
         aggregates: Vec::new(),
     };
 
-    let operations =
-        parser::UpdateInit(&unescape_unicode_codepoints(update), &mut state).map_err(|e| {
-            ParseError {
-                inner: ParseErrorKind::Parser(e),
-            }
-        })?;
+    let operations = parser::UpdateInit(update, &mut state).map_err(|e| ParseError {
+        inner: ParseErrorKind::Parser(e),
+    })?;
     Ok(Update {
         operations,
         base_iri: state.base_iri,
@@ -724,11 +719,11 @@ pub struct ParserState {
 }
 
 impl ParserState {
-    fn parse_iri(&self, iri: &str) -> Result<Iri<String>, IriParseError> {
+    fn parse_iri(&self, iri: String) -> Result<Iri<String>, IriParseError> {
         if let Some(base_iri) = &self.base_iri {
-            base_iri.resolve(iri)
+            base_iri.resolve(&iri)
         } else {
-            Iri::parse(iri.to_owned())
+            Iri::parse(iri)
         }
     }
 
@@ -746,209 +741,67 @@ impl ParserState {
     }
 }
 
-pub fn unescape_unicode_codepoints(input: &str) -> Cow<'_, str> {
-    if needs_unescape_unicode_codepoints(input) {
-        UnescapeUnicodeCharIterator::new(input).collect()
-    } else {
-        input.into()
-    }
-}
-
-fn needs_unescape_unicode_codepoints(input: &str) -> bool {
-    let bytes = input.as_bytes();
-    for i in 1..bytes.len() {
-        if (bytes[i] == b'u' || bytes[i] == b'U') && bytes[i - 1] == b'\\' {
-            return true;
-        }
-    }
-    false
-}
-
-struct UnescapeUnicodeCharIterator<'a> {
-    iter: Chars<'a>,
-    buffer: String,
-}
-
-impl<'a> UnescapeUnicodeCharIterator<'a> {
-    fn new(string: &'a str) -> Self {
-        Self {
-            iter: string.chars(),
-            buffer: String::with_capacity(9),
-        }
-    }
-}
-
-impl<'a> Iterator for UnescapeUnicodeCharIterator<'a> {
-    type Item = char;
-
-    fn next(&mut self) -> Option<char> {
-        if !self.buffer.is_empty() {
-            return Some(self.buffer.remove(0));
-        }
-        match self.iter.next()? {
-            '\\' => match self.iter.next() {
-                Some('u') => {
-                    self.buffer.push('u');
-                    for _ in 0..4 {
-                        if let Some(c) = self.iter.next() {
-                            self.buffer.push(c);
-                        } else {
-                            return Some('\\');
-                        }
-                    }
-                    if let Some(c) = u32::from_str_radix(&self.buffer[1..], 16)
-                        .ok()
-                        .and_then(char::from_u32)
-                    {
-                        self.buffer.clear();
-                        Some(c)
-                    } else {
-                        Some('\\')
-                    }
-                }
-                Some('U') => {
-                    self.buffer.push('U');
-                    for _ in 0..8 {
-                        if let Some(c) = self.iter.next() {
-                            self.buffer.push(c);
-                        } else {
-                            return Some('\\');
-                        }
-                    }
-                    if let Some(c) = u32::from_str_radix(&self.buffer[1..], 16)
-                        .ok()
-                        .and_then(char::from_u32)
-                    {
-                        self.buffer.clear();
-                        Some(c)
-                    } else {
-                        Some('\\')
-                    }
-                }
-                Some(c) => {
-                    self.buffer.push(c);
-                    Some('\\')
-                }
-                None => Some('\\'),
-            },
-            c => Some(c),
-        }
-    }
-}
-
-pub fn unescape_characters<'a>(
-    input: &'a str,
-    characters: &'static [u8],
-    replacement: &'static StaticCharSliceMap,
-) -> Cow<'a, str> {
-    if needs_unescape_characters(input, characters) {
-        UnescapeCharsIterator::new(input, replacement).collect()
-    } else {
-        input.into()
-    }
-}
-
-fn needs_unescape_characters(input: &str, characters: &[u8]) -> bool {
-    let bytes = input.as_bytes();
-    for i in 1..bytes.len() {
-        if bytes[i - 1] == b'\\' && characters.contains(&bytes[i]) {
-            return true;
-        }
-    }
-    false
-}
-
-struct UnescapeCharsIterator<'a> {
-    iter: Chars<'a>,
-    buffer: Option<char>,
-    replacement: &'static StaticCharSliceMap,
-}
-
-impl<'a> UnescapeCharsIterator<'a> {
-    fn new(string: &'a str, replacement: &'static StaticCharSliceMap) -> Self {
-        Self {
-            iter: string.chars(),
-            buffer: None,
-            replacement,
-        }
-    }
-}
-
-impl<'a> Iterator for UnescapeCharsIterator<'a> {
-    type Item = char;
-
-    fn next(&mut self) -> Option<char> {
-        if let Some(ch) = self.buffer {
-            self.buffer = None;
-            return Some(ch);
-        }
-        match self.iter.next()? {
-            '\\' => match self.iter.next() {
-                Some(ch) => {
-                    if let Some(replace) = self.replacement.get(ch) {
-                        Some(replace)
-                    } else {
-                        self.buffer = Some(ch);
-                        Some('\\')
-                    }
-                }
-                None => Some('\\'),
-            },
-            c => Some(c),
-        }
-    }
-}
-
-pub struct StaticCharSliceMap {
-    keys: &'static [char],
-    values: &'static [char],
-}
-
-impl StaticCharSliceMap {
-    pub const fn new(keys: &'static [char], values: &'static [char]) -> Self {
-        Self { keys, values }
-    }
-
-    pub fn get(&self, key: char) -> Option<char> {
-        for i in 0..self.keys.len() {
-            if self.keys[i] == key {
-                return Some(self.values[i]);
+fn unescape_iriref(mut input: &str) -> Result<String, &'static str> {
+    let mut output = String::with_capacity(input.len());
+    while let Some((before, after)) = input.split_once('\\') {
+        output.push_str(before);
+        let mut after = after.chars();
+        let (escape, after) = match after.next() {
+            Some('u') => read_hex_char::<4>(after.as_str())?,
+            Some('U') => read_hex_char::<8>(after.as_str())?,
+            Some(_) => {
+                return Err(
+                    "IRIs are only allowed to contain escape sequences \\uXXXX and \\UXXXXXXXX",
+                )
             }
-        }
-        None
+            None => return Err("IRIs are not allowed to end with a '\'"),
+        };
+        output.push(escape);
+        input = after;
     }
+    output.push_str(input);
+    Ok(output)
 }
 
-const UNESCAPE_CHARACTERS: [u8; 8] = [b't', b'b', b'n', b'r', b'f', b'"', b'\'', b'\\'];
-const UNESCAPE_REPLACEMENT: StaticCharSliceMap = StaticCharSliceMap::new(
-    &['t', 'b', 'n', 'r', 'f', '"', '\'', '\\'],
-    &[
-        '\u{0009}', '\u{0008}', '\u{000A}', '\u{000D}', '\u{000C}', '\u{0022}', '\u{0027}',
-        '\u{005C}',
-    ],
-);
-
-fn unescape_echars(input: &str) -> Cow<'_, str> {
-    unescape_characters(input, &UNESCAPE_CHARACTERS, &UNESCAPE_REPLACEMENT)
+fn unescape_string(mut input: &str) -> Result<String, &'static str> {
+    let mut output = String::with_capacity(input.len());
+    while let Some((before, after)) = input.split_once('\\') {
+        output.push_str(before);
+        let mut after = after.chars();
+        let (escape, after) = match after.next() {
+            Some('t') => ('\u{0009}', after.as_str()),
+            Some('b') => ('\u{0008}', after.as_str()),
+            Some('n') => ('\u{000A}', after.as_str()),
+            Some('r') => ('\u{000D}', after.as_str()),
+            Some('f') => ('\u{000C}', after.as_str()),
+            Some('"') => ('\u{0022}', after.as_str()),
+            Some('\'') => ('\u{0027}', after.as_str()),
+            Some('\\') => ('\u{005C}', after.as_str()),
+            Some('u') => read_hex_char::<4>(after.as_str())?,
+            Some('U') => read_hex_char::<8>(after.as_str())?,
+            Some(_) => return Err("The character that can be escaped in strings are tbnrf\"'\\"),
+            None => return Err("strings are not allowed to end with a '\'"),
+        };
+        output.push(escape);
+        input = after;
+    }
+    output.push_str(input);
+    Ok(output)
 }
 
-const UNESCAPE_PN_CHARACTERS: [u8; 20] = [
-    b'_', b'~', b'.', b'-', b'!', b'$', b'&', b'\'', b'(', b')', b'*', b'+', b',', b';', b'=',
-    b'/', b'?', b'#', b'@', b'%',
-];
-const UNESCAPE_PN_REPLACEMENT: StaticCharSliceMap = StaticCharSliceMap::new(
-    &[
-        '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/', '?', '#',
-        '@', '%',
-    ],
-    &[
-        '_', '~', '.', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/', '?', '#',
-        '@', '%',
-    ],
-);
-
-pub fn unescape_pn_local(input: &str) -> Cow<'_, str> {
-    unescape_characters(input, &UNESCAPE_PN_CHARACTERS, &UNESCAPE_PN_REPLACEMENT)
+fn read_hex_char<const SIZE: usize>(input: &str) -> Result<(char, &str), &'static str> {
+    if let Some(escape) = input.get(..SIZE) {
+        if let Some(char) = u32::from_str_radix(escape, 16)
+            .ok()
+            .and_then(char::from_u32)
+        {
+            Ok((char, &input[SIZE..]))
+        } else {
+            Err("\\u escape sequence should be followed by hexadecimal digits")
+        }
+    } else {
+        Err("\\u escape sequence should be followed by hexadecimal digits")
+    }
 }
 
 fn variable() -> Variable {
@@ -2143,7 +1996,7 @@ parser! {
         } / ANON() { BlankNode::default() }
 
         rule IRIREF() -> Iri<String> = "<" i:$((!['>'] [_])*) ">" {?
-            state.parse_iri(i).map_err(|_| "IRI parsing failed")
+            state.parse_iri(unescape_iriref(i)?).map_err(|_| "IRI parsing failed")
         }
 
         rule PNAME_NS() -> &'input str = ns:$(PN_PREFIX()?) ":" {
@@ -2152,8 +2005,11 @@ parser! {
 
         rule PNAME_LN() -> Iri<String> = ns:PNAME_NS() local:$(PN_LOCAL()) {?
             if let Some(base) = state.namespaces.get(ns) {
-                let mut iri = base.clone();
-                iri.push_str(&unescape_pn_local(local));
+                let mut iri = String::with_capacity(base.len() + local.len());
+                iri.push_str(base);
+                for chunk in local.split('\\') { // We remove \
+                    iri.push_str(chunk);
+                }
                 Iri::parse(iri).map_err(|_| "IRI parsing failed")
             } else {
                 Err("Prefix not found")
@@ -2192,28 +2048,30 @@ parser! {
 
         rule EXPONENT() = ['e' | 'E'] ['+' | '-']? ['0'..='9']+
 
-        rule STRING_LITERAL1() -> String = "'" l:$((STRING_LITERAL1_simple_char() / ECHAR())*) "'" {
-            unescape_echars(l).to_string()
+        rule STRING_LITERAL1() -> String = "'" l:$((STRING_LITERAL1_simple_char() / ECHAR() / UCHAR())*) "'" {?
+             unescape_string(l)
         }
         rule STRING_LITERAL1_simple_char() = !['\u{27}' | '\u{5C}' | '\u{A}' | '\u{D}'] [_]
 
 
-        rule STRING_LITERAL2() -> String = "\"" l:$((STRING_LITERAL2_simple_char() / ECHAR())*) "\"" {
-            unescape_echars(l).to_string()
+        rule STRING_LITERAL2() -> String = "\"" l:$((STRING_LITERAL2_simple_char() / ECHAR() / UCHAR())*) "\"" {?
+             unescape_string(l)
         }
         rule STRING_LITERAL2_simple_char() = !['\u{22}' | '\u{5C}' | '\u{A}' | '\u{D}'] [_]
 
-        rule STRING_LITERAL_LONG1() -> String = "'''" l:$(STRING_LITERAL_LONG1_inner()*) "'''" {
-            unescape_echars(l).to_string()
+        rule STRING_LITERAL_LONG1() -> String = "'''" l:$(STRING_LITERAL_LONG1_inner()*) "'''" {?
+             unescape_string(l)
         }
-        rule STRING_LITERAL_LONG1_inner() = ("''" / "'")? (STRING_LITERAL_LONG1_simple_char() / ECHAR())
+        rule STRING_LITERAL_LONG1_inner() = ("''" / "'")? (STRING_LITERAL_LONG1_simple_char() / ECHAR() / UCHAR())
         rule STRING_LITERAL_LONG1_simple_char() = !['\'' | '\\'] [_]
 
-        rule STRING_LITERAL_LONG2() -> String = "\"\"\"" l:$(STRING_LITERAL_LONG2_inner()*) "\"\"\"" {
-            unescape_echars(l).to_string()
+        rule STRING_LITERAL_LONG2() -> String = "\"\"\"" l:$(STRING_LITERAL_LONG2_inner()*) "\"\"\"" {?
+             unescape_string(l)
         }
-        rule STRING_LITERAL_LONG2_inner() = ("\"\"" / "\"")? (STRING_LITERAL_LONG2_simple_char() / ECHAR())
+        rule STRING_LITERAL_LONG2_inner() = ("\"\"" / "\"")? (STRING_LITERAL_LONG2_simple_char() / ECHAR() / UCHAR())
         rule STRING_LITERAL_LONG2_simple_char() = !['"' | '\\'] [_]
+
+        rule UCHAR() = "\\u" HEX() HEX() HEX() HEX() / "\\U" HEX() HEX() HEX() HEX() HEX() HEX() HEX() HEX()
 
         rule ECHAR() = "\\" ['t' | 'b' | 'n' | 'r' | 'f' | '"' |'\'' | '\\']
 
@@ -2223,7 +2081,7 @@ parser! {
 
         rule ANON() = "[" WS()* "]"
 
-        rule PN_CHARS_BASE() = ['A' ..= 'Z' | 'a' ..= 'z' | '\u{00C0}' ..='\u{00D6}' | '\u{00D8}'..='\u{00F6}' | '\u{00F8}'..='\u{02FF}' | '\u{0370}'..='\u{037D}' | '\u{037F}'..='\u{1FFF}' | '\u{200C}'..='\u{200D}' | '\u{2070}'..='\u{218F}' | '\u{2C00}'..='\u{2FEF}' | '\u{3001}'..='\u{D7FF}' | '\u{F900}'..='\u{FDCF}' | '\u{FDF0}'..='\u{FFFD}']
+        rule PN_CHARS_BASE() = ['A' ..= 'Z' | 'a' ..= 'z' | '\u{00C0}'..='\u{00D6}' | '\u{00D8}'..='\u{00F6}' | '\u{00F8}'..='\u{02FF}' | '\u{0370}'..='\u{037D}' | '\u{037F}'..='\u{1FFF}' | '\u{200C}'..='\u{200D}' | '\u{2070}'..='\u{218F}' | '\u{2C00}'..='\u{2FEF}' | '\u{3001}'..='\u{D7FF}' | '\u{F900}'..='\u{FDCF}' | '\u{FDF0}'..='\u{FFFD}']
 
         rule PN_CHARS_U() = ['_'] / PN_CHARS_BASE()
 
