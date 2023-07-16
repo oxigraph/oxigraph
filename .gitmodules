@@ -17,3 +17,6 @@
 	path = testsuite/N3
 	url = https://github.com/w3c/N3.git
 	branch = master
+[submodule "testsuite/rdf-canon"]
+	path = testsuite/rdf-canon
+	url = https://github.com/w3c/rdf-canon.git

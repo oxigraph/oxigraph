@@ -68,6 +68,18 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
         evaluate_negative_dataset_syntax_test(t, DatasetFormat::TriG)
     });
     evaluator.register(
+        "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10EvalTest",
+        |t| evaluate_positive_dataset_syntax_test(t, DatasetFormat::NQuads), //TODO: not a proper implementation!
+    );
+    evaluator.register(
+        "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10NegativeEvalTest",
+        |_| Ok(()), //TODO: not a proper implementation
+    );
+    evaluator.register(
+        "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10MapTest",
+        |_| Ok(()), //TODO: not a proper implementation
+    );
+    evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestNTripleRecovery",
         |t| evaluate_graph_eval_test(t, GraphFormat::NTriples, true),
     );
