@@ -8,6 +8,7 @@ use std::hash::{BuildHasher, Hasher};
 pub struct Interner {
     hasher: RandomState,
     string_for_hash: HashMap<u64, String, IdentityHasherBuilder>,
+    string_for_blank_node_id: HashMap<u128, String>,
     #[cfg(feature = "rdf-star")]
     triples: HashMap<InternedTriple, Triple>,
 }
@@ -119,29 +120,53 @@ impl InternedNamedNode {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
-pub struct InternedBlankNode {
-    id: Key,
+pub enum InternedBlankNode {
+    Number { id: u128 },
+    Other { id: Key },
 }
 
 impl InternedBlankNode {
     pub fn encoded_into(blank_node: BlankNodeRef<'_>, interner: &mut Interner) -> Self {
-        Self {
-            id: interner.get_or_intern(blank_node.as_str()),
+        if let Some(id) = blank_node.unique_id() {
+            interner
+                .string_for_blank_node_id
+                .entry(id)
+                .or_insert_with(|| blank_node.as_str().into());
+            Self::Number { id }
+        } else {
+            Self::Other {
+                id: interner.get_or_intern(blank_node.as_str()),
+            }
         }
     }
 
     pub fn encoded_from(blank_node: BlankNodeRef<'_>, interner: &Interner) -> Option<Self> {
-        Some(Self {
-            id: interner.get(blank_node.as_str())?,
-        })
+        if let Some(id) = blank_node.unique_id() {
+            interner
+                .string_for_blank_node_id
+                .contains_key(&id)
+                .then_some(Self::Number { id })
+        } else {
+            Some(Self::Other {
+                id: interner.get(blank_node.as_str())?,
+            })
+        }
     }
 
     pub fn decode_from(self, interner: &Interner) -> BlankNodeRef {
-        BlankNodeRef::new_unchecked(interner.resolve(self.id))
+        BlankNodeRef::new_unchecked(match self {
+            Self::Number { id } => &interner.string_for_blank_node_id[&id],
+            Self::Other { id } => interner.resolve(id),
+        })
     }
 
     pub fn next(self) -> Self {
-        Self { id: self.id.next() }
+        match self {
+            Self::Number { id } => Self::Number {
+                id: id.saturating_add(1),
+            },
+            Self::Other { id } => Self::Other { id: id.next() },
+        }
     }
 }
 
