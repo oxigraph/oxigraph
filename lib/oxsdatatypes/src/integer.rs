@@ -1,4 +1,5 @@
-use crate::{Boolean, Decimal, DecimalOverflowError, Double, Float};
+use crate::{Boolean, Decimal, Double, Float};
+use std::error::Error;
 use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
@@ -28,6 +29,8 @@ impl Integer {
     }
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -37,6 +40,8 @@ impl Integer {
     }
 
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -46,6 +51,8 @@ impl Integer {
     }
 
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_mul(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -55,6 +62,8 @@ impl Integer {
     }
 
     /// [op:numeric-integer-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-integer-divide)
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_div(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -64,6 +73,8 @@ impl Integer {
     }
 
     /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_rem(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -72,6 +83,9 @@ impl Integer {
         })
     }
 
+    /// Euclidean remainder
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_rem_euclid(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -81,6 +95,8 @@ impl Integer {
     }
 
     /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_neg(self) -> Option<Self> {
@@ -90,12 +106,14 @@ impl Integer {
     }
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
-    pub const fn abs(self) -> Self {
-        Self {
-            value: self.value.abs(),
-        }
+    pub fn checked_abs(self) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_abs()?,
+        })
     }
 
     #[inline]
@@ -223,22 +241,40 @@ impl fmt::Display for Integer {
 }
 
 impl TryFrom<Float> for Integer {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Float) -> Result<Self, DecimalOverflowError> {
-        Decimal::try_from(value)?.try_into()
+    fn try_from(value: Float) -> Result<Self, TooLargeForIntegerError> {
+        Decimal::try_from(value)
+            .map_err(|_| TooLargeForIntegerError)?
+            .try_into()
     }
 }
 
 impl TryFrom<Double> for Integer {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Double) -> Result<Self, DecimalOverflowError> {
-        Decimal::try_from(value)?.try_into()
+    fn try_from(value: Double) -> Result<Self, TooLargeForIntegerError> {
+        Decimal::try_from(value)
+            .map_err(|_| TooLargeForIntegerError)?
+            .try_into()
     }
 }
+
+/// The input is too large to fit into an [`Integer`].
+///
+/// Matches XPath [`FOCA0003` error](https://www.w3.org/TR/xpath-functions-31/#ERRFOCA0003).
+#[derive(Debug, Clone, Copy)]
+pub struct TooLargeForIntegerError;
+
+impl fmt::Display for TooLargeForIntegerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Value too large for xsd:integer internal representation")
+    }
+}
+
+impl Error for TooLargeForIntegerError {}
 
 #[cfg(test)]
 mod tests {
@@ -278,7 +314,8 @@ mod tests {
                 .unwrap()
                 .checked_sub(Integer::from_str("1672507300000")?)
                 .unwrap()
-                .abs()
+                .checked_abs()
+                .unwrap()
                 < Integer::from(1_000_000)
         );
         Ok(())
@@ -303,7 +340,8 @@ mod tests {
                 .unwrap()
                 .checked_sub(Integer::from_str("1672507300000").unwrap())
                 .unwrap()
-                .abs()
+                .checked_abs()
+                .unwrap()
                 < Integer::from(10)
         );
         assert!(Integer::try_from(Double::from(f64::NAN)).is_err());

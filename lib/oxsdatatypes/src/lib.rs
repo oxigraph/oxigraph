@@ -11,15 +11,16 @@ mod double;
 mod duration;
 mod float;
 mod integer;
-mod parser;
 
 pub use self::boolean::Boolean;
 pub use self::date_time::{
-    Date, DateTime, DateTimeError, GDay, GMonth, GMonthDay, GYear, GYearMonth, Time, TimezoneOffset,
+    Date, DateTime, DateTimeOverflowError, GDay, GMonth, GMonthDay, GYear, GYearMonth,
+    InvalidTimezoneError, ParseDateTimeError, Time, TimezoneOffset,
 };
-pub use self::decimal::{Decimal, DecimalOverflowError, ParseDecimalError};
+pub use self::decimal::{Decimal, ParseDecimalError, TooLargeForDecimalError};
 pub use self::double::Double;
-pub use self::duration::{DayTimeDuration, Duration, YearMonthDuration};
+pub use self::duration::{
+    DayTimeDuration, Duration, DurationOverflowError, ParseDurationError, YearMonthDuration,
+};
 pub use self::float::Float;
-pub use self::integer::Integer;
-pub use self::parser::XsdParseError;
+pub use self::integer::{Integer, TooLargeForIntegerError};

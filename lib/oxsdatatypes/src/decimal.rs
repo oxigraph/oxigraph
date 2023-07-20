@@ -1,4 +1,4 @@
-use crate::{Boolean, Double, Float, Integer};
+use crate::{Boolean, Double, Float, Integer, TooLargeForIntegerError};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
@@ -21,15 +21,20 @@ pub struct Decimal {
 impl Decimal {
     /// Constructs the decimal i / 10^n
     #[inline]
-    pub fn new(i: i128, n: u32) -> Result<Self, DecimalOverflowError> {
-        let shift = DECIMAL_PART_DIGITS
-            .checked_sub(n)
-            .ok_or(DecimalOverflowError)?;
-        Ok(Self {
-            value: i
-                .checked_mul(10_i128.pow(shift))
-                .ok_or(DecimalOverflowError)?,
-        })
+    pub const fn new(i: i128, n: u32) -> Result<Self, TooLargeForDecimalError> {
+        let Some(shift) = DECIMAL_PART_DIGITS.checked_sub(n) else {
+            return Err(TooLargeForDecimalError);
+        };
+        let Some(value) = i.checked_mul(10_i128.pow(shift)) else {
+             return Err(TooLargeForDecimalError);
+         };
+        Ok(Self { value })
+    }
+
+    pub(crate) const fn new_from_i128_unchecked(value: i128) -> Self {
+        Self {
+            value: value * DECIMAL_PART_POW,
+        }
     }
 
     #[inline]
@@ -47,6 +52,8 @@ impl Decimal {
     }
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -56,6 +63,8 @@ impl Decimal {
     }
 
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -65,6 +74,8 @@ impl Decimal {
     }
 
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_mul(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -98,6 +109,8 @@ impl Decimal {
     }
 
     /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-divide)
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_div(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -132,6 +145,8 @@ impl Decimal {
     }
 
     /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_rem(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -140,6 +155,9 @@ impl Decimal {
         })
     }
 
+    /// Euclidean remainder
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_rem_euclid(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -149,6 +167,8 @@ impl Decimal {
     }
 
     /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
     pub fn checked_neg(self) -> Option<Self> {
@@ -158,52 +178,63 @@ impl Decimal {
     }
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
-    pub const fn abs(self) -> Self {
-        Self {
-            value: self.value.abs(),
-        }
+    pub fn checked_abs(self) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_abs()?,
+        })
     }
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
-    pub fn round(self) -> Self {
+    pub fn checked_round(self) -> Option<Self> {
         let value = self.value / DECIMAL_PART_POW_MINUS_ONE;
-        Self {
+        Some(Self {
             value: if value >= 0 {
-                (value / 10 + i128::from(value % 10 >= 5)) * DECIMAL_PART_POW
+                value / 10 + i128::from(value % 10 >= 5)
             } else {
-                (value / 10 - i128::from(-value % 10 > 5)) * DECIMAL_PART_POW
-            },
-        }
+                value / 10 - i128::from(-value % 10 > 5)
+            }
+            .checked_mul(DECIMAL_PART_POW)?,
+        })
     }
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
-    pub fn ceil(self) -> Self {
-        Self {
-            value: if self.value >= 0 && self.value % DECIMAL_PART_POW != 0 {
-                (self.value / DECIMAL_PART_POW + 1) * DECIMAL_PART_POW
+    pub fn checked_ceil(self) -> Option<Self> {
+        Some(Self {
+            value: if self.value > 0 && self.value % DECIMAL_PART_POW != 0 {
+                self.value / DECIMAL_PART_POW + 1
             } else {
-                (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
-            },
-        }
+                self.value / DECIMAL_PART_POW
+            }
+            .checked_mul(DECIMAL_PART_POW)?,
+        })
     }
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
     #[must_use]
-    pub fn floor(self) -> Self {
-        Self {
+    pub fn checked_floor(self) -> Option<Self> {
+        Some(Self {
             value: if self.value >= 0 || self.value % DECIMAL_PART_POW == 0 {
-                (self.value / DECIMAL_PART_POW) * DECIMAL_PART_POW
+                self.value / DECIMAL_PART_POW
             } else {
-                (self.value / DECIMAL_PART_POW - 1) * DECIMAL_PART_POW
-            },
-        }
+                self.value / DECIMAL_PART_POW - 1
+            }
+            .checked_mul(DECIMAL_PART_POW)?,
+        })
     }
 
     #[inline]
@@ -328,28 +359,28 @@ impl From<Integer> for Decimal {
 }
 
 impl TryFrom<i128> for Decimal {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForDecimalError;
 
     #[inline]
-    fn try_from(value: i128) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: i128) -> Result<Self, TooLargeForDecimalError> {
         Ok(Self {
             value: value
                 .checked_mul(DECIMAL_PART_POW)
-                .ok_or(DecimalOverflowError)?,
+                .ok_or(TooLargeForDecimalError)?,
         })
     }
 }
 
 impl TryFrom<u128> for Decimal {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForDecimalError;
 
     #[inline]
-    fn try_from(value: u128) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: u128) -> Result<Self, TooLargeForDecimalError> {
         Ok(Self {
             value: i128::try_from(value)
-                .map_err(|_| DecimalOverflowError)?
+                .map_err(|_| TooLargeForDecimalError)?
                 .checked_mul(DECIMAL_PART_POW)
-                .ok_or(DecimalOverflowError)?,
+                .ok_or(TooLargeForDecimalError)?,
         })
     }
 }
@@ -362,27 +393,27 @@ impl From<Boolean> for Decimal {
 }
 
 impl TryFrom<Float> for Decimal {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForDecimalError;
 
     #[inline]
-    fn try_from(value: Float) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: Float) -> Result<Self, TooLargeForDecimalError> {
         Double::from(value).try_into()
     }
 }
 
 impl TryFrom<Double> for Decimal {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForDecimalError;
 
     #[inline]
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-    fn try_from(value: Double) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: Double) -> Result<Self, TooLargeForDecimalError> {
         let shifted = f64::from(value) * (DECIMAL_PART_POW as f64);
-        if shifted.is_finite() && (i128::MIN as f64) <= shifted && shifted <= (i128::MAX as f64) {
+        if (i128::MIN as f64) <= shifted && shifted <= (i128::MAX as f64) {
             Ok(Self {
                 value: shifted as i128,
             })
         } else {
-            Err(DecimalOverflowError)
+            Err(TooLargeForDecimalError)
         }
     }
 }
@@ -415,17 +446,17 @@ impl From<Decimal> for Double {
 }
 
 impl TryFrom<Decimal> for Integer {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Decimal) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: Decimal) -> Result<Self, TooLargeForIntegerError> {
         Ok(i64::try_from(
             value
                 .value
                 .checked_div(DECIMAL_PART_POW)
-                .ok_or(DecimalOverflowError)?,
+                .ok_or(TooLargeForIntegerError)?,
         )
-        .map_err(|_| DecimalOverflowError)?
+        .map_err(|_| TooLargeForIntegerError)?
         .into())
     }
 }
@@ -620,25 +651,27 @@ impl fmt::Display for ParseDecimalError {
 
 impl Error for ParseDecimalError {}
 
-impl From<DecimalOverflowError> for ParseDecimalError {
-    fn from(_: DecimalOverflowError) -> Self {
+impl From<TooLargeForDecimalError> for ParseDecimalError {
+    fn from(_: TooLargeForDecimalError) -> Self {
         Self {
             kind: DecimalParseErrorKind::Overflow,
         }
     }
 }
 
-/// An overflow in [`Decimal`] computations.
+/// The input is too large to fit into a [`Decimal`].
+///
+/// Matches XPath [`FOCA0001` error](https://www.w3.org/TR/xpath-functions-31/#ERRFOCA0001).
 #[derive(Debug, Clone, Copy)]
-pub struct DecimalOverflowError;
+pub struct TooLargeForDecimalError;
 
-impl fmt::Display for DecimalOverflowError {
+impl fmt::Display for TooLargeForDecimalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Value overflow")
+        write!(f, "Value too large for xsd:decimal internal representation")
     }
 }
 
-impl Error for DecimalOverflowError {}
+impl Error for TooLargeForDecimalError {}
 
 #[cfg(test)]
 mod tests {
@@ -797,45 +830,153 @@ mod tests {
             Some(Decimal::from_str("0.9")?)
         );
         assert_eq!(Decimal::from(1).checked_rem(0), None);
+        assert_eq!(
+            Decimal::MAX.checked_rem(1),
+            Some(Decimal::from_str("0.687303715884105727")?)
+        );
+        assert_eq!(
+            Decimal::MIN.checked_rem(1),
+            Some(Decimal::from_str("-0.687303715884105728")?)
+        );
+        assert_eq!(
+            Decimal::MAX.checked_rem(Decimal::STEP),
+            Some(Decimal::default())
+        );
+        assert_eq!(
+            Decimal::MIN.checked_rem(Decimal::STEP),
+            Some(Decimal::default())
+        );
+        assert_eq!(
+            Decimal::MAX.checked_rem(Decimal::MAX),
+            Some(Decimal::default())
+        );
+        assert_eq!(
+            Decimal::MIN.checked_rem(Decimal::MIN),
+            Some(Decimal::default())
+        );
         Ok(())
     }
 
     #[test]
     fn round() -> Result<(), ParseDecimalError> {
-        assert_eq!(Decimal::from(10).round(), Decimal::from(10));
-        assert_eq!(Decimal::from(-10).round(), Decimal::from(-10));
-        assert_eq!(Decimal::from_str("2.5")?.round(), Decimal::from(3));
-        assert_eq!(Decimal::from_str("2.4999")?.round(), Decimal::from(2));
-        assert_eq!(Decimal::from_str("-2.5")?.round(), Decimal::from(-2));
-        assert_eq!(Decimal::from(i64::MIN).round(), Decimal::from(i64::MIN));
-        assert_eq!(Decimal::from(i64::MAX).round(), Decimal::from(i64::MAX));
+        assert_eq!(Decimal::from(10).checked_round(), Some(Decimal::from(10)));
+        assert_eq!(Decimal::from(-10).checked_round(), Some(Decimal::from(-10)));
+        assert_eq!(
+            Decimal::from(i64::MIN).checked_round(),
+            Some(Decimal::from(i64::MIN))
+        );
+        assert_eq!(
+            Decimal::from(i64::MAX).checked_round(),
+            Some(Decimal::from(i64::MAX))
+        );
+        assert_eq!(
+            Decimal::from_str("2.5")?.checked_round(),
+            Some(Decimal::from(3))
+        );
+        assert_eq!(
+            Decimal::from_str("2.4999")?.checked_round(),
+            Some(Decimal::from(2))
+        );
+        assert_eq!(
+            Decimal::from_str("-2.5")?.checked_round(),
+            Some(Decimal::from(-2))
+        );
+        assert_eq!(Decimal::MAX.checked_round(), None);
+        assert_eq!(
+            (Decimal::MAX.checked_sub(Decimal::from_str("0.5")?))
+                .unwrap()
+                .checked_round(),
+            Some(Decimal::from_str("170141183460469231731")?)
+        );
+        assert_eq!(Decimal::MIN.checked_round(), None);
+        assert_eq!(
+            (Decimal::MIN.checked_add(Decimal::from_str("0.5")?))
+                .unwrap()
+                .checked_round(),
+            Some(Decimal::from_str("-170141183460469231731")?)
+        );
         Ok(())
     }
 
     #[test]
     fn ceil() -> Result<(), ParseDecimalError> {
-        assert_eq!(Decimal::from(10).ceil(), Decimal::from(10));
-        assert_eq!(Decimal::from(-10).ceil(), Decimal::from(-10));
-        assert_eq!(Decimal::from_str("10.5")?.ceil(), Decimal::from(11));
-        assert_eq!(Decimal::from_str("-10.5")?.ceil(), Decimal::from(-10));
-        assert_eq!(Decimal::from(i64::MIN).ceil(), Decimal::from(i64::MIN));
-        assert_eq!(Decimal::from(i64::MAX).ceil(), Decimal::from(i64::MAX));
+        assert_eq!(Decimal::from(10).checked_ceil(), Some(Decimal::from(10)));
+        assert_eq!(Decimal::from(-10).checked_ceil(), Some(Decimal::from(-10)));
+        assert_eq!(
+            Decimal::from_str("10.5")?.checked_ceil(),
+            Some(Decimal::from(11))
+        );
+        assert_eq!(
+            Decimal::from_str("-10.5")?.checked_ceil(),
+            Some(Decimal::from(-10))
+        );
+        assert_eq!(
+            Decimal::from(i64::MIN).checked_ceil(),
+            Some(Decimal::from(i64::MIN))
+        );
+        assert_eq!(
+            Decimal::from(i64::MAX).checked_ceil(),
+            Some(Decimal::from(i64::MAX))
+        );
+        assert_eq!(Decimal::MAX.checked_ceil(), None);
+        assert_eq!(
+            Decimal::MAX
+                .checked_sub(Decimal::from(1))
+                .unwrap()
+                .checked_ceil(),
+            Some(Decimal::from_str("170141183460469231731")?)
+        );
+        assert_eq!(
+            Decimal::MIN.checked_ceil(),
+            Some(Decimal::from_str("-170141183460469231731")?)
+        );
         Ok(())
     }
 
     #[test]
     fn floor() -> Result<(), ParseDecimalError> {
-        assert_eq!(Decimal::from(10).ceil(), Decimal::from(10));
-        assert_eq!(Decimal::from(-10).ceil(), Decimal::from(-10));
-        assert_eq!(Decimal::from_str("10.5")?.floor(), Decimal::from(10));
-        assert_eq!(Decimal::from_str("-10.5")?.floor(), Decimal::from(-11));
-        assert_eq!(Decimal::from(i64::MIN).floor(), Decimal::from(i64::MIN));
-        assert_eq!(Decimal::from(i64::MAX).floor(), Decimal::from(i64::MAX));
+        assert_eq!(Decimal::from(10).checked_floor(), Some(Decimal::from(10)));
+        assert_eq!(Decimal::from(-10).checked_floor(), Some(Decimal::from(-10)));
+        assert_eq!(
+            Decimal::from_str("10.5")?.checked_floor(),
+            Some(Decimal::from(10))
+        );
+        assert_eq!(
+            Decimal::from_str("-10.5")?.checked_floor(),
+            Some(Decimal::from(-11))
+        );
+        assert_eq!(
+            Decimal::from(i64::MIN).checked_floor(),
+            Some(Decimal::from(i64::MIN))
+        );
+        assert_eq!(
+            Decimal::from(i64::MAX).checked_floor(),
+            Some(Decimal::from(i64::MAX))
+        );
+        assert_eq!(
+            Decimal::MAX.checked_floor(),
+            Some(Decimal::from_str("170141183460469231731")?)
+        );
+        assert_eq!(Decimal::MIN.checked_floor(), None);
+        assert_eq!(
+            (Decimal::MIN.checked_add(Decimal::from_str("1")?))
+                .unwrap()
+                .checked_floor(),
+            Some(Decimal::from_str("-170141183460469231731")?)
+        );
         Ok(())
     }
 
     #[test]
     fn to_be_bytes() -> Result<(), ParseDecimalError> {
+        assert_eq!(
+            Decimal::from_be_bytes(Decimal::MIN.to_be_bytes()),
+            Decimal::MIN
+        );
+        assert_eq!(
+            Decimal::from_be_bytes(Decimal::MAX.to_be_bytes()),
+            Decimal::MAX
+        );
         assert_eq!(
             Decimal::from_be_bytes(Decimal::from(i64::MIN).to_be_bytes()),
             Decimal::from(i64::MIN)
@@ -889,7 +1030,8 @@ mod tests {
                 .unwrap()
                 .checked_sub(Decimal::from(1_672_507_293_696_i64))
                 .unwrap()
-                .abs()
+                .checked_abs()
+                .unwrap()
                 < Decimal::from(1)
         );
         Ok(())
@@ -914,7 +1056,8 @@ mod tests {
                 .unwrap()
                 .checked_sub(Decimal::from(1_672_507_302_466_i64))
                 .unwrap()
-                .abs()
+                .checked_abs()
+                .unwrap()
                 < Decimal::from(1)
         );
         assert!(Decimal::try_from(Double::from(f64::NAN)).is_err());
