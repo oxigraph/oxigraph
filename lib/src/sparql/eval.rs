@@ -142,7 +142,7 @@ impl SimpleEvaluator {
         Self {
             dataset,
             base_iri,
-            now: DateTime::now().unwrap(),
+            now: DateTime::now(),
             service_handler,
             custom_functions,
             run_stats,
@@ -1605,8 +1605,8 @@ impl SimpleEvaluator {
                             stat_children,
                         );
                         Rc::new(move |tuple| match e(tuple)? {
-                            EncodedTerm::IntegerLiteral(value) => Some(value.abs().into()),
-                            EncodedTerm::DecimalLiteral(value) => Some(value.abs().into()),
+                            EncodedTerm::IntegerLiteral(value) => Some(value.checked_abs()?.into()),
+                            EncodedTerm::DecimalLiteral(value) => Some(value.checked_abs()?.into()),
                             EncodedTerm::FloatLiteral(value) => Some(value.abs().into()),
                             EncodedTerm::DoubleLiteral(value) => Some(value.abs().into()),
                             _ => None,
@@ -1620,7 +1620,9 @@ impl SimpleEvaluator {
                         );
                         Rc::new(move |tuple| match e(tuple)? {
                             EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                            EncodedTerm::DecimalLiteral(value) => Some(value.ceil().into()),
+                            EncodedTerm::DecimalLiteral(value) => {
+                                Some(value.checked_ceil()?.into())
+                            }
                             EncodedTerm::FloatLiteral(value) => Some(value.ceil().into()),
                             EncodedTerm::DoubleLiteral(value) => Some(value.ceil().into()),
                             _ => None,
@@ -1634,7 +1636,9 @@ impl SimpleEvaluator {
                         );
                         Rc::new(move |tuple| match e(tuple)? {
                             EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                            EncodedTerm::DecimalLiteral(value) => Some(value.floor().into()),
+                            EncodedTerm::DecimalLiteral(value) => {
+                                Some(value.checked_floor()?.into())
+                            }
                             EncodedTerm::FloatLiteral(value) => Some(value.floor().into()),
                             EncodedTerm::DoubleLiteral(value) => Some(value.floor().into()),
                             _ => None,
@@ -1648,7 +1652,9 @@ impl SimpleEvaluator {
                         );
                         Rc::new(move |tuple| match e(tuple)? {
                             EncodedTerm::IntegerLiteral(value) => Some(value.into()),
-                            EncodedTerm::DecimalLiteral(value) => Some(value.round().into()),
+                            EncodedTerm::DecimalLiteral(value) => {
+                                Some(value.checked_round()?.into())
+                            }
                             EncodedTerm::FloatLiteral(value) => Some(value.round().into()),
                             EncodedTerm::DoubleLiteral(value) => Some(value.round().into()),
                             _ => None,
@@ -5851,18 +5857,18 @@ fn format_list<T: ToString>(values: impl IntoIterator<Item = T>) -> String {
 }
 
 pub struct Timer {
-    start: Option<DateTime>,
+    start: DateTime,
 }
 
 impl Timer {
     pub fn now() -> Self {
         Self {
-            start: DateTime::now().ok(),
+            start: DateTime::now(),
         }
     }
 
     pub fn elapsed(&self) -> Option<DayTimeDuration> {
-        DateTime::now().ok()?.checked_sub(self.start?)
+        DateTime::now().checked_sub(self.start)
     }
 }
 

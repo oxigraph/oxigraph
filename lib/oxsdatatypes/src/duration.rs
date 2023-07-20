@@ -1,7 +1,6 @@
-use super::decimal::DecimalOverflowError;
-use super::parser::*;
-use super::*;
+use crate::{DateTime, Decimal};
 use std::cmp::Ordering;
+use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
@@ -78,13 +77,13 @@ impl Duration {
 
     #[inline]
     #[must_use]
-    pub(super) const fn all_months(self) -> i64 {
+    pub(crate) const fn all_months(self) -> i64 {
         self.year_month.all_months()
     }
 
     #[inline]
     #[must_use]
-    pub(super) const fn all_seconds(self) -> Decimal {
+    pub(crate) const fn all_seconds(self) -> Decimal {
         self.day_time.as_seconds()
     }
 
@@ -98,6 +97,8 @@ impl Duration {
     }
 
     /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDurations) and [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDurations)
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     #[must_use]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -109,6 +110,8 @@ impl Duration {
     }
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDurations) and [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
@@ -119,6 +122,9 @@ impl Duration {
         })
     }
 
+    /// Unary negation.
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     #[must_use]
     pub fn checked_neg(self) -> Option<Self> {
@@ -134,22 +140,39 @@ impl Duration {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
+
+    pub const MIN: Self = Self {
+        year_month: YearMonthDuration::MIN,
+        day_time: DayTimeDuration::MIN,
+    };
+
+    pub const MAX: Self = Self {
+        year_month: YearMonthDuration::MAX,
+        day_time: DayTimeDuration::MAX,
+    };
 }
 
 impl TryFrom<StdDuration> for Duration {
-    type Error = DecimalOverflowError;
+    type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: StdDuration) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: StdDuration) -> Result<Self, DurationOverflowError> {
         Ok(DayTimeDuration::try_from(value)?.into())
     }
 }
 
 impl FromStr for Duration {
-    type Err = XsdParseError;
+    type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_duration(input)
+    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+        let parts = ensure_complete(input, duration_parts)?;
+        if parts.year_month.is_none() && parts.day_time.is_none() {
+            return Err(ParseDurationError::msg("Empty duration"));
+        }
+        Ok(Self::new(
+            parts.year_month.unwrap_or(0),
+            parts.day_time.unwrap_or_default(),
+        ))
     }
 }
 
@@ -208,7 +231,7 @@ impl fmt::Display for Duration {
                     write!(f, "{}M", m.abs())?;
                 }
                 if s != 0.into() {
-                    write!(f, "{}S", s.abs())?;
+                    write!(f, "{}S", s.checked_abs().ok_or(fmt::Error)?)?;
                 }
             }
         }
@@ -282,7 +305,7 @@ impl YearMonthDuration {
     }
 
     #[inline]
-    pub(super) const fn all_months(self) -> i64 {
+    pub(crate) const fn all_months(self) -> i64 {
         self.months
     }
 
@@ -292,6 +315,8 @@ impl YearMonthDuration {
     }
 
     /// [op:add-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-yearMonthDurations)
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -301,6 +326,8 @@ impl YearMonthDuration {
     }
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDurations)
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -309,6 +336,9 @@ impl YearMonthDuration {
         })
     }
 
+    /// Unary negation.
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
@@ -321,6 +351,10 @@ impl YearMonthDuration {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
+
+    pub const MIN: Self = Self { months: i64::MIN };
+
+    pub const MAX: Self = Self { months: i64::MAX };
 }
 
 impl From<YearMonthDuration> for Duration {
@@ -334,23 +368,31 @@ impl From<YearMonthDuration> for Duration {
 }
 
 impl TryFrom<Duration> for YearMonthDuration {
-    type Error = DecimalOverflowError;
+    type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: Duration) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: Duration) -> Result<Self, DurationOverflowError> {
         if value.day_time == DayTimeDuration::default() {
             Ok(value.year_month)
         } else {
-            Err(DecimalOverflowError {})
+            Err(DurationOverflowError)
         }
     }
 }
 
 impl FromStr for YearMonthDuration {
-    type Err = XsdParseError;
+    type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_year_month_duration(input)
+    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+        let parts = ensure_complete(input, duration_parts)?;
+        if parts.day_time.is_some() {
+            return Err(ParseDurationError::msg(
+                "There must not be any day or time component in a yearMonthDuration",
+            ));
+        }
+        Ok(Self::new(parts.year_month.ok_or(
+            ParseDurationError::msg("No year and month values found"),
+        )?))
     }
 }
 
@@ -455,6 +497,8 @@ impl DayTimeDuration {
     }
 
     /// [op:add-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-add-dayTimeDurations)
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -464,6 +508,8 @@ impl DayTimeDuration {
     }
 
     /// [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
@@ -472,6 +518,9 @@ impl DayTimeDuration {
         })
     }
 
+    /// Unary negation.
+    ///
+    /// Returns `None` in case of overflow ([`FODT0002`](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002)).
     #[inline]
     pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
@@ -484,6 +533,14 @@ impl DayTimeDuration {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
+
+    pub const MIN: Self = Self {
+        seconds: Decimal::MIN,
+    };
+
+    pub const MAX: Self = Self {
+        seconds: Decimal::MAX,
+    };
 }
 
 impl From<DayTimeDuration> for Duration {
@@ -497,65 +554,75 @@ impl From<DayTimeDuration> for Duration {
 }
 
 impl TryFrom<Duration> for DayTimeDuration {
-    type Error = DecimalOverflowError;
+    type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: Duration) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: Duration) -> Result<Self, DurationOverflowError> {
         if value.year_month == YearMonthDuration::default() {
             Ok(value.day_time)
         } else {
-            Err(DecimalOverflowError {})
+            Err(DurationOverflowError)
         }
     }
 }
 
 impl TryFrom<StdDuration> for DayTimeDuration {
-    type Error = DecimalOverflowError;
+    type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: StdDuration) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: StdDuration) -> Result<Self, DurationOverflowError> {
         Ok(Self {
             seconds: Decimal::new(
-                i128::try_from(value.as_nanos()).map_err(|_| DecimalOverflowError)?,
+                i128::try_from(value.as_nanos()).map_err(|_| DurationOverflowError)?,
                 9,
-            )?,
+            )
+            .map_err(|_| DurationOverflowError)?,
         })
     }
 }
 
 impl TryFrom<DayTimeDuration> for StdDuration {
-    type Error = DecimalOverflowError;
+    type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: DayTimeDuration) -> Result<Self, DecimalOverflowError> {
+    fn try_from(value: DayTimeDuration) -> Result<Self, DurationOverflowError> {
         if value.seconds.is_negative() {
-            return Err(DecimalOverflowError);
+            return Err(DurationOverflowError);
         }
-        let secs = value.seconds.floor();
+        let secs = value.seconds.checked_floor().ok_or(DurationOverflowError)?;
         let nanos = value
             .seconds
             .checked_sub(secs)
-            .ok_or(DecimalOverflowError)?
+            .ok_or(DurationOverflowError)?
             .checked_mul(1_000_000_000)
-            .ok_or(DecimalOverflowError)?
-            .floor();
+            .ok_or(DurationOverflowError)?
+            .checked_floor()
+            .ok_or(DurationOverflowError)?;
         Ok(StdDuration::new(
             secs.as_i128()
                 .try_into()
-                .map_err(|_| DecimalOverflowError)?,
+                .map_err(|_| DurationOverflowError)?,
             nanos
                 .as_i128()
                 .try_into()
-                .map_err(|_| DecimalOverflowError)?,
+                .map_err(|_| DurationOverflowError)?,
         ))
     }
 }
 
 impl FromStr for DayTimeDuration {
-    type Err = XsdParseError;
+    type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, XsdParseError> {
-        parse_day_time_duration(input)
+    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+        let parts = ensure_complete(input, duration_parts)?;
+        if parts.year_month.is_some() {
+            return Err(ParseDurationError::msg(
+                "There must not be any year or month component in a dayTimeDuration",
+            ));
+        }
+        Ok(Self::new(parts.day_time.ok_or(ParseDurationError::msg(
+            "No day or time values found",
+        ))?))
     }
 }
 
@@ -622,12 +689,273 @@ impl PartialOrd<DayTimeDuration> for YearMonthDuration {
     }
 }
 
+// [6]   duYearFrag ::= unsignedNoDecimalPtNumeral 'Y'
+// [7]   duMonthFrag ::= unsignedNoDecimalPtNumeral 'M'
+// [8]   duDayFrag ::= unsignedNoDecimalPtNumeral 'D'
+// [9]   duHourFrag ::= unsignedNoDecimalPtNumeral 'H'
+// [10]   duMinuteFrag ::= unsignedNoDecimalPtNumeral 'M'
+// [11]   duSecondFrag ::= (unsignedNoDecimalPtNumeral | unsignedDecimalPtNumeral) 'S'
+// [12]   duYearMonthFrag ::= (duYearFrag duMonthFrag?) | duMonthFrag
+// [13]   duTimeFrag ::= 'T' ((duHourFrag duMinuteFrag? duSecondFrag?) | (duMinuteFrag duSecondFrag?) | duSecondFrag)
+// [14]   duDayTimeFrag ::= (duDayFrag duTimeFrag?) | duTimeFrag
+// [15]   durationLexicalRep ::= '-'? 'P' ((duYearMonthFrag duDayTimeFrag?) | duDayTimeFrag)
+struct DurationParts {
+    year_month: Option<i64>,
+    day_time: Option<Decimal>,
+}
+
+fn duration_parts(input: &str) -> Result<(DurationParts, &str), ParseDurationError> {
+    // States
+    const START: u32 = 0;
+    const AFTER_YEAR: u32 = 1;
+    const AFTER_MONTH: u32 = 2;
+    const AFTER_DAY: u32 = 3;
+    const AFTER_T: u32 = 4;
+    const AFTER_HOUR: u32 = 5;
+    const AFTER_MINUTE: u32 = 6;
+    const AFTER_SECOND: u32 = 7;
+
+    let (is_negative, input) = if let Some(left) = input.strip_prefix('-') {
+        (true, left)
+    } else {
+        (false, input)
+    };
+    let mut input = expect_char(input, 'P', "Durations must start with 'P'")?;
+    let mut state = START;
+    let mut year_month: Option<i64> = None;
+    let mut day_time: Option<Decimal> = None;
+    while !input.is_empty() {
+        if let Some(left) = input.strip_prefix('T') {
+            if state >= AFTER_T {
+                return Err(ParseDurationError::msg("Duplicated time separator 'T'"));
+            }
+            state = AFTER_T;
+            input = left;
+        } else {
+            let (number_str, left) = decimal_prefix(input);
+            match left.chars().next() {
+                Some('Y') if state < AFTER_YEAR => {
+                    year_month = Some(
+                        year_month
+                            .unwrap_or_default()
+                            .checked_add(
+                                apply_i64_neg(
+                                    i64::from_str(number_str).map_err(|_| OVERFLOW_ERROR)?,
+                                    is_negative,
+                                )?
+                                .checked_mul(12)
+                                .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_YEAR;
+                }
+                Some('M') if state < AFTER_MONTH => {
+                    year_month = Some(
+                        year_month
+                            .unwrap_or_default()
+                            .checked_add(apply_i64_neg(
+                                i64::from_str(number_str).map_err(|_| OVERFLOW_ERROR)?,
+                                is_negative,
+                            )?)
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_MONTH;
+                }
+                Some('D') if state < AFTER_DAY => {
+                    if number_str.contains('.') {
+                        return Err(ParseDurationError::msg(
+                            "Decimal numbers are not allowed for days",
+                        ));
+                    }
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(
+                                apply_decimal_neg(
+                                    Decimal::from_str(number_str).map_err(|_| OVERFLOW_ERROR)?,
+                                    is_negative,
+                                )?
+                                .checked_mul(86400)
+                                .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_DAY;
+                }
+                Some('H') if state == AFTER_T => {
+                    if number_str.contains('.') {
+                        return Err(ParseDurationError::msg(
+                            "Decimal numbers are not allowed for hours",
+                        ));
+                    }
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(
+                                apply_decimal_neg(
+                                    Decimal::from_str(number_str).map_err(|_| OVERFLOW_ERROR)?,
+                                    is_negative,
+                                )?
+                                .checked_mul(3600)
+                                .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_HOUR;
+                }
+                Some('M') if (AFTER_T..AFTER_MINUTE).contains(&state) => {
+                    if number_str.contains('.') {
+                        return Err(ParseDurationError::msg(
+                            "Decimal numbers are not allowed for minutes",
+                        ));
+                    }
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(
+                                apply_decimal_neg(
+                                    Decimal::from_str(number_str).map_err(|_| OVERFLOW_ERROR)?,
+                                    is_negative,
+                                )?
+                                .checked_mul(60)
+                                .ok_or(OVERFLOW_ERROR)?,
+                            )
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_MINUTE;
+                }
+                Some('S') if (AFTER_T..AFTER_SECOND).contains(&state) => {
+                    day_time = Some(
+                        day_time
+                            .unwrap_or_default()
+                            .checked_add(apply_decimal_neg(
+                                Decimal::from_str(number_str).map_err(|_| OVERFLOW_ERROR)?,
+                                is_negative,
+                            )?)
+                            .ok_or(OVERFLOW_ERROR)?,
+                    );
+                    state = AFTER_SECOND;
+                }
+                Some(_) => return Err(ParseDurationError::msg("Unexpected type character")),
+                None => {
+                    return Err(ParseDurationError::msg(
+                        "Numbers in durations must be followed by a type character",
+                    ))
+                }
+            }
+            input = &left[1..];
+        }
+    }
+
+    Ok((
+        DurationParts {
+            year_month,
+            day_time,
+        },
+        input,
+    ))
+}
+
+fn apply_i64_neg(value: i64, is_negative: bool) -> Result<i64, ParseDurationError> {
+    if is_negative {
+        value.checked_neg().ok_or(OVERFLOW_ERROR)
+    } else {
+        Ok(value)
+    }
+}
+
+fn apply_decimal_neg(value: Decimal, is_negative: bool) -> Result<Decimal, ParseDurationError> {
+    if is_negative {
+        value.checked_neg().ok_or(OVERFLOW_ERROR)
+    } else {
+        Ok(value)
+    }
+}
+
+fn ensure_complete<T>(
+    input: &str,
+    parse: impl FnOnce(&str) -> Result<(T, &str), ParseDurationError>,
+) -> Result<T, ParseDurationError> {
+    let (result, left) = parse(input)?;
+    if !left.is_empty() {
+        return Err(ParseDurationError::msg("Unrecognized value suffix"));
+    }
+    Ok(result)
+}
+
+fn expect_char<'a>(
+    input: &'a str,
+    constant: char,
+    error_message: &'static str,
+) -> Result<&'a str, ParseDurationError> {
+    if let Some(left) = input.strip_prefix(constant) {
+        Ok(left)
+    } else {
+        Err(ParseDurationError::msg(error_message))
+    }
+}
+
+fn decimal_prefix(input: &str) -> (&str, &str) {
+    let mut end = input.len();
+    let mut dot_seen = false;
+    for (i, c) in input.char_indices() {
+        if c.is_ascii_digit() {
+            // Ok
+        } else if c == '.' && !dot_seen {
+            dot_seen = true;
+        } else {
+            end = i;
+            break;
+        }
+    }
+    input.split_at(end)
+}
+
+/// A parsing error
+#[derive(Debug, Clone)]
+pub struct ParseDurationError {
+    msg: &'static str,
+}
+
+const OVERFLOW_ERROR: ParseDurationError = ParseDurationError {
+    msg: "Overflow error",
+};
+
+impl fmt::Display for ParseDurationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+impl ParseDurationError {
+    const fn msg(msg: &'static str) -> Self {
+        Self { msg }
+    }
+}
+
+impl Error for ParseDurationError {}
+
+/// An overflow during [`Duration`]-related operations.
+///
+/// Matches XPath [`FODT0002` error](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002).
+#[derive(Debug, Clone, Copy)]
+pub struct DurationOverflowError;
+
+impl fmt::Display for DurationOverflowError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "overflow during xsd:duration computation")
+    }
+}
+
+impl Error for DurationOverflowError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn from_str() -> Result<(), XsdParseError> {
+    fn from_str() -> Result<(), ParseDurationError> {
         let min = Duration::new(i64::MIN, Decimal::MIN);
         let max = Duration::new(i64::MAX, Decimal::MAX);
 
@@ -667,25 +995,52 @@ mod tests {
     }
 
     #[test]
-    fn from_std() {
+    fn from_std() -> Result<(), DurationOverflowError> {
         assert_eq!(
-            Duration::try_from(StdDuration::new(10, 10))
-                .unwrap()
-                .to_string(),
+            Duration::try_from(StdDuration::new(10, 10))?.to_string(),
             "PT10.00000001S"
         );
+        Ok(())
     }
 
     #[test]
-    fn to_std() -> Result<(), XsdParseError> {
-        let duration = StdDuration::try_from(DayTimeDuration::from_str("PT10.00000001S")?).unwrap();
+    fn to_std() -> Result<(), Box<dyn Error>> {
+        let duration = StdDuration::try_from(DayTimeDuration::from_str("PT10.00000001S")?)?;
         assert_eq!(duration.as_secs(), 10);
         assert_eq!(duration.subsec_nanos(), 10);
         Ok(())
     }
 
     #[test]
-    fn equals() -> Result<(), XsdParseError> {
+    fn to_be_bytes() {
+        assert_eq!(
+            Duration::from_be_bytes(Duration::MIN.to_be_bytes()),
+            Duration::MIN
+        );
+        assert_eq!(
+            Duration::from_be_bytes(Duration::MAX.to_be_bytes()),
+            Duration::MAX
+        );
+        assert_eq!(
+            YearMonthDuration::from_be_bytes(YearMonthDuration::MIN.to_be_bytes()),
+            YearMonthDuration::MIN
+        );
+        assert_eq!(
+            YearMonthDuration::from_be_bytes(YearMonthDuration::MAX.to_be_bytes()),
+            YearMonthDuration::MAX
+        );
+        assert_eq!(
+            DayTimeDuration::from_be_bytes(DayTimeDuration::MIN.to_be_bytes()),
+            DayTimeDuration::MIN
+        );
+        assert_eq!(
+            DayTimeDuration::from_be_bytes(DayTimeDuration::MAX.to_be_bytes()),
+            DayTimeDuration::MAX
+        );
+    }
+
+    #[test]
+    fn equals() -> Result<(), ParseDurationError> {
         assert_eq!(
             YearMonthDuration::from_str("P1Y")?,
             YearMonthDuration::from_str("P12M")?
@@ -730,7 +1085,24 @@ mod tests {
     }
 
     #[test]
-    fn years() -> Result<(), XsdParseError> {
+    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    fn cmp() -> Result<(), ParseDurationError> {
+        assert!(Duration::from_str("P1Y1D")? < Duration::from_str("P13MT25H")?);
+        assert!(YearMonthDuration::from_str("P1Y")? < YearMonthDuration::from_str("P13M")?);
+        assert!(Duration::from_str("P1Y")? < YearMonthDuration::from_str("P13M")?);
+        assert!(YearMonthDuration::from_str("P1Y")? < Duration::from_str("P13M")?);
+        assert!(DayTimeDuration::from_str("P1D")? < DayTimeDuration::from_str("PT25H")?);
+        assert!(DayTimeDuration::from_str("PT1H")? < DayTimeDuration::from_str("PT61M")?);
+        assert!(DayTimeDuration::from_str("PT1M")? < DayTimeDuration::from_str("PT61S")?);
+        assert!(Duration::from_str("PT1H")? < DayTimeDuration::from_str("PT61M")?);
+        assert!(DayTimeDuration::from_str("PT1H")? < Duration::from_str("PT61M")?);
+        assert!(YearMonthDuration::from_str("P1M")? < DayTimeDuration::from_str("P40D")?);
+        assert!(DayTimeDuration::from_str("P25D")? < YearMonthDuration::from_str("P1M")?);
+        Ok(())
+    }
+
+    #[test]
+    fn years() -> Result<(), ParseDurationError> {
         assert_eq!(Duration::from_str("P20Y15M")?.years(), 21);
         assert_eq!(Duration::from_str("-P15M")?.years(), -1);
         assert_eq!(Duration::from_str("-P2DT15H")?.years(), 0);
@@ -738,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    fn months() -> Result<(), XsdParseError> {
+    fn months() -> Result<(), ParseDurationError> {
         assert_eq!(Duration::from_str("P20Y15M")?.months(), 3);
         assert_eq!(Duration::from_str("-P20Y18M")?.months(), -6);
         assert_eq!(Duration::from_str("-P2DT15H0M0S")?.months(), 0);
@@ -746,7 +1118,7 @@ mod tests {
     }
 
     #[test]
-    fn days() -> Result<(), XsdParseError> {
+    fn days() -> Result<(), ParseDurationError> {
         assert_eq!(Duration::from_str("P3DT10H")?.days(), 3);
         assert_eq!(Duration::from_str("P3DT55H")?.days(), 5);
         assert_eq!(Duration::from_str("P3Y5M")?.days(), 0);
@@ -754,7 +1126,7 @@ mod tests {
     }
 
     #[test]
-    fn hours() -> Result<(), XsdParseError> {
+    fn hours() -> Result<(), ParseDurationError> {
         assert_eq!(Duration::from_str("P3DT10H")?.hours(), 10);
         assert_eq!(Duration::from_str("P3DT12H32M12S")?.hours(), 12);
         assert_eq!(Duration::from_str("PT123H")?.hours(), 3);
@@ -763,14 +1135,14 @@ mod tests {
     }
 
     #[test]
-    fn minutes() -> Result<(), XsdParseError> {
+    fn minutes() -> Result<(), ParseDurationError> {
         assert_eq!(Duration::from_str("P3DT10H")?.minutes(), 0);
         assert_eq!(Duration::from_str("-P5DT12H30M")?.minutes(), -30);
         Ok(())
     }
 
     #[test]
-    fn seconds() -> Result<(), XsdParseError> {
+    fn seconds() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             Duration::from_str("P3DT10H12.5S")?.seconds(),
             Decimal::from_str("12.5")?
@@ -783,7 +1155,7 @@ mod tests {
     }
 
     #[test]
-    fn add() -> Result<(), XsdParseError> {
+    fn add() -> Result<(), ParseDurationError> {
         assert_eq!(
             Duration::from_str("P2Y11M")?.checked_add(Duration::from_str("P3Y3M")?),
             Some(Duration::from_str("P6Y2M")?)
@@ -796,7 +1168,7 @@ mod tests {
     }
 
     #[test]
-    fn sub() -> Result<(), XsdParseError> {
+    fn sub() -> Result<(), ParseDurationError> {
         assert_eq!(
             Duration::from_str("P2Y11M")?.checked_sub(Duration::from_str("P3Y3M")?),
             Some(Duration::from_str("-P4M")?)
@@ -809,7 +1181,7 @@ mod tests {
     }
 
     #[test]
-    fn minimally_conformant() -> Result<(), XsdParseError> {
+    fn minimally_conformant() -> Result<(), ParseDurationError> {
         // All minimally conforming processors must support fractional-second duration values
         // to milliseconds (i.e. those expressible with three fraction digits).
         assert_eq!(Duration::from_str("PT0.001S")?.to_string(), "PT0.001S");

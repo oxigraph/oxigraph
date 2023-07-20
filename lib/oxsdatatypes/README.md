@@ -38,10 +38,10 @@ The `DateTime::now()` function needs special OS support.
 Currently:
 - If the `custom-now` feature is enabled, a function computing `now` must be set:
   ```rust
-  use oxsdatatypes::{DateTimeError, Duration};
+   use oxsdatatypes::Duration;
   
   #[no_mangle]
-  fn custom_ox_now() -> Result<Duration, DateTimeError> {
+  fn custom_ox_now() -> Duration {
     unimplemented!("now implementation")
   }
   ```
