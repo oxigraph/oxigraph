@@ -1,13 +1,13 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use oxigraph::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
 use oxigraph::model::{Dataset, Graph};
 use oxttl::n3::N3Quad;
 use oxttl::N3Parser;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::path::PathBuf;
 
-pub fn read_file(url: &str) -> Result<impl BufRead> {
+pub fn read_file(url: &str) -> Result<impl Read> {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push(if url.starts_with("http://w3c.github.io/") {
         url.replace("http://w3c.github.io/", "")
@@ -25,7 +25,7 @@ pub fn read_file(url: &str) -> Result<impl BufRead> {
     } else {
         bail!("Not supported url for file: {url}")
     });
-    Ok(BufReader::new(File::open(&path)?))
+    File::open(&path).with_context(|| format!("Failed to read {}", path.display()))
 }
 
 pub fn read_file_to_string(url: &str) -> Result<String> {

@@ -12,7 +12,7 @@ use pyo3::{intern, wrap_pyfunction};
 use std::cmp::max;
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Read, Write};
+use std::io::{self, BufWriter, Cursor, Read, Write};
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(parse))?;
@@ -193,15 +193,13 @@ impl PyQuadReader {
 
 pub enum PyReadable {
     Bytes(Cursor<Vec<u8>>),
-    Io(BufReader<PyIo>),
-    File(BufReader<File>),
+    Io(PyIo),
+    File(File),
 }
 
 impl PyReadable {
     pub fn from_file(file: &str, py: Python<'_>) -> io::Result<Self> {
-        Ok(Self::File(BufReader::new(
-            py.allow_threads(|| File::open(file))?,
-        )))
+        Ok(Self::File(py.allow_threads(|| File::open(file))?))
     }
 
     pub fn from_data(data: PyObject, py: Python<'_>) -> Self {
@@ -210,7 +208,7 @@ impl PyReadable {
         } else if let Ok(string) = data.extract::<String>(py) {
             Self::Bytes(Cursor::new(string.into_bytes()))
         } else {
-            Self::Io(BufReader::new(PyIo(data)))
+            Self::Io(PyIo(data))
         }
     }
 }
@@ -221,24 +219,6 @@ impl Read for PyReadable {
             Self::Bytes(bytes) => bytes.read(buf),
             Self::Io(io) => io.read(buf),
             Self::File(file) => file.read(buf),
-        }
-    }
-}
-
-impl BufRead for PyReadable {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        match self {
-            Self::Bytes(bytes) => bytes.fill_buf(),
-            Self::Io(io) => io.fill_buf(),
-            Self::File(file) => file.fill_buf(),
-        }
-    }
-
-    fn consume(&mut self, amt: usize) {
-        match self {
-            Self::Bytes(bytes) => bytes.consume(amt),
-            Self::Io(io) => io.consume(amt),
-            Self::File(file) => file.consume(amt),
         }
     }
 }

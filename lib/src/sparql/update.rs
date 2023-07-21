@@ -18,7 +18,6 @@ use spargebra::term::{
 use spargebra::GraphUpdateOperation;
 use sparopt::Optimizer;
 use std::collections::HashMap;
-use std::io::BufReader;
 use std::rc::Rc;
 
 pub fn evaluate_update<'a, 'b: 'a>(
@@ -182,7 +181,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 .with_base_iri(base_iri.as_str())
                 .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
         }
-        for t in parser.read_triples(BufReader::new(body)) {
+        for t in parser.read_triples(body) {
             self.transaction
                 .insert(t?.as_ref().in_graph(to_graph_name))?;
         }

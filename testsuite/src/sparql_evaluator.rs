@@ -11,7 +11,7 @@ use oxigraph::store::Store;
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::io::{self, Cursor};
+use std::io::{self, BufReader, Cursor};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -296,7 +296,10 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
         .rsplit_once('.')
         .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))
     {
-        StaticQueryResults::from_query_results(QueryResults::read(read_file(url)?, format)?, false)
+        StaticQueryResults::from_query_results(
+            QueryResults::read(BufReader::new(read_file(url)?), format)?,
+            false,
+        )
     } else {
         StaticQueryResults::from_graph(&load_graph(url, guess_graph_format(url)?, false)?)
     }

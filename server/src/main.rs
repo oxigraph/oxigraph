@@ -21,7 +21,7 @@ use std::cmp::{max, min};
 use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{self, stdin, stdout, BufWriter, Read, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixDatagram;
 use std::path::{Path, PathBuf};
@@ -377,7 +377,7 @@ pub fn main() -> anyhow::Result<()> {
                                     if file.extension().map_or(false, |e| e == OsStr::new("gz")) {
                                         bulk_load(
                                             &loader,
-                                            BufReader::new(MultiGzDecoder::new(fp)),
+                                            MultiGzDecoder::new(fp),
                                             format.unwrap_or_else(|| {
                                                 GraphOrDatasetFormat::from_path(
                                                     &file.with_extension(""),
@@ -390,7 +390,7 @@ pub fn main() -> anyhow::Result<()> {
                                     } else {
                                         bulk_load(
                                             &loader,
-                                            BufReader::new(fp),
+                                            fp,
                                             format.unwrap_or_else(|| {
                                                 GraphOrDatasetFormat::from_path(&file).unwrap()
                                             }),
@@ -645,7 +645,7 @@ pub fn main() -> anyhow::Result<()> {
 
 fn bulk_load(
     loader: &BulkLoader,
-    reader: impl BufRead,
+    reader: impl Read,
     format: GraphOrDatasetFormat,
     base_iri: Option<&str>,
     to_graph_name: Option<NamedNodeRef<'_>>,
@@ -1531,18 +1531,13 @@ fn web_load_graph(
     };
     if url_query_parameter(request, "no_transaction").is_some() {
         web_bulk_loader(store, request).load_graph(
-            BufReader::new(request.body_mut()),
+            request.body_mut(),
             format,
             to_graph_name,
             base_iri,
         )
     } else {
-        store.load_graph(
-            BufReader::new(request.body_mut()),
-            format,
-            to_graph_name,
-            base_iri,
-        )
+        store.load_graph(request.body_mut(), format, to_graph_name, base_iri)
     }
     .map_err(loader_to_http_error)
 }
@@ -1553,13 +1548,9 @@ fn web_load_dataset(
     format: DatasetFormat,
 ) -> Result<(), HttpError> {
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_dataset(
-            BufReader::new(request.body_mut()),
-            format,
-            None,
-        )
+        web_bulk_loader(store, request).load_dataset(request.body_mut(), format, None)
     } else {
-        store.load_dataset(BufReader::new(request.body_mut()), format, None)
+        store.load_dataset(request.body_mut(), format, None)
     }
     .map_err(loader_to_http_error)
 }
