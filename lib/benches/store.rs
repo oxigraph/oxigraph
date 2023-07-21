@@ -92,7 +92,7 @@ fn store_query_and_update(c: &mut Criterion) {
         .read_to_end(&mut data)
         .unwrap();
 
-    let operations = read_data("mix-exploreAndUpdate-1000.tsv.zst")
+    let operations = BufReader::new(read_data("mix-exploreAndUpdate-1000.tsv.zst"))
         .lines()
         .map(|l| {
             let l = l.unwrap();
@@ -167,7 +167,7 @@ fn sparql_parsing(c: &mut Criterion) {
         .read_to_end(&mut data)
         .unwrap();
 
-    let operations = read_data("mix-exploreAndUpdate-1000.tsv.zst")
+    let operations = BufReader::new(read_data("mix-exploreAndUpdate-1000.tsv.zst"))
         .lines()
         .map(|l| {
             let l = l.unwrap();
@@ -213,7 +213,7 @@ criterion_group!(store, sparql_parsing, store_query_and_update, store_load);
 
 criterion_main!(store);
 
-fn read_data(file: &str) -> impl BufRead {
+fn read_data(file: &str) -> impl Read {
     if !Path::new(file).exists() {
         let mut client = oxhttp::Client::new();
         client.set_redirection_limit(5);
@@ -228,7 +228,7 @@ fn read_data(file: &str) -> impl BufRead {
         );
         std::io::copy(&mut response.into_body(), &mut File::create(file).unwrap()).unwrap();
     }
-    BufReader::new(zstd::Decoder::new(File::open(file).unwrap()).unwrap())
+    zstd::Decoder::new(File::open(file).unwrap()).unwrap()
 }
 
 #[derive(Clone)]

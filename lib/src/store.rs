@@ -40,7 +40,7 @@ use crate::storage::{
 };
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
 use std::error::Error;
-use std::io::{BufRead, Write};
+use std::io::{Read, Write};
 #[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 use std::{fmt, str};
@@ -469,7 +469,7 @@ impl Store {
     /// ```
     pub fn load_graph<'a>(
         &self,
-        reader: impl BufRead,
+        reader: impl Read,
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,
@@ -513,7 +513,7 @@ impl Store {
     /// ```
     pub fn load_dataset(
         &self,
-        reader: impl BufRead,
+        reader: impl Read,
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
@@ -1077,7 +1077,7 @@ impl<'a> Transaction<'a> {
     /// ```
     pub fn load_graph<'b>(
         &mut self,
-        reader: impl BufRead,
+        reader: impl Read,
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'b>>,
         base_iri: Option<&str>,
@@ -1119,7 +1119,7 @@ impl<'a> Transaction<'a> {
     /// ```
     pub fn load_dataset(
         &mut self,
-        reader: impl BufRead,
+        reader: impl Read,
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
@@ -1462,7 +1462,7 @@ impl BulkLoader {
     /// ```
     pub fn load_dataset(
         &self,
-        reader: impl BufRead,
+        reader: impl Read,
         format: DatasetFormat,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
@@ -1517,7 +1517,7 @@ impl BulkLoader {
     /// ```
     pub fn load_graph<'a>(
         &self,
-        reader: impl BufRead,
+        reader: impl Read,
         format: GraphFormat,
         to_graph_name: impl Into<GraphNameRef<'a>>,
         base_iri: Option<&str>,

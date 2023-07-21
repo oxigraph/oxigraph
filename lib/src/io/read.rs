@@ -10,7 +10,7 @@ use oxttl::ntriples::{FromReadNTriplesReader, NTriplesParser};
 use oxttl::trig::{FromReadTriGReader, TriGParser};
 use oxttl::turtle::{FromReadTurtleReader, TurtleParser};
 use std::collections::HashMap;
-use std::io::BufRead;
+use std::io::Read;
 
 /// Parsers for RDF graph serialization formats.
 ///
@@ -83,8 +83,8 @@ impl GraphParser {
         })
     }
 
-    /// Executes the parsing itself on a [`BufRead`] implementation and returns an iterator of triples.
-    pub fn read_triples<R: BufRead>(&self, reader: R) -> TripleReader<R> {
+    /// Executes the parsing itself on a [`Read`] implementation and returns an iterator of triples.
+    pub fn read_triples<R: Read>(&self, reader: R) -> TripleReader<R> {
         TripleReader {
             mapper: BlankNodeMapper::default(),
             parser: match &self.inner {
@@ -114,19 +114,19 @@ impl GraphParser {
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]
-pub struct TripleReader<R: BufRead> {
+pub struct TripleReader<R: Read> {
     mapper: BlankNodeMapper,
     parser: TripleReaderKind<R>,
 }
 
 #[allow(clippy::large_enum_variant)]
-enum TripleReaderKind<R: BufRead> {
+enum TripleReaderKind<R: Read> {
     NTriples(FromReadNTriplesReader<R>),
     Turtle(FromReadTurtleReader<R>),
     RdfXml(FromReadRdfXmlReader<R>),
 }
 
-impl<R: BufRead> Iterator for TripleReader<R> {
+impl<R: Read> Iterator for TripleReader<R> {
     type Item = Result<Triple, ParseError>;
 
     fn next(&mut self) -> Option<Result<Triple, ParseError>> {
@@ -214,8 +214,8 @@ impl DatasetParser {
         })
     }
 
-    /// Executes the parsing itself on a [`BufRead`] implementation and returns an iterator of quads.
-    pub fn read_quads<R: BufRead>(&self, reader: R) -> QuadReader<R> {
+    /// Executes the parsing itself on a [`Read`] implementation and returns an iterator of quads.
+    pub fn read_quads<R: Read>(&self, reader: R) -> QuadReader<R> {
         QuadReader {
             mapper: BlankNodeMapper::default(),
             parser: match &self.inner {
@@ -242,17 +242,17 @@ impl DatasetParser {
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]
-pub struct QuadReader<R: BufRead> {
+pub struct QuadReader<R: Read> {
     mapper: BlankNodeMapper,
     parser: QuadReaderKind<R>,
 }
 
-enum QuadReaderKind<R: BufRead> {
+enum QuadReaderKind<R: Read> {
     NQuads(FromReadNQuadsReader<R>),
     TriG(FromReadTriGReader<R>),
 }
 
-impl<R: BufRead> Iterator for QuadReader<R> {
+impl<R: Read> Iterator for QuadReader<R> {
     type Item = Result<Quad, ParseError>;
 
     fn next(&mut self) -> Option<Result<Quad, ParseError>> {
