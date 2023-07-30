@@ -23,14 +23,14 @@ fn test_data_from_testsuite(manifest_uri: String, include_tests_types: &[&str]) 
 
 fn ntriples_test_data() -> Result<Vec<u8>> {
     test_data_from_testsuite(
-        "http://w3c.github.io/rdf-tests/ntriples/manifest.ttl".to_owned(),
+        "https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-n-triples/manifest.ttl".to_owned(),
         &["http://www.w3.org/ns/rdftest#TestNTriplesPositiveSyntax"],
     )
 }
 
 fn turtle_test_data() -> Result<Vec<u8>> {
     test_data_from_testsuite(
-        "http://w3c.github.io/rdf-tests/turtle/manifest.ttl".to_owned(),
+        "https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-turtle/manifest.ttl".to_owned(),
         &[
             "http://www.w3.org/ns/rdftest#TestTurtlePositiveSyntax",
             "http://www.w3.org/ns/rdftest#TestTurtleEval",
