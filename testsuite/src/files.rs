@@ -9,12 +9,8 @@ use std::path::PathBuf;
 
 pub fn read_file(url: &str) -> Result<impl Read> {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push(if url.starts_with("http://w3c.github.io/") {
-        url.replace("http://w3c.github.io/", "")
-    } else if url.starts_with("https://w3c.github.io/") {
+    path.push(if url.starts_with("https://w3c.github.io/") {
         url.replace("https://w3c.github.io/", "")
-    } else if url.starts_with("http://www.w3.org/2013/RDFXMLTests/") {
-        url.replace("http://www.w3.org/2013/RDFXMLTests/", "rdf-tests/rdf-xml/")
     } else if url.starts_with("https://github.com/oxigraph/oxigraph/tests/") {
         url.replace(
             "https://github.com/oxigraph/oxigraph/tests/",
