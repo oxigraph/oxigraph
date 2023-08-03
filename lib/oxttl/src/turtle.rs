@@ -32,7 +32,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in TurtleParser::new().parse_from_read(file.as_ref()) {
+/// for triple in TurtleParser::new().parse_read(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -98,7 +98,7 @@ impl TurtleParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in TurtleParser::new().parse_from_read(file.as_ref()) {
+    /// for triple in TurtleParser::new().parse_read(file.as_ref()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -107,9 +107,9 @@ impl TurtleParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_from_read<R: Read>(&self, read: R) -> FromReadTurtleReader<R> {
+    pub fn parse_read<R: Read>(&self, read: R) -> FromReadTurtleReader<R> {
         FromReadTurtleReader {
-            inner: self.parse().parser.parse_from_read(read),
+            inner: self.parse().parser.parse_read(read),
         }
     }
 
@@ -131,7 +131,7 @@ impl TurtleParser {
     ///
     ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     ///     let mut count = 0;
-    ///     let mut parser = TurtleParser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
     ///     while let Some(triple) = parser.next().await {
     ///         let triple = triple?;
     ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -143,12 +143,12 @@ impl TurtleParser {
     /// }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
         &self,
         read: R,
     ) -> FromTokioAsyncReadTurtleReader<R> {
         FromTokioAsyncReadTurtleReader {
-            inner: self.parse().parser.parse_from_tokio_async_read(read),
+            inner: self.parse().parser.parse_tokio_async_read(read),
         }
     }
 
@@ -201,7 +201,7 @@ impl TurtleParser {
     }
 }
 
-/// Parses a Turtle file from a [`Read`] implementation. Can be built using [`TurtleParser::parse_from_read`].
+/// Parses a Turtle file from a [`Read`] implementation. Can be built using [`TurtleParser::parse_read`].
 ///
 /// Count the number of people:
 /// ```
@@ -217,7 +217,7 @@ impl TurtleParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in TurtleParser::new().parse_from_read(file.as_ref()) {
+/// for triple in TurtleParser::new().parse_read(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -238,7 +238,7 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
     }
 }
 
-/// Parses a Turtle file from a [`AsyncRead`] implementation. Can be built using [`TurtleParser::parse_from_tokio_async_read`].
+/// Parses a Turtle file from a [`AsyncRead`] implementation. Can be built using [`TurtleParser::parse_tokio_async_read`].
 ///
 /// Count the number of people:
 /// ```
@@ -256,7 +256,7 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 ///
 ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 ///     let mut count = 0;
-///     let mut parser = TurtleParser::new().parse_from_tokio_async_read(file.as_ref());
+///     let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
 ///     while let Some(triple) = parser.next().await {
 ///         let triple = triple?;
 ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {

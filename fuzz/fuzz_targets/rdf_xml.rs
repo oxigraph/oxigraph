@@ -6,7 +6,7 @@ use oxrdfxml::{RdfXmlParser, RdfXmlSerializer};
 fuzz_target!(|data: &[u8]| {
     // We parse
     let mut triples = Vec::new();
-    for triple in RdfXmlParser::new().parse_from_read(data) {
+    for triple in RdfXmlParser::new().parse_read(data) {
         if let Ok(triple) = triple {
             triples.push(triple);
         }
@@ -21,7 +21,7 @@ fuzz_target!(|data: &[u8]| {
 
     // We parse the serialization
     let new_triples = RdfXmlParser::new()
-        .parse_from_read(new_serialization.as_slice())
+        .parse_read(new_serialization.as_slice())
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             format!(

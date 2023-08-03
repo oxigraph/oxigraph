@@ -26,7 +26,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in NTriplesParser::new().parse_from_read(file.as_ref()) {
+/// for triple in NTriplesParser::new().parse_read(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -71,7 +71,7 @@ impl NTriplesParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in NTriplesParser::new().parse_from_read(file.as_ref()) {
+    /// for triple in NTriplesParser::new().parse_read(file.as_ref()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -80,9 +80,9 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_from_read<R: Read>(&self, read: R) -> FromReadNTriplesReader<R> {
+    pub fn parse_read<R: Read>(&self, read: R) -> FromReadNTriplesReader<R> {
         FromReadNTriplesReader {
-            inner: self.parse().parser.parse_from_read(read),
+            inner: self.parse().parser.parse_read(read),
         }
     }
 
@@ -102,7 +102,7 @@ impl NTriplesParser {
     ///
     ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     ///     let mut count = 0;
-    ///     let mut parser = NTriplesParser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
     ///     while let Some(triple) = parser.next().await {
     ///         let triple = triple?;
     ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -114,12 +114,12 @@ impl NTriplesParser {
     /// }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
         &self,
         read: R,
     ) -> FromTokioAsyncReadNTriplesReader<R> {
         FromTokioAsyncReadNTriplesReader {
-            inner: self.parse().parser.parse_from_tokio_async_read(read),
+            inner: self.parse().parser.parse_tokio_async_read(read),
         }
     }
 
@@ -171,7 +171,7 @@ impl NTriplesParser {
     }
 }
 
-/// Parses a N-Triples file from a [`Read`] implementation. Can be built using [`NTriplesParser::parse_from_read`].
+/// Parses a N-Triples file from a [`Read`] implementation. Can be built using [`NTriplesParser::parse_read`].
 ///
 /// Count the number of people:
 /// ```
@@ -185,7 +185,7 @@ impl NTriplesParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in NTriplesParser::new().parse_from_read(file.as_ref()) {
+/// for triple in NTriplesParser::new().parse_read(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -206,7 +206,7 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
     }
 }
 
-/// Parses a N-Triples file from a [`AsyncRead`] implementation. Can be built using [`NTriplesParser::parse_from_tokio_async_read`].
+/// Parses a N-Triples file from a [`AsyncRead`] implementation. Can be built using [`NTriplesParser::parse_tokio_async_read`].
 ///
 /// Count the number of people:
 /// ```
@@ -222,7 +222,7 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 ///
 ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 ///     let mut count = 0;
-///     let mut parser = NTriplesParser::new().parse_from_tokio_async_read(file.as_ref());
+///     let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
 ///     while let Some(triple) = parser.next().await {
 ///         let triple = triple?;
 ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {

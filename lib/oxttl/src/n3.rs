@@ -194,7 +194,7 @@ impl From<Quad> for N3Quad {
 /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
 /// let mut count = 0;
-/// for triple in N3Parser::new().parse_from_read(file.as_ref()) {
+/// for triple in N3Parser::new().parse_read(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf_type && triple.object == schema_person {
 ///         count += 1;
@@ -250,7 +250,7 @@ impl N3Parser {
     /// let rdf_type = N3Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
     /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
     /// let mut count = 0;
-    /// for triple in N3Parser::new().parse_from_read(file.as_ref()) {
+    /// for triple in N3Parser::new().parse_read(file.as_ref()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf_type && triple.object == schema_person {
     ///         count += 1;
@@ -259,9 +259,9 @@ impl N3Parser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_from_read<R: Read>(&self, read: R) -> FromReadN3Reader<R> {
+    pub fn parse_read<R: Read>(&self, read: R) -> FromReadN3Reader<R> {
         FromReadN3Reader {
-            inner: self.parse().parser.parse_from_read(read),
+            inner: self.parse().parser.parse_read(read),
         }
     }
 
@@ -285,7 +285,7 @@ impl N3Parser {
     ///     let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
     ///     let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
     ///     let mut count = 0;
-    ///     let mut parser = N3Parser::new().parse_from_tokio_async_read(file.as_ref());
+    ///     let mut parser = N3Parser::new().parse_tokio_async_read(file.as_ref());
     ///     while let Some(triple) = parser.next().await {
     ///         let triple = triple?;
     ///         if triple.predicate == rdf_type && triple.object == schema_person {
@@ -297,12 +297,12 @@ impl N3Parser {
     /// }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
         &self,
         read: R,
     ) -> FromTokioAsyncReadN3Reader<R> {
         FromTokioAsyncReadN3Reader {
-            inner: self.parse().parser.parse_from_tokio_async_read(read),
+            inner: self.parse().parser.parse_tokio_async_read(read),
         }
     }
 
@@ -350,7 +350,7 @@ impl N3Parser {
     }
 }
 
-/// Parses a N3 file from a [`Read`] implementation. Can be built using [`N3Parser::parse_from_read`].
+/// Parses a N3 file from a [`Read`] implementation. Can be built using [`N3Parser::parse_read`].
 ///
 /// Count the number of people:
 /// ```
@@ -367,7 +367,7 @@ impl N3Parser {
 /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
 /// let mut count = 0;
-/// for triple in N3Parser::new().parse_from_read(file.as_ref()) {
+/// for triple in N3Parser::new().parse_read(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf_type && triple.object == schema_person {
 ///         count += 1;
@@ -388,7 +388,7 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
     }
 }
 
-/// Parses a N3 file from a [`AsyncRead`] implementation. Can be built using [`N3Parser::parse_from_tokio_async_read`].
+/// Parses a N3 file from a [`AsyncRead`] implementation. Can be built using [`N3Parser::parse_tokio_async_read`].
 ///
 /// Count the number of people:
 /// ```
@@ -408,7 +408,7 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 ///     let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 ///     let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
 ///     let mut count = 0;
-///     let mut parser = N3Parser::new().parse_from_tokio_async_read(file.as_ref());
+///     let mut parser = N3Parser::new().parse_tokio_async_read(file.as_ref());
 ///     while let Some(triple) = parser.next().await {
 ///         let triple = triple?;
 ///         if triple.predicate == rdf_type && triple.object == schema_person {
