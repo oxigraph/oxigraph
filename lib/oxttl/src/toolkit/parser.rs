@@ -113,12 +113,12 @@ impl<RR: RuleRecognizer> Parser<RR> {
         }
     }
 
-    pub fn parse_from_read<R: Read>(self, read: R) -> FromReadIterator<R, RR> {
+    pub fn parse_read<R: Read>(self, read: R) -> FromReadIterator<R, RR> {
         FromReadIterator { read, parser: self }
     }
 
     #[cfg(feature = "async-tokio")]
-    pub fn parse_from_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
         self,
         read: R,
     ) -> FromTokioAsyncReadIterator<R, RR> {

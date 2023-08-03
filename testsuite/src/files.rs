@@ -107,7 +107,7 @@ pub fn load_n3(url: &str, ignore_errors: bool) -> Result<Vec<N3Quad>> {
     for q in N3Parser::new()
         .with_base_iri(url)?
         .with_prefix("", format!("{url}#"))?
-        .parse_from_read(read_file(url)?)
+        .parse_read(read_file(url)?)
     {
         match q {
             Ok(q) => quads.push(q),

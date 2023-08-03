@@ -88,11 +88,9 @@ impl GraphParser {
         TripleReader {
             mapper: BlankNodeMapper::default(),
             parser: match &self.inner {
-                GraphParserKind::NTriples(p) => {
-                    TripleReaderKind::NTriples(p.parse_from_read(reader))
-                }
-                GraphParserKind::Turtle(p) => TripleReaderKind::Turtle(p.parse_from_read(reader)),
-                GraphParserKind::RdfXml(p) => TripleReaderKind::RdfXml(p.parse_from_read(reader)),
+                GraphParserKind::NTriples(p) => TripleReaderKind::NTriples(p.parse_read(reader)),
+                GraphParserKind::Turtle(p) => TripleReaderKind::Turtle(p.parse_read(reader)),
+                GraphParserKind::RdfXml(p) => TripleReaderKind::RdfXml(p.parse_read(reader)),
             },
         }
     }
@@ -219,8 +217,8 @@ impl DatasetParser {
         QuadReader {
             mapper: BlankNodeMapper::default(),
             parser: match &self.inner {
-                DatasetParserKind::NQuads(p) => QuadReaderKind::NQuads(p.parse_from_read(reader)),
-                DatasetParserKind::TriG(p) => QuadReaderKind::TriG(p.parse_from_read(reader)),
+                DatasetParserKind::NQuads(p) => QuadReaderKind::NQuads(p.parse_read(reader)),
+                DatasetParserKind::TriG(p) => QuadReaderKind::TriG(p.parse_read(reader)),
             },
         }
     }
