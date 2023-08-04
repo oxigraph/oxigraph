@@ -1,4 +1,5 @@
 use memchr::memchr2;
+use std::cmp::min;
 use std::error::Error;
 use std::fmt;
 use std::io::{self, Read};
@@ -56,7 +57,6 @@ pub struct Lexer<R: TokenRecognizer> {
     parser: R,
     data: Vec<u8>,
     start: usize,
-    end: usize,
     is_ending: bool,
     position: usize,
     min_buffer_size: usize,
@@ -77,7 +77,6 @@ impl<R: TokenRecognizer> Lexer<R> {
             parser,
             data: Vec::new(),
             start: 0,
-            end: 0,
             is_ending: false,
             position: 0,
             min_buffer_size,
@@ -88,10 +87,8 @@ impl<R: TokenRecognizer> Lexer<R> {
     }
 
     pub fn extend_from_slice(&mut self, other: &[u8]) {
-        self.shrink_if_useful();
-        self.data.truncate(self.end);
+        self.shrink_data();
         self.data.extend_from_slice(other);
-        self.end = self.data.len();
     }
 
     #[inline]
@@ -100,26 +97,25 @@ impl<R: TokenRecognizer> Lexer<R> {
     }
 
     pub fn extend_from_read(&mut self, read: &mut impl Read) -> io::Result<()> {
-        self.shrink_if_useful();
-        let min_end = self.end + self.min_buffer_size;
-        if min_end > self.max_buffer_size {
+        self.shrink_data();
+        if self.data.len() == self.max_buffer_size {
             return Err(io::Error::new(
                 io::ErrorKind::OutOfMemory,
                 format!(
-                    "The buffer maximal size is {} < {min_end}",
+                    "Reached the buffer maximal size of {}",
                     self.max_buffer_size
                 ),
             ));
         }
-        if self.data.len() < min_end {
-            self.data.resize(min_end, 0);
-        }
+        let min_end = min(self.data.len() + self.min_buffer_size, self.max_buffer_size);
+        let new_start = self.data.len();
+        self.data.resize(min_end, 0);
         if self.data.len() < self.data.capacity() {
             // We keep extending to have as much space as available without reallocation
             self.data.resize(self.data.capacity(), 0);
         }
-        let read = read.read(&mut self.data[self.end..])?;
-        self.end += read;
+        let read = read.read(&mut self.data[new_start..])?;
+        self.data.truncate(new_start + read);
         self.is_ending = read == 0;
         Ok(())
     }
@@ -129,26 +125,25 @@ impl<R: TokenRecognizer> Lexer<R> {
         &mut self,
         read: &mut (impl AsyncRead + Unpin),
     ) -> io::Result<()> {
-        self.shrink_if_useful();
-        let min_end = self.end + self.min_buffer_size;
-        if min_end > self.max_buffer_size {
+        self.shrink_data();
+        if self.data.len() == self.max_buffer_size {
             return Err(io::Error::new(
                 io::ErrorKind::OutOfMemory,
                 format!(
-                    "The buffer maximal size is {} < {min_end}",
+                    "Reached the buffer maximal size of {}",
                     self.max_buffer_size
                 ),
             ));
         }
-        if self.data.len() < min_end {
-            self.data.resize(min_end, 0);
-        }
+        let min_end = min(self.data.len() + self.min_buffer_size, self.max_buffer_size);
+        let new_start = self.data.len();
+        self.data.resize(min_end, 0);
         if self.data.len() < self.data.capacity() {
             // We keep extending to have as much space as available without reallocation
             self.data.resize(self.data.capacity(), 0);
         }
-        let read = read.read(&mut self.data[self.end..]).await?;
-        self.end += read;
+        let read = read.read(&mut self.data[new_start..]).await?;
+        self.data.truncate(new_start + read);
         self.is_ending = read == 0;
         Ok(())
     }
@@ -158,22 +153,21 @@ impl<R: TokenRecognizer> Lexer<R> {
         options: &R::Options,
     ) -> Option<Result<TokenWithPosition<R::Token<'_>>, LexerError>> {
         self.skip_whitespaces_and_comments()?;
-        let (consumed, result) = if let Some(r) = self.parser.recognize_next_token(
-            &self.data[self.start..self.end],
-            self.is_ending,
-            options,
-        ) {
+        let (consumed, result) = if let Some(r) =
+            self.parser
+                .recognize_next_token(&self.data[self.start..], self.is_ending, options)
+        {
             r
         } else {
             return if self.is_ending {
-                if self.start == self.end {
+                if self.start == self.data.len() {
                     None // We have finished
                 } else {
                     let error = LexerError {
-                        position: self.position..self.position + (self.end - self.start),
+                        position: self.position..self.position + (self.data.len() - self.start),
                         message: "Unexpected end of file".into(),
                     };
-                    self.end = self.start; // We consume everything
+                    self.start = self.data.len(); // We consume everything
                     Some(Err(error))
                 }
             } else {
@@ -185,9 +179,9 @@ impl<R: TokenRecognizer> Lexer<R> {
             "The lexer must consume at least one byte each time"
         );
         debug_assert!(
-            self.start + consumed <= self.end,
+            self.start + consumed <= self.data.len(),
             "The lexer tried to consumed {consumed} bytes but only {} bytes are readable",
-            self.end - self.start
+            self.data.len() - self.start
         );
         let old_position = self.position;
         self.start += consumed;
@@ -205,14 +199,14 @@ impl<R: TokenRecognizer> Lexer<R> {
     }
 
     pub fn is_end(&self) -> bool {
-        self.is_ending && self.end == self.start
+        self.is_ending && self.data.len() == self.start
     }
 
     fn skip_whitespaces_and_comments(&mut self) -> Option<()> {
         loop {
             self.skip_whitespaces();
 
-            let buf = &self.data[self.start..self.end];
+            let buf = &self.data[self.start..];
             if let Some(line_comment_start) = self.line_comment_start {
                 if buf.starts_with(line_comment_start) {
                     // Comment
@@ -222,7 +216,7 @@ impl<R: TokenRecognizer> Lexer<R> {
                         continue;
                     }
                     if self.is_ending {
-                        self.end = self.start; // EOF
+                        self.start = self.data.len(); // EOF
                         return Some(());
                     }
                     return None; // We need more data
@@ -234,7 +228,7 @@ impl<R: TokenRecognizer> Lexer<R> {
 
     fn skip_whitespaces(&mut self) {
         if self.is_line_jump_whitespace {
-            for (i, c) in self.data[self.start..self.end].iter().enumerate() {
+            for (i, c) in self.data[self.start..].iter().enumerate() {
                 if !matches!(c, b' ' | b'\t' | b'\r' | b'\n') {
                     self.start += i;
                     self.position += i;
@@ -243,7 +237,7 @@ impl<R: TokenRecognizer> Lexer<R> {
                 //TODO: SIMD
             }
         } else {
-            for (i, c) in self.data[self.start..self.end].iter().enumerate() {
+            for (i, c) in self.data[self.start..].iter().enumerate() {
                 if !matches!(c, b' ' | b'\t') {
                     self.start += i;
                     self.position += i;
@@ -253,15 +247,14 @@ impl<R: TokenRecognizer> Lexer<R> {
             }
         }
         // We only have whitespaces
-        self.position += self.end - self.start;
-        self.end = self.start;
+        self.position += self.data.len() - self.start;
+        self.start = self.data.len();
     }
 
-    fn shrink_if_useful(&mut self) {
-        if self.start * 2 > self.data.len() {
-            // We have read more than half of the buffer, let's move the data to the beginning
-            self.data.copy_within(self.start..self.end, 0);
-            self.end -= self.start;
+    fn shrink_data(&mut self) {
+        if self.start > 0 {
+            self.data.copy_within(self.start.., 0);
+            self.data.truncate(self.data.len() - self.start);
             self.start = 0;
         }
     }
