@@ -3,6 +3,7 @@ members = [
     "js",
     "lib",
     "lib/oxrdf",
+    "lib/oxrdfio",
     "lib/oxrdfxml",
     "lib/oxsdatatypes",
     "lib/oxttl",

@@ -1,3 +1,5 @@
+use oxrdfio::RdfFormat;
+
 /// [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) serialization formats.
 ///
 /// This enumeration is non exhaustive. New formats like JSON-LD will be added in the future.
@@ -102,6 +104,16 @@ impl GraphFormat {
     }
 }
 
+impl From<GraphFormat> for RdfFormat {
+    fn from(format: GraphFormat) -> Self {
+        match format {
+            GraphFormat::NTriples => Self::NTriples,
+            GraphFormat::Turtle => Self::Turtle,
+            GraphFormat::RdfXml => Self::RdfXml,
+        }
+    }
+}
+
 /// [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) serialization formats.
 ///
 /// This enumeration is non exhaustive. New formats like JSON-LD will be added in the future.
@@ -194,6 +206,15 @@ impl DatasetFormat {
             "nq" | "txt" => Some(Self::NQuads),
             "trig" => Some(Self::TriG),
             _ => None,
+        }
+    }
+}
+
+impl From<DatasetFormat> for RdfFormat {
+    fn from(format: DatasetFormat) -> Self {
+        match format {
+            DatasetFormat::NQuads => Self::NQuads,
+            DatasetFormat::TriG => Self::TriG,
         }
     }
 }

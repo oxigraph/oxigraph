@@ -37,6 +37,8 @@ jobs:
       - run: cargo clippy
         working-directory: ./lib/oxttl
       - run: cargo clippy
+        working-directory: ./lib/oxrdfio
+      - run: cargo clippy
         working-directory: ./lib/sparesults
       - run: cargo clippy
         working-directory: ./lib/spargebra
@@ -102,6 +104,8 @@ jobs:
         working-directory: ./lib/oxrdfxml
       - run: cargo clippy --  -D warnings -D clippy::all
         working-directory: ./lib/oxttl
+      - run: cargo clippy --  -D warnings -D clippy::all
+        working-directory: ./lib/oxrdfio
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./lib/sparesults
       - run: cargo clippy -- -D warnings -D clippy::all
@@ -159,7 +163,7 @@ jobs:
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-semver-checks || true
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server --exclude oxrdfxml --exclude oxttl --exclude sparopt
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server --exclude oxrdfxml --exclude oxttl --exclude oxrdfio --exclude sparopt
 
   test_linux:
     runs-on: ubuntu-latest

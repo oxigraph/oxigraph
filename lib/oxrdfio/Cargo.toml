@@ -1,0 +1,33 @@
+[package]
+name = "oxrdfio"
+version = "0.1.0-alpha.1-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["RDF"]
+repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
+homepage = "https://oxigraph.org/"
+documentation = "https://docs.rs/oxrdfio"
+description = """
+Parser for various RDF serializations
+"""
+edition = "2021"
+rust-version = "1.65"
+
+[features]
+default = []
+async-tokio = ["dep:tokio", "oxrdfxml/async-tokio", "oxttl/async-tokio"]
+rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
+
+[dependencies]
+oxrdf = { version = "0.2.0-alpha.1-dev", path = "../oxrdf" }
+oxrdfxml = { version = "0.1.0-alpha.1-dev", path = "../oxrdfxml" }
+oxttl = { version = "0.1.0-alpha.1-dev" , path = "../oxttl" }
+tokio = { version = "1", optional = true, features = ["io-util"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
