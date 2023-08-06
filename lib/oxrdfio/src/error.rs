@@ -1,4 +1,3 @@
-use oxiri::IriParseError;
 use std::error::Error;
 use std::{fmt, io};
 
@@ -12,13 +11,9 @@ pub enum ParseError {
 }
 
 impl ParseError {
-    #[inline]
-    pub(crate) fn invalid_base_iri(iri: &str, error: IriParseError) -> Self {
+    pub(crate) fn msg(msg: &'static str) -> Self {
         Self::Syntax(SyntaxError {
-            inner: SyntaxErrorKind::InvalidBaseIri {
-                iri: iri.to_owned(),
-                error,
-            },
+            inner: SyntaxErrorKind::Msg { msg },
         })
     }
 }
@@ -43,21 +38,40 @@ impl Error for ParseError {
     }
 }
 
-impl From<oxrdfio::SyntaxError> for SyntaxError {
+impl From<oxttl::SyntaxError> for SyntaxError {
     #[inline]
-    fn from(error: oxrdfio::SyntaxError) -> Self {
+    fn from(error: oxttl::SyntaxError) -> Self {
         SyntaxError {
-            inner: SyntaxErrorKind::IO(error),
+            inner: SyntaxErrorKind::Turtle(error),
         }
     }
 }
 
-impl From<oxrdfio::ParseError> for ParseError {
+impl From<oxttl::ParseError> for ParseError {
     #[inline]
-    fn from(error: oxrdfio::ParseError) -> Self {
+    fn from(error: oxttl::ParseError) -> Self {
         match error {
-            oxrdfio::ParseError::Syntax(e) => Self::Syntax(e.into()),
-            oxrdfio::ParseError::Io(e) => Self::Io(e),
+            oxttl::ParseError::Syntax(e) => Self::Syntax(e.into()),
+            oxttl::ParseError::Io(e) => Self::Io(e),
+        }
+    }
+}
+
+impl From<oxrdfxml::SyntaxError> for SyntaxError {
+    #[inline]
+    fn from(error: oxrdfxml::SyntaxError) -> Self {
+        SyntaxError {
+            inner: SyntaxErrorKind::RdfXml(error),
+        }
+    }
+}
+
+impl From<oxrdfxml::ParseError> for ParseError {
+    #[inline]
+    fn from(error: oxrdfxml::ParseError) -> Self {
+        match error {
+            oxrdfxml::ParseError::Syntax(e) => Self::Syntax(e.into()),
+            oxrdfxml::ParseError::Io(e) => Self::Io(e),
         }
     }
 }
@@ -94,18 +108,19 @@ pub struct SyntaxError {
 
 #[derive(Debug)]
 enum SyntaxErrorKind {
-    IO(oxrdfio::SyntaxError),
-    InvalidBaseIri { iri: String, error: IriParseError },
+    Turtle(oxttl::SyntaxError),
+    RdfXml(oxrdfxml::SyntaxError),
+
+    Msg { msg: &'static str },
 }
 
 impl fmt::Display for SyntaxError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
-            SyntaxErrorKind::IO(e) => e.fmt(f),
-            SyntaxErrorKind::InvalidBaseIri { iri, error } => {
-                write!(f, "Invalid base IRI '{iri}': {error}")
-            }
+            SyntaxErrorKind::Turtle(e) => e.fmt(f),
+            SyntaxErrorKind::RdfXml(e) => e.fmt(f),
+            SyntaxErrorKind::Msg { msg } => write!(f, "{msg}"),
         }
     }
 }
@@ -114,8 +129,9 @@ impl Error for SyntaxError {
     #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.inner {
-            SyntaxErrorKind::IO(e) => Some(e),
-            SyntaxErrorKind::InvalidBaseIri { .. } => None,
+            SyntaxErrorKind::Turtle(e) => Some(e),
+            SyntaxErrorKind::RdfXml(e) => Some(e),
+            SyntaxErrorKind::Msg { .. } => None,
         }
     }
 }
@@ -124,11 +140,9 @@ impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
         match error.inner {
-            SyntaxErrorKind::IO(error) => error.into(),
-            SyntaxErrorKind::InvalidBaseIri { iri, error } => Self::new(
-                io::ErrorKind::InvalidInput,
-                format!("Invalid IRI '{iri}': {error}"),
-            ),
+            SyntaxErrorKind::Turtle(error) => error.into(),
+            SyntaxErrorKind::RdfXml(error) => error.into(),
+            SyntaxErrorKind::Msg { msg } => io::Error::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }

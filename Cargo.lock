@@ -952,10 +952,9 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "oxrdfxml",
+ "oxrdfio",
  "oxrocksdb-sys",
  "oxsdatatypes",
- "oxttl",
  "rand",
  "regex",
  "sha-1",
@@ -1034,6 +1033,16 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
+]
+
+[[package]]
+name = "oxrdfio"
+version = "0.1.0-alpha.1-dev"
+dependencies = [
+ "oxrdf",
+ "oxrdfxml",
+ "oxttl",
+ "tokio",
 ]
 
 [[package]]

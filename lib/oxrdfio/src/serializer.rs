@@ -1,0 +1,322 @@
+//! Utilities to write RDF graphs and datasets.
+
+use crate::format::RdfFormat;
+use oxrdf::{GraphNameRef, QuadRef, TripleRef};
+#[cfg(feature = "async-tokio")]
+use oxrdfxml::ToTokioAsyncWriteRdfXmlWriter;
+use oxrdfxml::{RdfXmlSerializer, ToWriteRdfXmlWriter};
+#[cfg(feature = "async-tokio")]
+use oxttl::nquads::ToTokioAsyncWriteNQuadsWriter;
+use oxttl::nquads::{NQuadsSerializer, ToWriteNQuadsWriter};
+#[cfg(feature = "async-tokio")]
+use oxttl::ntriples::ToTokioAsyncWriteNTriplesWriter;
+use oxttl::ntriples::{NTriplesSerializer, ToWriteNTriplesWriter};
+#[cfg(feature = "async-tokio")]
+use oxttl::trig::ToTokioAsyncWriteTriGWriter;
+use oxttl::trig::{ToWriteTriGWriter, TriGSerializer};
+#[cfg(feature = "async-tokio")]
+use oxttl::turtle::ToTokioAsyncWriteTurtleWriter;
+use oxttl::turtle::{ToWriteTurtleWriter, TurtleSerializer};
+use std::io::{self, Write};
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncWrite, AsyncWriteExt};
+
+/// A serializer for RDF serialization formats.
+///
+/// It currently supports the following formats:
+/// * [N3](https://w3c.github.io/N3/spec/) ([`RdfFormat::N3`])
+/// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`RdfFormat::NQuads`])
+/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`RdfFormat::NTriples`])
+/// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`RdfFormat::RdfXml`])
+/// * [TriG](https://www.w3.org/TR/trig/) ([`RdfFormat::TriG`])
+/// * [Turtle](https://www.w3.org/TR/turtle/) ([`RdfFormat::Turtle`])
+///
+/// ```
+/// use oxrdfio::{RdfFormat, RdfSerializer};
+/// use oxrdf::{Quad, NamedNode};
+///
+/// let mut buffer = Vec::new();
+/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(&mut buffer);
+/// writer.write_quad(&Quad {
+///    subject: NamedNode::new("http://example.com/s")?.into(),
+///    predicate: NamedNode::new("http://example.com/p")?,
+///    object: NamedNode::new("http://example.com/o")?.into(),
+///    graph_name: NamedNode::new("http://example.com/g")?.into()
+/// })?;
+/// writer.finish()?;
+///
+/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
+pub struct RdfSerializer {
+    format: RdfFormat,
+}
+
+impl RdfSerializer {
+    /// Builds a serializer for the given format
+    #[inline]
+    pub fn from_format(format: RdfFormat) -> Self {
+        Self { format }
+    }
+
+    /// Writes to a [`Write`] implementation.
+    ///
+    /// Warning: Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+    ///
+    /// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfFormat, RdfSerializer};
+    /// use oxrdf::{Quad, NamedNode};
+    ///
+    /// let mut buffer = Vec::new();
+    /// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(&mut buffer);
+    /// writer.write_quad(&Quad {
+    ///    subject: NamedNode::new("http://example.com/s")?.into(),
+    ///    predicate: NamedNode::new("http://example.com/p")?,
+    ///    object: NamedNode::new("http://example.com/o")?.into(),
+    ///    graph_name: NamedNode::new("http://example.com/g")?.into()
+    /// })?;
+    /// writer.finish()?;
+    ///
+    /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn serialize_to_write<W: Write>(&self, writer: W) -> ToWriteQuadWriter<W> {
+        ToWriteQuadWriter {
+            formatter: match self.format {
+                RdfFormat::NQuads => ToWriteQuadWriterKind::NQuads(
+                    NQuadsSerializer::new().serialize_to_write(writer),
+                ),
+                RdfFormat::NTriples => ToWriteQuadWriterKind::NTriples(
+                    NTriplesSerializer::new().serialize_to_write(writer),
+                ),
+                RdfFormat::RdfXml => ToWriteQuadWriterKind::RdfXml(
+                    RdfXmlSerializer::new().serialize_to_write(writer),
+                ),
+                RdfFormat::TriG => {
+                    ToWriteQuadWriterKind::TriG(TriGSerializer::new().serialize_to_write(writer))
+                }
+                RdfFormat::Turtle | RdfFormat::N3 => ToWriteQuadWriterKind::Turtle(
+                    TurtleSerializer::new().serialize_to_write(writer),
+                ),
+            },
+        }
+    }
+
+    /// Writes to a Tokio [`AsyncWrite`] implementation.
+    ///
+    /// Warning: Do not forget to run the [`finish`](ToTokioAsyncWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+    ///
+    /// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](tokio::io::BufWriter) to avoid that.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfFormat, RdfSerializer};
+    /// use oxrdf::{Quad, NamedNode};
+    /// use std::io;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> io::Result<()> {
+    ///     let mut buffer = Vec::new();
+    ///     let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
+    ///     writer.write_quad(&Quad {
+    ///         subject: NamedNode::new_unchecked("http://example.com/s").into(),
+    ///         predicate: NamedNode::new_unchecked("http://example.com/p"),
+    ///         object: NamedNode::new_unchecked("http://example.com/o").into(),
+    ///         graph_name: NamedNode::new_unchecked("http://example.com/g").into()
+    ///     }).await?;
+    ///     writer.finish().await?;
+    ///
+    ///     assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-tokio")]
+    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+        &self,
+        writer: W,
+    ) -> ToTokioAsyncWriteQuadWriter<W> {
+        ToTokioAsyncWriteQuadWriter {
+            formatter: match self.format {
+                RdfFormat::NQuads => ToTokioAsyncWriteQuadWriterKind::NQuads(
+                    NQuadsSerializer::new().serialize_to_tokio_async_write(writer),
+                ),
+                RdfFormat::NTriples => ToTokioAsyncWriteQuadWriterKind::NTriples(
+                    NTriplesSerializer::new().serialize_to_tokio_async_write(writer),
+                ),
+                RdfFormat::RdfXml => ToTokioAsyncWriteQuadWriterKind::RdfXml(
+                    RdfXmlSerializer::new().serialize_to_tokio_async_write(writer),
+                ),
+                RdfFormat::TriG => ToTokioAsyncWriteQuadWriterKind::TriG(
+                    TriGSerializer::new().serialize_to_tokio_async_write(writer),
+                ),
+                RdfFormat::Turtle | RdfFormat::N3 => ToTokioAsyncWriteQuadWriterKind::Turtle(
+                    TurtleSerializer::new().serialize_to_tokio_async_write(writer),
+                ),
+            },
+        }
+    }
+}
+
+/// Writes quads or triples to a [`Write`] implementation.
+///
+/// Can be built using [`RdfSerializer::serialize_to_write`].
+///
+/// Warning: Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+///
+/// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.
+///
+/// ```
+/// use oxrdfio::{RdfFormat, RdfSerializer};
+/// use oxrdf::{Quad, NamedNode};
+///
+/// let mut buffer = Vec::new();
+/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(&mut buffer);
+/// writer.write_quad(&Quad {
+///    subject: NamedNode::new("http://example.com/s")?.into(),
+///    predicate: NamedNode::new("http://example.com/p")?,
+///    object: NamedNode::new("http://example.com/o")?.into(),
+///    graph_name: NamedNode::new("http://example.com/g")?.into(),
+/// })?;
+/// writer.finish()?;
+///
+/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
+#[must_use]
+pub struct ToWriteQuadWriter<W: Write> {
+    formatter: ToWriteQuadWriterKind<W>,
+}
+
+enum ToWriteQuadWriterKind<W: Write> {
+    NQuads(ToWriteNQuadsWriter<W>),
+    NTriples(ToWriteNTriplesWriter<W>),
+    RdfXml(ToWriteRdfXmlWriter<W>),
+    TriG(ToWriteTriGWriter<W>),
+    Turtle(ToWriteTurtleWriter<W>),
+}
+
+impl<W: Write> ToWriteQuadWriter<W> {
+    /// Writes a [`QuadRef`]
+    pub fn write_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        match &mut self.formatter {
+            ToWriteQuadWriterKind::NQuads(writer) => writer.write_quad(quad),
+            ToWriteQuadWriterKind::NTriples(writer) => writer.write_triple(to_triple(quad)?),
+            ToWriteQuadWriterKind::RdfXml(writer) => writer.write_triple(to_triple(quad)?),
+            ToWriteQuadWriterKind::TriG(writer) => writer.write_quad(quad),
+            ToWriteQuadWriterKind::Turtle(writer) => writer.write_triple(to_triple(quad)?),
+        }
+    }
+
+    /// Writes a [`TripleRef`]
+    pub fn write_triple<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        self.write_quad(triple.into().in_graph(GraphNameRef::DefaultGraph))
+    }
+
+    /// Writes the last bytes of the file
+    pub fn finish(self) -> io::Result<()> {
+        match self.formatter {
+            ToWriteQuadWriterKind::NQuads(writer) => writer.finish(),
+            ToWriteQuadWriterKind::NTriples(writer) => writer.finish(),
+            ToWriteQuadWriterKind::RdfXml(writer) => writer.finish()?,
+            ToWriteQuadWriterKind::TriG(writer) => writer.finish()?,
+            ToWriteQuadWriterKind::Turtle(writer) => writer.finish()?,
+        }
+        .flush()
+    }
+}
+
+/// Writes quads or triples to a [`Write`] implementation.
+///
+/// Can be built using [`RdfSerializer::serialize_to_write`].
+///
+/// Warning: Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+///
+/// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.
+///
+/// ```
+/// use oxrdfio::{RdfFormat, RdfSerializer};
+/// use oxrdf::{Quad, NamedNode};
+/// use std::io;
+///
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() -> io::Result<()> {
+///     let mut buffer = Vec::new();
+///     let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
+///     writer.write_quad(&Quad {
+///         subject: NamedNode::new_unchecked("http://example.com/s").into(),
+///         predicate: NamedNode::new_unchecked("http://example.com/p"),
+///         object: NamedNode::new_unchecked("http://example.com/o").into(),
+///         graph_name: NamedNode::new_unchecked("http://example.com/g").into()
+///     }).await?;
+///     writer.finish().await?;
+///
+///     assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+///     Ok(())
+/// }
+/// ```
+#[must_use]
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteQuadWriter<W: AsyncWrite + Unpin> {
+    formatter: ToTokioAsyncWriteQuadWriterKind<W>,
+}
+
+#[cfg(feature = "async-tokio")]
+enum ToTokioAsyncWriteQuadWriterKind<W: AsyncWrite + Unpin> {
+    NQuads(ToTokioAsyncWriteNQuadsWriter<W>),
+    NTriples(ToTokioAsyncWriteNTriplesWriter<W>),
+    RdfXml(ToTokioAsyncWriteRdfXmlWriter<W>),
+    TriG(ToTokioAsyncWriteTriGWriter<W>),
+    Turtle(ToTokioAsyncWriteTurtleWriter<W>),
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteQuadWriter<W> {
+    /// Writes a [`QuadRef`]
+    pub async fn write_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        match &mut self.formatter {
+            ToTokioAsyncWriteQuadWriterKind::NQuads(writer) => writer.write_quad(quad).await,
+            ToTokioAsyncWriteQuadWriterKind::NTriples(writer) => {
+                writer.write_triple(to_triple(quad)?).await
+            }
+            ToTokioAsyncWriteQuadWriterKind::RdfXml(writer) => {
+                writer.write_triple(to_triple(quad)?).await
+            }
+            ToTokioAsyncWriteQuadWriterKind::TriG(writer) => writer.write_quad(quad).await,
+            ToTokioAsyncWriteQuadWriterKind::Turtle(writer) => {
+                writer.write_triple(to_triple(quad)?).await
+            }
+        }
+    }
+
+    /// Writes a [`TripleRef`]
+    pub async fn write_triple<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        self.write_quad(triple.into().in_graph(GraphNameRef::DefaultGraph))
+            .await
+    }
+
+    /// Writes the last bytes of the file
+    pub async fn finish(self) -> io::Result<()> {
+        match self.formatter {
+            ToTokioAsyncWriteQuadWriterKind::NQuads(writer) => writer.finish(),
+            ToTokioAsyncWriteQuadWriterKind::NTriples(writer) => writer.finish(),
+            ToTokioAsyncWriteQuadWriterKind::RdfXml(writer) => writer.finish().await?,
+            ToTokioAsyncWriteQuadWriterKind::TriG(writer) => writer.finish().await?,
+            ToTokioAsyncWriteQuadWriterKind::Turtle(writer) => writer.finish().await?,
+        }
+        .flush()
+        .await
+    }
+}
+
+fn to_triple<'a>(quad: impl Into<QuadRef<'a>>) -> io::Result<TripleRef<'a>> {
+    let quad = quad.into();
+    if quad.graph_name.is_default_graph() {
+        Ok(quad.into())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Only quads in the default graph can be serialized to a RDF graph format",
+        ))
+    }
+}
