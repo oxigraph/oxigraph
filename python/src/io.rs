@@ -13,6 +13,7 @@ use std::cmp::max;
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
+use std::path::{Path, PathBuf};
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(parse))?;
@@ -34,7 +35,7 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: io(bytes) or io(str) or str
+/// :type input: io(bytes) or io(str) or str or pathlib.Path
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -55,8 +56,8 @@ pub fn parse(
     base_iri: Option<&str>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let input = if let Ok(path) = input.extract::<&str>(py) {
-        PyReadable::from_file(path, py).map_err(map_io_err)?
+    let input = if let Ok(path) = input.extract::<PathBuf>(py) {
+        PyReadable::from_file(&path, py).map_err(map_io_err)?
     } else {
         PyReadable::from_data(input, py)
     };
@@ -106,7 +107,7 @@ pub fn parse(
 /// :param input: the RDF triples and quads to serialize.
 /// :type input: iterable(Triple) or iterable(Quad)
 /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
-/// :type output: io(bytes) or str
+/// :type output: io(bytes) or str or pathlib.Path
 /// :param mime_type: the MIME type of the RDF serialization.
 /// :type mime_type: str
 /// :rtype: None
@@ -119,8 +120,8 @@ pub fn parse(
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
-    let output = if let Ok(path) = output.extract::<&str>(py) {
-        PyWritable::from_file(path, py).map_err(map_io_err)?
+    let output = if let Ok(path) = output.extract::<PathBuf>(py) {
+        PyWritable::from_file(&path, py).map_err(map_io_err)?
     } else {
         PyWritable::from_data(output)
     };
@@ -198,7 +199,7 @@ pub enum PyReadable {
 }
 
 impl PyReadable {
-    pub fn from_file(file: &str, py: Python<'_>) -> io::Result<Self> {
+    pub fn from_file(file: &Path, py: Python<'_>) -> io::Result<Self> {
         Ok(Self::File(py.allow_threads(|| File::open(file))?))
     }
 
@@ -229,7 +230,7 @@ pub enum PyWritable {
 }
 
 impl PyWritable {
-    pub fn from_file(file: &str, py: Python<'_>) -> io::Result<Self> {
+    pub fn from_file(file: &Path, py: Python<'_>) -> io::Result<Self> {
         Ok(Self::File(BufWriter::new(
             py.allow_threads(|| File::create(file))?,
         )))
