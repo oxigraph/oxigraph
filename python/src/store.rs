@@ -9,6 +9,7 @@ use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use std::path::PathBuf;
 
 /// RDF store.
 ///
@@ -26,7 +27,7 @@ use pyo3::prelude::*;
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 ///              In this case, the store data are kept in memory and never written on disk.
-/// :type path: str or None, optional
+/// :type path: str or pathlib.Path or None, optional
 /// :raises IOError: if the target directory contains invalid data or could not be accessed.
 ///
 /// The :py:func:`str` function provides a serialization of the store in NQuads:
@@ -45,7 +46,7 @@ pub struct PyStore {
 impl PyStore {
     #[new]
     #[pyo3(signature = (path = None))]
-    fn new(path: Option<&str>, py: Python<'_>) -> PyResult<Self> {
+    fn new(path: Option<PathBuf>, py: Python<'_>) -> PyResult<Self> {
         py.allow_threads(|| {
             Ok(Self {
                 inner: if let Some(path) = path {
@@ -357,7 +358,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io(bytes) or io(str) or str
+    /// :type input: io(bytes) or io(str) or str or pathlib.Path
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -387,8 +388,8 @@ impl PyStore {
         } else {
             None
         };
-        let input = if let Ok(path) = input.extract::<&str>(py) {
-            PyReadable::from_file(path, py).map_err(map_io_err)?
+        let input = if let Ok(path) = input.extract::<PathBuf>(py) {
+            PyReadable::from_file(&path, py).map_err(map_io_err)?
         } else {
             PyReadable::from_data(input, py)
         };
@@ -439,7 +440,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io(bytes) or io(str) or str
+    /// :type input: io(bytes) or io(str) or str or pathlib.Path
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -469,8 +470,8 @@ impl PyStore {
         } else {
             None
         };
-        let input = if let Ok(path) = input.extract::<&str>(py) {
-            PyReadable::from_file(path, py).map_err(map_io_err)?
+        let input = if let Ok(path) = input.extract::<PathBuf>(py) {
+            PyReadable::from_file(&path, py).map_err(map_io_err)?
         } else {
             PyReadable::from_data(input, py)
         };
@@ -518,7 +519,7 @@ impl PyStore {
     /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
-    /// :type output: io(bytes) or str
+    /// :type output: io(bytes) or str or pathlib.Path
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
     /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
@@ -541,8 +542,8 @@ impl PyStore {
         from_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let output = if let Ok(path) = output.extract::<&str>(py) {
-            PyWritable::from_file(path, py).map_err(map_io_err)?
+        let output = if let Ok(path) = output.extract::<PathBuf>(py) {
+            PyWritable::from_file(&path, py).map_err(map_io_err)?
         } else {
             PyWritable::from_data(output)
         };
