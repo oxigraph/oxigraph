@@ -266,11 +266,11 @@ class TestStore(unittest.TestCase):
 
     def test_load_file(self) -> None:
         with NamedTemporaryFile(delete=False) as fp:
-            file_name = fp.name
+            file_name = Path(fp.name)
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
         store = Store()
         store.load(file_name, mime_type="application/n-quads")
-        Path(file_name).unlink()
+        file_name.unlink()
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_with_io_error(self) -> None:
@@ -310,12 +310,12 @@ class TestStore(unittest.TestCase):
 
     def test_dump_file(self) -> None:
         with NamedTemporaryFile(delete=False) as fp:
-            file_name = fp.name
+            file_name = Path(fp.name)
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
         store.dump(file_name, "application/n-quads")
         self.assertEqual(
-            Path(file_name).read_text(),
+            file_name.read_text(),
             "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
