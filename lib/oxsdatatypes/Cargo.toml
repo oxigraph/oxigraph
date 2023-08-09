@@ -10,6 +10,7 @@ homepage = "https://oxigraph.org/"
 description = """
 An implementation of some XSD datatypes for SPARQL implementations
 """
+documentation = "https://docs.rs/oxsdatatypes"
 edition = "2021"
 rust-version = "1.60"
 
