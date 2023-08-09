@@ -8,6 +8,7 @@ readme = "README.md"
 description = """
 Rust bindings for RocksDB for Oxigraph usage.
 """
+documentation = "https://docs.rs/oxrocksdb-sys"
 edition = "2021"
 rust-version = "1.65"
 build = "build.rs"

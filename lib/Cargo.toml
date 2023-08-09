@@ -8,6 +8,7 @@ keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib"
 homepage = "https://oxigraph.org/"
+documentation = "https://docs.rs/oxigraph"
 description = """
 a SPARQL database and RDF toolkit
 """

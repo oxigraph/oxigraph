@@ -10,6 +10,7 @@ homepage = "https://oxigraph.org/"
 description = """
 Parser for the RDF/XML language
 """
+documentation = "https://docs.rs/oxrdfxml"
 edition = "2021"
 rust-version = "1.65"
 
