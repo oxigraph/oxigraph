@@ -59,7 +59,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 NQuadsState::ExpectSubject => match token {
                     N3Token::IriRef(s) => {
                         self.subjects
-                            .push(NamedNode::new_unchecked(s.into_inner()).into());
+                            .push(NamedNode::from(s).into());
                         self.stack.push(NQuadsState::ExpectPredicate);
                         self
                     }
@@ -82,7 +82,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 NQuadsState::ExpectPredicate => match token {
                     N3Token::IriRef(p) => {
                         self.predicates
-                            .push(NamedNode::new_unchecked(p.into_inner()));
+                            .push(p.into());
                         self.stack.push(NQuadsState::ExpectedObject);
                         self
                     }
@@ -94,7 +94,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 NQuadsState::ExpectedObject => match token {
                     N3Token::IriRef(o) => {
                         self.objects
-                            .push(NamedNode::new_unchecked(o.into_inner()).into());
+                            .push(NamedNode::from(o).into());
                         self.stack
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                         self
@@ -151,7 +151,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self.objects.push(
                             Literal::new_typed_literal(
                                 value,
-                                NamedNode::new_unchecked(d.into_inner()),
+                                d
                             )
                             .into(),
                         );
@@ -167,7 +167,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                             N3Token::IriRef(g) if self.with_graph_name => {
                                 self.emit_quad(
                                     results,
-                                    NamedNode::new_unchecked(g.into_inner()).into(),
+                                    NamedNode::from(g).into(),
                                 );
                                 self.stack.push(NQuadsState::ExpectDot);
                                 self

@@ -1102,13 +1102,11 @@ fn base_url(request: &Request) -> String {
 }
 
 fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode, HttpError> {
-    Ok(NamedNode::new_unchecked(
-        Iri::parse(base_url(request))
-            .map_err(bad_request)?
-            .resolve(url)
-            .map_err(bad_request)?
-            .into_inner(),
-    ))
+    Ok(Iri::parse(base_url(request))
+        .map_err(bad_request)?
+        .resolve(url)
+        .map_err(bad_request)?
+        .into())
 }
 
 fn url_query(request: &Request) -> &[u8] {

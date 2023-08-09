@@ -1155,17 +1155,15 @@ impl<R> RdfXmlReader<R> {
 
 fn resolve(base_iri: &Option<Iri<String>>, relative_iri: String) -> Result<NamedNode, SyntaxError> {
     if let Some(base_iri) = base_iri {
-        Ok(NamedNode::new_unchecked(
-            base_iri
-                .resolve(&relative_iri)
-                .map_err(|error| SyntaxError {
-                    inner: SyntaxErrorKind::InvalidIri {
-                        iri: relative_iri,
-                        error,
-                    },
-                })?
-                .into_inner(),
-        ))
+        Ok(base_iri
+            .resolve(&relative_iri)
+            .map_err(|error| SyntaxError {
+                inner: SyntaxErrorKind::InvalidIri {
+                    iri: relative_iri,
+                    error,
+                },
+            })?
+            .into())
     } else {
         NamedNode::new(relative_iri.clone()).map_err(|error| SyntaxError {
             inner: SyntaxErrorKind::InvalidIri {
