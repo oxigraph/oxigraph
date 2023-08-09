@@ -778,7 +778,7 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::PathItem => {
                     match token {
                         N3Token::IriRef(iri) => {
-                            self.terms.push(NamedNode::new_unchecked(iri.into_inner()).into());
+                            self.terms.push(NamedNode::from(iri).into());
                             self
                         }
                         N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
@@ -860,7 +860,7 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::IriPropertyList => match token {
                     N3Token::IriRef(id) => {
-                        self.terms.push(NamedNode::new_unchecked(id.into_inner()).into());
+                        self.terms.push(NamedNode::from(id).into());
                         self.stack.push(N3State::PropertyListEnd);
                         self.stack.push(N3State::PredicateObjectList);
                         self
@@ -940,7 +940,7 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::LiteralExpectDatatype { value } => {
                     match token {
                         N3Token::IriRef(datatype) => {
-                            self.terms.push(Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype.into_inner())).into());
+                            self.terms.push(Literal::new_typed_literal(value, datatype).into());
                             self
                         },
                         N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {

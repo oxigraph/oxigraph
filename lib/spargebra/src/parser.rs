@@ -1975,7 +1975,7 @@ parser! {
         rule String() -> String = STRING_LITERAL_LONG1() / STRING_LITERAL_LONG2() / STRING_LITERAL1() / STRING_LITERAL2()
 
         rule iri() -> NamedNode = i:(IRIREF() / PrefixedName()) {
-            NamedNode::new_unchecked(i.into_inner())
+            NamedNode::from(i)
         }
 
         rule PrefixedName() -> Iri<String> = PNAME_LN() /

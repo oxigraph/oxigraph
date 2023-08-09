@@ -127,7 +127,7 @@ impl RuleRecognizer for TriGRecognizer {
                 TriGState::TriplesOrGraph => match token {
                     N3Token::IriRef(iri) => {
                         self.stack.push(TriGState::WrappedGraphOrPredicateObjectList {
-                            term: NamedNode::new_unchecked(iri.into_inner()).into()
+                            term: NamedNode::from(iri).into()
                         });
                         self
                     }
@@ -291,7 +291,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_subject.push(NamedNode::new_unchecked(iri.into_inner()).into());
+                        self.cur_subject.push(NamedNode::from(iri).into());
                         self.stack.push(TriGState::PredicateObjectList);
                         self
                     }
@@ -337,7 +337,7 @@ impl RuleRecognizer for TriGRecognizer {
                 // [7g] 	labelOrSubject 	::= 	iri | BlankNode
                 TriGState::GraphName => match token {
                     N3Token::IriRef(iri) => {
-                        self.cur_graph = NamedNode::new_unchecked(iri.into_inner()).into();
+                        self.cur_graph = NamedNode::from(iri).into();
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
@@ -451,7 +451,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_predicate.push(NamedNode::new_unchecked(iri.into_inner()));
+                        self.cur_predicate.push(NamedNode::from(iri));
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
@@ -479,7 +479,7 @@ impl RuleRecognizer for TriGRecognizer {
                 // [137s] 	BlankNode 	::= 	BLANK_NODE_LABEL | ANON
                 TriGState::Object => match token {
                     N3Token::IriRef(iri) => {
-                        self.cur_object.push(NamedNode::new_unchecked(iri.into_inner()).into());
+                        self.cur_object.push(NamedNode::from(iri).into());
                         self.emit_quad(results);
                         self
                     }
@@ -632,7 +632,7 @@ impl RuleRecognizer for TriGRecognizer {
                 TriGState::LiteralExpectDatatype { value, emit } => {
                     match token {
                         N3Token::IriRef(datatype) => {
-                            self.cur_object.push(Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype.into_inner())).into());
+                            self.cur_object.push(Literal::new_typed_literal(value, datatype).into());
                             if emit {
                                 self.emit_quad(results);
                             }
@@ -694,7 +694,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_subject.push(NamedNode::new_unchecked(iri.into_inner()).into());
+                        self.cur_subject.push(NamedNode::from(iri).into());
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
@@ -726,7 +726,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_object.push(NamedNode::new_unchecked(iri.into_inner()).into());
+                        self.cur_object.push(NamedNode::from(iri).into());
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
