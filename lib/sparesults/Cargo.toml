@@ -10,6 +10,7 @@ homepage = "https://oxigraph.org/"
 description = """
 SPARQL query results formats parsers and serializers
 """
+documentation = "https://docs.rs/sparesults"
 edition = "2021"
 rust-version = "1.60"
 
