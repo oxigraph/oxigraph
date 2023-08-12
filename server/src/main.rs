@@ -1,10 +1,10 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{anyhow, bail, ensure, Context, Error};
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Method, Request, Response, Status};
 use oxhttp::Server;
-use oxigraph::io::{DatasetFormat, DatasetSerializer, GraphFormat, GraphSerializer};
+use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat, RdfSerializer};
 use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
@@ -424,9 +424,9 @@ pub fn main() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow!("The --location argument is required"))?,
             )?;
             let format = if let Some(format) = format {
-                GraphOrDatasetFormat::from_str(&format)?
+                rdf_format_from_name(&format)?
             } else if let Some(file) = &file {
-                GraphOrDatasetFormat::from_path(file)?
+                rdf_format_from_path(file)?
             } else {
                 bail!("The --format option must be set when writing to stdout")
             };
@@ -554,34 +554,25 @@ pub fn main() -> anyhow::Result<()> {
                         }
                     }
                     QueryResults::Graph(triples) => {
-                        let format = if let Some(name) = results_format {
-                            if let Some(format) = GraphFormat::from_extension(&name) {
-                                format
-                            } else if let Some(format) = GraphFormat::from_media_type(&name) {
-                                format
-                            } else {
-                                bail!("The file format '{name}' is unknown")
-                            }
+                        let format = if let Some(name) = &results_format {
+                            rdf_format_from_name(name)
                         } else if let Some(results_file) = &results_file {
-                            format_from_path(results_file, |ext| {
-                                GraphFormat::from_extension(ext)
-                                    .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
-                            })?
+                            rdf_format_from_path(results_file)
                         } else {
                             bail!("The --results-format option must be set when writing to stdout")
-                        };
+                        }?;
+                        let serializer = RdfSerializer::from_format(format);
                         if let Some(results_file) = results_file {
-                            let mut writer = GraphSerializer::from_format(format)
-                                .triple_writer(BufWriter::new(File::create(results_file)?));
+                            let mut writer = serializer
+                                .serialize_to_write(BufWriter::new(File::create(results_file)?));
                             for triple in triples {
-                                writer.write(triple?.as_ref())?;
+                                writer.write_triple(triple?.as_ref())?;
                             }
                             writer.finish()?;
                         } else {
-                            let mut writer =
-                                GraphSerializer::from_format(format).triple_writer(stdout().lock());
+                            let mut writer = serializer.serialize_to_write(stdout().lock());
                             for triple in triples {
-                                writer.write(triple?.as_ref())?;
+                                writer.write_triple(triple?.as_ref())?;
                             }
                             writer.finish()?;
                         }
@@ -670,22 +661,15 @@ fn bulk_load(
 fn dump(
     store: &Store,
     writer: impl Write,
-    format: GraphOrDatasetFormat,
+    format: RdfFormat,
     to_graph_name: Option<GraphName>,
 ) -> anyhow::Result<()> {
-    match format {
-        GraphOrDatasetFormat::Graph(format) => store.dump_graph(
-            writer,
-            format,
-            &to_graph_name.ok_or_else(|| anyhow!("The --graph option is required when writing a graph format like NTriples, Turtle or RDF/XML"))?,
-        )?,
-        GraphOrDatasetFormat::Dataset(format) => {
-            if to_graph_name.is_some() {
-                bail!("The --graph option is not allowed when writing a dataset format like NQuads or TriG");
-            }
-            store.dump_dataset(writer, format)?
-        }
-    }
+    ensure!(format.supports_datasets() || to_graph_name.is_some(), "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML");
+    if let Some(to_graph_name) = &to_graph_name {
+        store.dump_graph(writer, format, to_graph_name)
+    } else {
+        store.dump_dataset(writer, format)
+    }?;
     Ok(())
 }
 
@@ -759,6 +743,23 @@ impl FromStr for GraphOrDatasetFormat {
         }
         bail!("The file format '{name}' is unknown")
     }
+}
+
+fn rdf_format_from_path(path: &Path) -> anyhow::Result<RdfFormat> {
+    format_from_path(path, |ext| {
+        RdfFormat::from_extension(ext)
+            .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+    })
+}
+
+fn rdf_format_from_name(name: &str) -> anyhow::Result<RdfFormat> {
+    if let Some(t) = RdfFormat::from_extension(name) {
+        return Ok(t);
+    }
+    if let Some(t) = RdfFormat::from_media_type(name) {
+        return Ok(t);
+    }
+    bail!("The file format '{name}' is unknown")
 }
 
 fn serve(store: Store, bind: String, read_only: bool, cors: bool) -> anyhow::Result<()> {
@@ -917,8 +918,9 @@ fn handle_request(
         (path, "GET") if path.starts_with("/store") => {
             if let Some(target) = store_target(request)? {
                 assert_that_graph_exists(&store, &target)?;
-                let format = graph_content_negotiation(request)?;
-                let triples = store.quads_for_pattern(
+                let format = rdf_content_negotiation(request)?;
+
+                let quads = store.quads_for_pattern(
                     None,
                     None,
                     None,
@@ -927,14 +929,14 @@ fn handle_request(
                 ReadForWrite::build_response(
                     move |w| {
                         Ok((
-                            GraphSerializer::from_format(format).triple_writer(w),
-                            triples,
+                            RdfSerializer::from_format(format).serialize_to_write(w),
+                            quads,
                         ))
                     },
-                    |(mut writer, mut triples)| {
-                        Ok(if let Some(t) = triples.next() {
-                            writer.write(&t?.into())?;
-                            Some((writer, triples))
+                    |(mut writer, mut quads)| {
+                        Ok(if let Some(q) = quads.next() {
+                            writer.write_triple(&q?.into())?;
+                            Some((writer, quads))
                         } else {
                             writer.finish()?;
                             None
@@ -943,17 +945,22 @@ fn handle_request(
                     format.media_type(),
                 )
             } else {
-                let format = dataset_content_negotiation(request)?;
+                let format = rdf_content_negotiation(request)?;
+                if !format.supports_datasets() {
+                    return Err(bad_request(format!(
+                        "It is not possible to serialize the full RDF dataset using {format} that does not support named graphs"
+                    )));
+                }
                 ReadForWrite::build_response(
                     move |w| {
                         Ok((
-                            DatasetSerializer::from_format(format).quad_writer(w),
+                            RdfSerializer::from_format(format).serialize_to_write(w),
                             store.iter(),
                         ))
                     },
                     |(mut writer, mut quads)| {
                         Ok(if let Some(q) = quads.next() {
-                            writer.write(&q?)?;
+                            writer.write_quad(&q?)?;
                             Some((writer, quads))
                         } else {
                             writer.finish()?;
@@ -1227,17 +1234,17 @@ fn evaluate_sparql_query(
                 .with_body(body))
         }
         QueryResults::Graph(triples) => {
-            let format = graph_content_negotiation(request)?;
+            let format = rdf_content_negotiation(request)?;
             ReadForWrite::build_response(
                 move |w| {
                     Ok((
-                        GraphSerializer::from_format(format).triple_writer(w),
+                        RdfSerializer::from_format(format).serialize_to_write(w),
                         triples,
                     ))
                 },
                 |(mut writer, mut triples)| {
                     Ok(if let Some(t) = triples.next() {
-                        writer.write(&t?)?;
+                        writer.write_triple(&t?)?;
                         Some((writer, triples))
                     } else {
                         writer.finish()?;
@@ -1403,26 +1410,26 @@ impl From<NamedGraphName> for GraphName {
     }
 }
 
-fn graph_content_negotiation(request: &Request) -> Result<GraphFormat, HttpError> {
+fn rdf_content_negotiation(request: &Request) -> Result<RdfFormat, HttpError> {
     content_negotiation(
         request,
         &[
-            GraphFormat::NTriples.media_type(),
-            GraphFormat::Turtle.media_type(),
-            GraphFormat::RdfXml.media_type(),
+            "application/n-quads",
+            "application/n-triples",
+            "application/rdf+xml",
+            "application/trig",
+            "application/turtle",
+            "application/xml",
+            "application/x-trig",
+            "application/x-turtle",
+            "text/n3",
+            "text/nquads",
+            "text/plain",
+            "text/turtle",
+            "text/xml",
+            "text/x-nquads",
         ],
-        GraphFormat::from_media_type,
-    )
-}
-
-fn dataset_content_negotiation(request: &Request) -> Result<DatasetFormat, HttpError> {
-    content_negotiation(
-        request,
-        &[
-            DatasetFormat::NQuads.media_type(),
-            DatasetFormat::TriG.media_type(),
-        ],
-        DatasetFormat::from_media_type,
+        RdfFormat::from_media_type,
     )
 }
 
@@ -1430,10 +1437,15 @@ fn query_results_content_negotiation(request: &Request) -> Result<QueryResultsFo
     content_negotiation(
         request,
         &[
-            QueryResultsFormat::Json.media_type(),
-            QueryResultsFormat::Xml.media_type(),
-            QueryResultsFormat::Csv.media_type(),
-            QueryResultsFormat::Tsv.media_type(),
+            "application/json",
+            "application/sparql-results+json",
+            "application/sparql-results+xml",
+            "application/xml",
+            "text/csv",
+            "text/json",
+            "text/tab-separated-values",
+            "text/tsv",
+            "text/xml",
         ],
         QueryResultsFormat::from_media_type,
     )

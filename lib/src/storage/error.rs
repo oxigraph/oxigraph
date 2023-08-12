@@ -1,4 +1,4 @@
-use crate::io::read::ParseError;
+use crate::io::{read::ParseError, RdfFormat};
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -179,6 +179,8 @@ pub enum SerializerError {
     Io(io::Error),
     /// An error raised during the lookup in the store.
     Storage(StorageError),
+    /// A format compatible with [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) is required.
+    DatasetFormatExpected(RdfFormat),
 }
 
 impl fmt::Display for SerializerError {
@@ -187,6 +189,10 @@ impl fmt::Display for SerializerError {
         match self {
             Self::Io(e) => e.fmt(f),
             Self::Storage(e) => e.fmt(f),
+            Self::DatasetFormatExpected(format) => write!(
+                f,
+                "A RDF format supporting datasets was expected, {format} found"
+            ),
         }
     }
 }
@@ -197,6 +203,7 @@ impl Error for SerializerError {
         match self {
             Self::Io(e) => Some(e),
             Self::Storage(e) => Some(e),
+            Self::DatasetFormatExpected(_) => None,
         }
     }
 }
@@ -221,6 +228,9 @@ impl From<SerializerError> for io::Error {
         match error {
             SerializerError::Storage(error) => error.into(),
             SerializerError::Io(error) => error,
+            SerializerError::DatasetFormatExpected(_) => {
+                io::Error::new(io::ErrorKind::InvalidInput, error.to_string())
+            }
         }
     }
 }

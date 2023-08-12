@@ -1,4 +1,4 @@
-use crate::io::read::ParseError;
+use crate::io::{ParseError, SyntaxError};
 use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error;
@@ -14,10 +14,10 @@ pub enum EvaluationError {
     /// An error from the storage.
     Storage(StorageError),
     /// An error while parsing an external RDF file.
-    GraphParsing(ParseError),
+    GraphParsing(SyntaxError),
     /// An error while parsing an external result file (likely from a federated query).
     ResultsParsing(sparesults::ParseError),
-    /// An error returned during store IOs or during results write.
+    /// An error returned during store or results I/Os.
     Io(io::Error),
     /// An error returned during the query evaluation itself (not supported custom function...).
     Query(QueryError),
@@ -132,7 +132,10 @@ impl From<io::Error> for EvaluationError {
 impl From<ParseError> for EvaluationError {
     #[inline]
     fn from(error: ParseError) -> Self {
-        Self::GraphParsing(error)
+        match error {
+            ParseError::Syntax(error) => Self::GraphParsing(error),
+            ParseError::Io(error) => Self::Io(error),
+        }
     }
 }
 

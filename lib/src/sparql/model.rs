@@ -1,5 +1,4 @@
-use crate::io::GraphFormat;
-use crate::io::GraphSerializer;
+use crate::io::{RdfFormat, RdfSerializer};
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
 use oxrdf::{Variable, VariableRef};
@@ -96,7 +95,7 @@ impl QueryResults {
     ///
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::io::{RdfFormat, GraphFormat};
     /// use oxigraph::model::*;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n";
@@ -105,19 +104,19 @@ impl QueryResults {
     /// store.load_graph(graph.as_bytes(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
     ///
     /// let mut results = Vec::new();
-    /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, GraphFormat::NTriples)?;
+    /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, RdfFormat::NTriples)?;
     /// assert_eq!(results, graph.as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write_graph(
         self,
         write: impl Write,
-        format: GraphFormat,
+        format: impl Into<RdfFormat>,
     ) -> Result<(), EvaluationError> {
         if let Self::Graph(triples) = self {
-            let mut writer = GraphSerializer::from_format(format).triple_writer(write);
+            let mut writer = RdfSerializer::from_format(format.into()).serialize_to_write(write);
             for triple in triples {
-                writer.write(&triple?)?;
+                writer.write_triple(&triple?)?;
             }
             writer.finish()?;
             Ok(())

@@ -3,7 +3,7 @@
 use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyReadable, PyWritable};
 use crate::model::*;
 use crate::sparql::*;
-use oxigraph::io::{DatasetFormat, GraphFormat};
+use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat};
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
@@ -522,10 +522,10 @@ impl PyStore {
     /// :type output: io(bytes) or str or pathlib.Path
     /// :param mime_type: the MIME type of the RDF serialization.
     /// :type mime_type: str
-    /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
+    /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is given with a quad syntax.
+    /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
     /// :raises IOError: if an I/O error happens during a quad lookup
     ///
     /// >>> store = Store()
@@ -547,34 +547,23 @@ impl PyStore {
         } else {
             PyWritable::from_data(output)
         };
+        let Some(format) = RdfFormat::from_media_type(mime_type) else {
+            return Err(PyValueError::new_err(format!(
+                "Not supported MIME type: {mime_type}"
+            )));
+        };
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
         };
         py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-                self.inner
-                    .dump_graph(
-                        output,
-                        graph_format,
-                        &from_graph_name.unwrap_or(GraphName::DefaultGraph),
-                    )
-                    .map_err(map_serializer_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if from_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .dump_dataset(output, dataset_format)
-                    .map_err(map_serializer_error)
+            if let Some(from_graph_name) = &from_graph_name {
+                self.inner.dump_graph(output, format, from_graph_name)
             } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {mime_type}"
-                )))
+                self.inner.dump_dataset(output, format)
             }
+            .map_err(map_serializer_error)
         })
     }
 
@@ -878,6 +867,7 @@ pub fn map_serializer_error(error: SerializerError) -> PyErr {
     match error {
         SerializerError::Storage(error) => map_storage_error(error),
         SerializerError::Io(error) => PyIOError::new_err(error.to_string()),
+        SerializerError::DatasetFormatExpected(_) => PyValueError::new_err(error.to_string()),
     }
 }
 
