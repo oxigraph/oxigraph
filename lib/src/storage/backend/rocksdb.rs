@@ -942,10 +942,10 @@ impl Reader {
                 }
                 InnerReader::Transaction(inner) => {
                     let Some(inner) = inner.upgrade() else {
-                         return Err(StorageError::Other(
-                             "The transaction is already ended".into(),
-                         ));
-                     };
+                        return Err(StorageError::Other(
+                            "The transaction is already ended".into(),
+                        ));
+                    };
                     ffi_result!(rocksdb_transaction_get_pinned_cf_with_status(
                         *inner,
                         self.options,

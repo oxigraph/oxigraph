@@ -26,8 +26,8 @@ impl Decimal {
             return Err(TooLargeForDecimalError);
         };
         let Some(value) = i.checked_mul(10_i128.pow(shift)) else {
-             return Err(TooLargeForDecimalError);
-         };
+            return Err(TooLargeForDecimalError);
+        };
         Ok(Self { value })
     }
 
