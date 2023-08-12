@@ -1,5 +1,4 @@
-use crate::io::read::ParseError;
-use crate::io::{GraphFormat, GraphParser};
+use crate::io::{RdfFormat, RdfParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::dataset::DatasetView;
@@ -166,7 +165,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             from.as_str(),
             "application/n-triples, text/turtle, application/rdf+xml",
         )?;
-        let format = GraphFormat::from_media_type(&content_type).ok_or_else(|| {
+        let format = RdfFormat::from_media_type(&content_type).ok_or_else(|| {
             EvaluationError::msg(format!(
                 "Unsupported Content-Type returned by {from}: {content_type}"
             ))
@@ -175,15 +174,17 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             GraphName::NamedNode(graph_name) => graph_name.into(),
             GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
         };
-        let mut parser = GraphParser::from_format(format);
+        let mut parser = RdfParser::from_format(format)
+            .rename_blank_nodes()
+            .without_named_graphs()
+            .with_default_graph(to_graph_name);
         if let Some(base_iri) = &self.base_iri {
-            parser = parser
-                .with_base_iri(base_iri.as_str())
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+            parser = parser.with_base_iri(base_iri.as_str()).map_err(|e| {
+                EvaluationError::msg(format!("The LOAD IRI '{base_iri}' is invalid: {e}"))
+            })?;
         }
-        for t in parser.read_triples(body) {
-            self.transaction
-                .insert(t?.as_ref().in_graph(to_graph_name))?;
+        for q in parser.parse_read(body) {
+            self.transaction.insert(q?.as_ref())?;
         }
         Ok(())
     }

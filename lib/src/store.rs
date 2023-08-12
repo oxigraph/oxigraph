@@ -24,9 +24,7 @@
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
 use crate::io::read::ParseError;
-use crate::io::{
-    DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
-};
+use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser, RdfFormat, RdfSerializer};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryExplanation, QueryOptions,
@@ -612,13 +610,13 @@ impl Store {
     /// ```
     pub fn dump_graph<'a>(
         &self,
-        writer: impl Write,
-        format: GraphFormat,
+        write: impl Write,
+        format: impl Into<RdfFormat>,
         from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), SerializerError> {
-        let mut writer = GraphSerializer::from_format(format).triple_writer(writer);
+        let mut writer = RdfSerializer::from_format(format.into()).serialize_to_write(write);
         for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
-            writer.write(quad?.as_ref())?;
+            writer.write_triple(quad?.as_ref())?;
         }
         writer.finish()?;
         Ok(())
@@ -642,12 +640,16 @@ impl Store {
     /// ```
     pub fn dump_dataset(
         &self,
-        writer: impl Write,
-        format: DatasetFormat,
+        write: impl Write,
+        format: impl Into<RdfFormat>,
     ) -> Result<(), SerializerError> {
-        let mut writer = DatasetSerializer::from_format(format).quad_writer(writer);
+        let format = format.into();
+        if !format.supports_datasets() {
+            return Err(SerializerError::DatasetFormatExpected(format));
+        }
+        let mut writer = RdfSerializer::from_format(format).serialize_to_write(write);
         for quad in self.iter() {
-            writer.write(&quad?)?;
+            writer.write_quad(&quad?)?;
         }
         writer.finish()?;
         Ok(())

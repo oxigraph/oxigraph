@@ -4,7 +4,7 @@ use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
-use oxigraph::io::{DatasetFormat, GraphFormat};
+use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat};
 use oxigraph::model::*;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::Store;
@@ -191,34 +191,22 @@ impl JsStore {
     }
 
     pub fn dump(&self, mime_type: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
+        let Some(format) = RdfFormat::from_media_type(mime_type) else {
+            return Err(format_err!("Not supported MIME type: {mime_type}"));
+        };
         let from_graph_name =
             if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-                Some(graph_name.try_into()?)
+                Some(GraphName::try_from(graph_name)?)
             } else {
                 None
             };
-
         let mut buffer = Vec::new();
-        if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-            self.store
-                .dump_graph(
-                    &mut buffer,
-                    graph_format,
-                    &from_graph_name.unwrap_or(GraphName::DefaultGraph),
-                )
-                .map_err(to_err)?;
-        } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-            if from_graph_name.is_some() {
-                return Err(format_err!(
-                    "The target graph name parameter is not available for dataset formats"
-                ));
-            }
-            self.store
-                .dump_dataset(&mut buffer, dataset_format)
-                .map_err(to_err)?;
+        if let Some(from_graph_name) = &from_graph_name {
+            self.store.dump_graph(&mut buffer, format, from_graph_name)
         } else {
-            return Err(format_err!("Not supported MIME type: {mime_type}"));
+            self.store.dump_dataset(&mut buffer, format)
         }
+        .map_err(to_err)?;
         String::from_utf8(buffer).map_err(to_err)
     }
 }

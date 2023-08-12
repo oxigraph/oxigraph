@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! Utilities to write RDF graphs and datasets.
 
 use crate::io::{DatasetFormat, GraphFormat};
@@ -28,6 +30,7 @@ use std::io::{self, Write};
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes());
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[deprecated(note = "Use RdfSerializer instead")]
 pub struct GraphSerializer {
     inner: RdfSerializer,
 }
@@ -110,6 +113,7 @@ impl<W: Write> TripleWriter<W> {
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[deprecated(note = "Use RdfSerializer instead")]
 pub struct DatasetSerializer {
     inner: RdfSerializer,
 }

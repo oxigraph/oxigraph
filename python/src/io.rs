@@ -3,8 +3,9 @@
 use crate::model::{PyQuad, PyTriple};
 use oxigraph::io::read::{ParseError, QuadReader, TripleReader};
 use oxigraph::io::{
-    DatasetFormat, DatasetParser, DatasetSerializer, GraphFormat, GraphParser, GraphSerializer,
+    DatasetFormat, DatasetParser, GraphFormat, GraphParser, RdfFormat, RdfSerializer,
 };
+use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -120,34 +121,34 @@ pub fn parse(
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
 pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
+    let Some(format) = RdfFormat::from_media_type(mime_type) else {
+        return Err(PyValueError::new_err(format!(
+            "Not supported MIME type: {mime_type}"
+        )));
+    };
     let output = if let Ok(path) = output.extract::<PathBuf>(py) {
         PyWritable::from_file(&path, py).map_err(map_io_err)?
     } else {
         PyWritable::from_data(output)
     };
-    if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-        let mut writer = GraphSerializer::from_format(graph_format).triple_writer(output);
-        for i in input.iter()? {
-            writer
-                .write(&*i?.extract::<PyRef<PyTriple>>()?)
-                .map_err(map_io_err)?;
+    let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
+    for i in input.iter()? {
+        let i = i?;
+        if let Ok(triple) = i.extract::<PyRef<PyTriple>>() {
+            writer.write_triple(&*triple)
+        } else {
+            let quad = i.extract::<PyRef<PyQuad>>()?;
+            let quad = QuadRef::from(&*quad);
+            if !quad.graph_name.is_default_graph() && !format.supports_datasets() {
+                return Err(PyValueError::new_err(
+                    "The {format} format does not support named graphs",
+                ));
+            }
+            writer.write_quad(quad)
         }
-        writer.finish().map_err(map_io_err)?;
-        Ok(())
-    } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-        let mut writer = DatasetSerializer::from_format(dataset_format).quad_writer(output);
-        for i in input.iter()? {
-            writer
-                .write(&*i?.extract::<PyRef<PyQuad>>()?)
-                .map_err(map_io_err)?;
-        }
-        writer.finish().map_err(map_io_err)?;
-        Ok(())
-    } else {
-        Err(PyValueError::new_err(format!(
-            "Not supported MIME type: {mime_type}"
-        )))
+        .map_err(map_io_err)?;
     }
+    writer.finish().map_err(map_io_err)
 }
 
 #[pyclass(name = "TripleReader", module = "pyoxigraph")]

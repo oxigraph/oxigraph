@@ -1,4 +1,4 @@
-use oxigraph::io::{DatasetFormat, GraphFormat};
+use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat};
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
@@ -211,11 +211,7 @@ fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     }
 
     let mut buffer = Vec::new();
-    store.dump_graph(
-        &mut buffer,
-        GraphFormat::NTriples,
-        GraphNameRef::DefaultGraph,
-    )?;
+    store.dump_graph(&mut buffer, RdfFormat::NTriples, GraphNameRef::DefaultGraph)?;
     assert_eq!(
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES
@@ -231,7 +227,7 @@ fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
     }
 
     let mut buffer = Vec::new();
-    store.dump_dataset(&mut buffer, DatasetFormat::NQuads)?;
+    store.dump_dataset(&mut buffer, RdfFormat::NQuads)?;
     assert_eq!(
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES

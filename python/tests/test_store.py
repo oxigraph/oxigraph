@@ -321,8 +321,10 @@ class TestStore(unittest.TestCase):
         )
 
     def test_dump_with_io_error(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, bar))
         with self.assertRaises(OSError) as _, TemporaryFile("rb") as fp:
-            Store().dump(fp, mime_type="application/rdf+xml")
+            store.dump(fp, mime_type="application/trig")
 
     def test_write_in_read(self) -> None:
         store = Store()
