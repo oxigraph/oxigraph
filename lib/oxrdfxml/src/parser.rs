@@ -734,11 +734,13 @@ impl<R> RdfXmlReader<R> {
             }
             RdfXmlNextProduction::PropertyElt { subject } => {
                 let iri = if *tag_name == *RDF_LI {
-                    let Some(RdfXmlState::NodeElt { li_counter, .. }) = self.state.last_mut() else {
+                    let Some(RdfXmlState::NodeElt { li_counter, .. }) = self.state.last_mut()
+                    else {
                         return Err(SyntaxError::msg(format!(
                             "Invalid property element tag name: {}",
                             &tag_name
-                        )).into());
+                        ))
+                        .into());
                     };
                     *li_counter += 1;
                     NamedNode::new_unchecked(format!(
