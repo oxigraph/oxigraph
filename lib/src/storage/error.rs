@@ -1,4 +1,5 @@
-use crate::io::{read::ParseError, RdfFormat};
+use crate::io::{ParseError, RdfFormat};
+use oxiri::IriParseError;
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -126,6 +127,8 @@ pub enum LoaderError {
     Parsing(ParseError),
     /// An error raised during the insertion in the store.
     Storage(StorageError),
+    /// The base IRI is invalid.
+    InvalidBaseIri { iri: String, error: IriParseError },
 }
 
 impl fmt::Display for LoaderError {
@@ -134,6 +137,7 @@ impl fmt::Display for LoaderError {
         match self {
             Self::Parsing(e) => e.fmt(f),
             Self::Storage(e) => e.fmt(f),
+            Self::InvalidBaseIri { iri, error } => write!(f, "Invalid base IRI '{iri}': {error}"),
         }
     }
 }
@@ -144,6 +148,7 @@ impl Error for LoaderError {
         match self {
             Self::Parsing(e) => Some(e),
             Self::Storage(e) => Some(e),
+            Self::InvalidBaseIri { error, .. } => Some(error),
         }
     }
 }
@@ -168,6 +173,9 @@ impl From<LoaderError> for io::Error {
         match error {
             LoaderError::Storage(error) => error.into(),
             LoaderError::Parsing(error) => error.into(),
+            LoaderError::InvalidBaseIri { .. } => {
+                io::Error::new(io::ErrorKind::InvalidInput, error.to_string())
+            }
         }
     }
 }

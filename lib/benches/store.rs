@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use oxhttp::model::{Method, Request, Status};
-use oxigraph::io::GraphFormat;
-use oxigraph::model::GraphNameRef;
+use oxigraph::io::RdfFormat;
+use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
 use rand::random;
@@ -63,12 +63,7 @@ fn store_load(c: &mut Criterion) {
 
 fn do_load(store: &Store, data: &[u8]) {
     store
-        .load_graph(
-            data,
-            GraphFormat::NTriples,
-            GraphNameRef::DefaultGraph,
-            None,
-        )
+        .load_graph(data, RdfFormat::NTriples, GraphName::DefaultGraph, None)
         .unwrap();
     store.optimize().unwrap();
 }
@@ -76,12 +71,7 @@ fn do_load(store: &Store, data: &[u8]) {
 fn do_bulk_load(store: &Store, data: &[u8]) {
     store
         .bulk_loader()
-        .load_graph(
-            data,
-            GraphFormat::NTriples,
-            GraphNameRef::DefaultGraph,
-            None,
-        )
+        .load_graph(data, RdfFormat::NTriples, GraphNameRef::DefaultGraph, None)
         .unwrap();
     store.optimize().unwrap();
 }

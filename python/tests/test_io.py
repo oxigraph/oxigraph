@@ -2,9 +2,9 @@ import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from tempfile import NamedTemporaryFile, TemporaryFile
 
-from pyoxigraph import Literal, NamedNode, Quad, Triple, parse, serialize
+from pyoxigraph import Literal, NamedNode, Quad, parse, serialize
 
-EXAMPLE_TRIPLE = Triple(
+EXAMPLE_TRIPLE = Quad(
     NamedNode("http://example.com/foo"),
     NamedNode("http://example.com/p"),
     Literal("éù"),
@@ -83,11 +83,40 @@ class TestParse(unittest.TestCase):
             [EXAMPLE_QUAD],
         )
 
+    def test_parse_without_named_graphs(self) -> None:
+        with self.assertRaises(SyntaxError) as _:
+            list(
+                parse(
+                    StringIO('<g> { <foo> <p> "1" }'),
+                    "application/trig",
+                    base_iri="http://example.com/",
+                    without_named_graphs=True,
+                )
+            )
+
+    def test_parse_rename_blank_nodes(self) -> None:
+        self.assertNotEqual(
+            list(
+                parse(
+                    StringIO('_:s <http://example.com/p> "o" .'),
+                    "application/n-triples",
+                    rename_blank_nodes=True,
+                )
+            ),
+            list(
+                parse(
+                    StringIO('_:s <http://example.com/p> "o" .'),
+                    "application/n-triples",
+                    rename_blank_nodes=True,
+                )
+            ),
+        )
+
 
 class TestSerialize(unittest.TestCase):
     def test_serialize_to_bytes_io(self) -> None:
         output = BytesIO()
-        serialize([EXAMPLE_TRIPLE], output, "text/turtle")
+        serialize([EXAMPLE_TRIPLE.triple], output, "text/turtle")
         self.assertEqual(
             output.getvalue().decode(),
             '<http://example.com/foo> <http://example.com/p> "éù" .\n',

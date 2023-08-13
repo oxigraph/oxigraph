@@ -95,13 +95,13 @@ impl QueryResults {
     ///
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::{RdfFormat, GraphFormat};
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n";
     ///
     /// let store = Store::new()?;
-    /// store.load_graph(graph.as_bytes(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
+    /// store.load_graph(graph.as_bytes(), RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
     ///
     /// let mut results = Vec::new();
     /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, RdfFormat::NTriples)?;

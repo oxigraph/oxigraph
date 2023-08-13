@@ -3,7 +3,7 @@
 use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyReadable, PyWritable};
 use crate::model::*;
 use crate::sparql::*;
-use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat};
+use oxigraph::io::RdfFormat;
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
@@ -366,7 +366,7 @@ impl PyStore {
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
+    /// :raises ValueError: if the MIME type is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
     /// :raises IOError: if an I/O error happens during a quad insertion.
     ///
@@ -383,6 +383,11 @@ impl PyStore {
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
+        let Some(format) = RdfFormat::from_media_type(mime_type) else {
+            return Err(PyValueError::new_err(format!(
+                "Not supported MIME type: {mime_type}"
+            )));
+        };
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
@@ -394,29 +399,13 @@ impl PyStore {
             PyReadable::from_data(input, py)
         };
         py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
+            if let Some(to_graph_name) = to_graph_name {
                 self.inner
-                    .load_graph(
-                        input,
-                        graph_format,
-                        to_graph_name.as_ref().unwrap_or(&GraphName::DefaultGraph),
-                        base_iri,
-                    )
-                    .map_err(map_loader_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if to_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .load_dataset(input, dataset_format, base_iri)
-                    .map_err(map_loader_error)
+                    .load_graph(input, format, to_graph_name, base_iri)
             } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {mime_type}"
-                )))
+                self.inner.load_dataset(input, format, base_iri)
             }
+            .map_err(map_loader_error)
         })
     }
 
@@ -448,7 +437,7 @@ impl PyStore {
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
+    /// :raises ValueError: if the MIME type is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
     /// :raises IOError: if an I/O error happens during a quad insertion.
     ///
@@ -465,6 +454,11 @@ impl PyStore {
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
+        let Some(format) = RdfFormat::from_media_type(mime_type) else {
+            return Err(PyValueError::new_err(format!(
+                "Not supported MIME type: {mime_type}"
+            )));
+        };
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
@@ -476,31 +470,16 @@ impl PyStore {
             PyReadable::from_data(input, py)
         };
         py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
+            if let Some(to_graph_name) = to_graph_name {
                 self.inner
                     .bulk_loader()
-                    .load_graph(
-                        input,
-                        graph_format,
-                        &to_graph_name.unwrap_or(GraphName::DefaultGraph),
-                        base_iri,
-                    )
-                    .map_err(map_loader_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if to_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .bulk_loader()
-                    .load_dataset(input, dataset_format, base_iri)
-                    .map_err(map_loader_error)
+                    .load_graph(input, format, to_graph_name, base_iri)
             } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {mime_type}"
-                )))
+                self.inner
+                    .bulk_loader()
+                    .load_dataset(input, format, base_iri)
             }
+            .map_err(map_loader_error)
         })
     }
 
@@ -542,11 +521,6 @@ impl PyStore {
         from_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let output = if let Ok(path) = output.extract::<PathBuf>(py) {
-            PyWritable::from_file(&path, py).map_err(map_io_err)?
-        } else {
-            PyWritable::from_data(output)
-        };
         let Some(format) = RdfFormat::from_media_type(mime_type) else {
             return Err(PyValueError::new_err(format!(
                 "Not supported MIME type: {mime_type}"
@@ -556,6 +530,11 @@ impl PyStore {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
+        };
+        let output = if let Ok(path) = output.extract::<PathBuf>(py) {
+            PyWritable::from_file(&path, py).map_err(map_io_err)?
+        } else {
+            PyWritable::from_data(output)
         };
         py.allow_threads(|| {
             if let Some(from_graph_name) = &from_graph_name {
@@ -860,6 +839,7 @@ pub fn map_loader_error(error: LoaderError) -> PyErr {
     match error {
         LoaderError::Storage(error) => map_storage_error(error),
         LoaderError::Parsing(error) => map_parse_error(error),
+        LoaderError::InvalidBaseIri { .. } => PyValueError::new_err(error.to_string()),
     }
 }
 

@@ -1,4 +1,4 @@
-use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat};
+use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use oxigraph::store::Store;
@@ -109,7 +109,7 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.load_graph(
         DATA.as_bytes(),
-        GraphFormat::Turtle,
+        RdfFormat::Turtle,
         GraphNameRef::DefaultGraph,
         None,
     )?;
@@ -126,8 +126,8 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().load_graph(
         DATA.as_bytes(),
-        GraphFormat::Turtle,
-        GraphNameRef::DefaultGraph,
+        RdfFormat::Turtle,
+        GraphName::DefaultGraph,
         None,
     )?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -143,8 +143,8 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().on_parse_error(|_| Ok(())).load_graph(
         b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> .".as_slice(),
-        GraphFormat::NTriples,
-        GraphNameRef::DefaultGraph,
+        RdfFormat::NTriples,
+        GraphName::DefaultGraph,
         None,
     )?;
     assert_eq!(store.len()?, 1);
@@ -161,7 +161,7 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.load_dataset(GRAPH_DATA.as_bytes(), DatasetFormat::TriG, None)?;
+    store.load_dataset(GRAPH_DATA.as_bytes(), RdfFormat::TriG, None)?;
     for q in quads(NamedNodeRef::new_unchecked(
         "http://www.wikidata.org/wiki/Special:EntityData/Q90",
     )) {
@@ -177,7 +177,7 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
         .bulk_loader()
-        .load_dataset(GRAPH_DATA.as_bytes(), DatasetFormat::TriG, None)?;
+        .load_dataset(GRAPH_DATA.as_bytes(), RdfFormat::TriG, None)?;
     let graph_name =
         NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
     for q in quads(graph_name) {
@@ -194,8 +194,8 @@ fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     for _ in 0..2 {
         store.load_graph(
             "_:a <http://example.com/p> <http://example.com/p> .".as_bytes(),
-            GraphFormat::NTriples,
-            GraphNameRef::DefaultGraph,
+            RdfFormat::NTriples,
+            GraphName::DefaultGraph,
             None,
         )?;
     }

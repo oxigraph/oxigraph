@@ -1,4 +1,4 @@
-use crate::files::{guess_graph_format, load_to_graph};
+use crate::files::{guess_rdf_format, load_to_graph};
 use crate::vocab::*;
 use anyhow::{bail, Result};
 use oxigraph::model::vocab::*;
@@ -275,7 +275,7 @@ impl TestManifest {
             return Ok(None);
         };
         self.graph.clear();
-        load_to_graph(&url, &mut self.graph, guess_graph_format(&url)?, false)?;
+        load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, false)?;
 
         let manifests = self
             .graph
