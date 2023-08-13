@@ -23,8 +23,9 @@
 //! };
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
-use crate::io::read::ParseError;
-use crate::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser, RdfFormat, RdfSerializer};
+#[cfg(not(target_family = "wasm"))]
+use crate::io::ParseError;
+use crate::io::{RdfFormat, RdfParser, RdfSerializer};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryExplanation, QueryOptions,
@@ -451,38 +452,43 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
+    /// store.load_graph(file.as_ref(), RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn load_graph<'a>(
+    pub fn load_graph(
         &self,
-        reader: impl Read,
-        format: GraphFormat,
-        to_graph_name: impl Into<GraphNameRef<'a>>,
+        read: impl Read,
+        format: impl Into<RdfFormat>,
+        to_graph_name: impl Into<GraphName>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = GraphParser::from_format(format);
+        let mut parser = RdfParser::from_format(format.into())
+            .without_named_graphs()
+            .with_default_graph(to_graph_name)
+            .rename_blank_nodes();
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| LoaderError::InvalidBaseIri {
+                    iri: base_iri.into(),
+                    error: e,
+                })?;
         }
-        let quads = parser.read_triples(reader).collect::<Result<Vec<_>, _>>()?;
-        let to_graph_name = to_graph_name.into();
+        let quads = parser.parse_read(read).collect::<Result<Vec<_>, _>>()?;
         self.storage.transaction(move |mut t| {
             for quad in &quads {
-                t.insert(quad.as_ref().in_graph(to_graph_name))?;
+                t.insert(quad.as_ref())?;
             }
             Ok(())
         })
@@ -495,14 +501,14 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    /// store.load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -511,20 +517,23 @@ impl Store {
     /// ```
     pub fn load_dataset(
         &self,
-        reader: impl Read,
-        format: DatasetFormat,
+        read: impl Read,
+        format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = DatasetParser::from_format(format);
+        let mut parser = RdfParser::from_format(format.into()).rename_blank_nodes();
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| LoaderError::InvalidBaseIri {
+                    iri: base_iri.into(),
+                    error: e,
+                })?;
         }
-        let quads = parser.read_quads(reader).collect::<Result<Vec<_>, _>>()?;
+        let quads = parser.parse_read(read).collect::<Result<Vec<_>, _>>()?;
         self.storage.transaction(move |mut t| {
             for quad in &quads {
-                t.insert(quad.into())?;
+                t.insert(quad.as_ref())?;
             }
             Ok(())
         })
@@ -595,16 +604,16 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::GraphFormat;
-    /// use oxigraph::model::GraphNameRef;
+    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::model::*;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = Store::new()?;
-    /// store.load_graph(file, GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
+    /// store.load_graph(file, RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump_graph(&mut buffer, GraphFormat::NTriples, GraphNameRef::DefaultGraph)?;
+    /// store.dump_graph(&mut buffer, RdfFormat::NTriples, GraphNameRef::DefaultGraph)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
@@ -626,15 +635,15 @@ impl Store {
     ///    
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::io::RdfFormat;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = Store::new()?;
-    /// store.load_dataset(file, DatasetFormat::NQuads, None)?;
+    /// store.load_dataset(file, RdfFormat::NQuads, None)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump_dataset(&mut buffer, DatasetFormat::NQuads)?;
+    /// store.dump_dataset(&mut buffer, RdfFormat::NQuads)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
@@ -841,14 +850,14 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = Store::new()?;
     ///
     /// // quads file insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_loader().load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    /// store.bulk_loader().load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1061,7 +1070,7 @@ impl<'a> Transaction<'a> {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = Store::new()?;
@@ -1069,7 +1078,7 @@ impl<'a> Transaction<'a> {
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|mut transaction| {
-    ///     transaction.load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)
+    ///     transaction.load_graph(file.as_ref(), RdfFormat::NTriples, GraphName::DefaultGraph, None)
     /// })?;
     ///
     /// // we inspect the store contents
@@ -1077,23 +1086,27 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
     /// ```
-    pub fn load_graph<'b>(
+    pub fn load_graph(
         &mut self,
-        reader: impl Read,
-        format: GraphFormat,
-        to_graph_name: impl Into<GraphNameRef<'b>>,
+        read: impl Read,
+        format: impl Into<RdfFormat>,
+        to_graph_name: impl Into<GraphName>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = GraphParser::from_format(format);
+        let mut parser = RdfParser::from_format(format.into())
+            .without_named_graphs()
+            .with_default_graph(to_graph_name)
+            .rename_blank_nodes();
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| LoaderError::InvalidBaseIri {
+                    iri: base_iri.into(),
+                    error: e,
+                })?;
         }
-        let to_graph_name = to_graph_name.into();
-        for triple in parser.read_triples(reader) {
-            self.writer
-                .insert(triple?.as_ref().in_graph(to_graph_name))?;
+        for quad in parser.parse_read(read) {
+            self.writer.insert(quad?.as_ref())?;
         }
         Ok(())
     }
@@ -1103,7 +1116,7 @@ impl<'a> Transaction<'a> {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = Store::new()?;
@@ -1111,7 +1124,7 @@ impl<'a> Transaction<'a> {
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|mut transaction| {
-    ///     transaction.load_dataset(file.as_ref(), DatasetFormat::NQuads, None)
+    ///     transaction.load_dataset(file.as_ref(), RdfFormat::NQuads, None)
     /// })?;
     ///
     /// // we inspect the store contents
@@ -1121,17 +1134,20 @@ impl<'a> Transaction<'a> {
     /// ```
     pub fn load_dataset(
         &mut self,
-        reader: impl Read,
-        format: DatasetFormat,
+        read: impl Read,
+        format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = DatasetParser::from_format(format);
+        let mut parser = RdfParser::from_format(format.into()).rename_blank_nodes();
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| LoaderError::InvalidBaseIri {
+                    iri: base_iri.into(),
+                    error: e,
+                })?;
         }
-        for quad in parser.read_quads(reader) {
+        for quad in parser.parse_read(read) {
             self.writer.insert(quad?.as_ref())?;
         }
         Ok(())
@@ -1365,14 +1381,14 @@ impl Iterator for GraphNameIter {
 /// Usage example with loading a dataset:
 /// ```
 /// use oxigraph::store::Store;
-/// use oxigraph::io::DatasetFormat;
+/// use oxigraph::io::RdfFormat;
 /// use oxigraph::model::*;
 ///
 /// let store = Store::new()?;
 ///
 /// // quads file insertion
 /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-/// store.bulk_loader().load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+/// store.bulk_loader().load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
 ///
 /// // we inspect the store contents
 /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1448,14 +1464,14 @@ impl BulkLoader {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::DatasetFormat;
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_loader().load_dataset(file.as_ref(), DatasetFormat::NQuads, None)?;
+    /// store.bulk_loader().load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1464,17 +1480,20 @@ impl BulkLoader {
     /// ```
     pub fn load_dataset(
         &self,
-        reader: impl Read,
-        format: DatasetFormat,
+        read: impl Read,
+        format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = DatasetParser::from_format(format);
+        let mut parser = RdfParser::from_format(format.into()).rename_blank_nodes();
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| LoaderError::InvalidBaseIri {
+                    iri: base_iri.into(),
+                    error: e,
+                })?;
         }
-        self.load_ok_quads(parser.read_quads(reader).filter_map(|r| match r {
+        self.load_ok_quads(parser.parse_read(read).filter_map(|r| match r {
             Ok(q) => Some(Ok(q)),
             Err(e) => {
                 if let Some(callback) = &self.on_parse_error {
@@ -1503,36 +1522,41 @@ impl BulkLoader {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::GraphFormat;
+    /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_loader().load_graph(file.as_ref(), GraphFormat::NTriples, GraphNameRef::DefaultGraph, None)?;
+    /// store.bulk_loader().load_graph(file.as_ref(), RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn load_graph<'a>(
+    pub fn load_graph(
         &self,
-        reader: impl Read,
-        format: GraphFormat,
-        to_graph_name: impl Into<GraphNameRef<'a>>,
+        read: impl Read,
+        format: impl Into<RdfFormat>,
+        to_graph_name: impl Into<GraphName>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = GraphParser::from_format(format);
+        let mut parser = RdfParser::from_format(format.into())
+            .without_named_graphs()
+            .with_default_graph(to_graph_name)
+            .rename_blank_nodes();
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
-                .map_err(|e| ParseError::invalid_base_iri(base_iri, e))?;
+                .map_err(|e| LoaderError::InvalidBaseIri {
+                    iri: base_iri.into(),
+                    error: e,
+                })?;
         }
-        let to_graph_name = to_graph_name.into();
-        self.load_ok_quads(parser.read_triples(reader).filter_map(|r| match r {
-            Ok(q) => Some(Ok(q.in_graph(to_graph_name.into_owned()))),
+        self.load_ok_quads(parser.parse_read(read).filter_map(|r| match r {
+            Ok(q) => Some(Ok(q)),
             Err(e) => {
                 if let Some(callback) = &self.on_parse_error {
                     if let Err(e) = callback(e) {

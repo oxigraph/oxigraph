@@ -158,7 +158,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         load_dataset_to_store(data, &store)?;
     }
     for (name, value) in &test.graph_data {
-        load_graph_to_store(value, &store, name)?;
+        load_graph_to_store(value, &store, name.clone())?;
     }
     let query_file = test
         .query
@@ -251,7 +251,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         load_dataset_to_store(data, &store)?;
     }
     for (name, value) in &test.graph_data {
-        load_graph_to_store(value, &store, name)?;
+        load_graph_to_store(value, &store, name.clone())?;
     }
 
     let result_store = Store::new()?;
@@ -259,7 +259,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         load_dataset_to_store(data, &result_store)?;
     }
     for (name, value) in &test.result_graph_data {
-        load_graph_to_store(value, &result_store, name)?;
+        load_graph_to_store(value, &result_store, name.clone())?;
     }
 
     let update_file = test
@@ -301,7 +301,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
             false,
         )
     } else {
-        StaticQueryResults::from_graph(&load_graph(url, guess_graph_format(url)?, false)?)
+        StaticQueryResults::from_graph(&load_graph(url, guess_rdf_format(url)?, false)?)
     }
 }
 
@@ -698,14 +698,14 @@ fn solutions_to_string(solutions: Vec<Vec<(Variable, Term)>>, ordered: bool) -> 
     lines.join("\n")
 }
 
-fn load_graph_to_store<'a>(
+fn load_graph_to_store(
     url: &str,
     store: &Store,
-    to_graph_name: impl Into<GraphNameRef<'a>>,
+    to_graph_name: impl Into<GraphName>,
 ) -> Result<()> {
     store.load_graph(
         read_file(url)?,
-        guess_graph_format(url)?,
+        guess_rdf_format(url)?,
         to_graph_name,
         Some(url),
     )?;
@@ -713,16 +713,7 @@ fn load_graph_to_store<'a>(
 }
 
 fn load_dataset_to_store(url: &str, store: &Store) -> Result<()> {
-    if let Ok(format) = guess_dataset_format(url) {
-        store.load_dataset(read_file(url)?, format, Some(url))
-    } else {
-        store.load_graph(
-            read_file(url)?,
-            guess_graph_format(url)?,
-            GraphNameRef::DefaultGraph,
-            Some(url),
-        )
-    }?;
+    store.load_dataset(read_file(url)?, guess_rdf_format(url)?, Some(url))?;
     Ok(())
 }
 

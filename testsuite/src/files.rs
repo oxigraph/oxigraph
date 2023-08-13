@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
-use oxigraph::io::{DatasetFormat, DatasetParser, GraphFormat, GraphParser};
+use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::{Dataset, Graph};
 use oxttl::n3::N3Quad;
 use oxttl::N3Parser;
@@ -33,14 +33,14 @@ pub fn read_file_to_string(url: &str) -> Result<String> {
 pub fn load_to_graph(
     url: &str,
     graph: &mut Graph,
-    format: GraphFormat,
+    format: RdfFormat,
     ignore_errors: bool,
 ) -> Result<()> {
-    let parser = GraphParser::from_format(format).with_base_iri(url)?;
-    for t in parser.read_triples(read_file(url)?) {
+    let parser = RdfParser::from_format(format).with_base_iri(url)?;
+    for t in parser.parse_read(read_file(url)?) {
         match t {
             Ok(t) => {
-                graph.insert(&t);
+                graph.insert(&t.into());
             }
             Err(e) => {
                 if !ignore_errors {
@@ -52,26 +52,20 @@ pub fn load_to_graph(
     Ok(())
 }
 
-pub fn load_graph(url: &str, format: GraphFormat, ignore_errors: bool) -> Result<Graph> {
+pub fn load_graph(url: &str, format: RdfFormat, ignore_errors: bool) -> Result<Graph> {
     let mut graph = Graph::new();
     load_to_graph(url, &mut graph, format, ignore_errors)?;
     Ok(graph)
 }
 
-pub fn guess_graph_format(url: &str) -> Result<GraphFormat> {
-    url.rsplit_once('.')
-        .and_then(|(_, extension)| GraphFormat::from_extension(extension))
-        .ok_or_else(|| anyhow!("Serialization type not found for {url}"))
-}
-
 pub fn load_to_dataset(
     url: &str,
     dataset: &mut Dataset,
-    format: DatasetFormat,
+    format: RdfFormat,
     ignore_errors: bool,
 ) -> Result<()> {
-    let parser = DatasetParser::from_format(format).with_base_iri(url)?;
-    for q in parser.read_quads(read_file(url)?) {
+    let parser = RdfParser::from_format(format).with_base_iri(url)?;
+    for q in parser.parse_read(read_file(url)?) {
         match q {
             Ok(q) => {
                 dataset.insert(&q);
@@ -86,15 +80,15 @@ pub fn load_to_dataset(
     Ok(())
 }
 
-pub fn load_dataset(url: &str, format: DatasetFormat, ignore_errors: bool) -> Result<Dataset> {
+pub fn load_dataset(url: &str, format: RdfFormat, ignore_errors: bool) -> Result<Dataset> {
     let mut dataset = Dataset::new();
     load_to_dataset(url, &mut dataset, format, ignore_errors)?;
     Ok(dataset)
 }
 
-pub fn guess_dataset_format(url: &str) -> Result<DatasetFormat> {
+pub fn guess_rdf_format(url: &str) -> Result<RdfFormat> {
     url.rsplit_once('.')
-        .and_then(|(_, extension)| DatasetFormat::from_extension(extension))
+        .and_then(|(_, extension)| RdfFormat::from_extension(extension))
         .ok_or_else(|| anyhow!("Serialization type not found for {url}"))
 }
 

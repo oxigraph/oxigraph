@@ -1,10 +1,10 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
-use anyhow::{anyhow, bail, ensure, Context, Error};
+use anyhow::{anyhow, bail, ensure, Context};
 use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Method, Request, Response, Status};
 use oxhttp::Server;
-use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat, RdfSerializer};
+use oxigraph::io::{RdfFormat, RdfSerializer};
 use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
@@ -295,13 +295,13 @@ pub fn main() -> anyhow::Result<()> {
                 Store::new()
             }?;
             let format = if let Some(format) = format {
-                Some(GraphOrDatasetFormat::from_str(&format)?)
+                Some(rdf_format_from_name(&format)?)
             } else {
                 None
             };
             let graph = if let Some(iri) = &graph {
                 Some(
-                    NamedNodeRef::new(iri)
+                    NamedNode::new(iri)
                         .with_context(|| format!("The target graph name {iri} is invalid"))?,
                 )
             } else {
@@ -342,6 +342,7 @@ pub fn main() -> anyhow::Result<()> {
                     .scope(|s| {
                         for file in file {
                             let store = store.clone();
+                            let graph = graph.clone();
                             s.spawn(move |_| {
                                 let f = file.clone();
                                 let start = Instant::now();
@@ -379,10 +380,8 @@ pub fn main() -> anyhow::Result<()> {
                                             &loader,
                                             MultiGzDecoder::new(fp),
                                             format.unwrap_or_else(|| {
-                                                GraphOrDatasetFormat::from_path(
-                                                    &file.with_extension(""),
-                                                )
-                                                .unwrap()
+                                                rdf_format_from_path(&file.with_extension(""))
+                                                    .unwrap()
                                             }),
                                             None,
                                             graph,
@@ -392,7 +391,7 @@ pub fn main() -> anyhow::Result<()> {
                                             &loader,
                                             fp,
                                             format.unwrap_or_else(|| {
-                                                GraphOrDatasetFormat::from_path(&file).unwrap()
+                                                rdf_format_from_path(&file).unwrap()
                                             }),
                                             None,
                                             graph,
@@ -432,7 +431,7 @@ pub fn main() -> anyhow::Result<()> {
             };
             let graph = if let Some(graph) = &graph {
                 Some(if graph.eq_ignore_ascii_case("default") {
-                    GraphName::DefaultGraph
+                    GraphNameRef::DefaultGraph
                 } else {
                     NamedNodeRef::new(graph)
                         .with_context(|| format!("The target graph name {graph} is invalid"))?
@@ -637,24 +636,15 @@ pub fn main() -> anyhow::Result<()> {
 fn bulk_load(
     loader: &BulkLoader,
     reader: impl Read,
-    format: GraphOrDatasetFormat,
+    format: RdfFormat,
     base_iri: Option<&str>,
-    to_graph_name: Option<NamedNodeRef<'_>>,
+    to_graph_name: Option<NamedNode>,
 ) -> anyhow::Result<()> {
-    match format {
-        GraphOrDatasetFormat::Graph(format) => loader.load_graph(
-            reader,
-            format,
-            to_graph_name.map_or(GraphNameRef::DefaultGraph, GraphNameRef::from),
-            base_iri,
-        )?,
-        GraphOrDatasetFormat::Dataset(format) => {
-            if to_graph_name.is_some() {
-                bail!("The --graph option is not allowed when loading a dataset format like NQuads or TriG");
-            }
-            loader.load_dataset(reader, format, base_iri)?
-        }
-    }
+    if let Some(to_graph_name) = to_graph_name {
+        loader.load_graph(reader, format, to_graph_name, base_iri)
+    } else {
+        loader.load_dataset(reader, format, base_iri)
+    }?;
     Ok(())
 }
 
@@ -662,55 +652,15 @@ fn dump(
     store: &Store,
     writer: impl Write,
     format: RdfFormat,
-    to_graph_name: Option<GraphName>,
+    from_graph_name: Option<GraphNameRef<'_>>,
 ) -> anyhow::Result<()> {
-    ensure!(format.supports_datasets() || to_graph_name.is_some(), "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML");
-    if let Some(to_graph_name) = &to_graph_name {
-        store.dump_graph(writer, format, to_graph_name)
+    ensure!(format.supports_datasets() || from_graph_name.is_some(), "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML");
+    if let Some(from_graph_name) = from_graph_name {
+        store.dump_graph(writer, format, from_graph_name)
     } else {
         store.dump_dataset(writer, format)
     }?;
     Ok(())
-}
-
-#[derive(Copy, Clone)]
-enum GraphOrDatasetFormat {
-    Graph(GraphFormat),
-    Dataset(DatasetFormat),
-}
-
-impl GraphOrDatasetFormat {
-    fn from_path(path: &Path) -> anyhow::Result<Self> {
-        format_from_path(path, Self::from_extension)
-    }
-
-    fn from_extension(name: &str) -> anyhow::Result<Self> {
-        Ok(match (GraphFormat::from_extension(name), DatasetFormat::from_extension(name)) {
-            (Some(g), Some(d)) => bail!("The file extension '{name}' can be resolved to both '{}' and '{}', not sure what to pick", g.file_extension(), d.file_extension()),
-            (Some(g), None) => Self::Graph(g),
-            (None, Some(d)) => Self::Dataset(d),
-            (None, None) =>
-            bail!("The file extension '{name}' is unknown")
-        })
-    }
-
-    fn from_media_type(name: &str) -> anyhow::Result<Self> {
-        Ok(
-            match (
-                GraphFormat::from_media_type(name),
-                DatasetFormat::from_media_type(name),
-            ) {
-                (Some(g), Some(d)) => bail!(
-                "The media type '{name}' can be resolved to both '{}' and '{}', not sure what to pick",
-                g.file_extension(),
-                d.file_extension()
-            ),
-                (Some(g), None) => Self::Graph(g),
-                (None, Some(d)) => Self::Dataset(d),
-                (None, None) => bail!("The media type '{name}' is unknown"),
-            },
-        )
-    }
 }
 
 fn format_from_path<T>(
@@ -728,20 +678,6 @@ fn format_from_path<T>(
             "The path {} has no extension to guess a file format from",
             path.display()
         )
-    }
-}
-
-impl FromStr for GraphOrDatasetFormat {
-    type Err = Error;
-
-    fn from_str(name: &str) -> anyhow::Result<Self> {
-        if let Ok(t) = Self::from_extension(name) {
-            return Ok(t);
-        }
-        if let Ok(t) = Self::from_media_type(name) {
-            return Ok(t);
-        }
-        bail!("The file format '{name}' is unknown")
     }
 }
 
@@ -978,7 +914,7 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if let Some(target) = store_target(request)? {
-                let format = GraphFormat::from_media_type(&content_type)
+                let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 let new = !match &target {
                     NamedGraphName::NamedNode(target) => {
@@ -1002,7 +938,7 @@ fn handle_request(
                         true
                     }
                 };
-                web_load_graph(&store, request, format, GraphName::from(target).as_ref())?;
+                web_load_graph(&store, request, format, &GraphName::from(target))?;
                 Ok(Response::builder(if new {
                     Status::CREATED
                 } else {
@@ -1010,7 +946,7 @@ fn handle_request(
                 })
                 .build())
             } else {
-                let format = DatasetFormat::from_media_type(&content_type)
+                let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 store.clear().map_err(internal_server_error)?;
                 web_load_dataset(&store, request, format)?;
@@ -1054,10 +990,10 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if let Some(target) = store_target(request)? {
-                let format = GraphFormat::from_media_type(&content_type)
+                let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 let new = assert_that_graph_exists(&store, &target).is_ok();
-                web_load_graph(&store, request, format, GraphName::from(target).as_ref())?;
+                web_load_graph(&store, request, format, &GraphName::from(target))?;
                 Ok(Response::builder(if new {
                     Status::CREATED
                 } else {
@@ -1065,22 +1001,19 @@ fn handle_request(
                 })
                 .build())
             } else {
-                match GraphOrDatasetFormat::from_media_type(&content_type)
-                    .map_err(|_| unsupported_media_type(&content_type))?
-                {
-                    GraphOrDatasetFormat::Graph(format) => {
-                        let graph =
-                            resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
-                        web_load_graph(&store, request, format, graph.as_ref().into())?;
-                        Ok(Response::builder(Status::CREATED)
-                            .with_header(HeaderName::LOCATION, graph.into_string())
-                            .unwrap()
-                            .build())
-                    }
-                    GraphOrDatasetFormat::Dataset(format) => {
-                        web_load_dataset(&store, request, format)?;
-                        Ok(Response::builder(Status::NO_CONTENT).build())
-                    }
+                let format = RdfFormat::from_media_type(&content_type)
+                    .ok_or_else(|| unsupported_media_type(&content_type))?;
+                if format.supports_datasets() {
+                    web_load_dataset(&store, request, format)?;
+                    Ok(Response::builder(Status::NO_CONTENT).build())
+                } else {
+                    let graph =
+                        resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
+                    web_load_graph(&store, request, format, &graph.clone().into())?;
+                    Ok(Response::builder(Status::CREATED)
+                        .with_header(HeaderName::LOCATION, graph.as_str())
+                        .unwrap()
+                        .build())
                 }
             }
         }
@@ -1531,10 +1464,10 @@ fn content_type(request: &Request) -> Option<String> {
 fn web_load_graph(
     store: &Store,
     request: &mut Request,
-    format: GraphFormat,
-    to_graph_name: GraphNameRef<'_>,
+    format: RdfFormat,
+    to_graph_name: &GraphName,
 ) -> Result<(), HttpError> {
-    let base_iri = if let GraphNameRef::NamedNode(graph_name) = to_graph_name {
+    let base_iri = if let GraphName::NamedNode(graph_name) = to_graph_name {
         Some(graph_name.as_str())
     } else {
         None
@@ -1543,11 +1476,11 @@ fn web_load_graph(
         web_bulk_loader(store, request).load_graph(
             request.body_mut(),
             format,
-            to_graph_name,
+            to_graph_name.clone(),
             base_iri,
         )
     } else {
-        store.load_graph(request.body_mut(), format, to_graph_name, base_iri)
+        store.load_graph(request.body_mut(), format, to_graph_name.clone(), base_iri)
     }
     .map_err(loader_to_http_error)
 }
@@ -1555,7 +1488,7 @@ fn web_load_graph(
 fn web_load_dataset(
     store: &Store,
     request: &mut Request,
-    format: DatasetFormat,
+    format: RdfFormat,
 ) -> Result<(), HttpError> {
     if url_query_parameter(request, "no_transaction").is_some() {
         web_bulk_loader(store, request).load_dataset(request.body_mut(), format, None)
@@ -1616,6 +1549,7 @@ fn loader_to_http_error(e: LoaderError) -> HttpError {
     match e {
         LoaderError::Parsing(e) => bad_request(e),
         LoaderError::Storage(e) => internal_server_error(e),
+        LoaderError::InvalidBaseIri { .. } => bad_request(e),
     }
 }
 

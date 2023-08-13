@@ -1,10 +1,11 @@
+#![allow(deprecated)]
+
 //! Utilities to read RDF graphs and datasets.
 
-pub use crate::io::error::{ParseError, SyntaxError};
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
 use oxiri::IriParseError;
-use oxrdfio::{FromReadQuadReader, RdfParser};
+use oxrdfio::{FromReadQuadReader, ParseError, RdfParser};
 use std::io::Read;
 
 /// Parsers for RDF graph serialization formats.
@@ -26,6 +27,7 @@ use std::io::Read;
 /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
+#[deprecated(note = "Use RdfParser instead")]
 pub struct GraphParser {
     inner: RdfParser,
 }
@@ -116,6 +118,7 @@ impl<R: Read> Iterator for TripleReader<R> {
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
+#[deprecated(note = "Use RdfParser instead")]
 pub struct DatasetParser {
     inner: RdfParser,
 }

@@ -1,10 +1,7 @@
 #![allow(clippy::needless_option_as_deref)]
 
 use crate::model::{PyQuad, PyTriple};
-use oxigraph::io::read::{ParseError, QuadReader, TripleReader};
-use oxigraph::io::{
-    DatasetFormat, DatasetParser, GraphFormat, GraphParser, RdfFormat, RdfSerializer,
-};
+use oxigraph::io::{FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
@@ -41,54 +38,54 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// :type mime_type: str
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
 /// :type base_iri: str or None, optional
+/// :param without_named_graphs: Sets that the parser must fail if parsing a named graph.
+/// :type without_named_graphs: bool, optional
+/// :param rename_blank_nodes: Renames the blank nodes ids from the ones set in the serialization to random ids. This allows to avoid id conflicts when merging graphs together.
+/// :type rename_blank_nodes: bool, optional
 /// :return: an iterator of RDF triples or quads depending on the format.
-/// :rtype: iterator(Triple) or iterator(Quad)
+/// :rtype: iterator(Quad)
 /// :raises ValueError: if the MIME type is not supported.
 /// :raises SyntaxError: if the provided data is invalid.
 ///
 /// >>> input = io.BytesIO(b'<foo> <p> "1" .')
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
-/// [<Triple subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
+/// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
 #[pyfunction]
-#[pyo3(signature = (input, mime_type, *, base_iri = None))]
+#[pyo3(signature = (input, mime_type, *, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
 pub fn parse(
     input: PyObject,
     mime_type: &str,
     base_iri: Option<&str>,
+    without_named_graphs: bool,
+    rename_blank_nodes: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
+    let Some(format) = RdfFormat::from_media_type(mime_type) else {
+        return Err(PyValueError::new_err(format!(
+            "Not supported MIME type: {mime_type}"
+        )));
+    };
     let input = if let Ok(path) = input.extract::<PathBuf>(py) {
         PyReadable::from_file(&path, py).map_err(map_io_err)?
     } else {
         PyReadable::from_data(input, py)
     };
-    if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-        let mut parser = GraphParser::from_format(graph_format);
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        }
-        Ok(PyTripleReader {
-            inner: parser.read_triples(input),
-        }
-        .into_py(py))
-    } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-        let mut parser = DatasetParser::from_format(dataset_format);
-        if let Some(base_iri) = base_iri {
-            parser = parser
-                .with_base_iri(base_iri)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        }
-        Ok(PyQuadReader {
-            inner: parser.read_quads(input),
-        }
-        .into_py(py))
-    } else {
-        Err(PyValueError::new_err(format!(
-            "Not supported MIME type: {mime_type}"
-        )))
+    let mut parser = RdfParser::from_format(format);
+    if let Some(base_iri) = base_iri {
+        parser = parser
+            .with_base_iri(base_iri)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
     }
+    if without_named_graphs {
+        parser = parser.without_named_graphs();
+    }
+    if rename_blank_nodes {
+        parser = parser.rename_blank_nodes();
+    }
+    Ok(PyQuadReader {
+        inner: parser.parse_read(input),
+    }
+    .into_py(py))
 }
 
 /// Serializes an RDF graph or dataset.
@@ -151,30 +148,9 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
     writer.finish().map_err(map_io_err)
 }
 
-#[pyclass(name = "TripleReader", module = "pyoxigraph")]
-pub struct PyTripleReader {
-    inner: TripleReader<PyReadable>,
-}
-
-#[pymethods]
-impl PyTripleReader {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
-        slf
-    }
-
-    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyTriple>> {
-        py.allow_threads(|| {
-            self.inner
-                .next()
-                .map(|q| Ok(q.map_err(map_parse_error)?.into()))
-                .transpose()
-        })
-    }
-}
-
 #[pyclass(name = "QuadReader", module = "pyoxigraph")]
 pub struct PyQuadReader {
-    inner: QuadReader<PyReadable>,
+    inner: FromReadQuadReader<PyReadable>,
 }
 
 #[pymethods]

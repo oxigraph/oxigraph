@@ -186,7 +186,7 @@ describe("Store", function () {
 
         it("dump default graph content", function () {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
-            assert.strictEqual("", store.dump("application/n-triples"));
+            assert.strictEqual("", store.dump("application/n-triples", dataModel.defaultGraph()));
         });
     });
 });

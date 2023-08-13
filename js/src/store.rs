@@ -4,7 +4,7 @@ use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
-use oxigraph::io::{DatasetFormat, GraphFormat, RdfFormat};
+use oxigraph::io::RdfFormat;
 use oxigraph::model::*;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::Store;
@@ -148,6 +148,9 @@ impl JsStore {
         base_iri: &JsValue,
         to_graph_name: &JsValue,
     ) -> Result<(), JsValue> {
+        let Some(format) = RdfFormat::from_media_type(mime_type) else {
+            return Err(format_err!("Not supported MIME type: {mime_type}"));
+        };
         let base_iri = if base_iri.is_null() || base_iri.is_undefined() {
             None
         } else if base_iri.is_string() {
@@ -160,49 +163,28 @@ impl JsStore {
             ));
         };
 
-        let to_graph_name =
-            if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
-                Some(graph_name.try_into()?)
-            } else {
-                None
-            };
-
-        if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-            self.store
-                .load_graph(
-                    data.as_bytes(),
-                    graph_format,
-                    &to_graph_name.unwrap_or(GraphName::DefaultGraph),
-                    base_iri.as_deref(),
-                )
-                .map_err(to_err)
-        } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-            if to_graph_name.is_some() {
-                return Err(format_err!(
-                    "The target graph name parameter is not available for dataset formats"
-                ));
-            }
-            self.store
-                .load_dataset(data.as_bytes(), dataset_format, base_iri.as_deref())
-                .map_err(to_err)
+        if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
+            self.store.load_graph(
+                data.as_bytes(),
+                format,
+                GraphName::try_from(to_graph_name)?,
+                base_iri.as_deref(),
+            )
         } else {
-            Err(format_err!("Not supported MIME type: {mime_type}"))
+            self.store
+                .load_dataset(data.as_bytes(), format, base_iri.as_deref())
         }
+        .map_err(to_err)
     }
 
     pub fn dump(&self, mime_type: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
         let Some(format) = RdfFormat::from_media_type(mime_type) else {
             return Err(format_err!("Not supported MIME type: {mime_type}"));
         };
-        let from_graph_name =
-            if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-                Some(GraphName::try_from(graph_name)?)
-            } else {
-                None
-            };
         let mut buffer = Vec::new();
-        if let Some(from_graph_name) = &from_graph_name {
-            self.store.dump_graph(&mut buffer, format, from_graph_name)
+        if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
+            self.store
+                .dump_graph(&mut buffer, format, &GraphName::try_from(from_graph_name)?)
         } else {
             self.store.dump_dataset(&mut buffer, format)
         }

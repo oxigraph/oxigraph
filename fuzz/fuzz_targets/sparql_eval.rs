@@ -2,7 +2,7 @@
 
 use lazy_static::lazy_static;
 use libfuzzer_sys::fuzz_target;
-use oxigraph::io::DatasetFormat;
+use oxigraph::io::RdfFormat;
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, QuerySolutionIter};
 use oxigraph::store::Store;
 
@@ -10,11 +10,7 @@ lazy_static! {
     static ref STORE: Store = {
         let store = Store::new().unwrap();
         store
-            .load_dataset(
-                sparql_smith::DATA_TRIG.as_bytes(),
-                DatasetFormat::TriG,
-                None,
-            )
+            .load_dataset(sparql_smith::DATA_TRIG.as_bytes(), RdfFormat::TriG, None)
             .unwrap();
         store
     };
