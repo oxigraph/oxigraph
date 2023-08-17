@@ -1,0 +1,57 @@
+name: Artifacts
+
+on:
+  pull_request:
+    branches:
+      - main
+      - next
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  binary_linux:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update && rustup target add aarch64-unknown-linux-gnu
+      - run: |
+          sudo apt update && sudo apt install -y g++-aarch64-linux-gnu
+          echo -e "\n\n[target.aarch64-unknown-linux-gnu]\nlinker = \"aarch64-linux-gnu-gcc\"" >> .cargo/config.toml
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: '**/requirements.dev.txt'
+      - run: pip install -r python/requirements.dev.txt
+      - run: maturin build --release --features abi3
+        working-directory: ./python
+      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
+        working-directory: ./python
+      - run: maturin build --release --features abi3 --compatibility manylinux2014
+        working-directory: ./python
+      - run: maturin build --release --target aarch64-unknown-linux-gnu --features abi3 --compatibility manylinux2014
+        working-directory: ./python
+        env:
+          BINDGEN_EXTRA_CLANG_ARGS: --sysroot /usr/aarch64-linux-gnu
+          # TODO TARGET_CC: /usr/bin/aarch64-linux-gnu-gcc
+          # TODO TARGET_AR: /usr/bin/aarch64-linux-gnu-ar
+      - uses: actions/upload-artifact@v3
+        with:
+          name: pyoxigraph_wheel_x86_64_linux_gnu
+          path: target/wheels/*_x86_64.whl
+      - uses: actions/upload-artifact@v3
+        with:
+          name: pyoxigraph_wheel_aarch64_linux_gnu
+          path: target/wheels/*_aarch64.whl
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
+          packages-dir: target/wheels
+        if: github.event_name == 'release'

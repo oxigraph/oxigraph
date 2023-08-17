@@ -1,10 +1,6 @@
 name: Change tests
 
 on:
-  pull_request:
-    branches:
-      - main
-      - next
   schedule:
     - cron: "12 3 * * *"
 
