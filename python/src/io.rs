@@ -3,7 +3,7 @@
 use crate::model::{PyQuad, PyTriple};
 use oxigraph::io::{FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::QuadRef;
-use pyo3::exceptions::{PyIOError, PySyntaxError, PyValueError};
+use pyo3::exceptions::{PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::{intern, wrap_pyfunction};
@@ -272,14 +272,17 @@ impl Write for PyIo {
 
     fn flush(&mut self) -> io::Result<()> {
         Python::with_gil(|py| {
-            self.0.as_ref(py).call_method0(intern!(py, "flush"))?;
+            self.0
+                .as_ref(py)
+                .call_method0(intern!(py, "flush"))
+                .map_err(to_io_err)?;
             Ok(())
         })
     }
 }
 
-fn to_io_err(error: impl Into<PyErr>) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, error.into())
+fn to_io_err(error: PyErr) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, error)
 }
 
 pub fn map_io_err(error: io::Error) -> PyErr {
@@ -289,7 +292,7 @@ pub fn map_io_err(error: io::Error) -> PyErr {
     {
         *error.into_inner().unwrap().downcast().unwrap()
     } else {
-        PyIOError::new_err(error.to_string())
+        error.into()
     }
 }
 

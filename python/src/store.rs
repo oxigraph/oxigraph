@@ -7,7 +7,7 @@ use oxigraph::io::RdfFormat;
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
-use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::path::PathBuf;
 
@@ -28,7 +28,7 @@ use std::path::PathBuf;
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 ///              In this case, the store data are kept in memory and never written on disk.
 /// :type path: str or pathlib.Path or None, optional
-/// :raises IOError: if the target directory contains invalid data or could not be accessed.
+/// :raises OSError: if the target directory contains invalid data or could not be accessed.
 ///
 /// The :py:func:`str` function provides a serialization of the store in NQuads:
 ///
@@ -68,7 +68,7 @@ impl PyStore {
     /// :type path: str
     /// :return: the opened store.
     /// :rtype: Store
-    /// :raises IOError: if the target directory contains invalid data or could not be accessed.
+    /// :raises OSError: if the target directory contains invalid data or could not be accessed.
     #[staticmethod]
     fn read_only(path: &str, py: Python<'_>) -> PyResult<Self> {
         py.allow_threads(|| {
@@ -92,7 +92,7 @@ impl PyStore {
     /// :type secondary_path: str or None, optional
     /// :return: the opened store.
     /// :rtype: Store
-    /// :raises IOError: if the target directories contain invalid data or could not be accessed.
+    /// :raises OSError: if the target directories contain invalid data or could not be accessed.
     #[staticmethod]
     #[pyo3(signature = (primary_path, secondary_path = None))]
     fn secondary(
@@ -117,7 +117,7 @@ impl PyStore {
     /// :param quad: the quad to add.
     /// :type quad: Quad
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad insertion.
+    /// :raises OSError: if an error happens during the quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -138,7 +138,7 @@ impl PyStore {
     /// :param quads: the quads to add.
     /// :type quads: iterable(Quad)
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad insertion.
+    /// :raises OSError: if an error happens during the quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.extend([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
@@ -163,7 +163,7 @@ impl PyStore {
     /// :param quads: the quads to add.
     /// :type quads: iterable(Quad)
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad insertion.
+    /// :raises OSError: if an error happens during the quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.bulk_extend([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
@@ -183,7 +183,7 @@ impl PyStore {
     /// :param quad: the quad to remove.
     /// :type quad: Quad
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad removal.
+    /// :raises OSError: if an error happens during the quad removal.
     ///
     /// >>> store = Store()
     /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
@@ -210,7 +210,7 @@ impl PyStore {
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :return: an iterator of the quads matching the pattern.
     /// :rtype: iterator(Quad)
-    /// :raises IOError: if an I/O error happens during the quads lookup.
+    /// :raises OSError: if an error happens during the quads lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -251,7 +251,7 @@ impl PyStore {
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryTriples or bool
     /// :raises SyntaxError: if the provided query is invalid.
-    /// :raises IOError: if an I/O error happens while reading the store.
+    /// :raises OSError: if an error happens while reading the store.
     ///
     /// ``SELECT`` query:
     ///
@@ -305,7 +305,7 @@ impl PyStore {
     /// :type base_iri: str or None, optional
     /// :rtype: None
     /// :raises SyntaxError: if the provided update is invalid.
-    /// :raises IOError: if an I/O error happens while reading the store.
+    /// :raises OSError: if an error happens while reading the store.
     ///
     /// ``INSERT DATA`` update:
     ///
@@ -368,7 +368,7 @@ impl PyStore {
     /// :rtype: None
     /// :raises ValueError: if the MIME type is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
-    /// :raises IOError: if an I/O error happens during a quad insertion.
+    /// :raises OSError: if an error happens during a quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
@@ -439,7 +439,7 @@ impl PyStore {
     /// :rtype: None
     /// :raises ValueError: if the MIME type is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
-    /// :raises IOError: if an I/O error happens during a quad insertion.
+    /// :raises OSError: if an error happens during a quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
@@ -505,7 +505,7 @@ impl PyStore {
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
     /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
-    /// :raises IOError: if an I/O error happens during a quad lookup
+    /// :raises OSError: if an error happens during a quad lookup
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -550,7 +550,7 @@ impl PyStore {
     ///
     /// :return: an iterator of the store graph names.
     /// :rtype: iterator(NamedNode or BlankNode)
-    /// :raises IOError: if an I/O error happens during the named graphs lookup.
+    /// :raises OSError: if an error happens during the named graphs lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -567,7 +567,7 @@ impl PyStore {
     /// :param graph_name: the name of the named graph.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: bool
-    /// :raises IOError: if an I/O error happens during the named graph lookup.
+    /// :raises OSError: if an error happens during the named graph lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
@@ -588,7 +588,7 @@ impl PyStore {
     /// :param graph_name: the name of the name graph to add.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the named graph insertion.
+    /// :raises OSError: if an error happens during the named graph insertion.
     ///
     /// >>> store = Store()
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
@@ -615,7 +615,7 @@ impl PyStore {
     /// :param graph_name: the name of the name graph to clear.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the operation.
+    /// :raises OSError: if an error happens during the operation.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -640,7 +640,7 @@ impl PyStore {
     /// :param graph_name: the name of the name graph to remove.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the named graph removal.
+    /// :raises OSError: if an error happens during the named graph removal.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -666,7 +666,7 @@ impl PyStore {
     /// Clears the store by removing all its contents.
     ///
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the operation.
+    /// :raises OSError: if an error happens during the operation.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -684,7 +684,7 @@ impl PyStore {
     /// Flushes are automatically done using background threads but might lag a little bit.
     ///
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the flush.
+    /// :raises OSError: if an error happens during the flush.
     fn flush(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.flush().map_err(map_storage_error))
     }
@@ -694,7 +694,7 @@ impl PyStore {
     /// Useful to call after a batch upload or another similar operation.
     ///
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the optimization.
+    /// :raises OSError: if an error happens during the optimization.
     fn optimize(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.optimize().map_err(map_storage_error))
     }
@@ -719,7 +719,7 @@ impl PyStore {
     /// :param target_directory: the directory name to save the database to.
     /// :type target_directory: str
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the backup.
+    /// :raises OSError: if an error happens during the backup.
     fn backup(&self, target_directory: &str, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             self.inner
@@ -830,7 +830,7 @@ pub fn extract_quads_pattern<'a>(
 
 pub fn map_storage_error(error: StorageError) -> PyErr {
     match error {
-        StorageError::Io(error) => PyIOError::new_err(error.to_string()),
+        StorageError::Io(error) => error.into(),
         _ => PyRuntimeError::new_err(error.to_string()),
     }
 }
@@ -846,7 +846,7 @@ pub fn map_loader_error(error: LoaderError) -> PyErr {
 pub fn map_serializer_error(error: SerializerError) -> PyErr {
     match error {
         SerializerError::Storage(error) => map_storage_error(error),
-        SerializerError::Io(error) => PyIOError::new_err(error.to_string()),
+        SerializerError::Io(error) => error.into(),
         SerializerError::DatasetFormatExpected(_) => PyValueError::new_err(error.to_string()),
     }
 }
