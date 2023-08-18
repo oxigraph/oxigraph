@@ -244,13 +244,24 @@ store.dump("text/turtle", oxigraph.namedNode("http://example.com/graph"));
 * RDF/JS datamodel functions (`namedNode`...) are now available at the root of the `oxigraph` package. You now need to call `oxigraph.namedNode` instead of `store.dataFactory.namedNode`.
 * [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is now implemented. `Quad` is now a valid value for the `Ωuad` `subject` and `object` properties.
 
+
 ## How to contribute
 
 The Oxigraph bindings are written in Rust using [the Rust WASM toolkit](https://rustwasm.github.io/docs.html).
 
 The [The Rust Wasm Book](https://rustwasm.github.io/docs/book/) is a great tutorial to get started.
 
-To run the tests of the JS bindings written in JS run `npm test`.
+To setup a dev environment:
+- ensure to have a Rust toolchain with `rustup` and `cargo` installed ([possible instructions](https://www.rust-lang.org/tools/install)).
+- install [`wasm-pack`](https://rustwasm.github.io/wasm-pack/): `cargo install wasm-pack` (it is also in some Linux distribution repositories).
+- `npm install` to install pure JS dependencies.
+- you are good to go!
+
+Testing and linting:
+- Rust code is formatted with [rustfmt](https://github.com/rust-lang/rustfmt) and linted with [clippy](https://github.com/rust-lang/rust-clippy).
+  You can execute them with `cargo fmt` and `cargo clippy`.
+- JS code is formatted and linted with [Rome](https://rome.tools/). `npm run fmt` to auto-format and `npm test` to lint and test.
+- Tests are written in JavaScript using [Mocha](https://mochajs.org/) in the `test` directory. `npm test` to run them.
 
 
 ## License
