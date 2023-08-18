@@ -1,3 +1,13 @@
+## [0.3.19] - 2023-08-18
+
+### Added
+- Python: allows to give `pathlib.Path` argument when a path is expected.
+- Cargo.toml: add a documentation field to link to docs.rs documentation.
+
+### Changed
+- Upgrades RocksDB to 8.3.2.
+
+
 ## [0.3.18] - 2023-06-13
 
 ### Changed
