@@ -1,7 +1,8 @@
 #![allow(
     clippy::used_underscore_binding,
     clippy::unused_self,
-    clippy::trivially_copy_pass_by_ref
+    clippy::trivially_copy_pass_by_ref,
+    unused_qualifications
 )]
 
 mod io;

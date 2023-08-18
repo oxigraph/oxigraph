@@ -14,17 +14,17 @@ publish = false
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-time = { version = "0.3", features = ["formatting"] }
 oxigraph = { path = "../lib" }
 oxttl = { path= "../lib/oxttl" }
 sparopt = { path = "../lib/sparopt" }
 spargebra = { path = "../lib/spargebra" }
 text-diff = "0.4"
-rio_api = "0.8"
-rio_turtle = "0.8"
+time = { version = "=0.3.23", features = ["formatting"] }
 
 [dev-dependencies]
 criterion = "0.5"
+rio_api = "0.8"
+rio_turtle = "0.8"
 
 [[bench]]
 name = "parser"
