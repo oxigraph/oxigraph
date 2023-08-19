@@ -441,17 +441,16 @@ pub fn main() -> anyhow::Result<()> {
                 None
             };
             if let Some(file) = file {
-                dump(
+                close_file_writer(dump(
                     &store,
-                    BufWriter::new(File::create(&file).map_err(|e| {
-                        anyhow!("Error while opening file {}: {e}", file.display())
-                    })?),
+                    BufWriter::new(File::create(file)?),
                     format,
                     graph,
-                )
+                )?)?;
             } else {
-                dump(&store, stdout().lock(), format, graph)
+                dump(&store, stdout().lock(), format, graph)?.flush()?;
             }
+            Ok(())
         }
         Command::Query {
             query,
@@ -509,7 +508,7 @@ pub fn main() -> anyhow::Result<()> {
                             for solution in solutions {
                                 writer.write(&solution?)?;
                             }
-                            writer.finish()?;
+                            close_file_writer(writer.finish()?)?;
                         } else {
                             let mut writer = QueryResultsSerializer::from_format(format)
                                 .solutions_writer(
@@ -519,8 +518,7 @@ pub fn main() -> anyhow::Result<()> {
                             for solution in solutions {
                                 writer.write(&solution?)?;
                             }
-                            #[allow(clippy::let_underscore_must_use)]
-                            let _ = writer.finish()?;
+                            writer.finish()?.flush()?;
                         }
                     }
                     QueryResults::Boolean(result) => {
@@ -542,14 +540,16 @@ pub fn main() -> anyhow::Result<()> {
                             bail!("The --results-format option must be set when writing to stdout")
                         };
                         if let Some(results_file) = results_file {
-                            QueryResultsSerializer::from_format(format).write_boolean_result(
-                                BufWriter::new(File::create(results_file)?),
-                                result,
+                            close_file_writer(
+                                QueryResultsSerializer::from_format(format).write_boolean_result(
+                                    BufWriter::new(File::create(results_file)?),
+                                    result,
+                                )?,
                             )?;
                         } else {
-                            #[allow(clippy::let_underscore_must_use)]
-                            let _ = QueryResultsSerializer::from_format(format)
-                                .write_boolean_result(stdout().lock(), result)?;
+                            QueryResultsSerializer::from_format(format)
+                                .write_boolean_result(stdout().lock(), result)?
+                                .flush()?;
                         }
                     }
                     QueryResults::Graph(triples) => {
@@ -567,13 +567,13 @@ pub fn main() -> anyhow::Result<()> {
                             for triple in triples {
                                 writer.write_triple(triple?.as_ref())?;
                             }
-                            writer.finish()?;
+                            close_file_writer(writer.finish()?)?;
                         } else {
                             let mut writer = serializer.serialize_to_write(stdout().lock());
                             for triple in triples {
                                 writer.write_triple(triple?.as_ref())?;
                             }
-                            writer.finish()?;
+                            writer.finish()?.flush()?;
                         }
                     }
                 }
@@ -585,13 +585,14 @@ pub fn main() -> anyhow::Result<()> {
                     .extension()
                     .and_then(OsStr::to_str) {
                     Some("json") => {
-                        explanation.write_in_json(file)?;
+                        explanation.write_in_json(&mut file)?;
                     },
                     Some("txt") => {
                         write!(file, "{:?}", explanation)?;
                     },
                     _ => bail!("The given explanation file {} must have an extension that is .json or .txt", explain_file.display())
                 }
+                close_file_writer(file)?;
             } else if explain || stats {
                 eprintln!("{:#?}", explanation);
             }
@@ -648,19 +649,18 @@ fn bulk_load(
     Ok(())
 }
 
-fn dump(
+fn dump<W: Write>(
     store: &Store,
-    writer: impl Write,
+    writer: W,
     format: RdfFormat,
     from_graph_name: Option<GraphNameRef<'_>>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<W> {
     ensure!(format.supports_datasets() || from_graph_name.is_some(), "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML");
-    if let Some(from_graph_name) = from_graph_name {
+    Ok(if let Some(from_graph_name) = from_graph_name {
         store.dump_graph(writer, format, from_graph_name)
     } else {
         store.dump_dataset(writer, format)
-    }?;
-    Ok(())
+    }?)
 }
 
 fn format_from_path<T>(
@@ -1629,6 +1629,14 @@ impl Write for ReadForWriteWriter {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.buffer.borrow_mut().write_all(buf)
     }
+}
+
+fn close_file_writer(writer: BufWriter<File>) -> io::Result<()> {
+    let mut file = writer
+        .into_inner()
+        .map_err(io::IntoInnerError::into_error)?;
+    file.flush()?;
+    file.sync_all()
 }
 
 #[cfg(target_os = "linux")]

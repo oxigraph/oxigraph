@@ -181,14 +181,14 @@ impl JsStore {
         let Some(format) = RdfFormat::from_media_type(mime_type) else {
             return Err(format_err!("Not supported MIME type: {mime_type}"));
         };
-        let mut buffer = Vec::new();
-        if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-            self.store
-                .dump_graph(&mut buffer, format, &GraphName::try_from(from_graph_name)?)
-        } else {
-            self.store.dump_dataset(&mut buffer, format)
-        }
-        .map_err(to_err)?;
+        let buffer =
+            if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
+                self.store
+                    .dump_graph(Vec::new(), format, &GraphName::try_from(from_graph_name)?)
+            } else {
+                self.store.dump_dataset(Vec::new(), format)
+            }
+            .map_err(to_err)?;
         String::from_utf8(buffer).map_err(to_err)
     }
 }

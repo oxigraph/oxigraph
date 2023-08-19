@@ -86,7 +86,7 @@ impl<W: Write> TripleWriter<W> {
 
     /// Writes the last bytes of the file
     pub fn finish(self) -> io::Result<()> {
-        self.writer.finish()
+        self.writer.finish()?.flush()
     }
 }
 
@@ -170,6 +170,6 @@ impl<W: Write> QuadWriter<W> {
 
     /// Writes the last bytes of the file
     pub fn finish(self) -> io::Result<()> {
-        self.writer.finish()
+        self.writer.finish()?.flush()
     }
 }

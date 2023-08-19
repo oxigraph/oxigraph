@@ -128,7 +128,7 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
     } else {
         PyWritable::from_data(output)
     };
-    let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
+    let mut writer = RdfSerializer::from_format(format).serialize_to_write(BufWriter::new(output));
     for i in input.iter()? {
         let i = i?;
         if let Ok(triple) = i.extract::<PyRef<PyTriple>>() {
@@ -145,7 +145,13 @@ pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_
         }
         .map_err(map_io_err)?;
     }
-    writer.finish().map_err(map_io_err)
+    writer
+        .finish()
+        .map_err(map_io_err)?
+        .into_inner()
+        .map_err(|e| map_io_err(e.into_error()))?
+        .close()
+        .map_err(map_io_err)
 }
 
 #[pyclass(name = "QuadReader", module = "pyoxigraph")]
@@ -202,19 +208,25 @@ impl Read for PyReadable {
 }
 
 pub enum PyWritable {
-    Io(BufWriter<PyIo>),
-    File(BufWriter<File>),
+    Io(PyIo),
+    File(File),
 }
 
 impl PyWritable {
     pub fn from_file(file: &Path, py: Python<'_>) -> io::Result<Self> {
-        Ok(Self::File(BufWriter::new(
-            py.allow_threads(|| File::create(file))?,
-        )))
+        Ok(Self::File(py.allow_threads(|| File::create(file))?))
     }
 
     pub fn from_data(data: PyObject) -> Self {
-        Self::Io(BufWriter::new(PyIo(data)))
+        Self::Io(PyIo(data))
+    }
+
+    pub fn close(mut self) -> io::Result<()> {
+        self.flush()?;
+        if let Self::File(file) = self {
+            file.sync_all()?;
+        }
+        Ok(())
     }
 }
 
