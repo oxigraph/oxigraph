@@ -37,7 +37,7 @@ jobs:
           path: target/release/oxigraph_server
       - uses: actions/upload-artifact@v3
         with:
-          name: oxigraph_server_aarch64-linux_gnu
+          name: oxigraph_server_aarch64_linux_gnu
           path: target/aarch64-unknown-linux-gnu/release/oxigraph_server
       - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_linux_gnu
         if: github.event_name == 'release'
@@ -126,7 +126,7 @@ jobs:
         if: github.event_name == 'release' || matrix.architecture == 'x86_64'
       - uses: actions/upload-artifact@v3
         with:
-          name: pyoxigraph_wheel_x86_64_linux
+          name: pyoxigraph_wheel_x86_64_linux_gnu
           path: target/wheels/*.whl
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -181,15 +181,19 @@ jobs:
           cache: pip
           cache-dependency-path: '**/requirements.dev.txt'
       - run: pip install -r python/requirements.dev.txt
-      - run: maturin build --release -m python/Cargo.toml --features abi3
+      - run: maturin build --release --features abi3
+        working-directory: ./python
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin build --release --target universal2-apple-darwin -m python/Cargo.toml --features abi3
-      - run: maturin build --release -m python/Cargo.toml --features abi3
+      - run: maturin build --release --target universal2-apple-darwin --features abi3
+        working-directory: ./python
+      - run: maturin build --release --features abi3
+        working-directory: ./python
         if: github.event_name == 'release'
-      - run: maturin build --release --target aarch64-apple-darwin -m python/Cargo.toml --features abi3
+      - run: maturin build --release --target aarch64-apple-darwin --features abi3
+        working-directory: ./python
         if: github.event_name == 'release'
       - uses: actions/upload-artifact@v3
         with:
@@ -216,13 +220,16 @@ jobs:
           cache-dependency-path: '**/requirements.dev.txt'
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: pip install -r python/requirements.dev.txt
-      - run: maturin build --release -m python/Cargo.toml --features abi3
+      - run: maturin build --release --features abi3
+        working-directory: ./python
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
         working-directory: ./python
-      - run: maturin build --release -m python/Cargo.toml --features abi3
-      - run: maturin sdist -m python/Cargo.toml
+      - run: maturin build --release --features abi3
+        working-directory: ./python
+      - run: maturin sdist
+        working-directory: ./python
       - uses: actions/upload-artifact@v3
         with:
           name: pyoxigraph_wheel_x86_64_windows
