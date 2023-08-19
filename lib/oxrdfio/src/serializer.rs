@@ -19,7 +19,7 @@ use oxttl::turtle::ToTokioAsyncWriteTurtleWriter;
 use oxttl::turtle::{ToWriteTurtleWriter, TurtleSerializer};
 use std::io::{self, Write};
 #[cfg(feature = "async-tokio")]
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::AsyncWrite;
 
 /// A serializer for RDF serialization formats.
 ///
@@ -214,15 +214,16 @@ impl<W: Write> ToWriteQuadWriter<W> {
     }
 
     /// Writes the last bytes of the file
-    pub fn finish(self) -> io::Result<()> {
-        match self.formatter {
+    ///
+    /// Note that this function does not flush the writer. You need to do that if you are using a [`BufWriter`](io::BufWriter).
+    pub fn finish(self) -> io::Result<W> {
+        Ok(match self.formatter {
             ToWriteQuadWriterKind::NQuads(writer) => writer.finish(),
             ToWriteQuadWriterKind::NTriples(writer) => writer.finish(),
             ToWriteQuadWriterKind::RdfXml(writer) => writer.finish()?,
             ToWriteQuadWriterKind::TriG(writer) => writer.finish()?,
             ToWriteQuadWriterKind::Turtle(writer) => writer.finish()?,
-        }
-        .flush()
+        })
     }
 }
 
@@ -296,16 +297,16 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteQuadWriter<W> {
     }
 
     /// Writes the last bytes of the file
-    pub async fn finish(self) -> io::Result<()> {
-        match self.formatter {
+    ///
+    /// Note that this function does not flush the writer. You need to do that if you are using a [`BufWriter`](io::BufWriter).
+    pub async fn finish(self) -> io::Result<W> {
+        Ok(match self.formatter {
             ToTokioAsyncWriteQuadWriterKind::NQuads(writer) => writer.finish(),
             ToTokioAsyncWriteQuadWriterKind::NTriples(writer) => writer.finish(),
             ToTokioAsyncWriteQuadWriterKind::RdfXml(writer) => writer.finish().await?,
             ToTokioAsyncWriteQuadWriterKind::TriG(writer) => writer.finish().await?,
             ToTokioAsyncWriteQuadWriterKind::Turtle(writer) => writer.finish().await?,
-        }
-        .flush()
-        .await
+        })
     }
 }
 

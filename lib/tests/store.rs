@@ -226,8 +226,7 @@ fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
         store.insert(q)?;
     }
 
-    let mut buffer = Vec::new();
-    store.dump_dataset(&mut buffer, RdfFormat::NQuads)?;
+    let buffer = store.dump_dataset(Vec::new(), RdfFormat::NQuads)?;
     assert_eq!(
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES

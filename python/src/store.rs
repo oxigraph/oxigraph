@@ -9,6 +9,7 @@ use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use std::io::BufWriter;
 use std::path::PathBuf;
 
 /// RDF store.
@@ -537,12 +538,17 @@ impl PyStore {
             PyWritable::from_data(output)
         };
         py.allow_threads(|| {
+            let output = BufWriter::new(output);
             if let Some(from_graph_name) = &from_graph_name {
                 self.inner.dump_graph(output, format, from_graph_name)
             } else {
                 self.inner.dump_dataset(output, format)
             }
-            .map_err(map_serializer_error)
+            .map_err(map_serializer_error)?
+            .into_inner()
+            .map_err(|e| map_io_err(e.into_error()))?
+            .close()
+            .map_err(map_io_err)
         })
     }
 

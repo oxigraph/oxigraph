@@ -617,18 +617,17 @@ impl Store {
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn dump_graph<'a>(
+    pub fn dump_graph<'a, W: Write>(
         &self,
-        write: impl Write,
+        write: W,
         format: impl Into<RdfFormat>,
         from_graph_name: impl Into<GraphNameRef<'a>>,
-    ) -> Result<(), SerializerError> {
+    ) -> Result<W, SerializerError> {
         let mut writer = RdfSerializer::from_format(format.into()).serialize_to_write(write);
         for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
             writer.write_triple(quad?.as_ref())?;
         }
-        writer.finish()?;
-        Ok(())
+        Ok(writer.finish()?)
     }
 
     /// Dumps the store into a file.
@@ -642,16 +641,15 @@ impl Store {
     /// let store = Store::new()?;
     /// store.load_dataset(file, RdfFormat::NQuads, None)?;
     ///
-    /// let mut buffer = Vec::new();
-    /// store.dump_dataset(&mut buffer, RdfFormat::NQuads)?;
+    /// let buffer = store.dump_dataset(Vec::new(), RdfFormat::NQuads)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn dump_dataset(
+    pub fn dump_dataset<W: Write>(
         &self,
-        write: impl Write,
+        write: W,
         format: impl Into<RdfFormat>,
-    ) -> Result<(), SerializerError> {
+    ) -> Result<W, SerializerError> {
         let format = format.into();
         if !format.supports_datasets() {
             return Err(SerializerError::DatasetFormatExpected(format));
@@ -660,8 +658,7 @@ impl Store {
         for quad in self.iter() {
             writer.write_quad(&quad?)?;
         }
-        writer.finish()?;
-        Ok(())
+        Ok(writer.finish()?)
     }
 
     /// Returns all the store named graphs.
