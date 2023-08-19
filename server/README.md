@@ -44,7 +44,7 @@ It will create a fat binary in `target/release/oxigraph_server`.
 
 ## Usage
 
-Run `oxigraph_server --location my_data_storage_directory serve` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored. It listens by default on `localhost:7878`.
+Run `oxigraph_server serve --location my_data_storage_directory` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored. It listens by default on `localhost:7878`.
 
 The server provides an HTML UI, based on [YASGUI](https://yasgui.triply.cc), with a form to execute SPARQL requests.
 
@@ -81,7 +81,7 @@ It provides the following REST actions:
 Use `oxigraph_server --help` to see the possible options when starting the server.
 
 It is also possible to load RDF data offline using bulk loading:
-`oxigraph_server --location my_data_storage_directory load --file my_file.nq`
+`oxigraph_server load --location my_data_storage_directory --file my_file.nq`
 
 ## Using a Docker image
 
@@ -93,7 +93,7 @@ docker run --rm ghcr.io/oxigraph/oxigraph --help
 ### Run the Webserver
 Expose the server on port `7878` of the host machine, and save data on the local `./data` folder
 ```sh
-docker run --rm -v $PWD/data:/data -p 7878:7878 ghcr.io/oxigraph/oxigraph --location /data serve --bind 0.0.0.0:7878
+docker run --rm -v $PWD/data:/data -p 7878:7878 ghcr.io/oxigraph/oxigraph serve --location /data --bind 0.0.0.0:7878
 ```
 
 You can then access it from your machine on port `7878`:
