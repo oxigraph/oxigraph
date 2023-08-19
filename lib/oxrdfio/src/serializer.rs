@@ -82,24 +82,24 @@ impl RdfSerializer {
     /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(&self, writer: W) -> ToWriteQuadWriter<W> {
+    pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteQuadWriter<W> {
         ToWriteQuadWriter {
             formatter: match self.format {
-                RdfFormat::NQuads => ToWriteQuadWriterKind::NQuads(
-                    NQuadsSerializer::new().serialize_to_write(writer),
-                ),
-                RdfFormat::NTriples => ToWriteQuadWriterKind::NTriples(
-                    NTriplesSerializer::new().serialize_to_write(writer),
-                ),
-                RdfFormat::RdfXml => ToWriteQuadWriterKind::RdfXml(
-                    RdfXmlSerializer::new().serialize_to_write(writer),
-                ),
-                RdfFormat::TriG => {
-                    ToWriteQuadWriterKind::TriG(TriGSerializer::new().serialize_to_write(writer))
+                RdfFormat::NQuads => {
+                    ToWriteQuadWriterKind::NQuads(NQuadsSerializer::new().serialize_to_write(write))
                 }
-                RdfFormat::Turtle | RdfFormat::N3 => ToWriteQuadWriterKind::Turtle(
-                    TurtleSerializer::new().serialize_to_write(writer),
+                RdfFormat::NTriples => ToWriteQuadWriterKind::NTriples(
+                    NTriplesSerializer::new().serialize_to_write(write),
                 ),
+                RdfFormat::RdfXml => {
+                    ToWriteQuadWriterKind::RdfXml(RdfXmlSerializer::new().serialize_to_write(write))
+                }
+                RdfFormat::TriG => {
+                    ToWriteQuadWriterKind::TriG(TriGSerializer::new().serialize_to_write(write))
+                }
+                RdfFormat::Turtle | RdfFormat::N3 => {
+                    ToWriteQuadWriterKind::Turtle(TurtleSerializer::new().serialize_to_write(write))
+                }
             },
         }
     }
@@ -134,24 +134,24 @@ impl RdfSerializer {
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
         &self,
-        writer: W,
+        write: W,
     ) -> ToTokioAsyncWriteQuadWriter<W> {
         ToTokioAsyncWriteQuadWriter {
             formatter: match self.format {
                 RdfFormat::NQuads => ToTokioAsyncWriteQuadWriterKind::NQuads(
-                    NQuadsSerializer::new().serialize_to_tokio_async_write(writer),
+                    NQuadsSerializer::new().serialize_to_tokio_async_write(write),
                 ),
                 RdfFormat::NTriples => ToTokioAsyncWriteQuadWriterKind::NTriples(
-                    NTriplesSerializer::new().serialize_to_tokio_async_write(writer),
+                    NTriplesSerializer::new().serialize_to_tokio_async_write(write),
                 ),
                 RdfFormat::RdfXml => ToTokioAsyncWriteQuadWriterKind::RdfXml(
-                    RdfXmlSerializer::new().serialize_to_tokio_async_write(writer),
+                    RdfXmlSerializer::new().serialize_to_tokio_async_write(write),
                 ),
                 RdfFormat::TriG => ToTokioAsyncWriteQuadWriterKind::TriG(
-                    TriGSerializer::new().serialize_to_tokio_async_write(writer),
+                    TriGSerializer::new().serialize_to_tokio_async_write(write),
                 ),
                 RdfFormat::Turtle | RdfFormat::N3 => ToTokioAsyncWriteQuadWriterKind::Turtle(
-                    TurtleSerializer::new().serialize_to_tokio_async_write(writer),
+                    TurtleSerializer::new().serialize_to_tokio_async_write(write),
                 ),
             },
         }

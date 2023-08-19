@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Method, Request, Response, Status};
 use oxhttp::Server;
-use oxigraph::io::{RdfFormat, RdfSerializer};
+use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
@@ -129,9 +129,10 @@ enum Command {
         /// By default the format is guessed from the loaded file extension.
         #[arg(long, required_unless_present = "file")]
         format: Option<String>,
+        /// Base IRI of the file(s) to load.
+        #[arg(long)]
+        base: Option<String>,
         /// Attempt to keep loading even if the data file is invalid.
-        ///
-        /// Only works with N-Triples and N-Quads for now.
         #[arg(long)]
         lenient: bool,
         /// Name of the graph to load the data to.
@@ -174,7 +175,7 @@ enum Command {
         /// If no query or query file are given, stdin is used.
         #[arg(long, conflicts_with = "query")]
         query_file: Option<PathBuf>,
-        /// Base URI of the query.
+        /// Base IRI of the query.
         #[arg(long)]
         query_base: Option<String>,
         /// File in which the query results will be stored.
@@ -219,7 +220,7 @@ enum Command {
         /// If no update or update file are given, stdin is used.
         #[arg(long, conflicts_with = "update")]
         update_file: Option<PathBuf>,
-        /// Base URI of the update.
+        /// Base IRI of the update.
         #[arg(long)]
         update_base: Option<String>,
     },
@@ -228,6 +229,52 @@ enum Command {
     /// Done by default in the background when serving requests.
     /// It is likely to not be useful in most of cases except if you provide a read-only SPARQL endpoint under heavy load.
     Optimize {},
+    /// Converts a RDF serialization from one format to an other.
+    Convert {
+        /// File to convert from.
+        ///
+        /// If no file is given, stdin is read.
+        #[arg(short, long)]
+        from_file: Option<PathBuf>,
+        /// The format of the file(s) to convert from.
+        ///
+        /// Can be an extension like "nt" or a MIME type like "application/n-triples".
+        ///
+        /// By default the format is guessed from the input file extension.
+        #[arg(long, required_unless_present = "from_file")]
+        from_format: Option<String>,
+        /// Base IRI of the file to read.
+        #[arg(long)]
+        from_base: Option<String>,
+        /// File to convert to.
+        ///
+        /// If no file is given, stdout is written.
+        #[arg(short, long)]
+        to_file: Option<PathBuf>,
+        /// The format of the file(s) to convert from.
+        ///
+        /// Can be an extension like "nt" or a MIME type like "application/n-triples".
+        ///
+        /// By default the format is guessed from the target file extension.
+        #[arg(long, required_unless_present = "to_file")]
+        to_format: Option<String>,
+        /// Attempt to keep converting even if the data file is invalid.
+        #[arg(long)]
+        lenient: bool,
+        /// Only load the given named graph from the input file.
+        ///
+        /// By default all graphs are loaded.
+        #[arg(long, conflicts_with = "from_default_graph")]
+        from_graph: Option<String>,
+        /// Only load the default graph from the input file.
+        #[arg(long, conflicts_with = "from_graph")]
+        from_default_graph: bool,
+        /// Name of the graph to map the default graph to.
+        ///
+        /// By default the default graph is used.
+        #[arg(long)]
+        to_graph: Option<String>,
+    },
 }
 
 pub fn main() -> anyhow::Result<()> {
@@ -286,6 +333,7 @@ pub fn main() -> anyhow::Result<()> {
             file,
             lenient,
             format,
+            base,
             graph,
         } => {
             let store = if let Some(location) = matches.location {
@@ -331,7 +379,7 @@ pub fn main() -> anyhow::Result<()> {
                     format.ok_or_else(|| {
                         anyhow!("The --format option must be set when loading from stdin")
                     })?,
-                    None,
+                    base.as_deref(),
                     graph,
                 )
             } else {
@@ -343,6 +391,7 @@ pub fn main() -> anyhow::Result<()> {
                         for file in file {
                             let store = store.clone();
                             let graph = graph.clone();
+                            let base = base.clone();
                             s.spawn(move |_| {
                                 let f = file.clone();
                                 let start = Instant::now();
@@ -383,7 +432,7 @@ pub fn main() -> anyhow::Result<()> {
                                                 rdf_format_from_path(&file.with_extension(""))
                                                     .unwrap()
                                             }),
-                                            None,
+                                            base.as_deref(),
                                             graph,
                                         )
                                     } else {
@@ -393,7 +442,7 @@ pub fn main() -> anyhow::Result<()> {
                                             format.unwrap_or_else(|| {
                                                 rdf_format_from_path(&file).unwrap()
                                             }),
-                                            None,
+                                            base.as_deref(),
                                             graph,
                                         )
                                     }
@@ -631,6 +680,101 @@ pub fn main() -> anyhow::Result<()> {
             store.optimize()?;
             Ok(())
         }
+        Command::Convert {
+            from_file,
+            from_format,
+            from_base,
+            to_file,
+            to_format,
+            lenient,
+            from_graph,
+            from_default_graph,
+            to_graph,
+        } => {
+            let from_format = if let Some(format) = from_format {
+                rdf_format_from_name(&format)?
+            } else if let Some(file) = &from_file {
+                rdf_format_from_path(file)?
+            } else {
+                bail!("The --from-format option must be set when reading from stdin")
+            };
+            let mut parser = RdfParser::from_format(from_format);
+            if let Some(base) = from_base {
+                parser = parser
+                    .with_base_iri(&base)
+                    .with_context(|| anyhow!("Invalid base IRI {base}"))?;
+            }
+
+            let to_format = if let Some(format) = to_format {
+                rdf_format_from_name(&format)?
+            } else if let Some(file) = &from_file {
+                rdf_format_from_path(file)?
+            } else {
+                bail!("The --to-format option must be set when writing to stdout")
+            };
+            let serializer = RdfSerializer::from_format(to_format);
+
+            let from_graph = if let Some(from_graph) = from_graph {
+                Some(
+                    NamedNode::new(&from_graph)
+                        .with_context(|| format!("The source graph name {from_graph} is invalid"))?
+                        .into(),
+                )
+            } else if from_default_graph {
+                Some(GraphName::DefaultGraph)
+            } else {
+                None
+            };
+            let to_graph = if let Some(to_graph) = to_graph {
+                NamedNode::new(&to_graph)
+                    .with_context(|| format!("The target graph name {to_graph} is invalid"))?
+                    .into()
+            } else {
+                GraphName::DefaultGraph
+            };
+
+            match (from_file, to_file) {
+                (Some(from_file), Some(to_file)) => close_file_writer(do_convert(
+                    &parser,
+                    File::open(from_file)?,
+                    &serializer,
+                    BufWriter::new(File::create(to_file)?),
+                    lenient,
+                    &from_graph,
+                    &to_graph,
+                )?),
+                (Some(from_file), None) => do_convert(
+                    &parser,
+                    File::open(from_file)?,
+                    &serializer,
+                    stdout().lock(),
+                    lenient,
+                    &from_graph,
+                    &to_graph,
+                )?
+                .flush(),
+                (None, Some(to_file)) => close_file_writer(do_convert(
+                    &parser,
+                    stdin().lock(),
+                    &serializer,
+                    BufWriter::new(File::create(to_file)?),
+                    lenient,
+                    &from_graph,
+                    &to_graph,
+                )?),
+                (None, None) => do_convert(
+                    &parser,
+                    stdin().lock(),
+                    &serializer,
+                    stdout().lock(),
+                    lenient,
+                    &from_graph,
+                    &to_graph,
+                )?
+                .flush(),
+            }?;
+            Ok(())
+        }
     }
 }
 
@@ -651,16 +795,53 @@ fn bulk_load(
 
 fn dump<W: Write>(
     store: &Store,
-    writer: W,
+    write: W,
     format: RdfFormat,
     from_graph_name: Option<GraphNameRef<'_>>,
 ) -> anyhow::Result<W> {
     ensure!(format.supports_datasets() || from_graph_name.is_some(), "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML");
     Ok(if let Some(from_graph_name) = from_graph_name {
-        store.dump_graph(writer, format, from_graph_name)
+        store.dump_graph(write, format, from_graph_name)
     } else {
-        store.dump_dataset(writer, format)
+        store.dump_dataset(write, format)
     }?)
+}
+
+fn do_convert<R: Read, W: Write>(
+    parser: &RdfParser,
+    read: R,
+    serializer: &RdfSerializer,
+    write: W,
+    lenient: bool,
+    from_graph: &Option<GraphName>,
+    default_graph: &GraphName,
+) -> anyhow::Result<W> {
+    let mut writer = serializer.serialize_to_write(write);
+    for quad_result in parser.parse_read(read) {
+        match quad_result {
+            Ok(mut quad) => {
+                if let Some(from_graph) = from_graph {
+                    if quad.graph_name == *from_graph {
+                        quad.graph_name = GraphName::DefaultGraph;
+                    } else {
+                        continue;
+                    }
+                }
+                if quad.graph_name.is_default_graph() {
+                    quad.graph_name = default_graph.clone();
+                }
+                writer.write_quad(&quad)?;
+            }
+            Err(e) => {
+                if lenient {
+                    eprintln!("Parsing error: {e}");
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
+    Ok(writer.finish()?)
 }
 
 fn format_from_path<T>(
@@ -1710,15 +1891,16 @@ mod tests {
     #[test]
     fn cli_load_optimize_and_dump_graph() -> Result<()> {
         let store_dir = TempDir::new()?;
-        let input_file = NamedTempFile::new("input.nt")?;
-        input_file
-            .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
+        let input_file = NamedTempFile::new("input.ttl")?;
+        input_file.write_str("<s> <http://example.com/p> <http://example.com/o> .")?;
         cli_command()?
             .arg("--location")
             .arg(store_dir.path())
             .arg("load")
             .arg("--file")
             .arg(input_file.path())
+            .arg("--base")
+            .arg("http://example.com/")
             .assert()
             .success();
 
@@ -2039,6 +2221,60 @@ mod tests {
             &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
         )
+    }
+
+    #[test]
+    fn cli_convert_file() -> Result<()> {
+        let input_file = NamedTempFile::new("input.ttl")?;
+        input_file.write_str("<s> <p> <o> .")?;
+        let output_file = NamedTempFile::new("output.nt")?;
+        cli_command()?
+            .arg("convert")
+            .arg("--from-file")
+            .arg(input_file.path())
+            .arg("--from-base")
+            .arg("http://example.com/")
+            .arg("--to-file")
+            .arg(output_file.path())
+            .assert()
+            .success();
+        output_file
+            .assert("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
+        Ok(())
+    }
+
+    #[test]
+    fn cli_convert_from_default_graph_to_named_graph() -> Result<()> {
+        cli_command()?
+            .arg("convert")
+            .arg("--from-format")
+            .arg("trig")
+            .arg("--to-format")
+            .arg("nq")
+            .arg("--from-default-graph")
+            .arg("--to-graph")
+            .arg("http://example.com/t")
+            .write_stdin("@base <http://example.com/> . <s> <p> <o> . <g> { <sg> <pg> <og> . }")
+            .assert()
+            .stdout("<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/t> .\n")
+            .success();
+        Ok(())
+    }
+
+    #[test]
+    fn cli_convert_from_named_graph() -> Result<()> {
+        cli_command()?
+            .arg("convert")
+            .arg("--from-format")
+            .arg("trig")
+            .arg("--to-format")
+            .arg("nq")
+            .arg("--from-graph")
+            .arg("http://example.com/g")
+            .write_stdin("@base <http://example.com/> . <s> <p> <o> . <g> { <sg> <pg> <og> . }")
+            .assert()
+            .stdout("<http://example.com/sg> <http://example.com/pg> <http://example.com/og> .\n");
+        Ok(())
     }
 
     #[test]
