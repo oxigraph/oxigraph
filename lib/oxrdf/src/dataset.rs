@@ -669,10 +669,10 @@ impl Dataset {
                     to_hash.sort_unstable();
                     let hash = Self::hash_tuple((&to_hash, hashes[bnode]));
                     to_hash.clear();
-                    if hash != hashes[bnode] {
-                        new_hashes.insert(*bnode, hash);
-                    } else {
+                    if hash == hashes[bnode] {
                         to_do.insert(*bnode, false);
+                    } else {
+                        new_hashes.insert(*bnode, hash);
                     }
                     hash
                 } else {
