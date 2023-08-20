@@ -80,7 +80,7 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(&self, read: R) -> FromReadNTriplesReader<R> {
+    pub fn parse_read<R: Read>(self, read: R) -> FromReadNTriplesReader<R> {
         FromReadNTriplesReader {
             inner: self.parse().parser.parse_read(read),
         }
@@ -115,7 +115,7 @@ impl NTriplesParser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         read: R,
     ) -> FromTokioAsyncReadNTriplesReader<R> {
         FromTokioAsyncReadNTriplesReader {
@@ -160,7 +160,7 @@ impl NTriplesParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn parse(&self) -> LowLevelNTriplesReader {
+    pub fn parse(self) -> LowLevelNTriplesReader {
         LowLevelNTriplesReader {
             parser: NQuadsRecognizer::new_parser(
                 false,
@@ -361,7 +361,7 @@ impl NTriplesSerializer {
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteNTriplesWriter<W> {
+    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteNTriplesWriter<W> {
         ToWriteNTriplesWriter {
             write,
             writer: self.serialize(),
@@ -392,7 +392,7 @@ impl NTriplesSerializer {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
     ) -> ToTokioAsyncWriteNTriplesWriter<W> {
         ToTokioAsyncWriteNTriplesWriter {

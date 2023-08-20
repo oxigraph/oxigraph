@@ -45,7 +45,7 @@ impl GraphSerializer {
     }
 
     /// Returns a [`TripleWriter`] allowing writing triples into the given [`Write`] implementation
-    pub fn triple_writer<W: Write>(&self, write: W) -> TripleWriter<W> {
+    pub fn triple_writer<W: Write>(self, write: W) -> TripleWriter<W> {
         TripleWriter {
             writer: self.inner.serialize_to_write(write),
         }
@@ -128,7 +128,7 @@ impl DatasetSerializer {
     }
 
     /// Returns a [`QuadWriter`] allowing writing triples into the given [`Write`] implementation
-    pub fn quad_writer<W: Write>(&self, write: W) -> QuadWriter<W> {
+    pub fn quad_writer<W: Write>(self, write: W) -> QuadWriter<W> {
         QuadWriter {
             writer: self.inner.serialize_to_write(write),
         }

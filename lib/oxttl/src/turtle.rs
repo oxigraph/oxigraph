@@ -107,7 +107,7 @@ impl TurtleParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(&self, read: R) -> FromReadTurtleReader<R> {
+    pub fn parse_read<R: Read>(self, read: R) -> FromReadTurtleReader<R> {
         FromReadTurtleReader {
             inner: self.parse().parser.parse_read(read),
         }
@@ -144,7 +144,7 @@ impl TurtleParser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         read: R,
     ) -> FromTokioAsyncReadTurtleReader<R> {
         FromTokioAsyncReadTurtleReader {
@@ -188,14 +188,14 @@ impl TurtleParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse(&self) -> LowLevelTurtleReader {
+    pub fn parse(self) -> LowLevelTurtleReader {
         LowLevelTurtleReader {
             parser: TriGRecognizer::new_parser(
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
-                self.base.clone(),
-                self.prefixes.clone(),
+                self.base,
+                self.prefixes,
             ),
         }
     }
@@ -397,7 +397,7 @@ impl TurtleSerializer {
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteTurtleWriter<W> {
+    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteTurtleWriter<W> {
         ToWriteTurtleWriter {
             inner: self.inner.serialize_to_write(write),
         }
@@ -427,7 +427,7 @@ impl TurtleSerializer {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
     ) -> ToTokioAsyncWriteTurtleWriter<W> {
         ToTokioAsyncWriteTurtleWriter {
