@@ -35,6 +35,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct NQuadsParser {
     #[cfg(feature = "rdf-star")]
     with_quoted_triples: bool,
@@ -50,7 +51,6 @@ impl NQuadsParser {
     /// Enables [N-Quads-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-quads-star).
     #[cfg(feature = "rdf-star")]
     #[inline]
-    #[must_use]
     pub fn with_quoted_triples(mut self) -> Self {
         self.with_quoted_triples = true;
         self
@@ -193,6 +193,7 @@ impl NQuadsParser {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct FromReadNQuadsReader<R: Read> {
     inner: FromReadIterator<R, NQuadsRecognizer>,
 }
@@ -233,6 +234,7 @@ impl<R: Read> Iterator for FromReadNQuadsReader<R> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct FromTokioAsyncReadNQuadsReader<R: AsyncRead + Unpin> {
     inner: FromTokioAsyncReadIterator<R, NQuadsRecognizer>,
 }
@@ -334,6 +336,7 @@ impl LowLevelNQuadsReader {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct NQuadsSerializer;
 
 impl NQuadsSerializer {
@@ -449,6 +452,7 @@ impl NQuadsSerializer {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct ToWriteNQuadsWriter<W: Write> {
     write: W,
     writer: LowLevelNQuadsWriter,
@@ -490,6 +494,7 @@ impl<W: Write> ToWriteNQuadsWriter<W> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct ToTokioAsyncWriteNQuadsWriter<W: AsyncWrite + Unpin> {
     write: W,
     writer: LowLevelNQuadsWriter,

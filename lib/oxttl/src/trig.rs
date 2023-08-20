@@ -40,6 +40,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct TriGParser {
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
@@ -74,7 +75,6 @@ impl TriGParser {
     /// Enables [TriG-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#trig-star).
     #[cfg(feature = "rdf-star")]
     #[inline]
-    #[must_use]
     pub fn with_quoted_triples(mut self) -> Self {
         self.with_quoted_triples = true;
         self
@@ -224,6 +224,7 @@ impl TriGParser {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct FromReadTriGReader<R: Read> {
     inner: FromReadIterator<R, TriGRecognizer>,
 }
@@ -266,6 +267,7 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct FromTokioAsyncReadTriGReader<R: AsyncRead + Unpin> {
     inner: FromTokioAsyncReadIterator<R, TriGRecognizer>,
 }
@@ -367,6 +369,7 @@ impl LowLevelTriGReader {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct TriGSerializer;
 
 impl TriGSerializer {
@@ -486,6 +489,7 @@ impl TriGSerializer {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct ToWriteTriGWriter<W: Write> {
     write: W,
     writer: LowLevelTriGWriter,
@@ -528,6 +532,7 @@ impl<W: Write> ToWriteTriGWriter<W> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct ToTokioAsyncWriteTriGWriter<W: AsyncWrite + Unpin> {
     write: W,
     writer: LowLevelTriGWriter,

@@ -204,6 +204,7 @@ impl From<Quad> for N3Quad {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct N3Parser {
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
@@ -376,6 +377,7 @@ impl N3Parser {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct FromReadN3Reader<R: Read> {
     inner: FromReadIterator<R, N3Recognizer>,
 }
@@ -420,6 +422,7 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct FromTokioAsyncReadN3Reader<R: AsyncRead + Unpin> {
     inner: FromTokioAsyncReadIterator<R, N3Recognizer>,
 }

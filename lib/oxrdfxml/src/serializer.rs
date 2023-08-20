@@ -27,6 +27,7 @@ use tokio::io::AsyncWrite;
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct RdfXmlSerializer;
 
 impl RdfXmlSerializer {
@@ -123,6 +124,7 @@ impl RdfXmlSerializer {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct ToWriteRdfXmlWriter<W: Write> {
     writer: Writer<W>,
     inner: InnerRdfXmlWriter,
@@ -176,6 +178,7 @@ impl<W: Write> ToWriteRdfXmlWriter<W> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct ToTokioAsyncWriteRdfXmlWriter<W: AsyncWrite + Unpin> {
     writer: Writer<W>,
     inner: InnerRdfXmlWriter,

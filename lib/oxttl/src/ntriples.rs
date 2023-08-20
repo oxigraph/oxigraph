@@ -36,6 +36,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct NTriplesParser {
     #[cfg(feature = "rdf-star")]
     with_quoted_triples: bool,
@@ -51,7 +52,6 @@ impl NTriplesParser {
     /// Enables [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star).
     #[cfg(feature = "rdf-star")]
     #[inline]
-    #[must_use]
     pub fn with_quoted_triples(mut self) -> Self {
         self.with_quoted_triples = true;
         self
@@ -194,6 +194,7 @@ impl NTriplesParser {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct FromReadNTriplesReader<R: Read> {
     inner: FromReadIterator<R, NQuadsRecognizer>,
 }
@@ -234,6 +235,7 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct FromTokioAsyncReadNTriplesReader<R: AsyncRead + Unpin> {
     inner: FromTokioAsyncReadIterator<R, NQuadsRecognizer>,
 }
@@ -334,6 +336,7 @@ impl LowLevelNTriplesReader {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct NTriplesSerializer;
 
 impl NTriplesSerializer {
@@ -445,6 +448,7 @@ impl NTriplesSerializer {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct ToWriteNTriplesWriter<W: Write> {
     write: W,
     writer: LowLevelNTriplesWriter,
@@ -485,6 +489,7 @@ impl<W: Write> ToWriteNTriplesWriter<W> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct ToTokioAsyncWriteNTriplesWriter<W: AsyncWrite + Unpin> {
     write: W,
     writer: LowLevelNTriplesWriter,

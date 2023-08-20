@@ -53,6 +53,7 @@ use tokio::io::AsyncRead;
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
+#[must_use]
 pub struct RdfParser {
     inner: RdfParserKind,
     default_graph: GraphName,
@@ -72,7 +73,6 @@ enum RdfParserKind {
 impl RdfParser {
     /// Builds a parser for the given format.
     #[inline]
-    #[must_use]
     pub fn from_format(format: RdfFormat) -> Self {
         Self {
             inner: match format {
@@ -172,7 +172,6 @@ impl RdfParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    #[must_use]
     pub fn with_default_graph(self, default_graph: impl Into<GraphName>) -> Self {
         Self {
             inner: self.inner,
@@ -195,7 +194,6 @@ impl RdfParser {
     /// assert!(parser.parse_read(file.as_bytes()).next().unwrap().is_err());
     /// ```
     #[inline]
-    #[must_use]
     pub fn without_named_graphs(self) -> Self {
         Self {
             inner: self.inner,
@@ -224,7 +222,6 @@ impl RdfParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    #[must_use]
     pub fn rename_blank_nodes(self) -> Self {
         Self {
             inner: self.inner,
