@@ -62,7 +62,7 @@ use std::hash::{Hash, Hasher};
 /// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Dataset {
     interner: Interner,
     gspo: BTreeSet<(
