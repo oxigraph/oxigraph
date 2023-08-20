@@ -57,7 +57,7 @@ impl RdfXmlSerializer {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteRdfXmlWriter<W> {
+    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteRdfXmlWriter<W> {
         ToWriteRdfXmlWriter {
             writer: Writer::new_with_indent(write, b'\t', 1),
             inner: InnerRdfXmlWriter {
@@ -93,7 +93,7 @@ impl RdfXmlSerializer {
     #[allow(clippy::unused_self)]
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
     ) -> ToTokioAsyncWriteRdfXmlWriter<W> {
         ToTokioAsyncWriteRdfXmlWriter {

@@ -259,7 +259,7 @@ impl N3Parser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(&self, read: R) -> FromReadN3Reader<R> {
+    pub fn parse_read<R: Read>(self, read: R) -> FromReadN3Reader<R> {
         FromReadN3Reader {
             inner: self.parse().parser.parse_read(read),
         }
@@ -298,7 +298,7 @@ impl N3Parser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         read: R,
     ) -> FromTokioAsyncReadN3Reader<R> {
         FromTokioAsyncReadN3Reader {
@@ -343,9 +343,9 @@ impl N3Parser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse(&self) -> LowLevelN3Reader {
+    pub fn parse(self) -> LowLevelN3Reader {
         LowLevelN3Reader {
-            parser: N3Recognizer::new_parser(self.base.clone(), self.prefixes.clone()),
+            parser: N3Recognizer::new_parser(self.base, self.prefixes),
         }
     }
 }

@@ -733,18 +733,18 @@ pub fn main() -> anyhow::Result<()> {
 
             match (from_file, to_file) {
                 (Some(from_file), Some(to_file)) => close_file_writer(do_convert(
-                    &parser,
+                    parser,
                     File::open(from_file)?,
-                    &serializer,
+                    serializer,
                     BufWriter::new(File::create(to_file)?),
                     lenient,
                     &from_graph,
                     &to_graph,
                 )?),
                 (Some(from_file), None) => do_convert(
-                    &parser,
+                    parser,
                     File::open(from_file)?,
-                    &serializer,
+                    serializer,
                     stdout().lock(),
                     lenient,
                     &from_graph,
@@ -752,18 +752,18 @@ pub fn main() -> anyhow::Result<()> {
                 )?
                 .flush(),
                 (None, Some(to_file)) => close_file_writer(do_convert(
-                    &parser,
+                    parser,
                     stdin().lock(),
-                    &serializer,
+                    serializer,
                     BufWriter::new(File::create(to_file)?),
                     lenient,
                     &from_graph,
                     &to_graph,
                 )?),
                 (None, None) => do_convert(
-                    &parser,
+                    parser,
                     stdin().lock(),
-                    &serializer,
+                    serializer,
                     stdout().lock(),
                     lenient,
                     &from_graph,
@@ -806,9 +806,9 @@ fn dump<W: Write>(
 }
 
 fn do_convert<R: Read, W: Write>(
-    parser: &RdfParser,
+    parser: RdfParser,
     read: R,
-    serializer: &RdfSerializer,
+    serializer: RdfSerializer,
     write: W,
     lenient: bool,
     from_graph: &Option<GraphName>,

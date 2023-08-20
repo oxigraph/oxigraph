@@ -105,7 +105,7 @@ impl TriGParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(&self, read: R) -> FromReadTriGReader<R> {
+    pub fn parse_read<R: Read>(self, read: R) -> FromReadTriGReader<R> {
         FromReadTriGReader {
             inner: self.parse().parser.parse_read(read),
         }
@@ -142,7 +142,7 @@ impl TriGParser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         read: R,
     ) -> FromTokioAsyncReadTriGReader<R> {
         FromTokioAsyncReadTriGReader {
@@ -186,14 +186,14 @@ impl TriGParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse(&self) -> LowLevelTriGReader {
+    pub fn parse(self) -> LowLevelTriGReader {
         LowLevelTriGReader {
             parser: TriGRecognizer::new_parser(
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
-                self.base.clone(),
-                self.prefixes.clone(),
+                self.base,
+                self.prefixes,
             ),
         }
     }
@@ -395,7 +395,7 @@ impl TriGSerializer {
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteTriGWriter<W> {
+    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteTriGWriter<W> {
         ToWriteTriGWriter {
             write,
             writer: self.serialize(),
@@ -427,7 +427,7 @@ impl TriGSerializer {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
     ) -> ToTokioAsyncWriteTriGWriter<W> {
         ToTokioAsyncWriteTriGWriter {

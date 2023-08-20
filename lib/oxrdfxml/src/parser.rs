@@ -94,7 +94,7 @@ impl RdfXmlParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(&self, read: R) -> FromReadRdfXmlReader<R> {
+    pub fn parse_read<R: Read>(self, read: R) -> FromReadRdfXmlReader<R> {
         FromReadRdfXmlReader {
             results: Vec::new(),
             reader: self.parse(BufReader::new(read)),
@@ -135,7 +135,7 @@ impl RdfXmlParser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         read: R,
     ) -> FromTokioAsyncReadRdfXmlReader<R> {
         FromTokioAsyncReadRdfXmlReader {

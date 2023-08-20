@@ -214,9 +214,12 @@ impl RdfParser {
     ///
     /// let file = "_:a <http://example.com/p> <http://example.com/o> .";
     ///
-    /// let parser = RdfParser::from_format(RdfFormat::NQuads).rename_blank_nodes();
-    /// let result1 = parser.parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
-    /// let result2 = parser.parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    /// let result1 = RdfParser::from_format(RdfFormat::NQuads)
+    ///     .rename_blank_nodes()
+    ///     .parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    /// let result2 = RdfParser::from_format(RdfFormat::NQuads)
+    ///     .rename_blank_nodes()
+    ///     .parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
     /// assert_ne!(result1, result2);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -247,9 +250,9 @@ impl RdfParser {
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(&self, reader: R) -> FromReadQuadReader<R> {
+    pub fn parse_read<R: Read>(self, reader: R) -> FromReadQuadReader<R> {
         FromReadQuadReader {
-            parser: match &self.inner {
+            parser: match self.inner {
                 RdfParserKind::N3(p) => FromReadQuadReaderKind::N3(p.parse_read(reader)),
                 RdfParserKind::NQuads(p) => FromReadQuadReaderKind::NQuads(p.parse_read(reader)),
                 RdfParserKind::NTriples(p) => {
@@ -288,11 +291,11 @@ impl RdfParser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         reader: R,
     ) -> FromTokioAsyncReadQuadReader<R> {
         FromTokioAsyncReadQuadReader {
-            parser: match &self.inner {
+            parser: match self.inner {
                 RdfParserKind::N3(p) => {
                     FromTokioAsyncReadQuadReaderKind::N3(p.parse_tokio_async_read(reader))
                 }

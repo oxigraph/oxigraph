@@ -79,7 +79,7 @@ impl NQuadsParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(&self, read: R) -> FromReadNQuadsReader<R> {
+    pub fn parse_read<R: Read>(self, read: R) -> FromReadNQuadsReader<R> {
         FromReadNQuadsReader {
             inner: self.parse().parser.parse_read(read),
         }
@@ -114,7 +114,7 @@ impl NQuadsParser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         read: R,
     ) -> FromTokioAsyncReadNQuadsReader<R> {
         FromTokioAsyncReadNQuadsReader {
@@ -159,7 +159,7 @@ impl NQuadsParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn parse(&self) -> LowLevelNQuadsReader {
+    pub fn parse(self) -> LowLevelNQuadsReader {
         LowLevelNQuadsReader {
             parser: NQuadsRecognizer::new_parser(
                 true,
@@ -362,7 +362,7 @@ impl NQuadsSerializer {
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteNQuadsWriter<W> {
+    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteNQuadsWriter<W> {
         ToWriteNQuadsWriter {
             write,
             writer: self.serialize(),
@@ -394,7 +394,7 @@ impl NQuadsSerializer {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
     ) -> ToTokioAsyncWriteNQuadsWriter<W> {
         ToTokioAsyncWriteNQuadsWriter {

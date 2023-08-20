@@ -82,7 +82,7 @@ impl RdfSerializer {
     /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(&self, write: W) -> ToWriteQuadWriter<W> {
+    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteQuadWriter<W> {
         ToWriteQuadWriter {
             formatter: match self.format {
                 RdfFormat::NQuads => {
@@ -133,7 +133,7 @@ impl RdfSerializer {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
     ) -> ToTokioAsyncWriteQuadWriter<W> {
         ToTokioAsyncWriteQuadWriter {

@@ -65,7 +65,7 @@ impl GraphParser {
     }
 
     /// Executes the parsing itself on a [`Read`] implementation and returns an iterator of triples.
-    pub fn read_triples<R: Read>(&self, reader: R) -> TripleReader<R> {
+    pub fn read_triples<R: Read>(self, reader: R) -> TripleReader<R> {
         TripleReader {
             parser: self.inner.parse_read(reader),
         }
@@ -154,7 +154,7 @@ impl DatasetParser {
     }
 
     /// Executes the parsing itself on a [`Read`] implementation and returns an iterator of quads.
-    pub fn read_quads<R: Read>(&self, reader: R) -> QuadReader<R> {
+    pub fn read_quads<R: Read>(self, reader: R) -> QuadReader<R> {
         QuadReader {
             parser: self.inner.parse_read(reader),
         }
