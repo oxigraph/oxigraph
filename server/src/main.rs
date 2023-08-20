@@ -1,6 +1,6 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
 use anyhow::{anyhow, bail, ensure, Context};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueHint};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Method, Request, Response, Status};
 use oxhttp::Server;
@@ -52,10 +52,10 @@ enum Command {
         /// Directory in which the data should be persisted.
         ///
         /// If not present. An in-memory storage will be used.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: Option<PathBuf>,
         /// Host and port to listen to.
-        #[arg(short, long, default_value = "localhost:7878")]
+        #[arg(short, long, default_value = "localhost:7878", value_hint = ValueHint::Hostname)]
         bind: String,
         /// Allows cross-origin requests
         #[arg(long)]
@@ -68,7 +68,7 @@ enum Command {
     /// Please use the serve-secondary command in this case.
     ServeReadOnly {
         /// Directory in which Oxigraph data are persisted.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
         /// Host and port to listen to.
         #[arg(short, long, default_value = "localhost:7878")]
@@ -86,12 +86,12 @@ enum Command {
     /// Dirty reads might happen.
     ServeSecondary {
         /// Directory where the primary Oxigraph instance is writing to.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::DirPath)]
         primary_location: PathBuf,
         /// Directory to which the current secondary instance might write to.
         ///
         /// By default, temporary storage is used.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::DirPath)]
         secondary_location: Option<PathBuf>,
         /// Host and port to listen to.
         #[arg(short, long, default_value = "localhost:7878")]
@@ -113,23 +113,23 @@ enum Command {
     /// If you want to move your data to another RDF storage system, you should use the dump operation instead.
     Backup {
         /// Directory in which Oxigraph data are persisted.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
         /// Directory in which the backup will be written.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         destination: PathBuf,
     },
     /// Load file(s) into the store.
     Load {
         /// Directory in which Oxigraph data are persisted.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
         /// File(s) to load.
         ///
         /// If multiple files are provided they are loaded in parallel.
         ///
         /// If no file is given, stdin is read.
-        #[arg(short, long, num_args = 0..)]
+        #[arg(short, long, num_args = 0.., value_hint = ValueHint::FilePath)]
         file: Vec<PathBuf>,
         /// The format of the file(s) to load.
         ///
@@ -139,7 +139,7 @@ enum Command {
         #[arg(long, required_unless_present = "file")]
         format: Option<String>,
         /// Base IRI of the file(s) to load.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::Url)]
         base: Option<String>,
         /// Attempt to keep loading even if the data file is invalid.
         #[arg(long)]
@@ -149,18 +149,18 @@ enum Command {
         /// By default the default graph is used.
         ///
         /// Only available when loading a graph file (N-Triples, Turtle...) and not a dataset file (N-Quads, TriG...).
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::Url)]
         graph: Option<String>,
     },
     /// Dump the store content into a file.
     Dump {
         /// Directory in which Oxigraph data are persisted.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
         /// File to dump to.
         ///
         /// If no file is given, stdout is used.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::FilePath)]
         file: Option<PathBuf>,
         /// The format of the file(s) to dump.
         ///
@@ -172,13 +172,13 @@ enum Command {
         /// Name of the graph to dump.
         ///
         /// By default all graphs are dumped if the output format supports datasets.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::Url)]
         graph: Option<String>,
     },
     /// Executes a SPARQL query against the store.
     Query {
         /// Directory in which Oxigraph data are persisted.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
         /// The SPARQL query to execute.
         ///
@@ -188,15 +188,15 @@ enum Command {
         /// File in which the query is stored.
         ///
         /// If no query or query file are given, stdin is used.
-        #[arg(long, conflicts_with = "query")]
+        #[arg(long, conflicts_with = "query", value_hint = ValueHint::FilePath)]
         query_file: Option<PathBuf>,
         /// Base IRI of the query.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::Url)]
         query_base: Option<String>,
         /// File in which the query results will be stored.
         ///
         /// If no file is given, stdout is used.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::FilePath)]
         results_file: Option<PathBuf>,
         /// The format of the results.
         ///
@@ -215,7 +215,7 @@ enum Command {
         /// If the file extension is .json the JSON format is used, if .txt a human readable format is used.
         ///
         /// Use the stats option to print also query evaluation statistics.
-        #[arg(long, conflicts_with = "explain")]
+        #[arg(long, conflicts_with = "explain", value_hint = ValueHint::FilePath)]
         explain_file: Option<PathBuf>,
         /// Computes some evaluation statistics to print as part of the query explanations.
         ///
@@ -226,7 +226,7 @@ enum Command {
     /// Executes a SPARQL update against the store.
     Update {
         /// Directory in which Oxigraph data are persisted.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
         /// The SPARQL update to execute.
         ///
@@ -236,10 +236,10 @@ enum Command {
         /// File in which the update is stored.
         ///
         /// If no update or update file are given, stdin is used.
-        #[arg(long, conflicts_with = "update")]
+        #[arg(long, conflicts_with = "update", value_hint = ValueHint::FilePath)]
         update_file: Option<PathBuf>,
         /// Base IRI of the update.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::Url)]
         update_base: Option<String>,
     },
     /// Optimizes the database storage.
@@ -248,7 +248,7 @@ enum Command {
     /// It is likely to not be useful in most of cases except if you provide a read-only SPARQL endpoint under heavy load.
     Optimize {
         /// Directory in which Oxigraph data are persisted.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
     },
     /// Converts a RDF serialization from one format to an other.
@@ -256,7 +256,7 @@ enum Command {
         /// File to convert from.
         ///
         /// If no file is given, stdin is read.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::FilePath)]
         from_file: Option<PathBuf>,
         /// The format of the file(s) to convert from.
         ///
@@ -266,12 +266,12 @@ enum Command {
         #[arg(long, required_unless_present = "from_file")]
         from_format: Option<String>,
         /// Base IRI of the file to read.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::Url)]
         from_base: Option<String>,
         /// File to convert to.
         ///
         /// If no file is given, stdout is written.
-        #[arg(short, long)]
+        #[arg(short, long, value_hint = ValueHint::FilePath)]
         to_file: Option<PathBuf>,
         /// The format of the file(s) to convert from.
         ///
@@ -286,7 +286,7 @@ enum Command {
         /// Only load the given named graph from the input file.
         ///
         /// By default all graphs are loaded.
-        #[arg(long, conflicts_with = "from_default_graph")]
+        #[arg(long, conflicts_with = "from_default_graph", value_hint = ValueHint::Url)]
         from_graph: Option<String>,
         /// Only load the default graph from the input file.
         #[arg(long, conflicts_with = "from_graph")]
@@ -294,7 +294,7 @@ enum Command {
         /// Name of the graph to map the default graph to.
         ///
         /// By default the default graph is used.
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::Url)]
         to_graph: Option<String>,
     },
 }
