@@ -4,7 +4,7 @@ use crate::*;
 use std::collections::hash_map::{Entry, HashMap, RandomState};
 use std::hash::{BuildHasher, Hasher};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Interner {
     hasher: RandomState,
     string_for_hash: HashMap<u64, String, IdentityHasherBuilder>,
@@ -503,7 +503,7 @@ impl InternedTriple {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct IdentityHasherBuilder;
 
 impl BuildHasher for IdentityHasherBuilder {

@@ -48,7 +48,7 @@ use std::fmt;
 /// assert_eq!(vec![triple], results);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Graph {
     dataset: Dataset,
 }
