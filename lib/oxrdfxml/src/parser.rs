@@ -50,6 +50,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct RdfXmlParser {
     base: Option<Iri<String>>,
 }
@@ -188,6 +189,7 @@ impl RdfXmlParser {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct FromReadRdfXmlReader<R: Read> {
     results: Vec<Triple>,
     reader: RdfXmlReader<BufReader<R>>,
@@ -259,6 +261,7 @@ impl<R: Read> FromReadRdfXmlReader<R> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct FromTokioAsyncReadRdfXmlReader<R: AsyncRead + Unpin> {
     results: Vec<Triple>,
     reader: RdfXmlReader<AsyncBufReader<R>>,

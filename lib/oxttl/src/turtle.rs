@@ -42,6 +42,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct TurtleParser {
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
@@ -76,7 +77,6 @@ impl TurtleParser {
     /// Enables [Turtle-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#turtle-star).
     #[cfg(feature = "rdf-star")]
     #[inline]
-    #[must_use]
     pub fn with_quoted_triples(mut self) -> Self {
         self.with_quoted_triples = true;
         self
@@ -226,6 +226,7 @@ impl TurtleParser {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct FromReadTurtleReader<R: Read> {
     inner: FromReadIterator<R, TriGRecognizer>,
 }
@@ -268,6 +269,7 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct FromTokioAsyncReadTurtleReader<R: AsyncRead + Unpin> {
     inner: FromTokioAsyncReadIterator<R, TriGRecognizer>,
 }
@@ -368,6 +370,7 @@ impl LowLevelTurtleReader {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
+#[must_use]
 pub struct TurtleSerializer {
     inner: TriGSerializer,
 }
@@ -480,6 +483,7 @@ impl TurtleSerializer {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[must_use]
 pub struct ToWriteTurtleWriter<W: Write> {
     inner: ToWriteTriGWriter<W>,
 }
@@ -520,6 +524,7 @@ impl<W: Write> ToWriteTurtleWriter<W> {
 /// }
 /// ```
 #[cfg(feature = "async-tokio")]
+#[must_use]
 pub struct ToTokioAsyncWriteTurtleWriter<W: AsyncWrite + Unpin> {
     inner: ToTokioAsyncWriteTriGWriter<W>,
 }
