@@ -182,9 +182,17 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
         Expression::FunctionCall(Function::Predicate, _) => {
             VariableType::NAMED_NODE | VariableType::UNDEF
         }
-        Expression::FunctionCall(Function::BNode, _) => {
-            VariableType::BLANK_NODE | VariableType::UNDEF
+        Expression::FunctionCall(Function::BNode, args) => {
+            if args.is_empty() {
+                VariableType::BLANK_NODE
+            } else {
+                VariableType::BLANK_NODE | VariableType::UNDEF
+            }
         }
+        Expression::FunctionCall(
+            Function::Rand | Function::Now | Function::Uuid | Function::StrUuid,
+            _,
+        ) => VariableType::LITERAL,
         Expression::Or(_)
         | Expression::And(_)
         | Expression::Equal(_, _)
@@ -203,7 +211,6 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
             Function::Str
             | Function::Lang
             | Function::LangMatches
-            | Function::Rand
             | Function::Abs
             | Function::Ceil
             | Function::Floor
@@ -228,9 +235,6 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
             | Function::Seconds
             | Function::Timezone
             | Function::Tz
-            | Function::Now
-            | Function::Uuid
-            | Function::StrUuid
             | Function::Md5
             | Function::Sha1
             | Function::Sha256
