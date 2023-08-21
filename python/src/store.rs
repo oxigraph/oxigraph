@@ -1,9 +1,10 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyReadable, PyWritable};
+use crate::io::{
+    allow_threads_unsafe, map_io_err, map_parse_error, rdf_format, PyReadable, PyWritable,
+};
 use crate::model::*;
 use crate::sparql::*;
-use oxigraph::io::RdfFormat;
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
@@ -348,26 +349,27 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
+    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
     ///
-    /// It supports also some MIME type aliases.
+    /// It supports also some media type and extension aliases.
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
     /// :type input: io(bytes) or io(str) or str or pathlib.Path
-    /// :param mime_type: the MIME type of the RDF serialization.
-    /// :type mime_type: str
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
+    /// :type format: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported.
+    /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
     /// :raises OSError: if an error happens during a quad insertion.
     ///
@@ -375,20 +377,16 @@ impl PyStore {
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input, format, *, base_iri = None, to_graph = None))]
     fn load(
         &self,
         input: PyObject,
-        mime_type: &str,
+        format: &str,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let Some(format) = RdfFormat::from_media_type(mime_type) else {
-            return Err(PyValueError::new_err(format!(
-                "Not supported MIME type: {mime_type}"
-            )));
-        };
+        let format = rdf_format(format)?;
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
@@ -419,26 +417,27 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
+    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
     ///
-    /// It supports also some MIME type aliases.
+    /// It supports also some media type and extension aliases.
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
     /// :type input: io(bytes) or io(str) or str or pathlib.Path
-    /// :param mime_type: the MIME type of the RDF serialization.
-    /// :type mime_type: str
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
+    /// :type format: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported.
+    /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
     /// :raises OSError: if an error happens during a quad insertion.
     ///
@@ -446,20 +445,16 @@ impl PyStore {
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input, format, *, base_iri = None, to_graph = None))]
     fn bulk_load(
         &self,
         input: PyObject,
-        mime_type: &str,
+        format: &str,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let Some(format) = RdfFormat::from_media_type(mime_type) else {
-            return Err(PyValueError::new_err(format!(
-                "Not supported MIME type: {mime_type}"
-            )));
-        };
+        let format = rdf_format(format)?;
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
@@ -488,24 +483,25 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
+    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
     ///
-    /// It supports also some MIME type aliases.
+    /// It supports also some media type and extension aliases.
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
     /// :type output: io(bytes) or str or pathlib.Path
-    /// :param mime_type: the MIME type of the RDF serialization.
-    /// :type mime_type: str
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
+    /// :type format: str
     /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
+    /// :raises ValueError: if the format is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
     /// :raises OSError: if an error happens during a quad lookup
     ///
     /// >>> store = Store()
@@ -514,19 +510,15 @@ impl PyStore {
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(signature = (output, mime_type, *, from_graph = None))]
+    #[pyo3(signature = (output, format, *, from_graph = None))]
     fn dump(
         &self,
         output: PyObject,
-        mime_type: &str,
+        format: &str,
         from_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let Some(format) = RdfFormat::from_media_type(mime_type) else {
-            return Err(PyValueError::new_err(format!(
-                "Not supported MIME type: {mime_type}"
-            )));
-        };
+        let format = rdf_format(format)?;
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {

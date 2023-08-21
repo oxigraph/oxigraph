@@ -22,20 +22,21 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 ///
 /// It currently supports the following formats:
 ///
-/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-/// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
+/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
+/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
+/// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
+/// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
+/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
 ///
-/// It supports also some MIME type aliases.
+/// It supports also some media type and extension aliases.
 /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-/// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+/// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
 /// :type input: io(bytes) or io(str) or str or pathlib.Path
-/// :param mime_type: the MIME type of the RDF serialization.
-/// :type mime_type: str
+/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
+/// :type format: str
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
 /// :type base_iri: str or None, optional
 /// :param without_named_graphs: Sets that the parser must fail if parsing a named graph.
@@ -44,27 +45,23 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// :type rename_blank_nodes: bool, optional
 /// :return: an iterator of RDF triples or quads depending on the format.
 /// :rtype: iterator(Quad)
-/// :raises ValueError: if the MIME type is not supported.
+/// :raises ValueError: if the format is not supported.
 /// :raises SyntaxError: if the provided data is invalid.
 ///
 /// >>> input = io.BytesIO(b'<foo> <p> "1" .')
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
 /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
 #[pyfunction]
-#[pyo3(signature = (input, mime_type, *, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
+#[pyo3(signature = (input, format, *, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
 pub fn parse(
     input: PyObject,
-    mime_type: &str,
+    format: &str,
     base_iri: Option<&str>,
     without_named_graphs: bool,
     rename_blank_nodes: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let Some(format) = RdfFormat::from_media_type(mime_type) else {
-        return Err(PyValueError::new_err(format!(
-            "Not supported MIME type: {mime_type}"
-        )));
-    };
+    let format = rdf_format(format)?;
     let input = if let Ok(path) = input.extract::<PathBuf>(py) {
         PyReadable::from_file(&path, py).map_err(map_io_err)?
     } else {
@@ -92,24 +89,25 @@ pub fn parse(
 ///
 /// It currently supports the following formats:
 ///
-/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-/// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
+/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
+/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
+/// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
+/// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
+/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
 ///
-/// It supports also some MIME type aliases.
+/// It supports also some media type and extension aliases.
 /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-/// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+/// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: the RDF triples and quads to serialize.
 /// :type input: iterable(Triple) or iterable(Quad)
 /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
 /// :type output: io(bytes) or str or pathlib.Path
-/// :param mime_type: the MIME type of the RDF serialization.
-/// :type mime_type: str
+/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
+/// :type format: str
 /// :rtype: None
-/// :raises ValueError: if the MIME type is not supported.
+/// :raises ValueError: if the format is not supported.
 /// :raises TypeError: if a triple is given during a quad format serialization or reverse.
 ///
 /// >>> output = io.BytesIO()
@@ -117,12 +115,8 @@ pub fn parse(
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-pub fn serialize(input: &PyAny, output: PyObject, mime_type: &str, py: Python<'_>) -> PyResult<()> {
-    let Some(format) = RdfFormat::from_media_type(mime_type) else {
-        return Err(PyValueError::new_err(format!(
-            "Not supported MIME type: {mime_type}"
-        )));
-    };
+pub fn serialize(input: &PyAny, output: PyObject, format: &str, py: Python<'_>) -> PyResult<()> {
+    let format = rdf_format(format)?;
     let output = if let Ok(path) = output.extract::<PathBuf>(py) {
         PyWritable::from_file(&path, py).map_err(map_io_err)?
     } else {
@@ -289,6 +283,18 @@ impl Write for PyIo {
                 .call_method0(intern!(py, "flush"))
                 .map_err(to_io_err)?;
             Ok(())
+        })
+    }
+}
+
+pub fn rdf_format(format: &str) -> PyResult<RdfFormat> {
+    if format.contains('/') {
+        RdfFormat::from_media_type(format).ok_or_else(|| {
+            PyValueError::new_err(format!("Not supported RDF format media type: {format}"))
+        })
+    } else {
+        RdfFormat::from_extension(format).ok_or_else(|| {
+            PyValueError::new_err(format!("Not supported RDF format extension: {format}"))
         })
     }
 }

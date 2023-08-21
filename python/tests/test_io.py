@@ -69,7 +69,7 @@ class TestParse(unittest.TestCase):
 
     def test_parse_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
-            list(parse(fp, mime_type="application/n-triples"))
+            list(parse(fp, "nt"))
 
     def test_parse_quad(self) -> None:
         self.assertEqual(

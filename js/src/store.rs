@@ -144,13 +144,11 @@ impl JsStore {
     pub fn load(
         &self,
         data: &str,
-        mime_type: &str,
+        format: &str,
         base_iri: &JsValue,
         to_graph_name: &JsValue,
     ) -> Result<(), JsValue> {
-        let Some(format) = RdfFormat::from_media_type(mime_type) else {
-            return Err(format_err!("Not supported MIME type: {mime_type}"));
-        };
+        let format = rdf_format(format)?;
         let base_iri = if base_iri.is_null() || base_iri.is_undefined() {
             None
         } else if base_iri.is_string() {
@@ -177,10 +175,8 @@ impl JsStore {
         .map_err(to_err)
     }
 
-    pub fn dump(&self, mime_type: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
-        let Some(format) = RdfFormat::from_media_type(mime_type) else {
-            return Err(format_err!("Not supported MIME type: {mime_type}"));
-        };
+    pub fn dump(&self, format: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
+        let format = rdf_format(format)?;
         let buffer =
             if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
                 self.store
@@ -190,5 +186,15 @@ impl JsStore {
             }
             .map_err(to_err)?;
         String::from_utf8(buffer).map_err(to_err)
+    }
+}
+
+fn rdf_format(format: &str) -> Result<RdfFormat, JsValue> {
+    if format.contains('/') {
+        RdfFormat::from_media_type(format)
+            .ok_or_else(|| format_err!("Not supported RDF format media type: {format}"))
+    } else {
+        RdfFormat::from_extension(format)
+            .ok_or_else(|| format_err!("Not supported RDF format extension: {format}"))
     }
 }
