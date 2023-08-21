@@ -197,40 +197,42 @@ Example of update:
 store.update("DELETE WHERE { <http://example.com/s> ?p ?o }")
 ```
 
-#### `Store.prototype.load(String data, String mimeType, NamedNode|String? baseIRI, NamedNode|BlankNode|DefaultGraph? toNamedGraph)`
+#### `Store.prototype.load(String data, String format, NamedNode|String? baseIRI, NamedNode|BlankNode|DefaultGraph? toNamedGraph)`
 
 Loads serialized RDF triples or quad into the store.
 The method arguments are:
 1. `data`: the serialized RDF triples or quads.
-2. `mimeType`: the MIME type of the serialization. See below for the supported mime types.
+2. `format`: the format of the serialization. See below for the supported formats.
 3. `baseIRI`: the base IRI to use to resolve the relative IRIs in the serialization.
 4. `toNamedGraph`: for triple serialization formats, the name of the named graph the triple should be loaded to.
 
 The available formats are:
-* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle`
-* [TriG](https://www.w3.org/TR/trig/): `application/trig`
-* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples`
-* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads`
-* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml`
+* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
+* [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
+* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
+* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
+* [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
+* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
 ```js
 store.load("<http://example.com> <http://example.com> <> .", "text/turtle", "http://example.com", oxigraph.namedNode("http://example.com/graph"));
 ```
 
-#### `Store.prototype.dump(String mimeType, NamedNode|BlankNode|DefaultGraph? fromNamedGraph)`
+#### `Store.prototype.dump(String format, NamedNode|BlankNode|DefaultGraph? fromNamedGraph)`
 
 Returns serialized RDF triples or quad from the store.
 The method arguments are:
-1. `mimeType`: the MIME type of the serialization. See below for the supported mime types.
+1. `format`: the format type of the serialization. See below for the supported types.
 2. `fromNamedGraph`: for triple serialization formats, the name of the named graph the triple should be loaded from.
 
 The available formats are:
-* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle`
-* [TriG](https://www.w3.org/TR/trig/): `application/trig`
-* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples`
-* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads`
-* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml`
+* [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
+* [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
+* [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
+* [N-Quads](https://www.w3.org/TR/n-quads/): `application/n-quads` or `nq`
+* [N3](https://w3c.github.io/N3/spec/): `text/n3` or `n3`
+* [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/): `application/rdf+xml` or `rdf`
 
 Example of building a Turtle file from the named graph `<http://example.com/graph>`:
 ```js

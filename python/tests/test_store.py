@@ -225,7 +225,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
-            mime_type="application/n-triples",
+            "application/n-triples",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
 
@@ -233,7 +233,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
-            mime_type="application/n-triples",
+            "application/n-triples",
             to_graph=graph,
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
@@ -242,7 +242,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <> ."),
-            mime_type="text/turtle",
+            "text/turtle",
             base_iri="http://baz",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
@@ -251,7 +251,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <http://baz> <http://graph>."),
-            mime_type="application/n-quads",
+            "nq",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
@@ -259,7 +259,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             BytesIO(b"<http://graph> { <http://foo> <http://bar> <> . }"),
-            mime_type="application/trig",
+            "application/trig",
             base_iri="http://baz",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
@@ -269,13 +269,13 @@ class TestStore(unittest.TestCase):
             file_name = Path(fp.name)
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
         store = Store()
-        store.load(file_name, mime_type="application/n-quads")
+        store.load(file_name, "nq")
         file_name.unlink()
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_with_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
-            Store().load(fp, mime_type="application/n-triples")
+            Store().load(fp, "application/n-triples")
 
     def test_dump_ntriples(self) -> None:
         store = Store()
@@ -291,7 +291,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
         output = BytesIO()
-        store.dump(output, "application/n-quads")
+        store.dump(output, "nq")
         self.assertEqual(
             output.getvalue(),
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
@@ -314,7 +314,7 @@ class TestStore(unittest.TestCase):
             file_name = Path(fp.name)
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
-        store.dump(file_name, "application/n-quads")
+        store.dump(file_name, "nq")
         self.assertEqual(
             file_name.read_text(),
             "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
@@ -324,7 +324,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.add(Quad(foo, bar, bar))
         with self.assertRaises(OSError) as _, TemporaryFile("rb") as fp:
-            store.dump(fp, mime_type="application/trig")
+            store.dump(fp, "application/trig")
 
     def test_write_in_read(self) -> None:
         store = Store()
