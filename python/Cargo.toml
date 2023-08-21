@@ -1,14 +1,16 @@
 [package]
 name = "pyoxigraph"
-version = "0.4.0-alpha.1-dev"
-authors = ["Tpt"]
-license = "MIT OR Apache-2.0"
+version.workspace  = true
+authors.workspace = true
+license.workspace  = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/python"
 homepage = "https://pyoxigraph.readthedocs.io/"
 description = "Python bindings of Oxigraph, a SPARQL database and RDF toolkit"
-edition = "2021"
+edition.workspace  = true
+rust-version.workspace  = true
+publish = false
 
 [lib]
 crate-type = ["cdylib"]

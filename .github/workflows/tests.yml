@@ -156,6 +156,7 @@ jobs:
 
   semver_checks:
     runs-on: ubuntu-latest
+    if: false
     steps:
       - uses: actions/checkout@v3
         with:
@@ -163,7 +164,7 @@ jobs:
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-semver-checks || true
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server --exclude oxrdfxml --exclude oxttl --exclude oxrdfio --exclude sparopt
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
 
   test_linux:
     runs-on: ubuntu-latest

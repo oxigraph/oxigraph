@@ -1,19 +1,19 @@
 [package]
 name = "oxigraph"
-version = "0.4.0-alpha.1-dev"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+version.workspace  = true
+authors.workspace  = true
+license.workspace  = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib"
-homepage = "https://oxigraph.org/"
+homepage.workspace  = true
 documentation = "https://docs.rs/oxigraph"
 description = """
 a SPARQL database and RDF toolkit
 """
-edition = "2021"
-rust-version = "1.65"
+edition.workspace  = true
+rust-version.workspace  = true
 
 [features]
 default = []

@@ -1000,7 +1000,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph_testsuite"
-version = "0.0.0"
+version = "0.4.0-alpha.1-dev"
 dependencies = [
  "anyhow",
  "clap",

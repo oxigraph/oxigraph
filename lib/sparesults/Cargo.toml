@@ -1,18 +1,18 @@
 [package]
 name = "sparesults"
 version = "0.2.0-alpha.1-dev"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+authors.workspace  = true
+license.workspace  = true
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparesults"
-homepage = "https://oxigraph.org/"
+homepage.workspace  = true
 description = """
 SPARQL query results formats parsers and serializers
 """
 documentation = "https://docs.rs/sparesults"
-edition = "2021"
-rust-version = "1.65"
+edition.workspace  = true
+rust-version.workspace  = true
 
 [features]
 default = []

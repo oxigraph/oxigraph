@@ -1,16 +1,16 @@
 [package]
 name = "oxigraph_server"
-version = "0.4.0-alpha.1-dev"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+version.workspace  = true
+authors.workspace  = true
+license.workspace  = true
 readme = "README.md"
 repository = "https://github.com/oxigraph/oxigraph/tree/main/server"
 homepage = "https://oxigraph.org/server/"
 description = """
 Oxigraph SPARQL HTTP server
 """
-edition = "2021"
-rust-version = "1.65"
+edition.workspace  = true
+rust-version.workspace  = true
 
 [dependencies]
 anyhow = "1"
