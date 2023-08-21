@@ -1,18 +1,18 @@
 [package]
 name = "spargebra"
 version = "0.3.0-alpha.1-dev"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+authors.workspace  = true
+license.workspace  = true
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargebra"
-homepage = "https://oxigraph.org/"
+homepage.workspace  = true
 documentation = "https://docs.rs/spargebra"
 description = """
 A SPARQL parser
 """
-edition = "2021"
-rust-version = "1.65"
+edition.workspace  = true
+rust-version.workspace  = true
 
 [features]
 default = []

@@ -18,6 +18,14 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+version = "0.4.0-alpha.1-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
+homepage = "https://oxigraph.org/"
+edition = "2021"
+rust-version = "1.65"
+
 [profile.release]
 lto = true
 codegen-units = 1
