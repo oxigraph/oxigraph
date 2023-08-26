@@ -153,12 +153,10 @@ impl<R: TokenRecognizer> Lexer<R> {
         options: &R::Options,
     ) -> Option<Result<TokenWithPosition<R::Token<'_>>, LexerError>> {
         self.skip_whitespaces_and_comments()?;
-        let (consumed, result) = if let Some(r) =
+        let Some((consumed, result)) =
             self.parser
                 .recognize_next_token(&self.data[self.start..], self.is_ending, options)
-        {
-            r
-        } else {
+        else {
             return if self.is_ending {
                 if self.start == self.data.len() {
                     None // We have finished

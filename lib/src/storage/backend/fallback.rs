@@ -1,6 +1,7 @@
 //! TODO: This storage is dramatically naive.
 
 use crate::storage::StorageError;
+use crate::store::CorruptionError;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
@@ -30,9 +31,13 @@ impl Db {
     }
 
     #[allow(clippy::unwrap_in_result)]
-    pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
-        let name = ColumnFamily(name);
-        self.0.read().unwrap().contains_key(&name).then_some(name)
+    pub fn column_family(&self, name: &'static str) -> Result<ColumnFamily, StorageError> {
+        let column_family = ColumnFamily(name);
+        if self.0.read().unwrap().contains_key(&column_family) {
+            Ok(column_family)
+        } else {
+            Err(CorruptionError::msg(format!("Column family {name} does not exist")).into())
+        }
     }
 
     #[must_use]
@@ -116,6 +121,7 @@ impl Reader {
         }
     }
 
+    #[allow(clippy::iter_not_returning_iterator)]
     pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter, StorageError> {
         self.scan_prefix(column_family, &[])
     }
@@ -226,7 +232,7 @@ pub struct Transaction<'a>(
 impl Transaction<'_> {
     #[allow(unsafe_code, clippy::useless_transmute)]
     pub fn reader(&self) -> Reader {
-        // This transmute is safe because we take a weak reference and the only Rc reference used is guarded by the lifetime.
+        // SAFETY: This transmute is safe because we take a weak reference and the only Rc reference used is guarded by the lifetime.
         Reader(InnerReader::Transaction(Rc::downgrade(unsafe {
             transmute(&self.0)
         })))

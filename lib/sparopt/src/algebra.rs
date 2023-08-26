@@ -875,7 +875,7 @@ impl GraphPattern {
                     inner,
                     expression: expression & e2,
                 },
-                inner => Self::Filter {
+                _ => Self::Filter {
                     inner: Box::new(inner),
                     expression,
                 },

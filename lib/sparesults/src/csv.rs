@@ -198,7 +198,7 @@ fn write_tsv_quoted_str(string: &str, f: &mut impl Write) -> io::Result<()> {
             b'\r' => f.write_all(b"\\r"),
             b'"' => f.write_all(b"\\\""),
             b'\\' => f.write_all(b"\\\\"),
-            c => f.write_all(&[c]),
+            _ => f.write_all(&[c]),
         }?;
     }
     f.write_all(b"\"")

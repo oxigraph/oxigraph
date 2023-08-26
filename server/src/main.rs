@@ -642,13 +642,13 @@ pub fn main() -> anyhow::Result<()> {
                         explanation.write_in_json(&mut file)?;
                     },
                     Some("txt") => {
-                        write!(file, "{:?}", explanation)?;
+                        write!(file, "{explanation:?}")?;
                     },
                     _ => bail!("The given explanation file {} must have an extension that is .json or .txt", explain_file.display())
                 }
                 close_file_writer(file)?;
             } else if explain || stats {
-                eprintln!("{:#?}", explanation);
+                eprintln!("{explanation:#?}");
             }
             print_result
         }
@@ -1753,7 +1753,7 @@ impl<O: 'static, U: (Fn(O) -> io::Result<Option<O>>) + 'static> ReadForWrite<O, 
         .map_err(internal_server_error)?;
         Ok(Response::builder(Status::OK)
             .with_header(HeaderName::CONTENT_TYPE, content_type)
-            .unwrap()
+            .map_err(internal_server_error)?
             .with_body(Body::from_read(Self {
                 buffer,
                 position: 0,

@@ -716,13 +716,19 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
             if let EncodedTerm::NamedNode { iri_id } = encoded {
                 insert_str(iri_id, node.as_str())
             } else {
-                unreachable!("Invalid term encoding {encoded:?} for {term}")
+                Err(
+                    CorruptionError::new(format!("Invalid term encoding {encoded:?} for {term}"))
+                        .into(),
+                )
             }
         }
         TermRef::BlankNode(node) => match encoded {
             EncodedTerm::BigBlankNode { id_id } => insert_str(id_id, node.as_str()),
             EncodedTerm::SmallBlankNode(..) | EncodedTerm::NumericalBlankNode { .. } => Ok(()),
-            _ => unreachable!("Invalid term encoding {encoded:?} for {term}"),
+            _ => Err(
+                CorruptionError::new(format!("Invalid term encoding {encoded:?} for {term}"))
+                    .into(),
+            ),
         },
         TermRef::Literal(literal) => match encoded {
             EncodedTerm::BigStringLiteral { value_id }
@@ -733,7 +739,10 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
                 if let Some(language) = literal.language() {
                     insert_str(language_id, language)
                 } else {
-                    unreachable!("Invalid term encoding {encoded:?} for {term}")
+                    Err(CorruptionError::new(format!(
+                        "Invalid term encoding {encoded:?} for {term}"
+                    ))
+                    .into())
                 }
             }
             EncodedTerm::BigBigLangStringLiteral {
@@ -744,7 +753,10 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
                 if let Some(language) = literal.language() {
                     insert_str(language_id, language)
                 } else {
-                    unreachable!("Invalid term encoding {encoded:?} for {term}")
+                    Err(CorruptionError::new(format!(
+                        "Invalid term encoding {encoded:?} for {term}"
+                    ))
+                    .into())
                 }
             }
             EncodedTerm::SmallTypedLiteral { datatype_id, .. } => {
@@ -775,7 +787,10 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
             | EncodedTerm::DurationLiteral(..)
             | EncodedTerm::YearMonthDurationLiteral(..)
             | EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
-            _ => unreachable!("Invalid term encoding {encoded:?} for {term}"),
+            _ => Err(
+                CorruptionError::new(format!("Invalid term encoding {encoded:?} for {term}"))
+                    .into(),
+            ),
         },
         TermRef::Triple(triple) => {
             if let EncodedTerm::Triple(encoded) = encoded {
@@ -787,7 +802,10 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
                 )?;
                 insert_term(triple.object.as_ref(), &encoded.object, insert_str)
             } else {
-                unreachable!("Invalid term encoding {encoded:?} for {term}")
+                Err(
+                    CorruptionError::new(format!("Invalid term encoding {encoded:?} for {term}"))
+                        .into(),
+                )
             }
         }
     }

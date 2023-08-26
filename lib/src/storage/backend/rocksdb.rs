@@ -1,9 +1,14 @@
 //! Code inspired by [Rust RocksDB](https://github.com/rust-rocksdb/rust-rocksdb) under Apache License 2.0.
 
-#![allow(unsafe_code, trivial_casts)]
+#![allow(
+    unsafe_code,
+    trivial_casts,
+    clippy::undocumented_unsafe_blocks,
+    clippy::panic_in_result_fn,
+    clippy::unwrap_in_result
+)]
 
 use crate::storage::error::{CorruptionError, StorageError};
-use lazy_static::lazy_static;
 use libc::{self, c_void, free};
 use oxrocksdb_sys::*;
 use rand::random;
@@ -20,7 +25,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::thread::{available_parallelism, yield_now};
 use std::{ptr, slice};
 
@@ -49,23 +54,6 @@ macro_rules! ffi_result_impl {
             Err(ErrorStatus(status))
         }
     }}
-}
-
-lazy_static! {
-    static ref ROCKSDB_ENV: UnsafeEnv = {
-        unsafe {
-            let env = rocksdb_create_default_env();
-            assert!(!env.is_null(), "rocksdb_create_default_env returned null");
-            UnsafeEnv(env)
-        }
-    };
-    static ref ROCKSDB_MEM_ENV: UnsafeEnv = {
-        unsafe {
-            let env = rocksdb_create_mem_env();
-            assert!(!env.is_null(), "rocksdb_create_mem_env returned null");
-            UnsafeEnv(env)
-        }
-    };
 }
 
 pub struct ColumnFamilyDefinition {
@@ -132,7 +120,7 @@ impl Drop for RwDbHandler {
         }
         if self.in_memory {
             #[allow(clippy::let_underscore_must_use)]
-            let _ = remove_dir_all(&self.path);
+            let _: io::Result<()> = remove_dir_all(&self.path);
         }
     }
 }
@@ -167,7 +155,7 @@ impl Drop for RoDbHandler {
         }
         if let Some(path) = &self.path_to_remove {
             #[allow(clippy::let_underscore_must_use)]
-            let _ = remove_dir_all(path);
+            let _: io::Result<()> = remove_dir_all(path);
         }
     }
 }
@@ -466,6 +454,9 @@ impl Db {
         limit_max_open_files: bool,
         in_memory: bool,
     ) -> Result<*mut rocksdb_options_t, StorageError> {
+        static ROCKSDB_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
+        static ROCKSDB_MEM_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
+
         unsafe {
             let options = rocksdb_options_create();
             assert!(!options.is_null(), "rocksdb_options_create returned null");
@@ -502,10 +493,19 @@ impl Db {
             rocksdb_options_set_env(
                 options,
                 if in_memory {
-                    ROCKSDB_MEM_ENV.0
+                    ROCKSDB_MEM_ENV.get_or_init(|| {
+                        let env = rocksdb_create_mem_env();
+                        assert!(!env.is_null(), "rocksdb_create_mem_env returned null");
+                        UnsafeEnv(env)
+                    })
                 } else {
-                    ROCKSDB_ENV.0
-                },
+                    ROCKSDB_ENV.get_or_init(|| {
+                        let env = rocksdb_create_default_env();
+                        assert!(!env.is_null(), "rocksdb_create_default_env returned null");
+                        UnsafeEnv(env)
+                    })
+                }
+                .0,
             );
             Ok(options)
         }
@@ -551,17 +551,17 @@ impl Db {
         (column_family_names, c_column_family_names, cf_options)
     }
 
-    pub fn column_family(&self, name: &'static str) -> Option<ColumnFamily> {
+    pub fn column_family(&self, name: &'static str) -> Result<ColumnFamily, StorageError> {
         let (column_family_names, cf_handles) = match &self.inner {
             DbKind::ReadOnly(db) => (&db.column_family_names, &db.cf_handles),
             DbKind::ReadWrite(db) => (&db.column_family_names, &db.cf_handles),
         };
         for (cf, cf_handle) in column_family_names.iter().zip(cf_handles) {
             if *cf == name {
-                return Some(ColumnFamily(*cf_handle));
+                return Ok(ColumnFamily(*cf_handle));
             }
         }
-        None
+        Err(CorruptionError::msg(format!("Column family {name} does not exist")).into())
     }
 
     #[must_use]
@@ -572,7 +572,8 @@ impl Db {
                     if db.is_secondary {
                         // We try to refresh (and ignore the errors)
                         #[allow(clippy::let_underscore_must_use)]
-                        let _ = ffi_result!(rocksdb_try_catch_up_with_primary_with_status(db.db));
+                        let _: Result<(), ErrorStatus> =
+                            ffi_result!(rocksdb_try_catch_up_with_primary_with_status(db.db));
                     }
                     let options = rocksdb_readoptions_create_copy(db.read_options);
                     Reader {
@@ -980,6 +981,7 @@ impl Reader {
         Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
     }
 
+    #[allow(clippy::iter_not_returning_iterator)]
     pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter, StorageError> {
         self.scan_prefix(column_family, &[])
     }
@@ -1392,7 +1394,8 @@ impl From<ErrorStatus> for StorageError {
 
 struct UnsafeEnv(*mut rocksdb_env_t);
 
-// Hack for lazy_static. OK because only written in lazy static and used in a thread-safe way by RocksDB
+// Hack for OnceCell. OK because only written in OnceCell and used in a thread-safe way by RocksDB
+unsafe impl Send for UnsafeEnv {}
 unsafe impl Sync for UnsafeEnv {}
 
 fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {

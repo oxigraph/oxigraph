@@ -4,6 +4,7 @@ use oxilangtag::LanguageTag;
 use oxiri::Iri;
 use oxrdf::NamedNode;
 use std::borrow::Cow;
+use std::cmp::min;
 use std::collections::HashMap;
 use std::ops::{Range, RangeInclusive};
 use std::str;
@@ -261,7 +262,7 @@ impl N3Lexer {
                             }
                             return Some((
                                 i,
-                                Ok(N3Token::PlainKeyword(str::from_utf8(&data[..i]).unwrap())),
+                                str_from_utf8(&data[..i], 0..i).map(N3Token::PlainKeyword),
                             ));
                         }
                     }
@@ -279,14 +280,17 @@ impl N3Lexer {
                 } else {
                     (
                         i,
-                        Ok(N3Token::PlainKeyword(str::from_utf8(&data[..i]).unwrap())),
+                        str_from_utf8(&data[..i], 0..i).map(N3Token::PlainKeyword),
                     )
                 });
             } else {
                 return None;
             }
         }
-        let pn_prefix = str::from_utf8(&data[..i - 1]).unwrap();
+        let pn_prefix = match str_from_utf8(&data[..i - 1], 0..i - 1) {
+            Ok(pn_prefix) => pn_prefix,
+            Err(e) => return Some((i, Err(e))),
+        };
         if pn_prefix.ends_with('.') {
             return Some((
                 i,
@@ -387,10 +391,13 @@ impl N3Lexer {
                             // We add the missing bytes
                             if i - position_that_is_already_in_buffer > 1 {
                                 buffer.push_str(
-                                    str::from_utf8(
+                                    match str_from_utf8(
                                         &data[position_that_is_already_in_buffer..i - 1],
-                                    )
-                                    .unwrap(),
+                                        position_that_is_already_in_buffer..i - 1,
+                                    ) {
+                                        Ok(data) => data,
+                                        Err(e) => return Some((i, Err(e))),
+                                    },
                                 )
                             }
                             buffer.push(a);
@@ -411,8 +418,13 @@ impl N3Lexer {
                         } else {
                             let buffer = if let Some(mut buffer) = buffer {
                                 buffer.push_str(
-                                    str::from_utf8(&data[position_that_is_already_in_buffer..i])
-                                        .unwrap(),
+                                    match str_from_utf8(
+                                        &data[position_that_is_already_in_buffer..i],
+                                        position_that_is_already_in_buffer..i,
+                                    ) {
+                                        Ok(data) => data,
+                                        Err(e) => return Some((i, Err(e))),
+                                    },
                                 );
                                 // We do not include the last dot
                                 while buffer.ends_with('.') {
@@ -421,7 +433,10 @@ impl N3Lexer {
                                 }
                                 Cow::Owned(buffer)
                             } else {
-                                let mut data = str::from_utf8(&data[..i]).unwrap();
+                                let mut data = match str_from_utf8(&data[..i], 0..i) {
+                                    Ok(data) => data,
+                                    Err(e) => return Some((i, Err(e))),
+                                };
                                 // We do not include the last dot
                                 while let Some(d) = data.strip_suffix('.') {
                                     data = d;
@@ -443,7 +458,10 @@ impl N3Lexer {
                     }
                     Cow::Owned(buffer)
                 } else {
-                    let mut data = str::from_utf8(&data[..i]).unwrap();
+                    let mut data = match str_from_utf8(&data[..i], 0..i) {
+                        Ok(data) => data,
+                        Err(e) => return Some((i, Err(e))),
+                    };
                     // We do not include the last dot
                     while let Some(d) = data.strip_suffix('.') {
                         data = d;
@@ -475,9 +493,7 @@ impl N3Lexer {
                             i -= 1;
                             return Some((
                                 i,
-                                Ok(N3Token::BlankNodeLabel(
-                                    str::from_utf8(&data[2..i]).unwrap(),
-                                )),
+                                str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
                             ));
                         }
                     } else if i == 0 {
@@ -489,16 +505,12 @@ impl N3Lexer {
                         i -= 1;
                         return Some((
                             i,
-                            Ok(N3Token::BlankNodeLabel(
-                                str::from_utf8(&data[2..i]).unwrap(),
-                            )),
+                            str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
                         ));
                     } else {
                         return Some((
                             i,
-                            Ok(N3Token::BlankNodeLabel(
-                                str::from_utf8(&data[2..i]).unwrap(),
-                            )),
+                            str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
                         ));
                     }
                     i += consumed;
@@ -537,7 +549,7 @@ impl N3Lexer {
         position: Range<usize>,
     ) -> Result<N3Token<'_>, TokenRecognizerError> {
         Ok(N3Token::LangTag(
-            LanguageTag::parse(str::from_utf8(lang_tag).unwrap())
+            LanguageTag::parse(str_from_utf8(lang_tag, position.clone())?)
                 .map_err(|e| (position.clone(), e.to_string()))?
                 .into_inner(),
         ))
@@ -553,18 +565,9 @@ impl N3Lexer {
         let mut i = 1;
         loop {
             let end = memchr2(delimiter, b'\\', &data[i..])?;
-            match str::from_utf8(&data[i..i + end]) {
-                Ok(a) => string.push_str(a),
-                Err(e) => {
-                    return Some((
-                        end,
-                        Err((
-                            i..i + end,
-                            format!("The string contains invalid UTF-8 characters: {e}"),
-                        )
-                            .into()),
-                    ))
-                }
+            match str_from_utf8(&data[i..i + end], i..i + end) {
+                Ok(s) => string.push_str(s),
+                Err(e) => return Some((end, Err(e))),
             };
             i += end;
             match data[i] {
@@ -600,18 +603,9 @@ impl N3Lexer {
         let mut i = 3;
         loop {
             let end = memchr2(delimiter, b'\\', &data[i..])?;
-            match str::from_utf8(&data[i..i + end]) {
-                Ok(a) => string.push_str(a),
-                Err(e) => {
-                    return Some((
-                        end,
-                        Err((
-                            i..i + end,
-                            format!("The string contains invalid UTF-8 characters: {e}"),
-                        )
-                            .into()),
-                    ))
-                }
+            match str_from_utf8(&data[i..i + end], i..i + end) {
+                Ok(s) => string.push_str(s),
+                Err(e) => return Some((end, Err(e))),
             };
             i += end;
             match data[i] {
@@ -706,7 +700,7 @@ impl N3Lexer {
                 } else if count_before == 0 && count_after.unwrap_or(0) == 0 {
                     Err((0..i, "A double should not be empty").into())
                 } else {
-                    Ok(N3Token::Double(str::from_utf8(&data[..i]).unwrap()))
+                    str_from_utf8(&data[..i], 0..i).map(N3Token::Double)
                 },
             ))
         } else if let Some(count_after) = count_after {
@@ -718,11 +712,11 @@ impl N3Lexer {
                     if count_before == 0 {
                         Err((0..i, "An integer should not be empty").into())
                     } else {
-                        Ok(N3Token::Integer(str::from_utf8(&data[..i]).unwrap()))
+                        str_from_utf8(&data[..i], 0..i).map(N3Token::Integer)
                     },
                 ))
             } else {
-                Some((i, Ok(N3Token::Decimal(str::from_utf8(&data[..i]).unwrap()))))
+                Some((i, str_from_utf8(&data[..i], 0..i).map(N3Token::Decimal)))
             }
         } else {
             Some((
@@ -730,7 +724,7 @@ impl N3Lexer {
                 if count_before == 0 {
                     Err((0..i, "An integer should not be empty").into())
                 } else {
-                    Ok(N3Token::Integer(str::from_utf8(&data[..i]).unwrap()))
+                    str_from_utf8(&data[..i], 0..i).map(N3Token::Integer)
                 },
             ))
         }
@@ -780,12 +774,7 @@ impl N3Lexer {
         if data.len() < len {
             return Ok(None);
         }
-        let val = str::from_utf8(&data[..len]).map_err(|e| {
-            (
-                position..position + len + 2,
-                format!("The escape sequence contains invalid UTF-8 characters: {e}"),
-            )
-        })?;
+        let val = str_from_utf8(&data[..len], position..position + len + 2)?;
         let codepoint = u32::from_str_radix(val, 16).map_err(|e| {
             (
                 position..position + len + 2,
@@ -935,4 +924,14 @@ pub fn resolve_local_name(
     } else {
         Err(format!("The prefix {prefix}: has not been declared"))
     }
+}
+
+fn str_from_utf8(data: &[u8], range: Range<usize>) -> Result<&str, TokenRecognizerError> {
+    str::from_utf8(data).map_err(|e| {
+        (
+            range.start + e.valid_up_to()..min(range.end, range.start + e.valid_up_to() + 4),
+            format!("Invalid UTF-8: {e}"),
+        )
+            .into()
+    })
 }

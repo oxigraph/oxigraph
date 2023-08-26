@@ -87,9 +87,7 @@ impl TestManifest {
             let Some(test_node) = self.tests_to_do.pop_front() else {
                 return Ok(None);
             };
-            let test_node = if let Term::NamedNode(test_node) = test_node {
-                test_node
-            } else {
+            let Term::NamedNode(test_node) = test_node else {
                 bail!("Invalid test identifier. Got {test_node}");
             };
 

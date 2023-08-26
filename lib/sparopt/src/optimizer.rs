@@ -272,13 +272,13 @@ impl Optimizer {
 
     fn push_filters(
         pattern: GraphPattern,
-        filters: Vec<Expression>,
+        mut filters: Vec<Expression>,
         input_types: &VariableTypes,
     ) -> GraphPattern {
         match pattern {
-            pattern @ (GraphPattern::QuadPattern { .. }
+            GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
-            | GraphPattern::Values { .. }) => {
+            | GraphPattern::Values { .. } => {
                 GraphPattern::filter(pattern, Expression::and_all(filters))
             }
             GraphPattern::Join {
@@ -416,7 +416,6 @@ impl Optimizer {
                 )
             }
             GraphPattern::Filter { inner, expression } => {
-                let mut filters = filters;
                 if let Expression::And(expressions) = expression {
                     filters.extend(expressions)
                 } else {
@@ -479,9 +478,9 @@ impl Optimizer {
 
     fn reorder_joins(pattern: GraphPattern, input_types: &VariableTypes) -> GraphPattern {
         match pattern {
-            pattern @ (GraphPattern::QuadPattern { .. }
+            GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
-            | GraphPattern::Values { .. }) => pattern,
+            | GraphPattern::Values { .. } => pattern,
             GraphPattern::Join { left, right, .. } => {
                 // We flatten the join operation
                 let mut to_reorder = Vec::new();

@@ -326,11 +326,11 @@ impl SimpleEvaluator {
                 inner,
                 silent,
             } => {
+                #[allow(clippy::shadow_same)]
                 let silent = *silent;
                 let service_name =
                     TupleSelector::from_named_node_pattern(name, encoded_variables, &self.dataset);
-                let _ =
-                    self.build_graph_pattern_evaluator(inner, encoded_variables, &mut Vec::new()); // We call recursively to fill "encoded_variables"
+                self.build_graph_pattern_evaluator(inner, encoded_variables, &mut Vec::new()); // We call recursively to fill "encoded_variables"
                 let graph_pattern = spargebra::algebra::GraphPattern::from(inner.as_ref());
                 let variables = Rc::from(encoded_variables.as_slice());
                 let eval = self.clone();
@@ -907,6 +907,7 @@ impl SimpleEvaluator {
                 let (mut child, child_stats) =
                     self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
+                #[allow(clippy::shadow_same)]
                 let start = *start;
                 if start > 0 {
                     child = Rc::new(move |from| Box::new(child(from).skip(start)));
@@ -3416,10 +3417,10 @@ fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedT
                 }
                 _ => Ordering::Greater,
             },
-            a => match b {
+            _ => match b {
                 _ if b.is_named_node() || b.is_blank_node() => Ordering::Greater,
                 _ if b.is_triple() => Ordering::Less,
-                b => {
+                _ => {
                     if let Some(ord) = partial_cmp_literals(dataset, a, b) {
                         ord
                     } else if let (Ok(Term::Literal(a)), Ok(Term::Literal(b))) =
@@ -5872,14 +5873,18 @@ impl Timer {
     }
 }
 
-#[test]
-fn uuid() {
-    let mut buffer = String::default();
-    generate_uuid(&mut buffer);
-    assert!(
-        Regex::new("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
-            .unwrap()
-            .is_match(&buffer),
-        "{buffer} is not a valid UUID"
-    );
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn uuid() {
+        let mut buffer = String::default();
+        generate_uuid(&mut buffer);
+        assert!(
+            Regex::new("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+                .unwrap()
+                .is_match(&buffer),
+            "{buffer} is not a valid UUID"
+        );
+    }
 }

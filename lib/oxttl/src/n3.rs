@@ -567,7 +567,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::BaseExpectIri);
                             self
                         }
-                        token => {
+                        _ => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::Triples);
                             self.recognize_next(token, results, errors)
@@ -712,7 +712,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::Path);
                         self
                     }
-                    token => {
+                   _ => {
                         self.stack.push(N3State::AfterRegularVerb);
                         self.stack.push(N3State::Path);
                         self.recognize_next(token, results, errors)
@@ -755,7 +755,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::PathItem);
                         self
                     }
-                    token => self.recognize_next(token, results, errors)
+                   _ => self.recognize_next(token, results, errors)
                 },
                 N3State::PathAfterIndicator { is_inverse } => {
                     let predicate = self.terms.pop().unwrap();
@@ -836,7 +836,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::FormulaContent);
                             self
                         }
-                        token => self.error(errors, format!("This is not a valid RDF value: {token:?}"))
+                       _ => self.error(errors, format!("This is not a valid RDF value: {token:?}"))
                     }
                 }
                 N3State::PropertyListMiddle => match token {
@@ -848,7 +848,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::IriPropertyList);
                         self
                     },
-                    token => {
+                   _ => {
                         self.terms.push(BlankNode::default().into());
                         self.stack.push(N3State::PropertyListEnd);
                         self.stack.push(N3State::PredicateObjectList);
@@ -881,47 +881,43 @@ impl RuleRecognizer for N3Recognizer {
                         self.error(errors, "The '[ id' construction should be followed by an IRI")
                     }
                 }
-                N3State::CollectionBeginning => match token {
-                    N3Token::Punctuation(")") => {
-                        self.terms.push(rdf::NIL.into());
-                        self
-                    }
-                    token => {
-                        let root = BlankNode::default();
-                        self.terms.push(root.clone().into());
-                        self.terms.push(root.into());
-                        self.stack.push(N3State::CollectionPossibleEnd);
-                        self.stack.push(N3State::Path);
-                        self.recognize_next(token, results, errors)
-                    }
+                N3State::CollectionBeginning => if let N3Token::Punctuation(")") = token {
+                    self.terms.push(rdf::NIL.into());
+                    self
+                } else {
+                    let root = BlankNode::default();
+                    self.terms.push(root.clone().into());
+                    self.terms.push(root.into());
+                    self.stack.push(N3State::CollectionPossibleEnd);
+                    self.stack.push(N3State::Path);
+                    self.recognize_next(token, results, errors)
                 },
                 N3State::CollectionPossibleEnd => {
                     let value = self.terms.pop().unwrap();
                     let old = self.terms.pop().unwrap();
                     results.push(self.quad(
-                         old.clone(),
-                         rdf::FIRST,
-                         value,
+                        old.clone(),
+                        rdf::FIRST,
+                        value,
                     ));
-                    match token {
-                        N3Token::Punctuation(")") => {
-                            results.push(self.quad(old,
-                                rdf::REST,
-                                rdf::NIL
-                            ));
-                            self
-                        }
-                        token => {
-                            let new = BlankNode::default();
-                            results.push(self.quad( old,
-                                rdf::REST,
-                                new.clone()
-                            ));
-                            self.terms.push(new.into());
-                            self.stack.push(N3State::CollectionPossibleEnd);
-                            self.stack.push(N3State::Path);
-                            self.recognize_next(token, results, errors)
-                        }
+                    if let N3Token::Punctuation(")") = token {
+                        results.push(self.quad(
+                            old,
+                            rdf::REST,
+                            rdf::NIL
+                        ));
+                        self
+                    } else {
+                        let new = BlankNode::default();
+                        results.push(self.quad(
+                            old,
+                            rdf::REST,
+                            new.clone()
+                        ));
+                        self.terms.push(new.into());
+                        self.stack.push(N3State::CollectionPossibleEnd);
+                        self.stack.push(N3State::Path);
+                        self.recognize_next(token, results, errors)
                     }
                 }
                 N3State::LiteralPossibleSuffix { value } => {
@@ -934,7 +930,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::LiteralExpectDatatype { value });
                             self
                         }
-                        token => {
+                       _ => {
                             self.terms.push(Literal::new_simple_literal(value).into());
                             self.recognize_next(token, results, errors)
                         }
@@ -953,7 +949,7 @@ impl RuleRecognizer for N3Recognizer {
                             },
                             Err(e) => self.error(errors, e)
                         }
-                        token => {
+                       _ => {
                             self.error(errors, format!("Expecting a datatype IRI after '^^, found {token:?}")).recognize_next(token, results, errors)
                         }
                     }
@@ -985,7 +981,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::BaseExpectIri);
                             self
                         }
-                        token => {
+                       _ => {
                             self.stack.push(N3State::FormulaContentExpectDot);
                             self.stack.push(N3State::Triples);
                             self.recognize_next(token, results, errors)
@@ -1002,7 +998,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::FormulaContent);
                             self
                         }
-                        token => {
+                       _ => {
                             errors.push("A dot is expected at the end of N3 statements".into());
                             self.stack.push(N3State::FormulaContent);
                             self.recognize_next(token, results, errors)

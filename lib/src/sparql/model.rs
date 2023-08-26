@@ -259,87 +259,95 @@ impl Iterator for QueryTripleIter {
     }
 }
 
-#[test]
-fn test_serialization_roundtrip() -> Result<(), EvaluationError> {
-    use std::io::Cursor;
-    use std::str;
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::panic_in_result_fn)]
 
-    for format in [
-        QueryResultsFormat::Json,
-        QueryResultsFormat::Xml,
-        QueryResultsFormat::Tsv,
-    ] {
-        let results = vec![
-            QueryResults::Boolean(true),
-            QueryResults::Boolean(false),
-            QueryResults::Solutions(QuerySolutionIter::new(
-                Rc::new(vec![
-                    Variable::new_unchecked("foo"),
-                    Variable::new_unchecked("bar"),
-                ]),
-                Box::new(
-                    vec![
-                        Ok(vec![None, None]),
-                        Ok(vec![
-                            Some(NamedNode::new_unchecked("http://example.com").into()),
-                            None,
-                        ]),
-                        Ok(vec![
-                            None,
-                            Some(NamedNode::new_unchecked("http://example.com").into()),
-                        ]),
-                        Ok(vec![
-                            Some(BlankNode::new_unchecked("foo").into()),
-                            Some(BlankNode::new_unchecked("bar").into()),
-                        ]),
-                        Ok(vec![Some(Literal::new_simple_literal("foo").into()), None]),
-                        Ok(vec![
-                            Some(
-                                Literal::new_language_tagged_literal_unchecked("foo", "fr").into(),
-                            ),
-                            None,
-                        ]),
-                        Ok(vec![
-                            Some(Literal::from(1).into()),
-                            Some(Literal::from(true).into()),
-                        ]),
-                        Ok(vec![
-                            Some(Literal::from(1.33).into()),
-                            Some(Literal::from(false).into()),
-                        ]),
-                        Ok(vec![
-                            Some(
-                                Triple::new(
-                                    NamedNode::new_unchecked("http://example.com/s"),
-                                    NamedNode::new_unchecked("http://example.com/p"),
+    use super::*;
+
+    #[test]
+    fn test_serialization_roundtrip() -> Result<(), EvaluationError> {
+        use std::io::Cursor;
+        use std::str;
+
+        for format in [
+            QueryResultsFormat::Json,
+            QueryResultsFormat::Xml,
+            QueryResultsFormat::Tsv,
+        ] {
+            let results = vec![
+                QueryResults::Boolean(true),
+                QueryResults::Boolean(false),
+                QueryResults::Solutions(QuerySolutionIter::new(
+                    Rc::new(vec![
+                        Variable::new_unchecked("foo"),
+                        Variable::new_unchecked("bar"),
+                    ]),
+                    Box::new(
+                        vec![
+                            Ok(vec![None, None]),
+                            Ok(vec![
+                                Some(NamedNode::new_unchecked("http://example.com").into()),
+                                None,
+                            ]),
+                            Ok(vec![
+                                None,
+                                Some(NamedNode::new_unchecked("http://example.com").into()),
+                            ]),
+                            Ok(vec![
+                                Some(BlankNode::new_unchecked("foo").into()),
+                                Some(BlankNode::new_unchecked("bar").into()),
+                            ]),
+                            Ok(vec![Some(Literal::new_simple_literal("foo").into()), None]),
+                            Ok(vec![
+                                Some(
+                                    Literal::new_language_tagged_literal_unchecked("foo", "fr")
+                                        .into(),
+                                ),
+                                None,
+                            ]),
+                            Ok(vec![
+                                Some(Literal::from(1).into()),
+                                Some(Literal::from(true).into()),
+                            ]),
+                            Ok(vec![
+                                Some(Literal::from(1.33).into()),
+                                Some(Literal::from(false).into()),
+                            ]),
+                            Ok(vec![
+                                Some(
                                     Triple::new(
-                                        NamedNode::new_unchecked("http://example.com/os"),
-                                        NamedNode::new_unchecked("http://example.com/op"),
-                                        NamedNode::new_unchecked("http://example.com/oo"),
-                                    ),
-                                )
-                                .into(),
-                            ),
-                            None,
-                        ]),
-                    ]
-                    .into_iter(),
-                ),
-            )),
-        ];
+                                        NamedNode::new_unchecked("http://example.com/s"),
+                                        NamedNode::new_unchecked("http://example.com/p"),
+                                        Triple::new(
+                                            NamedNode::new_unchecked("http://example.com/os"),
+                                            NamedNode::new_unchecked("http://example.com/op"),
+                                            NamedNode::new_unchecked("http://example.com/oo"),
+                                        ),
+                                    )
+                                    .into(),
+                                ),
+                                None,
+                            ]),
+                        ]
+                        .into_iter(),
+                    ),
+                )),
+            ];
 
-        for ex in results {
-            let mut buffer = Vec::new();
-            ex.write(&mut buffer, format)?;
-            let ex2 = QueryResults::read(Cursor::new(buffer.clone()), format)?;
-            let mut buffer2 = Vec::new();
-            ex2.write(&mut buffer2, format)?;
-            assert_eq!(
-                str::from_utf8(&buffer).unwrap(),
-                str::from_utf8(&buffer2).unwrap()
-            );
+            for ex in results {
+                let mut buffer = Vec::new();
+                ex.write(&mut buffer, format)?;
+                let ex2 = QueryResults::read(Cursor::new(buffer.clone()), format)?;
+                let mut buffer2 = Vec::new();
+                ex2.write(&mut buffer2, format)?;
+                assert_eq!(
+                    str::from_utf8(&buffer).unwrap(),
+                    str::from_utf8(&buffer2).unwrap()
+                );
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }

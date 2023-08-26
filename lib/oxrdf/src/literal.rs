@@ -628,7 +628,7 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
             '"' => f.write_str("\\\""),
             '\\' => f.write_str("\\\\"),
             '\0'..='\u{1f}' | '\u{7f}' => write!(f, "\\u{:04X}", u32::from(c)),
-            c => f.write_char(c),
+            _ => f.write_char(c),
         }?;
     }
     f.write_char('"')

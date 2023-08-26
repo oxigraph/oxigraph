@@ -46,10 +46,8 @@ impl SmallString {
     #[inline]
     #[allow(unsafe_code)]
     pub fn as_str(&self) -> &str {
-        unsafe {
-            // safe because we ensured it in constructors
-            str::from_utf8_unchecked(self.as_bytes())
-        }
+        // SAFETY: safe because we ensured it in constructors
+        unsafe { str::from_utf8_unchecked(self.as_bytes()) }
     }
 
     #[inline]

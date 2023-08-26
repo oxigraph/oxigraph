@@ -65,7 +65,7 @@ impl From<quick_xml::Error> for ParseError {
                 Ok(error) => error,
                 Err(error) => io::Error::new(error.kind(), error),
             }),
-            error => Self::Syntax(SyntaxError {
+            _ => Self::Syntax(SyntaxError {
                 inner: SyntaxErrorKind::Xml(error),
             }),
         }
@@ -121,10 +121,10 @@ impl fmt::Display for SyntaxError {
             SyntaxErrorKind::Xml(error) => error.fmt(f),
             SyntaxErrorKind::XmlAttribute(error) => error.fmt(f),
             SyntaxErrorKind::InvalidIri { iri, error } => {
-                write!(f, "error while parsing IRI '{}': {}", iri, error)
+                write!(f, "error while parsing IRI '{iri}': {error}")
             }
             SyntaxErrorKind::InvalidLanguageTag { tag, error } => {
-                write!(f, "error while parsing language tag '{}': {}", tag, error)
+                write!(f, "error while parsing language tag '{tag}': {error}")
             }
             SyntaxErrorKind::Msg { msg } => f.write_str(msg),
         }
@@ -156,7 +156,7 @@ impl From<SyntaxError> for io::Error {
                 quick_xml::Error::UnexpectedEof(error) => {
                     Self::new(io::ErrorKind::UnexpectedEof, error)
                 }
-                error => Self::new(io::ErrorKind::InvalidData, error),
+                _ => Self::new(io::ErrorKind::InvalidData, error),
             },
             SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
             _ => Self::new(io::ErrorKind::InvalidData, error),
