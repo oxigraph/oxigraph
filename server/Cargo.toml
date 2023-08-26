@@ -4,6 +4,8 @@ version.workspace  = true
 authors.workspace  = true
 license.workspace  = true
 readme = "README.md"
+keywords = ["RDF", "SPARQL", "graph-database", "database"]
+categories = ["command-line-utilities", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/server"
 homepage = "https://oxigraph.org/server/"
 description = """
@@ -15,7 +17,7 @@ rust-version.workspace  = true
 [dependencies]
 anyhow = "1"
 oxhttp = { version = "0.1", features = ["rayon"] }
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 oxigraph = { version = "0.4.0-alpha.1-dev", path = "../lib", features = ["http_client"] }
 sparesults = { version = "0.2.0-alpha.1-dev", path = "../lib/sparesults", features = ["rdf-star"] }
 rand = "0.8"

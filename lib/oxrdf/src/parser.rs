@@ -232,7 +232,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         return Err(TermParseError::msg("Unexpected literal end"));
                     }
                 }
-                c => value.push(c),
+                _ => value.push(c),
             }
         }
         Err(TermParseError::msg("Unexpected literal end"))

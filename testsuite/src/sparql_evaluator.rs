@@ -505,11 +505,12 @@ impl StaticQueryResults {
         // Hack to normalize literals
         let store = Store::new()?;
         for t in graph {
-            store
-                .insert(t.in_graph(GraphNameRef::DefaultGraph))
-                .unwrap();
+            store.insert(t.in_graph(GraphNameRef::DefaultGraph))?;
         }
-        let mut graph: Graph = store.iter().map(|q| Triple::from(q.unwrap())).collect();
+        let mut graph = store
+            .iter()
+            .map(|q| Ok(Triple::from(q?)))
+            .collect::<Result<Graph>>()?;
 
         if let Some(result_set) = graph.subject_for_predicate_object(rdf::TYPE, rs::RESULT_SET) {
             if let Some(bool) = graph.object_for_subject_predicate(result_set, rs::BOOLEAN) {
@@ -737,11 +738,10 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
         .result
         .as_ref()
         .ok_or_else(|| anyhow!("No tests result found"))?;
-    let expected = if let spargebra::Query::Select { pattern, .. } =
-        spargebra::Query::parse(&read_file_to_string(result)?, Some(result))?
-    {
-        pattern
-    } else {
+    let spargebra::Query::Select {
+        pattern: expected, ..
+    } = spargebra::Query::parse(&read_file_to_string(result)?, Some(result))?
+    else {
         bail!("Only SELECT queries are supported in query sparql-optimization tests")
     };
     if expected == actual {

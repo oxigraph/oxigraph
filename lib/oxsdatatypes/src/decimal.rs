@@ -121,7 +121,6 @@ impl Decimal {
         let mut shift_left = 0_u32;
         if left != 0 {
             while let Some(r) = left.checked_mul(10) {
-                assert_eq!(r / 10, left);
                 left = r;
                 shift_left += 1;
             }
@@ -571,7 +570,7 @@ impl fmt::Display for Decimal {
             .find_map(|(i, v)| if v == b'0' { None } else { Some(i) })
             .unwrap_or(40);
 
-        let decimal_part_digits = usize::try_from(DECIMAL_PART_DIGITS).unwrap();
+        let decimal_part_digits = usize::try_from(DECIMAL_PART_DIGITS).map_err(|_| fmt::Error)?;
         if last_non_zero >= decimal_part_digits {
             let end = if let Some(mut width) = f.width() {
                 if self.value.is_negative() {

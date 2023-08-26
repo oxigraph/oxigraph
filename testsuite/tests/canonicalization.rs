@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 use anyhow::Result;
 use oxigraph_testsuite::check_testsuite;
 

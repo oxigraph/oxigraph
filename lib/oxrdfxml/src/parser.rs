@@ -421,7 +421,9 @@ impl<R> RdfXmlReader<R> {
         match event {
             Event::Start(event) => self.parse_start_event(&event, results),
             Event::End(event) => self.parse_end_event(&event, results),
-            Event::Empty(_) => unreachable!("The expand_empty_elements option must be enabled"),
+            Event::Empty(_) => {
+                Err(SyntaxError::msg("The expand_empty_elements option must be enabled").into())
+            }
             Event::Text(event) => self.parse_text_event(&event),
             Event::CData(event) => self.parse_text_event(&event.escape()?),
             Event::Comment(_) | Event::PI(_) => Ok(()),
@@ -672,7 +674,9 @@ impl<R> RdfXmlReader<R> {
                 subject: subject.clone(),
             },
             Some(RdfXmlState::ParseTypeLiteralPropertyElt { .. }) => {
-                panic!("ParseTypeLiteralPropertyElt production children should never be considered as a RDF/XML content")
+                return Err(
+                    SyntaxError::msg("ParseTypeLiteralPropertyElt production children should never be considered as a RDF/XML content").into()
+                );
             }
             None => {
                 return Err(
@@ -747,8 +751,7 @@ impl<R> RdfXmlReader<R> {
                     };
                     *li_counter += 1;
                     NamedNode::new_unchecked(format!(
-                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#_{}",
-                        li_counter
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#_{li_counter}"
                     ))
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name)
                     || *tag_name == *RDF_DESCRIPTION
@@ -881,7 +884,7 @@ impl<R> RdfXmlReader<R> {
                 if event.iter().copied().all(is_whitespace) {
                     Ok(())
                 } else {
-                    Err(SyntaxError::msg(format!("Unexpected text event: '{}'", text)).into())
+                    Err(SyntaxError::msg(format!("Unexpected text event: '{text}'")).into())
                 }
             }
         }
@@ -1057,8 +1060,7 @@ impl<R> RdfXmlReader<R> {
                     let object = writer.into_inner();
                     if object.is_empty() {
                         return Err(SyntaxError::msg(format!(
-                            "No value found for rdf:XMLLiteral value of property {}",
-                            iri
+                            "No value found for rdf:XMLLiteral value of property {iri}"
                         )));
                     }
                     let triple = Triple::new(

@@ -141,6 +141,7 @@ impl<'a> IntoIterator for &'a QuerySolution {
 impl Index<usize> for QuerySolution {
     type Output = Term;
 
+    #[allow(clippy::panic)]
     #[inline]
     fn index(&self, index: usize) -> &Term {
         self.get(index)
@@ -151,6 +152,7 @@ impl Index<usize> for QuerySolution {
 impl Index<&str> for QuerySolution {
     type Output = Term;
 
+    #[allow(clippy::panic)]
     #[inline]
     fn index(&self, index: &str) -> &Term {
         self.get(index)
@@ -161,6 +163,7 @@ impl Index<&str> for QuerySolution {
 impl Index<VariableRef<'_>> for QuerySolution {
     type Output = Term;
 
+    #[allow(clippy::panic)]
     #[inline]
     fn index(&self, index: VariableRef<'_>) -> &Term {
         self.get(index)

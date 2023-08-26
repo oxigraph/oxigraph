@@ -1,3 +1,5 @@
+#![allow(clippy::panic)]
+
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use oxhttp::model::{Method, Request, Status};
 use oxigraph::io::RdfFormat;

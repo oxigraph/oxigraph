@@ -22,7 +22,7 @@ rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
 [dependencies]
 oxrdf = { version = "0.2.0-alpha.1-dev", path = "../oxrdf" }
 oxrdfxml = { version = "0.1.0-alpha.1-dev", path = "../oxrdfxml" }
-oxttl = { version = "0.1.0-alpha.1-dev" , path = "../oxttl" }
+oxttl = { version = "0.1.0-alpha.1-dev", path = "../oxttl" }
 tokio = { version = "1", optional = true, features = ["io-util"] }
 
 [dev-dependencies]

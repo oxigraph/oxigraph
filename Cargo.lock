@@ -952,7 +952,6 @@ dependencies = [
  "hex",
  "js-sys",
  "json-event-parser",
- "lazy_static",
  "libc",
  "md-5",
  "oxhttp",

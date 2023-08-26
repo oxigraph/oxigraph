@@ -333,14 +333,15 @@ pub fn allow_threads_unsafe<T>(f: impl FnOnce() -> T) -> T {
 
     impl Drop for RestoreGuard {
         fn drop(&mut self) {
+            // SAFETY: not cloned so called once
             unsafe {
                 pyo3::ffi::PyEval_RestoreThread(self.tstate);
             }
         }
     }
 
-    let _guard = RestoreGuard {
-        tstate: unsafe { pyo3::ffi::PyEval_SaveThread() },
-    };
+    // SAFETY: we have the restore part in Drop to make sure it's properly executed
+    let tstate = unsafe { pyo3::ffi::PyEval_SaveThread() };
+    let _guard = RestoreGuard { tstate };
     f()
 }

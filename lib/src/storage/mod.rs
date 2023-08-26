@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_family = "wasm"))]
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(not(target_family = "wasm"))]
-use std::thread;
+use std::{io, thread};
 
 mod backend;
 mod binary_encoder;
@@ -178,22 +178,21 @@ impl Storage {
         ]
     }
 
-    #[allow(clippy::unnecessary_wraps, clippy::unwrap_in_result)]
     fn setup(db: Db) -> Result<Self, StorageError> {
         let this = Self {
             #[cfg(not(target_family = "wasm"))]
-            default_cf: db.column_family(DEFAULT_CF).unwrap(),
-            id2str_cf: db.column_family(ID2STR_CF).unwrap(),
-            spog_cf: db.column_family(SPOG_CF).unwrap(),
-            posg_cf: db.column_family(POSG_CF).unwrap(),
-            ospg_cf: db.column_family(OSPG_CF).unwrap(),
-            gspo_cf: db.column_family(GSPO_CF).unwrap(),
-            gpos_cf: db.column_family(GPOS_CF).unwrap(),
-            gosp_cf: db.column_family(GOSP_CF).unwrap(),
-            dspo_cf: db.column_family(DSPO_CF).unwrap(),
-            dpos_cf: db.column_family(DPOS_CF).unwrap(),
-            dosp_cf: db.column_family(DOSP_CF).unwrap(),
-            graphs_cf: db.column_family(GRAPHS_CF).unwrap(),
+            default_cf: db.column_family(DEFAULT_CF)?,
+            id2str_cf: db.column_family(ID2STR_CF)?,
+            spog_cf: db.column_family(SPOG_CF)?,
+            posg_cf: db.column_family(POSG_CF)?,
+            ospg_cf: db.column_family(OSPG_CF)?,
+            gspo_cf: db.column_family(GSPO_CF)?,
+            gpos_cf: db.column_family(GPOS_CF)?,
+            gosp_cf: db.column_family(GOSP_CF)?,
+            dspo_cf: db.column_family(DSPO_CF)?,
+            dpos_cf: db.column_family(DPOS_CF)?,
+            dosp_cf: db.column_family(DOSP_CF)?,
+            graphs_cf: db.column_family(GRAPHS_CF)?,
             db,
         };
         #[cfg(not(target_family = "wasm"))]
@@ -1282,7 +1281,7 @@ impl StorageBulkLoader {
                 batch_size,
             )?;
             for thread in threads {
-                thread.join().unwrap()?;
+                map_thread_result(thread.join()).map_err(StorageError::Io)??;
                 self.on_possible_progress(&done_counter, &mut done_and_displayed_counter);
             }
             Ok(())
@@ -1303,7 +1302,7 @@ impl StorageBulkLoader {
         // We avoid to have too many threads
         if threads.len() >= num_threads {
             if let Some(thread) = threads.pop_front() {
-                thread.join().unwrap()?;
+                map_thread_result(thread.join()).map_err(StorageError::Io)??;
                 self.on_possible_progress(done_counter, done_and_displayed_counter);
             }
         }
@@ -1353,7 +1352,7 @@ impl<'a> FileBulkLoader<'a> {
         self.encode(quads)?;
         let size = self.triples.len() + self.quads.len();
         self.save()?;
-        counter.fetch_add(size.try_into().unwrap(), Ordering::Relaxed);
+        counter.fetch_add(size.try_into().unwrap_or(u64::MAX), Ordering::Relaxed);
         Ok(())
     }
 
@@ -1376,7 +1375,12 @@ impl<'a> FileBulkLoader<'a> {
                         match quad.graph_name.as_ref() {
                             GraphNameRef::NamedNode(n) => n.into(),
                             GraphNameRef::BlankNode(n) => n.into(),
-                            GraphNameRef::DefaultGraph => unreachable!(),
+                            GraphNameRef::DefaultGraph => {
+                                return Err(CorruptionError::new(
+                                    "Default graph this not the default graph",
+                                )
+                                .into())
+                            }
                         },
                         &encoded.graph_name,
                     )?;
@@ -1533,4 +1537,18 @@ impl<'a> FileBulkLoader<'a> {
         }
         sst.finish()
     }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn map_thread_result<R>(result: thread::Result<R>) -> io::Result<R> {
+    result.map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            if let Ok(e) = e.downcast::<&dyn std::fmt::Display>() {
+                format!("A loader processed crashed with {e}")
+            } else {
+                "A loader processed crashed with and unknown error".into()
+            },
+        )
+    })
 }

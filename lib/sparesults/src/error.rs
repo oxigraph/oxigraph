@@ -64,7 +64,7 @@ impl From<quick_xml::Error> for ParseError {
                 Ok(error) => error,
                 Err(error) => io::Error::new(error.kind(), error),
             }),
-            error => Self::Syntax(SyntaxError {
+            _ => Self::Syntax(SyntaxError {
                 inner: SyntaxErrorKind::Xml(error),
             }),
         }
@@ -128,7 +128,7 @@ impl From<SyntaxError> for io::Error {
                 quick_xml::Error::UnexpectedEof(error) => {
                     Self::new(io::ErrorKind::UnexpectedEof, error)
                 }
-                error => Self::new(io::ErrorKind::InvalidData, error),
+                _ => Self::new(io::ErrorKind::InvalidData, error),
             },
             SyntaxErrorKind::Term(error) => Self::new(io::ErrorKind::InvalidData, error),
             SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),

@@ -1,3 +1,6 @@
+#![cfg(test)]
+#![allow(clippy::panic_in_result_fn)]
+
 use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
@@ -8,7 +11,7 @@ use rand::random;
 use std::env::temp_dir;
 use std::error::Error;
 #[cfg(not(target_family = "wasm"))]
-use std::fs::{create_dir, remove_dir_all, File};
+use std::fs::{create_dir_all, remove_dir_all, File};
 #[cfg(not(target_family = "wasm"))]
 use std::io::Write;
 #[cfg(target_os = "linux")]
@@ -237,10 +240,10 @@ fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
     let quad = QuadRef::new(
-        NamedNodeRef::new_unchecked("http://example.com/s"),
-        NamedNodeRef::new_unchecked("http://example.com/p"),
-        NamedNodeRef::new_unchecked("http://example.com/o"),
-        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
+        NamedNodeRef::new("http://example.com/s")?,
+        NamedNodeRef::new("http://example.com/p")?,
+        NamedNodeRef::new("http://example.com/o")?,
+        NamedNodeRef::new("http://www.wikidata.org/wiki/Special:EntityData/Q90")?,
     );
     let store = Store::new()?;
     store.insert(quad)?;
@@ -274,7 +277,7 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
 #[cfg(not(target_family = "wasm"))]
 fn test_open_bad_dir() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
-    create_dir(&dir.0)?;
+    create_dir_all(&dir.0)?;
     {
         File::create(dir.0.join("CURRENT"))?.write_all(b"foo")?;
     }
@@ -346,7 +349,7 @@ fn test_bad_backup() -> Result<(), Box<dyn Error>> {
     let store_dir = TempDir::default();
     let backup_dir = TempDir::default();
 
-    create_dir(&backup_dir.0)?;
+    create_dir_all(&backup_dir.0)?;
     assert!(Store::open(&store_dir)?.backup(&backup_dir.0).is_err());
     Ok(())
 }
@@ -430,7 +433,7 @@ fn test_secondary() -> Result<(), Box<dyn Error>> {
 #[cfg(not(target_family = "wasm"))]
 fn test_open_secondary_bad_dir() -> Result<(), Box<dyn Error>> {
     let primary_dir = TempDir::default();
-    create_dir(&primary_dir.0)?;
+    create_dir_all(&primary_dir.0)?;
     {
         File::create(primary_dir.0.join("CURRENT"))?.write_all(b"foo")?;
     }
@@ -491,7 +494,7 @@ fn test_read_only() -> Result<(), Box<dyn Error>> {
 #[cfg(not(target_family = "wasm"))]
 fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
-    create_dir(&dir.0)?;
+    create_dir_all(&dir.0)?;
     {
         File::create(dir.0.join("CURRENT"))?.write_all(b"foo")?;
     }

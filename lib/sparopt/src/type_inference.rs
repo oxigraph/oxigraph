@@ -340,6 +340,7 @@ impl VariableTypes {
     }
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct VariableType {
     pub undef: bool,
