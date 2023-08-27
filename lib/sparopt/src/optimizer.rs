@@ -508,7 +508,8 @@ impl Optimizer {
                 while let Some(next_entry_id) = not_yet_reordered_ids
                     .iter()
                     .enumerate()
-                    .filter_map(|(i, v)| v.then(|| i))
+                    .filter(|(_, v)| **v)
+                    .map(|(i, _)| i)
                     .min_by_key(|i| estimate_graph_pattern_size(&to_reorder[*i], input_types))
                 {
                     not_yet_reordered_ids[next_entry_id] = false; // It's now done
@@ -518,7 +519,8 @@ impl Optimizer {
                     while let Some(next_id) = not_yet_reordered_ids
                         .iter()
                         .enumerate()
-                        .filter_map(|(i, v)| v.then(|| i))
+                        .filter(|(_, v)| **v)
+                        .map(|(i, _)| i)
                         .filter(|i| {
                             has_common_variables(&output_types, &to_reorder_types[*i], input_types)
                         })

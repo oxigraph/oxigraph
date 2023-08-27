@@ -18,7 +18,7 @@ oxttl = { path= "../lib/oxttl" }
 sparopt = { path = "../lib/sparopt" }
 spargebra = { path = "../lib/spargebra" }
 text-diff = "0.4"
-time = { version = "=0.3.23", features = ["formatting"] }
+time = { version = "0.3", features = ["formatting"] }
 
 [dev-dependencies]
 criterion = "0.5"

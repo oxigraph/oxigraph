@@ -31,7 +31,7 @@ regex = "1"
 oxilangtag = "0.1"
 oxiri = "0.2"
 hex = "0.4"
-siphasher = "0.3"
+siphasher = "1"
 lazy_static = "1"
 json-event-parser = "0.1"
 oxrdf = { version = "0.2.0-alpha.1-dev", path = "oxrdf", features = ["rdf-star", "oxsdatatypes"] }
