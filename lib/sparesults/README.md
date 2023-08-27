@@ -5,7 +5,7 @@ Sparesults
 [![Released API docs](https://docs.rs/sparesults/badge.svg)](https://docs.rs/sparesults)
 [![Crates.io downloads](https://img.shields.io/crates/d/sparesults)](https://crates.io/crates/sparesults)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 Sparesults is a set of parsers and serializers for [SPARQL](https://www.w3.org/TR/sparql11-overview/) query results formats.
 

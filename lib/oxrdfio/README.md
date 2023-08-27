@@ -5,7 +5,7 @@ OxRDF I/O
 [![Released API docs](https://docs.rs/oxrdfio/badge.svg)](https://docs.rs/oxrdfio)
 [![Crates.io downloads](https://img.shields.io/crates/d/oxrdfio)](https://crates.io/crates/oxrdfio)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 OxRDF I/O is a set of parsers and serializers for RDF.
 
