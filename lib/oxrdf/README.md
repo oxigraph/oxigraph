@@ -5,7 +5,7 @@ OxRDF
 [![Released API docs](https://docs.rs/oxrdf/badge.svg)](https://docs.rs/oxrdf)
 [![Crates.io downloads](https://img.shields.io/crates/d/oxrdf)](https://crates.io/crates/oxrdf)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 OxRDF is a simple library providing datastructures encoding [RDF 1.1 concepts](https://www.w3.org/TR/rdf11-concepts/).
 

@@ -5,7 +5,7 @@ oxsdatatypes
 [![Released API docs](https://docs.rs/oxsdatatypes/badge.svg)](https://docs.rs/oxsdatatypes)
 [![Crates.io downloads](https://img.shields.io/crates/d/oxsdatatypes)](https://crates.io/crates/oxsdatatypes)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 oxsdatatypes is an implementation of some [XML Schema Definition Language Datatypes](https://www.w3.org/TR/xmlschema11-2/).
 Its main aim is to ease the implementation of SPARQL and XPath.

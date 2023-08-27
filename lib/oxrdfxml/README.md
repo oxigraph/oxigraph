@@ -5,7 +5,7 @@ OxRDF/XML
 [![Released API docs](https://docs.rs/oxrdfxml/badge.svg)](https://docs.rs/oxrdfxml)
 [![Crates.io downloads](https://img.shields.io/crates/d/oxrdfxml)](https://crates.io/crates/oxrdfxml)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 OxRdfXml is a parser and serializer for [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 

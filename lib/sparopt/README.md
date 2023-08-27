@@ -5,7 +5,7 @@ sparopt
 [![Released API docs](https://docs.rs/sparopt/badge.svg)](https://docs.rs/sparopt)
 [![Crates.io downloads](https://img.shields.io/crates/d/sparopt)](https://crates.io/crates/sparopt)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 sparopt is a work in progress [SPARQL Query](https://www.w3.org/TR/sparql11-query/) optimizer.
 
