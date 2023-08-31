@@ -1525,108 +1525,96 @@ impl From<NamedGraphName> for GraphName {
 fn rdf_content_negotiation(request: &Request) -> Result<RdfFormat, HttpError> {
     content_negotiation(
         request,
-        &[
-            "application/n-quads",
-            "application/n-triples",
-            "application/rdf+xml",
-            "application/trig",
-            "application/turtle",
-            "application/xml",
-            "application/x-trig",
-            "application/x-turtle",
-            "text/n3",
-            "text/nquads",
-            "text/plain",
-            "text/turtle",
-            "text/xml",
-            "text/x-nquads",
-        ],
         RdfFormat::from_media_type,
+        RdfFormat::NQuads,
+        &[
+            ("application", RdfFormat::NQuads),
+            ("text", RdfFormat::NQuads),
+        ],
+        "application/n-quads or text/turtle",
     )
 }
 
 fn query_results_content_negotiation(request: &Request) -> Result<QueryResultsFormat, HttpError> {
     content_negotiation(
         request,
-        &[
-            "application/json",
-            "application/sparql-results+json",
-            "application/sparql-results+xml",
-            "application/xml",
-            "text/csv",
-            "text/json",
-            "text/tab-separated-values",
-            "text/tsv",
-            "text/xml",
-        ],
         QueryResultsFormat::from_media_type,
+        QueryResultsFormat::Json,
+        &[
+            ("application", QueryResultsFormat::Json),
+            ("text", QueryResultsFormat::Json),
+        ],
+        "application/sparql-results+json or text/tsv",
     )
 }
 
-fn content_negotiation<F>(
+fn content_negotiation<F: Copy>(
     request: &Request,
-    supported: &[&str],
     parse: impl Fn(&str) -> Option<F>,
+    default: F,
+    default_by_base: &[(&str, F)],
+    example: &str,
 ) -> Result<F, HttpError> {
-    let default = HeaderValue::default();
+    let default_value = HeaderValue::default();
     let header = request
         .header(&HeaderName::ACCEPT)
-        .unwrap_or(&default)
+        .unwrap_or(&default_value)
         .to_str()
         .map_err(|_| bad_request("The Accept header should be a valid ASCII string"))?;
 
     if header.is_empty() {
-        return parse(supported.first().unwrap())
-            .ok_or_else(|| internal_server_error("Unknown media type"));
+        return Ok(default);
     }
     let mut result = None;
     let mut result_score = 0_f32;
-
-    for possible in header.split(',') {
-        let (possible, parameters) = possible.split_once(';').unwrap_or((possible, ""));
-        let (possible_base, possible_sub) = possible
-            .split_once('/')
-            .ok_or_else(|| bad_request(format!("Invalid media type: '{possible}'")))?;
-        let possible_base = possible_base.trim();
-        let possible_sub = possible_sub.trim();
-
+    for mut possible in header.split(',') {
         let mut score = 1.;
-        for parameter in parameters.split(';') {
-            let parameter = parameter.trim();
-            if let Some(s) = parameter.strip_prefix("q=") {
-                score = f32::from_str(s.trim())
-                    .map_err(|_| bad_request(format!("Invalid Accept media type score: {s}")))?
+        if let Some((possible_type, last_parameter)) = possible.rsplit_once(';') {
+            if let Some((name, value)) = last_parameter.split_once('=') {
+                if name.trim().eq_ignore_ascii_case("q") {
+                    score = f32::from_str(value.trim()).map_err(|_| {
+                        bad_request(format!("Invalid Accept media type score: {value}"))
+                    })?;
+                    possible = possible_type;
+                }
             }
         }
         if score <= result_score {
             continue;
         }
-        for candidate in supported {
-            let (candidate_base, candidate_sub) = candidate
-                .split_once(';')
-                .map_or(*candidate, |(p, _)| p)
-                .split_once('/')
-                .ok_or_else(|| {
-                    internal_server_error(format!("Invalid media type: '{possible}'"))
-                })?;
-            if (possible_base == candidate_base || possible_base == "*")
-                && (possible_sub == candidate_sub || possible_sub == "*")
-            {
-                result = Some(candidate);
-                result_score = score;
-                break;
+        let (possible_base, possible_sub) = possible
+            .split_once(';')
+            .unwrap_or((possible, ""))
+            .0
+            .split_once('/')
+            .ok_or_else(|| bad_request(format!("Invalid media type: '{possible}'")))?;
+        let possible_base = possible_base.trim();
+        let possible_sub = possible_sub.trim();
+
+        let mut format = None;
+        if possible_base == "*" && possible_sub == "*" {
+            format = Some(default);
+        } else if possible_sub == "*" {
+            for (base, sub_format) in default_by_base {
+                if *base == possible_base {
+                    format = Some(*sub_format);
+                }
             }
+        } else {
+            format = parse(possible);
+        }
+        if let Some(format) = format {
+            result = Some(format);
+            result_score = score;
         }
     }
 
-    let result = result.ok_or_else(|| {
+    result.ok_or_else(|| {
         (
             Status::NOT_ACCEPTABLE,
-            format!("The available Content-Types are {}", supported.join(", "),),
+            format!("The accept header does not provide any accepted format like {example}"),
         )
-    })?;
-
-    parse(result).ok_or_else(|| internal_server_error("Unknown media type"))
+    })
 }
 
 fn content_type(request: &Request) -> Option<String> {
@@ -2345,6 +2333,21 @@ mod tests {
     }
 
     #[test]
+    fn get_query_accept_substar() -> Result<()> {
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "text/*")?
+        .build();
+        ServerTest::new()?.test_body(
+            request,
+            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+        )
+    }
+
+    #[test]
     fn get_query_accept_good() -> Result<()> {
         let request = Request::builder(
             Method::GET,
@@ -2366,11 +2369,53 @@ mod tests {
     fn get_query_accept_bad() -> Result<()> {
         let request = Request::builder(
             Method::GET,
-            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}".parse()?,
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()?,
         )
         .with_header(HeaderName::ACCEPT, "application/foo")?
         .build();
         ServerTest::new()?.test_status(request, Status::NOT_ACCEPTABLE)
+    }
+
+    #[test]
+    fn get_query_accept_explicit_priority() -> Result<()> {
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "text/foo;q=0.5 , text/json ; q = 0.7")?
+        .build();
+        ServerTest::new()?.test_body(
+            request,
+            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+        )
+    }
+
+    #[test]
+    fn get_query_accept_implicit_priority() -> Result<()> {
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "text/json,text/foo")?
+        .build();
+        ServerTest::new()?.test_body(
+            request,
+            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+        )
+    }
+    #[test]
+    fn get_query_accept_implicit_and_explicit_priority() -> Result<()> {
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
+                .parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "text/foo;q=0.9,text/csv")?
+        .build();
+        ServerTest::new()?.test_body(request, "s,p,o\r\n")
     }
 
     #[test]

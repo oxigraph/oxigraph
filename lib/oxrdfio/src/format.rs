@@ -140,25 +140,32 @@ impl RdfFormat {
     /// ```
     #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
-        const MEDIA_TYPES: [(&str, RdfFormat); 14] = [
-            ("application/n-quads", RdfFormat::NQuads),
-            ("application/n-triples", RdfFormat::NTriples),
-            ("application/rdf+xml", RdfFormat::RdfXml),
-            ("application/trig", RdfFormat::TriG),
-            ("application/turtle", RdfFormat::Turtle),
-            ("application/xml", RdfFormat::RdfXml),
-            ("application/x-trig", RdfFormat::TriG),
-            ("application/x-turtle", RdfFormat::Turtle),
-            ("text/n3", RdfFormat::N3),
-            ("text/nquads", RdfFormat::NQuads),
-            ("text/plain", RdfFormat::NTriples),
-            ("text/turtle", RdfFormat::Turtle),
-            ("text/xml", RdfFormat::RdfXml),
-            ("text/x-nquads", RdfFormat::NQuads),
+        const MEDIA_SUBTYPES: [(&str, RdfFormat); 10] = [
+            ("n-quads", RdfFormat::NQuads),
+            ("n-triples", RdfFormat::NTriples),
+            ("n3", RdfFormat::N3),
+            ("nquads", RdfFormat::NQuads),
+            ("ntriples", RdfFormat::NTriples),
+            ("plain", RdfFormat::NTriples),
+            ("rdf+xml", RdfFormat::RdfXml),
+            ("trig", RdfFormat::TriG),
+            ("turtle", RdfFormat::Turtle),
+            ("xml", RdfFormat::RdfXml),
         ];
-        let media_type = media_type.split(';').next()?.trim();
-        for (candidate_media_type, candidate_id) in MEDIA_TYPES {
-            if candidate_media_type.eq_ignore_ascii_case(media_type) {
+
+        let (r#type, subtype) = media_type
+            .split_once(';')
+            .unwrap_or((media_type, ""))
+            .0
+            .split_once('/')?;
+        let r#type = r#type.trim();
+        if !r#type.eq_ignore_ascii_case("application") && !r#type.eq_ignore_ascii_case("text") {
+            return None;
+        }
+        let subtype = subtype.trim();
+        let subtype = subtype.strip_prefix("x-").unwrap_or(subtype);
+        for (candidate_subtype, candidate_id) in MEDIA_SUBTYPES {
+            if candidate_subtype.eq_ignore_ascii_case(subtype) {
                 return Some(candidate_id);
             }
         }
