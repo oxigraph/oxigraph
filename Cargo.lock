@@ -998,7 +998,6 @@ dependencies = [
  "predicates",
  "rand",
  "rayon-core",
- "sparesults",
  "url",
 ]
 

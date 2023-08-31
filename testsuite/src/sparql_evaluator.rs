@@ -6,6 +6,7 @@ use crate::vocab::*;
 use anyhow::{anyhow, bail, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
+use oxigraph::sparql::results::QueryResultsFormat;
 use oxigraph::sparql::*;
 use oxigraph::store::Store;
 use sparopt::Optimizer;
@@ -339,10 +340,10 @@ impl ServiceHandler for StaticServiceHandler {
         self.services
             .get(&service_name)
             .ok_or_else(|| {
-                io::Error::new(
+                EvaluationError::Service(Box::new(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("Service {service_name} not found"),
-                )
+                )))
             })?
             .query_opt(
                 query,

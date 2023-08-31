@@ -1077,7 +1077,7 @@ impl SimpleEvaluator {
     ) -> Result<EncodedTuplesIterator, EvaluationError> {
         let service_name = service_name
             .get_pattern_value(from)
-            .ok_or_else(|| EvaluationError::msg("The SERVICE name is not bound"))?;
+            .ok_or(EvaluationError::UnboundService)?;
         if let QueryResults::Solutions(iter) = self.service_handler.handle(
             self.dataset.decode_named_node(&service_name)?,
             Query {
@@ -1092,9 +1092,7 @@ impl SimpleEvaluator {
         )? {
             Ok(encode_bindings(Rc::clone(&self.dataset), variables, iter))
         } else {
-            Err(EvaluationError::msg(
-                "The service call has not returned a set of solutions",
-            ))
+            Err(EvaluationError::ServiceDoesNotReturnSolutions)
         }
     }
 

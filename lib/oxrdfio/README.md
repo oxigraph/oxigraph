@@ -21,27 +21,28 @@ Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html
 
 It is designed as a low level parser compatible with both synchronous and asynchronous I/O (behind the `async-tokio` feature).
 
-Usage example counting the number of people in a Turtle file:
+Usage example converting a Turtle file to a N-Triples file:
 ```rust
-use oxrdf::{NamedNodeRef, vocab::rdf};
-use oxrdfio::{RdfFormat, RdfParser};
+use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 
-let file = b"@base <http://example.com/> .
+let turtle_file = b"@base <http://example.com/> .
 @prefix schema: <http://schema.org/> .
 <foo> a schema:Person ;
     schema:name \"Foo\" .
 <bar> a schema:Person ;
     schema:name \"Bar\" .";
 
-let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
-let mut count = 0;
-for quad in RdfParser::from_format(RdfFormat::Turtle).parse_read(file.as_ref()) {
-    let quad = quad.unwrap();
-    if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
-        count += 1;
-    }
+let ntriples_file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+<http://example.com/foo> <http://schema.org/name> \"Foo\" .
+<http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+<http://example.com/bar> <http://schema.org/name> \"Bar\" .
+";
+
+let mut writer = RdfSerializer::from_format(RdfFormat::NTriples).serialize_to_write(Vec::new());
+for quad in RdfParser::from_format(RdfFormat::Turtle).parse_read(turtle_file.as_ref()) {
+    writer.write_quad(&quad.unwrap()).unwrap();
 }
-assert_eq!(2, count);
+assert_eq!(writer.finish().unwrap(), ntriples_file);
 ```
 
 ## License

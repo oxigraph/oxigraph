@@ -1,12 +1,12 @@
 use crate::io::{RdfFormat, RdfSerializer};
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
-use oxrdf::{Variable, VariableRef};
-pub use sparesults::QuerySolution;
-use sparesults::{
+use crate::sparql::results::{
     ParseError, QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
     SolutionsReader,
 };
+use oxrdf::{Variable, VariableRef};
+pub use sparesults::QuerySolution;
 use std::io::{BufRead, Write};
 use std::rc::Rc;
 
@@ -38,7 +38,7 @@ impl QueryResults {
     /// ```
     /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::QueryResultsFormat;
+    /// use oxigraph::sparql::results::QueryResultsFormat;
     ///
     /// let store = Store::new()?;
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -57,33 +57,43 @@ impl QueryResults {
         let serializer = QueryResultsSerializer::from_format(format);
         match self {
             Self::Boolean(value) => {
-                serializer.write_boolean_result(writer, value)?;
+                serializer
+                    .write_boolean_result(writer, value)
+                    .map_err(EvaluationError::ResultsSerialization)?;
             }
             Self::Solutions(solutions) => {
-                let mut writer =
-                    serializer.solutions_writer(writer, solutions.variables().to_vec())?;
+                let mut writer = serializer
+                    .solutions_writer(writer, solutions.variables().to_vec())
+                    .map_err(EvaluationError::ResultsSerialization)?;
                 for solution in solutions {
-                    writer.write(&solution?)?;
+                    writer
+                        .write(&solution?)
+                        .map_err(EvaluationError::ResultsSerialization)?;
                 }
-                writer.finish()?;
+                writer
+                    .finish()
+                    .map_err(EvaluationError::ResultsSerialization)?;
             }
             Self::Graph(triples) => {
                 let s = VariableRef::new_unchecked("subject");
                 let p = VariableRef::new_unchecked("predicate");
                 let o = VariableRef::new_unchecked("object");
-                let mut writer = serializer.solutions_writer(
-                    writer,
-                    vec![s.into_owned(), p.into_owned(), o.into_owned()],
-                )?;
+                let mut writer = serializer
+                    .solutions_writer(writer, vec![s.into_owned(), p.into_owned(), o.into_owned()])
+                    .map_err(EvaluationError::ResultsSerialization)?;
                 for triple in triples {
                     let triple = triple?;
-                    writer.write([
-                        (s, &triple.subject.into()),
-                        (p, &triple.predicate.into()),
-                        (o, &triple.object),
-                    ])?;
+                    writer
+                        .write([
+                            (s, &triple.subject.into()),
+                            (p, &triple.predicate.into()),
+                            (o, &triple.object),
+                        ])
+                        .map_err(EvaluationError::ResultsSerialization)?;
                 }
-                writer.finish()?;
+                writer
+                    .finish()
+                    .map_err(EvaluationError::ResultsSerialization)?;
             }
         }
         Ok(())
@@ -116,14 +126,16 @@ impl QueryResults {
         if let Self::Graph(triples) = self {
             let mut writer = RdfSerializer::from_format(format.into()).serialize_to_write(write);
             for triple in triples {
-                writer.write_triple(&triple?)?;
+                writer
+                    .write_triple(&triple?)
+                    .map_err(EvaluationError::ResultsSerialization)?;
             }
-            writer.finish()?;
+            writer
+                .finish()
+                .map_err(EvaluationError::ResultsSerialization)?;
             Ok(())
         } else {
-            Err(EvaluationError::msg(
-                "Bindings or booleans could not be formatted as an RDF graph",
-            ))
+            Err(EvaluationError::NotAGraph)
         }
     }
 }

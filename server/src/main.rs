@@ -8,12 +8,12 @@ use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
+use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
 use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
-use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{max, min};

@@ -233,9 +233,21 @@ pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     match error {
         EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
         EvaluationError::Storage(error) => map_storage_error(error),
-        EvaluationError::Io(error) => map_io_err(error),
-        EvaluationError::GraphParsing(error) => PySyntaxError::new_err(error.to_string()),
-        EvaluationError::Query(error) => PyValueError::new_err(error.to_string()),
+        EvaluationError::GraphParsing(error) => match error {
+            oxigraph::io::ParseError::Syntax(error) => PySyntaxError::new_err(error.to_string()),
+            oxigraph::io::ParseError::Io(error) => map_io_err(error),
+        },
+        EvaluationError::ResultsParsing(error) => match error {
+            oxigraph::sparql::results::ParseError::Syntax(error) => {
+                PySyntaxError::new_err(error.to_string())
+            }
+            oxigraph::sparql::results::ParseError::Io(error) => map_io_err(error),
+        },
+        EvaluationError::ResultsSerialization(error) => map_io_err(error),
+        EvaluationError::Service(error) => match error.downcast() {
+            Ok(error) => map_io_err(*error),
+            Err(error) => PyRuntimeError::new_err(error.to_string()),
+        },
         _ => PyRuntimeError::new_err(error.to_string()),
     }
 }
