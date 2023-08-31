@@ -16,6 +16,7 @@ use crate::json::*;
 pub use crate::solution::QuerySolution;
 use crate::xml::*;
 use oxrdf::{TermRef, Variable, VariableRef};
+use std::fmt;
 use std::io::{self, BufRead, Write};
 use std::rc::Rc;
 
@@ -84,6 +85,23 @@ impl QueryResultsFormat {
         }
     }
 
+    /// The format name.
+    ///
+    /// ```
+    /// use sparesults::QueryResultsFormat;
+    ///
+    /// assert_eq!(QueryResultsFormat::Json.name(), "SPARQL Results in JSON")
+    /// ```
+    #[inline]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Xml => "SPARQL Results in XML",
+            Self::Json => "SPARQL Results in JSON",
+            Self::Csv => "SPARQL Results in CSV",
+            Self::Tsv => "SPARQL Results in TSV",
+        }
+    }
+
     /// Looks for a known format from a media type.
     ///
     /// It supports some media type aliases.
@@ -97,15 +115,35 @@ impl QueryResultsFormat {
     /// ```
     #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
-        match media_type.split(';').next()?.trim() {
-            "application/sparql-results+xml" | "application/xml" | "text/xml" => Some(Self::Xml),
-            "application/sparql-results+json" | "application/json" | "text/json" => {
-                Some(Self::Json)
-            }
-            "text/csv" => Some(Self::Csv),
-            "text/tab-separated-values" | "text/tsv" => Some(Self::Tsv),
-            _ => None,
+        const MEDIA_SUBTYPES: [(&str, QueryResultsFormat); 8] = [
+            ("csv", QueryResultsFormat::Csv),
+            ("json", QueryResultsFormat::Json),
+            ("plain", QueryResultsFormat::Csv),
+            ("sparql-results+json", QueryResultsFormat::Json),
+            ("sparql-results+xml", QueryResultsFormat::Xml),
+            ("tab-separated-values", QueryResultsFormat::Tsv),
+            ("tsv", QueryResultsFormat::Tsv),
+            ("xml", QueryResultsFormat::Xml),
+        ];
+
+        let (r#type, subtype) = media_type
+            .split_once(';')
+            .unwrap_or((media_type, ""))
+            .0
+            .trim()
+            .split_once('/')?;
+        let r#type = r#type.trim();
+        if !r#type.eq_ignore_ascii_case("application") && !r#type.eq_ignore_ascii_case("text") {
+            return None;
         }
+        let subtype = subtype.trim();
+        let subtype = subtype.strip_prefix("x-").unwrap_or(subtype);
+        for (candidate_subtype, candidate_id) in MEDIA_SUBTYPES {
+            if candidate_subtype.eq_ignore_ascii_case(subtype) {
+                return Some(candidate_id);
+            }
+        }
+        None
     }
 
     /// Looks for a known format from an extension.
@@ -120,13 +158,27 @@ impl QueryResultsFormat {
     /// ```
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
-        match extension {
-            "srx" | "xml" => Some(Self::Xml),
-            "srj" | "json" => Some(Self::Json),
-            "csv" | "txt" => Some(Self::Csv),
-            "tsv" => Some(Self::Tsv),
-            _ => None,
+        const MEDIA_TYPES: [(&str, QueryResultsFormat); 7] = [
+            ("csv", QueryResultsFormat::Csv),
+            ("json", QueryResultsFormat::Json),
+            ("srj", QueryResultsFormat::Json),
+            ("srx", QueryResultsFormat::Xml),
+            ("tsv", QueryResultsFormat::Tsv),
+            ("txt", QueryResultsFormat::Csv),
+            ("xml", QueryResultsFormat::Xml),
+        ];
+        for (candidate_extension, candidate_id) in MEDIA_TYPES {
+            if candidate_extension.eq_ignore_ascii_case(extension) {
+                return Some(candidate_id);
+            }
         }
+        None
+    }
+}
+
+impl fmt::Display for QueryResultsFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
