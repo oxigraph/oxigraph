@@ -3,7 +3,7 @@ use crate::sparql::algebra::Query;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::http::Client;
 use crate::sparql::model::QueryResults;
-use crate::sparql::QueryResultsFormat;
+use crate::sparql::results::QueryResultsFormat;
 use std::error::Error;
 use std::io::BufReader;
 use std::time::Duration;
@@ -61,10 +61,8 @@ pub struct EmptyServiceHandler;
 impl ServiceHandler for EmptyServiceHandler {
     type Error = EvaluationError;
 
-    fn handle(&self, _: NamedNode, _: Query) -> Result<QueryResults, EvaluationError> {
-        Err(EvaluationError::msg(
-            "The SERVICE feature is not implemented",
-        ))
+    fn handle(&self, name: NamedNode, _: Query) -> Result<QueryResults, EvaluationError> {
+        Err(EvaluationError::UnsupportedService(name))
     }
 }
 
@@ -88,7 +86,7 @@ impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
     ) -> Result<QueryResults, EvaluationError> {
         self.handler
             .handle(service_name, query)
-            .map_err(EvaluationError::wrap)
+            .map_err(|e| EvaluationError::Service(Box::new(e)))
     }
 }
 
@@ -112,17 +110,17 @@ impl ServiceHandler for SimpleServiceHandler {
         service_name: NamedNode,
         query: Query,
     ) -> Result<QueryResults, EvaluationError> {
-        let (content_type, body) = self.client.post(
-            service_name.as_str(),
-            query.to_string().into_bytes(),
-            "application/sparql-query",
-            "application/sparql-results+json, application/sparql-results+xml",
-        )?;
-        let format = QueryResultsFormat::from_media_type(&content_type).ok_or_else(|| {
-            EvaluationError::msg(format!(
-                "Unsupported Content-Type returned by {service_name}: {content_type}"
-            ))
-        })?;
+        let (content_type, body) = self
+            .client
+            .post(
+                service_name.as_str(),
+                query.to_string().into_bytes(),
+                "application/sparql-query",
+                "application/sparql-results+json, application/sparql-results+xml",
+            )
+            .map_err(|e| EvaluationError::Service(Box::new(e)))?;
+        let format = QueryResultsFormat::from_media_type(&content_type)
+            .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?;
         Ok(QueryResults::read(BufReader::new(body), format)?)
     }
 }

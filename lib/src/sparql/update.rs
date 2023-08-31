@@ -17,6 +17,7 @@ use spargebra::term::{
 use spargebra::GraphUpdateOperation;
 use sparopt::Optimizer;
 use std::collections::HashMap;
+use std::io;
 use std::rc::Rc;
 
 pub fn evaluate_update<'a, 'b: 'a>(
@@ -71,9 +72,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             } => self.eval_delete_insert(
                 delete,
                 insert,
-                using_dataset
-                    .as_ref()
-                    .ok_or_else(|| EvaluationError::msg("No dataset"))?,
+                using_dataset.as_ref().unwrap_or(&QueryDataset::new()),
                 pattern,
             ),
             GraphUpdateOperation::Load {
@@ -161,15 +160,15 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     }
 
     fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), EvaluationError> {
-        let (content_type, body) = self.client.get(
-            from.as_str(),
-            "application/n-triples, text/turtle, application/rdf+xml",
-        )?;
-        let format = RdfFormat::from_media_type(&content_type).ok_or_else(|| {
-            EvaluationError::msg(format!(
-                "Unsupported Content-Type returned by {from}: {content_type}"
-            ))
-        })?;
+        let (content_type, body) = self
+            .client
+            .get(
+                from.as_str(),
+                "application/n-triples, text/turtle, application/rdf+xml",
+            )
+            .map_err(|e| EvaluationError::Service(Box::new(e)))?;
+        let format = RdfFormat::from_media_type(&content_type)
+            .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?;
         let to_graph_name = match to {
             GraphName::NamedNode(graph_name) => graph_name.into(),
             GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
@@ -178,11 +177,12 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             .rename_blank_nodes()
             .without_named_graphs()
             .with_default_graph(to_graph_name);
-        if let Some(base_iri) = &self.base_iri {
-            parser = parser.with_base_iri(base_iri.as_str()).map_err(|e| {
-                EvaluationError::msg(format!("The LOAD IRI '{base_iri}' is invalid: {e}"))
-            })?;
-        }
+        parser = parser.with_base_iri(from.as_str()).map_err(|e| {
+            EvaluationError::Service(Box::new(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Invalid URL: {from}: {e}"),
+            )))
+        })?;
         for q in parser.parse_read(body) {
             self.transaction.insert(q?.as_ref())?;
         }
@@ -193,9 +193,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         if self.transaction.insert_named_graph(graph_name.into())? || silent {
             Ok(())
         } else {
-            Err(EvaluationError::msg(format!(
-                "The graph {graph_name} already exists"
-            )))
+            Err(EvaluationError::GraphAlreadyExists(graph_name.clone()))
         }
     }
 
@@ -211,9 +209,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 } else if silent {
                     Ok(())
                 } else {
-                    Err(EvaluationError::msg(format!(
-                        "The graph {graph} does not exists"
-                    )))
+                    Err(EvaluationError::GraphDoesNotExist(graph_name.clone()))
                 }
             }
             GraphTarget::DefaultGraph => {
@@ -231,9 +227,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 if self.transaction.remove_named_graph(graph_name.into())? || silent {
                     Ok(())
                 } else {
-                    Err(EvaluationError::msg(format!(
-                        "The graph {graph_name} does not exists"
-                    )))
+                    Err(EvaluationError::GraphDoesNotExist(graph_name.clone()))
                 }
             }
             GraphTarget::DefaultGraph => {
