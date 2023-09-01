@@ -213,7 +213,7 @@ impl Store {
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options and
     /// returns a query explanation with some statistics (if enabled with the `with_stats` parameter).
     ///
-    /// Beware: if you want to compute statistics you need to exhaust the results iterator before having a look at them.
+    /// <div class="warning">If you want to compute statistics you need to exhaust the results iterator before having a look at them.</div>
     ///
     /// Usage example serialising the explanation with statistics in JSON:
     /// ```
@@ -324,7 +324,7 @@ impl Store {
 
     /// Returns the number of quads in the store.
     ///
-    /// Warning: this function executes a full scan.
+    /// <div class="warning">This function executes a full scan.</div>
     ///
     /// Usage example:
     /// ```
@@ -565,7 +565,7 @@ impl Store {
 
     /// Adds atomically a set of quads to this store.
     ///
-    /// Warning: This operation uses a memory heavy transaction internally, use the [`bulk_loader`](Store::bulk_loader) if you plan to add ten of millions of triples.
+    /// <div class="warning">This operation uses a memory heavy transaction internally, use the [`bulk_loader`](Store::bulk_loader) if you plan to add ten of millions of triples.</div>
     pub fn extend(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
@@ -815,7 +815,7 @@ impl Store {
     ///
     /// Useful to call after a batch upload or another similar operation.
     ///
-    /// Warning: Can take hours on huge databases.
+    /// <div class="warning">Can take hours on huge databases.</div>
     #[cfg(not(target_family = "wasm"))]
     pub fn optimize(&self) -> Result<(), StorageError> {
         self.storage.compact()
@@ -826,10 +826,10 @@ impl Store {
     /// After its creation, the backup is usable using [`Store::open`]
     /// like a regular Oxigraph database and operates independently from the original database.
     ///
-    /// Warning: Backups are only possible for on-disk databases created using [`Store::open`].
+    /// <div class="warning">Backups are only possible for on-disk databases created using [`Store::open`].</div>
     /// Temporary in-memory databases created using [`Store::new`] are not compatible with RocksDB backup system.
     ///
-    /// Warning: An error is raised if the `target_directory` already exists.
+    /// <div class="warning">An error is raised if the `target_directory` already exists.</div>
     ///
     /// If the target directory is in the same file system as the current database,
     /// the database content will not be fully copied
@@ -1012,7 +1012,7 @@ impl<'a> Transaction<'a> {
 
     /// Returns the number of quads in the store.
     ///
-    /// Warning: this function executes a full scan.
+    /// <div class="warning">this function executes a full scan.</div>
     pub fn len(&self) -> Result<usize, StorageError> {
         self.writer.reader().len()
     }
@@ -1364,11 +1364,11 @@ impl Iterator for GraphNameIter {
 
 /// A bulk loader allowing to load at lot of data quickly into the store.
 ///
-/// Warning: The operations provided here are not atomic.
+/// <div class="warning">The operations provided here are not atomic.</div>
 /// If the operation fails in the middle, only a part of the data may be written to the store.
 /// Results might get weird if you delete data during the loading process.
 ///
-/// Warning: It is optimized for speed.
+/// <div class="warning">It is optimized for speed.</div>
 /// Memory usage is configurable using [`BulkLoader::set_max_memory_size_in_megabytes`]
 /// and the number of used threads with [`BulkLoader::set_num_threads`].
 /// By default the memory consumption target (excluding the system and RocksDB internal consumption)
@@ -1452,11 +1452,11 @@ impl BulkLoader {
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`Store::load_dataset`] might be more convenient.
     ///
-    /// Warning: This method is not atomic.
+    /// <div class="warning">This method is not atomic.</div>
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
+    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     ///
     /// Usage example:
     /// ```
@@ -1510,11 +1510,11 @@ impl BulkLoader {
     ///
     /// This function is optimized for large graph loading speed. For small files, [`Store::load_graph`] might be more convenient.   
     ///
-    /// Warning: This method is not atomic.
+    /// <div class="warning">This method is not atomic.</div>
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
+    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     ///
     /// Usage example:
     /// ```
@@ -1570,11 +1570,11 @@ impl BulkLoader {
 
     /// Adds a set of quads using the bulk loader.
     ///
-    /// Warning: This method is not atomic.
+    /// <div class="warning">This method is not atomic.</div>
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
+    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     pub fn load_quads(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
@@ -1584,11 +1584,11 @@ impl BulkLoader {
 
     /// Adds a set of quads using the bulk loader while breaking in the middle of the process in case of error.
     ///
-    /// Warning: This method is not atomic.
+    /// <div class="warning">This method is not atomic.</div>
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.
     ///
-    /// Warning: This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.
+    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,

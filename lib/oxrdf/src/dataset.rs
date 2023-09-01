@@ -39,8 +39,9 @@ use std::hash::{Hash, Hasher};
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
 /// It can accommodate a fairly large number of quads (in the few millions).
-/// Beware: it interns the string and does not do any garbage collection yet:
-/// if you insert and remove a lot of different terms, memory will grow without any reduction.
+///
+/// <div class="warning">It interns the strings and does not do any garbage collection yet:
+/// if you insert and remove a lot of different terms, memory will grow without any reduction.</div>
 ///
 /// Usage example:
 /// ```

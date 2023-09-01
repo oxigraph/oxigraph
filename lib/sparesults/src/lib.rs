@@ -427,7 +427,7 @@ impl QueryResultsSerializer {
 /// Allows writing query results.
 /// Could be built using a [`QueryResultsSerializer`].
 ///
-/// Warning: Do not forget to run the [`finish`](SolutionsWriter::finish()) method to properly write the last bytes of the file.
+/// <div class="warning">Do not forget to run the [`finish`](SolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
 ///
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```

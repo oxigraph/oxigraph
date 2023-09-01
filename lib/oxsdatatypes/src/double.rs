@@ -9,7 +9,7 @@ use std::str::FromStr;
 ///
 /// Uses internally a [`f64`].
 ///
-/// Beware: serialization is currently buggy and do not follow the canonical mapping yet.
+/// <div class="warning">Serialization does not follow the canonical mapping.</div>
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(transparent)]
 pub struct Double {
