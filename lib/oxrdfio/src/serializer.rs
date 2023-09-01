@@ -62,9 +62,9 @@ impl RdfSerializer {
 
     /// Writes to a [`Write`] implementation.
     ///
-    /// Warning: Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+    /// <div class="warning">Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.</div>
     ///
-    /// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.
+    /// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
     ///
     /// ```
     /// use oxrdfio::{RdfFormat, RdfSerializer};
@@ -107,9 +107,9 @@ impl RdfSerializer {
 
     /// Writes to a Tokio [`AsyncWrite`] implementation.
     ///
-    /// Warning: Do not forget to run the [`finish`](ToTokioAsyncWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+    /// <div class="warning">Do not forget to run the [`finish`](ToTokioAsyncWriteQuadWriter::finish()) method to properly write the last bytes of the file.</div>
     ///
-    /// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](tokio::io::BufWriter) to avoid that.
+    /// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](tokio::io::BufWriter) to avoid that.</div>
     ///
     /// ```
     /// use oxrdfio::{RdfFormat, RdfSerializer};
@@ -163,9 +163,9 @@ impl RdfSerializer {
 ///
 /// Can be built using [`RdfSerializer::serialize_to_write`].
 ///
-/// Warning: Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+/// <div class="warning">Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.</div>
 ///
-/// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.
+/// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
 ///
 /// ```
 /// use oxrdfio::{RdfFormat, RdfSerializer};
@@ -232,9 +232,9 @@ impl<W: Write> ToWriteQuadWriter<W> {
 ///
 /// Can be built using [`RdfSerializer::serialize_to_write`].
 ///
-/// Warning: Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.
+/// <div class="warning">Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.</div>
 ///
-/// Warning: This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.
+/// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
 ///
 /// ```
 /// use oxrdfio::{RdfFormat, RdfSerializer};

@@ -1,8 +1,6 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery)
 //!
 //! The root type for SPARQL queries is [`Query`] and the root type for updates is [`Update`].
-//!
-//! Warning: this implementation is an unstable work in progress
 
 use crate::model::*;
 use crate::sparql::eval::Timer;

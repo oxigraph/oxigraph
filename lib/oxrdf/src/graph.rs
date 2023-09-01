@@ -29,8 +29,9 @@ use std::fmt;
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
 ///
 /// It can accommodate a fairly large number of triples (in the few millions).
-/// Beware: it interns the string and does not do any garbage collection yet:
-/// if you insert and remove a lot of different terms, memory will grow without any reduction.
+///
+/// <div class="warning">It interns the string and does not do any garbage collection yet:
+/// if you insert and remove a lot of different terms, memory will grow without any reduction.</div>
 ///
 /// Usage example:
 /// ```
