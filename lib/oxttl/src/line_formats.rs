@@ -76,7 +76,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                     }
                     _ => self.error(
                         errors,
-                        format!("The subject of a triple should be an IRI or a blank node, {token:?} found"),
+                        "The subject of a triple should be an IRI or a blank node, TOKEN found",
                     ),
                 },
                 NQuadsState::ExpectPredicate => match token {
@@ -88,7 +88,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                     }
                     _ => self.error(
                         errors,
-                        format!("The predicate of a triple should be an IRI, {token:?} found"),
+                        "The predicate of a triple should be an IRI, TOKEN found",
                     ),
                 },
                 NQuadsState::ExpectedObject => match token {
@@ -118,7 +118,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                     }
                     _ => self.error(
                         errors,
-                        format!("The object of a triple should be an IRI, a blank node or a literal, {token:?} found"),
+                        "The object of a triple should be an IRI, a blank node or a literal, TOKEN found",
                     ),
                 },
                 NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value } => match token {
@@ -159,7 +159,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                         self
                     }
-                    _ => self.error(errors, format!("A literal datatype must be an IRI, found {token:?}")),
+                    _ => self.error(errors, "A literal datatype must be an IRI, found TOKEN"),
                 },
                 NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple => {
                     if self.stack.is_empty() {

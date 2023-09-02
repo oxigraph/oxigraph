@@ -2,9 +2,9 @@
 
 use libfuzzer_sys::fuzz_target;
 use oxrdf::Quad;
-use oxttl::{NQuadsParser, NQuadsSerializer, SyntaxError};
+use oxttl::{NQuadsParser, NQuadsSerializer};
 
-fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<SyntaxError>) {
+fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<String>) {
     let mut quads = Vec::new();
     let mut errors = Vec::new();
     let mut parser = NQuadsParser::new().with_quoted_triples().parse();
@@ -13,7 +13,7 @@ fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<Synt
         while let Some(result) = parser.read_next() {
             match result {
                 Ok(quad) => quads.push(quad),
-                Err(error) => errors.push(error),
+                Err(error) => errors.push(error.to_string()),
             }
         }
     }
@@ -21,7 +21,7 @@ fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<Synt
     while let Some(result) = parser.read_next() {
         match result {
             Ok(quad) => quads.push(quad),
-            Err(error) => errors.push(error),
+            Err(error) => errors.push(error.to_string()),
         }
     }
     assert!(parser.is_end());
@@ -39,7 +39,7 @@ fuzz_target!(|data: &[u8]| {
         .collect::<Vec<_>>()
         .as_slice()]);
     assert_eq!(quads, quads_without_split);
-    assert_eq!(errors.len(), errors_without_split.len());
+    assert_eq!(errors, errors_without_split);
 
     // We serialize
     let mut writer = NQuadsSerializer::new().serialize_to_write(Vec::new());

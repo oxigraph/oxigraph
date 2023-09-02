@@ -1,9 +1,6 @@
-use crate::toolkit::lexer::TokenWithPosition;
-use crate::toolkit::{Lexer, LexerError, TokenRecognizer};
-use std::error::Error;
+use crate::toolkit::error::{ParseError, SyntaxError};
+use crate::toolkit::lexer::{Lexer, TokenRecognizer};
 use std::io::Read;
-use std::ops::Range;
-use std::{fmt, io};
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
 
@@ -42,7 +39,6 @@ pub struct Parser<RR: RuleRecognizer> {
     state: Option<RR>,
     results: Vec<RR::Output>,
     errors: Vec<RuleRecognizerError>,
-    position: Range<usize>,
     default_lexer_options: <RR::TokenRecognizer as TokenRecognizer>::Options,
 }
 
@@ -53,7 +49,6 @@ impl<RR: RuleRecognizer> Parser<RR> {
             state: Some(recognizer),
             results: vec![],
             errors: vec![],
-            position: 0..0,
             default_lexer_options: <RR::TokenRecognizer as TokenRecognizer>::Options::default(),
         }
     }
@@ -76,8 +71,10 @@ impl<RR: RuleRecognizer> Parser<RR> {
         loop {
             if let Some(error) = self.errors.pop() {
                 return Some(Err(SyntaxError {
-                    position: self.position.clone(),
-                    message: error.message,
+                    location: self.lexer.last_token_location(),
+                    message: error
+                        .message
+                        .replace("TOKEN", &self.lexer.last_token_source()),
                 }));
             }
             if let Some(result) = self.results.pop() {
@@ -89,8 +86,7 @@ impl<RR: RuleRecognizer> Parser<RR> {
                     .map_or(&self.default_lexer_options, |p| p.lexer_options()),
             ) {
                 match result {
-                    Ok(TokenWithPosition { token, position }) => {
-                        self.position = position;
+                    Ok(token) => {
                         self.state = self.state.take().map(|state| {
                             state.recognize_next(token, &mut self.results, &mut self.errors)
                         });
@@ -98,7 +94,7 @@ impl<RR: RuleRecognizer> Parser<RR> {
                     }
                     Err(e) => {
                         self.state = self.state.take().map(RR::error_recovery_state);
-                        return Some(Err(e.into()));
+                        return Some(Err(e));
                     }
                 }
             }
@@ -123,128 +119,6 @@ impl<RR: RuleRecognizer> Parser<RR> {
         read: R,
     ) -> FromTokioAsyncReadIterator<R, RR> {
         FromTokioAsyncReadIterator { read, parser: self }
-    }
-}
-
-/// An error in the syntax of the parsed file.
-///
-/// It is composed of a message and a byte range in the input.
-#[derive(Debug)]
-pub struct SyntaxError {
-    position: Range<usize>,
-    message: String,
-}
-
-impl SyntaxError {
-    /// The invalid byte range in the input.
-    #[inline]
-    pub fn position(&self) -> Range<usize> {
-        self.position.clone()
-    }
-
-    /// The error message.
-    #[inline]
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-
-    /// Converts this error to an error message.
-    #[inline]
-    pub fn into_message(self) -> String {
-        self.message
-    }
-}
-
-impl fmt::Display for SyntaxError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.position.start + 1 == self.position.end {
-            write!(
-                f,
-                "Parser error at byte {}: {}",
-                self.position.start, self.message
-            )
-        } else {
-            write!(
-                f,
-                "Parser error between bytes {} and {}: {}",
-                self.position.start, self.position.end, self.message
-            )
-        }
-    }
-}
-
-impl Error for SyntaxError {}
-
-impl From<SyntaxError> for io::Error {
-    #[inline]
-    fn from(error: SyntaxError) -> Self {
-        io::Error::new(io::ErrorKind::InvalidData, error)
-    }
-}
-
-impl From<LexerError> for SyntaxError {
-    #[inline]
-    fn from(e: LexerError) -> Self {
-        Self {
-            position: e.position(),
-            message: e.into_message(),
-        }
-    }
-}
-
-/// A parsing error.
-///
-/// It is the union of [`SyntaxError`] and [`std::io::Error`].
-#[derive(Debug)]
-pub enum ParseError {
-    /// I/O error during parsing (file not found...).
-    Io(io::Error),
-    /// An error in the file syntax.
-    Syntax(SyntaxError),
-}
-
-impl fmt::Display for ParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => e.fmt(f),
-            Self::Syntax(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for ParseError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(match self {
-            Self::Io(e) => e,
-            Self::Syntax(e) => e,
-        })
-    }
-}
-
-impl From<SyntaxError> for ParseError {
-    #[inline]
-    fn from(error: SyntaxError) -> Self {
-        Self::Syntax(error)
-    }
-}
-
-impl From<io::Error> for ParseError {
-    #[inline]
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
-}
-
-impl From<ParseError> for io::Error {
-    #[inline]
-    fn from(error: ParseError) -> Self {
-        match error {
-            ParseError::Syntax(e) => e.into(),
-            ParseError::Io(e) => e,
-        }
     }
 }
 

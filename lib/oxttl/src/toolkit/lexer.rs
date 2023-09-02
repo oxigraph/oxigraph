@@ -1,9 +1,10 @@
-use memchr::memchr2;
+use crate::toolkit::error::{SyntaxError, TextPosition};
+use memchr::{memchr2, memchr2_iter};
+use std::borrow::Cow;
 use std::cmp::min;
-use std::error::Error;
-use std::fmt;
 use std::io::{self, Read};
 use std::ops::{Range, RangeInclusive};
+use std::str;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -22,14 +23,14 @@ pub trait TokenRecognizer {
 }
 
 pub struct TokenRecognizerError {
-    pub position: Range<usize>,
+    pub location: Range<usize>,
     pub message: String,
 }
 
 impl<S: Into<String>> From<(Range<usize>, S)> for TokenRecognizerError {
-    fn from((position, message): (Range<usize>, S)) -> Self {
+    fn from((location, message): (Range<usize>, S)) -> Self {
         Self {
-            position,
+            location,
             message: message.into(),
         }
     }
@@ -37,32 +38,35 @@ impl<S: Into<String>> From<(Range<usize>, S)> for TokenRecognizerError {
 
 #[allow(clippy::range_plus_one)]
 impl<S: Into<String>> From<(RangeInclusive<usize>, S)> for TokenRecognizerError {
-    fn from((position, message): (RangeInclusive<usize>, S)) -> Self {
-        (*position.start()..*position.end() + 1, message).into()
+    fn from((location, message): (RangeInclusive<usize>, S)) -> Self {
+        (*location.start()..*location.end() + 1, message).into()
     }
 }
 
 impl<S: Into<String>> From<(usize, S)> for TokenRecognizerError {
-    fn from((position, message): (usize, S)) -> Self {
-        (position..=position, message).into()
+    fn from((location, message): (usize, S)) -> Self {
+        (location..=location, message).into()
     }
-}
-
-pub struct TokenWithPosition<T> {
-    pub token: T,
-    pub position: Range<usize>,
 }
 
 pub struct Lexer<R: TokenRecognizer> {
     parser: R,
     data: Vec<u8>,
-    start: usize,
+    position: Position,
+    previous_position: Position, // Lexer position before the last emitted token
     is_ending: bool,
-    position: usize,
     min_buffer_size: usize,
     max_buffer_size: usize,
     is_line_jump_whitespace: bool,
     line_comment_start: Option<&'static [u8]>,
+}
+
+#[derive(Clone, Copy)]
+struct Position {
+    line_start_buffer_offset: usize,
+    buffer_offset: usize,
+    global_offset: u64,
+    global_line: u64,
 }
 
 impl<R: TokenRecognizer> Lexer<R> {
@@ -76,9 +80,19 @@ impl<R: TokenRecognizer> Lexer<R> {
         Self {
             parser,
             data: Vec::new(),
-            start: 0,
+            position: Position {
+                line_start_buffer_offset: 0,
+                buffer_offset: 0,
+                global_offset: 0,
+                global_line: 0,
+            },
+            previous_position: Position {
+                line_start_buffer_offset: 0,
+                buffer_offset: 0,
+                global_offset: 0,
+                global_line: 0,
+            },
             is_ending: false,
-            position: 0,
             min_buffer_size,
             max_buffer_size,
             is_line_jump_whitespace,
@@ -148,24 +162,43 @@ impl<R: TokenRecognizer> Lexer<R> {
         Ok(())
     }
 
-    pub fn read_next(
-        &mut self,
-        options: &R::Options,
-    ) -> Option<Result<TokenWithPosition<R::Token<'_>>, LexerError>> {
+    #[allow(clippy::unwrap_in_result)]
+    pub fn read_next(&mut self, options: &R::Options) -> Option<Result<R::Token<'_>, SyntaxError>> {
         self.skip_whitespaces_and_comments()?;
-        let Some((consumed, result)) =
-            self.parser
-                .recognize_next_token(&self.data[self.start..], self.is_ending, options)
-        else {
+        self.previous_position = self.position;
+        let Some((consumed, result)) = self.parser.recognize_next_token(
+            &self.data[self.position.buffer_offset..],
+            self.is_ending,
+            options,
+        ) else {
             return if self.is_ending {
-                if self.start == self.data.len() {
+                if self.position.buffer_offset == self.data.len() {
                     None // We have finished
                 } else {
-                    let error = LexerError {
-                        position: self.position..self.position + (self.data.len() - self.start),
+                    let (new_line_jumps, new_line_start) =
+                        Self::find_number_of_line_jumps_and_start_of_last_line(
+                            &self.data[self.position.buffer_offset..],
+                        );
+                    if new_line_jumps > 0 {
+                        self.position.line_start_buffer_offset =
+                            self.position.buffer_offset + new_line_start;
+                    }
+                    self.position.global_offset +=
+                        u64::try_from(self.data.len() - self.position.buffer_offset).unwrap();
+                    self.position.buffer_offset = self.data.len();
+                    self.position.global_line += new_line_jumps;
+                    let new_position = TextPosition {
+                        line: self.position.global_line,
+                        column: Self::column_from_bytes(
+                            &self.data[self.position.line_start_buffer_offset..],
+                        ),
+                        offset: self.position.global_offset,
+                    };
+                    let error = SyntaxError {
+                        location: new_position..new_position,
                         message: "Unexpected end of file".into(),
                     };
-                    self.start = self.data.len(); // We consume everything
+                    self.position.buffer_offset = self.data.len(); // We consume everything
                     Some(Err(error))
                 }
             } else {
@@ -177,44 +210,119 @@ impl<R: TokenRecognizer> Lexer<R> {
             "The lexer must consume at least one byte each time"
         );
         debug_assert!(
-            self.start + consumed <= self.data.len(),
+            self.position.buffer_offset + consumed <= self.data.len(),
             "The lexer tried to consumed {consumed} bytes but only {} bytes are readable",
-            self.data.len() - self.start
+            self.data.len() - self.position.buffer_offset
         );
-        let old_position = self.position;
-        self.start += consumed;
-        self.position += consumed;
-        Some(match result {
-            Ok(token) => Ok(TokenWithPosition {
-                token,
-                position: old_position..self.position,
-            }),
-            Err(e) => Err(LexerError {
-                position: e.position.start + self.position..e.position.end + self.position,
-                message: e.message,
-            }),
-        })
+        let (new_line_jumps, new_line_start) =
+            Self::find_number_of_line_jumps_and_start_of_last_line(
+                &self.data[self.position.buffer_offset..self.position.buffer_offset + consumed],
+            );
+        if new_line_jumps > 0 {
+            self.position.line_start_buffer_offset = self.position.buffer_offset + new_line_start;
+        }
+        self.position.buffer_offset += consumed;
+        self.position.global_offset += u64::try_from(consumed).unwrap();
+        self.position.global_line += new_line_jumps;
+        Some(result.map_err(|e| SyntaxError {
+            location: self.location_from_buffer_offset_range(e.location),
+            message: e.message,
+        }))
+    }
+
+    pub fn location_from_buffer_offset_range(
+        &self,
+        offset_range: Range<usize>,
+    ) -> Range<TextPosition> {
+        let start_offset = self.previous_position.buffer_offset + offset_range.start;
+        let (start_extra_line_jumps, start_line_start) =
+            Self::find_number_of_line_jumps_and_start_of_last_line(
+                &self.data[self.previous_position.buffer_offset..start_offset],
+            );
+        let start_line_start = if start_extra_line_jumps > 0 {
+            start_line_start + self.previous_position.buffer_offset
+        } else {
+            self.previous_position.line_start_buffer_offset
+        };
+        let end_offset = self.previous_position.buffer_offset + offset_range.end;
+        let (end_extra_line_jumps, end_line_start) =
+            Self::find_number_of_line_jumps_and_start_of_last_line(
+                &self.data[self.previous_position.buffer_offset..end_offset],
+            );
+        let end_line_start = if end_extra_line_jumps > 0 {
+            end_line_start + self.previous_position.buffer_offset
+        } else {
+            self.previous_position.line_start_buffer_offset
+        };
+        TextPosition {
+            line: self.previous_position.global_line + start_extra_line_jumps,
+            column: Self::column_from_bytes(&self.data[start_line_start..start_offset]),
+            offset: self.previous_position.global_offset
+                + u64::try_from(offset_range.start).unwrap(),
+        }..TextPosition {
+            line: self.previous_position.global_line + end_extra_line_jumps,
+            column: Self::column_from_bytes(&self.data[end_line_start..end_offset]),
+            offset: self.previous_position.global_offset + u64::try_from(offset_range.end).unwrap(),
+        }
+    }
+
+    pub fn last_token_location(&self) -> Range<TextPosition> {
+        TextPosition {
+            line: self.previous_position.global_line,
+            column: Self::column_from_bytes(
+                &self.data[self.previous_position.line_start_buffer_offset
+                    ..self.previous_position.buffer_offset],
+            ),
+            offset: self.previous_position.global_offset,
+        }..TextPosition {
+            line: self.position.global_line,
+            column: Self::column_from_bytes(
+                &self.data[self.position.line_start_buffer_offset..self.position.buffer_offset],
+            ),
+            offset: self.position.global_offset,
+        }
+    }
+
+    pub fn last_token_source(&self) -> Cow<'_, str> {
+        String::from_utf8_lossy(
+            &self.data[self.previous_position.buffer_offset..self.position.buffer_offset],
+        )
     }
 
     pub fn is_end(&self) -> bool {
-        self.is_ending && self.data.len() == self.start
+        self.is_ending && self.data.len() == self.position.buffer_offset
     }
 
+    #[allow(clippy::unwrap_in_result)]
     fn skip_whitespaces_and_comments(&mut self) -> Option<()> {
         loop {
-            self.skip_whitespaces();
+            self.skip_whitespaces()?;
 
-            let buf = &self.data[self.start..];
+            let buf = &self.data[self.position.buffer_offset..];
             if let Some(line_comment_start) = self.line_comment_start {
                 if buf.starts_with(line_comment_start) {
                     // Comment
                     if let Some(end) = memchr2(b'\r', b'\n', &buf[line_comment_start.len()..]) {
-                        self.start += end + line_comment_start.len();
-                        self.position += end + line_comment_start.len();
+                        let mut end_position = line_comment_start.len() + end;
+                        if buf.get(end_position).copied() == Some(b'\r') {
+                            // We look for \n for Windows line end style
+                            if let Some(c) = buf.get(end_position + 1) {
+                                if *c == b'\n' {
+                                    end_position += 1;
+                                }
+                            } else if !self.is_ending {
+                                return None; // We need to read more
+                            }
+                        }
+                        let comment_size = end_position + 1;
+                        self.position.buffer_offset += comment_size;
+                        self.position.line_start_buffer_offset = self.position.buffer_offset;
+                        self.position.global_offset += u64::try_from(comment_size).unwrap();
+                        self.position.global_line += 1;
                         continue;
                     }
                     if self.is_ending {
-                        self.start = self.data.len(); // EOF
+                        self.position.buffer_offset = self.data.len(); // EOF
                         return Some(());
                     }
                     return None; // We need more data
@@ -224,80 +332,98 @@ impl<R: TokenRecognizer> Lexer<R> {
         }
     }
 
-    fn skip_whitespaces(&mut self) {
+    fn skip_whitespaces(&mut self) -> Option<()> {
         if self.is_line_jump_whitespace {
-            for (i, c) in self.data[self.start..].iter().enumerate() {
-                if !matches!(c, b' ' | b'\t' | b'\r' | b'\n') {
-                    self.start += i;
-                    self.position += i;
-                    return;
+            let mut i = self.position.buffer_offset;
+            while let Some(c) = self.data.get(i) {
+                match c {
+                    b' ' | b'\t' => {
+                        self.position.buffer_offset += 1;
+                        self.position.global_offset += 1;
+                    }
+                    b'\r' => {
+                        // We look for \n for Windows line end style
+                        let mut increment: u8 = 1;
+                        if let Some(c) = self.data.get(i + 1) {
+                            if *c == b'\n' {
+                                increment += 1;
+                                i += 1;
+                            }
+                        } else if !self.is_ending {
+                            return None; // We need to read more
+                        }
+                        self.position.buffer_offset += usize::from(increment);
+                        self.position.line_start_buffer_offset = self.position.buffer_offset;
+                        self.position.global_offset += u64::from(increment);
+                        self.position.global_line += 1;
+                    }
+                    b'\n' => {
+                        self.position.buffer_offset += 1;
+                        self.position.line_start_buffer_offset = self.position.buffer_offset;
+                        self.position.global_offset += 1;
+                        self.position.global_line += 1;
+                    }
+                    _ => return Some(()),
                 }
+                i += 1;
                 //TODO: SIMD
             }
         } else {
-            for (i, c) in self.data[self.start..].iter().enumerate() {
-                if !matches!(c, b' ' | b'\t') {
-                    self.start += i;
-                    self.position += i;
-                    return;
+            for c in &self.data[self.position.buffer_offset..] {
+                if matches!(c, b' ' | b'\t') {
+                    self.position.buffer_offset += 1;
+                    self.position.global_offset += 1;
+                } else {
+                    return Some(());
                 }
                 //TODO: SIMD
             }
         }
-        // We only have whitespaces
-        self.position += self.data.len() - self.start;
-        self.start = self.data.len();
+        Some(())
     }
 
     fn shrink_data(&mut self) {
-        if self.start > 0 {
-            self.data.copy_within(self.start.., 0);
-            self.data.truncate(self.data.len() - self.start);
-            self.start = 0;
+        if self.position.line_start_buffer_offset > 0 {
+            self.data
+                .copy_within(self.position.line_start_buffer_offset.., 0);
+            self.data
+                .truncate(self.data.len() - self.position.line_start_buffer_offset);
+            self.position.buffer_offset -= self.position.line_start_buffer_offset;
+            self.position.line_start_buffer_offset = 0;
+            self.previous_position = self.position;
         }
     }
-}
 
-#[derive(Debug)]
-pub struct LexerError {
-    position: Range<usize>,
-    message: String,
-}
-
-impl LexerError {
-    pub fn position(&self) -> Range<usize> {
-        self.position.clone()
-    }
-
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-
-    pub fn into_message(self) -> String {
-        self.message
-    }
-}
-
-impl fmt::Display for LexerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.position.start + 1 == self.position.end {
-            write!(
-                f,
-                "Lexer error at byte {}: {}",
-                self.position.start, self.message
-            )
-        } else {
-            write!(
-                f,
-                "Lexer error between bytes {} and {}: {}",
-                self.position.start, self.position.end, self.message
-            )
+    fn find_number_of_line_jumps_and_start_of_last_line(bytes: &[u8]) -> (u64, usize) {
+        let mut num_of_jumps = 0;
+        let mut last_jump_pos = 0;
+        let mut previous_cr = 0;
+        for pos in memchr2_iter(b'\r', b'\n', bytes) {
+            if bytes[pos] == b'\r' {
+                previous_cr = pos;
+                num_of_jumps += 1;
+                last_jump_pos = pos + 1;
+            } else {
+                if previous_cr < pos - 1 {
+                    // We count \r\n as a single line jump
+                    num_of_jumps += 1;
+                }
+                last_jump_pos = pos + 1;
+            }
         }
+        (num_of_jumps, last_jump_pos)
     }
-}
 
-impl Error for LexerError {
-    fn description(&self) -> &str {
-        self.message()
+    fn column_from_bytes(bytes: &[u8]) -> u64 {
+        match str::from_utf8(bytes) {
+            Ok(s) => u64::try_from(s.chars().count()).unwrap(),
+            Err(e) => {
+                if e.valid_up_to() == 0 {
+                    0
+                } else {
+                    Self::column_from_bytes(&bytes[..e.valid_up_to()])
+                }
+            }
+        }
     }
 }
