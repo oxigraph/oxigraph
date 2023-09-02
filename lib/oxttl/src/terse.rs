@@ -167,7 +167,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     _ => {
-                        self.error(errors, format!("The token {token:?} is not a valid subject or graph name"))
+                        self.error(errors, "TOKEN is not a valid subject or graph name")
                     }
                 }
                 TriGState::WrappedGraphOrPredicateObjectList { term } => {
@@ -317,7 +317,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                    _ => {
-                        self.error(errors, format!("The token {token:?} is not a valid RDF subject"))
+                        self.error(errors, "TOKEN is not a valid RDF subject")
                     }
                 },
                 TriGState::TriplesBlankNodePropertyListCurrent => if token == N3Token::Punctuation("]") {
@@ -350,7 +350,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                    _ => {
-                        self.error(errors, format!("The token {token:?} is not a valid graph name"))
+                        self.error(errors, "TOKEN is not a valid graph name")
                     }
                 }
                 TriGState::GraphNameAnonEnd => if token == N3Token::Punctuation("]") {
@@ -456,7 +456,7 @@ impl RuleRecognizer for TriGRecognizer {
                         Err(e) => self.error(errors, e)
                     }
                    _ => {
-                        self.error(errors, format!("The token {token:?} is not a valid predicate"))
+                        self.error(errors, "TOKEN is not a valid predicate")
                     }
                 }
                 // [12] 	object 	::= 	iri | BlankNode | collection | blankNodePropertyList | literal | quotedTriple
@@ -536,7 +536,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                    _ => {
-                        self.error(errors, format!("This is not a valid RDF object: {token:?}"))
+                        self.error(errors, "TOKEN is not a valid RDF object")
                     }
 
                 }
@@ -637,7 +637,7 @@ impl RuleRecognizer for TriGRecognizer {
                             Err(e) => self.error(errors, e)
                         }
                         _ => {
-                            self.error(errors, format!("Expecting a datatype IRI after '^^, found {token:?}")).recognize_next(token, results, errors)
+                            self.error(errors, "Expecting a datatype IRI after ^^, found TOKEN").recognize_next(token, results, errors)
                         }
                     }
                 }
@@ -653,7 +653,7 @@ impl RuleRecognizer for TriGRecognizer {
                     if token == N3Token::Punctuation(">>") {
                         self
                     } else {
-                        self.error(errors, format!("Expecting '>>' to close a quoted triple, found {token:?}"))
+                        self.error(errors, "Expecting '>>' to close a quoted triple, found TOKEN")
                     }
                 }
                 #[cfg(feature = "rdf-star")]
@@ -670,7 +670,7 @@ impl RuleRecognizer for TriGRecognizer {
                     if token == N3Token::Punctuation(">>") {
                         self
                     } else {
-                        self.error(errors, format!("Expecting '>>' to close a quoted triple, found {token:?}"))
+                        self.error(errors, "Expecting '>>' to close a quoted triple, found TOKEN")
                     }
                 }
                 // [28t] 	qtSubject 	::= 	iri | BlankNode | quotedTriple
@@ -703,7 +703,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::QuotedSubject);
                         self
                     }
-                    _ => self.error(errors, format!("This is not a valid RDF quoted triple subject: {token:?}"))
+                    _ => self.error(errors, "TOKEN is not a valid RDF quoted triple subject: TOKEN")
                 }
                 // [29t] 	qtObject 	::= 	iri | BlankNode | literal | quotedTriple
                 #[cfg(feature = "rdf-star")]
@@ -759,7 +759,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::QuotedSubject);
                         self
                     }
-                    _ => self.error(errors, format!("This is not a valid RDF quoted triple object: {token:?}"))
+                    _ => self.error(errors, "TOKEN is not a valid RDF quoted triple object")
                 }
                 #[cfg(feature = "rdf-star")]
                 TriGState::QuotedAnonEnd => if token == N3Token::Punctuation("]") {

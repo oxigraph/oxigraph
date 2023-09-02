@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::ops::Range;
 use std::{fmt, io};
 
 /// Error returned during RDF format parsing.
@@ -110,8 +111,31 @@ pub struct SyntaxError {
 enum SyntaxErrorKind {
     Turtle(oxttl::SyntaxError),
     RdfXml(oxrdfxml::SyntaxError),
-
     Msg { msg: &'static str },
+}
+
+impl SyntaxError {
+    /// The location of the error inside of the file.
+    #[inline]
+    pub fn location(&self) -> Option<Range<TextPosition>> {
+        match &self.inner {
+            SyntaxErrorKind::Turtle(e) => {
+                let location = e.location();
+                Some(
+                    TextPosition {
+                        line: location.start.line,
+                        column: location.start.column,
+                        offset: location.start.offset,
+                    }..TextPosition {
+                        line: location.end.line,
+                        column: location.end.column,
+                        offset: location.end.offset,
+                    },
+                )
+            }
+            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg { .. } => None,
+        }
+    }
 }
 
 impl fmt::Display for SyntaxError {
@@ -145,4 +169,12 @@ impl From<SyntaxError> for io::Error {
             SyntaxErrorKind::Msg { msg } => io::Error::new(io::ErrorKind::InvalidData, msg),
         }
     }
+}
+
+/// A position in a text i.e. a `line` number starting from 0, a `column` number starting from 0 (in number of code points) and a global file `offset` starting from 0 (in number of bytes).
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+pub struct TextPosition {
+    pub line: u64,
+    pub column: u64,
+    pub offset: u64,
 }

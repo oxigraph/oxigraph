@@ -266,7 +266,7 @@ impl N3Lexer {
                             ));
                         }
                     }
-                    Err(e) => return Some((e.position.end, Err(e))),
+                    Err(e) => return Some((e.location.end, Err(e))),
                 }
             } else if is_ending {
                 while data[..i].ends_with(b".") {
@@ -447,7 +447,7 @@ impl N3Lexer {
                             return Some((i, Ok((buffer, might_be_invalid_iri))));
                         }
                     }
-                    Err(e) => return Some((e.position.end, Err(e))),
+                    Err(e) => return Some((e.location.end, Err(e))),
                 }
             } else if is_ending {
                 let buffer = if let Some(mut buffer) = buffer {
@@ -515,7 +515,7 @@ impl N3Lexer {
                     }
                     i += consumed;
                 }
-                Err(e) => return Some((e.position.end, Err(e))),
+                Err(e) => return Some((e.location.end, Err(e))),
             }
         }
     }

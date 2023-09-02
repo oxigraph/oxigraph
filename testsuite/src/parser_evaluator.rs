@@ -1,8 +1,8 @@
 use crate::evaluator::TestEvaluator;
-use crate::files::{guess_rdf_format, load_dataset, load_n3};
+use crate::files::{guess_rdf_format, load_dataset, load_n3, read_file_to_string};
 use crate::manifest::Test;
-use crate::report::dataset_diff;
-use anyhow::{anyhow, ensure, Result};
+use crate::report::{dataset_diff, format_diff};
+use anyhow::{anyhow, bail, ensure, Result};
 use oxigraph::io::RdfFormat;
 use oxigraph::model::{BlankNode, Dataset, Quad};
 use oxttl::n3::{N3Quad, N3Term};
@@ -116,10 +116,17 @@ fn evaluate_negative_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
         .action
         .as_deref()
         .ok_or_else(|| anyhow!("No action found"))?;
-    ensure!(
-        load_dataset(action, format, false).is_err(),
-        "File parsed without errors even if it should not"
-    );
+    let Err(error) = load_dataset(action, format, false) else {
+        bail!("File parsed without errors even if it should not");
+    };
+    if let Some(result) = &test.result {
+        let expected = read_file_to_string(result)?;
+        ensure!(
+            expected == error.to_string(),
+            "Not expected error message:\n{}",
+            format_diff(&expected, &error.to_string(), "message")
+        );
+    }
     Ok(())
 }
 

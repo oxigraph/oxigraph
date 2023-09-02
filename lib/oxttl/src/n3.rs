@@ -836,7 +836,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::FormulaContent);
                             self
                         }
-                       _ => self.error(errors, format!("This is not a valid RDF value: {token:?}"))
+                       _ => self.error(errors, "TOKEN is not a valid RDF value")
                     }
                 }
                 N3State::PropertyListMiddle => match token {
@@ -950,7 +950,7 @@ impl RuleRecognizer for N3Recognizer {
                             Err(e) => self.error(errors, e)
                         }
                        _ => {
-                            self.error(errors, format!("Expecting a datatype IRI after '^^, found {token:?}")).recognize_next(token, results, errors)
+                            self.error(errors, "Expecting a datatype IRI after '^^, found TOKEN").recognize_next(token, results, errors)
                         }
                     }
                 }

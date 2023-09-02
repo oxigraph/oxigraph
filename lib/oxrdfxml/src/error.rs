@@ -72,15 +72,6 @@ impl From<quick_xml::Error> for ParseError {
     }
 }
 
-impl From<quick_xml::events::attributes::AttrError> for ParseError {
-    #[inline]
-    fn from(error: quick_xml::events::attributes::AttrError) -> Self {
-        Self::Syntax(SyntaxError {
-            inner: SyntaxErrorKind::XmlAttribute(error),
-        })
-    }
-}
-
 /// An error in the syntax of the parsed file.
 #[derive(Debug)]
 pub struct SyntaxError {
@@ -90,7 +81,6 @@ pub struct SyntaxError {
 #[derive(Debug)]
 pub enum SyntaxErrorKind {
     Xml(quick_xml::Error),
-    XmlAttribute(quick_xml::events::attributes::AttrError),
     InvalidIri {
         iri: String,
         error: IriParseError,
@@ -119,7 +109,6 @@ impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
             SyntaxErrorKind::Xml(error) => error.fmt(f),
-            SyntaxErrorKind::XmlAttribute(error) => error.fmt(f),
             SyntaxErrorKind::InvalidIri { iri, error } => {
                 write!(f, "error while parsing IRI '{iri}': {error}")
             }
@@ -136,7 +125,6 @@ impl Error for SyntaxError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.inner {
             SyntaxErrorKind::Xml(error) => Some(error),
-            SyntaxErrorKind::XmlAttribute(error) => Some(error),
             SyntaxErrorKind::InvalidIri { error, .. } => Some(error),
             SyntaxErrorKind::InvalidLanguageTag { error, .. } => Some(error),
             SyntaxErrorKind::Msg { .. } => None,

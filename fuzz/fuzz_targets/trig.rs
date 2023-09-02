@@ -2,9 +2,9 @@
 
 use libfuzzer_sys::fuzz_target;
 use oxrdf::{Dataset, GraphName, Quad, Subject, Term, Triple};
-use oxttl::{SyntaxError, TriGParser, TriGSerializer};
+use oxttl::{TriGParser, TriGSerializer};
 
-fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<SyntaxError>) {
+fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<String>) {
     let mut quads = Vec::new();
     let mut errors = Vec::new();
     let mut parser = TriGParser::new()
@@ -17,7 +17,7 @@ fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<Synt
         while let Some(result) = parser.read_next() {
             match result {
                 Ok(quad) => quads.push(quad),
-                Err(error) => errors.push(error),
+                Err(error) => errors.push(error.to_string()),
             }
         }
     }
@@ -25,7 +25,7 @@ fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<Synt
     while let Some(result) = parser.read_next() {
         match result {
             Ok(quad) => quads.push(quad),
-            Err(error) => errors.push(error),
+            Err(error) => errors.push(error.to_string()),
         }
     }
     assert!(parser.is_end());
@@ -96,7 +96,7 @@ fuzz_target!(|data: &[u8]| {
             String::from_utf8_lossy(&serialize_quads(&quads_without_split))
         );
     }
-    assert_eq!(errors.len(), errors_without_split.len());
+    assert_eq!(errors, errors_without_split);
 
     // We serialize
     let new_serialization = serialize_quads(&quads);

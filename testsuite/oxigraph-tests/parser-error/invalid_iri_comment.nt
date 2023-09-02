@@ -1,0 +1,2 @@
+<http://example.com/s> <http://example.com/p> <http://example.com/o> . # foo
+<http://example.com/s> <http:// /p> <http://example.com/o> .

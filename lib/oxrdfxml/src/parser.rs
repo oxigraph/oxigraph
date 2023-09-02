@@ -8,7 +8,7 @@ use quick_xml::escape::unescape_with;
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
 use quick_xml::name::{LocalName, QName, ResolveResult};
-use quick_xml::{NsReader, Writer};
+use quick_xml::{Error, NsReader, Writer};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Read};
 use std::str;
@@ -515,7 +515,7 @@ impl<R> RdfXmlReader<R> {
                     .to_string(),
             );
             for attr in event.attributes() {
-                clean_event.push_attribute(attr?);
+                clean_event.push_attribute(attr.map_err(Error::InvalidAttr)?);
             }
             writer.write_event(Event::Start(clean_event))?;
             self.in_literal_depth += 1;
@@ -544,7 +544,7 @@ impl<R> RdfXmlReader<R> {
         let mut type_attr = None;
 
         for attribute in event.attributes() {
-            let attribute = attribute?;
+            let attribute = attribute.map_err(Error::InvalidAttr)?;
             if attribute.key.as_ref().starts_with(b"xml") {
                 if attribute.key.as_ref() == b"xml:lang" {
                     let tag = self.convert_attribute(&attribute)?;
