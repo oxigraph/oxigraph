@@ -1,8 +1,8 @@
 /* global describe, it */
 
+import assert from "assert";
 import runTests from "../node_modules/@rdfjs/data-model/test/index.js";
 import oxigraph from "../pkg/oxigraph.js";
-import assert from "assert";
 
 runTests({ factory: oxigraph });
 
