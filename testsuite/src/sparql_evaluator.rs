@@ -3,7 +3,7 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Error, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
@@ -51,23 +51,23 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#PositiveJsonResultsSyntaxTest",
-        evaluate_positive_json_result_syntax_test,
+        |t| evaluate_positive_result_syntax_test(t, QueryResultsFormat::Json),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#NegativeJsonResultsSyntaxTest",
-        evaluate_negative_json_result_syntax_test,
+        |t| evaluate_negative_result_syntax_test(t, QueryResultsFormat::Json),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#PositiveXmlResultsSyntaxTest",
-        evaluate_positive_xml_result_syntax_test,
+        |t| evaluate_positive_result_syntax_test(t, QueryResultsFormat::Xml),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#NegativeXmlResultsSyntaxTest",
-        evaluate_negative_xml_result_syntax_test,
+        |t| evaluate_negative_result_syntax_test(t, QueryResultsFormat::Xml),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#NegativeTsvResultsSyntaxTest",
-        evaluate_negative_tsv_result_syntax_test,
+        |t| evaluate_negative_result_syntax_test(t, QueryResultsFormat::Tsv),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#QueryOptimizationTest",
@@ -79,11 +79,11 @@ fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
     let query_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
-        .map_err(|e| anyhow!("Not able to parse {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Not able to parse with error: {e}"))?;
     Query::parse(&query.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" of {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" with error: {e}"))?;
     Ok(())
 }
 
@@ -91,49 +91,19 @@ fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
     let query_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
-    match Query::parse(&read_file_to_string(query_file)?, Some(query_file)) {
-        Ok(result) => {
-            bail!("Oxigraph parses even if it should not {test}. The output tree is: {result}")
-        }
-        Err(_) => Ok(()),
-    }
-}
-
-fn evaluate_positive_json_result_syntax_test(test: &Test) -> Result<()> {
-    result_syntax_check(test, QueryResultsFormat::Json)
-}
-
-fn evaluate_negative_json_result_syntax_test(test: &Test) -> Result<()> {
-    if result_syntax_check(test, QueryResultsFormat::Json).is_ok() {
-        bail!("Oxigraph parses even if it should not {test}.")
-    }
+        .ok_or_else(|| anyhow!("No action found"))?;
+    ensure!(
+        Query::parse(&read_file_to_string(query_file)?, Some(query_file)).is_err(),
+        "Oxigraph parses even if it should not."
+    );
     Ok(())
 }
 
-fn evaluate_positive_xml_result_syntax_test(test: &Test) -> Result<()> {
-    result_syntax_check(test, QueryResultsFormat::Xml)
-}
-
-fn evaluate_negative_xml_result_syntax_test(test: &Test) -> Result<()> {
-    if result_syntax_check(test, QueryResultsFormat::Xml).is_ok() {
-        bail!("Oxigraph parses even if it should not {test}.")
-    }
-    Ok(())
-}
-
-fn evaluate_negative_tsv_result_syntax_test(test: &Test) -> Result<()> {
-    if result_syntax_check(test, QueryResultsFormat::Tsv).is_ok() {
-        bail!("Oxigraph parses even if it should not {test}.")
-    }
-    Ok(())
-}
-
-fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
+fn evaluate_positive_result_syntax_test(test: &Test, format: QueryResultsFormat) -> Result<()> {
     let action_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let actual_results = StaticQueryResults::from_query_results(
         QueryResults::read(Cursor::new(read_file_to_string(action_file)?), format)?,
         true,
@@ -143,13 +113,27 @@ fn result_syntax_check(test: &Test, format: QueryResultsFormat) -> Result<()> {
             QueryResults::read(Cursor::new(read_file_to_string(result_file)?), format)?,
             true,
         )?;
-        if !are_query_results_isomorphic(&expected_results, &actual_results) {
-            bail!(
-                "Failure on {test}.\n{}\n",
-                results_diff(expected_results, actual_results),
-            );
-        }
+        ensure!(
+            are_query_results_isomorphic(&expected_results, &actual_results),
+            "Not isomorphic results:\n{}\n",
+            results_diff(expected_results, actual_results),
+        );
     }
+    Ok(())
+}
+
+fn evaluate_negative_result_syntax_test(test: &Test, format: QueryResultsFormat) -> Result<()> {
+    let action_file = test
+        .action
+        .as_deref()
+        .ok_or_else(|| anyhow!("No action found"))?;
+    ensure!(
+        QueryResults::read(Cursor::new(read_file_to_string(action_file)?), format)
+            .map_err(Error::from)
+            .and_then(|r| { StaticQueryResults::from_query_results(r, true) })
+            .is_err(),
+        "Oxigraph parses even if it should not."
+    );
     Ok(())
 }
 
@@ -164,36 +148,34 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     let query_file = test
         .query
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let options = QueryOptions::default()
         .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
     let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
-        .map_err(|e| anyhow!("Failure to parse query of {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Failure to parse query with error: {e}"))?;
 
     // We check parsing roundtrip
     Query::parse(&query.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" of {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" with error: {e}"))?;
 
     // FROM and FROM NAMED support. We make sure the data is in the store
     if !query.dataset().is_default_dataset() {
         for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
-            if let GraphName::NamedNode(graph_name) = graph_name {
-                load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
-            } else {
-                bail!("Invalid FROM in query {query} for test {test}");
-            }
+            let GraphName::NamedNode(graph_name) = graph_name else {
+                bail!("Invalid FROM in query {query}");
+            };
+            load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
         }
         for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
-            if let NamedOrBlankNode::NamedNode(graph_name) = graph_name {
-                load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
-            } else {
-                bail!("Invalid FROM NAMED in query {query} for test {test}");
-            }
+            let NamedOrBlankNode::NamedNode(graph_name) = graph_name else {
+                bail!("Invalid FROM NAMED in query {query}");
+            };
+            load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
         }
     }
 
     let expected_results = load_sparql_query_result(test.result.as_ref().unwrap())
-        .map_err(|e| anyhow!("Error constructing expected graph for {test}: {e}"))?;
+        .map_err(|e| anyhow!("Error constructing expected graph: {e}"))?;
     let with_order = if let StaticQueryResults::Solutions { ordered, .. } = &expected_results {
         *ordered
     } else {
@@ -207,16 +189,15 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         }
         let actual_results = store
             .query_opt(query.clone(), options)
-            .map_err(|e| anyhow!("Failure to execute query of {test} with error: {e}"))?;
+            .map_err(|e| anyhow!("Failure to execute query with error: {e}"))?;
         let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)?;
 
-        if !are_query_results_isomorphic(&expected_results, &actual_results) {
-            bail!(
-                "Failure on {test}.\n{}\nParsed query:\n{}\nData:\n{store}\n",
-                results_diff(expected_results, actual_results),
-                Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap()
-            );
-        }
+        ensure!(
+            are_query_results_isomorphic(&expected_results, &actual_results),
+            "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{store}\n",
+            results_diff(expected_results, actual_results),
+            Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap()
+        );
     }
     Ok(())
 }
@@ -225,11 +206,11 @@ fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
-        .map_err(|e| anyhow!("Not able to parse {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Not able to parse with error: {e}"))?;
     Update::parse(&update.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" of {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" with error: {e}"))?;
     Ok(())
 }
 
@@ -237,13 +218,12 @@ fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
-    match Update::parse(&read_file_to_string(update_file)?, Some(update_file)) {
-        Ok(result) => {
-            bail!("Oxigraph parses even if it should not {test}. The output tree is: {result}")
-        }
-        Err(_) => Ok(()),
-    }
+        .ok_or_else(|| anyhow!("No action found"))?;
+    ensure!(
+        Update::parse(&read_file_to_string(update_file)?, Some(update_file)).is_err(),
+        "Oxigraph parses even if it should not."
+    );
+    Ok(())
 }
 
 fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
@@ -266,30 +246,28 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     let update_file = test
         .update
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
-        .map_err(|e| anyhow!("Failure to parse update of {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Failure to parse update with error: {e}"))?;
 
     // We check parsing roundtrip
     Update::parse(&update.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" of {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" with error: {e}"))?;
 
     store
         .update(update)
-        .map_err(|e| anyhow!("Failure to execute update of {test} with error: {e}"))?;
+        .map_err(|e| anyhow!("Failure to execute update with error: {e}"))?;
     let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
     store_dataset.canonicalize();
     let mut result_store_dataset: Dataset = result_store.iter().collect::<Result<_, _>>()?;
     result_store_dataset.canonicalize();
-    if store_dataset == result_store_dataset {
-        Ok(())
-    } else {
-        bail!(
-            "Failure on {test}.\nDiff:\n{}\nParsed update:\n{}\n",
-            dataset_diff(&result_store_dataset, &store_dataset),
-            Update::parse(&read_file_to_string(update_file)?, Some(update_file)).unwrap(),
-        )
-    }
+    ensure!(
+        store_dataset == result_store_dataset,
+        "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
+        dataset_diff(&result_store_dataset, &store_dataset),
+        Update::parse(&read_file_to_string(update_file)?, Some(update_file)).unwrap(),
+    );
+    Ok(())
 }
 
 fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
@@ -522,11 +500,10 @@ impl StaticQueryResults {
                 let mut variables: Vec<Variable> = graph
                     .objects_for_subject_predicate(result_set, rs::RESULT_VARIABLE)
                     .map(|object| {
-                        if let TermRef::Literal(l) = object {
-                            Ok(Variable::new_unchecked(l.value()))
-                        } else {
+                        let TermRef::Literal(l) = object else {
                             bail!("Invalid rs:resultVariable: {object}")
-                        }
+                        };
+                        Ok(Variable::new_unchecked(l.value()))
                     })
                     .collect::<Result<Vec<_>>>()?;
                 variables.sort();
@@ -534,45 +511,38 @@ impl StaticQueryResults {
                 let mut solutions = graph
                     .objects_for_subject_predicate(result_set, rs::SOLUTION)
                     .map(|object| {
-                        if let TermRef::BlankNode(solution) = object {
-                            let mut bindings = graph
-                                .objects_for_subject_predicate(solution, rs::BINDING)
-                                .map(|object| {
-                                    if let TermRef::BlankNode(binding) = object {
-                                        if let (Some(TermRef::Literal(variable)), Some(value)) = (
-                                            graph.object_for_subject_predicate(
-                                                binding,
-                                                rs::VARIABLE,
-                                            ),
-                                            graph.object_for_subject_predicate(binding, rs::VALUE),
-                                        ) {
-                                            Ok((
-                                                Variable::new_unchecked(variable.value()),
-                                                value.into_owned(),
-                                            ))
-                                        } else {
-                                            bail!("Invalid rs:binding: {binding}")
-                                        }
-                                    } else {
-                                        bail!("Invalid rs:binding: {object}")
-                                    }
-                                })
-                                .collect::<Result<Vec<_>>>()?;
-                            bindings.sort_by(|(a, _), (b, _)| a.cmp(b));
-                            let index = graph
-                                .object_for_subject_predicate(solution, rs::INDEX)
-                                .map(|object| {
-                                    if let TermRef::Literal(l) = object {
-                                        Ok(u64::from_str(l.value())?)
-                                    } else {
-                                        bail!("Invalid rs:index: {object}")
-                                    }
-                                })
-                                .transpose()?;
-                            Ok((bindings, index))
-                        } else {
+                        let TermRef::BlankNode(solution) = object else {
                             bail!("Invalid rs:solution: {object}")
-                        }
+                        };
+                        let mut bindings = graph
+                            .objects_for_subject_predicate(solution, rs::BINDING)
+                            .map(|object| {
+                                let TermRef::BlankNode(binding) = object else {
+                                    bail!("Invalid rs:binding: {object}")
+                                };
+                                let (Some(TermRef::Literal(variable)), Some(value)) = (
+                                    graph.object_for_subject_predicate(binding, rs::VARIABLE),
+                                    graph.object_for_subject_predicate(binding, rs::VALUE),
+                                ) else {
+                                    bail!("Invalid rs:binding: {binding}")
+                                };
+                                Ok((
+                                    Variable::new_unchecked(variable.value()),
+                                    value.into_owned(),
+                                ))
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        bindings.sort_by(|(a, _), (b, _)| a.cmp(b));
+                        let index = graph
+                            .object_for_subject_predicate(solution, rs::INDEX)
+                            .map(|object| {
+                                let TermRef::Literal(l) = object else {
+                                    bail!("Invalid rs:index: {object}")
+                                };
+                                Ok(u64::from_str(l.value())?)
+                            })
+                            .transpose()?;
+                        Ok((bindings, index))
                     })
                     .collect::<Result<Vec<_>>>()?;
                 solutions.sort_by(|(_, index_a), (_, index_b)| index_a.cmp(index_b));
@@ -723,7 +693,7 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let actual = (&Optimizer::optimize_graph_pattern(
         (&if let spargebra::Query::Select { pattern, .. } =
             spargebra::Query::parse(&read_file_to_string(action)?, Some(action))?
@@ -745,26 +715,24 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     else {
         bail!("Only SELECT queries are supported in query sparql-optimization tests")
     };
-    if expected == actual {
-        Ok(())
-    } else {
-        bail!(
-            "Failure on {test}.\nDiff:\n{}\n",
-            format_diff(
-                &spargebra::Query::Select {
-                    pattern: expected,
-                    dataset: None,
-                    base_iri: None
-                }
-                .to_sse(),
-                &spargebra::Query::Select {
-                    pattern: actual,
-                    dataset: None,
-                    base_iri: None
-                }
-                .to_sse(),
-                "query"
-            )
+    ensure!(
+        expected == actual,
+        "Not equal queries.\nDiff:\n{}\n",
+        format_diff(
+            &spargebra::Query::Select {
+                pattern: expected,
+                dataset: None,
+                base_iri: None
+            }
+            .to_sse(),
+            &spargebra::Query::Select {
+                pattern: actual,
+                dataset: None,
+                base_iri: None
+            }
+            .to_sse(),
+            "query"
         )
-    }
+    );
+    Ok(())
 }

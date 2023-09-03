@@ -2,7 +2,7 @@ use crate::evaluator::TestEvaluator;
 use crate::files::{guess_rdf_format, load_dataset, load_n3};
 use crate::manifest::Test;
 use crate::report::dataset_diff;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, ensure, Result};
 use oxigraph::io::RdfFormat;
 use oxigraph::model::{BlankNode, Dataset, Quad};
 use oxttl::n3::{N3Quad, N3Term};
@@ -97,7 +97,7 @@ fn evaluate_positive_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     load_dataset(action, format, false).map_err(|e| anyhow!("Parse error: {e}"))?;
     Ok(())
 }
@@ -106,7 +106,7 @@ fn evaluate_positive_n3_syntax_test(test: &Test) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     load_n3(action, false).map_err(|e| anyhow!("Parse error: {e}"))?;
     Ok(())
 }
@@ -115,29 +115,31 @@ fn evaluate_negative_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
-    match load_dataset(action, format, false) {
-        Ok(_) => bail!("File parsed without errors even if it should not"),
-        Err(_) => Ok(()),
-    }
+        .ok_or_else(|| anyhow!("No action found"))?;
+    ensure!(
+        load_dataset(action, format, false).is_err(),
+        "File parsed without errors even if it should not"
+    );
+    Ok(())
 }
 
 fn evaluate_negative_n3_syntax_test(test: &Test) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
-    match load_n3(action, false) {
-        Ok(_) => bail!("File parsed without errors even if it should not"),
-        Err(_) => Ok(()),
-    }
+        .ok_or_else(|| anyhow!("No action found"))?;
+    ensure!(
+        load_n3(action, false).is_err(),
+        "File parsed without errors even if it should not"
+    );
+    Ok(())
 }
 
 fn evaluate_eval_test(test: &Test, format: RdfFormat, ignore_errors: bool) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let mut actual_dataset = load_dataset(action, format, ignore_errors)
         .map_err(|e| anyhow!("Parse error on file {action}: {e}"))?;
     actual_dataset.canonicalize();
@@ -148,21 +150,19 @@ fn evaluate_eval_test(test: &Test, format: RdfFormat, ignore_errors: bool) -> Re
     let mut expected_dataset = load_dataset(results, guess_rdf_format(results)?, false)
         .map_err(|e| anyhow!("Parse error on file {results}: {e}"))?;
     expected_dataset.canonicalize();
-    if expected_dataset == actual_dataset {
-        Ok(())
-    } else {
-        bail!(
-            "The two files are not isomorphic. Diff:\n{}",
-            dataset_diff(&expected_dataset, &actual_dataset)
-        )
-    }
+    ensure!(
+        expected_dataset == actual_dataset,
+        "The two files are not isomorphic. Diff:\n{}",
+        dataset_diff(&expected_dataset, &actual_dataset)
+    );
+    Ok(())
 }
 
 fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
     let action = test
         .action
         .as_deref()
-        .ok_or_else(|| anyhow!("No action found for test {test}"))?;
+        .ok_or_else(|| anyhow!("No action found"))?;
     let mut actual_dataset = n3_to_dataset(
         load_n3(action, ignore_errors).map_err(|e| anyhow!("Parse error on file {action}: {e}"))?,
     );
@@ -175,14 +175,12 @@ fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
         load_n3(results, false).map_err(|e| anyhow!("Parse error on file {results}: {e}"))?,
     );
     expected_dataset.canonicalize();
-    if expected_dataset == actual_dataset {
-        Ok(())
-    } else {
-        bail!(
-            "The two files are not isomorphic. Diff:\n{}",
-            dataset_diff(&expected_dataset, &actual_dataset)
-        )
-    }
+    ensure!(
+        expected_dataset == actual_dataset,
+        "The two files are not isomorphic. Diff:\n{}",
+        dataset_diff(&expected_dataset, &actual_dataset)
+    );
+    Ok(())
 }
 
 fn n3_to_dataset(quads: Vec<N3Quad>) -> Dataset {
