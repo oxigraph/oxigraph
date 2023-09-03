@@ -13,8 +13,9 @@ use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::io::{self, BufReader, Cursor};
+use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 
 pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
     evaluator.register(
@@ -138,7 +139,7 @@ fn evaluate_negative_result_syntax_test(test: &Test, format: QueryResultsFormat)
 }
 
 fn evaluate_evaluation_test(test: &Test) -> Result<()> {
-    let store = Store::new()?;
+    let store = get_store()?;
     if let Some(data) = &test.data {
         load_dataset_to_store(data, &store)?;
     }
@@ -194,9 +195,10 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
 
         ensure!(
             are_query_results_isomorphic(&expected_results, &actual_results),
-            "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{store}\n",
+            "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{}\n",
             results_diff(expected_results, actual_results),
-            Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap()
+            Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap(),
+            &*store
         );
     }
     Ok(())
@@ -227,7 +229,7 @@ fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
 }
 
 fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
-    let store = Store::new()?;
+    let store = get_store()?;
     if let Some(data) = &test.data {
         load_dataset_to_store(data, &store)?;
     }
@@ -235,7 +237,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         load_graph_to_store(value, &store, name.clone())?;
     }
 
-    let result_store = Store::new()?;
+    let result_store = get_store()?;
     if let Some(data) = &test.result {
         load_dataset_to_store(data, &result_store)?;
     }
@@ -286,7 +288,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
 
 #[derive(Clone)]
 struct StaticServiceHandler {
-    services: Arc<HashMap<NamedNode, Store>>,
+    services: Arc<HashMap<NamedNode, StoreRef>>,
 }
 
 impl StaticServiceHandler {
@@ -297,7 +299,7 @@ impl StaticServiceHandler {
                     .iter()
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
-                        let store = Store::new()?;
+                        let store = get_store()?;
                         load_dataset_to_store(data, &store)?;
                         Ok((name, store))
                     })
@@ -482,7 +484,7 @@ impl StaticQueryResults {
 
     fn from_graph(graph: &Graph) -> Result<Self> {
         // Hack to normalize literals
-        let store = Store::new()?;
+        let store = get_store()?;
         for t in graph {
             store.insert(t.in_graph(GraphNameRef::DefaultGraph))?;
         }
@@ -735,4 +737,40 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
         )
     );
     Ok(())
+}
+
+// Pool of stores to avoid allocating/deallocating them a lot
+static STORE_POOL: OnceLock<Mutex<Vec<Store>>> = OnceLock::new();
+
+fn get_store() -> Result<StoreRef> {
+    let store = if let Some(store) = STORE_POOL.get_or_init(Mutex::default).lock().unwrap().pop() {
+        store
+    } else {
+        Store::new()?
+    };
+    Ok(StoreRef { store })
+}
+
+struct StoreRef {
+    store: Store,
+}
+
+impl Drop for StoreRef {
+    fn drop(&mut self) {
+        if self.store.clear().is_ok() {
+            STORE_POOL
+                .get_or_init(Mutex::default)
+                .lock()
+                .unwrap()
+                .push(self.store.clone())
+        }
+    }
+}
+
+impl Deref for StoreRef {
+    type Target = Store;
+
+    fn deref(&self) -> &Store {
+        &self.store
+    }
 }
