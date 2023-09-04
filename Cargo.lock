@@ -973,17 +973,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxigraph_js"
-version = "0.4.0-alpha.1-dev"
-dependencies = [
- "console_error_panic_hook",
- "js-sys",
- "oxigraph",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "oxigraph_server"
+name = "oxigraph-cli"
 version = "0.4.0-alpha.1-dev"
 dependencies = [
  "anyhow",
@@ -1002,7 +992,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxigraph_testsuite"
+name = "oxigraph-js"
+version = "0.4.0-alpha.1-dev"
+dependencies = [
+ "console_error_panic_hook",
+ "js-sys",
+ "oxigraph",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "oxigraph-testsuite"
 version = "0.4.0-alpha.1-dev"
 dependencies = [
  "anyhow",

@@ -26,28 +26,28 @@ jobs:
           echo -e "\n\n[target.aarch64-unknown-linux-gnu]\nlinker = \"aarch64-linux-gnu-gcc\"" >> .cargo/config.toml
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
-        working-directory: ./server
+        working-directory: ./cli
       - run: cargo build --release --target aarch64-unknown-linux-gnu
-        working-directory: ./server
+        working-directory: ./cli
         env:
           BINDGEN_EXTRA_CLANG_ARGS: --sysroot /usr/aarch64-linux-gnu
       - uses: actions/upload-artifact@v3
         with:
-          name: oxigraph_server_x86_64_linux_gnu
-          path: target/release/oxigraph_server
+          name: oxigraph_x86_64_linux_gnu
+          path: target/release/oxigraph
       - uses: actions/upload-artifact@v3
         with:
-          name: oxigraph_server_aarch64_linux_gnu
-          path: target/aarch64-unknown-linux-gnu/release/oxigraph_server
-      - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_linux_gnu
+          name: oxigraph_aarch64_linux_gnu
+          path: target/aarch64-unknown-linux-gnu/release/oxigraph
+      - run: mv target/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_x86_64_linux_gnu
         if: github.event_name == 'release'
-      - run: mv target/aarch64-unknown-linux-gnu/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_aarch64_linux_gnu
+      - run: mv target/aarch64-unknown-linux-gnu/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_aarch64_linux_gnu
         if: github.event_name == 'release'
       - uses: softprops/action-gh-release@v1
         with:
           files: |
-            oxigraph_server_${{ github.event.release.tag_name }}_x86_64_linux_gnu
-            oxigraph_server_${{ github.event.release.tag_name }}_aarch64_linux_gnu
+            oxigraph_${{ github.event.release.tag_name }}_x86_64_linux_gnu
+            oxigraph_${{ github.event.release.tag_name }}_aarch64_linux_gnu
         if: github.event_name == 'release'
 
   binary_mac:
@@ -63,26 +63,26 @@ jobs:
       - run: rustup update && rustup target add aarch64-apple-darwin
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
-        working-directory: ./server
+        working-directory: ./cli
       - run: cargo build --release --target aarch64-apple-darwin
-        working-directory: ./server
+        working-directory: ./cli
       - uses: actions/upload-artifact@v3
         with:
-          name: oxigraph_server_x86_64_apple
-          path: target/release/oxigraph_server
+          name: oxigraph_x86_64_apple
+          path: target/release/oxigraph
       - uses: actions/upload-artifact@v3
         with:
-          name: oxigraph_server_aarch64_apple
-          path: target/aarch64-apple-darwin/release/oxigraph_server
-      - run: mv target/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
+          name: oxigraph_aarch64_apple
+          path: target/aarch64-apple-darwin/release/oxigraph
+      - run: mv target/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_x86_64_apple
         if: github.event_name == 'release'
-      - run: mv target/aarch64-apple-darwin/release/oxigraph_server oxigraph_server_${{ github.event.release.tag_name }}_aarch64_apple
+      - run: mv target/aarch64-apple-darwin/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_aarch64_apple
         if: github.event_name == 'release'
       - uses: softprops/action-gh-release@v1
         with:
           files: |
-            oxigraph_server_${{ github.event.release.tag_name }}_x86_64_apple
-            oxigraph_server_${{ github.event.release.tag_name }}_aarch64_apple
+            oxigraph_${{ github.event.release.tag_name }}_x86_64_apple
+            oxigraph_${{ github.event.release.tag_name }}_aarch64_apple
         if: github.event_name == 'release'
 
   binary_windows:
@@ -95,16 +95,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: cargo build --release
-        working-directory: ./server
+        working-directory: ./cli
       - uses: actions/upload-artifact@v3
         with:
-          name: oxigraph_server_x86_64_windows_msvc
-          path: target/release/oxigraph_server.exe
-      - run: mv target/release/oxigraph_server.exe oxigraph_server_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
+          name: oxigraph_x86_64_windows_msvc
+          path: target/release/oxigraph.exe
+      - run: mv target/release/oxigraph.exe oxigraph_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
         if: github.event_name == 'release'
       - uses: softprops/action-gh-release@v1
         with:
-          files: oxigraph_server_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
+          files: oxigraph_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
         if: github.event_name == 'release'
 
   wheel_linux:
@@ -337,7 +337,7 @@ jobs:
         working-directory: ./lib
         continue-on-error: true
       - run: cargo publish
-        working-directory: ./server
+        working-directory: ./cli
 
   homebrew:
     if: "github.event_name == 'release' && !contains('-', github.event.release.tag_name)"

@@ -51,7 +51,7 @@ jobs:
       - run: cargo clippy
         working-directory: ./python
       - run: cargo clippy
-        working-directory: ./server
+        working-directory: ./cli
       - run: cargo clippy
         working-directory: ./testsuite
 
@@ -119,7 +119,7 @@ jobs:
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./python
       - run: cargo clippy -- -D warnings -D clippy::all
-        working-directory: ./server
+        working-directory: ./cli
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./testsuite
 
@@ -164,7 +164,7 @@ jobs:
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-semver-checks || true
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
 
   test_linux:
     runs-on: ubuntu-latest
@@ -187,7 +187,7 @@ jobs:
       - run: rustup update && rustup override set nightly
       - run: sudo apt install -y llvm
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
+      - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
         env:
           RUST_BACKTRACE: 1
           RUSTFLAGS: -Z sanitizer=address
@@ -215,7 +215,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@wasmtime
       - run: cargo install cargo-wasi || true
-      - run: cargo wasi test --workspace --exclude oxigraph_js --exclude oxigraph_server --exclude oxigraph_testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
+      - run: cargo wasi test --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
         env:
           RUST_BACKTRACE: 1
 

@@ -1,5 +1,5 @@
 [package]
-name = "oxigraph_testsuite"
+name = "oxigraph-testsuite"
 version.workspace = true
 authors.workspace = true
 license.workspace  = true

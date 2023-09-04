@@ -1,17 +1,15 @@
-Oxigraph Server
-===============
+Oxigraph CLI
+============
 
-[![Latest Version](https://img.shields.io/crates/v/oxigraph_server.svg)](https://crates.io/crates/oxigraph_server)
-[![Crates.io downloads](https://img.shields.io/crates/d/oxigraph_server)](https://crates.io/crates/oxigraph_server)
+[![Latest Version](https://img.shields.io/crates/v/oxigraph-cli.svg)](https://crates.io/crates/oxigraph-cli)
+[![Crates.io downloads](https://img.shields.io/crates/d/oxigraph-cli)](https://crates.io/crates/oxigraph-cli)
 [![Conda](https://img.shields.io/conda/vn/conda-forge/oxigraph-server)](https://anaconda.org/conda-forge/oxigraph-server)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
-Oxigraph Server is a standalone HTTP server providing a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
-
-Its goal is to provide a compliant, safe, and fast graph database based on the [RocksDB](https://rocksdb.org/) key-value store.
-It is written in Rust.
-It also provides a set of utility functions for reading, writing, and processing RDF files.
+Oxigraph CLI is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
+It is packaged as a command line tool allowing to manipulate an RDF files, query them using SPARQL...
+It also allows to spawn a HTTP server on top of the database.
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
@@ -36,15 +34,15 @@ A preliminary benchmark [is provided](../bench/README.md).
 
 You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
-To download, build and install the latest released version run `cargo install oxigraph_server`.
+To download, build and install the latest released version run `cargo install oxigraph-cli`.
 There is no need to clone the git repository.
 
-To compile the server from source, clone this git repository including its submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`), and execute `cargo build --release` in the `server` directory to compile the full server after having downloaded its dependencies.
-It will create a fat binary in `target/release/oxigraph_server`.
+To compile the command line tool from source, clone this git repository including its submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`), and execute `cargo build --release` in the `cli` directory to compile the full binary after having downloaded its dependencies.
+It will create a fat binary in `target/release/oxigraph`.
 
 ## Usage
 
-Run `oxigraph_server serve --location my_data_storage_directory` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored. It listens by default on `localhost:7878`.
+Run `oxigraph serve --location my_data_storage_directory` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored. It listens by default on `localhost:7878`.
 
 The server provides an HTML UI, based on [YASGUI](https://yasgui.triply.cc), with a form to execute SPARQL requests.
 
@@ -78,10 +76,10 @@ It provides the following REST actions:
   ```
   will add the N-Quads file `MY_FILE.nq` to the server dataset.
 
-Use `oxigraph_server --help` to see the possible options when starting the server.
+Use `oxigraph --help` to see the possible options when starting the server.
 
 It is also possible to load RDF data offline using bulk loading:
-`oxigraph_server load --location my_data_storage_directory --file my_file.nq`
+`oxigraph load --location my_data_storage_directory --file my_file.nq`
 
 ## Using a Docker image
 
@@ -217,14 +215,14 @@ To install Oxigraph server using Homebrew do:
 brew tap oxigraph/oxigraph
 brew install oxigraph
 ```
-It installs the `oxigraph_server` binary. [See the usage documentation to know how to use it](#usage).
+It installs the `oxigraph` binary. [See the usage documentation to know how to use it](#usage).
 
 
 ## Systemd
 
 It is possible to run Oxigraph in the background using systemd.
 
-For that, you can use the following `oxigraph_server.service` file (it might be inserted into `/etc/systemd/system/` or `$HOME/.config/systemd/user`):
+For that, you can use the following `oxigraph.service` file (it might be inserted into `/etc/systemd/system/` or `$HOME/.config/systemd/user`):
 ```ini
 [Unit]
 Description=Oxigraph database server
@@ -233,7 +231,7 @@ Wants=network-online.target
 
 [Service]
 Type=notify
-ExecStart=/PATH/TO/oxigraph_server serve --location /PATH/TO/OXIGRAPH/DATA
+ExecStart=/PATH/TO/oxigraph serve --location /PATH/TO/OXIGRAPH/DATA
 
 [Install]
 WantedBy=multi-user.target
@@ -242,8 +240,8 @@ WantedBy=multi-user.target
 ## Migration guide
 
 ### From 0.2 to 0.3
-* The cli API has been completely rewritten. To start the server run `oxigraph_server serve --location MY_STORAGE` instead of `oxigraph_server --file MY_STORAGE`.
-* Fast data bulk loading is not supported using `oxigraph_server load --location MY_STORAGE --file MY_FILE`. The file format is guessed from the extension (`.nt`, `.ttl`, `.nq`...).
+* The cli API has been completely rewritten. To start the server run `oxigraph serve --location MY_STORAGE` instead of `oxigraph --file MY_STORAGE`.
+* Fast data bulk loading is not supported using `oxigraph load --location MY_STORAGE --file MY_FILE`. The file format is guessed from the extension (`.nt`, `.ttl`, `.nq`...).
 * [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is now implemented.
 * All operations are now transactional using the "repeatable read" isolation level:
   the store only exposes changes that have been "committed" (i.e. no partial writes)
