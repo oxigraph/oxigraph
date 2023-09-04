@@ -392,8 +392,9 @@ impl PyStore {
         } else {
             None
         };
-        let input = if let Ok(path) = input.extract::<PathBuf>(py) {
-            PyReadable::from_file(&path, py).map_err(map_io_err)?
+        let file_path = input.extract::<PathBuf>(py).ok();
+        let input = if let Some(file_path) = &file_path {
+            PyReadable::from_file(file_path, py).map_err(map_io_err)?
         } else {
             PyReadable::from_data(input, py)
         };
@@ -404,7 +405,7 @@ impl PyStore {
             } else {
                 self.inner.load_dataset(input, format, base_iri)
             }
-            .map_err(map_loader_error)
+            .map_err(|e| map_loader_error(e, file_path))
         })
     }
 
@@ -460,8 +461,9 @@ impl PyStore {
         } else {
             None
         };
-        let input = if let Ok(path) = input.extract::<PathBuf>(py) {
-            PyReadable::from_file(&path, py).map_err(map_io_err)?
+        let file_path = input.extract::<PathBuf>(py).ok();
+        let input = if let Some(file_path) = &file_path {
+            PyReadable::from_file(file_path, py).map_err(map_io_err)?
         } else {
             PyReadable::from_data(input, py)
         };
@@ -475,7 +477,7 @@ impl PyStore {
                     .bulk_loader()
                     .load_dataset(input, format, base_iri)
             }
-            .map_err(map_loader_error)
+            .map_err(|e| map_loader_error(e, file_path))
         })
     }
 
@@ -833,10 +835,10 @@ pub fn map_storage_error(error: StorageError) -> PyErr {
     }
 }
 
-pub fn map_loader_error(error: LoaderError) -> PyErr {
+pub fn map_loader_error(error: LoaderError, file_path: Option<PathBuf>) -> PyErr {
     match error {
         LoaderError::Storage(error) => map_storage_error(error),
-        LoaderError::Parsing(error) => map_parse_error(error),
+        LoaderError::Parsing(error) => map_parse_error(error, file_path),
         LoaderError::InvalidBaseIri { .. } => PyValueError::new_err(error.to_string()),
     }
 }
