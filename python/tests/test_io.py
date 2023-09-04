@@ -1,3 +1,4 @@
+import sys
 import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from tempfile import NamedTemporaryFile, TemporaryFile
@@ -82,6 +83,20 @@ class TestParse(unittest.TestCase):
             ),
             [EXAMPLE_QUAD],
         )
+
+    def test_parse_syntax_error(self) -> None:
+        with NamedTemporaryFile() as fp:
+            fp.write(b"@base <http://example.com/> .\n")
+            fp.write(b'<foo> "p" "1"')
+            fp.flush()
+            with self.assertRaises(SyntaxError) as ctx:
+                list(parse(fp.name, "text/turtle"))
+            self.assertEqual(ctx.exception.filename, fp.name)
+            self.assertEqual(ctx.exception.lineno, 2)
+            self.assertEqual(ctx.exception.offset, 7)
+            if sys.version_info >= (3, 10):
+                self.assertEqual(ctx.exception.end_lineno, 2)
+                self.assertEqual(ctx.exception.end_offset, 10)
 
     def test_parse_without_named_graphs(self) -> None:
         with self.assertRaises(SyntaxError) as _:

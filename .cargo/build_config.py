@@ -53,17 +53,19 @@ FLAGS_BLACKLIST = {
     "-Wclippy::std-instead-of-core",
     "-Wclippy::shadow-reuse",
     "-Wclippy::shadow-unrelated",
-    "-Wclippy::string-slice", # TODO: might be nice
+    "-Wclippy::string-slice",  # TODO: might be nice
     "-Wclippy::too-many-lines",
     "-Wclippy::separated-literal-suffix",
-    "-Wclippy::unreachable", # TODO: might be nice
-    "-Wclippy::unwrap-used", # TODO: might be nice to use expect instead
+    "-Wclippy::unreachable",  # TODO: might be nice
+    "-Wclippy::unwrap-used",  # TODO: might be nice to use expect instead
     "-Wclippy::wildcard-enum-match-arm",  # TODO: might be nice
     "-Wclippy::wildcard-imports",  # TODO: might be nice
 }
 
 build_flags = set(DEFAULT_BUILD_FLAGS)
-with urlopen(f"https://rust-lang.github.io/rust-clippy/rust-{MSRV}/lints.json") as response:
+with urlopen(
+    f"https://rust-lang.github.io/rust-clippy/rust-{MSRV}/lints.json"
+) as response:
     for lint in json.load(response):
         if lint["level"] == "allow" and lint["group"] != "nursery":
             build_flags.add(f"-Wclippy::{lint['id'].replace('_', '-')}")
@@ -78,5 +80,5 @@ with open("./config.toml", "wt") as fp:
     fp.write("[build]\n")
     fp.write("rustflags = [\n")
     for flag in sorted(build_flags):
-        fp.write(f"    \"{flag}\",\n")
+        fp.write(f'    "{flag}",\n')
     fp.write("]\n")

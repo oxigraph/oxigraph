@@ -1,4 +1,4 @@
-use crate::io::{allow_threads_unsafe, map_io_err};
+use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error};
 use crate::map_storage_error;
 use crate::model::*;
 use oxigraph::model::Term;
@@ -233,10 +233,7 @@ pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     match error {
         EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
         EvaluationError::Storage(error) => map_storage_error(error),
-        EvaluationError::GraphParsing(error) => match error {
-            oxigraph::io::ParseError::Syntax(error) => PySyntaxError::new_err(error.to_string()),
-            oxigraph::io::ParseError::Io(error) => map_io_err(error),
-        },
+        EvaluationError::GraphParsing(error) => map_parse_error(error, None),
         EvaluationError::ResultsParsing(error) => match error {
             oxigraph::sparql::results::ParseError::Syntax(error) => {
                 PySyntaxError::new_err(error.to_string())

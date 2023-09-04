@@ -12,6 +12,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(parse))?;
@@ -62,8 +63,9 @@ pub fn parse(
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     let format = rdf_format(format)?;
-    let input = if let Ok(path) = input.extract::<PathBuf>(py) {
-        PyReadable::from_file(&path, py).map_err(map_io_err)?
+    let file_path = input.extract::<PathBuf>(py).ok();
+    let input = if let Some(file_path) = &file_path {
+        PyReadable::from_file(file_path, py).map_err(map_io_err)?
     } else {
         PyReadable::from_data(input, py)
     };
@@ -81,6 +83,7 @@ pub fn parse(
     }
     Ok(PyQuadReader {
         inner: parser.parse_read(input),
+        file_path,
     }
     .into_py(py))
 }
@@ -151,6 +154,7 @@ pub fn serialize(input: &PyAny, output: PyObject, format: &str, py: Python<'_>) 
 #[pyclass(name = "QuadReader", module = "pyoxigraph")]
 pub struct PyQuadReader {
     inner: FromReadQuadReader<PyReadable>,
+    file_path: Option<PathBuf>,
 }
 
 #[pymethods]
@@ -163,7 +167,10 @@ impl PyQuadReader {
         py.allow_threads(|| {
             self.inner
                 .next()
-                .map(|q| Ok(q.map_err(map_parse_error)?.into()))
+                .map(|q| {
+                    Ok(q.map_err(|e| map_parse_error(e, self.file_path.clone()))?
+                        .into())
+                })
                 .transpose()
         })
     }
@@ -314,9 +321,38 @@ pub fn map_io_err(error: io::Error) -> PyErr {
     }
 }
 
-pub fn map_parse_error(error: ParseError) -> PyErr {
+pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
     match error {
-        ParseError::Syntax(error) => PySyntaxError::new_err(error.to_string()),
+        ParseError::Syntax(error) => {
+            // Python 3.9 does not support end line and end column
+            if python_version() >= (3, 10, 0) {
+                let params = if let Some(location) = error.location() {
+                    (
+                        file_path,
+                        Some(location.start.line + 1),
+                        Some(location.start.column + 1),
+                        None::<Vec<u8>>,
+                        Some(location.end.line + 1),
+                        Some(location.end.column + 1),
+                    )
+                } else {
+                    (None, None, None, None, None, None)
+                };
+                PySyntaxError::new_err((error.to_string(), params))
+            } else {
+                let params = if let Some(location) = error.location() {
+                    (
+                        file_path,
+                        Some(location.start.line + 1),
+                        Some(location.start.column + 1),
+                        None::<Vec<u8>>,
+                    )
+                } else {
+                    (None, None, None, None)
+                };
+                PySyntaxError::new_err((error.to_string(), params))
+            }
+        }
         ParseError::Io(error) => map_io_err(error),
     }
 }
@@ -344,4 +380,14 @@ pub fn allow_threads_unsafe<T>(f: impl FnOnce() -> T) -> T {
     let tstate = unsafe { pyo3::ffi::PyEval_SaveThread() };
     let _guard = RestoreGuard { tstate };
     f()
+}
+
+fn python_version() -> (u8, u8, u8) {
+    static VERSION: OnceLock<(u8, u8, u8)> = OnceLock::new();
+    *VERSION.get_or_init(|| {
+        Python::with_gil(|py| {
+            let v = py.version_info();
+            (v.major, v.minor, v.patch)
+        })
+    })
 }
