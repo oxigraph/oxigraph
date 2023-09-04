@@ -13,7 +13,7 @@ members = [
     "lib/sparql-smith",
     "oxrocksdb-sys",
     "python",
-    "server",
+    "cli",
     "testsuite"
 ]
 resolver = "2"
@@ -30,5 +30,5 @@ rust-version = "1.70"
 lto = true
 codegen-units = 1
 
-[profile.release.package.oxigraph_js]
+[profile.release.package.oxigraph-js]
 opt-level = "z"

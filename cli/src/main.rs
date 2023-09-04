@@ -38,8 +38,8 @@ const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const LOGO: &str = include_str!("../logo.svg");
 
 #[derive(Parser)]
-#[command(about, version)]
-/// Oxigraph SPARQL server.
+#[command(about, version, name = "oxigraph")]
+/// Oxigraph command line toolkit and SPARQL HTTP server.
 struct Args {
     #[command(subcommand)]
     command: Command,
@@ -1830,7 +1830,7 @@ mod tests {
     fn cli_command() -> Result<Command> {
         Ok(Command::from_std(
             escargot::CargoBuild::new()
-                .bin(env!("CARGO_PKG_NAME"))
+                .bin("oxigraph")
                 .manifest_path(format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
                 .run()?
                 .command(),

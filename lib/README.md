@@ -14,7 +14,7 @@ It also provides a set of utility functions for reading, writing, and processing
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
-Oxigraph also provides [a standalone HTTP server](https://crates.io/crates/oxigraph_server) and [a Python library](https://pyoxigraph.readthedocs.io/) based on this library.
+Oxigraph also provides [a standalone HTTP server](https://crates.io/crates/oxigraph-cli) and [a Python library](https://pyoxigraph.readthedocs.io/) based on this library.
 
 
 Oxigraph implements the following specifications:

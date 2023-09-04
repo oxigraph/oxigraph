@@ -8,18 +8,18 @@ RUN apt-get update && \
         rustup target add aarch64-unknown-linux-gnu ; \
     fi
 COPY . /oxigraph
-WORKDIR /oxigraph/server
+WORKDIR /oxigraph/cli
 RUN if [ "$BUILDARCH" != "$TARGETARCH" ] && [ "$TARGETARCH" = "arm64" ] ; \
     then \
         export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc && \
         export BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/aarch64-linux-gnu" && \
         cargo build --release --target aarch64-unknown-linux-gnu && \
-        mv /oxigraph/target/aarch64-unknown-linux-gnu/release/oxigraph_server /oxigraph/target/release/oxigraph_server ; \
+        mv /oxigraph/target/aarch64-unknown-linux-gnu/release/oxigraph /oxigraph/target/release/oxigraph ; \
     else \
         cargo build --release ; \
     fi
 
 FROM --platform=$TARGETPLATFORM gcr.io/distroless/cc-debian11
-COPY --from=builder /oxigraph/target/release/oxigraph_server /usr/local/bin/oxigraph_server
-ENTRYPOINT [ "/usr/local/bin/oxigraph_server" ]
+COPY --from=builder /oxigraph/target/release/oxigraph /usr/local/bin/oxigraph
+ENTRYPOINT [ "/usr/local/bin/oxigraph" ]
 CMD [ "serve", "--location", "/data", "--bind", "0.0.0.0:7878" ]

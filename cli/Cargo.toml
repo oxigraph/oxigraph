@@ -1,18 +1,22 @@
 [package]
-name = "oxigraph_server"
+name = "oxigraph-cli"
 version.workspace  = true
 authors.workspace  = true
 license.workspace  = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["command-line-utilities", "database"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/server"
-homepage = "https://oxigraph.org/server/"
+repository = "https://github.com/oxigraph/oxigraph/tree/main/cli"
+homepage = "https://oxigraph.org/cli/"
 description = """
-Oxigraph SPARQL HTTP server
+Oxigraph command line toolkit and SPARQL HTTP server
 """
 edition.workspace  = true
 rust-version.workspace  = true
+
+[[bin]]
+name = "oxigraph"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
