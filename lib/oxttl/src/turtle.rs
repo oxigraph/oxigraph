@@ -118,29 +118,29 @@ impl TurtleParser {
     /// Count the number of people:
     /// ```
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
-    /// use oxttl::{ParseError, TurtleParser};
+    /// use oxttl::TurtleParser;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<(), ParseError> {
-    ///     let file = b"@base <http://example.com/> .
-    ///     @prefix schema: <http://schema.org/> .
-    ///     <foo> a schema:Person ;
-    ///         schema:name \"Foo\" .
-    ///     <bar> a schema:Person ;
-    ///         schema:name \"Bar\" .";
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .
+    /// <bar> a schema:Person ;
+    ///     schema:name \"Bar\" .";
     ///
-    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-    ///     let mut count = 0;
-    ///     let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
-    ///     while let Some(triple) = parser.next().await {
-    ///         let triple = triple?;
-    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-    ///             count += 1;
-    ///         }
+    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let mut count = 0;
+    /// let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
+    /// while let Some(triple) = parser.next().await {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///         count += 1;
     ///     }
-    ///     assert_eq!(2, count);
-    ///     Ok(())
     /// }
+    /// assert_eq!(2, count);
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
@@ -231,6 +231,33 @@ pub struct FromReadTurtleReader<R: Read> {
     inner: FromReadIterator<R, TriGRecognizer>,
 }
 
+impl<R: Read> FromReadTurtleReader<R> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns the mapping from prefix name to prefix value.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::TurtleParser;
+    ///
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = TurtleParser::new().parse_read(file.as_ref());
+    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
+        &self.inner.parser.context.prefixes
+    }
+}
+
 impl<R: Read> Iterator for FromReadTurtleReader<R> {
     type Item = Result<Triple, ParseError>;
 
@@ -244,29 +271,29 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 /// Count the number of people:
 /// ```
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
-/// use oxttl::{ParseError, TurtleParser};
+/// use oxttl::TurtleParser;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<(), ParseError> {
-///     let file = b"@base <http://example.com/> .
-///     @prefix schema: <http://schema.org/> .
-///     <foo> a schema:Person ;
-///         schema:name \"Foo\" .
-///     <bar> a schema:Person ;
-///         schema:name \"Bar\" .";
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), oxttl::ParseError> {
+/// let file = b"@base <http://example.com/> .
+/// @prefix schema: <http://schema.org/> .
+/// <foo> a schema:Person ;
+///     schema:name \"Foo\" .
+/// <bar> a schema:Person ;
+///     schema:name \"Bar\" .";
 ///
-///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-///     let mut count = 0;
-///     let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
-///     while let Some(triple) = parser.next().await {
-///         let triple = triple?;
-///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-///             count += 1;
-///         }
+/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let mut count = 0;
+/// let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
+/// while let Some(triple) = parser.next().await {
+///     let triple = triple?;
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///         count += 1;
 ///     }
-///     assert_eq!(2, count);
-///     Ok(())
 /// }
+/// assert_eq!(2, count);
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
@@ -279,6 +306,34 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Triple, ParseError>> {
         Some(self.inner.next().await?.map(Into::into))
+    }
+
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns the mapping from prefix name to prefix value.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::TurtleParser;
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = TurtleParser::new().parse_tokio_async_read(file.as_ref());
+    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
+        &self.inner.parser.context.prefixes
     }
 }
 
@@ -347,6 +402,32 @@ impl LowLevelTurtleReader {
     pub fn read_next(&mut self) -> Option<Result<Triple, SyntaxError>> {
         Some(self.parser.read_next()?.map(Into::into))
     }
+
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns the mapping from prefix name to prefix value.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::TurtleParser;
+    ///
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = TurtleParser::new().parse();
+    /// reader.extend_from_slice(file);
+    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.read_next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
+        &self.parser.context.prefixes
+    }
 }
 
 /// A [Turtle](https://www.w3.org/TR/turtle/) serializer.
@@ -411,22 +492,21 @@ impl TurtleSerializer {
     /// ```
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
-    /// use std::io::Result;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<()> {
-    ///     let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
-    ///     writer.write_triple(TripleRef::new(
-    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-    ///     )).await?;
-    ///     assert_eq!(
-    ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-    ///         writer.finish().await?.as_slice()
-    ///     );
-    ///     Ok(())
-    /// }
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> std::io::Result<()> {
+    /// let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    /// writer.write_triple(TripleRef::new(
+    ///     NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    /// )).await?;
+    /// assert_eq!(
+    /// b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+    ///     writer.finish().await?.as_slice()
+    /// );
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
@@ -506,22 +586,21 @@ impl<W: Write> ToWriteTurtleWriter<W> {
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
-/// use std::io::Result;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<()> {
-///     let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
-///     writer.write_triple(TripleRef::new(
-///         NamedNodeRef::new_unchecked("http://example.com#me"),
-///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///         NamedNodeRef::new_unchecked("http://schema.org/Person")
-///     )).await?;
-///     assert_eq!(
-///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-///         writer.finish().await?.as_slice()
-///     );
-///     Ok(())
-/// }
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> std::io::Result<()> {
+/// let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
+/// writer.write_triple(TripleRef::new(
+///     NamedNodeRef::new_unchecked("http://example.com#me"),
+///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///     NamedNodeRef::new_unchecked("http://schema.org/Person")
+/// )).await?;
+/// assert_eq!(
+///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///     writer.finish().await?.as_slice()
+/// );
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]

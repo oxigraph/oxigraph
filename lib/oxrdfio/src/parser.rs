@@ -272,19 +272,19 @@ impl RdfParser {
     /// Reads are buffered.
     ///
     /// ```
-    /// use oxrdfio::{RdfFormat, RdfParser, ParseError};
+    /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<(), ParseError> {
-    ///     let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxrdfio::ParseError> {
+    /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
-    ///     let parser = RdfParser::from_format(RdfFormat::NTriples);
-    ///     let mut reader = parser.parse_tokio_async_read(file.as_bytes());
-    ///     if let Some(quad) = reader.next().await {
-    ///         assert_eq!(quad?.subject.to_string(), "<http://example.com/s>");
-    ///     }
-    ///     Ok(())
+    /// let parser = RdfParser::from_format(RdfFormat::NTriples);
+    /// let mut reader = parser.parse_tokio_async_read(file.as_bytes());
+    /// if let Some(quad) = reader.next().await {
+    ///     assert_eq!(quad?.subject.to_string(), "<http://example.com/s>");
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
@@ -390,19 +390,19 @@ impl<R: Read> Iterator for FromReadQuadReader<R> {
 /// Reads are buffered.
 ///
 /// ```
-/// use oxrdfio::{RdfFormat, RdfParser, ParseError};
+/// use oxrdfio::{RdfFormat, RdfParser};
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<(), ParseError> {
-///     let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), oxrdfio::ParseError> {
+/// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
-///     let parser = RdfParser::from_format(RdfFormat::NTriples);
-///     let mut reader = parser.parse_tokio_async_read(file.as_bytes());
-///     if let Some(quad) = reader.next().await {
-///         assert_eq!(quad?.subject.to_string(), "<http://example.com/s>");
-///     }
-///     Ok(())
+/// let parser = RdfParser::from_format(RdfFormat::NTriples);
+/// let mut reader = parser.parse_tokio_async_read(file.as_bytes());
+/// if let Some(quad) = reader.next().await {
+///     assert_eq!(quad?.subject.to_string(), "<http://example.com/s>");
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[must_use]
 #[cfg(feature = "async-tokio")]

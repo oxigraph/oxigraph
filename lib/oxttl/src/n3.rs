@@ -272,30 +272,29 @@ impl N3Parser {
     /// ```
     /// use oxrdf::{NamedNode, vocab::rdf};
     /// use oxttl::n3::{N3Parser, N3Term};
-    /// use oxttl::ParseError;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<(), ParseError> {
-    ///     let file = b"@base <http://example.com/> .
-    ///     @prefix schema: <http://schema.org/> .
-    ///     <foo> a schema:Person ;
-    ///         schema:name \"Foo\" .
-    ///     <bar> a schema:Person ;
-    ///         schema:name \"Bar\" .";
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .
+    /// <bar> a schema:Person ;
+    ///     schema:name \"Bar\" .";
     ///
-    ///     let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
-    ///     let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
-    ///     let mut count = 0;
-    ///     let mut parser = N3Parser::new().parse_tokio_async_read(file.as_ref());
-    ///     while let Some(triple) = parser.next().await {
-    ///         let triple = triple?;
-    ///         if triple.predicate == rdf_type && triple.object == schema_person {
-    ///             count += 1;
-    ///         }
+    /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
+    /// let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
+    /// let mut count = 0;
+    /// let mut parser = N3Parser::new().parse_tokio_async_read(file.as_ref());
+    /// while let Some(triple) = parser.next().await {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf_type && triple.object == schema_person {
+    ///         count += 1;
     ///     }
-    ///     assert_eq!(2, count);
-    ///     Ok(())
     /// }
+    /// assert_eq!(2, count);
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
@@ -382,6 +381,33 @@ pub struct FromReadN3Reader<R: Read> {
     inner: FromReadIterator<R, N3Recognizer>,
 }
 
+impl<R: Read> FromReadN3Reader<R> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns the mapping from prefix name to prefix value.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = N3Parser::new().parse_read(file.as_ref());
+    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
+        &self.inner.parser.context.prefixes
+    }
+}
+
 impl<R: Read> Iterator for FromReadN3Reader<R> {
     type Item = Result<N3Quad, ParseError>;
 
@@ -396,30 +422,29 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 /// ```
 /// use oxrdf::{NamedNode, vocab::rdf};
 /// use oxttl::n3::{N3Parser, N3Term};
-/// use oxttl::ParseError;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<(), ParseError> {
-///     let file = b"@base <http://example.com/> .
-///     @prefix schema: <http://schema.org/> .
-///     <foo> a schema:Person ;
-///         schema:name \"Foo\" .
-///     <bar> a schema:Person ;
-///         schema:name \"Bar\" .";
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), oxttl::ParseError> {
+/// let file = b"@base <http://example.com/> .
+/// @prefix schema: <http://schema.org/> .
+/// <foo> a schema:Person ;
+///     schema:name \"Foo\" .
+/// <bar> a schema:Person ;
+///     schema:name \"Bar\" .";
 ///
-///     let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
-///     let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
-///     let mut count = 0;
-///     let mut parser = N3Parser::new().parse_tokio_async_read(file.as_ref());
-///     while let Some(triple) = parser.next().await {
-///         let triple = triple?;
-///         if triple.predicate == rdf_type && triple.object == schema_person {
-///             count += 1;
-///         }
+/// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
+/// let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
+/// let mut count = 0;
+/// let mut parser = N3Parser::new().parse_tokio_async_read(file.as_ref());
+/// while let Some(triple) = parser.next().await {
+///     let triple = triple?;
+///     if triple.predicate == rdf_type && triple.object == schema_person {
+///         count += 1;
 ///     }
-///     assert_eq!(2, count);
-///     Ok(())
 /// }
+/// assert_eq!(2, count);
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
@@ -432,6 +457,34 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<N3Quad, ParseError>> {
         Some(self.inner.next().await?.map(Into::into))
+    }
+
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns the mapping from prefix name to prefix value.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = N3Parser::new().parse_tokio_async_read(file.as_ref());
+    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
+        &self.inner.parser.context.prefixes
     }
 }
 
@@ -501,6 +554,32 @@ impl LowLevelN3Reader {
     pub fn read_next(&mut self) -> Option<Result<N3Quad, SyntaxError>> {
         self.parser.read_next()
     }
+
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns the mapping from prefix name to prefix value.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = N3Parser::new().parse();
+    /// reader.extend_from_slice(file);
+    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.read_next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
+        &self.parser.context.prefixes
+    }
 }
 
 #[derive(Clone)]
@@ -511,16 +590,20 @@ enum Predicate {
 
 struct N3Recognizer {
     stack: Vec<N3State>,
-    lexer_options: N3LexerOptions,
-    prefixes: HashMap<String, Iri<String>>,
     terms: Vec<N3Term>,
     predicates: Vec<Predicate>,
     contexts: Vec<BlankNode>,
 }
 
+struct N3RecognizerContext {
+    lexer_options: N3LexerOptions,
+    prefixes: HashMap<String, Iri<String>>,
+}
+
 impl RuleRecognizer for N3Recognizer {
     type TokenRecognizer = N3Lexer;
     type Output = N3Quad;
+    type Context = N3RecognizerContext;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
@@ -533,6 +616,7 @@ impl RuleRecognizer for N3Recognizer {
     fn recognize_next(
         mut self,
         token: N3Token,
+        context: &mut N3RecognizerContext,
         results: &mut Vec<N3Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
@@ -570,7 +654,7 @@ impl RuleRecognizer for N3Recognizer {
                         _ => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::Triples);
-                            self.recognize_next(token, results, errors)
+                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 },
@@ -579,12 +663,12 @@ impl RuleRecognizer for N3Recognizer {
                         self
                     } else  {
                         errors.push("A dot is expected at the end of N3 statements".into());
-                        self.recognize_next(token, results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 },
                 N3State::BaseExpectIri => match token {
                     N3Token::IriRef(iri) => {
-                        self.lexer_options.base_iri = Some(iri);
+                        context.lexer_options.base_iri = Some(iri);
                         self
                     }
                     _ => self.error(errors, "The BASE keyword should be followed by an IRI"),
@@ -600,7 +684,7 @@ impl RuleRecognizer for N3Recognizer {
                 },
                 N3State::PrefixExpectIri { name } => match token {
                     N3Token::IriRef(iri) => {
-                        self.prefixes.insert(name, iri);
+                        context.prefixes.insert(name, iri);
                         self
                     }
                     _ => self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI"),
@@ -609,25 +693,25 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::Triples => {
                     self.stack.push(N3State::TriplesMiddle);
                     self.stack.push(N3State::Path);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 N3State::TriplesMiddle => if matches!(token, N3Token::Punctuation("." | "]" | "}" | ")")) {
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 } else {
                     self.stack.push(N3State::TriplesEnd);
                     self.stack.push(N3State::PredicateObjectList);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 N3State::TriplesEnd => {
                     self.terms.pop();
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 // [10] 	predicateObjectList 	::= 	verb objectList ( ";" ( verb objectList) ? ) *
                 N3State::PredicateObjectList => {
                     self.stack.push(N3State::PredicateObjectListEnd);
                     self.stack.push(N3State::ObjectsList);
                     self.stack.push(N3State::Verb);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 N3State::PredicateObjectListEnd => {
                     self.predicates.pop();
@@ -635,25 +719,25 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::PredicateObjectListPossibleContinuation);
                         self
                     } else {
-                        self.recognize_next(token, results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 },
                 N3State::PredicateObjectListPossibleContinuation => if token == N3Token::Punctuation(";") {
                     self.stack.push(N3State::PredicateObjectListPossibleContinuation);
                     self
                 } else if matches!(token, N3Token::Punctuation(";" | "." | "}" | "]" | ")")) {
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 } else {
                     self.stack.push(N3State::PredicateObjectListEnd);
                     self.stack.push(N3State::ObjectsList);
                     self.stack.push(N3State::Verb);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 // [11] 	objectList 	::= 	object ( "," object) *
                 N3State::ObjectsList => {
                     self.stack.push(N3State::ObjectsListEnd);
                     self.stack.push(N3State::Path);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::ObjectsListEnd => {
                     let object = self.terms.pop().unwrap();
@@ -675,7 +759,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::Path);
                         self
                     } else {
-                        self.recognize_next(token, results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 },
                 // [12] 	verb 	::= 	predicate | "a" | ( "has" expression) | ( "is" expression "of") | "=" | "<=" | "=>"
@@ -715,16 +799,16 @@ impl RuleRecognizer for N3Recognizer {
                    _ => {
                         self.stack.push(N3State::AfterRegularVerb);
                         self.stack.push(N3State::Path);
-                        self.recognize_next(token, results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 }
                 N3State::AfterRegularVerb => {
                     self.predicates.push(Predicate::Regular(self.terms.pop().unwrap()));
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::AfterInvertedVerb => {
                     self.predicates.push(Predicate::Inverted(self.terms.pop().unwrap()));
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::AfterVerbIs => match token {
                     N3Token::PlainKeyword("of") => {
@@ -742,7 +826,7 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::Path => {
                     self.stack.push(N3State::PathFollowUp);
                     self.stack.push(N3State::PathItem);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::PathFollowUp => match token {
                     N3Token::Punctuation("!") => {
@@ -755,7 +839,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::PathItem);
                         self
                     }
-                   _ => self.recognize_next(token, results, errors)
+                   _ => self.recognize_next(token, context, results, errors)
                 },
                 N3State::PathAfterIndicator { is_inverse } => {
                     let predicate = self.terms.pop().unwrap();
@@ -764,7 +848,7 @@ impl RuleRecognizer for N3Recognizer {
                     results.push(if is_inverse { self.quad(current.clone(), predicate, previous) } else { self.quad(previous, predicate, current.clone())});
                     self.terms.push(current.into());
                     self.stack.push(N3State::PathFollowUp);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 // [18] 	pathItem 	::= 	iri | blankNode | quickVar | collection | blankNodePropertyList | iriPropertyList | literal | formula
                 // [19] 	literal 	::= 	rdfLiteral | numericLiteral | BOOLEAN_LITERAL
@@ -784,7 +868,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.terms.push(NamedNode::from(iri).into());
                             self
                         }
-                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
+                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
                             Ok(t) => {
                                 self.terms.push(t.into());
                                 self
@@ -852,14 +936,14 @@ impl RuleRecognizer for N3Recognizer {
                         self.terms.push(BlankNode::default().into());
                         self.stack.push(N3State::PropertyListEnd);
                         self.stack.push(N3State::PredicateObjectList);
-                        self.recognize_next(token, results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 }
                 N3State::PropertyListEnd => if token == N3Token::Punctuation("]") {
                     self
                 } else {
                     errors.push("blank node property lists should end with a ']'".into());
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::IriPropertyList => match token {
                     N3Token::IriRef(id) => {
@@ -868,7 +952,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.stack.push(N3State::PredicateObjectList);
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
+                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
                         Ok(t) => {
                             self.terms.push(t.into());
                             self.stack.push(N3State::PropertyListEnd);
@@ -890,7 +974,7 @@ impl RuleRecognizer for N3Recognizer {
                     self.terms.push(root.into());
                     self.stack.push(N3State::CollectionPossibleEnd);
                     self.stack.push(N3State::Path);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 N3State::CollectionPossibleEnd => {
                     let value = self.terms.pop().unwrap();
@@ -917,7 +1001,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.terms.push(new.into());
                         self.stack.push(N3State::CollectionPossibleEnd);
                         self.stack.push(N3State::Path);
-                        self.recognize_next(token, results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 }
                 N3State::LiteralPossibleSuffix { value } => {
@@ -932,7 +1016,7 @@ impl RuleRecognizer for N3Recognizer {
                         }
                        _ => {
                             self.terms.push(Literal::new_simple_literal(value).into());
-                            self.recognize_next(token, results, errors)
+                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 }
@@ -942,7 +1026,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.terms.push(Literal::new_typed_literal(value, datatype).into());
                             self
                         },
-                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &self.prefixes) {
+                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
                             Ok(datatype) =>{
                                 self.terms.push(Literal::new_typed_literal(value, datatype).into());
                                 self
@@ -950,7 +1034,7 @@ impl RuleRecognizer for N3Recognizer {
                             Err(e) => self.error(errors, e)
                         }
                        _ => {
-                            self.error(errors, "Expecting a datatype IRI after '^^, found TOKEN").recognize_next(token, results, errors)
+                            self.error(errors, "Expecting a datatype IRI after '^^, found TOKEN").recognize_next(token, context, results, errors)
                         }
                     }
                 }
@@ -984,7 +1068,7 @@ impl RuleRecognizer for N3Recognizer {
                        _ => {
                             self.stack.push(N3State::FormulaContentExpectDot);
                             self.stack.push(N3State::Triples);
-                            self.recognize_next(token, results, errors)
+                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 }
@@ -1001,7 +1085,7 @@ impl RuleRecognizer for N3Recognizer {
                        _ => {
                             errors.push("A dot is expected at the end of N3 statements".into());
                             self.stack.push(N3State::FormulaContent);
-                            self.recognize_next(token, results, errors)
+                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 }
@@ -1016,6 +1100,7 @@ impl RuleRecognizer for N3Recognizer {
 
     fn recognize_end(
         self,
+        _state: &mut N3RecognizerContext,
         _results: &mut Vec<Self::Output>,
         errors: &mut Vec<RuleRecognizerError>,
     ) {
@@ -1025,8 +1110,8 @@ impl RuleRecognizer for N3Recognizer {
         }
     }
 
-    fn lexer_options(&self) -> &N3LexerOptions {
-        &self.lexer_options
+    fn lexer_options(context: &N3RecognizerContext) -> &N3LexerOptions {
+        &context.lexer_options
     }
 }
 
@@ -1045,11 +1130,13 @@ impl N3Recognizer {
             ),
             N3Recognizer {
                 stack: vec![N3State::N3Doc],
-                lexer_options: N3LexerOptions { base_iri },
-                prefixes,
                 terms: Vec::new(),
                 predicates: Vec::new(),
                 contexts: Vec::new(),
+            },
+            N3RecognizerContext {
+                lexer_options: N3LexerOptions { base_iri },
+                prefixes,
             },
         )
     }

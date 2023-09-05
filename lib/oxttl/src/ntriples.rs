@@ -91,27 +91,27 @@ impl NTriplesParser {
     /// Count the number of people:
     /// ```
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
-    /// use oxttl::{ParseError, NTriplesParser};
+    /// use oxttl::NTriplesParser;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<(), ParseError> {
-    ///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
     ///
-    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-    ///     let mut count = 0;
-    ///     let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
-    ///     while let Some(triple) = parser.next().await {
-    ///         let triple = triple?;
-    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-    ///             count += 1;
-    ///         }
+    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let mut count = 0;
+    /// let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
+    /// while let Some(triple) = parser.next().await {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///         count += 1;
     ///     }
-    ///     assert_eq!(2, count);
-    ///     Ok(())
     /// }
+    /// assert_eq!(2, count);
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
@@ -212,27 +212,27 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 /// Count the number of people:
 /// ```
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
-/// use oxttl::{ParseError, NTriplesParser};
+/// use oxttl::NTriplesParser;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<(), ParseError> {
-///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), oxttl::ParseError> {
+/// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
 ///
-///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-///     let mut count = 0;
-///     let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
-///     while let Some(triple) = parser.next().await {
-///         let triple = triple?;
-///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-///             count += 1;
-///         }
+/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let mut count = 0;
+/// let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
+/// while let Some(triple) = parser.next().await {
+///     let triple = triple?;
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///         count += 1;
 ///     }
-///     assert_eq!(2, count);
-///     Ok(())
 /// }
+/// assert_eq!(2, count);
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
@@ -376,22 +376,21 @@ impl NTriplesSerializer {
     /// ```
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::NTriplesSerializer;
-    /// use std::io::Result;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<()> {
-    ///     let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
-    ///     writer.write_triple(TripleRef::new(
-    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-    ///     )).await?;
-    ///     assert_eq!(
-    ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-    ///         writer.finish().as_slice()
-    ///     );
-    ///     Ok(())
-    /// }
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> std::io::Result<()> {
+    /// let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    /// writer.write_triple(TripleRef::new(
+    ///     NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    /// )).await?;
+    /// assert_eq!(
+    ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+    ///     writer.finish().as_slice()
+    /// );
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
@@ -471,22 +470,21 @@ impl<W: Write> ToWriteNTriplesWriter<W> {
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::NTriplesSerializer;
-/// use std::io::Result;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<()> {
-///     let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
-///     writer.write_triple(TripleRef::new(
-///         NamedNodeRef::new_unchecked("http://example.com#me"),
-///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///         NamedNodeRef::new_unchecked("http://schema.org/Person")
-///     )).await?;
-///     assert_eq!(
-///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-///         writer.finish().as_slice()
-///     );
-///     Ok(())
-/// }
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> std::io::Result<()> {
+/// let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
+/// writer.write_triple(TripleRef::new(
+///     NamedNodeRef::new_unchecked("http://example.com#me"),
+///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///     NamedNodeRef::new_unchecked("http://schema.org/Person")
+/// )).await?;
+/// assert_eq!(
+///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///     writer.finish().as_slice()
+/// );
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]

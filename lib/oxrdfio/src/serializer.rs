@@ -114,23 +114,22 @@ impl RdfSerializer {
     /// ```
     /// use oxrdfio::{RdfFormat, RdfSerializer};
     /// use oxrdf::{Quad, NamedNode};
-    /// use std::io;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> io::Result<()> {
-    ///     let mut buffer = Vec::new();
-    ///     let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
-    ///     writer.write_quad(&Quad {
-    ///         subject: NamedNode::new_unchecked("http://example.com/s").into(),
-    ///         predicate: NamedNode::new_unchecked("http://example.com/p"),
-    ///         object: NamedNode::new_unchecked("http://example.com/o").into(),
-    ///         graph_name: NamedNode::new_unchecked("http://example.com/g").into()
-    ///     }).await?;
-    ///     writer.finish().await?;
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> std::io::Result<()> {
+    /// let mut buffer = Vec::new();
+    /// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
+    /// writer.write_quad(&Quad {
+    ///     subject: NamedNode::new_unchecked("http://example.com/s").into(),
+    ///     predicate: NamedNode::new_unchecked("http://example.com/p"),
+    ///     object: NamedNode::new_unchecked("http://example.com/o").into(),
+    ///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
+    /// }).await?;
+    /// writer.finish().await?;
     ///
-    ///     assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
-    ///     Ok(())
-    /// }
+    /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
@@ -239,23 +238,22 @@ impl<W: Write> ToWriteQuadWriter<W> {
 /// ```
 /// use oxrdfio::{RdfFormat, RdfSerializer};
 /// use oxrdf::{Quad, NamedNode};
-/// use std::io;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> io::Result<()> {
-///     let mut buffer = Vec::new();
-///     let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
-///     writer.write_quad(&Quad {
-///         subject: NamedNode::new_unchecked("http://example.com/s").into(),
-///         predicate: NamedNode::new_unchecked("http://example.com/p"),
-///         object: NamedNode::new_unchecked("http://example.com/o").into(),
-///         graph_name: NamedNode::new_unchecked("http://example.com/g").into()
-///     }).await?;
-///     writer.finish().await?;
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> std::io::Result<()> {
+/// let mut buffer = Vec::new();
+/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
+/// writer.write_quad(&Quad {
+///     subject: NamedNode::new_unchecked("http://example.com/s").into(),
+///     predicate: NamedNode::new_unchecked("http://example.com/p"),
+///     object: NamedNode::new_unchecked("http://example.com/o").into(),
+///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
+/// }).await?;
+/// writer.finish().await?;
 ///
-///     assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
-///     Ok(())
-/// }
+/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+/// # Ok(())
+/// # }
 /// ```
 #[must_use]
 #[cfg(feature = "async-tokio")]

@@ -9,13 +9,15 @@ use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
 
 pub struct NQuadsRecognizer {
     stack: Vec<NQuadsState>,
+    subjects: Vec<Subject>,
+    predicates: Vec<NamedNode>,
+    objects: Vec<Term>,
+}
+pub struct NQuadsRecognizerContext {
     with_graph_name: bool,
     #[cfg(feature = "rdf-star")]
     with_quoted_triples: bool,
     lexer_options: N3LexerOptions,
-    subjects: Vec<Subject>,
-    predicates: Vec<NamedNode>,
-    objects: Vec<Term>,
 }
 
 enum NQuadsState {
@@ -39,6 +41,7 @@ enum NQuadsState {
 impl RuleRecognizer for NQuadsRecognizer {
     type TokenRecognizer = N3Lexer;
     type Output = Quad;
+    type Context = NQuadsRecognizerContext;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
@@ -51,6 +54,7 @@ impl RuleRecognizer for NQuadsRecognizer {
     fn recognize_next(
         mut self,
         token: N3Token,
+        context: &mut NQuadsRecognizerContext,
         results: &mut Vec<Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
@@ -69,7 +73,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if self.with_quoted_triples => {
+                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
                         self.stack.push(NQuadsState::AfterQuotedSubject);
                         self.stack.push(NQuadsState::ExpectSubject);
                         self
@@ -111,7 +115,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if self.with_quoted_triples => {
+                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
                         self.stack.push(NQuadsState::AfterQuotedObject);
                         self.stack.push(NQuadsState::ExpectSubject);
                         self
@@ -143,7 +147,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self.objects.push(Literal::new_simple_literal(value).into());
                         self.stack
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
-                        self.recognize_next(token, results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 },
                 NQuadsState::ExpectLiteralDatatype { value } => match token {
@@ -164,7 +168,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple => {
                     if self.stack.is_empty() {
                         match token {
-                            N3Token::IriRef(g) if self.with_graph_name => {
+                            N3Token::IriRef(g) if context.with_graph_name => {
                                 self.emit_quad(
                                     results,
                                     NamedNode::from(g).into(),
@@ -172,7 +176,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                                 self.stack.push(NQuadsState::ExpectDot);
                                 self
                             }
-                            N3Token::BlankNodeLabel(g) if self.with_graph_name => {
+                            N3Token::BlankNodeLabel(g) if context.with_graph_name => {
                                 self.emit_quad(results, BlankNode::new_unchecked(g).into());
                                 self.stack.push(NQuadsState::ExpectDot);
                                 self
@@ -180,7 +184,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                             _ => {
                                 self.emit_quad(results, GraphName::DefaultGraph);
                                 self.stack.push(NQuadsState::ExpectDot);
-                                self.recognize_next(token, results, errors)
+                                self.recognize_next(token, context, results, errors)
                             }
                         }
                     } else if token == N3Token::Punctuation(">>") {
@@ -195,7 +199,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 } else {
                     errors.push("Quads should be followed by a dot".into());
                     self.stack.push(NQuadsState::ExpectSubject);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 },
                 #[cfg(feature = "rdf-star")]
                 NQuadsState::AfterQuotedSubject => {
@@ -206,7 +210,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                     };
                     self.subjects.push(triple.into());
                     self.stack.push(NQuadsState::ExpectPredicate);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token,context,  results, errors)
                 }
                 #[cfg(feature = "rdf-star")]
                 NQuadsState::AfterQuotedObject => {
@@ -218,7 +222,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                     self.objects.push(triple.into());
                     self.stack
                         .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
-                    self.recognize_next(token, results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
             }
         } else if token == N3Token::Punctuation(".") {
@@ -229,7 +233,12 @@ impl RuleRecognizer for NQuadsRecognizer {
         }
     }
 
-    fn recognize_end(mut self, results: &mut Vec<Quad>, errors: &mut Vec<RuleRecognizerError>) {
+    fn recognize_end(
+        mut self,
+        _context: &mut NQuadsRecognizerContext,
+        results: &mut Vec<Quad>,
+        errors: &mut Vec<RuleRecognizerError>,
+    ) {
         match &*self.stack {
             [NQuadsState::ExpectSubject] | [] => (),
             [NQuadsState::ExpectDot] => errors.push("Triples should be followed by a dot".into()),
@@ -246,8 +255,8 @@ impl RuleRecognizer for NQuadsRecognizer {
         }
     }
 
-    fn lexer_options(&self) -> &N3LexerOptions {
-        &self.lexer_options
+    fn lexer_options(context: &NQuadsRecognizerContext) -> &N3LexerOptions {
+        &context.lexer_options
     }
 }
 
@@ -266,13 +275,15 @@ impl NQuadsRecognizer {
             ),
             NQuadsRecognizer {
                 stack: vec![NQuadsState::ExpectSubject],
+                subjects: Vec::new(),
+                predicates: Vec::new(),
+                objects: Vec::new(),
+            },
+            NQuadsRecognizerContext {
                 with_graph_name,
                 #[cfg(feature = "rdf-star")]
                 with_quoted_triples,
                 lexer_options: N3LexerOptions::default(),
-                subjects: Vec::new(),
-                predicates: Vec::new(),
-                objects: Vec::new(),
             },
         )
     }
