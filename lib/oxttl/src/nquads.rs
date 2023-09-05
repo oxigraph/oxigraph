@@ -90,27 +90,27 @@ impl NQuadsParser {
     /// Count the number of people:
     /// ```
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
-    /// use oxttl::{ParseError, NQuadsParser};
+    /// use oxttl::NQuadsParser;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<(), ParseError> {
-    ///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
     ///
-    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-    ///     let mut count = 0;
-    ///     let mut parser = NQuadsParser::new().parse_tokio_async_read(file.as_ref());
-    ///     while let Some(triple) = parser.next().await {
-    ///         let triple = triple?;
-    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-    ///             count += 1;
-    ///         }
+    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let mut count = 0;
+    /// let mut parser = NQuadsParser::new().parse_tokio_async_read(file.as_ref());
+    /// while let Some(triple) = parser.next().await {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///         count += 1;
     ///     }
-    ///     assert_eq!(2, count);
-    ///     Ok(())
     /// }
+    /// assert_eq!(2, count);
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
@@ -211,27 +211,27 @@ impl<R: Read> Iterator for FromReadNQuadsReader<R> {
 /// Count the number of people:
 /// ```
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
-/// use oxttl::{ParseError, NQuadsParser};
+/// use oxttl::NQuadsParser;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<(), ParseError> {
-///     let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), oxttl::ParseError> {
+/// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
 ///
-///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-///     let mut count = 0;
-///     let mut parser = NQuadsParser::new().parse_tokio_async_read(file.as_ref());
-///     while let Some(triple) = parser.next().await {
-///         let triple = triple?;
-///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-///             count += 1;
-///         }
+/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let mut count = 0;
+/// let mut parser = NQuadsParser::new().parse_tokio_async_read(file.as_ref());
+/// while let Some(triple) = parser.next().await {
+///     let triple = triple?;
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///         count += 1;
 ///     }
-///     assert_eq!(2, count);
-///     Ok(())
 /// }
+/// assert_eq!(2, count);
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
@@ -377,10 +377,9 @@ impl NQuadsSerializer {
     /// ```
     /// use oxrdf::{NamedNodeRef, QuadRef};
     /// use oxttl::NQuadsSerializer;
-    /// use std::io::Result;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<()> {
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> std::io::Result<()> {
     ///     let mut writer = NQuadsSerializer::new().serialize_to_tokio_async_write(Vec::new());
     ///     writer.write_quad(QuadRef::new(
     ///         NamedNodeRef::new_unchecked("http://example.com#me"),
@@ -392,8 +391,8 @@ impl NQuadsSerializer {
     ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
     ///         writer.finish().as_slice()
     ///     );
-    ///     Ok(())
-    /// }
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
@@ -475,10 +474,9 @@ impl<W: Write> ToWriteNQuadsWriter<W> {
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::NQuadsSerializer;
-/// use std::io::Result;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<()> {
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> std::io::Result<()> {
 ///     let mut writer = NQuadsSerializer::new().serialize_to_tokio_async_write(Vec::new());
 ///     writer.write_quad(QuadRef::new(
 ///         NamedNodeRef::new_unchecked("http://example.com#me"),
@@ -490,8 +488,8 @@ impl<W: Write> ToWriteNQuadsWriter<W> {
 ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
 ///         writer.finish().as_slice()
 ///     );
-///     Ok(())
-/// }
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]

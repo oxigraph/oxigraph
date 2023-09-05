@@ -74,22 +74,21 @@ impl RdfXmlSerializer {
     /// ```
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxrdfxml::RdfXmlSerializer;
-    /// use std::io::Result;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<()> {
-    ///     let mut writer = RdfXmlSerializer::new().serialize_to_tokio_async_write(Vec::new());
-    ///     writer.write_triple(TripleRef::new(
-    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-    ///     )).await?;
-    ///     assert_eq!(
-    ///         b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
-    ///         writer.finish().await?.as_slice()
-    ///     );
-    ///     Ok(())
-    /// }
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> std::io::Result<()> {
+    /// let mut writer = RdfXmlSerializer::new().serialize_to_tokio_async_write(Vec::new());
+    /// writer.write_triple(TripleRef::new(
+    ///     NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    /// )).await?;
+    /// assert_eq!(
+    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+    ///     writer.finish().await?.as_slice()
+    /// );
+    /// # Ok(())
+    /// # }
     /// ```
     #[allow(clippy::unused_self)]
     #[cfg(feature = "async-tokio")]
@@ -160,22 +159,21 @@ impl<W: Write> ToWriteRdfXmlWriter<W> {
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxrdfxml::RdfXmlSerializer;
-/// use std::io::Result;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<()> {
-///     let mut writer = RdfXmlSerializer::new().serialize_to_tokio_async_write(Vec::new());
-///     writer.write_triple(TripleRef::new(
-///         NamedNodeRef::new_unchecked("http://example.com#me"),
-///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-///     )).await?;
-///     assert_eq!(
-///         b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
-///         writer.finish().await?.as_slice()
-///     );
-///     Ok(())
-/// }
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> std::io::Result<()> {
+/// let mut writer = RdfXmlSerializer::new().serialize_to_tokio_async_write(Vec::new());
+/// writer.write_triple(TripleRef::new(
+///     NamedNodeRef::new_unchecked("http://example.com#me"),
+///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
+/// )).await?;
+/// assert_eq!(
+///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+///     writer.finish().await?.as_slice()
+/// );
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]

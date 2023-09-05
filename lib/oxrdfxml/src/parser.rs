@@ -108,31 +108,31 @@ impl RdfXmlParser {
     /// Count the number of people:
     /// ```
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
-    ///  use oxrdfxml::{RdfXmlParser, ParseError};
+    /// use oxrdfxml::RdfXmlParser;
     ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<(), ParseError> {
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxrdfxml::ParseError> {
     /// let file = b"<?xml version=\"1.0\"?>
-    ///     <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
-    ///       <rdf:Description rdf:about=\"http://example.com/foo\">
-    ///         <rdf:type rdf:resource=\"http://schema.org/Person\" />
-    ///         <schema:name>Foo</schema:name>
-    ///       </rdf:Description>
-    ///       <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-    ///     </rdf:RDF>";
+    /// <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
+    ///   <rdf:Description rdf:about=\"http://example.com/foo\">
+    ///     <rdf:type rdf:resource=\"http://schema.org/Person\" />
+    ///     <schema:name>Foo</schema:name>
+    ///   </rdf:Description>
+    ///   <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
+    /// </rdf:RDF>";
     ///
-    ///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-    ///     let mut count = 0;
-    ///     let mut parser = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
-    ///     while let Some(triple) = parser.next().await {
-    ///         let triple = triple?;
-    ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-    ///             count += 1;
-    ///         }
+    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let mut count = 0;
+    /// let mut parser = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
+    /// while let Some(triple) = parser.next().await {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///         count += 1;
     ///     }
-    ///     assert_eq!(2, count);
-    ///     Ok(())
     /// }
+    /// assert_eq!(2, count);
+    /// # Ok(())
+    /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
     pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
@@ -234,31 +234,31 @@ impl<R: Read> FromReadRdfXmlReader<R> {
 /// Count the number of people:
 /// ```
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
-///  use oxrdfxml::{RdfXmlParser, ParseError};
+///  use oxrdfxml::RdfXmlParser;
 ///
-/// #[tokio::main(flavor = "current_thread")]
-/// async fn main() -> Result<(), ParseError> {
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), oxrdfxml::ParseError> {
 /// let file = b"<?xml version=\"1.0\"?>
-///     <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
-///       <rdf:Description rdf:about=\"http://example.com/foo\">
-///         <rdf:type rdf:resource=\"http://schema.org/Person\" />
-///         <schema:name>Foo</schema:name>
-///       </rdf:Description>
-///       <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-///     </rdf:RDF>";
+/// <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
+///   <rdf:Description rdf:about=\"http://example.com/foo\">
+///     <rdf:type rdf:resource=\"http://schema.org/Person\" />
+///     <schema:name>Foo</schema:name>
+///   </rdf:Description>
+///   <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
+/// </rdf:RDF>";
 ///
-///     let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
-///     let mut count = 0;
-///     let mut parser = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
-///     while let Some(triple) = parser.next().await {
-///         let triple = triple?;
-///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-///             count += 1;
-///         }
+/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let mut count = 0;
+/// let mut parser = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
+/// while let Some(triple) = parser.next().await {
+///     let triple = triple?;
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///         count += 1;
 ///     }
-///     assert_eq!(2, count);
-///     Ok(())
 /// }
+/// assert_eq!(2, count);
+/// # Ok(())
+/// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]

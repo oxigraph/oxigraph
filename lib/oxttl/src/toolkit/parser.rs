@@ -7,19 +7,28 @@ use tokio::io::AsyncRead;
 pub trait RuleRecognizer: Sized {
     type TokenRecognizer: TokenRecognizer;
     type Output;
+    type Context;
 
     fn error_recovery_state(self) -> Self;
 
     fn recognize_next(
         self,
         token: <Self::TokenRecognizer as TokenRecognizer>::Token<'_>,
+        context: &mut Self::Context,
         results: &mut Vec<Self::Output>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self;
 
-    fn recognize_end(self, results: &mut Vec<Self::Output>, errors: &mut Vec<RuleRecognizerError>);
+    fn recognize_end(
+        self,
+        context: &mut Self::Context,
+        results: &mut Vec<Self::Output>,
+        errors: &mut Vec<RuleRecognizerError>,
+    );
 
-    fn lexer_options(&self) -> &<Self::TokenRecognizer as TokenRecognizer>::Options;
+    fn lexer_options(
+        context: &Self::Context,
+    ) -> &<Self::TokenRecognizer as TokenRecognizer>::Options;
 }
 
 pub struct RuleRecognizerError {
@@ -34,22 +43,23 @@ impl<S: Into<String>> From<S> for RuleRecognizerError {
     }
 }
 
+#[allow(clippy::partial_pub_fields)]
 pub struct Parser<RR: RuleRecognizer> {
     lexer: Lexer<RR::TokenRecognizer>,
     state: Option<RR>,
+    pub context: RR::Context,
     results: Vec<RR::Output>,
     errors: Vec<RuleRecognizerError>,
-    default_lexer_options: <RR::TokenRecognizer as TokenRecognizer>::Options,
 }
 
 impl<RR: RuleRecognizer> Parser<RR> {
-    pub fn new(lexer: Lexer<RR::TokenRecognizer>, recognizer: RR) -> Self {
+    pub fn new(lexer: Lexer<RR::TokenRecognizer>, recognizer: RR, context: RR::Context) -> Self {
         Self {
             lexer,
             state: Some(recognizer),
+            context,
             results: vec![],
             errors: vec![],
-            default_lexer_options: <RR::TokenRecognizer as TokenRecognizer>::Options::default(),
         }
     }
 
@@ -80,15 +90,16 @@ impl<RR: RuleRecognizer> Parser<RR> {
             if let Some(result) = self.results.pop() {
                 return Some(Ok(result));
             }
-            if let Some(result) = self.lexer.read_next(
-                self.state
-                    .as_ref()
-                    .map_or(&self.default_lexer_options, |p| p.lexer_options()),
-            ) {
+            if let Some(result) = self.lexer.read_next(RR::lexer_options(&self.context)) {
                 match result {
                     Ok(token) => {
                         self.state = self.state.take().map(|state| {
-                            state.recognize_next(token, &mut self.results, &mut self.errors)
+                            state.recognize_next(
+                                token,
+                                &mut self.context,
+                                &mut self.results,
+                                &mut self.errors,
+                            )
                         });
                         continue;
                     }
@@ -102,7 +113,7 @@ impl<RR: RuleRecognizer> Parser<RR> {
                 let Some(state) = self.state.take() else {
                     return None;
                 };
-                state.recognize_end(&mut self.results, &mut self.errors)
+                state.recognize_end(&mut self.context, &mut self.results, &mut self.errors)
             } else {
                 return None;
             }
@@ -122,9 +133,10 @@ impl<RR: RuleRecognizer> Parser<RR> {
     }
 }
 
+#[allow(clippy::partial_pub_fields)]
 pub struct FromReadIterator<R: Read, RR: RuleRecognizer> {
     read: R,
-    parser: Parser<RR>,
+    pub parser: Parser<RR>,
 }
 
 impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
@@ -145,8 +157,8 @@ impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
 
 #[cfg(feature = "async-tokio")]
 pub struct FromTokioAsyncReadIterator<R: AsyncRead + Unpin, RR: RuleRecognizer> {
-    read: R,
-    parser: Parser<RR>,
+    pub read: R,
+    pub parser: Parser<RR>,
 }
 
 #[cfg(feature = "async-tokio")]
