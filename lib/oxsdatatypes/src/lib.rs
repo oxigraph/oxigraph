@@ -20,7 +20,8 @@ pub use self::date_time::{
 pub use self::decimal::{Decimal, ParseDecimalError, TooLargeForDecimalError};
 pub use self::double::Double;
 pub use self::duration::{
-    DayTimeDuration, Duration, DurationOverflowError, ParseDurationError, YearMonthDuration,
+    DayTimeDuration, Duration, DurationOverflowError, OppositeSignInDurationComponentsError,
+    ParseDurationError, YearMonthDuration,
 };
 pub use self::float::Float;
 pub use self::integer::{Integer, TooLargeForIntegerError};

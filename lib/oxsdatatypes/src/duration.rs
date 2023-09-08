@@ -16,12 +16,30 @@ pub struct Duration {
 
 impl Duration {
     #[inline]
-    #[must_use]
-    pub fn new(months: impl Into<i64>, seconds: impl Into<Decimal>) -> Self {
-        Self {
-            year_month: YearMonthDuration::new(months),
-            day_time: DayTimeDuration::new(seconds),
+    pub fn new(
+        months: impl Into<i64>,
+        seconds: impl Into<Decimal>,
+    ) -> Result<Self, OppositeSignInDurationComponentsError> {
+        Self::construct(
+            YearMonthDuration::new(months),
+            DayTimeDuration::new(seconds),
+        )
+    }
+
+    #[inline]
+    fn construct(
+        year_month: YearMonthDuration,
+        day_time: DayTimeDuration,
+    ) -> Result<Self, OppositeSignInDurationComponentsError> {
+        if (year_month > YearMonthDuration::default() && day_time < DayTimeDuration::default())
+            || (year_month < YearMonthDuration::default() && day_time > DayTimeDuration::default())
+        {
+            return Err(OppositeSignInDurationComponentsError);
         }
+        Ok(Self {
+            year_month,
+            day_time,
+        })
     }
 
     #[inline]
@@ -103,10 +121,11 @@ impl Duration {
     #[must_use]
     pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
-        Some(Self {
-            year_month: self.year_month.checked_add(rhs.year_month)?,
-            day_time: self.day_time.checked_add(rhs.day_time)?,
-        })
+        Self::construct(
+            self.year_month.checked_add(rhs.year_month)?,
+            self.day_time.checked_add(rhs.day_time)?,
+        )
+        .ok()
     }
 
     /// [op:subtract-yearMonthDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-yearMonthDurations) and [op:subtract-dayTimeDurations](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDurations)
@@ -116,10 +135,11 @@ impl Duration {
     #[must_use]
     pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         let rhs = rhs.into();
-        Some(Self {
-            year_month: self.year_month.checked_sub(rhs.year_month)?,
-            day_time: self.day_time.checked_sub(rhs.day_time)?,
-        })
+        Self::construct(
+            self.year_month.checked_sub(rhs.year_month)?,
+            self.day_time.checked_sub(rhs.day_time)?,
+        )
+        .ok()
     }
 
     /// Unary negation.
@@ -172,7 +192,7 @@ impl FromStr for Duration {
         Ok(Self::new(
             parts.year_month.unwrap_or(0),
             parts.day_time.unwrap_or_default(),
-        ))
+        )?)
     }
 }
 
@@ -183,6 +203,9 @@ impl fmt::Display for Duration {
         let ym = self.year_month.months;
         let ss = self.day_time.seconds;
 
+        if (ym < 0 && ss > 0.into()) || (ym > 0 && ss < 0.into()) {
+            return Err(fmt::Error); // Not able to format with only a part of the duration that is negative
+        }
         if ym < 0 || ss < 0.into() {
             write!(f, "-")?;
         }
@@ -950,14 +973,35 @@ impl fmt::Display for DurationOverflowError {
 
 impl Error for DurationOverflowError {}
 
+/// The year-month and the day-time components of a [`Duration\] have an opposite sign.
+#[derive(Debug, Clone, Copy)]
+pub struct OppositeSignInDurationComponentsError;
+
+impl fmt::Display for OppositeSignInDurationComponentsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign")
+    }
+}
+
+impl Error for OppositeSignInDurationComponentsError {}
+
+impl From<OppositeSignInDurationComponentsError> for ParseDurationError {
+    #[inline]
+    fn from(_: OppositeSignInDurationComponentsError) -> Self {
+        Self {
+            msg: "The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign"
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn from_str() -> Result<(), ParseDurationError> {
-        let min = Duration::new(i64::MIN, Decimal::MIN);
-        let max = Duration::new(i64::MAX, Decimal::MAX);
+        let min = Duration::new(i64::MIN, Decimal::MIN)?;
+        let max = Duration::new(i64::MAX, Decimal::MAX)?;
 
         assert_eq!(YearMonthDuration::from_str("P1Y")?.to_string(), "P1Y");
         assert_eq!(Duration::from_str("P1Y")?.to_string(), "P1Y");
@@ -1164,6 +1208,14 @@ mod tests {
             Duration::from_str("P2DT12H5M")?.checked_add(Duration::from_str("P5DT12H")?),
             Some(Duration::from_str("P8DT5M")?)
         );
+        assert_eq!(
+            Duration::from_str("P1M2D")?.checked_add(Duration::from_str("-P3D")?),
+            None
+        );
+        assert_eq!(
+            Duration::from_str("P1M2D")?.checked_add(Duration::from_str("-P2M")?),
+            None
+        );
         Ok(())
     }
 
@@ -1176,6 +1228,14 @@ mod tests {
         assert_eq!(
             Duration::from_str("P2DT12H")?.checked_sub(Duration::from_str("P1DT10H30M")?),
             Some(Duration::from_str("P1DT1H30M")?)
+        );
+        assert_eq!(
+            Duration::from_str("P1M2D")?.checked_sub(Duration::from_str("P3D")?),
+            None
+        );
+        assert_eq!(
+            Duration::from_str("P1M2D")?.checked_sub(Duration::from_str("P2M")?),
+            None
         );
         Ok(())
     }
