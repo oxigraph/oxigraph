@@ -24,7 +24,7 @@ rocksdb_debug = []
 [dependencies]
 rand = "0.8"
 md-5 = "0.10"
-sha-1 = "0.10"
+sha1 = "0.10"
 sha2 = "0.10"
 digest = "0.10"
 regex = "1"
