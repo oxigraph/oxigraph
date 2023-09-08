@@ -1877,11 +1877,11 @@ pub fn since_unix_epoch() -> Duration {
     target_os = "unknown"
 ))]
 fn since_unix_epoch() -> Duration {
-    Duration::new(
-        0,
+    DayTimeDuration::new(
         Decimal::try_from(crate::Double::from(js_sys::Date::now() / 1000.))
             .expect("The current time seems way in the future, it's strange"),
     )
+    .into()
 }
 
 #[cfg(not(any(
