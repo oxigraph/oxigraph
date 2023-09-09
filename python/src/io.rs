@@ -12,7 +12,6 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 pub fn add_to_module(module: &PyModule) -> PyResult<()> {
     module.add_wrapped(wrap_pyfunction!(parse))?;
@@ -325,7 +324,7 @@ pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
     match error {
         ParseError::Syntax(error) => {
             // Python 3.9 does not support end line and end column
-            if python_version() >= (3, 10, 0) {
+            if python_version() >= (3, 10) {
                 let params = if let Some(location) = error.location() {
                     (
                         file_path,
@@ -382,12 +381,9 @@ pub fn allow_threads_unsafe<T>(f: impl FnOnce() -> T) -> T {
     f()
 }
 
-fn python_version() -> (u8, u8, u8) {
-    static VERSION: OnceLock<(u8, u8, u8)> = OnceLock::new();
-    *VERSION.get_or_init(|| {
-        Python::with_gil(|py| {
-            let v = py.version_info();
-            (v.major, v.minor, v.patch)
-        })
+fn python_version() -> (u8, u8) {
+    Python::with_gil(|py| {
+        let v = py.version_info();
+        (v.major, v.minor)
     })
 }

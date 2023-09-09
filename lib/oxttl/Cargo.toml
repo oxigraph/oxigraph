@@ -20,14 +20,14 @@ rdf-star = ["oxrdf/rdf-star"]
 async-tokio = ["dep:tokio"]
 
 [dependencies]
-memchr = "2"
+memchr = "2.5"
 oxrdf = { version = "0.2.0-alpha.1-dev", path = "../oxrdf" }
 oxiri = "0.2"
 oxilangtag = "0.1"
-tokio = { version = "1", optional = true, features = ["io-util"] }
+tokio = { version = "1.29", optional = true, features = ["io-util"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1.29", features = ["rt", "macros"] }
 
 [package.metadata.docs.rs]
 all-features = true

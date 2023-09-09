@@ -11,8 +11,9 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+anyhow = "1.0.72"
+clap = { version = ">=4.0, <5.0", features = ["derive"] }
+lazy_static = "1.4"
 oxigraph = { path = "../lib" }
 oxttl = { path= "../lib/oxttl" }
 sparopt = { path = "../lib/sparopt" }

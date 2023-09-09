@@ -19,7 +19,7 @@ js = ["js-sys"]
 custom-now = []
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-js-sys = { version = "0.3", optional = true }
+js-sys = { version = "0.3.60", optional = true }
 
 [package.metadata.docs.rs]
 all-features = true

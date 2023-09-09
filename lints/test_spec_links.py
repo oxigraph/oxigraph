@@ -10,12 +10,12 @@ LINK_REGEXES = {
     r"<(https?://(w3c.github.io|www.w3.org)/[^>]+)>`_",  # reStructuredText
 }
 
-base_path = Path(__file__).parent
+base_path = Path(__file__).parent.parent
 spec_cache = {}
 errors = set()
 
 for ext in ("md", "rs", "rst"):
-    for file in Path(__file__).parent.rglob(f"*.{ext}"):
+    for file in base_path.rglob(f"*.{ext}"):
         content = file.read_text()
         for link_regex in LINK_REGEXES:
             for m in re.finditer(link_regex, content):

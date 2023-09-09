@@ -9,6 +9,7 @@
 )]
 
 use crate::storage::error::{CorruptionError, StorageError};
+use lazy_static::lazy_static;
 use libc::{self, c_void, free};
 use oxrocksdb_sys::*;
 use rand::random;
@@ -25,7 +26,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::thread::{available_parallelism, yield_now};
 use std::{ptr, slice};
 
@@ -54,6 +55,23 @@ macro_rules! ffi_result_impl {
             Err(ErrorStatus(status))
         }
     }}
+}
+
+lazy_static! {
+    static ref ROCKSDB_ENV: UnsafeEnv = {
+        unsafe {
+            let env = rocksdb_create_default_env();
+            assert!(!env.is_null(), "rocksdb_create_default_env returned null");
+            UnsafeEnv(env)
+        }
+    };
+    static ref ROCKSDB_MEM_ENV: UnsafeEnv = {
+        unsafe {
+            let env = rocksdb_create_mem_env();
+            assert!(!env.is_null(), "rocksdb_create_mem_env returned null");
+            UnsafeEnv(env)
+        }
+    };
 }
 
 pub struct ColumnFamilyDefinition {
@@ -454,9 +472,6 @@ impl Db {
         limit_max_open_files: bool,
         in_memory: bool,
     ) -> Result<*mut rocksdb_options_t, StorageError> {
-        static ROCKSDB_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
-        static ROCKSDB_MEM_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
-
         unsafe {
             let options = rocksdb_options_create();
             assert!(!options.is_null(), "rocksdb_options_create returned null");
@@ -493,19 +508,10 @@ impl Db {
             rocksdb_options_set_env(
                 options,
                 if in_memory {
-                    ROCKSDB_MEM_ENV.get_or_init(|| {
-                        let env = rocksdb_create_mem_env();
-                        assert!(!env.is_null(), "rocksdb_create_mem_env returned null");
-                        UnsafeEnv(env)
-                    })
+                    ROCKSDB_MEM_ENV.0
                 } else {
-                    ROCKSDB_ENV.get_or_init(|| {
-                        let env = rocksdb_create_default_env();
-                        assert!(!env.is_null(), "rocksdb_create_default_env returned null");
-                        UnsafeEnv(env)
-                    })
-                }
-                .0,
+                    ROCKSDB_ENV.0
+                },
             );
             Ok(options)
         }
@@ -1394,8 +1400,7 @@ impl From<ErrorStatus> for StorageError {
 
 struct UnsafeEnv(*mut rocksdb_env_t);
 
-// Hack for OnceCell. OK because only written in OnceCell and used in a thread-safe way by RocksDB
-unsafe impl Send for UnsafeEnv {}
+// Hack for lazy_static. OK because only written in lazy static and used in a thread-safe way by RocksDB
 unsafe impl Sync for UnsafeEnv {}
 
 fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
