@@ -4,6 +4,7 @@ use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
 use anyhow::{anyhow, bail, ensure, Error, Result};
+use lazy_static::lazy_static;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
@@ -15,7 +16,7 @@ use std::fmt::Write;
 use std::io::{self, BufReader, Cursor};
 use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
     evaluator.register(
@@ -739,11 +740,13 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     Ok(())
 }
 
-// Pool of stores to avoid allocating/deallocating them a lot
-static STORE_POOL: OnceLock<Mutex<Vec<Store>>> = OnceLock::new();
+lazy_static! {
+    // Pool of stores to avoid allocating/deallocating them a lot
+    static ref STORE_POOL: Mutex<Vec<Store>> = Mutex::new(Vec::new());
+}
 
 fn get_store() -> Result<StoreRef> {
-    let store = if let Some(store) = STORE_POOL.get_or_init(Mutex::default).lock().unwrap().pop() {
+    let store = if let Some(store) = STORE_POOL.lock().unwrap().pop() {
         store
     } else {
         Store::new()?
@@ -758,11 +761,7 @@ struct StoreRef {
 impl Drop for StoreRef {
     fn drop(&mut self) {
         if self.store.clear().is_ok() {
-            STORE_POOL
-                .get_or_init(Mutex::default)
-                .lock()
-                .unwrap()
-                .push(self.store.clone())
+            STORE_POOL.lock().unwrap().push(self.store.clone())
         }
     }
 }

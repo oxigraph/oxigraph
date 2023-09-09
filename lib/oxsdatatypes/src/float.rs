@@ -153,7 +153,7 @@ impl From<u16> for Float {
 impl From<Boolean> for Float {
     #[inline]
     fn from(value: Boolean) -> Self {
-        f32::from(bool::from(value)).into()
+        if bool::from(value) { 1. } else { 0. }.into()
     }
 }
 

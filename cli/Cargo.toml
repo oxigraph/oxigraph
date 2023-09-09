@@ -19,18 +19,18 @@ name = "oxigraph"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1"
-oxhttp = { version = "0.1", features = ["rayon"] }
-clap = { version = "4", features = ["derive"] }
+anyhow = "1.0.72"
+oxhttp = { version = "0.1.7", features = ["rayon"] }
+clap = { version = ">=4.0, <5.0", features = ["derive"] }
 oxigraph = { version = "0.4.0-alpha.1-dev", path = "../lib", features = ["http_client"] }
 rand = "0.8"
-url = "2"
+url = "2.4"
 oxiri = "0.2"
-flate2 = "1"
-rayon-core = "1"
+flate2 = "1.0"
+rayon-core = "1.11"
 
 [dev-dependencies]
-assert_cmd = "2"
-assert_fs = "1"
+assert_cmd = "2.0"
+assert_fs = "1.0"
 escargot = "0.5"
-predicates = "3"
+predicates = ">=2.0, <4.0"

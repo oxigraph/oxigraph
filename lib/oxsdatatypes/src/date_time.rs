@@ -1867,6 +1867,7 @@ pub fn since_unix_epoch() -> Duration {
         fn custom_ox_now() -> Duration;
     }
 
+    // SAFETY: Must be defined, if not compilation fails
     unsafe { custom_ox_now() }
 }
 
