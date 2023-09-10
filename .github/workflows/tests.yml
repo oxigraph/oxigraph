@@ -130,7 +130,7 @@ jobs:
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
       - run: cargo test
 
-  address_sanitizer:
+  test_linux_address_sanitizer:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -142,6 +142,21 @@ jobs:
       - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
         env:
           RUSTFLAGS: -Z sanitizer=address
+
+  test_linux_dynamic_linking:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v3
+        with:
+          path: rocksdb
+          key: ${{ runner.os }}-rocksdb-8.0.0
+      - run: bash .github/workflows/install_rocksdb.sh
+      - run: cargo test --tests --features oxrocksdb-sys/pkg-config
 
   test_windows:
     runs-on: windows-latest
