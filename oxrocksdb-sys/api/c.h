@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../rocksdb/include/rocksdb/c.h"
+#include <rocksdb/c.h>
 
 #ifdef __cplusplus
 extern "C" {

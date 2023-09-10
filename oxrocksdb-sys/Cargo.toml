@@ -14,9 +14,13 @@ rust-version.workspace  = true
 build = "build.rs"
 links = "rocksdb"
 
+[features]
+pkg-config = ["dep:pkg-config"]
+
 [dependencies]
 libc = "0.2.147"
 
 [build-dependencies]
+pkg-config = { version = "0.3.25", optional = true }
 bindgen = ">=0.60, <0.69"
 cc = { version = "1.0.73", features = ["parallel"] }
