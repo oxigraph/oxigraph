@@ -360,10 +360,10 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
     /// :type input: io(bytes) or io(str) or str or pathlib.Path
-    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
-    /// :type format: str
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: str or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
@@ -377,26 +377,26 @@ impl PyStore {
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, format, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input, /, format = None, *, base_iri = None, to_graph = None))]
     fn load(
         &self,
-        input: PyObject,
-        format: &str,
+        input: &PyAny,
+        format: Option<&str>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let format = rdf_format(format)?;
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
         };
-        let file_path = input.extract::<PathBuf>(py).ok();
+        let file_path = input.extract::<PathBuf>().ok();
+        let format = rdf_format(format, file_path.as_deref())?;
         let input = if let Some(file_path) = &file_path {
             PyReadable::from_file(file_path, py).map_err(map_io_err)?
         } else {
-            PyReadable::from_data(input, py)
+            PyReadable::from_data(input)
         };
         py.allow_threads(|| {
             if let Some(to_graph_name) = to_graph_name {
@@ -429,10 +429,10 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
     /// :type input: io(bytes) or io(str) or str or pathlib.Path
-    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
-    /// :type format: str
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: str or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
@@ -446,26 +446,26 @@ impl PyStore {
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, format, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input, /, format = None, *, base_iri = None, to_graph = None))]
     fn bulk_load(
         &self,
-        input: PyObject,
-        format: &str,
+        input: &PyAny,
+        format: Option<&str>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let format = rdf_format(format)?;
         let to_graph_name = if let Some(graph_name) = to_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
         };
-        let file_path = input.extract::<PathBuf>(py).ok();
+        let file_path = input.extract::<PathBuf>().ok();
+        let format = rdf_format(format, file_path.as_deref())?;
         let input = if let Some(file_path) = &file_path {
             PyReadable::from_file(file_path, py).map_err(map_io_err)?
         } else {
-            PyReadable::from_data(input, py)
+            PyReadable::from_data(input)
         };
         py.allow_threads(|| {
             if let Some(to_graph_name) = to_graph_name {
@@ -498,8 +498,8 @@ impl PyStore {
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
     /// :type output: io(bytes) or str or pathlib.Path
-    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
-    /// :type format: str
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: str or None, optional
     /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
@@ -512,22 +512,23 @@ impl PyStore {
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(signature = (output, format, *, from_graph = None))]
+    #[pyo3(signature = (output, /, format = None, *, from_graph = None))]
     fn dump(
         &self,
-        output: PyObject,
-        format: &str,
+        output: &PyAny,
+        format: Option<&str>,
         from_graph: Option<&PyAny>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        let format = rdf_format(format)?;
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
         };
-        let output = if let Ok(path) = output.extract::<PathBuf>(py) {
-            PyWritable::from_file(&path, py).map_err(map_io_err)?
+        let file_path = output.extract::<PathBuf>().ok();
+        let format = rdf_format(format, file_path.as_deref())?;
+        let output = if let Some(file_path) = &file_path {
+            PyWritable::from_file(file_path, py).map_err(map_io_err)?
         } else {
             PyWritable::from_data(output)
         };

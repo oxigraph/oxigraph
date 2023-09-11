@@ -9,6 +9,7 @@ use pyo3::types::PyBytes;
 use pyo3::{intern, wrap_pyfunction};
 use std::cmp::max;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -33,10 +34,10 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
 /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
-/// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+/// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
 /// :type input: io(bytes) or io(str) or str or pathlib.Path
-/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
-/// :type format: str
+/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
+/// :type format: str or None, optional
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
 /// :type base_iri: str or None, optional
 /// :param without_named_graphs: Sets that the parser must fail if parsing a named graph.
@@ -52,21 +53,21 @@ pub fn add_to_module(module: &PyModule) -> PyResult<()> {
 /// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
 /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
 #[pyfunction]
-#[pyo3(signature = (input, format, *, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
+#[pyo3(signature = (input, /, format = None, *, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
 pub fn parse(
-    input: PyObject,
-    format: &str,
+    input: &PyAny,
+    format: Option<&str>,
     base_iri: Option<&str>,
     without_named_graphs: bool,
     rename_blank_nodes: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let format = rdf_format(format)?;
-    let file_path = input.extract::<PathBuf>(py).ok();
+    let file_path = input.extract::<PathBuf>().ok();
+    let format = rdf_format(format, file_path.as_deref())?;
     let input = if let Some(file_path) = &file_path {
         PyReadable::from_file(file_path, py).map_err(map_io_err)?
     } else {
-        PyReadable::from_data(input, py)
+        PyReadable::from_data(input)
     };
     let mut parser = RdfParser::from_format(format);
     if let Some(base_iri) = base_iri {
@@ -106,8 +107,8 @@ pub fn parse(
 /// :type input: iterable(Triple) or iterable(Quad)
 /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
 /// :type output: io(bytes) or str or pathlib.Path
-/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.
-/// :type format: str
+/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
+/// :type format: str or None, optional
 /// :rtype: None
 /// :raises ValueError: if the format is not supported.
 /// :raises TypeError: if a triple is given during a quad format serialization or reverse.
@@ -117,10 +118,16 @@ pub fn parse(
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-pub fn serialize(input: &PyAny, output: PyObject, format: &str, py: Python<'_>) -> PyResult<()> {
-    let format = rdf_format(format)?;
-    let output = if let Ok(path) = output.extract::<PathBuf>(py) {
-        PyWritable::from_file(&path, py).map_err(map_io_err)?
+pub fn serialize(
+    input: &PyAny,
+    output: &PyAny,
+    format: Option<&str>,
+    py: Python<'_>,
+) -> PyResult<()> {
+    let file_path = output.extract::<PathBuf>().ok();
+    let format = rdf_format(format, file_path.as_deref())?;
+    let output = if let Some(file_path) = &file_path {
+        PyWritable::from_file(file_path, py).map_err(map_io_err)?
     } else {
         PyWritable::from_data(output)
     };
@@ -186,13 +193,13 @@ impl PyReadable {
         Ok(Self::File(py.allow_threads(|| File::open(file))?))
     }
 
-    pub fn from_data(data: PyObject, py: Python<'_>) -> Self {
-        if let Ok(bytes) = data.extract::<Vec<u8>>(py) {
+    pub fn from_data(data: &PyAny) -> Self {
+        if let Ok(bytes) = data.extract::<Vec<u8>>() {
             Self::Bytes(Cursor::new(bytes))
-        } else if let Ok(string) = data.extract::<String>(py) {
+        } else if let Ok(string) = data.extract::<String>() {
             Self::Bytes(Cursor::new(string.into_bytes()))
         } else {
-            Self::Io(PyIo(data))
+            Self::Io(PyIo(data.into()))
         }
     }
 }
@@ -217,8 +224,8 @@ impl PyWritable {
         Ok(Self::File(py.allow_threads(|| File::create(file))?))
     }
 
-    pub fn from_data(data: PyObject) -> Self {
-        Self::Io(PyIo(data))
+    pub fn from_data(data: &PyAny) -> Self {
+        Self::Io(PyIo(data.into()))
     }
 
     pub fn close(mut self) -> io::Result<()> {
@@ -293,7 +300,23 @@ impl Write for PyIo {
     }
 }
 
-pub fn rdf_format(format: &str) -> PyResult<RdfFormat> {
+pub fn rdf_format(format: Option<&str>, path: Option<&Path>) -> PyResult<RdfFormat> {
+    let format = if let Some(format) = format {
+        format
+    } else if let Some(path) = path {
+        if let Some(ext) = path.extension().and_then(OsStr::to_str) {
+            ext
+        } else {
+            return Err(PyValueError::new_err(format!(
+                "The file name {} has no extension to guess a file format from",
+                path.display()
+            )));
+        }
+    } else {
+        return Err(PyValueError::new_err(
+            "The format parameter is required when a file path is not given",
+        ));
+    };
     if format.contains('/') {
         RdfFormat::from_media_type(format).ok_or_else(|| {
             PyValueError::new_err(format!("Not supported RDF format media type: {format}"))

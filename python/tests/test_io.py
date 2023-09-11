@@ -20,11 +20,11 @@ EXAMPLE_QUAD = Quad(
 
 class TestParse(unittest.TestCase):
     def test_parse_file(self) -> None:
-        with NamedTemporaryFile() as fp:
+        with NamedTemporaryFile(suffix=".ttl") as fp:
             fp.write('<foo> <p> "éù" .'.encode())
             fp.flush()
             self.assertEqual(
-                list(parse(fp.name, "text/turtle", base_iri="http://example.com/")),
+                list(parse(fp.name, base_iri="http://example.com/")),
                 [EXAMPLE_TRIPLE],
             )
 
@@ -138,8 +138,8 @@ class TestSerialize(unittest.TestCase):
         )
 
     def test_serialize_to_file(self) -> None:
-        with NamedTemporaryFile() as fp:
-            serialize([EXAMPLE_TRIPLE], fp.name, "text/turtle")
+        with NamedTemporaryFile(suffix=".ttl") as fp:
+            serialize([EXAMPLE_TRIPLE], fp.name)
             self.assertEqual(
                 fp.read().decode(),
                 '<http://example.com/foo> <http://example.com/p> "éù" .\n',
