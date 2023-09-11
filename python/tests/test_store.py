@@ -265,13 +265,12 @@ class TestStore(unittest.TestCase):
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_file(self) -> None:
-        with NamedTemporaryFile(delete=False) as fp:
-            file_name = Path(fp.name)
+        with NamedTemporaryFile(suffix=".nq") as fp:
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
-        store = Store()
-        store.load(file_name, "nq")
-        file_name.unlink()
-        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+            fp.flush()
+            store = Store()
+            store.load(fp.name)
+            self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_with_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
@@ -311,14 +310,14 @@ class TestStore(unittest.TestCase):
 
     def test_dump_file(self) -> None:
         with NamedTemporaryFile(delete=False) as fp:
+            store = Store()
+            store.add(Quad(foo, bar, baz, graph))
             file_name = Path(fp.name)
-        store = Store()
-        store.add(Quad(foo, bar, baz, graph))
-        store.dump(file_name, "nq")
-        self.assertEqual(
-            file_name.read_text(),
-            "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
-        )
+            store.dump(file_name, "nq")
+            self.assertEqual(
+                file_name.read_text(),
+                "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
+            )
 
     def test_dump_with_io_error(self) -> None:
         store = Store()
