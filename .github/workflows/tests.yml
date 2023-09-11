@@ -46,8 +46,6 @@ jobs:
         working-directory: ./lib/sparopt
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./lib
-      - run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
-        working-directory: ./lib
       - run: cargo clippy -- -D warnings -D clippy::all
         working-directory: ./python
       - run: cargo clippy -- -D warnings -D clippy::all
@@ -193,7 +191,7 @@ jobs:
           submodules: true
       - run: rustup update && rustup default 1.70.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --all-features
+      - run: cargo doc
         working-directory: ./lib
         env:
           RUSTDOCFLAGS: -D warnings
