@@ -19,6 +19,7 @@ doctest = false
 
 [features]
 abi3 = ["pyo3/abi3-py38"]
+rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 
 [dependencies]
 oxigraph = { version = "0.4.0-alpha.1-dev", path="../lib", features = ["http_client"] }

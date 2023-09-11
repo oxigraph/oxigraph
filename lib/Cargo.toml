@@ -19,6 +19,7 @@ rust-version.workspace  = true
 default = []
 js = ["getrandom/js", "oxsdatatypes/js", "js-sys"]
 http_client = ["oxhttp", "oxhttp/rustls"]
+rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb_debug = []
 
 [dependencies]

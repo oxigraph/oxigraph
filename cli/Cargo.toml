@@ -18,6 +18,9 @@ rust-version.workspace  = true
 name = "oxigraph"
 path = "src/main.rs"
 
+[features]
+rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
+
 [dependencies]
 anyhow = "1.0.72"
 oxhttp = { version = "0.1.7", features = ["rayon"] }
