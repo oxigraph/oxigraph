@@ -32,6 +32,7 @@ fn pyoxigraph(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<PyVariable>()?;
     module.add_class::<PyQuerySolutions>()?;
     module.add_class::<PyQuerySolution>()?;
+    module.add_class::<PyQueryBoolean>()?;
     module.add_class::<PyQueryTriples>()?;
     io::add_to_module(module)
 }
