@@ -33,7 +33,7 @@ use std::path::PathBuf;
 /// :type path: str or pathlib.Path or None, optional
 /// :raises OSError: if the target directory contains invalid data or could not be accessed.
 ///
-/// The :py:func:`str` function provides a serialization of the store in NQuads:
+/// The :py:class:`str` function provides a serialization of the store in NQuads:
 ///
 /// >>> store = Store()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -251,7 +251,7 @@ impl PyStore {
     /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list(NamedNode or BlankNode or DefaultGraph) or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
     /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
-    /// :return: a :py:func:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
+    /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryBoolean or QueryTriples
     /// :raises SyntaxError: if the provided query is invalid.
     /// :raises OSError: if an error happens while reading the store.
@@ -373,7 +373,7 @@ impl PyStore {
     /// :rtype: None
     /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
-    /// :raises OSError: if an error happens during a quad insertion.
+    /// :raises OSError: if an error happens during a quad insertion or if a system error happens while reading the file.
     ///
     /// >>> store = Store()
     /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
@@ -442,7 +442,7 @@ impl PyStore {
     /// :rtype: None
     /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
-    /// :raises OSError: if an error happens during a quad insertion.
+    /// :raises OSError: if an error happens during a quad insertion or if a system error happens while reading the file.
     ///
     /// >>> store = Store()
     /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
@@ -498,12 +498,13 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:func:`bytes` buffer is returned with the serialized content.
+    /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
     /// :type output: io(bytes) or str or pathlib.Path or None, optional
     /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :return: py:class:`bytes` with the serialization if the ``output`` parameter is :py:const:`None`, :py:const:`None` if ``output`` is set.
     /// :rtype: bytes or None
     /// :raises ValueError: if the format is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
     /// :raises OSError: if an error happens during a quad lookup or file writing.
