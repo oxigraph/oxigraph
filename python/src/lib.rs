@@ -10,6 +10,7 @@ mod model;
 mod sparql;
 mod store;
 
+use crate::io::*;
 use crate::model::*;
 use crate::sparql::*;
 use crate::store::*;
@@ -34,5 +35,8 @@ fn pyoxigraph(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<PyQuerySolution>()?;
     module.add_class::<PyQueryBoolean>()?;
     module.add_class::<PyQueryTriples>()?;
-    io::add_to_module(module)
+    module.add_wrapped(wrap_pyfunction!(parse))?;
+    module.add_wrapped(wrap_pyfunction!(parse_query_results))?;
+    module.add_wrapped(wrap_pyfunction!(serialize))?;
+    Ok(())
 }

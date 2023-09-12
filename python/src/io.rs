@@ -3,21 +3,17 @@
 use crate::model::{PyQuad, PyTriple};
 use oxigraph::io::{FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::QuadRef;
+use oxigraph::sparql::results::QueryResultsFormat;
 use pyo3::exceptions::{PySyntaxError, PyValueError};
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::{intern, wrap_pyfunction};
 use std::cmp::max;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-
-pub fn add_to_module(module: &PyModule) -> PyResult<()> {
-    module.add_wrapped(wrap_pyfunction!(parse))?;
-    module.add_wrapped(wrap_pyfunction!(serialize))
-}
 
 /// Parses RDF graph and dataset serialization formats.
 ///
@@ -63,7 +59,7 @@ pub fn parse(
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     let file_path = input.extract::<PathBuf>().ok();
-    let format = rdf_format(format, file_path.as_deref())?;
+    let format = parse_format(format, file_path.as_deref())?;
     let input = if let Some(file_path) = &file_path {
         PyReadable::from_file(file_path, py).map_err(map_io_err)?
     } else {
@@ -128,40 +124,31 @@ pub fn serialize<'a>(
     format: Option<&str>,
     py: Python<'a>,
 ) -> PyResult<Option<&'a PyBytes>> {
-    let file_path = output.and_then(|output| output.extract::<PathBuf>().ok());
-    let format = rdf_format(format, file_path.as_deref())?;
-    let output = if let Some(output) = output {
-        if let Some(file_path) = &file_path {
-            PyWritable::from_file(file_path, py).map_err(map_io_err)?
-        } else {
-            PyWritable::from_data(output)
-        }
-    } else {
-        PyWritable::Bytes(Vec::new())
-    };
-    let mut writer = RdfSerializer::from_format(format).serialize_to_write(BufWriter::new(output));
-    for i in input.iter()? {
-        let i = i?;
-        if let Ok(triple) = i.extract::<PyRef<PyTriple>>() {
-            writer.write_triple(&*triple)
-        } else {
-            let quad = i.extract::<PyRef<PyQuad>>()?;
-            let quad = QuadRef::from(&*quad);
-            if !quad.graph_name.is_default_graph() && !format.supports_datasets() {
-                return Err(PyValueError::new_err(
-                    "The {format} format does not support named graphs",
-                ));
+    PyWritable::do_write(
+        |output, format| {
+            let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
+            for i in input.iter()? {
+                let i = i?;
+                if let Ok(triple) = i.extract::<PyRef<PyTriple>>() {
+                    writer.write_triple(&*triple)
+                } else {
+                    let quad = i.extract::<PyRef<PyQuad>>()?;
+                    let quad = QuadRef::from(&*quad);
+                    if !quad.graph_name.is_default_graph() && !format.supports_datasets() {
+                        return Err(PyValueError::new_err(
+                            "The {format} format does not support named graphs",
+                        ));
+                    }
+                    writer.write_quad(quad)
+                }
+                .map_err(map_io_err)?;
             }
-            writer.write_quad(quad)
-        }
-        .map_err(map_io_err)?;
-    }
-    writer
-        .finish()
-        .map_err(map_io_err)?
-        .into_inner()
-        .map_err(|e| map_io_err(e.into_error()))?
-        .close(py)
+            writer.finish().map_err(map_io_err)
+        },
+        output,
+        format,
+        py,
+    )
 }
 
 #[pyclass(name = "QuadReader", module = "pyoxigraph")]
@@ -228,15 +215,33 @@ pub enum PyWritable {
 }
 
 impl PyWritable {
-    pub fn from_file(file: &Path, py: Python<'_>) -> io::Result<Self> {
-        Ok(Self::File(py.allow_threads(|| File::create(file))?))
+    pub fn do_write<'a, F: Format>(
+        write: impl FnOnce(BufWriter<Self>, F) -> PyResult<BufWriter<Self>>,
+        output: Option<&PyAny>,
+        format: Option<&str>,
+        py: Python<'a>,
+    ) -> PyResult<Option<&'a PyBytes>> {
+        let file_path = output.and_then(|output| output.extract::<PathBuf>().ok());
+        let format = parse_format::<F>(format, file_path.as_deref())?;
+        let output = if let Some(output) = output {
+            if let Some(file_path) = &file_path {
+                Self::File(
+                    py.allow_threads(|| File::create(file_path))
+                        .map_err(map_io_err)?,
+                )
+            } else {
+                Self::Io(PyIo(output.into()))
+            }
+        } else {
+            PyWritable::Bytes(Vec::new())
+        };
+        let writer = write(BufWriter::new(output), format)?;
+        py.allow_threads(|| writer.into_inner())
+            .map_err(|e| map_io_err(e.into_error()))?
+            .close(py)
     }
 
-    pub fn from_data(data: &PyAny) -> Self {
-        Self::Io(PyIo(data.into()))
-    }
-
-    pub fn close(self, py: Python<'_>) -> PyResult<Option<&PyBytes>> {
+    fn close(self, py: Python<'_>) -> PyResult<Option<&PyBytes>> {
         match self {
             Self::Bytes(bytes) => Ok(Some(PyBytes::new(py, &bytes))),
             Self::File(mut file) => {
@@ -320,7 +325,32 @@ impl Write for PyIo {
     }
 }
 
-pub fn rdf_format(format: Option<&str>, path: Option<&Path>) -> PyResult<RdfFormat> {
+pub trait Format: Sized {
+    fn from_media_type(media_type: &str) -> Option<Self>;
+    fn from_extension(extension: &str) -> Option<Self>;
+}
+
+impl Format for RdfFormat {
+    fn from_media_type(media_type: &str) -> Option<Self> {
+        Self::from_media_type(media_type)
+    }
+
+    fn from_extension(extension: &str) -> Option<Self> {
+        Self::from_extension(extension)
+    }
+}
+
+impl Format for QueryResultsFormat {
+    fn from_media_type(media_type: &str) -> Option<Self> {
+        Self::from_media_type(media_type)
+    }
+
+    fn from_extension(extension: &str) -> Option<Self> {
+        Self::from_extension(extension)
+    }
+}
+
+pub fn parse_format<F: Format>(format: Option<&str>, path: Option<&Path>) -> PyResult<F> {
     let format = if let Some(format) = format {
         format
     } else if let Some(path) = path {
@@ -338,11 +368,11 @@ pub fn rdf_format(format: Option<&str>, path: Option<&Path>) -> PyResult<RdfForm
         ));
     };
     if format.contains('/') {
-        RdfFormat::from_media_type(format).ok_or_else(|| {
+        F::from_media_type(format).ok_or_else(|| {
             PyValueError::new_err(format!("Not supported RDF format media type: {format}"))
         })
     } else {
-        RdfFormat::from_extension(format).ok_or_else(|| {
+        F::from_extension(format).ok_or_else(|| {
             PyValueError::new_err(format!("Not supported RDF format extension: {format}"))
         })
     }
@@ -404,7 +434,7 @@ pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
 ///
 /// Code from pyo3: https://github.com/PyO3/pyo3/blob/a67180c8a42a0bc0fdc45b651b62c0644130cf47/src/python.rs#L366
 #[allow(unsafe_code)]
-pub fn allow_threads_unsafe<T>(f: impl FnOnce() -> T) -> T {
+pub fn allow_threads_unsafe<T>(_py: Python<'_>, f: impl FnOnce() -> T) -> T {
     struct RestoreGuard {
         tstate: *mut pyo3::ffi::PyThreadState,
     }

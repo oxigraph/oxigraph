@@ -1,17 +1,17 @@
 #![allow(clippy::needless_option_as_deref)]
 
 use crate::io::{
-    allow_threads_unsafe, map_io_err, map_parse_error, rdf_format, PyReadable, PyWritable,
+    allow_threads_unsafe, map_io_err, map_parse_error, parse_format, PyReadable, PyWritable,
 };
 use crate::model::*;
 use crate::sparql::*;
+use oxigraph::io::RdfFormat;
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use std::io::BufWriter;
 use std::path::PathBuf;
 
 /// RDF store.
@@ -251,7 +251,7 @@ impl PyStore {
     /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list(NamedNode or BlankNode or DefaultGraph) or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
     /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
-    /// :return: a :py:class:`QueryBoolean` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
+    /// :return: a :py:func:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryBoolean or QueryTriples
     /// :raises SyntaxError: if the provided query is invalid.
     /// :raises OSError: if an error happens while reading the store.
@@ -292,9 +292,10 @@ impl PyStore {
             use_default_graph_as_union,
             default_graph,
             named_graphs,
+            py,
         )?;
         let results =
-            allow_threads_unsafe(|| self.inner.query(query)).map_err(map_evaluation_error)?;
+            allow_threads_unsafe(py, || self.inner.query(query)).map_err(map_evaluation_error)?;
         Ok(query_results_to_python(py, results))
     }
 
@@ -393,7 +394,7 @@ impl PyStore {
             None
         };
         let file_path = input.extract::<PathBuf>().ok();
-        let format = rdf_format(format, file_path.as_deref())?;
+        let format = parse_format::<RdfFormat>(format, file_path.as_deref())?;
         let input = if let Some(file_path) = &file_path {
             PyReadable::from_file(file_path, py).map_err(map_io_err)?
         } else {
@@ -462,7 +463,7 @@ impl PyStore {
             None
         };
         let file_path = input.extract::<PathBuf>().ok();
-        let format = rdf_format(format, file_path.as_deref())?;
+        let format = parse_format::<RdfFormat>(format, file_path.as_deref())?;
         let input = if let Some(file_path) = &file_path {
             PyReadable::from_file(file_path, py).map_err(map_io_err)?
         } else {
@@ -505,7 +506,7 @@ impl PyStore {
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: bytes or None
     /// :raises ValueError: if the format is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
-    /// :raises OSError: if an error happens during a quad lookup
+    /// :raises OSError: if an error happens during a quad lookup or file writing.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
@@ -531,29 +532,21 @@ impl PyStore {
         } else {
             None
         };
-        let file_path = output.and_then(|output| output.extract::<PathBuf>().ok());
-        let format = rdf_format(format, file_path.as_deref())?;
-        let output = if let Some(output) = output {
-            if let Some(file_path) = &file_path {
-                PyWritable::from_file(file_path, py).map_err(map_io_err)?
-            } else {
-                PyWritable::from_data(output)
-            }
-        } else {
-            PyWritable::Bytes(Vec::new())
-        };
-        py.allow_threads(|| {
-            let output = BufWriter::new(output);
-            if let Some(from_graph_name) = &from_graph_name {
-                self.inner.dump_graph(output, format, from_graph_name)
-            } else {
-                self.inner.dump_dataset(output, format)
-            }
-            .map_err(map_serializer_error)?
-            .into_inner()
-            .map_err(|e| map_io_err(e.into_error()))
-        })?
-        .close(py)
+        PyWritable::do_write::<RdfFormat>(
+            |output, format| {
+                py.allow_threads(|| {
+                    if let Some(from_graph_name) = &from_graph_name {
+                        self.inner.dump_graph(output, format, from_graph_name)
+                    } else {
+                        self.inner.dump_dataset(output, format)
+                    }
+                    .map_err(map_serializer_error)
+                })
+            },
+            output,
+            format,
+            py,
+        )
     }
 
     /// Returns an iterator over all the store named graphs.

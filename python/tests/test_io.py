@@ -3,7 +3,16 @@ import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from tempfile import NamedTemporaryFile, TemporaryFile
 
-from pyoxigraph import Literal, NamedNode, Quad, parse, serialize
+from pyoxigraph import (
+    Literal,
+    NamedNode,
+    Quad,
+    QueryBoolean,
+    QuerySolutions,
+    parse,
+    parse_query_results,
+    serialize,
+)
 
 EXAMPLE_TRIPLE = Quad(
     NamedNode("http://example.com/foo"),
@@ -131,7 +140,7 @@ class TestParse(unittest.TestCase):
 class TestSerialize(unittest.TestCase):
     def test_serialize_to_bytes(self) -> None:
         self.assertEqual(
-            serialize([EXAMPLE_TRIPLE.triple], None, "text/turtle").decode(),
+            (serialize([EXAMPLE_TRIPLE.triple], None, "text/turtle") or b"").decode(),
             '<http://example.com/foo> <http://example.com/p> "éù" .\n',
         )
 
@@ -162,3 +171,37 @@ class TestSerialize(unittest.TestCase):
             output.getvalue(),
             b'<http://example.com/g> {\n\t<http://example.com/foo> <http://example.com/p> "1" .\n}\n',
         )
+
+
+class TestParseQuerySolutions(unittest.TestCase):
+    def test_parse_file(self) -> None:
+        with NamedTemporaryFile(suffix=".tsv") as fp:
+            fp.write(
+                b'?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t"1"\n'
+            )
+            fp.flush()
+            r = parse_query_results(fp.name)
+            self.assertIsInstance(r, QuerySolutions)
+            results = list(r)  # type: ignore[arg-type]
+            self.assertEqual(results[0]["s"], NamedNode("http://example.com/s"))
+            self.assertEqual(results[0][2], Literal("1"))
+
+    def test_parse_not_existing_file(self) -> None:
+        with self.assertRaises(IOError) as _:
+            parse_query_results(
+                "/tmp/not-existing-oxigraph-file.ttl", "application/json"
+            )
+
+    def test_parse_str_io(self) -> None:
+        result = parse_query_results(StringIO("true"), "tsv")
+        self.assertIsInstance(result, QueryBoolean)
+        self.assertTrue(result)
+
+    def test_parse_bytes_io(self) -> None:
+        result = parse_query_results(BytesIO(b"false"), "tsv")
+        self.assertIsInstance(result, QueryBoolean)
+        self.assertFalse(result)
+
+    def test_parse_io_error(self) -> None:
+        with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
+            parse_query_results(fp, "srx")
