@@ -189,6 +189,39 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(len(list(results)), 2)
 
+    def test_select_query_dump(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        results = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        output = BytesIO()
+        results.serialize(output, "csv")
+        self.assertEqual(
+            output.getvalue().decode(),
+            "s\r\nhttp://foo\r\n",
+        )
+
+    def test_ask_query_dump(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        results = store.query("ASK { ?s ?p ?o }")
+        output = BytesIO()
+        results.serialize(output, "csv")
+        self.assertEqual(
+            output.getvalue().decode(),
+            "true",
+        )
+
+    def test_construct_query_dump(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        results = store.query("CONSTRUCT WHERE { ?s ?p ?o }")
+        output = BytesIO()
+        results.serialize(output, "nt")
+        self.assertEqual(
+            output.getvalue().decode(),
+            "<http://foo> <http://bar> <http://baz> .\n",
+        )
+
     def test_update_insert_data(self) -> None:
         store = Store()
         store.update("INSERT DATA { <http://foo> <http://foo> <http://foo> }")
