@@ -10,6 +10,7 @@ use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::io::BufWriter;
 use std::path::PathBuf;
 
@@ -496,15 +497,20 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
-    /// :type output: io(bytes) or str or pathlib.Path
+    /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:func:`bytes` buffer is returned with the serialized content.
+    /// :type output: io(bytes) or str or pathlib.Path or None, optional
     /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
-    /// :rtype: None
+    /// :rtype: bytes or None
     /// :raises ValueError: if the format is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
     /// :raises OSError: if an error happens during a quad lookup
+    ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
+    /// >>> store.dump(format="trig")
+    /// b'<http://example.com> <http://example.com/p> "1" .\n'
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -512,25 +518,29 @@ impl PyStore {
     /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(signature = (output, /, format = None, *, from_graph = None))]
-    fn dump(
+    #[pyo3(signature = (output = None, /, format = None, *, from_graph = None))]
+    fn dump<'a>(
         &self,
-        output: &PyAny,
+        output: Option<&PyAny>,
         format: Option<&str>,
         from_graph: Option<&PyAny>,
-        py: Python<'_>,
-    ) -> PyResult<()> {
+        py: Python<'a>,
+    ) -> PyResult<Option<&'a PyBytes>> {
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
         };
-        let file_path = output.extract::<PathBuf>().ok();
+        let file_path = output.and_then(|output| output.extract::<PathBuf>().ok());
         let format = rdf_format(format, file_path.as_deref())?;
-        let output = if let Some(file_path) = &file_path {
-            PyWritable::from_file(file_path, py).map_err(map_io_err)?
+        let output = if let Some(output) = output {
+            if let Some(file_path) = &file_path {
+                PyWritable::from_file(file_path, py).map_err(map_io_err)?
+            } else {
+                PyWritable::from_data(output)
+            }
         } else {
-            PyWritable::from_data(output)
+            PyWritable::Bytes(Vec::new())
         };
         py.allow_threads(|| {
             let output = BufWriter::new(output);
@@ -541,10 +551,9 @@ impl PyStore {
             }
             .map_err(map_serializer_error)?
             .into_inner()
-            .map_err(|e| map_io_err(e.into_error()))?
-            .close()
-            .map_err(map_io_err)
-        })
+            .map_err(|e| map_io_err(e.into_error()))
+        })?
+        .close(py)
     }
 
     /// Returns an iterator over all the store named graphs.
