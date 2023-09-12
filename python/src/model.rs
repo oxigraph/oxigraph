@@ -16,7 +16,7 @@ use std::vec::IntoIter;
 /// :type value: str
 /// :raises ValueError: if the IRI is not valid according to `RFC 3987 <https://tools.ietf.org/rfc/rfc3987>`_.
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(NamedNode('http://example.com'))
 /// '<http://example.com>'
@@ -135,11 +135,11 @@ impl PyNamedNode {
 
 /// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_.
 ///
-/// :param value: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node ID is automatically generated).
+/// :param value: the `blank node identifier <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node identifier is automatically generated).
 /// :type value: str or None, optional
-/// :raises ValueError: if the blank node ID is invalid according to NTriples, Turtle, and SPARQL grammars.
+/// :raises ValueError: if the blank node identifier is invalid according to NTriples, Turtle, and SPARQL grammars.
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
@@ -198,7 +198,7 @@ impl PyBlankNode {
         .into())
     }
 
-    /// :return: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_.
+    /// :return: the `blank node identifier <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_.
     /// :rtype: str
     ///
     /// >>> BlankNode("ex").value
@@ -270,7 +270,7 @@ impl PyBlankNode {
 /// :type language: str or None, optional
 /// :raises ValueError: if the language tag is not valid according to `RFC 5646 <https://tools.ietf.org/rfc/rfc5646>`_ (`BCP 47 <https://tools.ietf.org/rfc/bcp/bcp47>`_).
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(Literal('example'))
 /// '"example"'
@@ -606,7 +606,7 @@ impl IntoPy<PyObject> for PyTerm {
 /// :param object: the triple object.
 /// :type object: NamedNode or BlankNode or Literal or Triple
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// '<http://example.com> <http://example.com/p> "1"'
@@ -801,7 +801,7 @@ impl IntoPy<PyObject> for PyGraphName {
 /// :param graph_name: the quad graph name. If not present, the default graph is assumed.
 /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g>'
@@ -995,7 +995,7 @@ impl PyQuad {
 /// :type value: str
 /// :raises ValueError: if the variable name is invalid according to the SPARQL grammar.
 ///
-/// The :py:func:`str` function provides a serialization compatible with SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with SPARQL:
 ///
 /// >>> str(Variable('foo'))
 /// '?foo'
