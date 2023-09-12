@@ -65,7 +65,7 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObjec
     match results {
         QueryResults::Solutions(inner) => PyQuerySolutions { inner }.into_py(py),
         QueryResults::Graph(inner) => PyQueryTriples { inner }.into_py(py),
-        QueryResults::Boolean(b) => b.into_py(py),
+        QueryResults::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
     }
 }
 
@@ -201,6 +201,38 @@ impl PyQuerySolutions {
             .transpose()
             .map_err(map_evaluation_error)?
             .map(move |inner| PyQuerySolution { inner }))
+    }
+}
+
+/// A boolean returned by a SPARQL ``ASK`` query.
+///
+/// It can be easily casted to a regular boolean using the :py:func:`bool` function.
+///
+/// >>> store = Store()
+/// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
+/// >>> bool(store.query('ASK { ?s ?p ?o }'))
+/// True
+#[pyclass(unsendable, name = "QueryBoolean", module = "pyoxigraph")]
+pub struct PyQueryBoolean {
+    inner: bool,
+}
+
+#[pymethods]
+impl PyQueryBoolean {
+    fn __bool__(&self) -> bool {
+        self.inner
+    }
+
+    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        op.matches(self.inner.cmp(&other.inner))
+    }
+
+    fn __hash__(&self) -> u64 {
+        self.inner.into()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<QueryBoolean {}>", self.inner)
     }
 }
 

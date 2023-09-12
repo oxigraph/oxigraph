@@ -251,8 +251,8 @@ impl PyStore {
     /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list(NamedNode or BlankNode or DefaultGraph) or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
     /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
-    /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
-    /// :rtype: QuerySolutions or QueryTriples or bool
+    /// :return: a :py:class:`QueryBoolean` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
+    /// :rtype: QuerySolutions or QueryBoolean or QueryTriples
     /// :raises SyntaxError: if the provided query is invalid.
     /// :raises OSError: if an error happens while reading the store.
     ///
@@ -274,7 +274,7 @@ impl PyStore {
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
-    /// >>> store.query('ASK { ?s ?p ?o }')
+    /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
     #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None))]
     fn query(
