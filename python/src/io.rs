@@ -105,31 +105,39 @@ pub fn parse(
 ///
 /// :param input: the RDF triples and quads to serialize.
 /// :type input: iterable(Triple) or iterable(Quad)
-/// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
-/// :type output: io(bytes) or str or pathlib.Path
+/// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:func:`bytes` buffer is returned with the serialized content.
+/// :type output: io(bytes) or str or pathlib.Path or None, optional
 /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: str or None, optional
-/// :rtype: None
+/// :rtype: bytes or None
 /// :raises ValueError: if the format is not supported.
 /// :raises TypeError: if a triple is given during a quad format serialization or reverse.
+///
+/// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], format="ttl")
+/// b'<http://example.com> <http://example.com/p> "1" .\n'
 ///
 /// >>> output = io.BytesIO()
 /// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, "text/turtle")
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-pub fn serialize(
+#[pyo3(signature = (input, output = None, /, format = None))]
+pub fn serialize<'a>(
     input: &PyAny,
-    output: &PyAny,
+    output: Option<&PyAny>,
     format: Option<&str>,
-    py: Python<'_>,
-) -> PyResult<()> {
-    let file_path = output.extract::<PathBuf>().ok();
+    py: Python<'a>,
+) -> PyResult<Option<&'a PyBytes>> {
+    let file_path = output.and_then(|output| output.extract::<PathBuf>().ok());
     let format = rdf_format(format, file_path.as_deref())?;
-    let output = if let Some(file_path) = &file_path {
-        PyWritable::from_file(file_path, py).map_err(map_io_err)?
+    let output = if let Some(output) = output {
+        if let Some(file_path) = &file_path {
+            PyWritable::from_file(file_path, py).map_err(map_io_err)?
+        } else {
+            PyWritable::from_data(output)
+        }
     } else {
-        PyWritable::from_data(output)
+        PyWritable::Bytes(Vec::new())
     };
     let mut writer = RdfSerializer::from_format(format).serialize_to_write(BufWriter::new(output));
     for i in input.iter()? {
@@ -153,8 +161,7 @@ pub fn serialize(
         .map_err(map_io_err)?
         .into_inner()
         .map_err(|e| map_io_err(e.into_error()))?
-        .close()
-        .map_err(map_io_err)
+        .close(py)
 }
 
 #[pyclass(name = "QuadReader", module = "pyoxigraph")]
@@ -215,6 +222,7 @@ impl Read for PyReadable {
 }
 
 pub enum PyWritable {
+    Bytes(Vec<u8>),
     Io(PyIo),
     File(File),
 }
@@ -228,18 +236,29 @@ impl PyWritable {
         Self::Io(PyIo(data.into()))
     }
 
-    pub fn close(mut self) -> io::Result<()> {
-        self.flush()?;
-        if let Self::File(file) = self {
-            file.sync_all()?;
+    pub fn close(self, py: Python<'_>) -> PyResult<Option<&PyBytes>> {
+        match self {
+            Self::Bytes(bytes) => Ok(Some(PyBytes::new(py, &bytes))),
+            Self::File(mut file) => {
+                py.allow_threads(|| {
+                    file.flush()?;
+                    file.sync_all()
+                })
+                .map_err(map_io_err)?;
+                Ok(None)
+            }
+            Self::Io(mut io) => {
+                py.allow_threads(|| io.flush()).map_err(map_io_err)?;
+                Ok(None)
+            }
         }
-        Ok(())
     }
 }
 
 impl Write for PyWritable {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
+            Self::Bytes(bytes) => bytes.write(buf),
             Self::Io(io) => io.write(buf),
             Self::File(file) => file.write(buf),
         }
@@ -247,6 +266,7 @@ impl Write for PyWritable {
 
     fn flush(&mut self) -> io::Result<()> {
         match self {
+            Self::Bytes(_) => Ok(()),
             Self::Io(io) => io.flush(),
             Self::File(file) => file.flush(),
         }

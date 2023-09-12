@@ -129,6 +129,12 @@ class TestParse(unittest.TestCase):
 
 
 class TestSerialize(unittest.TestCase):
+    def test_serialize_to_bytes(self) -> None:
+        self.assertEqual(
+            serialize([EXAMPLE_TRIPLE.triple], None, "text/turtle").decode(),
+            '<http://example.com/foo> <http://example.com/p> "éù" .\n',
+        )
+
     def test_serialize_to_bytes_io(self) -> None:
         output = BytesIO()
         serialize([EXAMPLE_TRIPLE.triple], output, "text/turtle")

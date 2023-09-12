@@ -289,10 +289,8 @@ class TestStore(unittest.TestCase):
     def test_dump_nquads(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
-        output = BytesIO()
-        store.dump(output, "nq")
         self.assertEqual(
-            output.getvalue(),
+            store.dump(format="nq"),
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
