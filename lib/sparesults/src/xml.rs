@@ -92,9 +92,7 @@ impl<W: Write> XmlSolutionsWriter<W> {
     }
 
     pub fn finish(self) -> io::Result<W> {
-        let mut inner = self.do_finish().map_err(map_xml_error)?;
-        inner.flush()?;
-        Ok(inner)
+        self.do_finish().map_err(map_xml_error)
     }
 
     fn do_finish(mut self) -> Result<W, quick_xml::Error> {

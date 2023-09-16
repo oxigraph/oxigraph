@@ -195,8 +195,8 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
         match self.formatter {
             ToWriteSolutionsWriterKind::Xml(write) => write.finish(),
             ToWriteSolutionsWriterKind::Json(write) => write.finish(),
-            ToWriteSolutionsWriterKind::Csv(write) => write.finish(),
-            ToWriteSolutionsWriterKind::Tsv(write) => write.finish(),
+            ToWriteSolutionsWriterKind::Csv(write) => Ok(write.finish()),
+            ToWriteSolutionsWriterKind::Tsv(write) => Ok(write.finish()),
         }
     }
 }
