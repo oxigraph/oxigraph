@@ -18,7 +18,7 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
 
             // We try to write again
             let mut writer = serializer
-                .solutions_writer(
+                .serialize_solutions_to_write(
                     Vec::new(),
                     solutions
                         .get(0)
@@ -49,7 +49,7 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
             // We try to write again
             let mut serialized = Vec::new();
             serializer
-                .write_boolean_result(&mut serialized, value)
+                .serialize_boolean_to_write(&mut serialized, value)
                 .unwrap();
 
             // And to parse again

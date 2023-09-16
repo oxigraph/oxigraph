@@ -58,12 +58,12 @@ impl QueryResults {
         match self {
             Self::Boolean(value) => {
                 serializer
-                    .write_boolean_result(writer, value)
+                    .serialize_boolean_to_write(writer, value)
                     .map_err(EvaluationError::ResultsSerialization)?;
             }
             Self::Solutions(solutions) => {
                 let mut writer = serializer
-                    .solutions_writer(writer, solutions.variables().to_vec())
+                    .serialize_solutions_to_write(writer, solutions.variables().to_vec())
                     .map_err(EvaluationError::ResultsSerialization)?;
                 for solution in solutions {
                     writer
@@ -79,7 +79,10 @@ impl QueryResults {
                 let p = VariableRef::new_unchecked("predicate");
                 let o = VariableRef::new_unchecked("object");
                 let mut writer = serializer
-                    .solutions_writer(writer, vec![s.into_owned(), p.into_owned(), o.into_owned()])
+                    .serialize_solutions_to_write(
+                        writer,
+                        vec![s.into_owned(), p.into_owned(), o.into_owned()],
+                    )
                     .map_err(EvaluationError::ResultsSerialization)?;
                 for triple in triples {
                     let triple = triple?;
