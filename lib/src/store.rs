@@ -1452,9 +1452,9 @@ impl BulkLoader {
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`Store::load_dataset`] might be more convenient.
     ///
-    /// <div class="warning">This method is not atomic.</div>
+    /// <div class="warning">This method is not atomic.
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
-    /// Results might get weird if you delete data during the loading process.
+    /// Results might get weird if you delete data during the loading process.</div>
     ///
     /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     ///
@@ -1510,9 +1510,9 @@ impl BulkLoader {
     ///
     /// This function is optimized for large graph loading speed. For small files, [`Store::load_graph`] might be more convenient.   
     ///
-    /// <div class="warning">This method is not atomic.</div>
+    /// <div class="warning">This method is not atomic.
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
-    /// Results might get weird if you delete data during the loading process.
+    /// Results might get weird if you delete data during the loading process.</div>
     ///
     /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     ///
@@ -1570,9 +1570,9 @@ impl BulkLoader {
 
     /// Adds a set of quads using the bulk loader.
     ///
-    /// <div class="warning">This method is not atomic.</div>
+    /// <div class="warning">This method is not atomic.
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
-    /// Results might get weird if you delete data during the loading process.
+    /// Results might get weird if you delete data during the loading process.</div>
     ///
     /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     pub fn load_quads(
@@ -1584,9 +1584,9 @@ impl BulkLoader {
 
     /// Adds a set of quads using the bulk loader while breaking in the middle of the process in case of error.
     ///
-    /// <div class="warning">This method is not atomic.</div>
+    /// <div class="warning">This method is not atomic.
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
-    /// Results might get weird if you delete data during the loading process.
+    /// Results might get weird if you delete data during the loading process.</div>
     ///
     /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
