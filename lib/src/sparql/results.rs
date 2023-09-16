@@ -15,15 +15,15 @@
 //!     match json_parser.read_results(json_file)? {
 //!         QueryResultsReader::Boolean(value) => {
 //!             // it's a boolean result, we copy it in TSV to the output buffer
-//!             tsv_serializer.write_boolean_result(Vec::new(), value)
+//!             tsv_serializer.serialize_boolean_to_write(Vec::new(), value)
 //!         },
 //!         QueryResultsReader::Solutions(solutions_reader) => {
 //!             // it's a set of solutions, we create a writer and we write to it while reading in streaming from the JSON file
-//!             let mut solutions_writer = tsv_serializer.solutions_writer(Vec::new(), solutions_reader.variables().to_vec())?;
+//!             let mut serialize_solutions_to_write = tsv_serializer.serialize_solutions_to_write(Vec::new(), solutions_reader.variables().to_vec())?;
 //!             for solution in solutions_reader {
-//!                 solutions_writer.write(&solution?)?;
+//!                 serialize_solutions_to_write.write(&solution?)?;
 //!             }
-//!             solutions_writer.finish()
+//!             serialize_solutions_to_write.finish()
 //!         }
 //!     }
 //! }

@@ -247,7 +247,7 @@ impl PyQuerySolutions {
         PyWritable::do_write(
             |output, format| {
                 let mut writer = QueryResultsSerializer::from_format(format)
-                    .solutions_writer(
+                    .serialize_solutions_to_write(
                         output,
                         match &self.inner {
                             PyQuerySolutionsVariant::Query(inner) => inner.variables().to_vec(),
@@ -349,7 +349,7 @@ impl PyQueryBoolean {
             |output, format| {
                 py.allow_threads(|| {
                     QueryResultsSerializer::from_format(format)
-                        .write_boolean_result(output, self.inner)
+                        .serialize_boolean_to_write(output, self.inner)
                         .map_err(map_io_err)
                 })
             },

@@ -555,7 +555,7 @@ pub fn main() -> anyhow::Result<()> {
                         };
                         if let Some(results_file) = results_file {
                             let mut writer = QueryResultsSerializer::from_format(format)
-                                .solutions_writer(
+                                .serialize_solutions_to_write(
                                     BufWriter::new(File::create(results_file)?),
                                     solutions.variables().to_vec(),
                                 )?;
@@ -565,7 +565,7 @@ pub fn main() -> anyhow::Result<()> {
                             close_file_writer(writer.finish()?)?;
                         } else {
                             let mut writer = QueryResultsSerializer::from_format(format)
-                                .solutions_writer(
+                                .serialize_solutions_to_write(
                                     stdout().lock(),
                                     solutions.variables().to_vec(),
                                 )?;
@@ -595,14 +595,15 @@ pub fn main() -> anyhow::Result<()> {
                         };
                         if let Some(results_file) = results_file {
                             close_file_writer(
-                                QueryResultsSerializer::from_format(format).write_boolean_result(
-                                    BufWriter::new(File::create(results_file)?),
-                                    result,
-                                )?,
+                                QueryResultsSerializer::from_format(format)
+                                    .serialize_boolean_to_write(
+                                        BufWriter::new(File::create(results_file)?),
+                                        result,
+                                    )?,
                             )?;
                         } else {
                             QueryResultsSerializer::from_format(format)
-                                .write_boolean_result(stdout().lock(), result)?
+                                .serialize_boolean_to_write(stdout().lock(), result)?
                                 .flush()?;
                         }
                     }
@@ -1318,7 +1319,7 @@ fn evaluate_sparql_query(
                 move |w| {
                     Ok((
                         QueryResultsSerializer::from_format(format)
-                            .solutions_writer(w, solutions.variables().to_vec())?,
+                            .serialize_solutions_to_write(w, solutions.variables().to_vec())?,
                         solutions,
                     ))
                 },
@@ -1338,7 +1339,7 @@ fn evaluate_sparql_query(
             let format = query_results_content_negotiation(request)?;
             let mut body = Vec::new();
             QueryResultsSerializer::from_format(format)
-                .write_boolean_result(&mut body, result)
+                .serialize_boolean_to_write(&mut body, result)
                 .map_err(internal_server_error)?;
             Ok(Response::builder(Status::OK)
                 .with_header(HeaderName::CONTENT_TYPE, format.media_type())
