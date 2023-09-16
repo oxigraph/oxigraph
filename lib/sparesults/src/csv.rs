@@ -1,10 +1,13 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
 use crate::error::{ParseError, SyntaxError, SyntaxErrorKind};
+use memchr::memchr;
 use oxrdf::Variable;
 use oxrdf::{vocab::xsd, *};
-use std::io::{self, BufRead, Write};
-use std::str::FromStr;
+use std::io::{self, BufRead, Read, Write};
+use std::str::{self, FromStr};
+
+const MAX_BUFFER_SIZE: usize = 4096 * 4096;
 
 pub fn write_boolean_csv_result<W: Write>(mut sink: W, value: bool) -> io::Result<W> {
     sink.write_all(if value { b"true" } else { b"false" })?;
@@ -271,7 +274,7 @@ fn is_turtle_double(value: &str) -> bool {
     (with_before || with_after) && !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
-pub enum TsvQueryResultsReader<R: BufRead> {
+pub enum TsvQueryResultsReader<R: Read> {
     Solutions {
         variables: Vec<Variable>,
         solutions: TsvSolutionsReader<R>,
@@ -279,14 +282,13 @@ pub enum TsvQueryResultsReader<R: BufRead> {
     Boolean(bool),
 }
 
-impl<R: BufRead> TsvQueryResultsReader<R> {
-    pub fn read(mut source: R) -> Result<Self, ParseError> {
-        let mut buffer = String::new();
+impl<R: Read> TsvQueryResultsReader<R> {
+    pub fn read(read: R) -> Result<Self, ParseError> {
+        let mut reader = LineReader::new(read);
 
         // We read the header
-        source.read_line(&mut buffer)?;
-        let line = buffer
-            .as_str()
+        let line = reader
+            .next_line()?
             .trim_matches(|c| matches!(c, ' ' | '\r' | '\n'));
         if line.eq_ignore_ascii_case("true") {
             return Ok(Self::Boolean(true));
@@ -316,29 +318,23 @@ impl<R: BufRead> TsvQueryResultsReader<R> {
         let column_len = variables.len();
         Ok(Self::Solutions {
             variables,
-            solutions: TsvSolutionsReader {
-                source,
-                buffer,
-                column_len,
-            },
+            solutions: TsvSolutionsReader { reader, column_len },
         })
     }
 }
 
-pub struct TsvSolutionsReader<R: BufRead> {
-    source: R,
-    buffer: String,
+pub struct TsvSolutionsReader<R: Read> {
+    reader: LineReader<R>,
     column_len: usize,
 }
 
 impl<R: BufRead> TsvSolutionsReader<R> {
     pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
-        self.buffer.clear();
-        if self.source.read_line(&mut self.buffer)? == 0 {
-            return Ok(None);
+        let line = self.reader.next_line()?;
+        if line.is_empty() {
+            return Ok(None); // EOF
         }
-        let elements = self
-            .buffer
+        let elements = line
             .split('\t')
             .map(|v| {
                 let v = v.trim();
@@ -346,7 +342,10 @@ impl<R: BufRead> TsvSolutionsReader<R> {
                     Ok(None)
                 } else {
                     Ok(Some(Term::from_str(v).map_err(|e| SyntaxError {
-                        inner: SyntaxErrorKind::Term(e),
+                        inner: SyntaxErrorKind::Term {
+                            error: e,
+                            term: v.into(),
+                        },
                     })?))
                 }
             })
@@ -357,13 +356,64 @@ impl<R: BufRead> TsvSolutionsReader<R> {
             Ok(Some(Vec::new())) // Zero columns case
         } else {
             Err(SyntaxError::msg(format!(
-                "This TSV files has {} columns but we found a row with {} columns: {:?}",
+                "This TSV files has {} columns but we found a row with {} columns: {}",
                 self.column_len,
                 elements.len(),
-                self.buffer
+                line
             ))
             .into())
         }
+    }
+}
+
+struct LineReader<R: Read> {
+    read: R,
+    buffer: Vec<u8>,
+    start: usize,
+    end: usize,
+}
+
+impl<R: Read> LineReader<R> {
+    fn new(read: R) -> Self {
+        Self {
+            read,
+            buffer: Vec::new(),
+            start: 0,
+            end: 0,
+        }
+    }
+
+    fn next_line(&mut self) -> io::Result<&str> {
+        self.buffer.copy_within(self.start..self.end, 0);
+        self.end -= self.start;
+        self.start = 0;
+        let line_end = loop {
+            if let Some(eol) = memchr(b'\n', &self.buffer[self.start..self.end]) {
+                break self.start + eol + 1;
+            }
+            if self.end + 1024 > self.buffer.len() {
+                if self.end + 1024 > MAX_BUFFER_SIZE {
+                    return Err(io::Error::new(
+                        io::ErrorKind::OutOfMemory,
+                        format!("Reached the buffer maximal size of {MAX_BUFFER_SIZE}"),
+                    ));
+                }
+                self.buffer.resize(self.end + 1024, b'\0');
+            }
+            let read = self.read.read(&mut self.buffer[self.end..])?;
+            if read == 0 {
+                break self.end;
+            }
+            self.end += read;
+        };
+        let result = str::from_utf8(&self.buffer[self.start..line_end]).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid UTF-8 in the TSV file: {e}"),
+            )
+        });
+        self.start = line_end;
+        result
     }
 }
 

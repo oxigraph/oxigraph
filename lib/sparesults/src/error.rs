@@ -78,9 +78,9 @@ pub struct SyntaxError {
 }
 
 #[derive(Debug)]
-pub enum SyntaxErrorKind {
+pub(crate) enum SyntaxErrorKind {
     Xml(quick_xml::Error),
-    Term(TermParseError),
+    Term { error: TermParseError, term: String },
     Msg { msg: String },
 }
 
@@ -99,7 +99,7 @@ impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
             SyntaxErrorKind::Xml(e) => e.fmt(f),
-            SyntaxErrorKind::Term(e) => e.fmt(f),
+            SyntaxErrorKind::Term { error, term } => write!(f, "{error}: {term}"),
             SyntaxErrorKind::Msg { msg } => f.write_str(msg),
         }
     }
@@ -110,7 +110,7 @@ impl Error for SyntaxError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.inner {
             SyntaxErrorKind::Xml(e) => Some(e),
-            SyntaxErrorKind::Term(e) => Some(e),
+            SyntaxErrorKind::Term { error, .. } => Some(error),
             SyntaxErrorKind::Msg { .. } => None,
         }
     }
@@ -130,7 +130,9 @@ impl From<SyntaxError> for io::Error {
                 }
                 _ => Self::new(io::ErrorKind::InvalidData, error),
             },
-            SyntaxErrorKind::Term(error) => Self::new(io::ErrorKind::InvalidData, error),
+            SyntaxErrorKind::Term { .. } => {
+                Self::new(io::ErrorKind::InvalidData, error.to_string())
+            }
             SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
