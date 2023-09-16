@@ -4,7 +4,8 @@ use crate::store::map_storage_error;
 use oxigraph::io::RdfSerializer;
 use oxigraph::model::Term;
 use oxigraph::sparql::results::{
-    ParseError, QueryResultsParser, QueryResultsReader, QueryResultsSerializer, SolutionsReader,
+    FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsParser,
+    QueryResultsSerializer,
 };
 use oxigraph::sparql::{
     EvaluationError, Query, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
@@ -189,7 +190,7 @@ pub struct PyQuerySolutions {
 }
 enum PyQuerySolutionsVariant {
     Query(QuerySolutionIter),
-    Reader(SolutionsReader<BufReader<PyReadable>>),
+    Reader(FromReadSolutionsReader<BufReader<PyReadable>>),
 }
 
 #[pymethods]
@@ -496,14 +497,14 @@ pub fn parse_query_results(
         PyReadable::from_data(input)
     };
     let results = QueryResultsParser::from_format(format)
-        .read_results(BufReader::new(input))
+        .parse_read(BufReader::new(input))
         .map_err(map_query_results_parse_error)?;
     Ok(match results {
-        QueryResultsReader::Solutions(inner) => PyQuerySolutions {
+        FromReadQueryResultsReader::Solutions(inner) => PyQuerySolutions {
             inner: PyQuerySolutionsVariant::Reader(inner),
         }
         .into_py(py),
-        QueryResultsReader::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
+        FromReadQueryResultsReader::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
     })
 }
 

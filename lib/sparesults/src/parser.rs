@@ -17,16 +17,16 @@ use std::rc::Rc;
 ///
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, QueryResultsReader};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
 /// use oxrdf::{Literal, Variable};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 /// // boolean
-/// if let QueryResultsReader::Boolean(v) = json_parser.read_results(b"{\"boolean\":true}".as_slice())? {
+/// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(b"{\"boolean\":true}".as_slice())? {
 ///     assert_eq!(v, true);
 /// }
 /// // solutions
-/// if let QueryResultsReader::Solutions(solutions) = json_parser.read_results(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice())? {
+/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice())? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -49,18 +49,18 @@ impl QueryResultsParser {
     ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
-    /// use sparesults::{QueryResultsFormat, QueryResultsParser, QueryResultsReader};
+    /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
     /// use oxrdf::{Literal, Variable};
     ///
     /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let QueryResultsReader::Boolean(v) = json_parser.read_results(b"<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head/><boolean>true</boolean></sparql>".as_slice())? {
+    /// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(b"<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head/><boolean>true</boolean></sparql>".as_slice())? {
     ///     assert_eq!(v, true);
     /// }
     ///
     /// // solutions
-    /// if let QueryResultsReader::Solutions(solutions) = json_parser.read_results(b"<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head><variable name=\"foo\"/><variable name=\"bar\"/></head><results><result><binding name=\"foo\"><literal>test</literal></binding></result></results></sparql>".as_slice())? {
+    /// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head><variable name=\"foo\"/><variable name=\"bar\"/></head><results><result><binding name=\"foo\"><literal>test</literal></binding></result></results></sparql>".as_slice())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
     ///     for solution in solutions {
     ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -68,61 +68,72 @@ impl QueryResultsParser {
     /// }
     /// # Result::<(),sparesults::ParseError>::Ok(())
     /// ```
-    pub fn read_results<R: BufRead>(&self, reader: R) -> Result<QueryResultsReader<R>, ParseError> {
+    pub fn parse_read<R: BufRead>(
+        &self,
+        reader: R,
+    ) -> Result<FromReadQueryResultsReader<R>, ParseError> {
         Ok(match self.format {
             QueryResultsFormat::Xml => match XmlQueryResultsReader::read(reader)? {
-                XmlQueryResultsReader::Boolean(r) => QueryResultsReader::Boolean(r),
+                XmlQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
                 XmlQueryResultsReader::Solutions {
                     solutions,
                     variables,
-                } => QueryResultsReader::Solutions(SolutionsReader {
+                } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
                     variables: Rc::new(variables),
                     solutions: SolutionsReaderKind::Xml(solutions),
                 }),
             },
             QueryResultsFormat::Json => match JsonQueryResultsReader::read(reader)? {
-                JsonQueryResultsReader::Boolean(r) => QueryResultsReader::Boolean(r),
+                JsonQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
                 JsonQueryResultsReader::Solutions {
                     solutions,
                     variables,
-                } => QueryResultsReader::Solutions(SolutionsReader {
+                } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
                     variables: Rc::new(variables),
                     solutions: SolutionsReaderKind::Json(solutions),
                 }),
             },
             QueryResultsFormat::Csv => return Err(SyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation").into()),
             QueryResultsFormat::Tsv => match TsvQueryResultsReader::read(reader)? {
-                TsvQueryResultsReader::Boolean(r) => QueryResultsReader::Boolean(r),
+                TsvQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
                 TsvQueryResultsReader::Solutions {
                     solutions,
                     variables,
-                } => QueryResultsReader::Solutions(SolutionsReader {
+                } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
                     variables: Rc::new(variables),
                     solutions: SolutionsReaderKind::Tsv(solutions),
                 }),
             },
         })
     }
+
+    #[deprecated(note = "Use parse_read")]
+    pub fn read_results<R: BufRead>(
+        &self,
+        reader: R,
+    ) -> Result<FromReadQueryResultsReader<R>, ParseError> {
+        self.parse_read(reader)
+    }
 }
 
 /// The reader for a given read of a results file.
 ///
-/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`SolutionsReader`]).
+/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`FromReadSolutionsReader`]).
 ///
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, QueryResultsReader};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
 /// use oxrdf::{Literal, Variable};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
 /// // boolean
-/// if let QueryResultsReader::Boolean(v) = json_parser.read_results(b"true".as_slice())? {
+/// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(b"true".as_slice())? {
 ///     assert_eq!(v, true);
 /// }
 ///
 /// // solutions
-/// if let QueryResultsReader::Solutions(solutions) = json_parser.read_results(b"?foo\t?bar\n\"test\"\t".as_slice())? {
+/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"?foo\t?bar\n\"test\"\t".as_slice())? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -130,8 +141,8 @@ impl QueryResultsParser {
 /// }
 /// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
-pub enum QueryResultsReader<R: BufRead> {
-    Solutions(SolutionsReader<R>),
+pub enum FromReadQueryResultsReader<R: BufRead> {
+    Solutions(FromReadSolutionsReader<R>),
     Boolean(bool),
 }
 
@@ -141,11 +152,11 @@ pub enum QueryResultsReader<R: BufRead> {
 ///
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, QueryResultsReader};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
 /// use oxrdf::{Literal, Variable};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
-/// if let QueryResultsReader::Solutions(solutions) = json_parser.read_results(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice())? {
+/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice())? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -154,7 +165,7 @@ pub enum QueryResultsReader<R: BufRead> {
 /// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
 #[allow(clippy::rc_buffer)]
-pub struct SolutionsReader<R: BufRead> {
+pub struct FromReadSolutionsReader<R: BufRead> {
     variables: Rc<Vec<Variable>>,
     solutions: SolutionsReaderKind<R>,
 }
@@ -165,16 +176,16 @@ enum SolutionsReaderKind<R: BufRead> {
     Tsv(TsvSolutionsReader<R>),
 }
 
-impl<R: BufRead> SolutionsReader<R> {
+impl<R: BufRead> FromReadSolutionsReader<R> {
     /// Ordered list of the declared variables at the beginning of the results.
     ///
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
-    /// use sparesults::{QueryResultsFormat, QueryResultsParser, QueryResultsReader};
+    /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
     /// use oxrdf::Variable;
     ///
     /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
-    /// if let QueryResultsReader::Solutions(solutions) = json_parser.read_results(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())? {
+    /// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
     /// }
     /// # Result::<(),sparesults::ParseError>::Ok(())
@@ -185,7 +196,7 @@ impl<R: BufRead> SolutionsReader<R> {
     }
 }
 
-impl<R: BufRead> Iterator for SolutionsReader<R> {
+impl<R: BufRead> Iterator for FromReadSolutionsReader<R> {
     type Item = Result<QuerySolution, ParseError>;
 
     fn next(&mut self) -> Option<Result<QuerySolution, ParseError>> {

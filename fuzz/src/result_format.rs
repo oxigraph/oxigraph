@@ -1,17 +1,17 @@
 use anyhow::Context;
 use sparesults::{
-    QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
+    FromReadQueryResultsReader, QueryResultsFormat, QueryResultsParser, QueryResultsSerializer,
 };
 
 pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
     let parser = QueryResultsParser::from_format(format);
     let serializer = QueryResultsSerializer::from_format(format);
 
-    let Ok(reader) = parser.read_results(data) else {
+    let Ok(reader) = parser.parse_read(data) else {
         return;
     };
     match reader {
-        QueryResultsReader::Solutions(solutions) => {
+        FromReadQueryResultsReader::Solutions(solutions) => {
             let Ok(solutions) = solutions.collect::<Result<Vec<_>, _>>() else {
                 return;
             };
@@ -31,8 +31,8 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
             let serialized = String::from_utf8(writer.finish().unwrap()).unwrap();
 
             // And to parse again
-            if let QueryResultsReader::Solutions(roundtrip_solutions) = parser
-                .read_results(serialized.as_bytes())
+            if let FromReadQueryResultsReader::Solutions(roundtrip_solutions) = parser
+                .parse_read(serialized.as_bytes())
                 .with_context(|| format!("Parsing {:?}", &serialized))
                 .unwrap()
             {
@@ -45,7 +45,7 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
                 )
             }
         }
-        QueryResultsReader::Boolean(value) => {
+        FromReadQueryResultsReader::Boolean(value) => {
             // We try to write again
             let mut serialized = Vec::new();
             serializer
@@ -53,8 +53,8 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
                 .unwrap();
 
             // And to parse again
-            if let QueryResultsReader::Boolean(roundtrip_value) =
-                parser.read_results(serialized.as_slice()).unwrap()
+            if let FromReadQueryResultsReader::Boolean(roundtrip_value) =
+                parser.parse_read(serialized.as_slice()).unwrap()
             {
                 assert_eq!(roundtrip_value, value)
             }

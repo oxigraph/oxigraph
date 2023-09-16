@@ -5,19 +5,19 @@
 //! Usage example converting a JSON result file into a TSV result file:
 //!
 //! ```
-//! use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer};
+//! use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader, QueryResultsSerializer};
 //! use std::io::Result;
 //!
 //! fn convert_json_to_tsv(json_file: &[u8]) -> Result<Vec<u8>> {
 //!     let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 //!     let tsv_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
 //!     // We start to read the JSON file and see which kind of results it is
-//!     match json_parser.read_results(json_file)? {
-//!         QueryResultsReader::Boolean(value) => {
+//!     match json_parser.parse_read(json_file)? {
+//!         FromReadQueryResultsReader::Boolean(value) => {
 //!             // it's a boolean result, we copy it in TSV to the output buffer
 //!             tsv_serializer.serialize_boolean_to_write(Vec::new(), value)
-//!         },
-//!         QueryResultsReader::Solutions(solutions_reader) => {
+//!         }
+//!         FromReadQueryResultsReader::Solutions(solutions_reader) => {
 //!             // it's a set of solutions, we create a writer and we write to it while reading in streaming from the JSON file
 //!             let mut serialize_solutions_to_write = tsv_serializer.serialize_solutions_to_write(Vec::new(), solutions_reader.variables().to_vec())?;
 //!             for solution in solutions_reader {
@@ -42,6 +42,6 @@
 //! ```
 
 pub use sparesults::{
-    ParseError, QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
-    SolutionsReader, SyntaxError,
+    FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsFormat,
+    QueryResultsParser, QueryResultsSerializer, SyntaxError,
 };
