@@ -67,9 +67,7 @@ impl<W: Write> JsonSolutionsWriter<W> {
         self.writer.write_event(JsonEvent::EndArray)?;
         self.writer.write_event(JsonEvent::EndObject)?;
         self.writer.write_event(JsonEvent::EndObject)?;
-        let mut inner = self.writer.into_inner();
-        inner.flush()?;
-        Ok(inner)
+        Ok(self.writer.into_inner())
     }
 }
 

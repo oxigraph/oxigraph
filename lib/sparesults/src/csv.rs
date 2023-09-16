@@ -55,9 +55,8 @@ impl<W: Write> CsvSolutionsWriter<W> {
         self.sink.write_all(b"\r\n")
     }
 
-    pub fn finish(mut self) -> io::Result<W> {
-        self.sink.flush()?;
-        Ok(self.sink)
+    pub fn finish(self) -> W {
+        self.sink
     }
 }
 
@@ -146,9 +145,8 @@ impl<W: Write> TsvSolutionsWriter<W> {
         self.sink.write_all(b"\n")
     }
 
-    pub fn finish(mut self) -> io::Result<W> {
-        self.sink.flush()?;
-        Ok(self.sink)
+    pub fn finish(self) -> W {
+        self.sink
     }
 }
 
@@ -436,7 +434,7 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             )?;
         }
-        let result = writer.finish()?;
+        let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"\r\n");
         Ok(())
     }
@@ -456,7 +454,7 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             )?;
         }
-        let result = writer.finish()?;
+        let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n");
 
         // Read
@@ -507,7 +505,7 @@ mod tests {
     fn test_no_columns_csv_serialization() -> io::Result<()> {
         let mut writer = CsvSolutionsWriter::start(Vec::new(), Vec::new())?;
         writer.write([])?;
-        let result = writer.finish()?;
+        let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "\r\n\r\n");
         Ok(())
     }
@@ -516,7 +514,7 @@ mod tests {
     fn test_no_columns_tsv_serialization() -> io::Result<()> {
         let mut writer = TsvSolutionsWriter::start(Vec::new(), Vec::new())?;
         writer.write([])?;
-        let result = writer.finish()?;
+        let result = writer.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "\n\n");
         Ok(())
     }
@@ -540,7 +538,7 @@ mod tests {
     #[test]
     fn test_no_results_csv_serialization() -> io::Result<()> {
         let result =
-            CsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish()?;
+            CsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "a\r\n");
         Ok(())
     }
@@ -548,7 +546,7 @@ mod tests {
     #[test]
     fn test_no_results_tsv_serialization() -> io::Result<()> {
         let result =
-            TsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish()?;
+            TsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish();
         assert_eq!(str::from_utf8(&result).unwrap(), "?a\n");
         Ok(())
     }
