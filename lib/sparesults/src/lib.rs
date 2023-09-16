@@ -15,6 +15,6 @@ mod xml;
 
 pub use crate::error::{ParseError, SyntaxError};
 pub use crate::format::QueryResultsFormat;
-pub use crate::parser::{QueryResultsParser, QueryResultsReader, SolutionsReader};
+pub use crate::parser::{FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsParser};
 pub use crate::serializer::{QueryResultsSerializer, ToWriteSolutionsWriter};
 pub use crate::solution::QuerySolution;

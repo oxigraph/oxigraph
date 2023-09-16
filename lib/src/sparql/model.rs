@@ -2,8 +2,8 @@ use crate::io::{RdfFormat, RdfSerializer};
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::results::{
-    ParseError, QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer,
-    SolutionsReader,
+    FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsFormat,
+    QueryResultsParser, QueryResultsSerializer,
 };
 use oxrdf::{Variable, VariableRef};
 pub use sparesults::QuerySolution;
@@ -27,7 +27,7 @@ impl QueryResults {
         format: QueryResultsFormat,
     ) -> Result<Self, ParseError> {
         Ok(QueryResultsParser::from_format(format)
-            .read_results(reader)?
+            .parse_read(reader)?
             .into())
     }
 
@@ -150,11 +150,11 @@ impl From<QuerySolutionIter> for QueryResults {
     }
 }
 
-impl<R: BufRead + 'static> From<QueryResultsReader<R>> for QueryResults {
-    fn from(reader: QueryResultsReader<R>) -> Self {
+impl<R: BufRead + 'static> From<FromReadQueryResultsReader<R>> for QueryResults {
+    fn from(reader: FromReadQueryResultsReader<R>) -> Self {
         match reader {
-            QueryResultsReader::Solutions(s) => Self::Solutions(s.into()),
-            QueryResultsReader::Boolean(v) => Self::Boolean(v),
+            FromReadQueryResultsReader::Solutions(s) => Self::Solutions(s.into()),
+            FromReadQueryResultsReader::Boolean(v) => Self::Boolean(v),
         }
     }
 }
@@ -211,8 +211,8 @@ impl QuerySolutionIter {
     }
 }
 
-impl<R: BufRead + 'static> From<SolutionsReader<R>> for QuerySolutionIter {
-    fn from(reader: SolutionsReader<R>) -> Self {
+impl<R: BufRead + 'static> From<FromReadSolutionsReader<R>> for QuerySolutionIter {
+    fn from(reader: FromReadSolutionsReader<R>) -> Self {
         Self {
             variables: Rc::new(reader.variables().to_vec()),
             iter: Box::new(reader.map(|t| t.map_err(EvaluationError::from))),
