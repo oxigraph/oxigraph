@@ -879,7 +879,7 @@ fn rdf_format_from_name(name: &str) -> anyhow::Result<RdfFormat> {
 }
 
 fn serve(store: Store, bind: String, read_only: bool, cors: bool) -> anyhow::Result<()> {
-    let mut server = if cors {
+    let server = if cors {
         Server::new(cors_middleware(move |request| {
             handle_request(request, store.clone(), read_only)
                 .unwrap_or_else(|(status, message)| error(status, message))
@@ -889,9 +889,10 @@ fn serve(store: Store, bind: String, read_only: bool, cors: bool) -> anyhow::Res
             handle_request(request, store.clone(), read_only)
                 .unwrap_or_else(|(status, message)| error(status, message))
         })
-    };
-    server.set_global_timeout(HTTP_TIMEOUT);
-    server.set_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))?;
+    }
+    .with_global_timeout(HTTP_TIMEOUT)
+    .with_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))?
+    .with_max_num_threads(available_parallelism()?.get() * 128);
     #[cfg(target_os = "linux")]
     systemd_notify_ready()?;
     eprintln!("Listening for requests at http://{}", &bind);
@@ -1191,7 +1192,7 @@ fn handle_request(
                         resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
                     web_load_graph(&store, request, format, &graph.clone().into())?;
                     Ok(Response::builder(Status::CREATED)
-                        .with_header(HeaderName::LOCATION, graph.as_str())
+                        .with_header(HeaderName::LOCATION, graph.into_string())
                         .unwrap()
                         .build())
                 }

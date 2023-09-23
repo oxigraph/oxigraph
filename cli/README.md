@@ -40,6 +40,13 @@ There is no need to clone the git repository.
 To compile the command line tool from source, clone this git repository including its submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`), and execute `cargo build --release` in the `cli` directory to compile the full binary after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph`.
 
+Some build options (cargo features) are available:
+- `rocksdb-pkg-config`: links against an already compiled rocksdb shared library found using [pkg-config](https://crates.io/crates/pkg-config).
+- `native-tls`: Enables Oxigraph HTTP client for query federation using the host OS TLS stack (enabled by default).
+- `rustls-native` Enables Oxigraph HTTP client for query federation using [Rustls](https://crates.io/crates/rustls) and the native certificates.
+- `rustls-webpki` Enables Oxigraph HTTP client for query federation using [Rustls](https://crates.io/crates/rustls) and the [Common CA Database](https://www.ccadb.org/) certificates.
+
+
 ## Usage
 
 Run `oxigraph serve --location my_data_storage_directory` to start the server where `my_data_storage_directory` is the directory where you want Oxigraph data to be stored. It listens by default on `localhost:7878`.

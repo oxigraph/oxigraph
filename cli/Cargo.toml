@@ -19,13 +19,17 @@ name = "oxigraph"
 path = "src/main.rs"
 
 [features]
+default = ["native-tls"]
+native-tls = ["oxigraph/http-client-native-tls"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
+rustls-native = ["oxigraph/http-client-rustls-native"]
+rustls-webpki = ["oxigraph/http-client-rustls-webpki"]
 
 [dependencies]
 anyhow = "1.0.72"
-oxhttp = { version = "0.1.7", features = ["rayon"] }
+oxhttp = { version = "0.2.0-alpha.1" }
 clap = { version = "4.0", features = ["derive"] }
-oxigraph = { version = "0.4.0-alpha.1-dev", path = "../lib", features = ["http_client"] }
+oxigraph = { version = "0.4.0-alpha.1-dev", path = "../lib" }
 rand = "0.8"
 url = "2.4"
 oxiri = "0.2"

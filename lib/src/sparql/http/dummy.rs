@@ -11,10 +11,10 @@ impl Client {
     }
 
     #[allow(clippy::unused_self)]
-    pub fn get(&self, _url: &str, _accept: &str) -> Result<(String, Empty)> {
+    pub fn get(&self, _url: &str, _accept: &'static str) -> Result<(String, Empty)> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "HTTP client is not available. Enable the feature 'http_client'",
+            "HTTP client is not available. Enable the feature 'http-client'",
         ))
     }
 
@@ -23,12 +23,12 @@ impl Client {
         &self,
         _url: &str,
         _payload: Vec<u8>,
-        _content_type: &str,
-        _accept: &str,
+        _content_type: &'static str,
+        _accept: &'static str,
     ) -> Result<(String, Empty)> {
         Err(Error::new(
             ErrorKind::Unsupported,
-            "HTTP client is not available. Enable the feature 'http_client'",
+            "HTTP client is not available. Enable the feature 'http-client'",
         ))
     }
 }
