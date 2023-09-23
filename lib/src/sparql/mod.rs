@@ -138,7 +138,7 @@ pub(crate) fn evaluate_query(
 /// Options for SPARQL query evaluation.
 ///
 ///
-/// If the `"http_client"` optional feature is enabled,
+/// If the `"http-client"` optional feature is enabled,
 /// a simple HTTP 1.1 client is used to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
 ///
 /// Usage example disabling the federated query support:
@@ -182,7 +182,7 @@ impl QueryOptions {
     }
 
     /// Sets a timeout for HTTP requests done during SPARQL evaluation.
-    #[cfg(feature = "http_client")]
+    #[cfg(feature = "http-client")]
     #[inline]
     #[must_use]
     pub fn with_http_timeout(mut self, timeout: Duration) -> Self {
@@ -193,7 +193,7 @@ impl QueryOptions {
     /// Sets an upper bound of the number of HTTP redirection followed per HTTP request done during SPARQL evaluation.
     ///
     /// By default this value is `0`.
-    #[cfg(feature = "http_client")]
+    #[cfg(feature = "http-client")]
     #[inline]
     #[must_use]
     pub fn with_http_redirection_limit(mut self, redirection_limit: usize) -> Self {
@@ -235,7 +235,7 @@ impl QueryOptions {
 
     fn service_handler(&self) -> Rc<dyn ServiceHandler<Error = EvaluationError>> {
         self.service_handler.clone().unwrap_or_else(|| {
-            if cfg!(feature = "http_client") {
+            if cfg!(feature = "http-client") {
                 Rc::new(service::SimpleServiceHandler::new(
                     self.http_timeout,
                     self.http_redirection_limit,

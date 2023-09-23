@@ -18,9 +18,12 @@ rust-version.workspace  = true
 [features]
 default = []
 js = ["getrandom/js", "oxsdatatypes/js", "js-sys"]
-http_client = ["oxhttp", "oxhttp/rustls"]
+http-client = ["oxhttp"]
+http-client-native-tls = ["http-client", "oxhttp/native-tls"]
+http-client-rustls-webpki = ["http-client", "oxhttp/rustls-webpki"]
+http-client-rustls-native = ["http-client", "oxhttp/rustls-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
-rocksdb_debug = []
+rocksdb-debug = []
 
 [dependencies]
 digest = "0.10"
@@ -44,7 +47,7 @@ sparopt = { version = "0.1.0-alpha.1-dev", path="sparopt", features = ["rdf-star
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc = "0.2.147"
 oxrocksdb-sys = { version = "0.4.0-alpha.1-dev", path="../oxrocksdb-sys" }
-oxhttp = { version = "0.1.7", optional = true }
+oxhttp = { version = "0.2.0-alpha.1", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom = "0.2"
@@ -52,7 +55,7 @@ js-sys = { version = "0.3.60", optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 criterion = "0.5"
-oxhttp = "0.1.7"
+oxhttp = "0.2.0-alpha.1"
 zstd = "0.12"
 
 [package.metadata.docs.rs]

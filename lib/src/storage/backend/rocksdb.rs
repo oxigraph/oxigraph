@@ -200,7 +200,7 @@ impl Db {
                 16,
             );
             rocksdb_options_set_block_based_table_factory(options, block_based_table_options);
-            #[cfg(feature = "rocksdb_debug")]
+            #[cfg(feature = "rocksdb-debug")]
             {
                 rocksdb_options_set_info_log_level(options, 0);
                 rocksdb_options_enable_statistics(options);

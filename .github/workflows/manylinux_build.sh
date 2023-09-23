@@ -13,9 +13,9 @@ source venv/bin/activate
 pip install -r requirements.dev.txt
 maturin develop --release
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
-maturin build --release --features abi3 --compatibility manylinux2014
+maturin build --release --no-default-features --features abi3 --features rustls --compatibility manylinux2014
 if [ %for_each_version% ]; then
   for VERSION in 7 8 9 10 11; do
-    maturin build --release --interpreter "python3.$VERSION" --compatibility manylinux2014
+    maturin build --release --no-default-features --features rustls --interpreter "python3.$VERSION" --compatibility manylinux2014
   done
 fi

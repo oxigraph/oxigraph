@@ -8,18 +8,17 @@ pub struct Client {
 
 impl Client {
     pub fn new(timeout: Option<Duration>, redirection_limit: usize) -> Self {
-        let mut client = oxhttp::Client::new();
-        if let Some(timeout) = timeout {
-            client.set_global_timeout(timeout);
-        }
-        client.set_redirection_limit(redirection_limit);
-        client
-            .set_user_agent(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
+        let mut client = oxhttp::Client::new()
+            .with_redirection_limit(redirection_limit)
+            .with_user_agent(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))
             .unwrap();
+        if let Some(timeout) = timeout {
+            client = client.with_global_timeout(timeout);
+        }
         Self { client }
     }
 
-    pub fn get(&self, url: &str, accept: &str) -> Result<(String, Body)> {
+    pub fn get(&self, url: &str, accept: &'static str) -> Result<(String, Body)> {
         let request = Request::builder(Method::GET, url.parse().map_err(invalid_input_error)?)
             .with_header(HeaderName::ACCEPT, accept)
             .map_err(invalid_input_error)?
@@ -50,8 +49,8 @@ impl Client {
         &self,
         url: &str,
         payload: Vec<u8>,
-        content_type: &str,
-        accept: &str,
+        content_type: &'static str,
+        accept: &'static str,
     ) -> Result<(String, Body)> {
         let request = Request::builder(Method::POST, url.parse().map_err(invalid_input_error)?)
             .with_header(HeaderName::ACCEPT, accept)

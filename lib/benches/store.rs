@@ -207,8 +207,7 @@ criterion_main!(store);
 
 fn read_data(file: &str) -> impl Read {
     if !Path::new(file).exists() {
-        let mut client = oxhttp::Client::new();
-        client.set_redirection_limit(5);
+        let client = oxhttp::Client::new().with_redirection_limit(5);
         let url = format!("https://github.com/Tpt/bsbm-tools/releases/download/v0.2/{file}");
         let request = Request::builder(Method::GET, url.parse().unwrap()).build();
         let response = client.request(request).unwrap();

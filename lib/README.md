@@ -48,9 +48,14 @@ if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { 
 ```
 
 Some parts of this library are available as standalone crates:
-* [`oxrdf`](https://crates.io/crates/oxrdf) provides datastructures encoding RDF basic concepts (the `oxigraph::model` module).
-* [`spargebra`](https://crates.io/crates/spargebra) provides a SPARQL parser.
-* [`sparesults`](https://crates.io/crates/sparesults) provides parsers and serializers for SPARQL result formats.
+* [`oxrdf`](https://crates.io/crates/oxrdf), datastructures encoding RDF basic concepts (the `oxigraph::model` module).
+* [`oxrdfio`](https://crates.io/crates/oxrdfio), a unified parser and serializer API for RDF formats. It itself relies on:
+  * [`oxttl`](https://crates.io/crates/oxttl), N-Triple, N-Quad, Turtle, TriG and N3 parsing and serialization.
+  * [`oxrdfxml`](https://crates.io/crates/oxrdfxml), RDF/XML parsing and serialization.
+* [`spargebra`](https://crates.io/crates/spargebra), a SPARQL parser.
+* [`sparesults`](https://crates.io/crates/sparesults), parsers and serializers for SPARQL result formats.
+* [`sparopt`](https://crates.io/crates/sparesults), a SPARQL optimizer.
+* [`oxsdatatypes`](https://crates.io/crates/oxsdatatypes), an implementation of some XML Schema datatypes.
 
 To build the library, don't forget to clone the submodules using `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or `git submodule update --init` to add submodules to the already cloned repository.
 
