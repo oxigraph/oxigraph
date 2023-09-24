@@ -24,7 +24,7 @@ authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 homepage = "https://oxigraph.org/"
 edition = "2021"
-rust-version = "1.67"
+rust-version = "1.70"
 
 [profile.release]
 lto = true

@@ -24,7 +24,7 @@ rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 [dependencies]
 anyhow = "1.0.72"
 oxhttp = { version = "0.1.7", features = ["rayon"] }
-clap = { version = ">=4.0, <5.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive"] }
 oxigraph = { version = "0.4.0-alpha.1-dev", path = "../lib", features = ["http_client"] }
 rand = "0.8"
 url = "2.4"

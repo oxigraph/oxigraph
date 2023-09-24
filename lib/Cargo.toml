@@ -26,7 +26,6 @@ rocksdb_debug = []
 digest = "0.10"
 hex = "0.4"
 json-event-parser = "0.1"
-lazy_static = "1.4"
 md-5 = "0.10"
 oxilangtag = "0.1"
 oxiri = "0.2"
