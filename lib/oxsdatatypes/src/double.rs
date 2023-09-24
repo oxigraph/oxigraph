@@ -173,7 +173,7 @@ impl From<Float> for Double {
 impl From<Boolean> for Double {
     #[inline]
     fn from(value: Boolean) -> Self {
-        if bool::from(value) { 1. } else { 0. }.into()
+        f64::from(bool::from(value)).into()
     }
 }
 

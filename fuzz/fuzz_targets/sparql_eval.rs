@@ -1,27 +1,26 @@
 #![no_main]
 
-use lazy_static::lazy_static;
 use libfuzzer_sys::fuzz_target;
 use oxigraph::io::RdfFormat;
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, QuerySolutionIter};
 use oxigraph::store::Store;
+use std::sync::OnceLock;
 
-lazy_static! {
-    static ref STORE: Store = {
+fuzz_target!(|data: sparql_smith::Query| {
+    static STORE: OnceLock<Store> = OnceLock::new();
+    let store = STORE.get_or_init(|| {
         let store = Store::new().unwrap();
         store
             .load_dataset(sparql_smith::DATA_TRIG.as_bytes(), RdfFormat::TriG, None)
             .unwrap();
         store
-    };
-}
+    });
 
-fuzz_target!(|data: sparql_smith::Query| {
     let query_str = data.to_string();
     if let Ok(query) = Query::parse(&query_str, None) {
         let options = QueryOptions::default();
-        let with_opt = STORE.query_opt(query.clone(), options.clone()).unwrap();
-        let without_opt = STORE
+        let with_opt = store.query_opt(query.clone(), options.clone()).unwrap();
+        let without_opt = store
             .query_opt(query, options.without_optimizations())
             .unwrap();
         match (with_opt, without_opt) {
