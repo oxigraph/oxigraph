@@ -1,5 +1,6 @@
 use oxrdf::TermParseError;
 use std::error::Error;
+use std::ops::Range;
 use std::sync::Arc;
 use std::{fmt, io};
 
@@ -90,8 +91,15 @@ pub struct SyntaxError {
 pub(crate) enum SyntaxErrorKind {
     Json(json_event_parser::SyntaxError),
     Xml(quick_xml::Error),
-    Term { error: TermParseError, term: String },
-    Msg { msg: String },
+    Term {
+        error: TermParseError,
+        term: String,
+        location: Range<TextPosition>,
+    },
+    Msg {
+        msg: String,
+        location: Option<Range<TextPosition>>,
+    },
 }
 
 impl SyntaxError {
@@ -99,7 +107,45 @@ impl SyntaxError {
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
         Self {
-            inner: SyntaxErrorKind::Msg { msg: msg.into() },
+            inner: SyntaxErrorKind::Msg {
+                msg: msg.into(),
+                location: None,
+            },
+        }
+    }
+
+    /// Builds an error from a printable error message and a location
+    #[inline]
+    pub(crate) fn located_message(msg: impl Into<String>, location: Range<TextPosition>) -> Self {
+        Self {
+            inner: SyntaxErrorKind::Msg {
+                msg: msg.into(),
+                location: Some(location),
+            },
+        }
+    }
+
+    /// The location of the error inside of the file.
+    #[inline]
+    pub fn location(&self) -> Option<Range<TextPosition>> {
+        match &self.inner {
+            SyntaxErrorKind::Json(e) => {
+                let location = e.location();
+                Some(
+                    TextPosition {
+                        line: location.start.line,
+                        column: location.start.column,
+                        offset: location.start.offset,
+                    }..TextPosition {
+                        line: location.end.line,
+                        column: location.end.column,
+                        offset: location.end.offset,
+                    },
+                )
+            }
+            SyntaxErrorKind::Term { location, .. } => Some(location.clone()),
+            SyntaxErrorKind::Msg { location, .. } => location.clone(),
+            SyntaxErrorKind::Xml(_) => None,
         }
     }
 }
@@ -110,8 +156,12 @@ impl fmt::Display for SyntaxError {
         match &self.inner {
             SyntaxErrorKind::Json(e) => e.fmt(f),
             SyntaxErrorKind::Xml(e) => e.fmt(f),
-            SyntaxErrorKind::Term { error, term } => write!(f, "{error}: {term}"),
-            SyntaxErrorKind::Msg { msg } => f.write_str(msg),
+            SyntaxErrorKind::Term {
+                error,
+                term,
+                location,
+            } => write!(f, "{error} on '{term}' in line {}", location.start.line + 1),
+            SyntaxErrorKind::Msg { msg, .. } => f.write_str(msg),
         }
     }
 }
@@ -144,7 +194,7 @@ impl From<SyntaxError> for io::Error {
                 _ => Self::new(io::ErrorKind::InvalidData, error),
             },
             SyntaxErrorKind::Term { .. } => Self::new(io::ErrorKind::InvalidData, error),
-            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
+            SyntaxErrorKind::Msg { msg, .. } => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }
@@ -155,4 +205,12 @@ impl From<json_event_parser::SyntaxError> for SyntaxError {
             inner: SyntaxErrorKind::Json(error),
         }
     }
+}
+
+/// A position in a text i.e. a `line` number starting from 0, a `column` number starting from 0 (in number of code points) and a global file `offset` starting from 0 (in number of bytes).
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+pub struct TextPosition {
+    pub line: u64,
+    pub column: u64,
+    pub offset: u64,
 }

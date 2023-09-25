@@ -13,7 +13,7 @@ mod serializer;
 pub mod solution;
 mod xml;
 
-pub use crate::error::{ParseError, SyntaxError};
+pub use crate::error::{ParseError, SyntaxError, TextPosition};
 pub use crate::format::QueryResultsFormat;
 pub use crate::parser::{FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsParser};
 pub use crate::serializer::{QueryResultsSerializer, ToWriteSolutionsWriter};

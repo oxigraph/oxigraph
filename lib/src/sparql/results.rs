@@ -43,5 +43,5 @@
 
 pub use sparesults::{
     FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsFormat,
-    QueryResultsParser, QueryResultsSerializer, SyntaxError,
+    QueryResultsParser, QueryResultsSerializer, SyntaxError, TextPosition,
 };

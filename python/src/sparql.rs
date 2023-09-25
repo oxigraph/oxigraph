@@ -190,7 +190,10 @@ pub struct PyQuerySolutions {
 }
 enum PyQuerySolutionsVariant {
     Query(QuerySolutionIter),
-    Reader(FromReadSolutionsReader<BufReader<PyReadable>>),
+    Reader {
+        iter: FromReadSolutionsReader<BufReader<PyReadable>>,
+        file_path: Option<PathBuf>,
+    },
 }
 
 #[pymethods]
@@ -207,8 +210,8 @@ impl PyQuerySolutions {
             PyQuerySolutionsVariant::Query(inner) => {
                 inner.variables().iter().map(|v| v.clone().into()).collect()
             }
-            PyQuerySolutionsVariant::Reader(inner) => {
-                inner.variables().iter().map(|v| v.clone().into()).collect()
+            PyQuerySolutionsVariant::Reader { iter, .. } => {
+                iter.variables().iter().map(|v| v.clone().into()).collect()
             }
         }
     }
@@ -252,7 +255,9 @@ impl PyQuerySolutions {
                         output,
                         match &self.inner {
                             PyQuerySolutionsVariant::Query(inner) => inner.variables().to_vec(),
-                            PyQuerySolutionsVariant::Reader(inner) => inner.variables().to_vec(),
+                            PyQuerySolutionsVariant::Reader { iter, .. } => {
+                                iter.variables().to_vec()
+                            }
                         },
                     )
                     .map_err(map_io_err)?;
@@ -264,10 +269,12 @@ impl PyQuerySolutions {
                                 .map_err(map_io_err)?;
                         }
                     }
-                    PyQuerySolutionsVariant::Reader(inner) => {
-                        for solution in inner {
+                    PyQuerySolutionsVariant::Reader { iter, file_path } => {
+                        for solution in iter {
                             writer
-                                .write(&solution.map_err(map_query_results_parse_error)?)
+                                .write(&solution.map_err(|e| {
+                                    map_query_results_parse_error(e, file_path.clone())
+                                })?)
                                 .map_err(map_io_err)?;
                         }
                     }
@@ -290,10 +297,10 @@ impl PyQuerySolutions {
             PyQuerySolutionsVariant::Query(inner) => allow_threads_unsafe(py, || {
                 inner.next().transpose().map_err(map_evaluation_error)
             }),
-            PyQuerySolutionsVariant::Reader(inner) => inner
+            PyQuerySolutionsVariant::Reader { iter, file_path } => iter
                 .next()
                 .transpose()
-                .map_err(map_query_results_parse_error),
+                .map_err(|e| map_query_results_parse_error(e, file_path.clone())),
         }?
         .map(move |inner| PyQuerySolution { inner }))
     }
@@ -498,10 +505,10 @@ pub fn parse_query_results(
     };
     let results = QueryResultsParser::from_format(format)
         .parse_read(BufReader::new(input))
-        .map_err(map_query_results_parse_error)?;
+        .map_err(|e| map_query_results_parse_error(e, file_path.clone()))?;
     Ok(match results {
-        FromReadQueryResultsReader::Solutions(inner) => PyQuerySolutions {
-            inner: PyQuerySolutionsVariant::Reader(inner),
+        FromReadQueryResultsReader::Solutions(iter) => PyQuerySolutions {
+            inner: PyQuerySolutionsVariant::Reader { iter, file_path },
         }
         .into_py(py),
         FromReadQueryResultsReader::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
@@ -513,7 +520,7 @@ pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
         EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
         EvaluationError::Storage(error) => map_storage_error(error),
         EvaluationError::GraphParsing(error) => map_parse_error(error, None),
-        EvaluationError::ResultsParsing(error) => map_query_results_parse_error(error),
+        EvaluationError::ResultsParsing(error) => map_query_results_parse_error(error, None),
         EvaluationError::ResultsSerialization(error) => map_io_err(error),
         EvaluationError::Service(error) => match error.downcast() {
             Ok(error) => map_io_err(*error),
@@ -523,9 +530,38 @@ pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     }
 }
 
-pub fn map_query_results_parse_error(error: ParseError) -> PyErr {
+pub fn map_query_results_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
     match error {
-        ParseError::Syntax(error) => PySyntaxError::new_err(error.to_string()),
+        ParseError::Syntax(error) => {
+            // Python 3.9 does not support end line and end column
+            if python_version() >= (3, 10) {
+                let params = if let Some(location) = error.location() {
+                    (
+                        file_path,
+                        Some(location.start.line + 1),
+                        Some(location.start.column + 1),
+                        None::<Vec<u8>>,
+                        Some(location.end.line + 1),
+                        Some(location.end.column + 1),
+                    )
+                } else {
+                    (None, None, None, None, None, None)
+                };
+                PySyntaxError::new_err((error.to_string(), params))
+            } else {
+                let params = if let Some(location) = error.location() {
+                    (
+                        file_path,
+                        Some(location.start.line + 1),
+                        Some(location.start.column + 1),
+                        None::<Vec<u8>>,
+                    )
+                } else {
+                    (None, None, None, None)
+                };
+                PySyntaxError::new_err((error.to_string(), params))
+            }
+        }
         ParseError::Io(error) => map_io_err(error),
     }
 }
