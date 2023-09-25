@@ -35,6 +35,6 @@ pub use self::read::{DatasetParser, GraphParser};
 #[allow(deprecated)]
 pub use self::write::{DatasetSerializer, GraphSerializer};
 pub use oxrdfio::{
-    FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer, SyntaxError,
+    FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer, SyntaxError, TextPosition,
     ToWriteQuadWriter,
 };

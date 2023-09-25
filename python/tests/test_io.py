@@ -205,3 +205,30 @@ class TestParseQuerySolutions(unittest.TestCase):
     def test_parse_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
             parse_query_results(fp, "srx")
+
+    def test_parse_syntax_error_json(self) -> None:
+        with NamedTemporaryFile() as fp:
+            fp.write(b"{]")
+            fp.flush()
+            with self.assertRaises(SyntaxError) as ctx:
+                list(parse_query_results(fp.name, "srj"))  # type: ignore[arg-type]
+            self.assertEqual(ctx.exception.filename, fp.name)
+            self.assertEqual(ctx.exception.lineno, 1)
+            self.assertEqual(ctx.exception.offset, 2)
+            if sys.version_info >= (3, 10):
+                self.assertEqual(ctx.exception.end_lineno, 1)
+                self.assertEqual(ctx.exception.end_offset, 3)
+
+    def test_parse_syntax_error_tsv(self) -> None:
+        with NamedTemporaryFile() as fp:
+            fp.write(b"?a\t?test\n")
+            fp.write(b"1\t<foo >\n")
+            fp.flush()
+            with self.assertRaises(SyntaxError) as ctx:
+                list(parse_query_results(fp.name, "tsv"))  # type: ignore[arg-type]
+            self.assertEqual(ctx.exception.filename, fp.name)
+            self.assertEqual(ctx.exception.lineno, 2)
+            self.assertEqual(ctx.exception.offset, 3)
+            if sys.version_info >= (3, 10):
+                self.assertEqual(ctx.exception.end_lineno, 2)
+                self.assertEqual(ctx.exception.end_offset, 9)

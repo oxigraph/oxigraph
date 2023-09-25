@@ -9,7 +9,7 @@ mod format;
 mod parser;
 mod serializer;
 
-pub use error::{ParseError, SyntaxError};
+pub use error::{ParseError, SyntaxError, TextPosition};
 pub use format::RdfFormat;
 #[cfg(feature = "async-tokio")]
 pub use parser::FromTokioAsyncReadQuadReader;
