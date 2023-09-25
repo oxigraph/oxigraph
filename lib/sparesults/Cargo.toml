@@ -19,7 +19,7 @@ default = []
 rdf-star = ["oxrdf/rdf-star"]
 
 [dependencies]
-json-event-parser = "0.1"
+json-event-parser = "0.2.0-alpha.1"
 memchr = "2.5"
 oxrdf = { version = "0.2.0-alpha.1-dev", path="../oxrdf" }
 quick-xml = ">=0.29, <0.31"

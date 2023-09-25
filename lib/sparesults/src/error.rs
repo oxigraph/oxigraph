@@ -56,6 +56,15 @@ impl From<ParseError> for io::Error {
     }
 }
 
+impl From<json_event_parser::ParseError> for ParseError {
+    fn from(error: json_event_parser::ParseError) -> Self {
+        match error {
+            json_event_parser::ParseError::Syntax(error) => SyntaxError::from(error).into(),
+            json_event_parser::ParseError::Io(error) => error.into(),
+        }
+    }
+}
+
 impl From<quick_xml::Error> for ParseError {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
@@ -79,6 +88,7 @@ pub struct SyntaxError {
 
 #[derive(Debug)]
 pub(crate) enum SyntaxErrorKind {
+    Json(json_event_parser::SyntaxError),
     Xml(quick_xml::Error),
     Term { error: TermParseError, term: String },
     Msg { msg: String },
@@ -98,6 +108,7 @@ impl fmt::Display for SyntaxError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
+            SyntaxErrorKind::Json(e) => e.fmt(f),
             SyntaxErrorKind::Xml(e) => e.fmt(f),
             SyntaxErrorKind::Term { error, term } => write!(f, "{error}: {term}"),
             SyntaxErrorKind::Msg { msg } => f.write_str(msg),
@@ -109,6 +120,7 @@ impl Error for SyntaxError {
     #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.inner {
+            SyntaxErrorKind::Json(e) => Some(e),
             SyntaxErrorKind::Xml(e) => Some(e),
             SyntaxErrorKind::Term { error, .. } => Some(error),
             SyntaxErrorKind::Msg { .. } => None,
@@ -120,6 +132,7 @@ impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
         match error.inner {
+            SyntaxErrorKind::Json(error) => Self::new(io::ErrorKind::InvalidData, error),
             SyntaxErrorKind::Xml(error) => match error {
                 quick_xml::Error::Io(error) => match Arc::try_unwrap(error) {
                     Ok(error) => error,
@@ -130,10 +143,16 @@ impl From<SyntaxError> for io::Error {
                 }
                 _ => Self::new(io::ErrorKind::InvalidData, error),
             },
-            SyntaxErrorKind::Term { .. } => {
-                Self::new(io::ErrorKind::InvalidData, error.to_string())
-            }
+            SyntaxErrorKind::Term { .. } => Self::new(io::ErrorKind::InvalidData, error),
             SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
+        }
+    }
+}
+
+impl From<json_event_parser::SyntaxError> for SyntaxError {
+    fn from(error: json_event_parser::SyntaxError) -> Self {
+        Self {
+            inner: SyntaxErrorKind::Json(error),
         }
     }
 }

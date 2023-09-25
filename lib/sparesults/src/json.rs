@@ -1,50 +1,50 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
 use crate::error::{ParseError, SyntaxError};
-use json_event_parser::{JsonEvent, JsonReader, JsonWriter};
+use json_event_parser::{FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
 use oxrdf::vocab::rdf;
 use oxrdf::Variable;
 use oxrdf::*;
 use std::collections::BTreeMap;
-use std::io::{self, BufRead, Write};
+use std::io::{self, Read, Write};
 use std::mem::take;
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
 /// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
 const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 128;
 
-pub fn write_boolean_json_result<W: Write>(sink: W, value: bool) -> io::Result<W> {
-    let mut writer = JsonWriter::from_writer(sink);
+pub fn write_boolean_json_result<W: Write>(write: W, value: bool) -> io::Result<W> {
+    let mut writer = ToWriteJsonWriter::new(write);
     writer.write_event(JsonEvent::StartObject)?;
-    writer.write_event(JsonEvent::ObjectKey("head"))?;
+    writer.write_event(JsonEvent::ObjectKey("head".into()))?;
     writer.write_event(JsonEvent::StartObject)?;
     writer.write_event(JsonEvent::EndObject)?;
-    writer.write_event(JsonEvent::ObjectKey("boolean"))?;
+    writer.write_event(JsonEvent::ObjectKey("boolean".into()))?;
     writer.write_event(JsonEvent::Boolean(value))?;
     writer.write_event(JsonEvent::EndObject)?;
-    Ok(writer.into_inner())
+    writer.finish()
 }
 
 pub struct JsonSolutionsWriter<W: Write> {
-    writer: JsonWriter<W>,
+    writer: ToWriteJsonWriter<W>,
 }
 
 impl<W: Write> JsonSolutionsWriter<W> {
-    pub fn start(sink: W, variables: &[Variable]) -> io::Result<Self> {
-        let mut writer = JsonWriter::from_writer(sink);
+    pub fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = ToWriteJsonWriter::new(write);
         writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("head"))?;
+        writer.write_event(JsonEvent::ObjectKey("head".into()))?;
         writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("vars"))?;
+        writer.write_event(JsonEvent::ObjectKey("vars".into()))?;
         writer.write_event(JsonEvent::StartArray)?;
         for variable in variables {
-            writer.write_event(JsonEvent::String(variable.as_str()))?;
+            writer.write_event(JsonEvent::String(variable.as_str().into()))?;
         }
         writer.write_event(JsonEvent::EndArray)?;
         writer.write_event(JsonEvent::EndObject)?;
-        writer.write_event(JsonEvent::ObjectKey("results"))?;
+        writer.write_event(JsonEvent::ObjectKey("results".into()))?;
         writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("bindings"))?;
+        writer.write_event(JsonEvent::ObjectKey("bindings".into()))?;
         writer.write_event(JsonEvent::StartArray)?;
         Ok(Self { writer })
     }
@@ -56,7 +56,7 @@ impl<W: Write> JsonSolutionsWriter<W> {
         self.writer.write_event(JsonEvent::StartObject)?;
         for (variable, value) in solution {
             self.writer
-                .write_event(JsonEvent::ObjectKey(variable.as_str()))?;
+                .write_event(JsonEvent::ObjectKey(variable.as_str().into()))?;
             write_json_term(value, &mut self.writer)?;
         }
         self.writer.write_event(JsonEvent::EndObject)?;
@@ -67,55 +67,58 @@ impl<W: Write> JsonSolutionsWriter<W> {
         self.writer.write_event(JsonEvent::EndArray)?;
         self.writer.write_event(JsonEvent::EndObject)?;
         self.writer.write_event(JsonEvent::EndObject)?;
-        Ok(self.writer.into_inner())
+        self.writer.finish()
     }
 }
 
-fn write_json_term(term: TermRef<'_>, writer: &mut JsonWriter<impl Write>) -> io::Result<()> {
+fn write_json_term(
+    term: TermRef<'_>,
+    writer: &mut ToWriteJsonWriter<impl Write>,
+) -> io::Result<()> {
     match term {
         TermRef::NamedNode(uri) => {
             writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type"))?;
-            writer.write_event(JsonEvent::String("uri"))?;
-            writer.write_event(JsonEvent::ObjectKey("value"))?;
-            writer.write_event(JsonEvent::String(uri.as_str()))?;
+            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
+            writer.write_event(JsonEvent::String("uri".into()))?;
+            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
+            writer.write_event(JsonEvent::String(uri.as_str().into()))?;
             writer.write_event(JsonEvent::EndObject)?;
         }
         TermRef::BlankNode(bnode) => {
             writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type"))?;
-            writer.write_event(JsonEvent::String("bnode"))?;
-            writer.write_event(JsonEvent::ObjectKey("value"))?;
-            writer.write_event(JsonEvent::String(bnode.as_str()))?;
+            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
+            writer.write_event(JsonEvent::String("bnode".into()))?;
+            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
+            writer.write_event(JsonEvent::String(bnode.as_str().into()))?;
             writer.write_event(JsonEvent::EndObject)?;
         }
         TermRef::Literal(literal) => {
             writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type"))?;
-            writer.write_event(JsonEvent::String("literal"))?;
-            writer.write_event(JsonEvent::ObjectKey("value"))?;
-            writer.write_event(JsonEvent::String(literal.value()))?;
+            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
+            writer.write_event(JsonEvent::String("literal".into()))?;
+            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
+            writer.write_event(JsonEvent::String(literal.value().into()))?;
             if let Some(language) = literal.language() {
-                writer.write_event(JsonEvent::ObjectKey("xml:lang"))?;
-                writer.write_event(JsonEvent::String(language))?;
+                writer.write_event(JsonEvent::ObjectKey("xml:lang".into()))?;
+                writer.write_event(JsonEvent::String(language.into()))?;
             } else if !literal.is_plain() {
-                writer.write_event(JsonEvent::ObjectKey("datatype"))?;
-                writer.write_event(JsonEvent::String(literal.datatype().as_str()))?;
+                writer.write_event(JsonEvent::ObjectKey("datatype".into()))?;
+                writer.write_event(JsonEvent::String(literal.datatype().as_str().into()))?;
             }
             writer.write_event(JsonEvent::EndObject)?;
         }
         #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
             writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type"))?;
-            writer.write_event(JsonEvent::String("triple"))?;
-            writer.write_event(JsonEvent::ObjectKey("value"))?;
+            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
+            writer.write_event(JsonEvent::String("triple".into()))?;
+            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
             writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("subject"))?;
+            writer.write_event(JsonEvent::ObjectKey("subject".into()))?;
             write_json_term(triple.subject.as_ref().into(), writer)?;
-            writer.write_event(JsonEvent::ObjectKey("predicate"))?;
+            writer.write_event(JsonEvent::ObjectKey("predicate".into()))?;
             write_json_term(triple.predicate.as_ref().into(), writer)?;
-            writer.write_event(JsonEvent::ObjectKey("object"))?;
+            writer.write_event(JsonEvent::ObjectKey("object".into()))?;
             write_json_term(triple.object.as_ref(), writer)?;
             writer.write_event(JsonEvent::EndObject)?;
             writer.write_event(JsonEvent::EndObject)?;
@@ -124,7 +127,7 @@ fn write_json_term(term: TermRef<'_>, writer: &mut JsonWriter<impl Write>) -> io
     Ok(())
 }
 
-pub enum JsonQueryResultsReader<R: BufRead> {
+pub enum JsonQueryResultsReader<R: Read> {
     Solutions {
         variables: Vec<Variable>,
         solutions: JsonSolutionsReader<R>,
@@ -132,24 +135,23 @@ pub enum JsonQueryResultsReader<R: BufRead> {
     Boolean(bool),
 }
 
-impl<R: BufRead> JsonQueryResultsReader<R> {
-    pub fn read(source: R) -> Result<Self, ParseError> {
-        let mut reader = JsonReader::from_reader(source);
-        let mut buffer = Vec::default();
+impl<R: Read> JsonQueryResultsReader<R> {
+    pub fn read(read: R) -> Result<Self, ParseError> {
+        let mut reader = FromReadJsonReader::new(read);
         let mut variables = None;
         let mut buffered_bindings: Option<Vec<_>> = None;
         let mut output_iter = None;
 
-        if reader.read_event(&mut buffer)? != JsonEvent::StartObject {
+        if reader.read_next_event()? != JsonEvent::StartObject {
             return Err(SyntaxError::msg("SPARQL JSON results should be an object").into());
         }
 
         loop {
-            let event = reader.read_event(&mut buffer)?;
+            let event = reader.read_next_event()?;
             match event {
-                JsonEvent::ObjectKey(key) => match key {
+                JsonEvent::ObjectKey(key) => match key.as_ref() {
                     "head" => {
-                        let extracted_variables = read_head(&mut reader, &mut buffer)?;
+                        let extracted_variables = read_head(&mut reader)?;
                         if let Some(buffered_bindings) = buffered_bindings.take() {
                             let mut mapping = BTreeMap::default();
                             for (i, var) in extracted_variables.iter().enumerate() {
@@ -169,13 +171,13 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                         }
                     }
                     "results" => {
-                        if reader.read_event(&mut buffer)? != JsonEvent::StartObject {
+                        if reader.read_next_event()? != JsonEvent::StartObject {
                             return Err(SyntaxError::msg("'results' should be an object").into());
                         }
                         loop {
-                            match reader.read_event(&mut buffer)? {
-                                JsonEvent::ObjectKey("bindings") => break, // Found
-                                JsonEvent::ObjectKey(_) => ignore_value(&mut reader, &mut buffer)?,
+                            match reader.read_next_event()? {
+                                JsonEvent::ObjectKey(k) if k == "bindings" => break, // Found
+                                JsonEvent::ObjectKey(_) => ignore_value(&mut reader)?,
                                 _ => {
                                     return Err(SyntaxError::msg(
                                         "'results' should contain a 'bindings' key",
@@ -184,7 +186,7 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                                 }
                             }
                         }
-                        if reader.read_event(&mut buffer)? != JsonEvent::StartArray {
+                        if reader.read_next_event()? != JsonEvent::StartArray {
                             return Err(SyntaxError::msg("'bindings' should be an object").into());
                         }
                         if let Some(variables) = variables {
@@ -195,7 +197,7 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                             return Ok(Self::Solutions {
                                 variables,
                                 solutions: JsonSolutionsReader {
-                                    kind: JsonSolutionsReaderKind::Streaming { reader, buffer },
+                                    kind: JsonSolutionsReaderKind::Streaming { reader },
                                     mapping,
                                 },
                             });
@@ -205,7 +207,7 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                         let mut variables = Vec::new();
                         let mut values = Vec::new();
                         loop {
-                            match reader.read_event(&mut buffer)? {
+                            match reader.read_next_event()? {
                                 JsonEvent::StartObject => (),
                                 JsonEvent::EndObject => {
                                     bindings.push((take(&mut variables), take(&mut values)));
@@ -215,8 +217,8 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                                     break;
                                 }
                                 JsonEvent::ObjectKey(key) => {
-                                    variables.push(key.to_owned());
-                                    values.push(read_value(&mut reader, &mut buffer, 0)?);
+                                    variables.push(key.into_owned());
+                                    values.push(read_value(&mut reader, 0)?);
                                 }
                                 _ => {
                                     return Err(
@@ -227,7 +229,7 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
                         }
                     }
                     "boolean" => {
-                        return if let JsonEvent::Boolean(v) = reader.read_event(&mut buffer)? {
+                        return if let JsonEvent::Boolean(v) = reader.read_next_event()? {
                             Ok(Self::Boolean(v))
                         } else {
                             Err(SyntaxError::msg("Unexpected boolean value").into())
@@ -257,38 +259,37 @@ impl<R: BufRead> JsonQueryResultsReader<R> {
     }
 }
 
-pub struct JsonSolutionsReader<R: BufRead> {
+pub struct JsonSolutionsReader<R: Read> {
     mapping: BTreeMap<String, usize>,
     kind: JsonSolutionsReaderKind<R>,
 }
 
-enum JsonSolutionsReaderKind<R: BufRead> {
+enum JsonSolutionsReaderKind<R: Read> {
     Streaming {
-        reader: JsonReader<R>,
-        buffer: Vec<u8>,
+        reader: FromReadJsonReader<R>,
     },
     Buffered {
         bindings: std::vec::IntoIter<(Vec<String>, Vec<Term>)>,
     },
 }
 
-impl<R: BufRead> JsonSolutionsReader<R> {
+impl<R: Read> JsonSolutionsReader<R> {
     pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
         match &mut self.kind {
-            JsonSolutionsReaderKind::Streaming { reader, buffer } => {
+            JsonSolutionsReaderKind::Streaming { reader } => {
                 let mut new_bindings = vec![None; self.mapping.len()];
                 loop {
-                    match reader.read_event(buffer)? {
+                    match reader.read_next_event()? {
                         JsonEvent::StartObject => (),
                         JsonEvent::EndObject => return Ok(Some(new_bindings)),
                         JsonEvent::EndArray | JsonEvent::Eof => return Ok(None),
                         JsonEvent::ObjectKey(key) => {
-                            let k = *self.mapping.get(key).ok_or_else(|| {
+                            let k = *self.mapping.get(key.as_ref()).ok_or_else(|| {
                                 SyntaxError::msg(format!(
                                     "The variable {key} has not been defined in the header"
                                 ))
                             })?;
-                            new_bindings[k] = Some(read_value(reader, buffer, 0)?)
+                            new_bindings[k] = Some(read_value(reader, 0)?)
                         }
                         _ => return Err(SyntaxError::msg("Invalid result serialization").into()),
                     }
@@ -314,9 +315,8 @@ impl<R: BufRead> JsonSolutionsReader<R> {
     }
 }
 
-fn read_value<R: BufRead>(
-    reader: &mut JsonReader<R>,
-    buffer: &mut Vec<u8>,
+fn read_value<R: Read>(
+    reader: &mut FromReadJsonReader<R>,
     number_of_recursive_calls: usize,
 ) -> Result<Term, ParseError> {
     enum Type {
@@ -351,28 +351,29 @@ fn read_value<R: BufRead>(
     let mut predicate = None;
     #[cfg(feature = "rdf-star")]
     let mut object = None;
-    if reader.read_event(buffer)? != JsonEvent::StartObject {
+    if reader.read_next_event()? != JsonEvent::StartObject {
         return Err(SyntaxError::msg("Term serializations should be an object").into());
     }
     loop {
-        match reader.read_event(buffer)? {
-            JsonEvent::ObjectKey(key) => match key {
+        #[allow(unsafe_code)]
+        // SAFETY: Borrow checker workaround https://github.com/rust-lang/rust/issues/70255
+        let next_event = unsafe {
+            let r: *mut FromReadJsonReader<R> = reader;
+            &mut *r
+        }
+        .read_next_event()?;
+        match next_event {
+            JsonEvent::ObjectKey(key) => match key.as_ref() {
                 "type" => state = Some(State::Type),
                 "value" => state = Some(State::Value),
                 "xml:lang" => state = Some(State::Lang),
                 "datatype" => state = Some(State::Datatype),
                 #[cfg(feature = "rdf-star")]
-                "subject" => {
-                    subject = Some(read_value(reader, buffer, number_of_recursive_calls + 1)?)
-                }
+                "subject" => subject = Some(read_value(reader, number_of_recursive_calls + 1)?),
                 #[cfg(feature = "rdf-star")]
-                "predicate" => {
-                    predicate = Some(read_value(reader, buffer, number_of_recursive_calls + 1)?)
-                }
+                "predicate" => predicate = Some(read_value(reader, number_of_recursive_calls + 1)?),
                 #[cfg(feature = "rdf-star")]
-                "object" => {
-                    object = Some(read_value(reader, buffer, number_of_recursive_calls + 1)?)
-                }
+                "object" => object = Some(read_value(reader, number_of_recursive_calls + 1)?),
                 _ => {
                     return Err(SyntaxError::msg(format!(
                         "Unexpected key in term serialization: '{key}'"
@@ -389,7 +390,7 @@ fn read_value<R: BufRead>(
             }
             JsonEvent::String(s) => match state {
                 Some(State::Type) => {
-                    match s {
+                    match s.as_ref() {
                         "uri" => t = Some(Type::Uri),
                         "bnode" => t = Some(Type::BNode),
                         "literal" | "typed-literal" => t = Some(Type::Literal),
@@ -404,11 +405,11 @@ fn read_value<R: BufRead>(
                     state = None;
                 }
                 Some(State::Value) => {
-                    value = Some(s.to_owned());
+                    value = Some(s.into_owned());
                     state = None;
                 }
                 Some(State::Lang) => {
-                    lang = Some(s.to_owned());
+                    lang = Some(s.into_owned());
                     state = None;
                 }
                 Some(State::Datatype) => {
@@ -458,7 +459,7 @@ fn read_value<R: BufRead>(
                                             )).into())
                                         }
                                     }
-                                    Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
+                                    Literal::new_language_tagged_literal(value, &*lang).map_err(|e| {
                                         SyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
                                     })?
                                 }
@@ -511,25 +512,22 @@ fn read_value<R: BufRead>(
     }
 }
 
-fn read_head<R: BufRead>(
-    reader: &mut JsonReader<R>,
-    buffer: &mut Vec<u8>,
-) -> Result<Vec<Variable>, ParseError> {
-    if reader.read_event(buffer)? != JsonEvent::StartObject {
+fn read_head<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<Vec<Variable>, ParseError> {
+    if reader.read_next_event()? != JsonEvent::StartObject {
         return Err(SyntaxError::msg("head should be an object").into());
     }
     let mut variables = Vec::new();
     loop {
-        match reader.read_event(buffer)? {
-            JsonEvent::ObjectKey(key) => match key {
+        match reader.read_next_event()? {
+            JsonEvent::ObjectKey(key) => match key.as_ref() {
                 "vars" => {
-                    if reader.read_event(buffer)? != JsonEvent::StartArray {
+                    if reader.read_next_event()? != JsonEvent::StartArray {
                         return Err(SyntaxError::msg("Variable list should be an array").into());
                     }
                     loop {
-                        match reader.read_event(buffer)? {
+                        match reader.read_next_event()? {
                             JsonEvent::String(s) => {
-                                let new_var = Variable::new(s).map_err(|e| {
+                                let new_var = Variable::new(s.as_ref()).map_err(|e| {
                                     SyntaxError::msg(format!(
                                         "Invalid variable declaration '{s}': {e}"
                                     ))
@@ -552,11 +550,11 @@ fn read_head<R: BufRead>(
                     }
                 }
                 "link" => {
-                    if reader.read_event(buffer)? != JsonEvent::StartArray {
+                    if reader.read_next_event()? != JsonEvent::StartArray {
                         return Err(SyntaxError::msg("Variable list should be an array").into());
                     }
                     loop {
-                        match reader.read_event(buffer)? {
+                        match reader.read_next_event()? {
                             JsonEvent::String(_) => (),
                             JsonEvent::EndArray => break,
                             _ => {
@@ -565,7 +563,7 @@ fn read_head<R: BufRead>(
                         }
                     }
                 }
-                _ => ignore_value(reader, buffer)?,
+                _ => ignore_value(reader)?,
             },
             JsonEvent::EndObject => return Ok(variables),
             _ => return Err(SyntaxError::msg("Invalid head serialization").into()),
@@ -573,13 +571,10 @@ fn read_head<R: BufRead>(
     }
 }
 
-fn ignore_value<R: BufRead>(
-    reader: &mut JsonReader<R>,
-    buffer: &mut Vec<u8>,
-) -> Result<(), ParseError> {
+fn ignore_value<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<(), ParseError> {
     let mut nesting = 0;
     loop {
-        match reader.read_event(buffer)? {
+        match reader.read_next_event()? {
             JsonEvent::Boolean(_)
             | JsonEvent::Null
             | JsonEvent::Number(_)

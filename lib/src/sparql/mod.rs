@@ -22,7 +22,7 @@ pub use crate::sparql::service::ServiceHandler;
 use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
 pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::StorageReader;
-use json_event_parser::{JsonEvent, JsonWriter};
+use json_event_parser::{JsonEvent, ToWriteJsonWriter};
 pub use oxrdf::{Variable, VariableNameParseError};
 use oxsdatatypes::{DayTimeDuration, Float};
 pub use spargebra::ParseError;
@@ -279,22 +279,22 @@ pub struct QueryExplanation {
 
 impl QueryExplanation {
     /// Writes the explanation as JSON.
-    pub fn write_in_json(&self, output: impl io::Write) -> io::Result<()> {
-        let mut writer = JsonWriter::from_writer(output);
+    pub fn write_in_json(&self, write: impl io::Write) -> io::Result<()> {
+        let mut writer = ToWriteJsonWriter::new(write);
         writer.write_event(JsonEvent::StartObject)?;
         if let Some(parsing_duration) = self.parsing_duration {
-            writer.write_event(JsonEvent::ObjectKey("parsing duration in seconds"))?;
+            writer.write_event(JsonEvent::ObjectKey("parsing duration in seconds".into()))?;
             writer.write_event(JsonEvent::Number(
-                &parsing_duration.as_seconds().to_string(),
+                parsing_duration.as_seconds().to_string().into(),
             ))?;
         }
         if let Some(planning_duration) = self.planning_duration {
-            writer.write_event(JsonEvent::ObjectKey("planning duration in seconds"))?;
+            writer.write_event(JsonEvent::ObjectKey("planning duration in seconds".into()))?;
             writer.write_event(JsonEvent::Number(
-                &planning_duration.as_seconds().to_string(),
+                planning_duration.as_seconds().to_string().into(),
             ))?;
         }
-        writer.write_event(JsonEvent::ObjectKey("plan"))?;
+        writer.write_event(JsonEvent::ObjectKey("plan".into()))?;
         self.inner.json_node(&mut writer, self.with_stats)?;
         writer.write_event(JsonEvent::EndObject)
     }
