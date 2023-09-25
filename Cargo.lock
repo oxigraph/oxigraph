@@ -786,9 +786,9 @@ dependencies = [
 
 [[package]]
 name = "json-event-parser"
-version = "0.1.1"
+version = "0.2.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32f12e624eaeb74accb9bb48f01cb071427f68115aaafa5689acb372d7e22977"
+checksum = "20a2ad11b373ee8f1d5f9b0632b148a6dc65cf1faa8b2a99c89cbe70411e31a2"
 
 [[package]]
 name = "kernel32-sys"

@@ -8,7 +8,7 @@ use crate::sparql::service::ServiceHandler;
 use crate::storage::numeric_encoder::*;
 use crate::storage::small_string::SmallString;
 use digest::Digest;
-use json_event_parser::{JsonEvent, JsonWriter};
+use json_event_parser::{JsonEvent, ToWriteJsonWriter};
 use md5::Md5;
 use oxilangtag::LanguageTag;
 use oxiri::Iri;
@@ -5676,21 +5676,21 @@ pub struct EvalNodeWithStats {
 impl EvalNodeWithStats {
     pub fn json_node(
         &self,
-        writer: &mut JsonWriter<impl io::Write>,
+        writer: &mut ToWriteJsonWriter<impl io::Write>,
         with_stats: bool,
     ) -> io::Result<()> {
         writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("name"))?;
-        writer.write_event(JsonEvent::String(&self.label))?;
+        writer.write_event(JsonEvent::ObjectKey("name".into()))?;
+        writer.write_event(JsonEvent::String((&self.label).into()))?;
         if with_stats {
-            writer.write_event(JsonEvent::ObjectKey("number of results"))?;
-            writer.write_event(JsonEvent::Number(&self.exec_count.get().to_string()))?;
+            writer.write_event(JsonEvent::ObjectKey("number of results".into()))?;
+            writer.write_event(JsonEvent::Number(self.exec_count.get().to_string().into()))?;
             if let Some(duration) = self.exec_duration.get() {
-                writer.write_event(JsonEvent::ObjectKey("duration in seconds"))?;
-                writer.write_event(JsonEvent::Number(&duration.as_seconds().to_string()))?;
+                writer.write_event(JsonEvent::ObjectKey("duration in seconds".into()))?;
+                writer.write_event(JsonEvent::Number(duration.as_seconds().to_string().into()))?;
             }
         }
-        writer.write_event(JsonEvent::ObjectKey("children"))?;
+        writer.write_event(JsonEvent::ObjectKey("children".into()))?;
         writer.write_event(JsonEvent::StartArray)?;
         for child in &self.children {
             child.json_node(writer, with_stats)?;

@@ -28,7 +28,7 @@ rocksdb-debug = []
 [dependencies]
 digest = "0.10"
 hex = "0.4"
-json-event-parser = "0.1"
+json-event-parser = "0.2.0-alpha.1"
 md-5 = "0.10"
 oxilangtag = "0.1"
 oxiri = "0.2"
