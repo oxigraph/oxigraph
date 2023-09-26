@@ -5,7 +5,6 @@ use crate::sparql::http::Client;
 use crate::sparql::model::QueryResults;
 use crate::sparql::results::QueryResultsFormat;
 use std::error::Error;
-use std::io::BufReader;
 use std::time::Duration;
 
 /// Handler for [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE.
@@ -121,6 +120,6 @@ impl ServiceHandler for SimpleServiceHandler {
             .map_err(|e| EvaluationError::Service(Box::new(e)))?;
         let format = QueryResultsFormat::from_media_type(&content_type)
             .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?;
-        Ok(QueryResults::read(BufReader::new(body), format)?)
+        Ok(QueryResults::read(body, format)?)
     }
 }

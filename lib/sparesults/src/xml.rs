@@ -8,7 +8,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::str;
 use std::sync::Arc;
 
@@ -157,7 +157,7 @@ fn write_xml_term(
     Ok(())
 }
 
-pub enum XmlQueryResultsReader<R: BufRead> {
+pub enum XmlQueryResultsReader<R: Read> {
     Solutions {
         variables: Vec<Variable>,
         solutions: XmlSolutionsReader<R>,
@@ -165,7 +165,7 @@ pub enum XmlQueryResultsReader<R: BufRead> {
     Boolean(bool),
 }
 
-impl<R: BufRead> XmlQueryResultsReader<R> {
+impl<R: Read> XmlQueryResultsReader<R> {
     pub fn read(source: R) -> Result<Self, ParseError> {
         enum State {
             Start,
@@ -175,7 +175,7 @@ impl<R: BufRead> XmlQueryResultsReader<R> {
             Boolean,
         }
 
-        let mut reader = Reader::from_reader(source);
+        let mut reader = Reader::from_reader(BufReader::new(source));
         reader.trim_text(true);
         reader.expand_empty_elements(true);
 
@@ -293,8 +293,8 @@ enum State {
     End,
 }
 
-pub struct XmlSolutionsReader<R: BufRead> {
-    reader: Reader<R>,
+pub struct XmlSolutionsReader<R: Read> {
+    reader: Reader<BufReader<R>>,
     buffer: Vec<u8>,
     mapping: BTreeMap<String, usize>,
     stack: Vec<State>,
@@ -303,7 +303,7 @@ pub struct XmlSolutionsReader<R: BufRead> {
     object_stack: Vec<Term>,
 }
 
-impl<R: BufRead> XmlSolutionsReader<R> {
+impl<R: Read> XmlSolutionsReader<R> {
     pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
         let mut state = State::Start;
 

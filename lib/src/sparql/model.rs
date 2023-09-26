@@ -7,7 +7,7 @@ use crate::sparql::results::{
 };
 use oxrdf::{Variable, VariableRef};
 pub use sparesults::QuerySolution;
-use std::io::{BufRead, Write};
+use std::io::{Read, Write};
 use std::rc::Rc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
@@ -22,12 +22,9 @@ pub enum QueryResults {
 
 impl QueryResults {
     /// Reads a SPARQL query results serialization.
-    pub fn read(
-        reader: impl BufRead + 'static,
-        format: QueryResultsFormat,
-    ) -> Result<Self, ParseError> {
+    pub fn read(read: impl Read + 'static, format: QueryResultsFormat) -> Result<Self, ParseError> {
         Ok(QueryResultsParser::from_format(format)
-            .parse_read(reader)?
+            .parse_read(read)?
             .into())
     }
 
@@ -51,19 +48,19 @@ impl QueryResults {
     /// ```
     pub fn write(
         self,
-        writer: impl Write,
+        write: impl Write,
         format: QueryResultsFormat,
     ) -> Result<(), EvaluationError> {
         let serializer = QueryResultsSerializer::from_format(format);
         match self {
             Self::Boolean(value) => {
                 serializer
-                    .serialize_boolean_to_write(writer, value)
+                    .serialize_boolean_to_write(write, value)
                     .map_err(EvaluationError::ResultsSerialization)?;
             }
             Self::Solutions(solutions) => {
                 let mut writer = serializer
-                    .serialize_solutions_to_write(writer, solutions.variables().to_vec())
+                    .serialize_solutions_to_write(write, solutions.variables().to_vec())
                     .map_err(EvaluationError::ResultsSerialization)?;
                 for solution in solutions {
                     writer
@@ -80,7 +77,7 @@ impl QueryResults {
                 let o = VariableRef::new_unchecked("object");
                 let mut writer = serializer
                     .serialize_solutions_to_write(
-                        writer,
+                        write,
                         vec![s.into_owned(), p.into_owned(), o.into_owned()],
                     )
                     .map_err(EvaluationError::ResultsSerialization)?;
@@ -150,7 +147,7 @@ impl From<QuerySolutionIter> for QueryResults {
     }
 }
 
-impl<R: BufRead + 'static> From<FromReadQueryResultsReader<R>> for QueryResults {
+impl<R: Read + 'static> From<FromReadQueryResultsReader<R>> for QueryResults {
     fn from(reader: FromReadQueryResultsReader<R>) -> Self {
         match reader {
             FromReadQueryResultsReader::Solutions(s) => Self::Solutions(s.into()),
@@ -211,7 +208,7 @@ impl QuerySolutionIter {
     }
 }
 
-impl<R: BufRead + 'static> From<FromReadSolutionsReader<R>> for QuerySolutionIter {
+impl<R: Read + 'static> From<FromReadSolutionsReader<R>> for QuerySolutionIter {
     fn from(reader: FromReadSolutionsReader<R>) -> Self {
         Self {
             variables: Rc::new(reader.variables().to_vec()),
@@ -279,10 +276,10 @@ mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_serialization_roundtrip() -> Result<(), EvaluationError> {
-        use std::io::Cursor;
         use std::str;
 
         for format in [
