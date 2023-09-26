@@ -5,7 +5,7 @@ use crate::json::{JsonQueryResultsReader, JsonSolutionsReader};
 use crate::solution::QuerySolution;
 use crate::xml::{XmlQueryResultsReader, XmlSolutionsReader};
 use oxrdf::Variable;
-use std::io::BufRead;
+use std::io::Read;
 use std::rc::Rc;
 
 /// Parsers for [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats.
@@ -47,6 +47,8 @@ impl QueryResultsParser {
 
     /// Reads a result file.
     ///
+    /// Reads are buffered.
+    ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
     /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
@@ -68,7 +70,7 @@ impl QueryResultsParser {
     /// }
     /// # Result::<(),sparesults::ParseError>::Ok(())
     /// ```
-    pub fn parse_read<R: BufRead>(
+    pub fn parse_read<R: Read>(
         &self,
         reader: R,
     ) -> Result<FromReadQueryResultsReader<R>, ParseError> {
@@ -108,7 +110,7 @@ impl QueryResultsParser {
     }
 
     #[deprecated(note = "Use parse_read")]
-    pub fn read_results<R: BufRead>(
+    pub fn read_results<R: Read>(
         &self,
         reader: R,
     ) -> Result<FromReadQueryResultsReader<R>, ParseError> {
@@ -141,7 +143,7 @@ impl QueryResultsParser {
 /// }
 /// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
-pub enum FromReadQueryResultsReader<R: BufRead> {
+pub enum FromReadQueryResultsReader<R: Read> {
     Solutions(FromReadSolutionsReader<R>),
     Boolean(bool),
 }
@@ -165,18 +167,18 @@ pub enum FromReadQueryResultsReader<R: BufRead> {
 /// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
 #[allow(clippy::rc_buffer)]
-pub struct FromReadSolutionsReader<R: BufRead> {
+pub struct FromReadSolutionsReader<R: Read> {
     variables: Rc<Vec<Variable>>,
     solutions: SolutionsReaderKind<R>,
 }
 
-enum SolutionsReaderKind<R: BufRead> {
+enum SolutionsReaderKind<R: Read> {
     Xml(XmlSolutionsReader<R>),
     Json(JsonSolutionsReader<R>),
     Tsv(TsvSolutionsReader<R>),
 }
 
-impl<R: BufRead> FromReadSolutionsReader<R> {
+impl<R: Read> FromReadSolutionsReader<R> {
     /// Ordered list of the declared variables at the beginning of the results.
     ///
     /// Example in TSV (the API is the same for JSON and XML):
@@ -196,7 +198,7 @@ impl<R: BufRead> FromReadSolutionsReader<R> {
     }
 }
 
-impl<R: BufRead> Iterator for FromReadSolutionsReader<R> {
+impl<R: Read> Iterator for FromReadSolutionsReader<R> {
     type Item = Result<QuerySolution, ParseError>;
 
     fn next(&mut self) -> Option<Result<QuerySolution, ParseError>> {

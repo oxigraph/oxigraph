@@ -17,7 +17,6 @@ use pyo3::exceptions::{
 };
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use std::io::BufReader;
 use std::path::PathBuf;
 use std::vec::IntoIter;
 
@@ -191,7 +190,7 @@ pub struct PyQuerySolutions {
 enum PyQuerySolutionsVariant {
     Query(QuerySolutionIter),
     Reader {
-        iter: FromReadSolutionsReader<BufReader<PyReadable>>,
+        iter: FromReadSolutionsReader<PyReadable>,
         file_path: Option<PathBuf>,
     },
 }
@@ -504,7 +503,7 @@ pub fn parse_query_results(
         PyReadable::from_data(input)
     };
     let results = QueryResultsParser::from_format(format)
-        .parse_read(BufReader::new(input))
+        .parse_read(input)
         .map_err(|e| map_query_results_parse_error(e, file_path.clone()))?;
     Ok(match results {
         FromReadQueryResultsReader::Solutions(iter) => PyQuerySolutions {
