@@ -134,6 +134,7 @@ impl Storage {
     }
 }
 
+#[derive(Clone)]
 pub struct StorageReader {
     kind: StorageReaderKind,
 }

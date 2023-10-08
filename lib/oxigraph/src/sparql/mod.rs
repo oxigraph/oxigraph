@@ -14,7 +14,7 @@ mod update;
 
 use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
-use crate::sparql::dataset::DatasetView;
+use crate::sparql::dataset::KVDatasetView;
 pub use crate::sparql::error::EvaluationError;
 use crate::sparql::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
@@ -42,7 +42,7 @@ pub(crate) fn evaluate_query(
     run_stats: bool,
 ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
     let query = query.try_into().map_err(Into::into)?;
-    let dataset = DatasetView::new(reader, &query.dataset);
+    let dataset = KVDatasetView::new(reader, &query.dataset);
     let start_planning = Timer::now();
     let (results, plan_node_with_stats, planning_duration) = match query.inner {
         spargebra::Query::Select {

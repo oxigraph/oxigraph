@@ -948,7 +948,7 @@ pub trait Decoder: StrLookup {
     }
 }
 
-impl<S: StrLookup> Decoder for S {
+impl<S: ?Sized + StrLookup> Decoder for S {
     fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError> {
         match encoded {
             EncodedTerm::DefaultGraph => {
@@ -1031,7 +1031,10 @@ impl<S: StrLookup> Decoder for S {
     }
 }
 
-fn get_required_str<L: StrLookup>(lookup: &L, id: &StrHash) -> Result<String, StorageError> {
+fn get_required_str<L: StrLookup + ?Sized>(
+    lookup: &L,
+    id: &StrHash,
+) -> Result<String, StorageError> {
     Ok(lookup.get_str(id)?.ok_or_else(|| {
         CorruptionError::new(format!(
             "Not able to find the string with id {id:?} in the string store"

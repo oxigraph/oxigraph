@@ -11,13 +11,49 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
 
-pub struct DatasetView {
+/// Boundry between the query evaluator and the storage layer.
+pub trait DatasetView: StrLookup + Clone {
+    // Polymorphism can be used to enable multiple storage layer
+    // options. A static dispatch approach to polymorphism is used to
+    // maximally preserve compile-time optimization
+    // opportunities. This is in contrast to use of a dynamic dispatch
+    // approach that would be necessary with the use of trait
+    // objects. See
+    // https://doc.rust-lang.org/stable/book/ch17-02-trait-objects.html#trait-objects-perform-dynamic-dispatch
+    // and
+    // https://doc.rust-lang.org/stable/book/ch10-01-syntax.html#performance-of-code-using-generics
+    // for details on the performance consequences of trait objects
+    // versus trait bounds on generics. With static dispatch switching
+    // storage layers at run-time requires more managment of the
+    // variations in code.
+
+    // References using `&dataset` syntax fail to compile with Rust
+    // 1.73.0 with the error that the DatasetView trait is not
+    // implemented for `Rc<T>`. A work-around is to use `&(*dataset)`
+    // syntax to explicitly deference the Rc. See
+    // https://doc.rust-lang.org/stable/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods
+    // fro details on automatic deref coercions.
+
+    fn encoded_quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>;
+    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm;
+    fn insert_str(&self, key: &StrHash, value: &str);
+}
+
+/// Boundry over a Key-Value Store storage layer.
+#[derive(Clone)]
+pub struct KVDatasetView {
     reader: StorageReader,
     extra: RefCell<HashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
     dataset: EncodedDatasetSpec,
 }
 
-impl DatasetView {
+impl KVDatasetView {
     pub fn new(reader: StorageReader, dataset: &QueryDataset) -> Self {
         let dataset = EncodedDatasetSpec {
             default: dataset
@@ -45,9 +81,11 @@ impl DatasetView {
             .quads_for_pattern(subject, predicate, object, graph_name)
             .map(|t| t.map_err(Into::into))
     }
+}
 
+impl DatasetView for KVDatasetView {
     #[allow(clippy::needless_collect)]
-    pub fn encoded_quads_for_pattern(
+    fn encoded_quads_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
@@ -151,7 +189,15 @@ impl DatasetView {
         }
     }
 
-    pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+    fn insert_str(&self, key: &StrHash, value: &str) {
+        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
+            if !matches!(self.reader.contains_str(key), Ok(true)) {
+                e.insert(value.to_owned());
+            }
+        }
+    }
+
+    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
         let term = term.into();
         let encoded = term.into();
         insert_term(term, &encoded, &mut |key, value| {
@@ -161,17 +207,9 @@ impl DatasetView {
         .unwrap();
         encoded
     }
-
-    pub fn insert_str(&self, key: &StrHash, value: &str) {
-        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
-            if !matches!(self.reader.contains_str(key), Ok(true)) {
-                e.insert(value.to_owned());
-            }
-        }
-    }
 }
 
-impl StrLookup for DatasetView {
+impl StrLookup for KVDatasetView {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
@@ -181,6 +219,7 @@ impl StrLookup for DatasetView {
     }
 }
 
+#[derive(Clone)]
 struct EncodedDatasetSpec {
     default: Option<Vec<EncodedTerm>>,
     named: Option<Vec<EncodedTerm>>,
