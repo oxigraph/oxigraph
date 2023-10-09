@@ -531,7 +531,6 @@ impl From<LiteralRef<'_>> for EncodedTerm {
             }
             "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
             "http://www.w3.org/2001/XMLSchema#string" => {
-                let value = value;
                 Some(if let Ok(value) = SmallString::try_from(value) {
                     Self::SmallStringLiteral(value)
                 } else {

@@ -321,7 +321,7 @@ impl<'a> RioMapper {
     fn blank_node(&mut self, node: rio::BlankNode<'a>) -> BlankNode {
         self.bnode_map
             .entry(node.id.to_owned())
-            .or_insert_with(BlankNode::default)
+            .or_default()
             .clone()
     }
 

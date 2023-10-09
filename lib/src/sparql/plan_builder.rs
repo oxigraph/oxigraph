@@ -1280,7 +1280,7 @@ impl<'a> PlanBuilder<'a> {
                 Self::add_left_join_problematic_variables(child, set);
             }
             PlanNode::Union { children } => {
-                for child in children.iter() {
+                for child in children {
                     Self::add_left_join_problematic_variables(child, set);
                 }
             }

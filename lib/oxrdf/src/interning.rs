@@ -13,6 +13,7 @@ pub struct Interner {
 }
 
 impl Interner {
+    #[allow(clippy::never_loop)]
     fn get_or_intern(&mut self, value: &str) -> Key {
         let mut hash = self.hash(value);
         loop {
