@@ -141,14 +141,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         for tuple in tuples {
             for quad in delete {
                 if let Some(quad) =
-                    Self::convert_ground_quad_pattern(quad, &variables, &tuple, &(*dataset))?
+                    Self::convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
                 {
                     self.transaction.remove(quad.as_ref())?;
                 }
             }
             for quad in insert {
                 if let Some(quad) =
-                    Self::convert_quad_pattern(quad, &variables, &tuple, &(*dataset), &mut bnodes)?
+                    Self::convert_quad_pattern(quad, &variables, &tuple, &dataset, &mut bnodes)?
                 {
                     self.transaction.insert(quad.as_ref())?;
                 }

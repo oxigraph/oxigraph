@@ -7,6 +7,7 @@ use oxsdatatypes::*;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 use std::str;
 use std::sync::Arc;
 
@@ -708,6 +709,12 @@ impl From<QuadRef<'_>> for EncodedQuad {
 
 pub trait StrLookup {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError>;
+}
+
+impl<T: StrLookup> StrLookup for Rc<T> {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+        return (**self).get_str(key);
+    }
 }
 
 pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(

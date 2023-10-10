@@ -10,30 +10,10 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
+use std::rc::Rc;
 
 /// Boundry between the query evaluator and the storage layer.
-pub trait DatasetView: StrLookup + Clone {
-    // Polymorphism can be used to enable multiple storage layer
-    // options. A static dispatch approach to polymorphism is used to
-    // maximally preserve compile-time optimization
-    // opportunities. This is in contrast to use of a dynamic dispatch
-    // approach that would be necessary with the use of trait
-    // objects. See
-    // https://doc.rust-lang.org/stable/book/ch17-02-trait-objects.html#trait-objects-perform-dynamic-dispatch
-    // and
-    // https://doc.rust-lang.org/stable/book/ch10-01-syntax.html#performance-of-code-using-generics
-    // for details on the performance consequences of trait objects
-    // versus trait bounds on generics. With static dispatch switching
-    // storage layers at run-time requires more managment of the
-    // variations in code.
-
-    // References using `&dataset` syntax fail to compile with Rust
-    // 1.73.0 with the error that the DatasetView trait is not
-    // implemented for `Rc<T>`. A work-around is to use `&(*dataset)`
-    // syntax to explicitly deference the Rc. See
-    // https://doc.rust-lang.org/stable/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods
-    // fro details on automatic deref coercions.
-
+pub trait DatasetView: Clone {
     fn encoded_quads_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
@@ -44,6 +24,103 @@ pub trait DatasetView: StrLookup + Clone {
     fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm;
     fn insert_str(&self, key: &StrHash, value: &str);
 }
+
+/// Blanket implementation for references to DatasetView.
+impl<T: DatasetView> DatasetView for &T {
+    // Implementation based on
+    //
+    // Gjengset, Jon. 2022. “Ergonomic Trait Implementations.” In Rust
+    // for Rustaceans, 40–40. San Francisco, CA: No Starch Press.
+    //
+    // Smith, Mark. 2023. “Rust Trait Implementations and References.”
+    // Judy2k’s Blog (blog). February 22,
+    // 2023. https://www.judy.co.uk/blog/rust-traits-and-references/.
+
+    fn encoded_quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+        return (**self).encoded_quads_for_pattern(subject, predicate, object, graph_name);
+    }
+
+    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+        return (**self).encode_term(term);
+    }
+
+    fn insert_str(&self, key: &StrHash, value: &str) {
+        return (**self).insert_str(key, value);
+    }
+}
+
+/// Blanket implementation for Rc<T> references to DatasetView.
+impl<T: DatasetView> DatasetView for Rc<T> {
+    // Implementation based on
+    //
+    // Gjengset, Jon. 2022. “Ergonomic Trait Implementations.” In Rust
+    // for Rustaceans, 40–40. San Francisco, CA: No Starch Press.
+    //
+    // Smith, Mark. 2023. “Rust Trait Implementations and References.”
+    // Judy2k’s Blog (blog). February 22,
+    // 2023. https://www.judy.co.uk/blog/rust-traits-and-references/.
+
+    fn encoded_quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+        return (**self).encoded_quads_for_pattern(subject, predicate, object, graph_name);
+    }
+
+    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+        return (**self).encode_term(term);
+    }
+
+    fn insert_str(&self, key: &StrHash, value: &str) {
+        return (**self).insert_str(key, value);
+    }
+}
+
+/// Boundry over a Header-Dictionary-Triplies (HDT) storage layer.
+// #[derive(Clone)]
+// pub struct HDTDatasetView {
+// }
+
+// https://w3c.github.io/rdf-tests/sparql/sparql11/csv-tsv-res/data.ttl
+// impl DatasetView for HDTDatasetView {
+
+//     fn encoded_quads_for_pattern(
+//         &self,
+//         subject: Option<&EncodedTerm>,
+//         predicate: Option<&EncodedTerm>,
+//         object: Option<&EncodedTerm>,
+//         graph_name: Option<&EncodedTerm>,
+//     ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+
+//     }
+
+//     fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+
+//     }
+
+//     fn insert_str(&self, key: &StrHash, value: &str) {
+
+//     }
+// }
+
+// impl StrLookup for HDTDatasetView {
+//     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+
+//     }
+
+//     fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
+
+//     }
+// }
 
 /// Boundry over a Key-Value Store storage layer.
 #[derive(Clone)]
@@ -92,6 +169,11 @@ impl DatasetView for KVDatasetView {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+        // println!(
+        //     "dataset: encoded_quads_for_pattern {:#?} {:#?} {:#?} {:#?}",
+        //     subject, predicate, object, graph_name
+        // );
+
         if let Some(graph_name) = graph_name {
             if graph_name.is_default_graph() {
                 if let Some(default_graph_graphs) = &self.dataset.default {
@@ -190,6 +272,8 @@ impl DatasetView for KVDatasetView {
     }
 
     fn insert_str(&self, key: &StrHash, value: &str) {
+        // println!("dataset: insert_str {:#?} {:#?}", &key, &value);
+
         if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
             if !matches!(self.reader.contains_str(key), Ok(true)) {
                 e.insert(value.to_owned());
@@ -200,6 +284,12 @@ impl DatasetView for KVDatasetView {
     fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
         let term = term.into();
         let encoded = term.into();
+
+        // println!(
+        //     "dataset: encode_term term {:#?} encoded {:#?}",
+        //     &term, &encoded
+        // );
+
         insert_term(term, &encoded, &mut |key, value| {
             self.insert_str(key, value);
             Ok(())
@@ -211,6 +301,8 @@ impl DatasetView for KVDatasetView {
 
 impl StrLookup for KVDatasetView {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+        // println!("dataset: get_str {:#?}", &key);
+
         Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
         } else {
