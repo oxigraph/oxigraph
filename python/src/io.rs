@@ -9,7 +9,6 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use std::cmp::max;
-use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
@@ -63,7 +62,7 @@ pub fn parse(
     let file_path = input.extract::<PathBuf>().ok();
     let format = parse_format(format, file_path.as_deref())?;
     let input = if let Some(file_path) = &file_path {
-        PyReadable::from_file(file_path, py).map_err(map_io_err)?
+        PyReadable::from_file(file_path, py)?
     } else {
         PyReadable::from_data(input)
     };
@@ -144,10 +143,9 @@ pub fn serialize<'a>(
                         ));
                     }
                     writer.write_quad(quad)
-                }
-                .map_err(map_io_err)?;
+                }?;
             }
-            writer.finish().map_err(map_io_err)
+            Ok(writer.finish()?)
         },
         output,
         format,
@@ -229,10 +227,7 @@ impl PyWritable {
         let format = parse_format::<F>(format, file_path.as_deref())?;
         let output = if let Some(output) = output {
             if let Some(file_path) = &file_path {
-                Self::File(
-                    py.allow_threads(|| File::create(file_path))
-                        .map_err(map_io_err)?,
-                )
+                Self::File(py.allow_threads(|| File::create(file_path))?)
             } else {
                 Self::Io(PyIo(output.into()))
             }
@@ -240,9 +235,7 @@ impl PyWritable {
             PyWritable::Bytes(Vec::new())
         };
         let writer = write(BufWriter::new(output), format)?;
-        py.allow_threads(|| writer.into_inner())
-            .map_err(|e| map_io_err(e.into_error()))?
-            .close(py)
+        py.allow_threads(|| writer.into_inner())?.close(py)
     }
 
     fn close(self, py: Python<'_>) -> PyResult<Option<&PyBytes>> {
@@ -252,12 +245,11 @@ impl PyWritable {
                 py.allow_threads(|| {
                     file.flush()?;
                     file.sync_all()
-                })
-                .map_err(map_io_err)?;
+                })?;
                 Ok(None)
             }
             Self::Io(mut io) => {
-                py.allow_threads(|| io.flush()).map_err(map_io_err)?;
+                py.allow_threads(|| io.flush())?;
                 Ok(None)
             }
         }
@@ -294,12 +286,10 @@ impl Read for PyIo {
             let read = self
                 .0
                 .as_ref(py)
-                .call_method1(intern!(py, "read"), (to_read,))
-                .map_err(to_io_err)?;
+                .call_method1(intern!(py, "read"), (to_read,))?;
             let bytes = read
                 .extract::<&[u8]>()
-                .or_else(|e| read.extract::<&str>().map(str::as_bytes).map_err(|_| e))
-                .map_err(to_io_err)?;
+                .or_else(|_| read.extract::<&str>().map(str::as_bytes))?;
             buf[..bytes.len()].copy_from_slice(bytes);
             Ok(bytes.len())
         })
@@ -309,21 +299,17 @@ impl Read for PyIo {
 impl Write for PyIo {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         Python::with_gil(|py| {
-            self.0
+            Ok(self
+                .0
                 .as_ref(py)
-                .call_method1(intern!(py, "write"), (PyBytes::new(py, buf),))
-                .map_err(to_io_err)?
-                .extract::<usize>()
-                .map_err(to_io_err)
+                .call_method1(intern!(py, "write"), (PyBytes::new(py, buf),))?
+                .extract::<usize>()?)
         })
     }
 
     fn flush(&mut self) -> io::Result<()> {
         Python::with_gil(|py| {
-            self.0
-                .as_ref(py)
-                .call_method0(intern!(py, "flush"))
-                .map_err(to_io_err)?;
+            self.0.as_ref(py).call_method0(intern!(py, "flush"))?;
             Ok(())
         })
     }
@@ -382,21 +368,6 @@ pub fn parse_format<F: Format>(format: Option<&str>, path: Option<&Path>) -> PyR
     }
 }
 
-fn to_io_err(error: PyErr) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, error)
-}
-
-pub fn map_io_err(error: io::Error) -> PyErr {
-    if error
-        .get_ref()
-        .map_or(false, <(dyn Error + Send + Sync + 'static)>::is::<PyErr>)
-    {
-        *error.into_inner().unwrap().downcast().unwrap()
-    } else {
-        error.into()
-    }
-}
-
 pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
     match error {
         ParseError::Syntax(error) => {
@@ -429,7 +400,7 @@ pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
                 PySyntaxError::new_err((error.to_string(), params))
             }
         }
-        ParseError::Io(error) => map_io_err(error),
+        ParseError::Io(error) => error.into(),
     }
 }
 
