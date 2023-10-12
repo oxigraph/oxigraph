@@ -12,11 +12,10 @@ use oxigraph::sparql::{
     Variable,
 };
 use pyo3::basic::CompareOp;
-use pyo3::exceptions::{
-    PyNotImplementedError, PyRuntimeError, PySyntaxError, PyTypeError, PyValueError,
-};
+use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use std::io;
 use std::path::PathBuf;
 use std::vec::IntoIter;
 
@@ -121,14 +120,12 @@ impl PyQuerySolution {
         buffer
     }
 
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        match op {
-            CompareOp::Eq => Ok(self.inner == other.inner),
-            CompareOp::Ne => Ok(self.inner != other.inner),
-            _ => Err(PyNotImplementedError::new_err(
-                "Ordering is not implemented",
-            )),
-        }
+    fn __eq__(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.inner != other.inner
     }
 
     fn __len__(&self) -> usize {
@@ -258,28 +255,23 @@ impl PyQuerySolutions {
                                 iter.variables().to_vec()
                             }
                         },
-                    )
-                    .map_err(map_io_err)?;
+                    )?;
                 match &mut self.inner {
                     PyQuerySolutionsVariant::Query(inner) => {
                         for solution in inner {
-                            writer
-                                .write(&solution.map_err(map_evaluation_error)?)
-                                .map_err(map_io_err)?;
+                            writer.write(&solution.map_err(map_evaluation_error)?)?;
                         }
                     }
                     PyQuerySolutionsVariant::Reader { iter, file_path } => {
                         for solution in iter {
-                            writer
-                                .write(&solution.map_err(|e| {
-                                    map_query_results_parse_error(e, file_path.clone())
-                                })?)
-                                .map_err(map_io_err)?;
+                            writer.write(&solution.map_err(|e| {
+                                map_query_results_parse_error(e, file_path.clone())
+                            })?)?;
                         }
                     }
                 }
 
-                writer.finish().map_err(map_io_err)
+                Ok(writer.finish()?)
             },
             output,
             format,
@@ -355,9 +347,8 @@ impl PyQueryBoolean {
         PyWritable::do_write(
             |output, format| {
                 py.allow_threads(|| {
-                    QueryResultsSerializer::from_format(format)
-                        .serialize_boolean_to_write(output, self.inner)
-                        .map_err(map_io_err)
+                    Ok(QueryResultsSerializer::from_format(format)
+                        .serialize_boolean_to_write(output, self.inner)?)
                 })
             },
             output,
@@ -435,11 +426,9 @@ impl PyQueryTriples {
             |output, format| {
                 let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
                 for triple in &mut self.inner {
-                    writer
-                        .write_triple(&triple.map_err(map_evaluation_error)?)
-                        .map_err(map_io_err)?;
+                    writer.write_triple(&triple.map_err(map_evaluation_error)?)?;
                 }
-                writer.finish().map_err(map_io_err)
+                Ok(writer.finish()?)
             },
             output,
             format,
@@ -498,7 +487,7 @@ pub fn parse_query_results(
     let file_path = input.extract::<PathBuf>().ok();
     let format = parse_format(format, file_path.as_deref())?;
     let input = if let Some(file_path) = &file_path {
-        PyReadable::from_file(file_path, py).map_err(map_io_err)?
+        PyReadable::from_file(file_path, py)?
     } else {
         PyReadable::from_data(input)
     };
@@ -520,9 +509,9 @@ pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
         EvaluationError::Storage(error) => map_storage_error(error),
         EvaluationError::GraphParsing(error) => map_parse_error(error, None),
         EvaluationError::ResultsParsing(error) => map_query_results_parse_error(error, None),
-        EvaluationError::ResultsSerialization(error) => map_io_err(error),
-        EvaluationError::Service(error) => match error.downcast() {
-            Ok(error) => map_io_err(*error),
+        EvaluationError::ResultsSerialization(error) => error.into(),
+        EvaluationError::Service(error) => match error.downcast::<io::Error>() {
+            Ok(error) => (*error).into(),
             Err(error) => PyRuntimeError::new_err(error.to_string()),
         },
         _ => PyRuntimeError::new_err(error.to_string()),
@@ -561,6 +550,6 @@ pub fn map_query_results_parse_error(error: ParseError, file_path: Option<PathBu
                 PySyntaxError::new_err((error.to_string(), params))
             }
         }
-        ParseError::Io(error) => map_io_err(error),
+        ParseError::Io(error) => error.into(),
     }
 }

@@ -56,7 +56,7 @@ js-sys = { version = "0.3.60", optional = true }
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 criterion = "0.5"
 oxhttp = "0.2.0-alpha.1"
-zstd = "0.12"
+zstd = ">=0.12, <0.14"
 
 [package.metadata.docs.rs]
 all-features = true

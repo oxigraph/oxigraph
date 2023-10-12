@@ -1,8 +1,6 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{
-    allow_threads_unsafe, map_io_err, map_parse_error, parse_format, PyReadable, PyWritable,
-};
+use crate::io::{allow_threads_unsafe, map_parse_error, parse_format, PyReadable, PyWritable};
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::RdfFormat;
@@ -396,7 +394,7 @@ impl PyStore {
         let file_path = input.extract::<PathBuf>().ok();
         let format = parse_format::<RdfFormat>(format, file_path.as_deref())?;
         let input = if let Some(file_path) = &file_path {
-            PyReadable::from_file(file_path, py).map_err(map_io_err)?
+            PyReadable::from_file(file_path, py)?
         } else {
             PyReadable::from_data(input)
         };
@@ -465,7 +463,7 @@ impl PyStore {
         let file_path = input.extract::<PathBuf>().ok();
         let format = parse_format::<RdfFormat>(format, file_path.as_deref())?;
         let input = if let Some(file_path) = &file_path {
-            PyReadable::from_file(file_path, py).map_err(map_io_err)?
+            PyReadable::from_file(file_path, py)?
         } else {
             PyReadable::from_data(input)
         };
