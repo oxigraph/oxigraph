@@ -1,6 +1,8 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{allow_threads_unsafe, map_parse_error, parse_format, PyReadable, PyWritable};
+use crate::io::{
+    allow_threads_unsafe, map_parse_error, parse_format, PyReadable, PyReadableInput, PyWritable,
+};
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::RdfFormat;
@@ -360,10 +362,12 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
-    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
+    /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
+    /// :param path: The file path to read from. Replaces the ``input`` parameter.
+    /// :type path: str or os.PathLike[str] or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
@@ -374,14 +378,15 @@ impl PyStore {
     /// :raises OSError: if an error happens during a quad insertion or if a system error happens while reading the file.
     ///
     /// >>> store = Store()
-    /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> store.load(input='<foo> <p> "1" .', format="text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, /, format = None, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
     fn load(
         &self,
-        input: &PyAny,
+        input: Option<PyReadableInput>,
         format: Option<&str>,
+        path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
@@ -391,13 +396,8 @@ impl PyStore {
         } else {
             None
         };
-        let file_path = input.extract::<PathBuf>().ok();
-        let format = parse_format::<RdfFormat>(format, file_path.as_deref())?;
-        let input = if let Some(file_path) = &file_path {
-            PyReadable::from_file(file_path, py)?
-        } else {
-            PyReadable::from_data(input)
-        };
+        let input = PyReadable::from_args(&path, input, py)?;
+        let format: RdfFormat = parse_format(format, path.as_deref())?;
         py.allow_threads(|| {
             if let Some(to_graph_name) = to_graph_name {
                 self.inner
@@ -405,7 +405,7 @@ impl PyStore {
             } else {
                 self.inner.load_dataset(input, format, base_iri)
             }
-            .map_err(|e| map_loader_error(e, file_path))
+            .map_err(|e| map_loader_error(e, path))
         })
     }
 
@@ -429,10 +429,12 @@ impl PyStore {
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
-    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
+    /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
+    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
+    /// :param path: The file path to read from. Replaces the ``input`` parameter.
+    /// :type path: str or os.PathLike[str] or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
@@ -443,14 +445,15 @@ impl PyStore {
     /// :raises OSError: if an error happens during a quad insertion or if a system error happens while reading the file.
     ///
     /// >>> store = Store()
-    /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> store.bulk_load(input=b'<foo> <p> "1" .', format="text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, /, format = None, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
     fn bulk_load(
         &self,
-        input: &PyAny,
+        input: Option<PyReadableInput>,
         format: Option<&str>,
+        path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
@@ -460,13 +463,8 @@ impl PyStore {
         } else {
             None
         };
-        let file_path = input.extract::<PathBuf>().ok();
-        let format = parse_format::<RdfFormat>(format, file_path.as_deref())?;
-        let input = if let Some(file_path) = &file_path {
-            PyReadable::from_file(file_path, py)?
-        } else {
-            PyReadable::from_data(input)
-        };
+        let input = PyReadable::from_args(&path, input, py)?;
+        let format: RdfFormat = parse_format(format, path.as_deref())?;
         py.allow_threads(|| {
             if let Some(to_graph_name) = to_graph_name {
                 self.inner
@@ -477,7 +475,7 @@ impl PyStore {
                     .bulk_loader()
                     .load_dataset(input, format, base_iri)
             }
-            .map_err(|e| map_loader_error(e, file_path))
+            .map_err(|e| map_loader_error(e, path))
         })
     }
 

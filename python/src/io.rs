@@ -30,10 +30,12 @@ use std::sync::OnceLock;
 /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
 /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
-/// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
+/// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+/// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
 /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: str or None, optional
+/// :param path: The file path to read from. Replaces the ``input`` parameter.
+/// :type path: str or os.PathLike[str] or None, optional
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
 /// :type base_iri: str or None, optional
 /// :param without_named_graphs: Sets that the parser must fail when parsing a named graph.
@@ -46,26 +48,21 @@ use std::sync::OnceLock;
 /// :raises SyntaxError: if the provided data is invalid.
 /// :raises OSError: if a system error happens while reading the file.
 ///
-/// >>> input = io.BytesIO(b'<foo> <p> "1" .')
-/// >>> list(parse(input, "text/turtle", base_iri="http://example.com/"))
+/// >>> list(parse(input=b'<foo> <p> "1" .', format="text/turtle", base_iri="http://example.com/"))
 /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
 #[pyfunction]
-#[pyo3(signature = (input, /, format = None, *, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
+#[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
 pub fn parse(
-    input: &PyAny,
+    input: Option<PyReadableInput>,
     format: Option<&str>,
+    path: Option<PathBuf>,
     base_iri: Option<&str>,
     without_named_graphs: bool,
     rename_blank_nodes: bool,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let file_path = input.extract::<PathBuf>().ok();
-    let format = parse_format(format, file_path.as_deref())?;
-    let input = if let Some(file_path) = &file_path {
-        PyReadable::from_file(file_path, py)?
-    } else {
-        PyReadable::from_data(input)
-    };
+    let input = PyReadable::from_args(&path, input, py)?;
+    let format = parse_format(format, path.as_deref())?;
     let mut parser = RdfParser::from_format(format);
     if let Some(base_iri) = base_iri {
         parser = parser
@@ -80,7 +77,7 @@ pub fn parse(
     }
     Ok(PyQuadReader {
         inner: parser.parse_read(input),
-        file_path,
+        file_path: path,
     }
     .into_py(py))
 }
@@ -120,7 +117,7 @@ pub fn parse(
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
-#[pyo3(signature = (input, output = None, /, format = None))]
+#[pyo3(signature = (input, output = None, format = None))]
 pub fn serialize<'a>(
     input: &PyAny,
     output: Option<&PyAny>,
@@ -167,13 +164,12 @@ impl PyQuadReader {
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyQuad>> {
         py.allow_threads(|| {
-            self.inner
+            Ok(self
+                .inner
                 .next()
-                .map(|q| {
-                    Ok(q.map_err(|e| map_parse_error(e, self.file_path.clone()))?
-                        .into())
-                })
                 .transpose()
+                .map_err(|e| map_parse_error(e, self.file_path.clone()))?
+                .map(PyQuad::from))
         })
     }
 }
@@ -185,6 +181,22 @@ pub enum PyReadable {
 }
 
 impl PyReadable {
+    pub fn from_args(
+        path: &Option<PathBuf>,
+        input: Option<PyReadableInput>,
+        py: Python<'_>,
+    ) -> PyResult<Self> {
+        match (path, input) {
+            (Some(_), Some(_)) => Err(PyValueError::new_err(
+                "input and file_path can't be both set at the same time",
+            )),
+            (Some(path), None) => Ok(PyReadable::from_file(path, py)?),
+            (None, Some(input)) => Ok(input.into()),
+            (None, None) => Err(PyValueError::new_err(
+                "Either input or file_path must be set",
+            )),
+        }
+    }
     pub fn from_file(file: &Path, py: Python<'_>) -> io::Result<Self> {
         Ok(Self::File(py.allow_threads(|| File::open(file))?))
     }
@@ -206,6 +218,23 @@ impl Read for PyReadable {
             Self::Bytes(bytes) => bytes.read(buf),
             Self::Io(io) => io.read(buf),
             Self::File(file) => file.read(buf),
+        }
+    }
+}
+
+#[derive(FromPyObject)]
+pub enum PyReadableInput {
+    String(String),
+    Bytes(Vec<u8>),
+    Io(PyObject),
+}
+
+impl From<PyReadableInput> for PyReadable {
+    fn from(input: PyReadableInput) -> Self {
+        match input {
+            PyReadableInput::String(string) => Self::Bytes(Cursor::new(string.into_bytes())),
+            PyReadableInput::Bytes(bytes) => Self::Bytes(Cursor::new(bytes)),
+            PyReadableInput::Io(io) => Self::Io(PyIo(io)),
         }
     }
 }
