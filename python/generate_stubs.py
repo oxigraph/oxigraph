@@ -5,65 +5,60 @@ import inspect
 import logging
 import re
 import subprocess
+from functools import reduce
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
 
 
-def _path_to_type(*elements: str) -> ast.AST:
-    base: ast.AST = ast.Name(id=elements[0], ctx=AST_LOAD)
+def path_to_type(*elements: str) -> ast.AST:
+    base: ast.AST = ast.Name(id=elements[0], ctx=ast.Load())
     for e in elements[1:]:
-        base = ast.Attribute(value=base, attr=e, ctx=AST_LOAD)
+        base = ast.Attribute(value=base, attr=e, ctx=ast.Load())
     return base
 
 
-AST_LOAD = ast.Load()
-AST_ELLIPSIS = ast.Ellipsis()
-AST_STORE = ast.Store()
-AST_TYPING_ANY = _path_to_type("typing", "Any")
-GENERICS = {
-    "iterable": _path_to_type("typing", "Iterable"),
-    "iterator": _path_to_type("typing", "Iterator"),
-    "list": _path_to_type("typing", "List"),
-    "io": _path_to_type("typing", "IO"),
-}
 OBJECT_MEMBERS = dict(inspect.getmembers(object))
-
-
 BUILTINS: Dict[str, Union[None, Tuple[List[ast.AST], ast.AST]]] = {
     "__annotations__": None,
-    "__bool__": ([], _path_to_type("bool")),
-    "__bytes__": ([], _path_to_type("bytes")),
+    "__bool__": ([], path_to_type("bool")),
+    "__bytes__": ([], path_to_type("bytes")),
     "__class__": None,
-    "__contains__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__contains__": ([path_to_type("typing", "Any")], path_to_type("bool")),
     "__del__": None,
-    "__delattr__": ([_path_to_type("str")], _path_to_type("None")),
-    "__delitem__": ([AST_TYPING_ANY], AST_TYPING_ANY),
+    "__delattr__": ([path_to_type("str")], path_to_type("None")),
+    "__delitem__": ([path_to_type("typing", "Any")], path_to_type("typing", "Any")),
     "__dict__": None,
     "__dir__": None,
     "__doc__": None,
-    "__eq__": ([AST_TYPING_ANY], _path_to_type("bool")),
-    "__format__": ([_path_to_type("str")], _path_to_type("str")),
-    "__ge__": ([AST_TYPING_ANY], _path_to_type("bool")),
-    "__getattribute__": ([_path_to_type("str")], AST_TYPING_ANY),
-    "__getitem__": ([AST_TYPING_ANY], AST_TYPING_ANY),
-    "__gt__": ([AST_TYPING_ANY], _path_to_type("bool")),
-    "__hash__": ([], _path_to_type("int")),
-    "__init__": ([], _path_to_type("None")),
+    "__eq__": ([path_to_type("typing", "Any")], path_to_type("bool")),
+    "__format__": ([path_to_type("str")], path_to_type("str")),
+    "__ge__": ([path_to_type("typing", "Any")], path_to_type("bool")),
+    "__getattribute__": ([path_to_type("str")], path_to_type("typing", "Any")),
+    "__getitem__": ([path_to_type("typing", "Any")], path_to_type("typing", "Any")),
+    "__gt__": ([path_to_type("typing", "Any")], path_to_type("bool")),
+    "__hash__": ([], path_to_type("int")),
+    "__init__": ([], path_to_type("None")),
     "__init_subclass__": None,
-    "__iter__": ([], AST_TYPING_ANY),
-    "__le__": ([AST_TYPING_ANY], _path_to_type("bool")),
-    "__len__": ([], _path_to_type("int")),
-    "__lt__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__iter__": ([], path_to_type("typing", "Any")),
+    "__le__": ([path_to_type("typing", "Any")], path_to_type("bool")),
+    "__len__": ([], path_to_type("int")),
+    "__lt__": ([path_to_type("typing", "Any")], path_to_type("bool")),
     "__module__": None,
-    "__ne__": ([AST_TYPING_ANY], _path_to_type("bool")),
+    "__ne__": ([path_to_type("typing", "Any")], path_to_type("bool")),
     "__new__": None,
-    "__next__": ([], AST_TYPING_ANY),
+    "__next__": ([], path_to_type("typing", "Any")),
     "__reduce__": None,
     "__reduce_ex__": None,
-    "__repr__": ([], _path_to_type("str")),
-    "__setattr__": ([_path_to_type("str"), AST_TYPING_ANY], _path_to_type("None")),
-    "__setitem__": ([AST_TYPING_ANY, AST_TYPING_ANY], AST_TYPING_ANY),
+    "__repr__": ([], path_to_type("str")),
+    "__setattr__": (
+        [path_to_type("str"), path_to_type("typing", "Any")],
+        path_to_type("None"),
+    ),
+    "__setitem__": (
+        [path_to_type("typing", "Any"), path_to_type("typing", "Any")],
+        path_to_type("typing", "Any"),
+    ),
     "__sizeof__": None,
-    "__str__": ([], _path_to_type("str")),
+    "__str__": ([], path_to_type("str")),
     "__subclasshook__": None,
 }
 
@@ -136,11 +131,11 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
         elif member_name == "__match_args__":
             constants.append(
                 ast.AnnAssign(
-                    target=ast.Name(id=member_name, ctx=AST_STORE),
+                    target=ast.Name(id=member_name, ctx=ast.Store()),
                     annotation=ast.Subscript(
-                        value=_path_to_type("typing", "Tuple"),
-                        slice=ast.Tuple(elts=[_path_to_type("str"), ast.Ellipsis()], ctx=AST_LOAD),
-                        ctx=AST_LOAD,
+                        value=path_to_type("tuple"),
+                        slice=ast.Tuple(elts=[path_to_type("str"), ast.Ellipsis()], ctx=ast.Load()),
+                        ctx=ast.Load(),
                     ),
                     value=ast.Constant(member_value),
                     simple=1,
@@ -156,8 +151,8 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
         bases=[],
         keywords=[],
         body=(([doc_comment] if doc_comment else []) + attributes + methods + magic_methods + constants)
-        or [AST_ELLIPSIS],
-        decorator_list=[_path_to_type("typing", "final")],
+        or [ast.Ellipsis()],
+        decorator_list=[path_to_type("typing", "final")],
     )
 
 
@@ -182,8 +177,8 @@ def data_descriptor_stub(
             )
 
     assign = ast.AnnAssign(
-        target=ast.Name(id=data_desc_name, ctx=AST_STORE),
-        annotation=annotation or AST_TYPING_ANY,
+        target=ast.Name(id=data_desc_name, ctx=ast.Store()),
+        annotation=annotation or path_to_type("typing", "Any"),
         simple=1,
     )
     doc_comment = build_doc_comment(doc_comment) if doc_comment else None
@@ -212,7 +207,7 @@ def function_stub(
     return ast.FunctionDef(
         fn_name,
         arguments_stub(fn_name, fn_def, doc or "", element_path, types_to_import),
-        body or [AST_ELLIPSIS],
+        body or [ast.Ellipsis()],
         decorator_list=decorator_list,
         returns=returns_stub(fn_name, doc, element_path, types_to_import) if doc else None,
         lineno=0,
@@ -352,11 +347,11 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
     # let's first parse nested parenthesis
     stack: List[List[Any]] = [[]]
     for token in tokens:
-        if token == "(":
+        if token == "[":
             children: List[str] = []
             stack[-1].append(children)
             stack.append(children)
-        elif token == ")":
+        elif token == "]":
             stack.pop()
         else:
             stack[-1].append(token)
@@ -376,37 +371,29 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
         new_elements: List[ast.AST] = []
         for group in or_groups:
             if len(group) == 1 and isinstance(group[0], str):
-                parts = group[0].split(".")
-                if any(not p for p in parts):
-                    raise ValueError(f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}")
-                if len(parts) > 1:
-                    types_to_import.add(parts[0])
-                new_elements.append(_path_to_type(*parts))
+                new_elements.append(concatenated_path_to_type(group[0], element_path, types_to_import))
             elif len(group) == 2 and isinstance(group[0], str) and isinstance(group[1], list):
-                if group[0] not in GENERICS:
-                    raise ValueError(
-                        f"Constructor {group[0]} is not supported in type '{type_str}' used by {'.'.join(element_path)}"
-                    )
                 new_elements.append(
                     ast.Subscript(
-                        value=GENERICS[group[0]],
+                        value=concatenated_path_to_type(group[0], element_path, types_to_import),
                         slice=parse_sequence(group[1]),
-                        ctx=AST_LOAD,
+                        ctx=ast.Load(),
                     )
                 )
             else:
                 raise ValueError(f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}")
-        return (
-            ast.Subscript(
-                value=_path_to_type("typing", "Union"),
-                slice=ast.Tuple(elts=new_elements, ctx=AST_LOAD),
-                ctx=AST_LOAD,
-            )
-            if len(new_elements) > 1
-            else new_elements[0]
-        )
+        return reduce(lambda left, right: ast.BinOp(left=left, op=ast.BitOr(), right=right), new_elements)
 
     return parse_sequence(stack[0])
+
+
+def concatenated_path_to_type(path: str, element_path: List[str], types_to_import: Set[str]) -> ast.AST:
+    parts = path.split(".")
+    if any(not p for p in parts):
+        raise ValueError(f"Not able to parse type '{path}' used by {'.'.join(element_path)}")
+    if len(parts) > 1:
+        types_to_import.add(".".join(parts[:-1]))
+    return path_to_type(*parts)
 
 
 def build_doc_comment(doc: str) -> Optional[ast.Expr]:

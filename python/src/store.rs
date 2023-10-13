@@ -28,7 +28,7 @@ use std::path::PathBuf;
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 ///              In this case, the store data are kept in memory and never written on disk.
-/// :type path: str or pathlib.Path or None, optional
+/// :type path: str or os.PathLike[str] or None, optional
 /// :raises OSError: if the target directory contains invalid data or could not be accessed.
 ///
 /// The :py:class:`str` function provides a serialization of the store in NQuads:
@@ -137,7 +137,7 @@ impl PyStore {
     /// The :py:func:`bulk_extend` method is also available for much faster loading of a large number of quads but without transactional guarantees.
     ///
     /// :param quads: the quads to add.
-    /// :type quads: iterable(Quad)
+    /// :type quads: collections.abc.Iterable[Quad]
     /// :rtype: None
     /// :raises OSError: if an error happens during the quad insertion.
     ///
@@ -162,7 +162,7 @@ impl PyStore {
     /// Only a part of the data might be written to the store.
     ///
     /// :param quads: the quads to add.
-    /// :type quads: iterable(Quad)
+    /// :type quads: collections.abc.Iterable[Quad]
     /// :rtype: None
     /// :raises OSError: if an error happens during the quad insertion.
     ///
@@ -210,7 +210,7 @@ impl PyStore {
     /// :param graph_name: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :return: an iterator of the quads matching the pattern.
-    /// :rtype: iterator(Quad)
+    /// :rtype: collections.abc.Iterator[Quad]
     /// :raises OSError: if an error happens during the quads lookup.
     ///
     /// >>> store = Store()
@@ -246,9 +246,9 @@ impl PyStore {
     /// :param use_default_graph_as_union: if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
     /// :type use_default_graph_as_union: bool, optional
     /// :param default_graph: list of the graphs that should be used as the query default graph. By default, the store default graph is used.
-    /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list(NamedNode or BlankNode or DefaultGraph) or None, optional
+    /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list[NamedNode or BlankNode or DefaultGraph] or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
-    /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
+    /// :type named_graphs: list[NamedNode or BlankNode] or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryBoolean or QueryTriples
     /// :raises SyntaxError: if the provided query is invalid.
@@ -361,7 +361,7 @@ impl PyStore {
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io(bytes) or io(str) or str or pathlib.Path
+    /// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
     /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -430,7 +430,7 @@ impl PyStore {
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io(bytes) or io(str) or str or pathlib.Path
+    /// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
     /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -497,7 +497,7 @@ impl PyStore {
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
-    /// :type output: io(bytes) or str or pathlib.Path or None, optional
+    /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
     /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`.  If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
@@ -551,7 +551,7 @@ impl PyStore {
     /// Returns an iterator over all the store named graphs.
     ///
     /// :return: an iterator of the store graph names.
-    /// :rtype: iterator(NamedNode or BlankNode)
+    /// :rtype: collections.abc.Iterator[NamedNode or BlankNode]
     /// :raises OSError: if an error happens during the named graphs lookup.
     ///
     /// >>> store = Store()
