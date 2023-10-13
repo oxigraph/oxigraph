@@ -1,5 +1,5 @@
 import unittest
-from io import BytesIO, UnsupportedOperation
+from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
 from typing import Any
@@ -253,7 +253,7 @@ class TestStore(unittest.TestCase):
     def test_load_ntriples_to_default_graph(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
+            b"<http://foo> <http://bar> <http://baz> .",
             "application/n-triples",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
@@ -261,7 +261,7 @@ class TestStore(unittest.TestCase):
     def test_load_ntriples_to_named_graph(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
+            "<http://foo> <http://bar> <http://baz> .",
             "application/n-triples",
             to_graph=graph,
         )
@@ -279,7 +279,7 @@ class TestStore(unittest.TestCase):
     def test_load_nquads(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://foo> <http://bar> <http://baz> <http://graph>."),
+            StringIO("<http://foo> <http://bar> <http://baz> <http://graph>."),
             "nq",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
@@ -287,7 +287,7 @@ class TestStore(unittest.TestCase):
     def test_load_trig_with_base_iri(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://graph> { <http://foo> <http://bar> <> . }"),
+            "<http://graph> { <http://foo> <http://bar> <> . }",
             "application/trig",
             base_iri="http://baz",
         )
@@ -298,7 +298,7 @@ class TestStore(unittest.TestCase):
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
             fp.flush()
             store = Store()
-            store.load(fp.name)
+            store.load(path=fp.name)
             self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_with_io_error(self) -> None:

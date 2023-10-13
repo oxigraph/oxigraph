@@ -33,13 +33,37 @@ class TestParse(unittest.TestCase):
             fp.write('<foo> <p> "éù" .'.encode())
             fp.flush()
             self.assertEqual(
-                list(parse(fp.name, base_iri="http://example.com/")),
+                list(parse(path=fp.name, base_iri="http://example.com/")),
                 [EXAMPLE_TRIPLE],
             )
 
     def test_parse_not_existing_file(self) -> None:
         with self.assertRaises(IOError) as _:
-            parse("/tmp/not-existing-oxigraph-file.ttl", "text/turtle")
+            parse(path="/tmp/not-existing-oxigraph-file.ttl", format="text/turtle")
+
+    def test_parse_str(self) -> None:
+        self.assertEqual(
+            list(
+                parse(
+                    '<foo> <p> "éù" .',
+                    "text/turtle",
+                    base_iri="http://example.com/",
+                )
+            ),
+            [EXAMPLE_TRIPLE],
+        )
+
+    def test_parse_bytes(self) -> None:
+        self.assertEqual(
+            list(
+                parse(
+                    '<foo> <p> "éù" .'.encode(),
+                    "text/turtle",
+                    base_iri="http://example.com/",
+                )
+            ),
+            [EXAMPLE_TRIPLE],
+        )
 
     def test_parse_str_io(self) -> None:
         self.assertEqual(
@@ -85,7 +109,7 @@ class TestParse(unittest.TestCase):
         self.assertEqual(
             list(
                 parse(
-                    StringIO('<g> { <foo> <p> "1" }'),
+                    '<g> { <foo> <p> "1" }',
                     "application/trig",
                     base_iri="http://example.com/",
                 )
@@ -99,7 +123,7 @@ class TestParse(unittest.TestCase):
             fp.write(b'<foo> "p" "1"')
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse(fp.name, "text/turtle"))
+                list(parse(path=fp.name, format="text/turtle"))
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 2)
             self.assertEqual(ctx.exception.offset, 7)
@@ -111,7 +135,7 @@ class TestParse(unittest.TestCase):
         with self.assertRaises(SyntaxError) as _:
             list(
                 parse(
-                    StringIO('<g> { <foo> <p> "1" }'),
+                    '<g> { <foo> <p> "1" }',
                     "application/trig",
                     base_iri="http://example.com/",
                     without_named_graphs=True,
@@ -122,14 +146,14 @@ class TestParse(unittest.TestCase):
         self.assertNotEqual(
             list(
                 parse(
-                    StringIO('_:s <http://example.com/p> "o" .'),
+                    '_:s <http://example.com/p> "o" .',
                     "application/n-triples",
                     rename_blank_nodes=True,
                 )
             ),
             list(
                 parse(
-                    StringIO('_:s <http://example.com/p> "o" .'),
+                    '_:s <http://example.com/p> "o" .',
                     "application/n-triples",
                     rename_blank_nodes=True,
                 )
