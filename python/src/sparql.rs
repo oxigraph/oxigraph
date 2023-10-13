@@ -195,7 +195,7 @@ enum PyQuerySolutionsVariant {
 #[pymethods]
 impl PyQuerySolutions {
     /// :return: the ordered list of all variables that could appear in the query results
-    /// :rtype: list(Variable)
+    /// :rtype: list[Variable]
     ///
     /// >>> store = Store()
     /// >>> store.query('SELECT ?s WHERE { ?s ?p ?o }').variables
@@ -225,7 +225,7 @@ impl PyQuerySolutions {
     /// For example, ``application/json`` could also be used for `JSON <https://www.w3.org/TR/sparql11-results-json/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
-    /// :type output: io(bytes) or str or pathlib.Path or None, optional
+    /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
     /// :param format: the format of the query results serialization using a media type like ``text/csv`` or an extension like `csv`. If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :rtype: bytes or None
@@ -325,7 +325,7 @@ impl PyQueryBoolean {
     /// For example, ``application/json`` could also be used for `JSON <https://www.w3.org/TR/sparql11-results-json/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
-    /// :type output: io(bytes) or str or pathlib.Path or None, optional
+    /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
     /// :param format: the format of the query results serialization using a media type like ``text/csv`` or an extension like `csv`. If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :rtype: bytes or None
@@ -403,7 +403,7 @@ impl PyQueryTriples {
     /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
-    /// :type output: io(bytes) or str or pathlib.Path or None, optional
+    /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
     /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: str or None, optional
     /// :rtype: bytes or None
@@ -461,7 +461,7 @@ impl PyQueryTriples {
 /// For example, ``application/json`` could also be used for `JSON <https://www.w3.org/TR/sparql11-results-json/>`_.
 ///
 /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: io(bytes) or io(str) or str or pathlib.Path
+/// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
 /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: str or None, optional
 /// :return: an iterator of :py:class:`QuerySolution` or a :py:class:`bool`.

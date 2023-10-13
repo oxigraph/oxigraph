@@ -31,7 +31,7 @@ use std::sync::OnceLock;
 /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: io(bytes) or io(str) or str or pathlib.Path
+/// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
 /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: str or None, optional
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -41,7 +41,7 @@ use std::sync::OnceLock;
 /// :param rename_blank_nodes: Renames the blank nodes identifiers from the ones set in the serialization to random ids. This allows to avoid identifier conflicts when merging graphs together.
 /// :type rename_blank_nodes: bool, optional
 /// :return: an iterator of RDF triples or quads depending on the format.
-/// :rtype: iterator(Quad)
+/// :rtype: collections.abc.Iterator[Quad]
 /// :raises ValueError: if the format is not supported.
 /// :raises SyntaxError: if the provided data is invalid.
 /// :raises OSError: if a system error happens while reading the file.
@@ -101,9 +101,9 @@ pub fn parse(
 /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
 ///
 /// :param input: the RDF triples and quads to serialize.
-/// :type input: iterable(Triple) or iterable(Quad)
+/// :type input: collections.abc.Iterable[Triple] or collections.abc.Iterable[Quad]
 /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
-/// :type output: io(bytes) or str or pathlib.Path or None, optional
+/// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
 /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: str or None, optional
 /// :return: py:class:`bytes` with the serialization if the ``output`` parameter is :py:const:`None`, :py:const:`None` if ``output`` is set.
