@@ -46,6 +46,7 @@ siphasher.workspace = true
 sparesults = { workspace = true, features = ["rdf-star"] }
 spargebra = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
 sparopt = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
+hdt = { version = "0.2.0", default-features = false }
 thiserror.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

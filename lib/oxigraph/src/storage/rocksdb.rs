@@ -263,6 +263,7 @@ impl RocksDbStorage {
     }
 }
 
+#[derive(Clone)]
 pub struct RocksDbStorageReader {
     reader: Reader,
     storage: RocksDbStorage,

@@ -139,6 +139,7 @@ pub struct StorageReader {
     kind: StorageReaderKind,
 }
 
+#[derive(Clone)]
 enum StorageReaderKind {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbStorageReader),

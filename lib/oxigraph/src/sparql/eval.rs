@@ -5097,19 +5097,6 @@ fn new_bnode() -> EncodedTerm {
     EncodedTerm::NumericalBlankNode { id: random() }
 }
 
-fn decode_triple<D: Decoder + ?Sized>(
-    decoder: &D,
-    subject: &EncodedTerm,
-    predicate: &EncodedTerm,
-    object: &EncodedTerm,
-) -> Result<Triple, EvaluationError> {
-    Ok(Triple::new(
-        decoder.decode_subject(subject)?,
-        decoder.decode_named_node(predicate)?,
-        decoder.decode_term(object)?,
-    ))
-}
-
 struct DescribeIterator<T: DatasetView + StrLookup> {
     eval: SimpleEvaluator<T>,
     tuples_to_describe: EncodedTuplesIterator,

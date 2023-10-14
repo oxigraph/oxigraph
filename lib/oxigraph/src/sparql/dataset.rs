@@ -1,16 +1,19 @@
-use crate::model::TermRef;
+use crate::model::{BlankNodeRef, LiteralRef, NamedNodeRef, Term, TermRef};
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
 use crate::storage::numeric_encoder::{
-    insert_term, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
+    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
 };
 use crate::storage::{StorageError, StorageReader};
+use hdt::Hdt;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::io::{Error, ErrorKind};
 use std::iter::empty;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Boundry between the query evaluator and the storage layer.
 pub trait DatasetView: Clone {
@@ -21,7 +24,20 @@ pub trait DatasetView: Clone {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>;
-    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm;
+
+    /// Add a hash value for a string to the in-memory hashmap.
+    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+        let term = term.into();
+        let encoded = term.into();
+
+        insert_term(term, &encoded, &mut |key, value| {
+            self.insert_str(key, value);
+            Ok(())
+        })
+        .unwrap();
+        encoded
+    }
+
     fn insert_str(&self, key: &StrHash, value: &str);
 }
 
@@ -86,41 +102,185 @@ impl<T: DatasetView> DatasetView for Rc<T> {
 }
 
 /// Boundry over a Header-Dictionary-Triplies (HDT) storage layer.
-// #[derive(Clone)]
-// pub struct HDTDatasetView {
-// }
+pub struct HDTDatasetView {
+    /// Path to the HDT file.
+    path: String,
 
-// https://w3c.github.io/rdf-tests/sparql/sparql11/csv-tsv-res/data.ttl
-// impl DatasetView for HDTDatasetView {
+    /// HDT interface.
+    hdt: Hdt,
 
-//     fn encoded_quads_for_pattern(
-//         &self,
-//         subject: Option<&EncodedTerm>,
-//         predicate: Option<&EncodedTerm>,
-//         object: Option<&EncodedTerm>,
-//         graph_name: Option<&EncodedTerm>,
-//     ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+    /// In-memory string hashs.
+    extra: RefCell<HashMap<StrHash, String>>,
+}
 
-//     }
+/// Cloning opens the same file again.
+impl Clone for HDTDatasetView {
+    fn clone(&self) -> HDTDatasetView {
+        let file = std::fs::File::open(&self.path).expect("error opening file");
+        let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
 
-//     fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+        Self {
+            path: String::from(&self.path),
+            hdt,
+            extra: self.extra.clone(),
+        }
+    }
+}
 
-//     }
+impl HDTDatasetView {
+    pub fn new(path: &str) -> Self {
+        let file = std::fs::File::open(path).expect("error opening file");
+        let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
 
-//     fn insert_str(&self, key: &StrHash, value: &str) {
+        Self {
+            path: String::from(path),
+            hdt,
+            extra: RefCell::new(HashMap::default()),
+        }
+    }
 
-//     }
-// }
+    fn encodedterm_to_hdt_str(&self, encoded_term: Option<&EncodedTerm>) -> Option<String> {
+        let term_str = match encoded_term {
+            None => None,
+            Some(i) => {
+                let decoded_term = &self.decode_term(i).unwrap();
+                let term = match decoded_term {
+                    Term::NamedNode(_) => {
+                        let term_str = &decoded_term.to_string();
+                        let unquoted = String::from(&term_str[1..term_str.len() - 1]);
+                        unquoted
+                    }
+                    _ => decoded_term.to_string(),
+                };
 
-// impl StrLookup for HDTDatasetView {
-//     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+                Some(term)
+            }
+        };
 
-//     }
+        term_str
+    }
 
-//     fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
+    /// Create the correct OxRDF term for a given resource string.  Slow,
+    /// use the appropriate method if you know which type (Literal, URI,
+    /// or blank node) the string has. Based on
+    /// https://github.com/KonradHoeffner/hdt/blob/871db777db3220dc4874af022287975b31d72d3a/src/hdt_graph.rs#L64
+    fn auto_term(&self, s: &str) -> Result<EncodedTerm, Error> {
+        match s.chars().next() {
+            None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
+            Some('"') => match s.rfind('"') {
+                None => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("missing right quotation mark in literal string {s}"),
+                )),
+                Some(index) => {
+                    let lex = Arc::from(&s[1..index]);
+                    let rest = &s[index + 1..];
+                    // literal with no language tag and no datatype
+                    if rest.is_empty() {
+                        return Ok(EncodedTerm::from(LiteralRef::new_simple_literal(*lex)));
+                    }
+                    // either language tag or datatype
+                    if let Some(tag_index) = rest.find('@') {
+                        let tag = Arc::from(&rest[tag_index + 1..]);
+                        return Ok(EncodedTerm::from(
+                            LiteralRef::new_language_tagged_literal_unchecked(*lex, *tag),
+                        ));
+                    }
+                    // datatype
+                    let mut dt_split = rest.split("^^");
+                    dt_split.next(); // empty
+                    match dt_split.next() {
+                        Some(dt) => {
+                            let unquoted = &dt[1..dt.len() - 1];
+                            let dt = unquoted; // TODO create a datatyped literal.
+                            Ok(EncodedTerm::from(LiteralRef::new_simple_literal(*lex)))
+                        }
+                        None => Err(Error::new(
+                            ErrorKind::InvalidData,
+                            format!("empty datatype in {s}"),
+                        )),
+                    }
+                }
+            },
+            Some('_') => Ok(EncodedTerm::from(BlankNodeRef::new_unchecked(*Arc::from(
+                &s[2..],
+            )))),
+            _ => {
+                let named_node = NamedNodeRef::new(*Arc::from(s)).unwrap();
+                self.encode_term(named_node);
+                Ok(EncodedTerm::from(named_node))
+            }
+        }
+    }
+}
 
-//     }
-// }
+impl DatasetView for HDTDatasetView {
+    /// Query the HDT by Basic Graph Pattern (BGP)
+    fn encoded_quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+        // The graph_name is unused as HDT does not have named graphs.
+        if let Some(graph) = graph_name {
+            match graph {
+                EncodedTerm::DefaultGraph => (),
+                _ => panic!("HDT does not support named graphs."),
+            }
+        }
+
+        // Get string representations of the Oxigraph EncodedTerms.
+        let s = self.encodedterm_to_hdt_str(subject);
+        let p = self.encodedterm_to_hdt_str(predicate);
+        let o = self.encodedterm_to_hdt_str(object);
+
+        // Query HDT for BGP by string values.
+        let results = self
+            .hdt
+            .triples_with_pattern(s.as_deref(), p.as_deref(), o.as_deref());
+
+        // Create a vector to hold the results.
+        let mut v: Vec<Result<EncodedQuad, EvaluationError>> = Vec::new();
+
+        // For each result
+        for result in results {
+            // Create OxRDF terms for the HDT result.
+            let ex_s = self.auto_term(&(*result.0)).unwrap();
+            let ex_p = self.auto_term(&(*result.1)).unwrap();
+            let ex_o = self.auto_term(&(*result.2)).unwrap();
+
+            // Add the result to the vector.
+            v.push(Ok(EncodedQuad::new(
+                ex_s.clone(),
+                ex_p.clone(),
+                ex_o.clone(),
+                EncodedTerm::DefaultGraph,
+            )));
+        }
+
+        return Box::new(v.into_iter());
+    }
+
+    fn insert_str(&self, key: &StrHash, value: &str) {
+        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
+            e.insert(value.to_owned());
+        }
+
+        return;
+    }
+}
+
+impl StrLookup for HDTDatasetView {
+    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
+        Ok(if let Some(value) = self.extra.borrow().get(key) {
+            Some(value.clone())
+        } else {
+            None
+        })
+    }
+}
 
 /// Boundry over a Key-Value Store storage layer.
 #[derive(Clone)]
@@ -169,11 +329,6 @@ impl DatasetView for KVDatasetView {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
-        // println!(
-        //     "dataset: encoded_quads_for_pattern {:#?} {:#?} {:#?} {:#?}",
-        //     subject, predicate, object, graph_name
-        // );
-
         if let Some(graph_name) = graph_name {
             if graph_name.is_default_graph() {
                 if let Some(default_graph_graphs) = &self.dataset.default {
@@ -272,37 +427,16 @@ impl DatasetView for KVDatasetView {
     }
 
     fn insert_str(&self, key: &StrHash, value: &str) {
-        // println!("dataset: insert_str {:#?} {:#?}", &key, &value);
-
         if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
             if !matches!(self.reader.contains_str(key), Ok(true)) {
                 e.insert(value.to_owned());
             }
         }
     }
-
-    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
-        let term = term.into();
-        let encoded = term.into();
-
-        // println!(
-        //     "dataset: encode_term term {:#?} encoded {:#?}",
-        //     &term, &encoded
-        // );
-
-        insert_term(term, &encoded, &mut |key, value| {
-            self.insert_str(key, value);
-            Ok(())
-        })
-        .unwrap();
-        encoded
-    }
 }
 
 impl StrLookup for KVDatasetView {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
-        // println!("dataset: get_str {:#?}", &key);
-
         Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
         } else {
