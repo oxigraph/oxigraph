@@ -41,65 +41,53 @@ pub trait DatasetView: Clone {
     fn insert_str(&self, key: &StrHash, value: &str);
 }
 
-/// Blanket implementation for references to DatasetView.
-impl<T: DatasetView> DatasetView for &T {
-    // Implementation based on
-    //
-    // Gjengset, Jon. 2022. “Ergonomic Trait Implementations.” In Rust
-    // for Rustaceans, 40–40. San Francisco, CA: No Starch Press.
-    //
-    // Smith, Mark. 2023. “Rust Trait Implementations and References.”
-    // Judy2k’s Blog (blog). February 22,
-    // 2023. https://www.judy.co.uk/blog/rust-traits-and-references/.
+my_impl_for! { &T, Rc<T> }
+// where
+macro_rules! my_impl_for {(
+    /* macro input */
+    $( // <---------+ repetition operator,
+        $Type:ty // | of `:ty`pes, that shall be named with the `$Type` "metavariable"
+    ),* $(,)? // <--+ `,`-separated, with an optional trailing `,`
+) => (
+    /* macro output */
+    $( // <- for each of the occurrences in input, emit:
+        /// Blanket implementation for references to DatasetView.
+        impl<T: DatasetView> DatasetView for $Type {
+            // Implementation based on
+            //
+            // Gjengset, Jon. 2022. “Ergonomic Trait Implementations.”
+            // In Rust for Rustaceans, 40–40. San Francisco, CA: No
+            // Starch Press.
+            //
+            // Smith, Mark. 2023. “Rust Trait Implementations and
+            // References.”  Judy2k’s Blog (blog). February 22,
+            // 2023. https://www.judy.co.uk/blog/rust-traits-and-references/.
+            //
+            // Note that
+            // https://docs.rs/syntactic-for/latest/syntactic_for/#impl-blocks
+            // does not work with the Rc<T> syntax.
 
-    fn encoded_quads_for_pattern(
-        &self,
-        subject: Option<&EncodedTerm>,
-        predicate: Option<&EncodedTerm>,
-        object: Option<&EncodedTerm>,
-        graph_name: Option<&EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
-        return (**self).encoded_quads_for_pattern(subject, predicate, object, graph_name);
-    }
+            fn encoded_quads_for_pattern(
+                &self,
+                subject: Option<&EncodedTerm>,
+                predicate: Option<&EncodedTerm>,
+                object: Option<&EncodedTerm>,
+                graph_name: Option<&EncodedTerm>,
+            ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+                return (**self).encoded_quads_for_pattern(subject, predicate, object, graph_name);
+            }
 
-    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
-        return (**self).encode_term(term);
-    }
+            fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
+                return (**self).encode_term(term);
+            }
 
-    fn insert_str(&self, key: &StrHash, value: &str) {
-        return (**self).insert_str(key, value);
-    }
-}
-
-/// Blanket implementation for Rc<T> references to DatasetView.
-impl<T: DatasetView> DatasetView for Rc<T> {
-    // Implementation based on
-    //
-    // Gjengset, Jon. 2022. “Ergonomic Trait Implementations.” In Rust
-    // for Rustaceans, 40–40. San Francisco, CA: No Starch Press.
-    //
-    // Smith, Mark. 2023. “Rust Trait Implementations and References.”
-    // Judy2k’s Blog (blog). February 22,
-    // 2023. https://www.judy.co.uk/blog/rust-traits-and-references/.
-
-    fn encoded_quads_for_pattern(
-        &self,
-        subject: Option<&EncodedTerm>,
-        predicate: Option<&EncodedTerm>,
-        object: Option<&EncodedTerm>,
-        graph_name: Option<&EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
-        return (**self).encoded_quads_for_pattern(subject, predicate, object, graph_name);
-    }
-
-    fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
-        return (**self).encode_term(term);
-    }
-
-    fn insert_str(&self, key: &StrHash, value: &str) {
-        return (**self).insert_str(key, value);
-    }
-}
+            fn insert_str(&self, key: &StrHash, value: &str) {
+                return (**self).insert_str(key, value);
+            }
+        }
+    )*
+)}
+use my_impl_for;
 
 /// Boundry over a Header-Dictionary-Triplies (HDT) storage layer.
 pub struct HDTDatasetView {

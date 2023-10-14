@@ -35,7 +35,7 @@ use std::time::Duration;
 use std::{fmt, io};
 
 pub fn evaluate_hdt_query(
-    dataset: HDTDatasetView,
+    dataset: Rc<HDTDatasetView>,
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
     run_stats: bool,
@@ -52,7 +52,7 @@ pub fn evaluate_hdt_query(
             }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
-                Rc::new(dataset),
+                Rc::clone(&dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
                 Arc::new(options.custom_functions),
