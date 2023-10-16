@@ -1055,7 +1055,7 @@ parser! {
             }
         rule DescribeQuery_item() -> NamedNodePattern = i:VarOrIri() _ { i }
 
-        rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
+        rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Ask {
                 dataset: d,
                 pattern: build_select(Selection::no_op(), w, g, h, o, l, v, state)?,
