@@ -16,6 +16,7 @@
     :long_unicode_escape_with_multibytes_char_update
     :describe
     :describe_where
+    :ask_with_from
     :group_concat_with_null
     :single_not_exists
     :property_list_path
@@ -62,6 +63,10 @@
          [ qt:query  <describe_where.rq> ;
            qt:data   <describe_input.ttl> ] ;
     mf:result  <describe_output.ttl> .
+
+:ask_with_from rdf:type mf:PositiveSyntaxTest ;
+    mf:name "ASK with FROM" ;
+    mf:action <ask_from.rq> .
 
 :group_concat_with_null rdf:type mf:QueryEvaluationTest ;
     mf:name "GROUP_CONCAT with NULL" ;
