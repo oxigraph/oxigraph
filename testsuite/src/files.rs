@@ -34,9 +34,10 @@ pub fn load_to_graph(
     url: &str,
     graph: &mut Graph,
     format: RdfFormat,
+    base_iri: Option<&str>,
     ignore_errors: bool,
 ) -> Result<()> {
-    let parser = RdfParser::from_format(format).with_base_iri(url)?;
+    let parser = RdfParser::from_format(format).with_base_iri(base_iri.unwrap_or(url))?;
     for t in parser.parse_read(read_file(url)?) {
         match t {
             Ok(t) => {
@@ -54,7 +55,7 @@ pub fn load_to_graph(
 
 pub fn load_graph(url: &str, format: RdfFormat, ignore_errors: bool) -> Result<Graph> {
     let mut graph = Graph::new();
-    load_to_graph(url, &mut graph, format, ignore_errors)?;
+    load_to_graph(url, &mut graph, format, None, ignore_errors)?;
     Ok(graph)
 }
 
