@@ -68,6 +68,10 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
         evaluate_negative_syntax_test(t, RdfFormat::TriG)
     });
     evaluator.register(
+        "http://www.w3.org/ns/rdftest#TestNTriplesPositiveC14N",
+        |t| evaluate_positive_c14n_test(t, RdfFormat::NTriples),
+    );
+    evaluator.register(
         "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10EvalTest",
         |t| evaluate_positive_syntax_test(t, RdfFormat::NQuads), //TODO: not a proper implementation!
     );
@@ -162,6 +166,22 @@ fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
         expected_dataset == actual_dataset,
         "The two files are not isomorphic. Diff:\n{}",
         dataset_diff(&expected_dataset, &actual_dataset)
+    );
+    Ok(())
+}
+
+fn evaluate_positive_c14n_test(test: &Test, format: RdfFormat) -> Result<()> {
+    let action = test.action.as_deref().context("No action found")?;
+    let actual = load_dataset(action, format, false)
+        .with_context(|| format!("Parse error on file {action}"))?
+        .to_string();
+    let results = test.result.as_ref().context("No tests result found")?;
+    let expected =
+        read_file_to_string(results).with_context(|| format!("Read error on file {results}"))?;
+    ensure!(
+        expected == actual,
+        "The two files are not equal. Diff:\n{}",
+        format_diff(&expected, &actual, "c14n")
     );
     Ok(())
 }
