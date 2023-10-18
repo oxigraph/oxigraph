@@ -19,6 +19,15 @@ fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
+#[test]
+fn rdf12_n_triples_c14n_w3c_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/c14n/manifest.ttl",
+        &[],
+    )
+}
+
 #[test]
 fn rdf11_n_quads_w3c_testsuite() -> Result<()> {
     check_testsuite(
