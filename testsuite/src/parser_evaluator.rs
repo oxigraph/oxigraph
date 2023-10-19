@@ -2,7 +2,7 @@ use crate::evaluator::TestEvaluator;
 use crate::files::{guess_rdf_format, load_dataset, load_n3, read_file_to_string};
 use crate::manifest::Test;
 use crate::report::{dataset_diff, format_diff};
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 use oxigraph::io::RdfFormat;
 use oxigraph::model::{BlankNode, Dataset, Quad};
 use oxttl::n3::{N3Quad, N3Term};
@@ -94,28 +94,19 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
 }
 
 fn evaluate_positive_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
-    let action = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
-    load_dataset(action, format, false).map_err(|e| anyhow!("Parse error: {e}"))?;
+    let action = test.action.as_deref().context("No action found")?;
+    load_dataset(action, format, false).context("Parse error")?;
     Ok(())
 }
 
 fn evaluate_positive_n3_syntax_test(test: &Test) -> Result<()> {
-    let action = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
-    load_n3(action, false).map_err(|e| anyhow!("Parse error: {e}"))?;
+    let action = test.action.as_deref().context("No action found")?;
+    load_n3(action, false).context("Parse error")?;
     Ok(())
 }
 
 fn evaluate_negative_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
-    let action = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let action = test.action.as_deref().context("No action found")?;
     let Err(error) = load_dataset(action, format, false) else {
         bail!("File parsed without errors even if it should not");
     };
@@ -131,10 +122,7 @@ fn evaluate_negative_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
 }
 
 fn evaluate_negative_n3_syntax_test(test: &Test) -> Result<()> {
-    let action = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let action = test.action.as_deref().context("No action found")?;
     ensure!(
         load_n3(action, false).is_err(),
         "File parsed without errors even if it should not"
@@ -143,19 +131,13 @@ fn evaluate_negative_n3_syntax_test(test: &Test) -> Result<()> {
 }
 
 fn evaluate_eval_test(test: &Test, format: RdfFormat, ignore_errors: bool) -> Result<()> {
-    let action = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let action = test.action.as_deref().context("No action found")?;
     let mut actual_dataset = load_dataset(action, format, ignore_errors)
-        .map_err(|e| anyhow!("Parse error on file {action}: {e}"))?;
+        .with_context(|| format!("Parse error on file {action}"))?;
     actual_dataset.canonicalize();
-    let results = test
-        .result
-        .as_ref()
-        .ok_or_else(|| anyhow!("No tests result found"))?;
+    let results = test.result.as_ref().context("No tests result found")?;
     let mut expected_dataset = load_dataset(results, guess_rdf_format(results)?, false)
-        .map_err(|e| anyhow!("Parse error on file {results}: {e}"))?;
+        .with_context(|| format!("Parse error on file {results}"))?;
     expected_dataset.canonicalize();
     ensure!(
         expected_dataset == actual_dataset,
@@ -166,20 +148,14 @@ fn evaluate_eval_test(test: &Test, format: RdfFormat, ignore_errors: bool) -> Re
 }
 
 fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
-    let action = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let action = test.action.as_deref().context("No action found")?;
     let mut actual_dataset = n3_to_dataset(
-        load_n3(action, ignore_errors).map_err(|e| anyhow!("Parse error on file {action}: {e}"))?,
+        load_n3(action, ignore_errors).with_context(|| format!("Parse error on file {action}"))?,
     );
     actual_dataset.canonicalize();
-    let results = test
-        .result
-        .as_ref()
-        .ok_or_else(|| anyhow!("No tests result found"))?;
+    let results = test.result.as_ref().context("No tests result found")?;
     let mut expected_dataset = n3_to_dataset(
-        load_n3(results, false).map_err(|e| anyhow!("Parse error on file {results}: {e}"))?,
+        load_n3(results, false).with_context(|| format!("Parse error on file {results}"))?,
     );
     expected_dataset.canonicalize();
     ensure!(

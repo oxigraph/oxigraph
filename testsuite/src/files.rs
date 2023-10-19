@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::{Dataset, Graph};
 use oxttl::n3::N3Quad;
@@ -90,7 +90,7 @@ pub fn load_dataset(url: &str, format: RdfFormat, ignore_errors: bool) -> Result
 pub fn guess_rdf_format(url: &str) -> Result<RdfFormat> {
     url.rsplit_once('.')
         .and_then(|(_, extension)| RdfFormat::from_extension(extension))
-        .ok_or_else(|| anyhow!("Serialization type not found for {url}"))
+        .with_context(|| format!("Serialization type not found for {url}"))
 }
 
 pub fn load_n3(url: &str, ignore_errors: bool) -> Result<Vec<N3Quad>> {

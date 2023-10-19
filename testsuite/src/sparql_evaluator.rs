@@ -3,7 +3,7 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
-use anyhow::{anyhow, bail, ensure, Error, Result};
+use anyhow::{bail, ensure, Context, Error, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
@@ -77,22 +77,16 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
 }
 
 fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
-    let query_file = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let query_file = test.action.as_deref().context("No action found")?;
     let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
-        .map_err(|e| anyhow!("Not able to parse with error: {e}"))?;
+        .context("Not able to parse")?;
     Query::parse(&query.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" with error: {e}"))?;
+        .with_context(|| format!("Failure to deserialize \"{query}\""))?;
     Ok(())
 }
 
 fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
-    let query_file = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let query_file = test.action.as_deref().context("No action found")?;
     ensure!(
         Query::parse(&read_file_to_string(query_file)?, Some(query_file)).is_err(),
         "Oxigraph parses even if it should not."
@@ -101,10 +95,7 @@ fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
 }
 
 fn evaluate_positive_result_syntax_test(test: &Test, format: QueryResultsFormat) -> Result<()> {
-    let action_file = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let action_file = test.action.as_deref().context("No action found")?;
     let actual_results = StaticQueryResults::from_query_results(
         QueryResults::read(read_file(action_file)?, format)?,
         true,
@@ -124,10 +115,7 @@ fn evaluate_positive_result_syntax_test(test: &Test, format: QueryResultsFormat)
 }
 
 fn evaluate_negative_result_syntax_test(test: &Test, format: QueryResultsFormat) -> Result<()> {
-    let action_file = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let action_file = test.action.as_deref().context("No action found")?;
     ensure!(
         QueryResults::read(Cursor::new(read_file_to_string(action_file)?), format)
             .map_err(Error::from)
@@ -146,18 +134,15 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     for (name, value) in &test.graph_data {
         load_graph_to_store(value, &store, name.clone())?;
     }
-    let query_file = test
-        .query
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let query_file = test.query.as_deref().context("No action found")?;
     let options = QueryOptions::default()
         .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
     let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
-        .map_err(|e| anyhow!("Failure to parse query with error: {e}"))?;
+        .context("Failure to parse query")?;
 
     // We check parsing roundtrip
     Query::parse(&query.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{query}\" with error: {e}"))?;
+        .with_context(|| format!("Failure to deserialize \"{query}\""))?;
 
     // FROM and FROM NAMED support. We make sure the data is in the store
     if !query.dataset().is_default_dataset() {
@@ -176,7 +161,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     }
 
     let expected_results = load_sparql_query_result(test.result.as_ref().unwrap())
-        .map_err(|e| anyhow!("Error constructing expected graph: {e}"))?;
+        .context("Error constructing expected graph")?;
     let with_order = if let StaticQueryResults::Solutions { ordered, .. } = &expected_results {
         *ordered
     } else {
@@ -190,7 +175,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         }
         let actual_results = store
             .query_opt(query.clone(), options)
-            .map_err(|e| anyhow!("Failure to execute query with error: {e}"))?;
+            .context("Failure to execute query")?;
         let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)?;
 
         ensure!(
@@ -205,22 +190,16 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
 }
 
 fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
-    let update_file = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let update_file = test.action.as_deref().context("No action found")?;
     let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
-        .map_err(|e| anyhow!("Not able to parse with error: {e}"))?;
+        .context("Not able to parse")?;
     Update::parse(&update.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" with error: {e}"))?;
+        .with_context(|| format!("Failure to deserialize \"{update}\""))?;
     Ok(())
 }
 
 fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
-    let update_file = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let update_file = test.action.as_deref().context("No action found")?;
     ensure!(
         Update::parse(&read_file_to_string(update_file)?, Some(update_file)).is_err(),
         "Oxigraph parses even if it should not."
@@ -245,20 +224,15 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         load_graph_to_store(value, &result_store, name.clone())?;
     }
 
-    let update_file = test
-        .update
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let update_file = test.update.as_deref().context("No action found")?;
     let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
-        .map_err(|e| anyhow!("Failure to parse update with error: {e}"))?;
+        .context("Failure to parse update")?;
 
     // We check parsing roundtrip
     Update::parse(&update.to_string(), None)
-        .map_err(|e| anyhow!("Failure to deserialize \"{update}\" with error: {e}"))?;
+        .with_context(|| format!("Failure to deserialize \"{update}\""))?;
 
-    store
-        .update(update)
-        .map_err(|e| anyhow!("Failure to execute update with error: {e}"))?;
+    store.update(update).context("Failure to execute update")?;
     let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
     store_dataset.canonicalize();
     let mut result_store_dataset: Dataset = result_store.iter().collect::<Result<_, _>>()?;
@@ -689,10 +663,7 @@ fn load_dataset_to_store(url: &str, store: &Store) -> Result<()> {
 }
 
 fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
-    let action = test
-        .action
-        .as_deref()
-        .ok_or_else(|| anyhow!("No action found"))?;
+    let action = test.action.as_deref().context("No action found")?;
     let actual = (&Optimizer::optimize_graph_pattern(
         (&if let spargebra::Query::Select { pattern, .. } =
             spargebra::Query::parse(&read_file_to_string(action)?, Some(action))?
@@ -704,10 +675,7 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
             .into(),
     ))
         .into();
-    let result = test
-        .result
-        .as_ref()
-        .ok_or_else(|| anyhow!("No tests result found"))?;
+    let result = test.result.as_ref().context("No tests result found")?;
     let spargebra::Query::Select {
         pattern: expected, ..
     } = spargebra::Query::parse(&read_file_to_string(result)?, Some(result))?
