@@ -1,5 +1,5 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
-use anyhow::{anyhow, bail, ensure, Context};
+use anyhow::{bail, ensure, Context};
 use clap::{Parser, Subcommand, ValueHint};
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Method, Request, Response, Status};
@@ -387,9 +387,7 @@ pub fn main() -> anyhow::Result<()> {
                 bulk_load(
                     &loader,
                     stdin().lock(),
-                    format.ok_or_else(|| {
-                        anyhow!("The --format option must be set when loading from stdin")
-                    })?,
+                    format.context("The --format option must be set when loading from stdin")?,
                     base.as_deref(),
                     graph,
                 )
@@ -547,8 +545,9 @@ pub fn main() -> anyhow::Result<()> {
                             }
                         } else if let Some(results_file) = &results_file {
                             format_from_path(results_file, |ext| {
-                                QueryResultsFormat::from_extension(ext)
-                                    .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                                QueryResultsFormat::from_extension(ext).with_context(|| {
+                                    format!("The file extension '{ext}' is unknown")
+                                })
                             })?
                         } else {
                             bail!("The --results-format option must be set when writing to stdout")
@@ -587,8 +586,9 @@ pub fn main() -> anyhow::Result<()> {
                             }
                         } else if let Some(results_file) = &results_file {
                             format_from_path(results_file, |ext| {
-                                QueryResultsFormat::from_extension(ext)
-                                    .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+                                QueryResultsFormat::from_extension(ext).with_context(|| {
+                                    format!("The file extension '{ext}' is unknown")
+                                })
                             })?
                         } else {
                             bail!("The --results-format option must be set when writing to stdout")
@@ -701,7 +701,7 @@ pub fn main() -> anyhow::Result<()> {
             if let Some(base) = from_base {
                 parser = parser
                     .with_base_iri(&base)
-                    .with_context(|| anyhow!("Invalid base IRI {base}"))?;
+                    .with_context(|| format!("Invalid base IRI {base}"))?;
             }
 
             let to_format = if let Some(format) = to_format {
@@ -864,7 +864,7 @@ fn format_from_path<T>(
 fn rdf_format_from_path(path: &Path) -> anyhow::Result<RdfFormat> {
     format_from_path(path, |ext| {
         RdfFormat::from_extension(ext)
-            .ok_or_else(|| anyhow!("The file extension '{ext}' is unknown"))
+            .with_context(|| format!("The file extension '{ext}' is unknown"))
     })
 }
 
