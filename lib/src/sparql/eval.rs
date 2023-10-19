@@ -2134,7 +2134,13 @@ fn to_bool(term: &EncodedTerm) -> Option<bool> {
 
 fn to_string_id(dataset: &DatasetView, term: &EncodedTerm) -> Option<SmallStringOrId> {
     match term {
-        EncodedTerm::NamedNode { iri_id } => Some((*iri_id).into()),
+        EncodedTerm::NamedNode { iri_id } => Some(
+            if let Ok(value) = SmallString::try_from(dataset.get_str(iri_id).ok()??.as_str()) {
+                value.into()
+            } else {
+                SmallStringOrId::Big(*iri_id)
+            },
+        ),
         EncodedTerm::DefaultGraph
         | EncodedTerm::NumericalBlankNode { .. }
         | EncodedTerm::SmallBlankNode { .. }
