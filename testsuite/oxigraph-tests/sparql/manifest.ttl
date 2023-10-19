@@ -32,6 +32,7 @@
     :one_or_more_shared
     :one_or_more_star
     :in_empty_error
+    :small_iri_str
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -151,3 +152,8 @@
     mf:name "IN should propagate errors on the left side, even on the empty input" ;
     mf:action [ qt:query  <in_empty_error.rq> ] ;
     mf:result  <in_empty_error.srx> .
+
+:small_iri_str rdf:type mf:QueryEvaluationTest ;
+    mf:name "Small IRI strings should be properly equal to their value" ;
+    mf:action [ qt:query  <small_iri_str.rq> ] ;
+    mf:result  <small_iri_str.srx> .
