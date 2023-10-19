@@ -1,7 +1,8 @@
 use oxigraph::sparql::dataset::HDTDatasetView;
 use oxigraph::sparql::evaluate_hdt_query;
 use oxigraph::sparql::QueryOptions;
-use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::QueryResultsFormat;
+use std::io;
 use std::rc::Rc;
 
 // Run with `cargo run --bin hdt_driver`.
@@ -30,11 +31,16 @@ fn main() {
     )
     .expect("failed to evaluate SPARQL query");
 
-    if let QueryResults::Solutions(solutions) = results.unwrap() {
-        for solution in solutions {
-            println!("{}", solution.unwrap().get("o").unwrap());
-        }
-    }
+    results
+        .unwrap()
+        .write(io::stdout(), QueryResultsFormat::Csv)
+        .unwrap();
+
+    // if let QueryResults::Solutions(solutions) = results.unwrap() {
+    //     for solution in solutions {
+    //         println!("{}", solution.unwrap().get("o").unwrap());
+    //     }
+    // }
 
     // Test
     println!();
@@ -51,11 +57,10 @@ fn main() {
     )
     .expect("failed to evaluate SPARQL query");
 
-    if let QueryResults::Solutions(solutions) = results.unwrap() {
-        for solution in solutions {
-            println!("{}", solution.unwrap().get("s").unwrap());
-        }
-    }
+    results
+        .unwrap()
+        .write(io::stdout(), QueryResultsFormat::Csv)
+        .unwrap();
 
     // Test
     println!();
@@ -72,12 +77,8 @@ fn main() {
     )
     .expect("failed to evaluate SPARQL query");
 
-    if let QueryResults::Solutions(solutions) = results.unwrap() {
-        for solution in solutions {
-            let bindings = solution.unwrap();
-            println!("{}", &bindings.get("s").unwrap());
-            println!("{}", &bindings.get("p").unwrap());
-            println!("{}", &bindings.get("o").unwrap());
-        }
-    }
+    results
+        .unwrap()
+        .write(io::stdout(), QueryResultsFormat::Csv)
+        .unwrap();
 }

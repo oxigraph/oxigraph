@@ -1,4 +1,4 @@
-use crate::model::{BlankNodeRef, LiteralRef, NamedNodeRef, Term, TermRef};
+use crate::model::{BlankNodeRef, NamedNodeRef, Term, TermRef};
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
 use crate::storage::numeric_encoder::{
@@ -13,6 +13,7 @@ use std::hash::BuildHasherDefault;
 use std::io::{Error, ErrorKind};
 use std::iter::empty;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::Arc;
 
 /// Boundry between the query evaluator and the storage layer.
@@ -127,17 +128,20 @@ impl HDTDatasetView {
         }
     }
 
+    /// Convert triple string formats from OxRDF to HDT.
     fn encodedterm_to_hdt_str(&self, encoded_term: Option<&EncodedTerm>) -> Option<String> {
         let term_str = match encoded_term {
             None => None,
             Some(i) => {
+                // It is not possible to get a string representation
+                // directly from an EncodedTerm, so it must first be
+                // decoded.
                 let decoded_term = &self.decode_term(i).unwrap();
+
                 let term = match decoded_term {
-                    Term::NamedNode(_) => {
-                        let term_str = &decoded_term.to_string();
-                        let unquoted = String::from(&term_str[1..term_str.len() - 1]);
-                        unquoted
-                    }
+                    // Remove double quote delimiters from URIs.
+                    Term::NamedNode(named_node) => named_node.clone().into_string(),
+                    // Otherwise use the string directly.
                     _ => decoded_term.to_string(),
                 };
 
@@ -155,45 +159,31 @@ impl HDTDatasetView {
     fn auto_term(&self, s: &str) -> Result<EncodedTerm, Error> {
         match s.chars().next() {
             None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
+
+            // Double-quote delimters are used around the string.
             Some('"') => match s.rfind('"') {
                 None => Err(Error::new(
                     ErrorKind::InvalidData,
                     format!("missing right quotation mark in literal string {s}"),
                 )),
-                Some(index) => {
-                    let lex = Arc::from(&s[1..index]);
-                    let rest = &s[index + 1..];
-                    // literal with no language tag and no datatype
-                    if rest.is_empty() {
-                        return Ok(EncodedTerm::from(LiteralRef::new_simple_literal(*lex)));
-                    }
-                    // either language tag or datatype
-                    if let Some(tag_index) = rest.find('@') {
-                        let tag = Arc::from(&rest[tag_index + 1..]);
-                        return Ok(EncodedTerm::from(
-                            LiteralRef::new_language_tagged_literal_unchecked(*lex, *tag),
-                        ));
-                    }
-                    // datatype
-                    let mut dt_split = rest.split("^^");
-                    dt_split.next(); // empty
-                    match dt_split.next() {
-                        Some(dt) => {
-                            let unquoted = &dt[1..dt.len() - 1];
-                            let dt = unquoted; // TODO create a datatyped literal.
-                            Ok(EncodedTerm::from(LiteralRef::new_simple_literal(*lex)))
-                        }
-                        None => Err(Error::new(
-                            ErrorKind::InvalidData,
-                            format!("empty datatype in {s}"),
-                        )),
-                    }
+
+                Some(_) => {
+                    let term = Term::from_str(s);
+                    Ok(self.encode_term(&term.unwrap()))
                 }
             },
+
+            // Underscore prefix indicating an Blank Node.
             Some('_') => Ok(EncodedTerm::from(BlankNodeRef::new_unchecked(*Arc::from(
                 &s[2..],
             )))),
+
+            // Double-quote delimiters not present. Underscore prefix
+            // not present. Assuming a URI.
             _ => {
+                // Note that Term::from_str() will not work for URIs
+                // (OxRDF NamedNode) when the string is not within "<"
+                // and ">" delimiters.
                 let named_node = NamedNodeRef::new(*Arc::from(s)).unwrap();
                 self.encode_term(named_node);
                 Ok(EncodedTerm::from(named_node))
@@ -241,9 +231,9 @@ impl DatasetView for HDTDatasetView {
 
             // Add the result to the vector.
             v.push(Ok(EncodedQuad::new(
-                ex_s.clone(),
-                ex_p.clone(),
-                ex_o.clone(),
+                ex_s,
+                ex_p,
+                ex_o,
                 EncodedTerm::DefaultGraph,
             )));
         }
