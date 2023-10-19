@@ -3,9 +3,9 @@
   "description": "Oxigraph JS build and tests",
   "private": true,
   "devDependencies": {
+    "@biomejs/biome": "^1.0.0",
     "@rdfjs/data-model": "^2.0.1",
-    "mocha": "^10.0.0",
-    "@biomejs/biome": "^1.0.0"
+    "mocha": "^10.0.0"
   },
   "scripts": {
     "fmt": "biome format . --write && biome check . --apply-unsafe",
