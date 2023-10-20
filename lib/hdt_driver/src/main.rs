@@ -1,7 +1,7 @@
 use oxigraph::sparql::dataset::HDTDatasetView;
 use oxigraph::sparql::evaluate_hdt_query;
 use oxigraph::sparql::QueryOptions;
-use oxigraph::sparql::QueryResultsFormat;
+use oxigraph::sparql::results::QueryResultsFormat;
 use std::io;
 use std::rc::Rc;
 
