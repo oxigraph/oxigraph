@@ -636,6 +636,8 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]

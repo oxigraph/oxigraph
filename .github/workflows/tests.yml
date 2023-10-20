@@ -28,29 +28,29 @@ jobs:
           submodules: true
       - run: rustup update && rustup default 1.70.0 && rustup component add clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --  -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxsdatatypes
-      - run: cargo clippy --  -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdf
-      - run: cargo clippy --  -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfxml
-      - run: cargo clippy --  -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxttl
-      - run: cargo clippy --  -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfio
-      - run: cargo clippy -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/sparesults
-      - run: cargo clippy -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/spargebra
-      - run: cargo clippy -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/sparopt
-      - run: cargo clippy -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib
-      - run: cargo clippy -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./python
-      - run: cargo clippy -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./cli
-      - run: cargo clippy -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./testsuite
 
   clippy_wasm_js:

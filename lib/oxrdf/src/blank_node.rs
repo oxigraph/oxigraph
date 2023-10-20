@@ -363,6 +363,8 @@ impl Error for BlankNodeIdParseError {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]
@@ -379,13 +381,13 @@ mod tests {
 
     #[test]
     fn new_validation() {
-        assert!(BlankNode::new("").is_err());
-        assert!(BlankNode::new("a").is_ok());
-        assert!(BlankNode::new("-").is_err());
-        assert!(BlankNode::new("a-").is_ok());
-        assert!(BlankNode::new(".").is_err());
-        assert!(BlankNode::new("a.").is_err());
-        assert!(BlankNode::new("a.a").is_ok());
+        BlankNode::new("").unwrap_err();
+        BlankNode::new("a").unwrap();
+        BlankNode::new("-").unwrap_err();
+        BlankNode::new("a-").unwrap();
+        BlankNode::new(".").unwrap_err();
+        BlankNode::new("a.").unwrap_err();
+        BlankNode::new("a.a").unwrap();
     }
 
     #[test]

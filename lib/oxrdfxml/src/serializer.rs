@@ -338,16 +338,21 @@ fn split_iri(iri: &str) -> (&str, &str) {
     }
 }
 
-#[test]
-fn test_split_iri() {
-    assert_eq!(
-        split_iri("http://schema.org/Person"),
-        ("http://schema.org/", "Person")
-    );
-    assert_eq!(split_iri("http://schema.org/"), ("http://schema.org/", ""));
-    assert_eq!(
-        split_iri("http://schema.org#foo"),
-        ("http://schema.org#", "foo")
-    );
-    assert_eq!(split_iri("urn:isbn:foo"), ("urn:isbn:", "foo"));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_iri() {
+        assert_eq!(
+            split_iri("http://schema.org/Person"),
+            ("http://schema.org/", "Person")
+        );
+        assert_eq!(split_iri("http://schema.org/"), ("http://schema.org/", ""));
+        assert_eq!(
+            split_iri("http://schema.org#foo"),
+            ("http://schema.org#", "foo")
+        );
+        assert_eq!(split_iri("urn:isbn:foo"), ("urn:isbn:", "foo"));
+    }
 }

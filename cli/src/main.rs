@@ -1818,6 +1818,8 @@ fn systemd_notify_ready() -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
     use anyhow::Result;
     use assert_cmd::Command;

@@ -261,6 +261,8 @@ impl Div for Double {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]

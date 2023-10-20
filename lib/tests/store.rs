@@ -291,15 +291,15 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
     let store = Store::open(&dir.0)?;
     remove_dir_all(&dir.0)?;
-    assert!(store
+    store
         .bulk_loader()
         .load_quads(once(Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
             NamedNode::new_unchecked("http://example.com/o"),
-            GraphName::DefaultGraph
+            GraphName::DefaultGraph,
         )))
-        .is_err());
+        .unwrap_err();
     Ok(())
 }
 
@@ -350,7 +350,7 @@ fn test_bad_backup() -> Result<(), Box<dyn Error>> {
     let backup_dir = TempDir::default();
 
     create_dir_all(&backup_dir.0)?;
-    assert!(Store::open(&store_dir)?.backup(&backup_dir.0).is_err());
+    Store::open(&store_dir)?.backup(&backup_dir.0).unwrap_err();
     Ok(())
 }
 
@@ -358,7 +358,7 @@ fn test_bad_backup() -> Result<(), Box<dyn Error>> {
 #[cfg(not(target_family = "wasm"))]
 fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
     let backup_dir = TempDir::default();
-    assert!(Store::new()?.backup(&backup_dir).is_err());
+    Store::new()?.backup(&backup_dir).unwrap_err();
     Ok(())
 }
 

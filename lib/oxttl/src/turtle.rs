@@ -666,6 +666,8 @@ impl LowLevelTurtleWriter {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
     use oxrdf::{BlankNodeRef, LiteralRef, NamedNodeRef};
 

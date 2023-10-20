@@ -2452,6 +2452,8 @@ impl Error for InvalidTimezoneError {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]
@@ -2613,9 +2615,9 @@ mod tests {
         assert_eq!(GMonth::from_str("--01+01:00")?.to_string(), "--01+01:00");
         assert_eq!(GMonth::from_str("--01")?.to_string(), "--01");
 
-        assert!(GYear::from_str("02020").is_err());
-        assert!(GYear::from_str("+2020").is_err());
-        assert!(GYear::from_str("33").is_err());
+        GYear::from_str("02020").unwrap_err();
+        GYear::from_str("+2020").unwrap_err();
+        GYear::from_str("33").unwrap_err();
 
         assert_eq!(Time::from_str("00:00:00+14:00")?, Time::MIN);
         assert_eq!(Time::from_str("24:00:00-14:00")?, Time::MAX);
@@ -3155,10 +3157,9 @@ mod tests {
     }
 
     #[test]
-    fn g_year_month_from_date() -> Result<(), ParseDateTimeError> {
+    fn g_year_month_from_date() {
         assert_eq!(GYearMonth::from(Date::MIN), GYearMonth::MIN);
         assert_eq!(GYearMonth::from(Date::MAX), GYearMonth::MAX);
-        Ok(())
     }
 
     #[test]

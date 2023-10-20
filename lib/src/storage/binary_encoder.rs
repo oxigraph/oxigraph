@@ -633,6 +633,8 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
     use crate::model::TermRef;
     use crate::storage::numeric_encoder::*;

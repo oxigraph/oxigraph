@@ -674,6 +674,8 @@ impl Error for TooLargeForDecimalError {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]
@@ -688,14 +690,14 @@ mod tests {
 
     #[test]
     fn from_str() -> Result<(), ParseDecimalError> {
-        assert!(Decimal::from_str("").is_err());
-        assert!(Decimal::from_str("+").is_err());
-        assert!(Decimal::from_str("-").is_err());
-        assert!(Decimal::from_str(".").is_err());
-        assert!(Decimal::from_str("+.").is_err());
-        assert!(Decimal::from_str("-.").is_err());
-        assert!(Decimal::from_str("a").is_err());
-        assert!(Decimal::from_str(".a").is_err());
+        Decimal::from_str("").unwrap_err();
+        Decimal::from_str("+").unwrap_err();
+        Decimal::from_str("-").unwrap_err();
+        Decimal::from_str(".").unwrap_err();
+        Decimal::from_str("+.").unwrap_err();
+        Decimal::from_str("-.").unwrap_err();
+        Decimal::from_str("a").unwrap_err();
+        Decimal::from_str(".a").unwrap_err();
         assert_eq!(Decimal::from_str("210")?.to_string(), "210");
         assert_eq!(Decimal::from_str("1000")?.to_string(), "1000");
         assert_eq!(Decimal::from_str("-1.23")?.to_string(), "-1.23");
@@ -713,8 +715,8 @@ mod tests {
         assert_eq!(Decimal::from_str("-0")?.to_string(), "0");
         assert_eq!(Decimal::from_str(&Decimal::MAX.to_string())?, Decimal::MAX);
         assert_eq!(Decimal::from_str(&Decimal::MIN.to_string())?, Decimal::MIN);
-        assert!(Decimal::from_str("0.0000000000000000001").is_err());
-        assert!(Decimal::from_str("1000000000000000000000").is_err());
+        Decimal::from_str("0.0000000000000000001").unwrap_err();
+        Decimal::from_str("1000000000000000000000").unwrap_err();
         assert_eq!(
             Decimal::from_str("0.100000000000000000000000000").unwrap(),
             Decimal::from_str("0.1").unwrap()
@@ -1019,11 +1021,11 @@ mod tests {
             Decimal::try_from(Float::from(-123.5)).ok(),
             Some(Decimal::from_str("-123.5")?)
         );
-        assert!(Decimal::try_from(Float::from(f32::NAN)).is_err());
-        assert!(Decimal::try_from(Float::from(f32::INFINITY)).is_err());
-        assert!(Decimal::try_from(Float::from(f32::NEG_INFINITY)).is_err());
-        assert!(Decimal::try_from(Float::from(f32::MIN)).is_err());
-        assert!(Decimal::try_from(Float::from(f32::MAX)).is_err());
+        Decimal::try_from(Float::from(f32::NAN)).unwrap_err();
+        Decimal::try_from(Float::from(f32::INFINITY)).unwrap_err();
+        Decimal::try_from(Float::from(f32::NEG_INFINITY)).unwrap_err();
+        Decimal::try_from(Float::from(f32::MIN)).unwrap_err();
+        Decimal::try_from(Float::from(f32::MAX)).unwrap_err();
         assert!(
             Decimal::try_from(Float::from(1_672_507_300_000.))
                 .unwrap()
@@ -1059,11 +1061,11 @@ mod tests {
                 .unwrap()
                 < Decimal::from(1)
         );
-        assert!(Decimal::try_from(Double::from(f64::NAN)).is_err());
-        assert!(Decimal::try_from(Double::from(f64::INFINITY)).is_err());
-        assert!(Decimal::try_from(Double::from(f64::NEG_INFINITY)).is_err());
-        assert!(Decimal::try_from(Double::from(f64::MIN)).is_err());
-        assert!(Decimal::try_from(Double::from(f64::MAX)).is_err());
+        Decimal::try_from(Double::from(f64::NAN)).unwrap_err();
+        Decimal::try_from(Double::from(f64::INFINITY)).unwrap_err();
+        Decimal::try_from(Double::from(f64::NEG_INFINITY)).unwrap_err();
+        Decimal::try_from(Double::from(f64::MIN)).unwrap_err();
+        Decimal::try_from(Double::from(f64::MAX)).unwrap_err();
         Ok(())
     }
 

@@ -278,6 +278,8 @@ impl Error for TooLargeForIntegerError {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]
@@ -286,7 +288,7 @@ mod tests {
         assert_eq!(Integer::from_str("-0")?.to_string(), "0");
         assert_eq!(Integer::from_str("123")?.to_string(), "123");
         assert_eq!(Integer::from_str("-123")?.to_string(), "-123");
-        assert!(Integer::from_str("123456789123456789123456789123456789123456789").is_err());
+        Integer::from_str("123456789123456789123456789123456789123456789").unwrap_err();
         Ok(())
     }
 
@@ -304,11 +306,11 @@ mod tests {
             Integer::try_from(Float::from(-123.1)).ok(),
             Some(Integer::from_str("-123")?)
         );
-        assert!(Integer::try_from(Float::from(f32::NAN)).is_err());
-        assert!(Integer::try_from(Float::from(f32::INFINITY)).is_err());
-        assert!(Integer::try_from(Float::from(f32::NEG_INFINITY)).is_err());
-        assert!(Integer::try_from(Float::from(f32::MIN)).is_err());
-        assert!(Integer::try_from(Float::from(f32::MAX)).is_err());
+        Integer::try_from(Float::from(f32::NAN)).unwrap_err();
+        Integer::try_from(Float::from(f32::INFINITY)).unwrap_err();
+        Integer::try_from(Float::from(f32::NEG_INFINITY)).unwrap_err();
+        Integer::try_from(Float::from(f32::MIN)).unwrap_err();
+        Integer::try_from(Float::from(f32::MAX)).unwrap_err();
         assert!(
             Integer::try_from(Float::from(1_672_507_300_000.))
                 .unwrap()
@@ -344,11 +346,11 @@ mod tests {
                 .unwrap()
                 < Integer::from(10)
         );
-        assert!(Integer::try_from(Double::from(f64::NAN)).is_err());
-        assert!(Integer::try_from(Double::from(f64::INFINITY)).is_err());
-        assert!(Integer::try_from(Double::from(f64::NEG_INFINITY)).is_err());
-        assert!(Integer::try_from(Double::from(f64::MIN)).is_err());
-        assert!(Integer::try_from(Double::from(f64::MAX)).is_err());
+        Integer::try_from(Double::from(f64::NAN)).unwrap_err();
+        Integer::try_from(Double::from(f64::INFINITY)).unwrap_err();
+        Integer::try_from(Double::from(f64::NEG_INFINITY)).unwrap_err();
+        Integer::try_from(Double::from(f64::MIN)).unwrap_err();
+        Integer::try_from(Double::from(f64::MAX)).unwrap_err();
         Ok(())
     }
 
@@ -362,8 +364,8 @@ mod tests {
             Integer::try_from(Decimal::from_str("-123.1").unwrap()).ok(),
             Some(Integer::from_str("-123")?)
         );
-        assert!(Integer::try_from(Decimal::MIN).is_err());
-        assert!(Integer::try_from(Decimal::MAX).is_err());
+        Integer::try_from(Decimal::MIN).unwrap_err();
+        Integer::try_from(Decimal::MAX).unwrap_err();
         Ok(())
     }
 

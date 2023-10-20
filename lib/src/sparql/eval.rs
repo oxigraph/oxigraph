@@ -5873,7 +5873,10 @@ impl Timer {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
+
     #[test]
     fn uuid() {
         let mut buffer = String::default();

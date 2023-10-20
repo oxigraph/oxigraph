@@ -1567,35 +1567,40 @@ type QuadsPerBlankNode = HashMap<
     )>,
 >;
 
-#[test]
-fn test_canon() {
-    let mut dataset = Dataset::new();
-    dataset.insert(QuadRef::new(
-        BlankNode::default().as_ref(),
-        NamedNodeRef::new_unchecked("http://ex"),
-        BlankNode::default().as_ref(),
-        GraphNameRef::DefaultGraph,
-    ));
-    dataset.insert(QuadRef::new(
-        BlankNode::default().as_ref(),
-        NamedNodeRef::new_unchecked("http://ex"),
-        BlankNode::default().as_ref(),
-        GraphNameRef::DefaultGraph,
-    ));
-    dataset.canonicalize();
-    let mut dataset2 = Dataset::new();
-    dataset2.insert(QuadRef::new(
-        BlankNode::default().as_ref(),
-        NamedNodeRef::new_unchecked("http://ex"),
-        BlankNode::default().as_ref(),
-        GraphNameRef::DefaultGraph,
-    ));
-    dataset2.insert(QuadRef::new(
-        BlankNode::default().as_ref(),
-        NamedNodeRef::new_unchecked("http://ex"),
-        BlankNode::default().as_ref(),
-        GraphNameRef::DefaultGraph,
-    ));
-    dataset2.canonicalize();
-    assert_eq!(dataset, dataset2);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_canon() {
+        let mut dataset = Dataset::new();
+        dataset.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset.canonicalize();
+        let mut dataset2 = Dataset::new();
+        dataset2.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset2.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset2.canonicalize();
+        assert_eq!(dataset, dataset2);
+    }
 }
