@@ -475,6 +475,8 @@ impl LineReader {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
     use std::error::Error;
     use std::rc::Rc;
