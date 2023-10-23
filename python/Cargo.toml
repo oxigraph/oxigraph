@@ -1,6 +1,6 @@
 [package]
 name = "pyoxigraph"
-version = "0.3.19"
+version = "0.3.20"
 authors = ["Tpt"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -19,5 +19,5 @@ doctest = false
 abi3 = ["pyo3/abi3-py37"]
 
 [dependencies]
-oxigraph = { version = "0.3.19", path="../lib", features = ["http_client"] }
+oxigraph = { version = "0.3.20", path="../lib", features = ["http_client"] }
 pyo3 = { version = "0.19", features = ["extension-module"] }

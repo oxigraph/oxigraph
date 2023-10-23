@@ -1,3 +1,11 @@
+## [0.3.20] - 2023-10-23
+
+### Changed
+- SPARQL: fixes `STR` evaluation on small IRI (less than 16 bytes) that was broken.
+- SPARQL update: fixes `WHERE` clause evaluation that was generating too many solutions in some cases.
+- Upgrades RocksDB to 8.7.1.
+
+
 ## [0.3.19] - 2023-08-18
 
 ### Added
