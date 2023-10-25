@@ -36,12 +36,6 @@ fn main() {
         .write(io::stdout(), QueryResultsFormat::Csv)
         .unwrap();
 
-    // if let QueryResults::Solutions(solutions) = results.unwrap() {
-    //     for solution in solutions {
-    //         println!("{}", solution.unwrap().get("o").unwrap());
-    //     }
-    // }
-
     // Test
     println!();
     println!("Test");

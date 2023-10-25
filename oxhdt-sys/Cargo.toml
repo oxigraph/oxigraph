@@ -1,13 +1,13 @@
 [package]
-name = "hdt_driver"
+name = "oxhdt-sys"
 version = "0.1.0"
 edition = "2021"
 authors = ["Don Pellegrino <don@decisym.ai>"]
 description = """
-Rust test driver for Oxigraph HDT calls.
+Rust bindings for HDT for Oxigraph usage.
 """
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-oxigraph = { path = "../oxigraph" }
+oxigraph = { path = "../lib/oxigraph" }
