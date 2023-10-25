@@ -20,5 +20,5 @@ export CPATH="${CPATH}":"${ONEAPI_ROOT}"/compiler/latest/linux/lib/clang/17/incl
 mkdir --parents "${PBS_SCRATCHDIR}"/tmp
 export TMPDIR="${PBS_SCRATCHDIR}"/tmp
 
-# For the rustix library use libc. Use clang and lld for linking.
-export RUSTFLAGS="--cfg=rustix_use_libc -C linker=${CMPLR_ROOT}/linux/bin-llvm/clang -C link-arg=-fuse-ld=lld"
+# For the rustix library use libc. Use clang linking.
+export RUSTFLAGS="--cfg=rustix_use_libc -C linker=${CMPLR_ROOT}/linux/bin-llvm/clang"
