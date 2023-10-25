@@ -22,3 +22,8 @@ export TMPDIR="${PBS_SCRATCHDIR}"/tmp
 
 # For the rustix library use libc. Use clang linking.
 export RUSTFLAGS="--cfg=rustix_use_libc -C linker=${CMPLR_ROOT}/linux/bin-llvm/clang"
+
+# Build on local device storage for performance. Note that build
+# artifacts will not persist between jobs.
+# https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-reads
+export CARGO_TARGET_DIR="${PBS_SCRATCHDIR}"
