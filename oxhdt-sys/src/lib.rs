@@ -34,7 +34,7 @@ mod tests {
         let ex = Literal::new_simple_literal("SPARQL Tutorial");
 
         if let QueryResults::Solutions(mut solutions) = hdt_query(
-            "/home/u133615/projects/oxigraph/hdt_driver/test.hdt",
+            "tests/resources/test.hdt",
             "SELECT ?o WHERE { <http://example.org/book/book1> ?p ?o }"
         ).unwrap() {
             assert_eq!(solutions.next().unwrap().unwrap().get("o"), Some(&ex.into()));
@@ -46,7 +46,7 @@ mod tests {
         let ex = NamedNode::new("http://example.org/book/book1").unwrap();
         
         if let QueryResults::Solutions(mut solutions) = hdt_query(
-            "/home/u133615/projects/oxigraph/hdt_driver/test.hdt",
+            "tests/resources/test.hdt",
             "SELECT ?s WHERE { ?s <http://purl.org/dc/elements/1.1/title> ?o }"
         ).unwrap() {
             assert_eq!(solutions.next().unwrap().unwrap().get("s"), Some(&ex.into()));
@@ -60,7 +60,7 @@ mod tests {
         let ex_o = Literal::new_simple_literal("SPARQL Tutorial");
 
         if let QueryResults::Solutions(mut solutions) = hdt_query(
-            "/home/u133615/projects/oxigraph/hdt_driver/test.hdt",
+            "tests/resources/test.hdt",
             "SELECT ?s ?p ?o WHERE { <http://example.org/book/book1> ?p ?o . ?s ?p \"SPARQL Tutorial\" }"
         ).unwrap() {
             let row = solutions.next().unwrap().unwrap();

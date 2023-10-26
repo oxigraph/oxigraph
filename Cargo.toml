@@ -2,7 +2,6 @@
 members = [
     "cli",
     "js",
-    "lib/hdt_driver",
     "lib/oxigraph",
     "lib/oxrdf",
     "lib/oxrdfio",

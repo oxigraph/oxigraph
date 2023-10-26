@@ -26,4 +26,5 @@ export RUSTFLAGS="--cfg=rustix_use_libc -C linker=${CMPLR_ROOT}/linux/bin-llvm/c
 # Build on local device storage for performance. Note that build
 # artifacts will not persist between jobs.
 # https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-reads
-export CARGO_TARGET_DIR="${PBS_SCRATCHDIR}"
+mkdir --parents "${PBS_SCRATCHDIR}"/cargo_target
+export CARGO_TARGET_DIR="${PBS_SCRATCHDIR}"/cargo_target
