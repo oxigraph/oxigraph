@@ -11,3 +11,4 @@ Rust bindings for HDT for Oxigraph usage.
 
 [dependencies]
 oxigraph = { path = "../lib/oxigraph" }
+oxigraph-testsuite = { path = "../testsuite" }
