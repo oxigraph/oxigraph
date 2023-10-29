@@ -1,24 +1,20 @@
 #[allow(unused_imports)]
-use oxigraph::model::{NamedNode, Literal};
-use oxigraph::sparql::EvaluationError;
-use oxigraph::sparql::QueryOptions;
-use oxigraph::sparql::Query;
-use oxigraph::sparql::QueryResults;
+use oxigraph::model::{Literal, NamedNode};
 use oxigraph::sparql::dataset::HDTDatasetView;
-use oxigraph::sparql::evaluate_hdt_query;
 use oxigraph::sparql::results::QueryResultsFormat;
-use std::rc::Rc;
+use oxigraph::sparql::{evaluate_hdt_query, EvaluationError, Query, QueryOptions, QueryResults};
+use oxigraph_testsuite::sparql_evaluator::{are_query_results_isomorphic, StaticQueryResults};
 use std::fs;
 use std::fs::File;
 use std::io::BufReader;
-use oxigraph_testsuite::sparql_evaluator::{are_query_results_isomorphic, StaticQueryResults};
+use std::rc::Rc;
 
 #[allow(dead_code)]
-fn hdt_query(hdt_path: &str, sparql_query: &str)  -> Result<QueryResults, EvaluationError> {
+fn hdt_query(hdt_path: &str, sparql_query: &str) -> Result<QueryResults, EvaluationError> {
     // Open the HDT file.
     let dataset = Rc::new(HDTDatasetView::new(hdt_path));
     let sparql_query = sparql_query;
-           
+
     // SPARQL query
     let (results, _explain) = evaluate_hdt_query(
         Rc::clone(&dataset),
@@ -26,7 +22,7 @@ fn hdt_query(hdt_path: &str, sparql_query: &str)  -> Result<QueryResults, Evalua
         QueryOptions::default(),
         false,
     )
-        .expect("failed to evaluate SPARQL query");
+    .expect("failed to evaluate SPARQL query");
 
     return results;
 }
@@ -34,38 +30,52 @@ fn hdt_query(hdt_path: &str, sparql_query: &str)  -> Result<QueryResults, Evalua
 #[allow(dead_code)]
 fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool {
     // The test SPARQL query
-    let rq = fs::read_to_string(&query_path)
-        .expect("Failed to read test query from file");
-    let query = Query::parse(&rq, None).unwrap();
-    
+    let rq = fs::read_to_string(&query_path).expect("Failed to read test query from file");
+
+    let query = Query::parse(&rq, None).expect("Failed to parse the test query string");
+
     // The test data in HDT format
     let data = Rc::new(HDTDatasetView::new(&data_path));
-    
+
     // The expected results in XML format
-    let f = File::open(result_path).unwrap();
+    let f = File::open(result_path).expect("Failed to open the expected results from file");
     let f = BufReader::new(f);
     let ref_results = QueryResults::read(f, QueryResultsFormat::Xml);
-    
+
     // Execute the query
-    let (results, _explain) = evaluate_hdt_query(
-        Rc::clone(&data),
-        query,
-        QueryOptions::default(),
-        false,
-    )
-        .expect("failed to evaluate SPARQL query");
-    
+    let (results, _explain) =
+        evaluate_hdt_query(Rc::clone(&data), query, QueryOptions::default(), false)
+            .expect("Failed to evaluate SPARQL query");
+
     // Compare the XML results
-    
+
     // XML result serializations may differ for the same semantics
     // due to whitespace and the order of nodes.
-    
+
     // Results may differ when a SELECT * wildcard is used since
     // the order of the bindings is undefined.
-    
-    let static_ref_results = StaticQueryResults::from_query_results(ref_results.unwrap(), true).unwrap();
-    let static_results = StaticQueryResults::from_query_results(results.unwrap(), true).unwrap();
-    
+
+    let static_ref_results =
+        StaticQueryResults::from_query_results(ref_results.unwrap(), false).unwrap();
+    let static_results = StaticQueryResults::from_query_results(results.unwrap(), false).unwrap();
+
+    // Debug failures by rerunning the query and printing out the
+    // results.
+
+    // let query2 = Query::parse(&rq, None).unwrap();
+    // let (results_dbg, _explain) = evaluate_hdt_query(
+    //     Rc::clone(&data),
+    //     query2,
+    //     QueryOptions::default(),
+    //     false,
+    // )
+    //     .expect("Failed to evaluate SPARQL query");
+    // if let QueryResults::Solutions(solutions) = results_dbg.unwrap() {
+    //     for row in solutions {
+    //         dbg!(&row);
+    //     }
+    // }
+
     return are_query_results_isomorphic(&static_ref_results, &static_results);
 }
 
@@ -79,21 +89,31 @@ mod tests {
 
         if let QueryResults::Solutions(mut solutions) = hdt_query(
             "tests/resources/test.hdt",
-            "SELECT ?o WHERE { <http://example.org/book/book1> ?p ?o }"
-        ).unwrap() {
-            assert_eq!(solutions.next().unwrap().unwrap().get("o"), Some(&ex.into()));
+            "SELECT ?o WHERE { <http://example.org/book/book1> ?p ?o }",
+        )
+        .unwrap()
+        {
+            assert_eq!(
+                solutions.next().unwrap().unwrap().get("o"),
+                Some(&ex.into())
+            );
         }
     }
 
     #[test]
     fn hdt_sparql_select_s_uri_by_p_uri() {
         let ex = NamedNode::new("http://example.org/book/book1").unwrap();
-        
+
         if let QueryResults::Solutions(mut solutions) = hdt_query(
             "tests/resources/test.hdt",
-            "SELECT ?s WHERE { ?s <http://purl.org/dc/elements/1.1/title> ?o }"
-        ).unwrap() {
-            assert_eq!(solutions.next().unwrap().unwrap().get("s"), Some(&ex.into()));
+            "SELECT ?s WHERE { ?s <http://purl.org/dc/elements/1.1/title> ?o }",
+        )
+        .unwrap()
+        {
+            assert_eq!(
+                solutions.next().unwrap().unwrap().get("s"),
+                Some(&ex.into())
+            );
         }
     }
 
@@ -114,115 +134,66 @@ mod tests {
         }
     }
 
-    // ```
-    // :base-prefix-1 rdf:type mf:QueryEvaluationTest ;
-    // mf:name    "Basic - Prefix/Base 1" ;
-    // dawgt:approval dawgt:Approved ;
-    // dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
-    // mf:action
-    //     [ qt:query  <base-prefix-1.rq> ;
-    //       qt:data   <data-1.ttl> ] ;
-    // mf:result  <base-prefix-1.srx> ;
-    // .
-    // ```
-    /// Basic - Prefix/Base 1
-    #[test]
-    fn base_prefix_1() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-1.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-1.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-1.srx",
-        ));
+    // Create a test function.
+    macro_rules! rdf_sparql10_basic_test {
+        ($(($name:ident, $query:literal, $data:literal, $result:literal)),*) => {
+            $(
+                #[test]
+                fn $name() {
+                    assert!(rdf_test_runner(
+                        concat!("../testsuite/rdf-tests/sparql/sparql10/basic/", $query),
+                        concat!("tests/resources/rdf-tests/sparql/sparql10/basic/", $data),
+                        concat!("../testsuite/rdf-tests/sparql/sparql10/basic/", $result)
+                    ));
+                }
+            )*
+        }
     }
 
-    // ```
-    // :base-prefix-2 rdf:type mf:QueryEvaluationTest ;
-    // mf:name    "Basic - Prefix/Base 2" ;
-    // dawgt:approval dawgt:Approved ;
-    // dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
-    // mf:action
-    //      [ qt:query  <base-prefix-2.rq> ;
-    //        qt:data   <data-1.ttl> ] ;
-    // mf:result  <base-prefix-2.srx>
-    // .
-    // ```
-    /// Basic - Prefix/Base 2
-    #[test]
-    fn base_prefix_2() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-2.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-1.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-2.srx",
-        ));
-    }
+    // Create test functions for the combinations of input, data, and
+    // output from the W3C SPARQL 1.0 Basic test suite. Note that this
+    // implementation fails to stay automatically up-to-date with
+    // changes in the upstream W3C SPARQL test suite since the list is
+    // hard-coded. Processing the manifest.ttl would enable
+    // synchronization with the upsteam suite.
+    rdf_sparql10_basic_test! {
+        (base_prefix_1, "base-prefix-1.rq", "data-1.hdt", "base-prefix-1.srx"),
+        (base_prefix_2, "base-prefix-2.rq", "data-1.hdt", "base-prefix-2.srx"),
+        (base_prefix_3, "base-prefix-3.rq", "data-1.hdt", "base-prefix-3.srx"),
+        (base_prefix_4, "base-prefix-4.rq", "data-1.hdt", "base-prefix-4.srx"),
+        (base_prefix_5, "base-prefix-5.rq", "data-1.hdt", "base-prefix-5.srx"),
 
-    /// Basic - Prefix/Base 3
-    #[test]
-    fn base_prefix_3() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-3.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-1.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-3.srx",
-        ));
-    }
+        (list_1, "list-1.rq", "data-2.hdt", "list-1.srx"),
+        (list_2, "list-2.rq", "data-2.hdt", "list-2.srx"),
+        (list_3, "list-3.rq", "data-2.hdt", "list-3.srx"),
+        (list_4, "list-4.rq", "data-2.hdt", "list-4.srx"),
 
-    /// Basic - Prefix/Base 4
-    #[test]
-    fn base_prefix_4() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-4.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-1.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-4.srx",
-        ));
-    }
+        (quotes_1, "quotes-1.rq", "data-3.hdt", "quotes-1.srx"),
+        (quotes_2, "quotes-2.rq", "data-3.hdt", "quotes-2.srx"),
 
-    /// Basic - Prefix/Base 5
-    #[test]
-    fn base_prefix_5() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-5.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-1.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/base-prefix-5.srx",
-        ));
-    }
+        // HDT Java (https://github.com/rdfhdt/hdt-java) creates the
+        // data-3.hdt from the data-3.ttl correctly. HDT C++ does not
+        // per https://github.com/rdfhdt/hdt-cpp/issues/219.
+        (quotes_3, "quotes-3.rq", "data-3.hdt", "quotes-3.srx"),
 
-    /// Basic - List 1
-    #[test]
-    fn list_1() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-1.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-2.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-1.srx",
-        ));
-    }
+        (quotes_4, "quotes-4.rq", "data-3.hdt", "quotes-4.srx"),
 
-    /// Basic - List 2
-    #[test]
-    fn list_2() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-2.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-2.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-2.srx",
-        ));
-    }
+        (term_1, "term-1.rq", "data-4.hdt", "term-1.srx"),
+        (term_2, "term-2.rq", "data-4.hdt", "term-2.srx"),
+        (term_3, "term-3.rq", "data-4.hdt", "term-3.srx"),
+        (term_4, "term-4.rq", "data-4.hdt", "term-4.srx"),
+        (term_5, "term-5.rq", "data-4.hdt", "term-5.srx"),
+        (term_6, "term-6.rq", "data-4.hdt", "term-6.srx"),
+        (term_7, "term-7.rq", "data-4.hdt", "term-7.srx"),
+        (term_8, "term-8.rq", "data-4.hdt", "term-8.srx"),
+        (term_9, "term-9.rq", "data-4.hdt", "term-9.srx"),
 
-    /// Basic - List 3
-    #[test]
-    fn list_3() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-3.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-2.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-3.srx",
-        ));
-    }
+        (var_1, "var-1.rq", "data-5.hdt", "var-1.srx"),
+        (var_2, "var-2.rq", "data-5.hdt", "var-2.srx"),
 
-    /// Basic - List 4
-    #[test]
-    fn list_4() {
-        assert!(rdf_test_runner(
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-4.rq",
-            "tests/resources/rdf-tests/sparql/sparql10/basic/data-2.hdt",
-            "../testsuite/rdf-tests/sparql/sparql10/basic/list-4.srx",
-        ));
+        (bgp_no_match, "bgp-no-match.rq", "data-7.hdt", "bgp-no-match.srx"),
+        (spoo_1, "spoo-1.rq", "data-6.hdt", "spoo-1.srx"),
+
+        (prefix_name_1, "prefix-name-1.rq", "data-6.hdt", "prefix-name-1.srx")
     }
 }

@@ -2926,7 +2926,7 @@ fn to_bool(term: &EncodedTerm) -> Option<bool> {
     }
 }
 
-fn to_string_id<T: StrLookup + DatasetView>(
+fn to_string_id<T: DatasetView + StrLookup>(
     dataset: &T,
     term: &EncodedTerm,
 ) -> Option<SmallStringOrId> {

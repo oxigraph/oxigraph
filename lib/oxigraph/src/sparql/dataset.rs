@@ -129,7 +129,7 @@ impl HDTDatasetView {
     }
 
     /// Convert triple string formats from OxRDF to HDT.
-    fn encodedterm_to_hdt_str(&self, encoded_term: Option<&EncodedTerm>) -> Option<String> {
+    fn encodedterm_to_hdt_bgp_str(&self, encoded_term: Option<&EncodedTerm>) -> Option<String> {
         let term_str = match encoded_term {
             None => None,
             Some(i) => {
@@ -137,15 +137,31 @@ impl HDTDatasetView {
                 // directly from an EncodedTerm, so it must first be
                 // decoded.
                 let decoded_term = &self.decode_term(i).unwrap();
-
                 let term = match decoded_term {
                     // Remove double quote delimiters from URIs.
-                    Term::NamedNode(named_node) => named_node.clone().into_string(),
+                    Term::NamedNode(named_node) => Some(named_node.clone().into_string()),
+
+                    // Get the string directly from literals and add
+                    // quotes to work-around handling of "\n" being
+                    // double-escaped.
+                    // format!("\"{}\"", literal.value()),
+                    Term::Literal(literal) => {
+                        if literal.is_plain() {
+                            Some(literal.to_string().replace("\\n", "\n"))
+                        }
+                        // For numbers and other typed literals return
+                        // None as the BGP search will need to collect
+                        // all possibilities before filtering.
+                        else {
+                            None
+                        }
+                    }
+
                     // Otherwise use the string directly.
-                    _ => decoded_term.to_string(),
+                    _ => Some(decoded_term.to_string()),
                 };
 
-                Some(term)
+                term
             }
         };
 
@@ -210,9 +226,9 @@ impl DatasetView for HDTDatasetView {
         }
 
         // Get string representations of the Oxigraph EncodedTerms.
-        let s = self.encodedterm_to_hdt_str(subject);
-        let p = self.encodedterm_to_hdt_str(predicate);
-        let o = self.encodedterm_to_hdt_str(object);
+        let s = self.encodedterm_to_hdt_bgp_str(subject);
+        let p = self.encodedterm_to_hdt_bgp_str(predicate);
+        let o = self.encodedterm_to_hdt_bgp_str(object);
 
         // Query HDT for BGP by string values.
         let results = self

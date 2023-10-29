@@ -2,6 +2,10 @@
 
 # Generate HDT files from the W3C rdf-tests data files.
 
+# HDT Java (https://github.com/rdfhdt/hdt-java) creates the
+# data-3.hdt from the data-3.ttl correctly. HDT C++ does not
+# per https://github.com/rdfhdt/hdt-cpp/issues/219.
+
 # This is a temporary implementation intended to be replaced with a
 # Rust function that generates HDT from upstream RDF text encodings as
 # needed during test execution.
@@ -18,6 +22,9 @@ for data_file in "${basic_data[@]}"
 do
     # Use the rdf2hdt from the HDT C++ implementation, presumed to be
     # in the PATH.
+
+    # TODO Convert call to HDT C++ rdf2hdt to HDT Java rdf2hdt.sh per
+    # hdt-cpp Issue #219.
     rdf2hdt -f ttl \
             -p \
             -v \
