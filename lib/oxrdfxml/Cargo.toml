@@ -22,7 +22,7 @@ async-tokio = ["dep:tokio", "quick-xml/async-tokio"]
 oxrdf = { version = "0.2.0-alpha.1-dev", path = "../oxrdf" }
 oxilangtag = "0.1"
 oxiri = "0.2"
-quick-xml = ">=0.29, <0.31"
+quick-xml = ">=0.29, <0.32"
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
 
 [dev-dependencies]
