@@ -614,7 +614,7 @@ impl IntoPy<PyObject> for PyTerm {
 /// A triple could also be easily destructed into its components:
 ///
 /// >>> (s, p, o) = Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))
-#[pyclass(frozen, name = "Triple", module = "pyoxigraph")]
+#[pyclass(frozen, sequence, name = "Triple", module = "pyoxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyTriple {
     inner: Triple,
@@ -812,7 +812,7 @@ impl IntoPy<PyObject> for PyGraphName {
 /// A quad could also be easily destructed into its components:
 ///
 /// >>> (s, p, o, g) = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
-#[pyclass(frozen, name = "Quad", module = "pyoxigraph")]
+#[pyclass(frozen, sequence, name = "Quad", module = "pyoxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyQuad {
     inner: Quad,
