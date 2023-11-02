@@ -1144,7 +1144,7 @@ impl<R> RdfXmlReader<R> {
     fn convert_attribute(&self, attribute: &Attribute) -> Result<String, ParseError> {
         Ok(attribute
             .decode_and_unescape_value_with(&self.reader, |e| self.resolve_entity(e))?
-            .to_string())
+            .into_owned())
     }
 
     fn convert_iri_attribute(

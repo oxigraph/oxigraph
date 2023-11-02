@@ -27,7 +27,7 @@ pub fn check_testsuite(manifest_url: &str, ignored_tests: &[&str]) -> Result<()>
     for result in results {
         if let Err(error) = &result.outcome {
             if !ignored_tests.contains(&result.test.as_str()) {
-                errors.push(format!("{}: failed with error {}", result.test, error))
+                errors.push(format!("{}: failed with error {error:?}", result.test))
             }
         }
     }

@@ -28,7 +28,7 @@ fn do_write_boolean_xml_result<W: Write>(sink: W, value: bool) -> Result<W, quic
                 .write_text_content(BytesText::new(""))?
                 .create_element("boolean")
                 .write_text_content(BytesText::new(if value { "true" } else { "false" }))?;
-            Ok(())
+            quick_xml::Result::Ok(())
         })?;
     Ok(writer.into_inner())
 }
@@ -57,7 +57,7 @@ impl<W: Write> XmlSolutionsWriter<W> {
                         .with_attribute(("name", variable.as_str()))
                         .write_empty()?;
                 }
-                Ok(())
+                quick_xml::Result::Ok(())
             })?;
         writer.write_event(Event::Start(BytesStart::new("results")))?;
         Ok(Self { writer })
@@ -81,12 +81,9 @@ impl<W: Write> XmlSolutionsWriter<W> {
                     writer
                         .create_element("binding")
                         .with_attribute(("name", variable.as_str()))
-                        .write_inner_content(|writer| {
-                            write_xml_term(value, writer)?;
-                            Ok(())
-                        })?;
+                        .write_inner_content(|writer| write_xml_term(value, writer))?;
                 }
-                Ok(())
+                quick_xml::Result::Ok(())
             })?;
         Ok(())
     }
@@ -150,7 +147,7 @@ fn write_xml_term(
                         .write_inner_content(|writer| {
                             write_xml_term(triple.object.as_ref(), writer)
                         })?;
-                    Ok(())
+                    quick_xml::Result::Ok(())
                 })?;
         }
     }
@@ -370,7 +367,8 @@ impl<R: Read> XmlSolutionsReader<R> {
                         } else if event.local_name().as_ref() == b"bnode" {
                             state = State::BNode;
                         } else if event.local_name().as_ref() == b"literal" {
-                            for attr in event.attributes().flatten() {
+                            for attr in event.attributes() {
+                                let attr = attr.map_err(quick_xml::Error::from)?;
                                 if attr.key.as_ref() == b"xml:lang" {
                                     lang = Some(
                                         attr.decode_and_unescape_value(&self.reader)?.to_string(),
