@@ -176,9 +176,7 @@ class TestSerialize(unittest.TestCase):
 class TestParseQuerySolutions(unittest.TestCase):
     def test_parse_file(self) -> None:
         with NamedTemporaryFile(suffix=".tsv") as fp:
-            fp.write(
-                b'?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t"1"\n'
-            )
+            fp.write(b'?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t"1"\n')
             fp.flush()
             r = parse_query_results(fp.name)
             self.assertIsInstance(r, QuerySolutions)
@@ -188,9 +186,7 @@ class TestParseQuerySolutions(unittest.TestCase):
 
     def test_parse_not_existing_file(self) -> None:
         with self.assertRaises(IOError) as _:
-            parse_query_results(
-                "/tmp/not-existing-oxigraph-file.ttl", "application/json"
-            )
+            parse_query_results("/tmp/not-existing-oxigraph-file.ttl", "application/json")
 
     def test_parse_str_io(self) -> None:
         result = parse_query_results(StringIO("true"), "tsv")

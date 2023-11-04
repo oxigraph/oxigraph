@@ -149,9 +149,7 @@ class TestStore(unittest.TestCase):
         store.add(Quad(foo, bar, baz, graph))
         results: Any = store.query("SELECT ?s WHERE { ?s ?p ?o }")
         self.assertEqual(len(list(results)), 0)
-        results = store.query(
-            "SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True
-        )
+        results = store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True)
         self.assertEqual(len(list(results)), 1)
         results = store.query(
             "SELECT ?s WHERE { ?s ?p ?o }",
@@ -246,9 +244,7 @@ class TestStore(unittest.TestCase):
 
     def test_update_star(self) -> None:
         store = Store()
-        store.update(
-            "PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }"
-        )
+        store.update("PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }")
         results: Any = store.query(
             "PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }"
         )

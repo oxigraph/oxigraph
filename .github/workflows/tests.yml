@@ -227,8 +227,6 @@ jobs:
           cache: pip
           cache-dependency-path: '**/requirements.dev.txt'
       - run: pip install -r python/requirements.dev.txt
-      - run: python -m black --check --diff --color .
-        working-directory: ./python
       - run: maturin build -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
@@ -238,13 +236,15 @@ jobs:
         working-directory: ./python/docs
       - run: sphinx-build -M html . build
         working-directory: ./python/docs
-      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
+      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: python -m mypy.stubtest pyoxigraph  --allowlist=mypy_allowlist.txt
         working-directory: ./python
       - run: python -m mypy generate_stubs.py tests --strict
         working-directory: ./python
-      - run: python -m ruff check .
+      - run: python -m ruff format --check .
+        working-directory: ./python
+      - run: python -m ruff check --output-format=github .
         working-directory: ./python
 
   python_msv:

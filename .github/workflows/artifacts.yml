@@ -187,7 +187,7 @@ jobs:
         working-directory: ./python
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
-      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
+      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: maturin build --release --target universal2-apple-darwin --features abi3
         working-directory: ./python
@@ -226,7 +226,7 @@ jobs:
         working-directory: ./python
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
-      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
+      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: maturin build --release --features abi3
         working-directory: ./python
