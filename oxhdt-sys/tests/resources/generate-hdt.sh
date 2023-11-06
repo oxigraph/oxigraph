@@ -49,5 +49,22 @@ function triple_match_hdt () {
     done
 }
 
+function open_world_hdt () {
+    data=("data-1"
+          "data-2"
+          "data-3"
+	  "data-4")
+
+    for data_file in "${data[@]}"
+    do
+        # Use the rdf2hdt.sh from the HDT Java implementation, presumed to be
+        # in the PATH.
+
+        rdf2hdt.sh ../../../testsuite/rdf-tests/sparql/sparql10/open-world/"$data_file".ttl \
+                   rdf-tests/sparql/sparql10/open-world/"$data_file".hdt
+    done
+}
+
 # basic_data_hdt
-triple_match_hdt
+# triple_match_hdt
+open_world_hdt
