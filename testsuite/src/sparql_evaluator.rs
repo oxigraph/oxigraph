@@ -249,7 +249,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     Ok(())
 }
 
-fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
+pub fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
     if let Some(format) = url
         .rsplit_once('.')
         .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))

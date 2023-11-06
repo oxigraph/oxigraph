@@ -1,12 +1,11 @@
 #[allow(unused_imports)]
 use oxigraph::model::{Literal, NamedNode};
 use oxigraph::sparql::dataset::HDTDatasetView;
-use oxigraph::sparql::results::QueryResultsFormat;
 use oxigraph::sparql::{evaluate_hdt_query, EvaluationError, Query, QueryOptions, QueryResults};
-use oxigraph_testsuite::sparql_evaluator::{are_query_results_isomorphic, StaticQueryResults};
+use oxigraph_testsuite::sparql_evaluator::{
+    are_query_results_isomorphic, load_sparql_query_result, StaticQueryResults,
+};
 use std::fs;
-use std::fs::File;
-use std::io::BufReader;
 use std::rc::Rc;
 
 #[allow(dead_code)]
@@ -38,9 +37,9 @@ fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool
     let data = Rc::new(HDTDatasetView::new(&data_path));
 
     // The expected results in XML format
-    let f = File::open(result_path).expect("Failed to open the expected results from file");
-    let f = BufReader::new(f);
-    let ref_results = QueryResults::read(f, QueryResultsFormat::Xml);
+    // let f = File::open(result_path).expect("Failed to open the expected results from file");
+    // let f = BufReader::new(f);
+    // let ref_results = QueryResults::read(f, QueryResultsFormat::Xml);
 
     // Execute the query
     let (results, _explain) =
@@ -55,9 +54,15 @@ fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool
     // Results may differ when a SELECT * wildcard is used since
     // the order of the bindings is undefined.
 
-    let static_ref_results =
-        StaticQueryResults::from_query_results(ref_results.unwrap(), false).unwrap();
-    let static_results = StaticQueryResults::from_query_results(results.unwrap(), false).unwrap();
+    // let static_ref_results =
+    //     StaticQueryResults::from_query_results(ref_results.unwrap(), false).unwrap();
+
+    // Load the SPARQL query results, automatically identifying the source format.
+    let static_ref_results = load_sparql_query_result(&result_path)
+        .expect("Failed to load the reference results from file");
+
+    let static_results = StaticQueryResults::from_query_results(results.unwrap(), false)
+        .expect("Failed to transorm the calculated results to a static result");
 
     // Debug failures by rerunning the query and printing out the
     // results.
@@ -134,7 +139,7 @@ mod tests {
         }
     }
 
-    // Create a test function.
+    // Create W3C SPARQL 1.0 Basic test functions.
     macro_rules! rdf_sparql10_basic_test {
         ($(($name:ident, $query:literal, $data:literal, $result:literal)),*) => {
             $(
@@ -143,7 +148,23 @@ mod tests {
                     assert!(rdf_test_runner(
                         concat!("../testsuite/rdf-tests/sparql/sparql10/basic/", $query),
                         concat!("tests/resources/rdf-tests/sparql/sparql10/basic/", $data),
-                        concat!("../testsuite/rdf-tests/sparql/sparql10/basic/", $result)
+                        concat!("https://w3c.github.io/rdf-tests/sparql/sparql10/basic/", $result)
+                    ));
+                }
+            )*
+        }
+    }
+
+    // Create W3C SPARQL 1.0 DAWG Triple Pattern test functions.
+    macro_rules! rdf_sparql10_triple_match_test {
+        ($(($name:ident, $query:literal, $data:literal, $result:literal)),*) => {
+            $(
+                #[test]
+                fn $name() {
+                    assert!(rdf_test_runner(
+                        concat!("../testsuite/rdf-tests/sparql/sparql10/triple-match/", $query),
+                        concat!("tests/resources/rdf-tests/sparql/sparql10/triple-match/", $data),
+                        concat!("https://w3c.github.io/rdf-tests/sparql/sparql10/triple-match/", $result)
                     ));
                 }
             )*
@@ -195,5 +216,12 @@ mod tests {
         (spoo_1, "spoo-1.rq", "data-6.hdt", "spoo-1.srx"),
 
         (prefix_name_1, "prefix-name-1.rq", "data-6.hdt", "prefix-name-1.srx")
+    }
+
+    rdf_sparql10_triple_match_test! {
+        (dawg_triple_pattern_001, "dawg-tp-01.rq", "data-01.hdt", "result-tp-01.ttl"),
+        (dawg_triple_pattern_002, "dawg-tp-02.rq", "data-01.hdt", "result-tp-02.ttl"),
+        (dawg_triple_pattern_003, "dawg-tp-03.rq", "data-02.hdt", "result-tp-03.ttl"),
+        (dawg_triple_pattern_004, "dawg-tp-04.rq", "dawg-data-01.hdt", "result-tp-04.ttl")
     }
 }
