@@ -213,6 +213,7 @@ mod tests {
         // xsd:integer. Our system does strong normalization." per
         // oxigraph/testsuite/tests/sparql.rs
         // sparql10_w3c_query_evaluation_testsuite
+        // TODO Mark as ignored rather than comment out.
         // ("open-world", open_eq_01, "open-eq-01.rq", "data-1.hdt", "open-eq-01-result.srx"),
 
         ("open-world", open_eq_02, "open-eq-02.rq", "data-1.hdt", "open-eq-02-result.srx"),
@@ -232,6 +233,7 @@ mod tests {
         // Excluded with "We use XSD 1.1 equality on dates." per
         // oxigraph/testsuite/tests/sparql.rs
         // sparql10_w3c_query_evaluation_testsuite
+        // TODO Mark as ignored rather than comment out.
         // (date_2, "date-2.rq", "data-3.hdt", "date-2-result.srx"),
 
         ("open-world", date_3, "date-3.rq", "data-3.hdt", "date-3-result.srx"),
@@ -239,5 +241,25 @@ mod tests {
 
         ("open-world", open_cmp_01, "open-cmp-01.rq", "data-4.hdt", "open-cmp-01-result.srx"),
         ("open-world", open_cmp_02, "open-cmp-02.rq", "data-4.hdt", "open-cmp-02-result.srx")
+    }
+
+    rdf_sparql10_test! {
+        ("algebra", nested_opt_1, "two-nested-opt.rq", "two-nested-opt.hdt", "two-nested-opt.srx"),
+        ("algebra", nested_opt_2, "two-nested-opt-alt.rq", "two-nested-opt.hdt", "two-nested-opt-alt.srx"),
+        ("algebra", opt_filter_1, "opt-filter-1.rq", "opt-filter-1.hdt", "opt-filter-1.srx"),
+        ("algebra", opt_filter_2, "opt-filter-2.rq", "opt-filter-2.hdt", "opt-filter-2.srx"),
+        ("algebra", opt_filter_3, "opt-filter-3.rq", "opt-filter-3.hdt", "opt-filter-3.srx"),
+        ("algebra", filter_place_1, "filter-placement-1.rq", "data-2.hdt", "filter-placement-1.srx"),
+        ("algebra", filter_place_2, "filter-placement-2.rq", "data-2.hdt", "filter-placement-2.srx"),
+        ("algebra", filter_place_3, "filter-placement-3.rq", "data-2.hdt", "filter-placement-3.srx"),
+        ("algebra", filter_nested_1, "filter-nested-1.rq", "data-1.hdt", "filter-nested-1.srx"),
+        ("algebra", filter_nested_2, "filter-nested-2.rq", "data-1.hdt", "filter-nested-2.srx"),
+        ("algebra", filter_scope_1, "filter-scope-1.rq", "data-2.hdt", "filter-scope-1.srx"),
+        ("algebra", join_scope_1, "var-scope-join-1.rq", "var-scope-join-1.hdt", "var-scope-join-1.srx"),
+        ("algebra", join_combo_1, "join-combo-1.rq", "join-combo-graph-2.hdt", "join-combo-1.srx")
+
+        // TODO - Handle multiple data sources
+        // ("algebra", join-combo-2, "join-combo-2.rq",
+        // ["join-combo-graph-1.hdt", "join-combo-graph-2.hdt"], "join-combo-2.srx")
     }
 }
