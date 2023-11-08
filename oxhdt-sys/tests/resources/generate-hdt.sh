@@ -12,6 +12,10 @@
 
 # TODO This should probably be a GNU Makefile rule instead of a GNU
 # Bash function.
+
+# TODO Ignore manifest.ttl
+
+# TODO Ignore result.ttl
 function test_ttl_to_hdt() {
     # First parameter is the directory of source files to process.
     local ttl_dir="../../../testsuite/rdf-tests/sparql/sparql10/${1}"
@@ -29,4 +33,6 @@ function test_ttl_to_hdt() {
 # test_ttl_to_hdt "basic"
 # test_ttl_to_hdt "triple-match"
 # test_ttl_to_hdt "open-world"
-test_ttl_to_hdt "algebra"
+# test_ttl_to_hdt "algebra"
+# test_ttl_to_hdt "bnode-coreference"
+test_ttl_to_hdt "optional"
