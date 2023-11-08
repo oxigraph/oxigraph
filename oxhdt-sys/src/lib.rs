@@ -319,4 +319,77 @@ mod tests {
              "q-opt-3.rq", "data.hdt", "result-opt-3.ttl")
         }
     }
+
+    mod graph {
+        // TODO - HDT does not support named graphs. See
+        // https://doi.org/10.1007/978-3-319-93417-4_13 for possible
+        // opportunities to add support for named graphs.
+        rdf_sparql10_ignore_test! {
+            // Uses qt:graphData
+            ("graph", dawg_graph_02, "graph-02.rq", "data-g1.hdt", "graph-02.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_03, "graph-03.rq", "data-g1.hdt", "graph-03.ttl"),
+            // GRAPH sytanx in SPARQL
+            ("graph", dawg_graph_04, "graph-04.rq", "data-g1.hdt", "graph-04.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_05, "graph-05.rq", "data-g1.hdt", "graph-05.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_06, "graph-06.rq", "data-g1.hdt", "graph-06.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_07, "graph-07.rq", "data-g1.hdt", "graph-07.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_08, "graph-08.rq", "data-g1.hdt", "graph-08.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_09, "graph-09.rq", "data-g3.hdt", "graph-09.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_10b, "graph-10.rq", "data-g3.hdt", "graph-10.ttl"),
+            // Uses qt:graphData
+            ("graph", dawg_graph_11, "graph-11.rq", "data-g1.hdt", "graph-11.ttl")
+        }
+
+        rdf_sparql10_test! {
+            ("graph", dawg_graph_01, "graph-01.rq", "data-g1.hdt", "graph-01.ttl")
+        }
+    }
+
+    mod dataset {
+        // TODO These could be run as-is as regression tests.
+
+        // TODO These could be modified so that the FROM clause specifies an HDT file as source.
+    }
+
+    mod type_promotion {
+        rdf_sparql10_test! {
+            ("type-promotion", type_promotion_01, "tP-double-double.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_02, "tP-double-float.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_03, "tP-double-decimal.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_04, "tP-float-float.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_05, "tP-float-decimal.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_06, "tP-decimal-decimal.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_07, "tP-integer-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_08, "tP-nonPositiveInteger-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_09, "tP-negativeInteger-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_10, "tP-long-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_11, "tP-int-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_12, "tP-short-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_13, "tP-byte-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_14, "tP-nonNegativeInteger-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_15, "tP-unsignedLong-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_16, "tP-unsignedInt-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_17, "tP-unsignedShort-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_18, "tP-unsignedByte-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_19, "tP-positiveInteger-short.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_20, "tP-short-double.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_21, "tP-short-float.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_22, "tP-short-decimal.rq", "tP.hdt", "true.ttl"),
+            ("type-promotion", type_promotion_23, "tP-short-short-fail.rq", "tP.hdt", "false.ttl"),
+            ("type-promotion", type_promotion_24, "tP-byte-short-fail.rq", "tP.hdt", "false.ttl"),
+            ("type-promotion", type_promotion_25, "tP-short-long-fail.rq", "tP.hdt", "false.ttl"),
+            ("type-promotion", type_promotion_26, "tP-short-int-fail.rq", "tP.hdt", "false.ttl"),
+            ("type-promotion", type_promotion_27, "tP-short-byte-fail.rq", "tP.hdt", "false.ttl"),
+            ("type-promotion", type_promotion_28, "tP-double-float-fail.rq", "tP.hdt", "false.ttl"),
+            ("type-promotion", type_promotion_29, "tP-double-decimal-fail.rq", "tP.hdt", "false.ttl"),
+            ("type-promotion", type_promotion_30, "tP-float-decimal-fail.rq", "tP.hdt", "false.ttl")
+        }
+    }
 }
