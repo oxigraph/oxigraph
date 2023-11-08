@@ -21,6 +21,8 @@ function test_ttl_to_hdt() {
     local ttl_dir="../../../testsuite/rdf-tests/sparql/sparql10/${1}"
     local hdt_dir="rdf-tests/sparql/sparql10/${1}"
 
+    mkdir --parents "${hdt_dir}"
+
     # For each RDF Turtle file in the directory
     shopt -s nullglob
     for i in "${ttl_dir}"/*.ttl; do
@@ -35,4 +37,5 @@ function test_ttl_to_hdt() {
 # test_ttl_to_hdt "open-world"
 # test_ttl_to_hdt "algebra"
 # test_ttl_to_hdt "bnode-coreference"
-test_ttl_to_hdt "optional"
+# test_ttl_to_hdt "optional"
+test_ttl_to_hdt "boolean-effective-value"

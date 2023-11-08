@@ -392,4 +392,28 @@ mod tests {
             ("type-promotion", type_promotion_30, "tP-float-decimal-fail.rq", "tP.hdt", "false.ttl")
         }
     }
+
+    mod cast {
+        rdf_sparql10_test! {
+            ("cast", cast_bool, "cast-bool.rq", "data.hdt", "cast-bool.srx"),
+            ("cast", cast_dt, "cast-dT.rq", "data.hdt", "cast-dT.srx"),
+            ("cast", cast_dbl, "cast-dbl.rq", "data.hdt", "cast-dbl.srx"),
+            ("cast", cast_dec, "cast-dec.rq", "data.hdt", "cast-dec.srx"),
+            ("cast", cast_flt, "cast-flt.rq", "data.hdt", "cast-flt.srx"),
+            ("cast", cast_int, "cast-int.rq", "data.hdt", "cast-int.srx"),
+            ("cast", cast_str, "cast-str.rq", "data.hdt", "cast-str.srx")
+        }
+    }
+
+    mod boolean_effective_value {
+        rdf_sparql10_test! {
+            ("boolean-effective-value", dawg_bev_1, "query-bev-1.rq", "data-1.hdt", "result-bev-1.ttl"),
+            ("boolean-effective-value", dawg_bev_2, "query-bev-2.rq", "data-1.hdt", "result-bev-2.ttl"),
+            ("boolean-effective-value", dawg_bev_3, "query-bev-3.rq", "data-1.hdt", "result-bev-3.ttl"),
+            ("boolean-effective-value", dawg_bev_4, "query-bev-4.rq", "data-1.hdt", "result-bev-4.ttl"),
+            ("boolean-effective-value", dawg_bev_5, "query-bev-5.rq", "data-2.hdt", "result-bev-5.ttl"),
+            ("boolean-effective-value", dawg_bev_6, "query-bev-6.rq", "data-2.hdt", "result-bev-6.ttl"),
+            ("boolean-effective-value", dawg_boolean_literal, "query-boolean-literal.rq", "data-1.hdt", "result-boolean-literal.ttl")
+        }
+    }
 }

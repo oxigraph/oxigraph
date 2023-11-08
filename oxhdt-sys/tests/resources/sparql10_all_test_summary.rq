@@ -1,0 +1,46 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX dawgt: <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#>
+PREFIX mf: <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#>
+PREFIX qt: <http://www.w3.org/2001/sw/DataAccess/tests/test-query#>
+
+PREFIX basic: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/basic/manifest#>
+PREFIX triple-match: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest#>
+
+PREFIX open-world: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#>
+PREFIX algebra: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest#>
+PREFIX bnode-coreference: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bnode-coreference/manifest#>
+
+PREFIX optional: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest#>
+PREFIX optional-filter: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#>
+PREFIX graph: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest#>
+PREFIX dataset: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#>
+
+PREFIX type-promotion: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest#>
+PREFIX cast: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest#>
+PREFIX boolean-effective-value: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/boolean-effective-value/manifest#>
+PREFIX bound: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest#>
+PREFIX expr-builtin: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#>
+PREFIX expr-ops: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#>
+PREFIX expr-equals: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#>
+PREFIX regex: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest#>
+PREFIX i18n: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#>
+
+PREFIX construct: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest#>
+PREFIX ask: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/ask/manifest#>
+PREFIX distinct: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#>
+PREFIX sort: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/sort/manifest#>
+PREFIX solution-seq: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/solution-seq/manifest#>
+
+PREFIX reduced: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#>
+
+# List of tests that use named graphs and need to be ignored for HDT,
+# which does not support named graphs.
+SELECT ?test ?query ?data ?result
+WHERE {
+  ?test mf:action ?test_action .
+  ?test_action qt:query ?query .
+  ?test_action qt:data ?data .
+  ?test mf:result ?result .
+}
+ORDER BY ?test
