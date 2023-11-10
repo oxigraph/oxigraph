@@ -416,4 +416,45 @@ mod tests {
             ("boolean-effective-value", dawg_boolean_literal, "query-boolean-literal.rq", "data-1.hdt", "result-boolean-literal.ttl")
         }
     }
+
+    mod bound {
+        rdf_sparql10_test! {
+            ("bound", dawg_bound_query_001, "bound1.rq", "data.hdt", "bound1-result.ttl")
+        }
+    }
+
+    mod expr_builtin {
+        rdf_sparql10_ignore_test! {
+            // Multiple writing of the same xsd:integer. Our system does strong normalization.
+            ("expr-builtin", dawg_str_1, "q-str-1.rq", "data-builtin-1.hdt", "result-str-1.ttl"),
+            ("expr-builtin", dawg_str_2, "q-str-2.rq", "data-builtin-1.hdt", "result-str-2.ttl"),
+
+            // Multiple writing of the same xsd:double. Our system does strong normalization.
+            ("expr-builtin", same_term_simple, "sameTerm.rq", "data-builtin-1.hdt", "result-sameTerm.ttl"),
+            ("expr-builtin", same_term_eq, "sameTerm-eq.rq", "data-builtin-1.hdt", "result-sameTerm-eq.ttl"),
+            ("expr-builtin", same_term_not_eq, "sameTerm-not-eq.rq", "data-builtin-1.hdt", "result-sameTerm-not-eq.ttl")
+        }
+
+        rdf_sparql10_test! {
+            ("expr-builtin", dawg_datatype_1, "q-datatype-1.rq", "data-builtin-1.hdt", "result-datatype-1.ttl"),
+            ("expr-builtin", dawg_datatype_2, "q-datatype-2.rq", "data-builtin-2.hdt", "result-datatype-2.srx"),
+            ("expr-builtin", dawg_datatype_3, "q-datatype-3.rq", "data-builtin-2.hdt", "result-datatype-3.srx"),
+            ("expr-builtin", dawg_isblank_1, "q-blank-1.rq", "data-builtin-1.hdt", "result-blank-1.ttl"),
+            ("expr-builtin", dawg_isiri_1, "q-iri-1.rq", "data-builtin-1.hdt", "result-iri-1.ttl"),
+            ("expr-builtin", dawg_isliteral_1, "q-isliteral-1.rq", "data-builtin-2.hdt", "result-isliteral-1.ttl"),
+            ("expr-builtin", dawg_isuri_1, "q-uri-1.rq", "data-builtin-1.hdt", "result-uri-1.ttl"),
+            ("expr-builtin", dawg_lang_1, "q-lang-1.rq", "data-builtin-2.hdt", "result-lang-1.srx"),
+            ("expr-builtin", dawg_lang_2, "q-lang-2.rq", "data-builtin-2.hdt", "result-lang-2.srx"),
+            ("expr-builtin", dawg_lang_3, "q-lang-3.rq", "data-builtin-2.hdt", "result-lang-3.srx"),
+            ("expr-builtin", dawg_langmatches_1, "q-langMatches-1.rq", "data-langMatches.hdt", "result-langMatches-1.ttl"),
+            ("expr-builtin", dawg_langmatches_2, "q-langMatches-2.rq", "data-langMatches.hdt", "result-langMatches-2.ttl"),
+            ("expr-builtin", dawg_langmatches_3, "q-langMatches-3.rq", "data-langMatches.hdt", "result-langMatches-3.ttl"),
+            ("expr-builtin", dawg_langmatches_4, "q-langMatches-4.rq", "data-langMatches.hdt", "result-langMatches-4.ttl"),
+            ("expr-builtin", dawg_langmatches_basic, "q-langMatches-de-de.rq", "data-langMatches-de.hdt", "result-langMatches-de.ttl"),
+            ("expr-builtin", dawg_str_3, "q-str-3.rq", "data-builtin-1.hdt", "result-str-3.ttl"),
+            ("expr-builtin", dawg_str_4, "q-str-4.rq", "data-builtin-1.hdt", "result-str-4.ttl"),
+            ("expr-builtin", lang_case_insensitive_eq, "lang-case-sensitivity-eq.rq", "lang-case-sensitivity.hdt", "lang-case-insensitive-eq.srx"),
+            ("expr-builtin", lang_case_insensitive_ne, "lang-case-sensitivity-ne.rq", "lang-case-sensitivity.hdt", "lang-case-insensitive-ne.srx")
+        }
+    }
 }

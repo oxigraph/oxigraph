@@ -20,8 +20,11 @@ export CPATH="${CPATH}":"${ONEAPI_ROOT}"/compiler/latest/linux/lib/clang/17/incl
 mkdir --parents "${PBS_SCRATCHDIR}"/tmp
 export TMPDIR="${PBS_SCRATCHDIR}"/tmp
 
-# For the rustix library use libc. Use clang linking.
-export RUSTFLAGS="--cfg=rustix_use_libc -C linker=${CMPLR_ROOT}/linux/bin-llvm/clang"
+# For the rustix library use libc. Use the default compiler front-end for linking.
+# For https://crates.io/crates/cargo-udeps per
+# https://community.intel.com/t5/Intel-oneAPI-Base-Toolkit/Is-it-possible-to-create-a-dynamic-shared-object-DSO-with-no/m-p/1250508
+# the following was found to work.
+export RUSTFLAGS="--cfg=rustix_use_libc -C linker=${CXX} -C link-arg=-lintlc"
 
 # Build on local device storage for performance. Note that build
 # artifacts will not persist between jobs.

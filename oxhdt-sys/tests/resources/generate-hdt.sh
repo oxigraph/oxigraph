@@ -38,4 +38,6 @@ function test_ttl_to_hdt() {
 # test_ttl_to_hdt "algebra"
 # test_ttl_to_hdt "bnode-coreference"
 # test_ttl_to_hdt "optional"
-test_ttl_to_hdt "boolean-effective-value"
+# test_ttl_to_hdt "boolean-effective-value"
+# test_ttl_to_hdt "bound"
+test_ttl_to_hdt "expr-builtin"
