@@ -118,7 +118,7 @@ impl Clone for HDTDatasetView {
 
 impl HDTDatasetView {
     pub fn new(path: &str) -> Self {
-        let file = std::fs::File::open(path).expect("error opening file");
+        let file = std::fs::File::open(path).expect("error opening HDT file");
         let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
 
         Self {

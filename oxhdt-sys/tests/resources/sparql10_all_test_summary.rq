@@ -36,11 +36,23 @@ PREFIX reduced: <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/mani
 
 # List of tests that use named graphs and need to be ignored for HDT,
 # which does not support named graphs.
-SELECT ?test ?query ?data ?result
+SELECT ?macro
 WHERE {
   ?test mf:action ?test_action .
   ?test_action qt:query ?query .
   ?test_action qt:data ?data .
   ?test mf:result ?result .
+  #  BIND( CONCAT(?test, ?query, ?data, ?result) AS ?macro )
+  BIND(CONCAT("(\"",
+	      STRBEFORE(STRAFTER(STR(?test), "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/"), "/"),
+	      "\", ",
+	      REPLACE(STRAFTER(STR(?test), "#"), "-", "_"),
+	      ", \"",
+	      STRAFTER(STR(?query), "file:///home/user/projects/oxigraph/oxhdt-sys/tests/resources/"),
+	      "\", \"",
+	      REPLACE(STRAFTER(STR(?data), "file:///home/user/projects/oxigraph/oxhdt-sys/tests/resources/"), ".ttl", ".hdt"),
+	      "\", \"",
+	      STRAFTER(STR(?result), "file:///home/user/projects/oxigraph/oxhdt-sys/tests/resources/"),
+	      "\"),") AS ?macro)
 }
 ORDER BY ?test

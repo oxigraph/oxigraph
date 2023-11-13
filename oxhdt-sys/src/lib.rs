@@ -61,7 +61,10 @@ fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool
     let static_ref_results = load_sparql_query_result(&result_path)
         .expect("Failed to load the reference results from file");
 
-    let static_results = StaticQueryResults::from_query_results(results.unwrap(), false)
+    // Set the second parameter, "with_order" to true so that order of
+    // results is preserved. This is necessary for the "sort" set of
+    // W3C SPARQL 1.0 Query test cases.
+    let static_results = StaticQueryResults::from_query_results(results.unwrap(), true)
         .expect("Failed to transorm the calculated results to a static result");
 
     let results_match = are_query_results_isomorphic(&static_ref_results, &static_results);
@@ -455,6 +458,155 @@ mod tests {
             ("expr-builtin", dawg_str_4, "q-str-4.rq", "data-builtin-1.hdt", "result-str-4.ttl"),
             ("expr-builtin", lang_case_insensitive_eq, "lang-case-sensitivity-eq.rq", "lang-case-sensitivity.hdt", "lang-case-insensitive-eq.srx"),
             ("expr-builtin", lang_case_insensitive_ne, "lang-case-sensitivity-ne.rq", "lang-case-sensitivity.hdt", "lang-case-insensitive-ne.srx")
+        }
+    }
+
+    mod expr_ops {
+        rdf_sparql10_test! {
+            ("expr-ops", ge_1, "query-ge-1.rq", "data.hdt", "result-ge-1.srx"),
+            ("expr-ops", le_1, "query-le-1.rq", "data.hdt", "result-le-1.srx"),
+            ("expr-ops", minus_1, "query-minus-1.rq", "data.hdt", "result-minus-1.srx"),
+            ("expr-ops", mul_1, "query-mul-1.rq", "data.hdt", "result-mul-1.srx"),
+            ("expr-ops", plus_1, "query-plus-1.rq", "data.hdt", "result-plus-1.srx"),
+            ("expr-ops", unminus_1, "query-unminus-1.rq", "data.hdt", "result-unminus-1.srx"),
+            ("expr-ops", unplus_1, "query-unplus-1.rq", "data.hdt", "result-unplus-1.srx")
+        }
+    }
+
+    mod expr_equals {
+        rdf_sparql10_ignore_test! {
+            // Multiple writing of the same xsd:integer. Our system does strong normalization.
+            ("expr-equals", eq_graph_1, "query-eq-graph-1.rq", "data-eq.hdt", "result-eq-graph-1.ttl"),
+            ("expr-equals", eq_graph_2, "query-eq-graph-2.rq", "data-eq.hdt", "result-eq-graph-2.ttl")
+        }
+
+        rdf_sparql10_test! {
+            ("expr-equals", eq_1, "query-eq-1.rq", "data-eq.hdt", "result-eq-1.ttl"),
+            ("expr-equals", eq_2, "query-eq-2.rq", "data-eq.hdt", "result-eq-2.ttl"),
+            ("expr-equals", eq_2_1, "query-eq2-1.rq", "data-eq.hdt", "result-eq2-1.ttl"),
+            ("expr-equals", eq_2_2, "query-eq2-1.rq", "data-eq.hdt", "result-eq2-1.ttl"),
+            ("expr-equals", eq_3, "query-eq-3.rq", "data-eq.hdt", "result-eq-3.ttl"),
+            ("expr-equals", eq_4, "query-eq-4.rq", "data-eq.hdt", "result-eq-4.ttl"),
+            ("expr-equals", eq_5, "query-eq-5.rq", "data-eq.hdt", "result-eq-5.ttl"),
+            ("expr-equals", eq_graph_3, "query-eq-graph-3.rq", "data-eq.hdt", "result-eq-graph-3.ttl"),
+            ("expr-equals", eq_graph_4, "query-eq-graph-4.rq", "data-eq.hdt", "result-eq-graph-4.ttl"),
+            ("expr-equals", eq_graph_5, "query-eq-graph-5.rq", "data-eq.hdt", "result-eq-graph-5.ttl")
+        }
+    }
+
+    mod regex {
+        rdf_sparql10_test! {
+            ("regex", dawg_regex_001, "regex-query-001.rq", "regex-data-01.hdt", "regex-result-001.ttl"),
+            ("regex", dawg_regex_002, "regex-query-002.rq", "regex-data-01.hdt", "regex-result-002.ttl"),
+            ("regex", dawg_regex_003, "regex-query-003.rq", "regex-data-01.hdt", "regex-result-003.ttl"),
+            ("regex", dawg_regex_004, "regex-query-004.rq", "regex-data-01.hdt", "regex-result-004.ttl")
+        }
+    }
+
+    mod i18n {
+        rdf_sparql10_test! {
+            ("i18n", kanji_1, "kanji-01.rq", "kanji.hdt", "kanji-01-results.ttl"),
+            ("i18n", kanji_2, "kanji-02.rq", "kanji.hdt", "kanji-02-results.ttl"),
+            ("i18n", normalization_1, "normalization-01.rq", "normalization-01.hdt", "normalization-01-results.ttl"),
+
+            // It looks like hdt-java drops the "." and ".." from the URL on creation of the HDT.
+            //
+            // HDT Content
+            //
+            // $ hdtSearch normalization-02.hdt
+            // >> ? ? ?
+            // http://example/vocab#s1 http://example/vocab#p example://a/b/c/%7Bfoo%7D#xyz
+            // http://example/vocab#s2 http://example/vocab#p eXAMPLE://a/b/%63/%7bfoo%7d#xyz
+            //
+            // However, hdt-cpp preserves it. Therefore, hdt-cpp is used to generate the test data.
+            // See https://github.com/rdfhdt/hdt-java/issues/203
+            ("i18n", normalization_2, "normalization-02.rq", "normalization-02.hdt", "normalization-02-results.ttl"),
+
+            ("i18n", normalization_3, "normalization-03.rq", "normalization-03.hdt", "normalization-03-results.ttl")
+        }
+    }
+
+    mod construct {
+        rdf_sparql10_test! {
+            ("construct", construct_1, "query-ident.rq", "data-ident.hdt", "result-ident.ttl"),
+            ("construct", construct_2, "query-subgraph.rq", "data-ident.hdt", "result-subgraph.ttl"),
+            ("construct", construct_3, "query-reif-1.rq", "data-reif.hdt", "result-reif.ttl"),
+            ("construct", construct_4, "query-reif-2.rq", "data-reif.hdt", "result-reif.ttl"),
+            ("construct", construct_5, "query-construct-optional.rq", "data-opt.hdt", "result-construct-optional.ttl")
+        }
+    }
+
+    mod ask {
+        rdf_sparql10_test! {
+            ("ask", ask_1, "ask-1.rq", "data.hdt", "ask-1.srx"),
+            ("ask", ask_4, "ask-4.rq", "data.hdt", "ask-4.srx"),
+            ("ask", ask_7, "ask-7.rq", "data.hdt", "ask-7.srx"),
+            ("ask", ask_8, "ask-8.rq", "data.hdt", "ask-8.srx")
+        }
+    }
+
+    mod distinct {
+        rdf_sparql10_ignore_test! {
+            // Multiple writing of the same xsd:integer. Our system does strong normalization.
+            ("distinct", distinct_1, "distinct-1.rq", "data-num.hdt", "distinct-num.srx"),
+            ("distinct", distinct_9, "distinct-1.rq", "data-all.hdt", "distinct-all.srx")
+        }
+
+        rdf_sparql10_test! {
+            ("distinct", distinct_2, "distinct-1.rq", "data-str.hdt", "distinct-str.srx"),
+            ("distinct", distinct_3, "distinct-1.rq", "data-node.hdt", "distinct-node.srx"),
+            ("distinct", distinct_4, "distinct-2.rq", "data-opt.hdt", "distinct-opt.srx"),
+            ("distinct", distinct_star_1, "distinct-star-1.rq", "data-star.hdt", "distinct-star-1.srx"),
+            ("distinct", no_distinct_1, "no-distinct-1.rq", "data-num.hdt", "no-distinct-num.srx"),
+            ("distinct", no_distinct_2, "no-distinct-1.rq", "data-str.hdt", "no-distinct-str.srx"),
+            ("distinct", no_distinct_3, "no-distinct-1.rq", "data-node.hdt", "no-distinct-node.srx"),
+            ("distinct", no_distinct_4, "no-distinct-2.rq", "data-opt.hdt", "no-distinct-opt.srx"),
+            ("distinct", no_distinct_9, "no-distinct-1.rq", "data-all.hdt", "no-distinct-all.srx")
+        }
+    }
+
+    mod sort {
+        rdf_sparql10_test! {
+            ("sort", dawg_sort_1, "query-sort-1.rq", "data-sort-1.hdt", "result-sort-1.rdf"),
+            ("sort", dawg_sort_10, "query-sort-10.rq", "data-sort-9.hdt", "result-sort-10.rdf"),
+            ("sort", dawg_sort_2, "query-sort-2.rq", "data-sort-1.hdt", "result-sort-2.rdf"),
+            ("sort", dawg_sort_3, "query-sort-3.rq", "data-sort-3.hdt", "result-sort-3.rdf"),
+            ("sort", dawg_sort_4, "query-sort-4.rq", "data-sort-4.hdt", "result-sort-4.rdf"),
+            ("sort", dawg_sort_5, "query-sort-5.rq", "data-sort-4.hdt", "result-sort-5.rdf"),
+            ("sort", dawg_sort_6, "query-sort-6.rq", "data-sort-6.hdt", "result-sort-6.rdf"),
+            ("sort", dawg_sort_7, "query-sort-4.rq", "data-sort-7.hdt", "result-sort-7.rdf"),
+            ("sort", dawg_sort_8, "query-sort-4.rq", "data-sort-8.hdt", "result-sort-8.rdf"),
+            ("sort", dawg_sort_9, "query-sort-9.rq", "data-sort-9.hdt", "result-sort-9.rdf"),
+            ("sort", dawg_sort_builtin, "query-sort-builtin.rq", "data-sort-builtin.hdt", "result-sort-builtin.ttl"),
+            ("sort", dawg_sort_function, "query-sort-function.rq", "data-sort-function.hdt", "result-sort-function.ttl"),
+            ("sort", dawg_sort_numbers, "query-sort-numbers.rq", "data-sort-numbers.hdt", "result-sort-numbers.ttl")
+        }
+    }
+
+    mod solution_seq {
+        rdf_sparql10_test! {
+            ("solution-seq", limit_1, "slice-01.rq", "data.hdt", "slice-results-01.ttl"),
+            ("solution-seq", limit_2, "slice-02.rq", "data.hdt", "slice-results-02.ttl"),
+            ("solution-seq", limit_3, "slice-03.rq", "data.hdt", "slice-results-03.ttl"),
+            ("solution-seq", limit_4, "slice-04.rq", "data.hdt", "slice-results-04.ttl"),
+            ("solution-seq", offset_1, "slice-10.rq", "data.hdt", "slice-results-10.ttl"),
+            ("solution-seq", offset_2, "slice-11.rq", "data.hdt", "slice-results-11.ttl"),
+            ("solution-seq", offset_3, "slice-12.rq", "data.hdt", "slice-results-12.ttl"),
+            ("solution-seq", offset_4, "slice-13.rq", "data.hdt", "slice-results-13.ttl"),
+            ("solution-seq", slice_1, "slice-20.rq", "data.hdt", "slice-results-20.ttl"),
+            ("solution-seq", slice_2, "slice-21.rq", "data.hdt", "slice-results-21.ttl"),
+            ("solution-seq", slice_3, "slice-22.rq", "data.hdt", "slice-results-22.ttl"),
+            ("solution-seq", slice_4, "slice-23.rq", "data.hdt", "slice-results-23.ttl"),
+            ("solution-seq", slice_5, "slice-24.rq", "data.hdt", "slice-results-24.ttl")
+        }
+    }
+
+    mod reduced {
+        // TODO These both fail. Oxigraph ignores reduced_2 but it is
+        // not clear why.
+        rdf_sparql10_test! {
+            ("reduced", reduced_1, "reduced-1.rq", "reduced-star.hdt", "reduced-1.srx"),
+            ("reduced", reduced_2, "reduced-2.rq", "reduced-str.hdt", "reduced-2.srx")
         }
     }
 }

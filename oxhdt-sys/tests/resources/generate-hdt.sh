@@ -6,12 +6,19 @@
 # data-3.hdt from the data-3.ttl correctly. HDT C++ does not
 # per https://github.com/rdfhdt/hdt-cpp/issues/219.
 
-# This is a temporary implementation intended to be replaced with a
-# Rust function that generates HDT from upstream RDF text encodings as
-# needed during test execution.
+# HDT C++ (https://github.com/rdfhdt/hdt-cpp) creates the
+# normalization-02.hdt from the normalization-02.ttl correctly. HDT
+# Java does not per https://github.com/rdfhdt/hdt-java/issues/203.
 
-# TODO This should probably be a GNU Makefile rule instead of a GNU
-# Bash function.
+# Therefore, it is not possible to use a single HDT implementation to
+# create all of the test case data files and pass consistently.
+
+# This Bash function is a temporary implementation intended to be
+# replaced with a Rust function that generates HDT from upstream RDF
+# text encodings as needed during test execution.
+
+# Even from the perspective of scripting, this should probably be a
+# GNU Makefile rule instead of a GNU Bash function.
 
 # TODO Ignore manifest.ttl
 
@@ -40,4 +47,13 @@ function test_ttl_to_hdt() {
 # test_ttl_to_hdt "optional"
 # test_ttl_to_hdt "boolean-effective-value"
 # test_ttl_to_hdt "bound"
-test_ttl_to_hdt "expr-builtin"
+# test_ttl_to_hdt "expr-builtin"
+# test_ttl_to_hdt "expr-ops"
+# test_ttl_to_hdt "expr-equals"
+# test_ttl_to_hdt "regex"
+# test_ttl_to_hdt "construct"
+# test_ttl_to_hdt "ask"
+# test_ttl_to_hdt "distinct"
+# test_ttl_to_hdt "sort"
+# test_ttl_to_hdt "solution-seq"
+test_ttl_to_hdt "reduced"
