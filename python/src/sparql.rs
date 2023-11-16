@@ -12,7 +12,7 @@ use oxigraph::sparql::{
     Variable,
 };
 use pyo3::basic::CompareOp;
-use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use std::io;
@@ -132,22 +132,13 @@ impl PyQuerySolution {
         self.inner.len()
     }
 
-    fn __getitem__(&self, input: &PyAny) -> PyResult<Option<PyTerm>> {
-        if let Ok(key) = usize::extract(input) {
-            Ok(self.inner.get(key).map(|term| PyTerm::from(term.clone())))
-        } else if let Ok(key) = <&str>::extract(input) {
-            Ok(self.inner.get(key).map(|term| PyTerm::from(term.clone())))
-        } else if let Ok(key) = input.extract::<PyRef<PyVariable>>() {
-            Ok(self
-                .inner
-                .get(<&Variable>::from(&*key))
-                .map(|term| PyTerm::from(term.clone())))
-        } else {
-            Err(PyTypeError::new_err(format!(
-                "{} is not an integer of a string",
-                input.get_type().name()?,
-            )))
+    fn __getitem__(&self, key: PySolutionKey<'_>) -> Option<PyTerm> {
+        match key {
+            PySolutionKey::Usize(key) => self.inner.get(key),
+            PySolutionKey::Str(key) => self.inner.get(key),
+            PySolutionKey::Variable(key) => self.inner.get(<&Variable>::from(&*key)),
         }
+        .map(|term| PyTerm::from(term.clone()))
     }
 
     #[allow(clippy::unnecessary_to_owned)]
@@ -156,6 +147,13 @@ impl PyQuerySolution {
             inner: self.inner.values().to_vec().into_iter(),
         }
     }
+}
+
+#[derive(FromPyObject)]
+pub enum PySolutionKey<'a> {
+    Usize(usize),
+    Str(&'a str),
+    Variable(PyRef<'a, PyVariable>),
 }
 
 #[pyclass(module = "pyoxigraph")]
@@ -460,43 +458,42 @@ impl PyQueryTriples {
 /// It supports also some media type and extension aliases.
 /// For example, ``application/json`` could also be used for `JSON <https://www.w3.org/TR/sparql11-results-json/>`_.
 ///
-/// :param input: The I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-/// :type input: typing.IO[bytes] or typing.IO[str] or str or os.PathLike[str]
+/// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+/// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
 /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: str or None, optional
+/// :param path: The file path to read from. Replaces the ``input`` parameter.
+/// :type path: str or os.PathLike[str] or None, optional
 /// :return: an iterator of :py:class:`QuerySolution` or a :py:class:`bool`.
 /// :rtype: QuerySolutions or QueryBoolean
 /// :raises ValueError: if the format is not supported.
 /// :raises SyntaxError: if the provided data is invalid.
 /// :raises OSError: if a system error happens while reading the file.
 ///
-/// >>> input = io.BytesIO(b'?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t1\n')
-/// >>> list(parse_query_results(input, "text/tsv"))
+/// >>> list(parse_query_results('?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t1\n', "text/tsv"))
 /// [<QuerySolution s=<NamedNode value=http://example.com/s> p=<NamedNode value=http://example.com/s> o=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#integer>>>]
 ///
-/// >>> input = io.BytesIO(b'{"head":{},"boolean":true}')
-/// >>> parse_query_results(input, "application/sparql-results+json")
+/// >>> parse_query_results('{"head":{},"boolean":true}', "application/sparql-results+json")
 /// <QueryBoolean true>
 #[pyfunction]
-#[pyo3(signature = (input, /, format = None))]
+#[pyo3(signature = (input = None, format = None, *, path = None))]
 pub fn parse_query_results(
-    input: &PyAny,
+    input: Option<PyReadableInput>,
     format: Option<&str>,
+    path: Option<PathBuf>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
-    let file_path = input.extract::<PathBuf>().ok();
-    let format = parse_format(format, file_path.as_deref())?;
-    let input = if let Some(file_path) = &file_path {
-        PyReadable::from_file(file_path, py)?
-    } else {
-        PyReadable::from_data(input)
-    };
+    let input = PyReadable::from_args(&path, input, py)?;
+    let format = parse_format(format, path.as_deref())?;
     let results = QueryResultsParser::from_format(format)
         .parse_read(input)
-        .map_err(|e| map_query_results_parse_error(e, file_path.clone()))?;
+        .map_err(|e| map_query_results_parse_error(e, path.clone()))?;
     Ok(match results {
         FromReadQueryResultsReader::Solutions(iter) => PyQuerySolutions {
-            inner: PyQuerySolutionsVariant::Reader { iter, file_path },
+            inner: PyQuerySolutionsVariant::Reader {
+                iter,
+                file_path: path,
+            },
         }
         .into_py(py),
         FromReadQueryResultsReader::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),

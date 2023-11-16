@@ -190,24 +190,11 @@ impl PyReadable {
             (Some(_), Some(_)) => Err(PyValueError::new_err(
                 "input and file_path can't be both set at the same time",
             )),
-            (Some(path), None) => Ok(PyReadable::from_file(path, py)?),
+            (Some(path), None) => Ok(Self::File(py.allow_threads(|| File::open(path))?)),
             (None, Some(input)) => Ok(input.into()),
             (None, None) => Err(PyValueError::new_err(
                 "Either input or file_path must be set",
             )),
-        }
-    }
-    pub fn from_file(file: &Path, py: Python<'_>) -> io::Result<Self> {
-        Ok(Self::File(py.allow_threads(|| File::open(file))?))
-    }
-
-    pub fn from_data(data: &PyAny) -> Self {
-        if let Ok(bytes) = data.extract::<Vec<u8>>() {
-            Self::Bytes(Cursor::new(bytes))
-        } else if let Ok(string) = data.extract::<String>() {
-            Self::Bytes(Cursor::new(string.into_bytes()))
-        } else {
-            Self::Io(PyIo(data.into()))
         }
     }
 }
