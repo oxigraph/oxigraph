@@ -173,6 +173,21 @@ mod tests {
         }
     }
 
+    macro_rules! rdf_sparql10_customized_test {
+        ($(($group:literal, $name:ident, $query:literal, $data:literal, $result:literal)),*) => {
+            $(
+                #[test]
+                fn $name() {
+                    assert!(super::rdf_test_runner(
+                        concat!("../testsuite/rdf-tests/sparql/sparql10/", $group, "/", $query),
+                        concat!("tests/resources/rdf-tests/sparql/sparql10/", $group, "/", $data),
+                        concat!("https://github.com/oxigraph/oxhdt-sys/tests/resources/rdf-tests/sparql/sparql10/", $group, "/", $result)
+                    ));
+                }
+            )*
+        }
+    }
+
     // Create test functions for the combinations of input, data, and
     // output from the W3C SPARQL 1.0 Basic test suite. Note that this
     // implementation fails to stay automatically up-to-date with
@@ -602,11 +617,42 @@ mod tests {
     }
 
     mod reduced {
-        // TODO These both fail. Oxigraph ignores reduced_2 but it is
-        // not clear why.
-        rdf_sparql10_test! {
-            ("reduced", reduced_1, "reduced-1.rq", "reduced-star.hdt", "reduced-1.srx"),
+        rdf_sparql10_ignore_test! {
+            // This test relies on naive iteration on the input file
             ("reduced", reduced_2, "reduced-2.rq", "reduced-str.hdt", "reduced-2.srx")
+        }
+
+        // Original Data
+        // <http://example/x1> <http://example/p> "abc" .
+        // <http://example/x1> <http://example/q> "abc" .
+        // <http://example/x2> <http://example/p> "abc" .
+        //
+        // HDT
+        // <http://example/x1> <http://example/p> "abc" .
+        // <http://example/x1> <http://example/q> "abc" .
+        // <http://example/x2> <http://example/p> "abc" .
+        //
+        // Query
+        // SELECT REDUCED *
+        // WHERE {
+        //   { ?s :p ?o } UNION { ?s :q ?o }
+        // }
+        //
+        // Expected
+        // s o
+        // <http://example/x1> "abc"
+        // <http://example/x1> "abc"
+        // <http://example/x2> "abc"
+        //
+        // Actual
+        // s o
+        // <http://example/x1> "abc"
+        // <http://example/x2> "abc"
+        //
+        // The actual is passable per
+        // https://www.w3.org/TR/sparql11-query/#modDuplicates
+        rdf_sparql10_customized_test! {
+            ("reduced", reduced_1, "reduced-1.rq", "reduced-star.hdt", "reduced-1.srx")
         }
     }
 }
