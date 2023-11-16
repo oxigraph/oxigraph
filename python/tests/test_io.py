@@ -202,7 +202,7 @@ class TestParseQuerySolutions(unittest.TestCase):
         with NamedTemporaryFile(suffix=".tsv") as fp:
             fp.write(b'?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t"1"\n')
             fp.flush()
-            r = parse_query_results(fp.name)
+            r = parse_query_results(path=fp.name)
             self.assertIsInstance(r, QuerySolutions)
             results = list(r)  # type: ignore[arg-type]
             self.assertEqual(results[0]["s"], NamedNode("http://example.com/s"))
@@ -210,10 +210,20 @@ class TestParseQuerySolutions(unittest.TestCase):
 
     def test_parse_not_existing_file(self) -> None:
         with self.assertRaises(IOError) as _:
-            parse_query_results("/tmp/not-existing-oxigraph-file.ttl", "application/json")
+            parse_query_results(path="/tmp/not-existing-oxigraph-file.ttl", format="application/json")
+
+    def test_parse_str(self) -> None:
+        result = parse_query_results("true", "tsv")
+        self.assertIsInstance(result, QueryBoolean)
+        self.assertTrue(result)
+
+    def test_parse_bytes(self) -> None:
+        result = parse_query_results(b"false", "tsv")
+        self.assertIsInstance(result, QueryBoolean)
+        self.assertFalse(result)
 
     def test_parse_str_io(self) -> None:
-        result = parse_query_results(StringIO("true"), "tsv")
+        result = parse_query_results("true", "tsv")
         self.assertIsInstance(result, QueryBoolean)
         self.assertTrue(result)
 
@@ -231,7 +241,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.write(b"{]")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(fp.name, "srj"))  # type: ignore[arg-type]
+                list(parse_query_results(path=fp.name, format="srj"))  # type: ignore[arg-type]
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 1)
             self.assertEqual(ctx.exception.offset, 2)
@@ -245,7 +255,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.write(b"1\t<foo >\n")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(fp.name, "tsv"))  # type: ignore[arg-type]
+                list(parse_query_results(path=fp.name, format="tsv"))  # type: ignore[arg-type]
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 2)
             self.assertEqual(ctx.exception.offset, 3)
