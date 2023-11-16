@@ -315,7 +315,7 @@ impl LowLevelNTriplesReader {
     }
 }
 
-/// A [N-Triples](https://www.w3.org/TR/n-triples/) serializer.
+/// A [canonical](https://www.w3.org/TR/n-triples/#canonical-ntriples) [N-Triples](https://www.w3.org/TR/n-triples/) serializer.
 ///
 /// Support for [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star) is available behind the `rdf-star` feature.
 ///

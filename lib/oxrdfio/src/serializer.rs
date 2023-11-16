@@ -26,7 +26,7 @@ use tokio::io::AsyncWrite;
 /// It currently supports the following formats:
 /// * [N3](https://w3c.github.io/N3/spec/) ([`RdfFormat::N3`])
 /// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`RdfFormat::NQuads`])
-/// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`RdfFormat::NTriples`])
+/// * [canonical](https://www.w3.org/TR/n-triples/#canonical-ntriples) [N-Triples](https://www.w3.org/TR/n-triples/) ([`RdfFormat::NTriples`])
 /// * [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) ([`RdfFormat::RdfXml`])
 /// * [TriG](https://www.w3.org/TR/trig/) ([`RdfFormat::TriG`])
 /// * [Turtle](https://www.w3.org/TR/turtle/) ([`RdfFormat::Turtle`])
