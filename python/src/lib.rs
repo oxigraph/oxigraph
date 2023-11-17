@@ -35,6 +35,8 @@ fn pyoxigraph(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<PyQuerySolution>()?;
     module.add_class::<PyQueryBoolean>()?;
     module.add_class::<PyQueryTriples>()?;
+    module.add_class::<PyRdfFormat>()?;
+    module.add_class::<PyQueryResultsFormat>()?;
     module.add_wrapped(wrap_pyfunction!(parse))?;
     module.add_wrapped(wrap_pyfunction!(parse_query_results))?;
     module.add_wrapped(wrap_pyfunction!(serialize))?;

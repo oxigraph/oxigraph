@@ -4,8 +4,8 @@ use crate::store::map_storage_error;
 use oxigraph::io::RdfSerializer;
 use oxigraph::model::Term;
 use oxigraph::sparql::results::{
-    FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsParser,
-    QueryResultsSerializer,
+    FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsFormat,
+    QueryResultsParser, QueryResultsSerializer,
 };
 use oxigraph::sparql::{
     EvaluationError, Query, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
@@ -15,8 +15,9 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use std::ffi::OsStr;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::vec::IntoIter;
 
 pub fn parse_query(
@@ -214,18 +215,18 @@ impl PyQuerySolutions {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (``application/sparql-results+xml`` or ``srx``)
-    /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (``application/sparql-results+json`` or ``srj``)
-    /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (``text/csv`` or ``csv``)
-    /// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (``text/tab-separated-values`` or ``tsv``)
+    /// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (:py:attr:`QueryResultsFormat.XML`)
+    /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
+    /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.CSV`)
+    /// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.TSV`)
     ///
     /// It supports also some media type and extension aliases.
     /// For example, ``application/json`` could also be used for `JSON <https://www.w3.org/TR/sparql11-results-json/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
     /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
-    /// :param format: the format of the query results serialization using a media type like ``text/csv`` or an extension like `csv`. If :py:const:`None`, the format is guessed from the file name extension.
-    /// :type format: str or None, optional
+    /// :param format: the format of the query results serialization. If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: QueryResultsFormat or None, optional
     /// :rtype: bytes or None
     /// :raises ValueError: if the format is not supported.
     /// :raises OSError: if a system error happens while writing the file.
@@ -233,17 +234,18 @@ impl PyQuerySolutions {
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> results = store.query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
-    /// >>> results.serialize(format="json")
+    /// >>> results.serialize(format=QueryResultsFormat.JSON)
     /// b'{"head":{"vars":["s","p","o"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"},"p":{"type":"uri","value":"http://example.com/p"},"o":{"type":"literal","value":"1"}}]}}'
-    #[pyo3(signature = (output = None, /, format = None))]
+    #[pyo3(signature = (output = None, format = None))]
     fn serialize<'a>(
         &mut self,
-        output: Option<&PyAny>,
-        format: Option<&str>,
+        output: Option<PyWritableOutput>,
+        format: Option<PyQueryResultsFormat>,
         py: Python<'a>,
     ) -> PyResult<Option<&'a PyBytes>> {
         PyWritable::do_write(
-            |output, format| {
+            |output, file_path| {
+                let format = lookup_query_results_format(format, file_path.as_deref())?;
                 let mut writer = QueryResultsSerializer::from_format(format)
                     .serialize_solutions_to_write(
                         output,
@@ -272,7 +274,6 @@ impl PyQuerySolutions {
                 Ok(writer.finish()?)
             },
             output,
-            format,
             py,
         )
     }
@@ -314,18 +315,18 @@ impl PyQueryBoolean {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (``application/sparql-results+xml`` or ``srx``)
-    /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (``application/sparql-results+json`` or ``srj``)
-    /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (``text/csv`` or ``csv``)
-    /// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (``text/tab-separated-values`` or ``tsv``)
+    /// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (:py:attr:`QueryResultsFormat.XML`)
+    /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
+    /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.CSV`)
+    /// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.TSV`)
     ///
     /// It supports also some media type and extension aliases.
     /// For example, ``application/json`` could also be used for `JSON <https://www.w3.org/TR/sparql11-results-json/>`_.
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
     /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
-    /// :param format: the format of the query results serialization using a media type like ``text/csv`` or an extension like `csv`. If :py:const:`None`, the format is guessed from the file name extension.
-    /// :type format: str or None, optional
+    /// :param format: the format of the query results serialization. If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: QueryResultsFormat or None, optional
     /// :rtype: bytes or None
     /// :raises ValueError: if the format is not supported.
     /// :raises OSError: if a system error happens while writing the file.
@@ -333,24 +334,24 @@ impl PyQueryBoolean {
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> results = store.query("ASK { ?s ?p ?o }")
-    /// >>> results.serialize(format="json")
+    /// >>> results.serialize(format=QueryResultsFormat.JSON)
     /// b'{"head":{},"boolean":true}'
-    #[pyo3(signature = (output = None, /, format = None))]
+    #[pyo3(signature = (output = None, format = None))]
     fn serialize<'a>(
         &mut self,
-        output: Option<&PyAny>,
-        format: Option<&str>,
+        output: Option<PyWritableOutput>,
+        format: Option<PyQueryResultsFormat>,
         py: Python<'a>,
     ) -> PyResult<Option<&'a PyBytes>> {
         PyWritable::do_write(
-            |output, format| {
+            |output, file_path| {
+                let format = lookup_query_results_format(format, file_path.as_deref())?;
                 py.allow_threads(|| {
                     Ok(QueryResultsSerializer::from_format(format)
                         .serialize_boolean_to_write(output, self.inner)?)
                 })
             },
             output,
-            format,
             py,
         )
     }
@@ -389,12 +390,12 @@ impl PyQueryTriples {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
-    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
-    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
-    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
-    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
-    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
+    /// * `canonical <https://www.w3.org/TR/n-triples/#canonical-ntriples>`_ `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
+    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
     ///
     /// It supports also some media type and extension aliases.
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
@@ -402,8 +403,8 @@ impl PyQueryTriples {
     ///
     /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
     /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
-    /// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
-    /// :type format: str or None, optional
+    /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: RdfFormat or None, optional
     /// :rtype: bytes or None
     /// :raises ValueError: if the format is not supported.
     /// :raises OSError: if a system error happens while writing the file.
@@ -411,17 +412,18 @@ impl PyQueryTriples {
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
-    /// >>> results.serialize(format="nt")
+    /// >>> results.serialize(format=RdfFormat.N_TRIPLES)
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(signature = (output = None, /, format = None))]
+    #[pyo3(signature = (output = None, format = None))]
     fn serialize<'a>(
         &mut self,
-        output: Option<&PyAny>,
-        format: Option<&str>,
+        output: Option<PyWritableOutput>,
+        format: Option<PyRdfFormat>,
         py: Python<'a>,
     ) -> PyResult<Option<&'a PyBytes>> {
         PyWritable::do_write(
-            |output, format| {
+            |output, file_path| {
+                let format = lookup_rdf_format(format, file_path.as_deref())?;
                 let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
                 for triple in &mut self.inner {
                     writer.write_triple(&triple.map_err(map_evaluation_error)?)?;
@@ -429,7 +431,6 @@ impl PyQueryTriples {
                 Ok(writer.finish()?)
             },
             output,
-            format,
             py,
         )
     }
@@ -450,18 +451,17 @@ impl PyQueryTriples {
 ///
 /// It currently supports the following formats:
 ///
-/// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (``application/sparql-results+xml`` or ``srx``)
-/// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (``application/sparql-results+json`` or ``srj``)
-/// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (``text/csv`` or ``csv``)
-/// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (``text/tab-separated-values`` or ``tsv``)
+/// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (:py:attr:`QueryResultsFormat.XML`)
+/// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
+/// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.TSV`)
 ///
 /// It supports also some media type and extension aliases.
 /// For example, ``application/json`` could also be used for `JSON <https://www.w3.org/TR/sparql11-results-json/>`_.
 ///
 /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
 /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
-/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
-/// :type format: str or None, optional
+/// :param format: the format of the query results serialization. If :py:const:`None`, the format is guessed from the file name extension.
+/// :type format: QueryResultsFormat or None, optional
 /// :param path: The file path to read from. Replaces the ``input`` parameter.
 /// :type path: str or os.PathLike[str] or None, optional
 /// :return: an iterator of :py:class:`QuerySolution` or a :py:class:`bool`.
@@ -470,21 +470,21 @@ impl PyQueryTriples {
 /// :raises SyntaxError: if the provided data is invalid.
 /// :raises OSError: if a system error happens while reading the file.
 ///
-/// >>> list(parse_query_results('?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t1\n', "text/tsv"))
+/// >>> list(parse_query_results('?s\t?p\t?o\n<http://example.com/s>\t<http://example.com/s>\t1\n', QueryResultsFormat.TSV))
 /// [<QuerySolution s=<NamedNode value=http://example.com/s> p=<NamedNode value=http://example.com/s> o=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#integer>>>]
 ///
-/// >>> parse_query_results('{"head":{},"boolean":true}', "application/sparql-results+json")
+/// >>> parse_query_results('{"head":{},"boolean":true}', QueryResultsFormat.JSON)
 /// <QueryBoolean true>
 #[pyfunction]
 #[pyo3(signature = (input = None, format = None, *, path = None))]
 pub fn parse_query_results(
     input: Option<PyReadableInput>,
-    format: Option<&str>,
+    format: Option<PyQueryResultsFormat>,
     path: Option<PathBuf>,
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     let input = PyReadable::from_args(&path, input, py)?;
-    let format = parse_format(format, path.as_deref())?;
+    let format = lookup_query_results_format(format, path.as_deref())?;
     let results = QueryResultsParser::from_format(format)
         .parse_read(input)
         .map_err(|e| map_query_results_parse_error(e, path.clone()))?;
@@ -498,6 +498,177 @@ pub fn parse_query_results(
         .into_py(py),
         FromReadQueryResultsReader::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
     })
+}
+
+/// `SPARQL query <https://www.w3.org/TR/sparql11-query/>`_ results serialization formats.
+///
+/// The following formats are supported:
+/// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (:py:attr:`QueryResultsFormat.XML`)
+/// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
+/// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.CSV`)
+/// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.TSV`)
+#[pyclass(name = "QueryResultsFormat", module = "pyoxigraph")]
+#[derive(Clone)]
+pub struct PyQueryResultsFormat {
+    inner: QueryResultsFormat,
+}
+
+#[pymethods]
+impl PyQueryResultsFormat {
+    /// `SPARQL Query Results XML Format <https://www.w3.org/TR/rdf-sparql-XMLres/>`_
+    #[classattr]
+    const XML: Self = Self {
+        inner: QueryResultsFormat::Xml,
+    };
+
+    /// `SPARQL Query Results JSON Format <https://www.w3.org/TR/sparql11-results-json/>`_
+    #[classattr]
+    const JSON: Self = Self {
+        inner: QueryResultsFormat::Json,
+    };
+
+    /// `SPARQL Query Results CSV Format <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_
+    #[classattr]
+    const CSV: Self = Self {
+        inner: QueryResultsFormat::Csv,
+    };
+
+    /// `SPARQL Query Results TSV Format <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_
+    #[classattr]
+    const TSV: Self = Self {
+        inner: QueryResultsFormat::Tsv,
+    };
+
+    /// :return: the format canonical IRI according to the `Unique URIs for file formats registry <https://www.w3.org/ns/formats/>`_.
+    /// :rtype: str
+    ///
+    /// >>> QueryResultsFormat.JSON.iri
+    /// 'http://www.w3.org/ns/formats/SPARQL_Results_JSON'
+    #[getter]
+    fn iri(&self) -> &'static str {
+        self.inner.iri()
+    }
+
+    /// :return: the format `IANA media type <https://tools.ietf.org/html/rfc2046>`_.
+    /// :rtype: str
+    ///
+    /// >>> QueryResultsFormat.JSON.media_type
+    /// 'application/sparql-results+json'
+    #[getter]
+    fn media_type(&self) -> &'static str {
+        self.inner.media_type()
+    }
+
+    /// :return: the format `IANA-registered <https://tools.ietf.org/html/rfc2046>`_ file extension.
+    /// :rtype: str
+    ///
+    /// >>> QueryResultsFormat.JSON.file_extension
+    /// 'srj'
+    #[getter]
+    fn file_extension(&self) -> &'static str {
+        self.inner.file_extension()
+    }
+
+    /// :return: the format name.
+    /// :rtype: str
+    ///
+    /// >>> QueryResultsFormat.JSON.name
+    /// 'SPARQL Results in JSON'
+    #[getter]
+    pub const fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    /// Looks for a known format from a media type.
+    ///
+    /// It supports some media type aliases.
+    /// For example, "application/xml" is going to return :py:const:`QueryResultsFormat.XML` even if it is not its canonical media type.
+    ///
+    /// :param media_type: the media type.
+    /// :type media_type: str
+    /// :return: :py:class:`QueryResultsFormat` if the media type is known or :py:const:`None` if not.
+    /// :rtype: QueryResultsFormat or None
+    ///
+    /// >>> QueryResultsFormat.from_media_type("application/sparql-results+json; charset=utf-8")
+    /// <QueryResultsFormat SPARQL Results in JSON>
+    #[staticmethod]
+    fn from_media_type(media_type: &str) -> Option<Self> {
+        Some(Self {
+            inner: QueryResultsFormat::from_media_type(media_type)?,
+        })
+    }
+
+    /// Looks for a known format from an extension.
+    ///
+    /// It supports some aliases.
+    ///
+    /// :param extension: the extension.
+    /// :type extension: str
+    /// :return: :py:class:`QueryResultsFormat` if the extension is known or :py:const:`None` if not.
+    /// :rtype: QueryResultsFormat or None
+    ///
+    /// >>> QueryResultsFormat.from_extension("json")
+    /// <QueryResultsFormat SPARQL Results in JSON>
+    #[staticmethod]
+    fn from_extension(extension: &str) -> Option<Self> {
+        Some(Self {
+            inner: QueryResultsFormat::from_extension(extension)?,
+        })
+    }
+
+    fn __str__(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<QueryResultsFormat {}>", self.inner.name())
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash(&self.inner)
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.inner != other.inner
+    }
+
+    /// :rtype: QueryResultsFormat
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: QueryResultsFormat
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
+    }
+}
+
+pub fn lookup_query_results_format(
+    format: Option<PyQueryResultsFormat>,
+    path: Option<&Path>,
+) -> PyResult<QueryResultsFormat> {
+    if let Some(format) = format {
+        return Ok(format.inner);
+    }
+    let Some(path) = path else {
+        return Err(PyValueError::new_err(
+            "The format parameter is required when a file path is not given",
+        ));
+    };
+    let Some(ext) = path.extension().and_then(OsStr::to_str) else {
+        return Err(PyValueError::new_err(format!(
+            "The file name {} has no extension to guess a file format from",
+            path.display()
+        )));
+    };
+    QueryResultsFormat::from_extension(ext)
+        .ok_or_else(|| PyValueError::new_err(format!("Not supported RDF format extension: {ext}")))
 }
 
 pub fn map_evaluation_error(error: EvaluationError) -> PyErr {

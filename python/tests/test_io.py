@@ -8,7 +8,9 @@ from pyoxigraph import (
     NamedNode,
     Quad,
     QueryBoolean,
+    QueryResultsFormat,
     QuerySolutions,
+    RdfFormat,
     parse,
     parse_query_results,
     serialize,
@@ -39,14 +41,14 @@ class TestParse(unittest.TestCase):
 
     def test_parse_not_existing_file(self) -> None:
         with self.assertRaises(IOError) as _:
-            parse(path="/tmp/not-existing-oxigraph-file.ttl", format="text/turtle")
+            parse(path="/tmp/not-existing-oxigraph-file.ttl", format=RdfFormat.TURTLE)
 
     def test_parse_str(self) -> None:
         self.assertEqual(
             list(
                 parse(
                     '<foo> <p> "éù" .',
-                    "text/turtle",
+                    RdfFormat.TURTLE,
                     base_iri="http://example.com/",
                 )
             ),
@@ -58,7 +60,7 @@ class TestParse(unittest.TestCase):
             list(
                 parse(
                     '<foo> <p> "éù" .'.encode(),
-                    "text/turtle",
+                    RdfFormat.TURTLE,
                     base_iri="http://example.com/",
                 )
             ),
@@ -70,7 +72,7 @@ class TestParse(unittest.TestCase):
             list(
                 parse(
                     StringIO('<foo> <p> "éù" .'),
-                    "text/turtle",
+                    RdfFormat.TURTLE,
                     base_iri="http://example.com/",
                 )
             ),
@@ -82,7 +84,7 @@ class TestParse(unittest.TestCase):
             list(
                 parse(
                     StringIO('<foo> <p> "éù" .\n' * 1024),
-                    "text/turtle",
+                    RdfFormat.TURTLE,
                     base_iri="http://example.com/",
                 )
             ),
@@ -94,7 +96,7 @@ class TestParse(unittest.TestCase):
             list(
                 parse(
                     BytesIO('<foo> <p> "éù" .'.encode()),
-                    "text/turtle",
+                    RdfFormat.TURTLE,
                     base_iri="http://example.com/",
                 )
             ),
@@ -103,14 +105,14 @@ class TestParse(unittest.TestCase):
 
     def test_parse_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
-            list(parse(fp, "nt"))
+            list(parse(fp, RdfFormat.N_TRIPLES))
 
     def test_parse_quad(self) -> None:
         self.assertEqual(
             list(
                 parse(
                     '<g> { <foo> <p> "1" }',
-                    "application/trig",
+                    RdfFormat.TRIG,
                     base_iri="http://example.com/",
                 )
             ),
@@ -123,7 +125,7 @@ class TestParse(unittest.TestCase):
             fp.write(b'<foo> "p" "1"')
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse(path=fp.name, format="text/turtle"))
+                list(parse(path=fp.name, format=RdfFormat.TURTLE))
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 2)
             self.assertEqual(ctx.exception.offset, 7)
@@ -136,7 +138,7 @@ class TestParse(unittest.TestCase):
             list(
                 parse(
                     '<g> { <foo> <p> "1" }',
-                    "application/trig",
+                    RdfFormat.TRIG,
                     base_iri="http://example.com/",
                     without_named_graphs=True,
                 )
@@ -147,14 +149,14 @@ class TestParse(unittest.TestCase):
             list(
                 parse(
                     '_:s <http://example.com/p> "o" .',
-                    "application/n-triples",
+                    RdfFormat.N_TRIPLES,
                     rename_blank_nodes=True,
                 )
             ),
             list(
                 parse(
                     '_:s <http://example.com/p> "o" .',
-                    "application/n-triples",
+                    RdfFormat.N_TRIPLES,
                     rename_blank_nodes=True,
                 )
             ),
@@ -164,13 +166,13 @@ class TestParse(unittest.TestCase):
 class TestSerialize(unittest.TestCase):
     def test_serialize_to_bytes(self) -> None:
         self.assertEqual(
-            (serialize([EXAMPLE_TRIPLE.triple], None, "text/turtle") or b"").decode(),
+            (serialize([EXAMPLE_TRIPLE.triple], None, RdfFormat.TURTLE) or b"").decode(),
             '<http://example.com/foo> <http://example.com/p> "éù" .\n',
         )
 
     def test_serialize_to_bytes_io(self) -> None:
         output = BytesIO()
-        serialize([EXAMPLE_TRIPLE.triple], output, "text/turtle")
+        serialize([EXAMPLE_TRIPLE.triple], output, RdfFormat.TURTLE)
         self.assertEqual(
             output.getvalue().decode(),
             '<http://example.com/foo> <http://example.com/p> "éù" .\n',
@@ -186,11 +188,11 @@ class TestSerialize(unittest.TestCase):
 
     def test_serialize_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("rb") as fp:
-            serialize([EXAMPLE_TRIPLE], fp, "text/turtle")
+            serialize([EXAMPLE_TRIPLE], fp, RdfFormat.TURTLE)
 
     def test_serialize_quad(self) -> None:
         output = BytesIO()
-        serialize([EXAMPLE_QUAD], output, "application/trig")
+        serialize([EXAMPLE_QUAD], output, RdfFormat.TRIG)
         self.assertEqual(
             output.getvalue(),
             b'<http://example.com/g> {\n\t<http://example.com/foo> <http://example.com/p> "1" .\n}\n',
@@ -210,38 +212,38 @@ class TestParseQuerySolutions(unittest.TestCase):
 
     def test_parse_not_existing_file(self) -> None:
         with self.assertRaises(IOError) as _:
-            parse_query_results(path="/tmp/not-existing-oxigraph-file.ttl", format="application/json")
+            parse_query_results(path="/tmp/not-existing-oxigraph-file.ttl", format=QueryResultsFormat.JSON)
 
     def test_parse_str(self) -> None:
-        result = parse_query_results("true", "tsv")
+        result = parse_query_results("true", QueryResultsFormat.TSV)
         self.assertIsInstance(result, QueryBoolean)
         self.assertTrue(result)
 
     def test_parse_bytes(self) -> None:
-        result = parse_query_results(b"false", "tsv")
+        result = parse_query_results(b"false", QueryResultsFormat.TSV)
         self.assertIsInstance(result, QueryBoolean)
         self.assertFalse(result)
 
     def test_parse_str_io(self) -> None:
-        result = parse_query_results("true", "tsv")
+        result = parse_query_results("true", QueryResultsFormat.TSV)
         self.assertIsInstance(result, QueryBoolean)
         self.assertTrue(result)
 
     def test_parse_bytes_io(self) -> None:
-        result = parse_query_results(BytesIO(b"false"), "tsv")
+        result = parse_query_results(BytesIO(b"false"), QueryResultsFormat.TSV)
         self.assertIsInstance(result, QueryBoolean)
         self.assertFalse(result)
 
     def test_parse_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
-            parse_query_results(fp, "srx")
+            parse_query_results(fp, QueryResultsFormat.XML)
 
     def test_parse_syntax_error_json(self) -> None:
         with NamedTemporaryFile() as fp:
             fp.write(b"{]")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(path=fp.name, format="srj"))  # type: ignore[arg-type]
+                list(parse_query_results(path=fp.name, format=QueryResultsFormat.JSON))  # type: ignore[arg-type]
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 1)
             self.assertEqual(ctx.exception.offset, 2)
@@ -255,7 +257,7 @@ class TestParseQuerySolutions(unittest.TestCase):
             fp.write(b"1\t<foo >\n")
             fp.flush()
             with self.assertRaises(SyntaxError) as ctx:
-                list(parse_query_results(path=fp.name, format="tsv"))  # type: ignore[arg-type]
+                list(parse_query_results(path=fp.name, format=QueryResultsFormat.TSV))  # type: ignore[arg-type]
             self.assertEqual(ctx.exception.filename, fp.name)
             self.assertEqual(ctx.exception.lineno, 2)
             self.assertEqual(ctx.exception.offset, 3)

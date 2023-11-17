@@ -1,9 +1,8 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::model::{PyQuad, PyTriple};
+use crate::model::{hash, PyQuad, PyTriple};
 use oxigraph::io::{FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::QuadRef;
-use oxigraph::sparql::results::QueryResultsFormat;
 use pyo3::exceptions::{PySyntaxError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
@@ -19,12 +18,12 @@ use std::sync::OnceLock;
 ///
 /// It currently supports the following formats:
 ///
-/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
-/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
-/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
-/// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
-/// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
-/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
+/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
+/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
+/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
+/// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
+/// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
+/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
 ///
 /// It supports also some media type and extension aliases.
 /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
@@ -32,8 +31,8 @@ use std::sync::OnceLock;
 ///
 /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
 /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
-/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
-/// :type format: str or None, optional
+/// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
+/// :type format: RdfFormat or None, optional
 /// :param path: The file path to read from. Replaces the ``input`` parameter.
 /// :type path: str or os.PathLike[str] or None, optional
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
@@ -48,13 +47,13 @@ use std::sync::OnceLock;
 /// :raises SyntaxError: if the provided data is invalid.
 /// :raises OSError: if a system error happens while reading the file.
 ///
-/// >>> list(parse(input=b'<foo> <p> "1" .', format="text/turtle", base_iri="http://example.com/"))
+/// >>> list(parse(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/"))
 /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
 #[pyfunction]
 #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
 pub fn parse(
     input: Option<PyReadableInput>,
-    format: Option<&str>,
+    format: Option<PyRdfFormat>,
     path: Option<PathBuf>,
     base_iri: Option<&str>,
     without_named_graphs: bool,
@@ -62,7 +61,7 @@ pub fn parse(
     py: Python<'_>,
 ) -> PyResult<PyObject> {
     let input = PyReadable::from_args(&path, input, py)?;
-    let format = parse_format(format, path.as_deref())?;
+    let format = lookup_rdf_format(format, path.as_deref())?;
     let mut parser = RdfParser::from_format(format);
     if let Some(base_iri) = base_iri {
         parser = parser
@@ -86,12 +85,12 @@ pub fn parse(
 ///
 /// It currently supports the following formats:
 ///
-/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples`` or ``nt``)
-/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads`` or ``nq``)
-/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle`` or ``ttl``)
-/// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig`` or ``trig``)
-/// * `N3 <https://w3c.github.io/N3/spec/>`_ (``text/n3`` or ``n3``)
-/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml`` or ``rdf``)
+/// * `canonical <https://www.w3.org/TR/n-triples/#canonical-ntriples>`_ `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
+/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
+/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
+/// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
+/// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
+/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
 ///
 /// It supports also some media type and extension aliases.
 /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
@@ -101,31 +100,32 @@ pub fn parse(
 /// :type input: collections.abc.Iterable[Triple] or collections.abc.Iterable[Quad]
 /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
 /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
-/// :param format: the format of the RDF serialization using a media type like ``text/turtle`` or an extension like `ttl`. If :py:const:`None`, the format is guessed from the file name extension.
-/// :type format: str or None, optional
-/// :return: py:class:`bytes` with the serialization if the ``output`` parameter is :py:const:`None`, :py:const:`None` if ``output`` is set.
+/// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
+/// :type format: RdfFormat or None, optional
+/// :return: :py:class:`bytes` with the serialization if the ``output`` parameter is :py:const:`None`, :py:const:`None` if ``output`` is set.
 /// :rtype: bytes or None
 /// :raises ValueError: if the format is not supported.
 /// :raises TypeError: if a triple is given during a quad format serialization or reverse.
 /// :raises OSError: if a system error happens while writing the file.
 ///
-/// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], format="ttl")
+/// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], format=RdfFormat.TURTLE)
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 ///
 /// >>> output = io.BytesIO()
-/// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, "text/turtle")
+/// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, RdfFormat.TURTLE)
 /// >>> output.getvalue()
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
 #[pyo3(signature = (input, output = None, format = None))]
 pub fn serialize<'a>(
     input: &PyAny,
-    output: Option<&PyAny>,
-    format: Option<&str>,
+    output: Option<PyWritableOutput>,
+    format: Option<PyRdfFormat>,
     py: Python<'a>,
 ) -> PyResult<Option<&'a PyBytes>> {
     PyWritable::do_write(
-        |output, format| {
+        |output, file_path| {
+            let format = lookup_rdf_format(format, file_path.as_deref())?;
             let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
             for i in input.iter()? {
                 let i = i?;
@@ -145,7 +145,6 @@ pub fn serialize<'a>(
             Ok(writer.finish()?)
         },
         output,
-        format,
         py,
     )
 }
@@ -171,6 +170,193 @@ impl PyQuadReader {
                 .map_err(|e| map_parse_error(e, self.file_path.clone()))?
                 .map(PyQuad::from))
         })
+    }
+}
+
+/// RDF serialization formats.
+///
+/// The following formats are supported:
+/// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
+/// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
+/// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
+/// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
+/// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
+/// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
+#[pyclass(name = "RdfFormat", module = "pyoxigraph")]
+#[derive(Clone)]
+pub struct PyRdfFormat {
+    inner: RdfFormat,
+}
+
+#[pymethods]
+impl PyRdfFormat {
+    /// `N3 <https://w3c.github.io/N3/spec/>`_
+    #[classattr]
+    const N3: Self = Self {
+        inner: RdfFormat::N3,
+    };
+
+    /// `N-Quads <https://www.w3.org/TR/n-quads/>`_
+    #[classattr]
+    const N_QUADS: Self = Self {
+        inner: RdfFormat::NQuads,
+    };
+
+    /// `N-Triples <https://www.w3.org/TR/n-triples/>`_
+    #[classattr]
+    const N_TRIPLES: Self = Self {
+        inner: RdfFormat::NTriples,
+    };
+
+    /// `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_
+    #[classattr]
+    const RDF_XML: Self = Self {
+        inner: RdfFormat::RdfXml,
+    };
+
+    /// `TriG <https://www.w3.org/TR/trig/>`_
+    #[classattr]
+    const TRIG: Self = Self {
+        inner: RdfFormat::TriG,
+    };
+
+    /// `Turtle <https://www.w3.org/TR/turtle/>`_
+    #[classattr]
+    const TURTLE: Self = Self {
+        inner: RdfFormat::Turtle,
+    };
+
+    /// :return: the format canonical IRI according to the `Unique URIs for file formats registry <https://www.w3.org/ns/formats/>`_.
+    /// :rtype: str
+    ///
+    /// >>> RdfFormat.N_TRIPLES.iri
+    /// 'http://www.w3.org/ns/formats/N-Triples'
+    #[getter]
+    fn iri(&self) -> &'static str {
+        self.inner.iri()
+    }
+
+    /// :return: the format `IANA media type <https://tools.ietf.org/html/rfc2046>`_.
+    /// :rtype: str
+    ///
+    /// >>> RdfFormat.N_TRIPLES.media_type
+    /// 'application/n-triples'
+    #[getter]
+    fn media_type(&self) -> &'static str {
+        self.inner.media_type()
+    }
+
+    /// :return: the format `IANA-registered <https://tools.ietf.org/html/rfc2046>`_ file extension.
+    /// :rtype: str
+    ///
+    /// >>> RdfFormat.N_TRIPLES.file_extension
+    /// 'nt'
+    #[getter]
+    pub fn file_extension(&self) -> &'static str {
+        self.inner.file_extension()
+    }
+
+    /// :return: the format name.
+    /// :rtype: str
+    ///
+    /// >>> RdfFormat.N_TRIPLES.name
+    /// 'N-Triples'
+    #[getter]
+    pub const fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    /// :return: if the formats supports `RDF datasets <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_ and not only `RDF graphs <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph>`_.
+    /// :rtype: bool
+    ///
+    /// >>> RdfFormat.N_TRIPLES.supports_datasets
+    /// False
+    /// >>> RdfFormat.N_QUADS.supports_datasets
+    /// True
+    #[getter]
+    pub fn supports_datasets(&self) -> bool {
+        self.inner.supports_datasets()
+    }
+
+    /// :return: if the formats supports `RDF-star quoted triples <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#dfn-quoted>`_.
+    /// :rtype: bool
+    ///
+    /// >>> RdfFormat.N_TRIPLES.supports_rdf_star
+    /// True
+    /// >>> RdfFormat.RDF_XML.supports_rdf_star
+    /// False
+    #[getter]
+    pub const fn supports_rdf_star(&self) -> bool {
+        self.inner.supports_rdf_star()
+    }
+
+    /// Looks for a known format from a media type.
+    ///
+    /// It supports some media type aliases.
+    /// For example, "application/xml" is going to return RDF/XML even if it is not its canonical media type.
+    ///
+    /// :param media_type: the media type.
+    /// :type media_type: str
+    /// :return: :py:class:`RdfFormat` if the media type is known or :py:const:`None` if not.
+    /// :rtype: RdfFormat or None
+    ///
+    /// >>> RdfFormat.from_media_type("text/turtle; charset=utf-8")
+    /// <RdfFormat Turtle>
+    #[staticmethod]
+    pub fn from_media_type(media_type: &str) -> Option<Self> {
+        Some(Self {
+            inner: RdfFormat::from_media_type(media_type)?,
+        })
+    }
+
+    /// Looks for a known format from an extension.
+    ///
+    /// It supports some aliases.
+    ///
+    /// :param extension: the extension.
+    /// :type extension: str
+    /// :return: :py:class:`RdfFormat` if the extension is known or :py:const:`None` if not.
+    /// :rtype: RdfFormat or None
+    ///
+    /// >>> RdfFormat.from_extension("nt")
+    /// <RdfFormat N-Triples>
+    #[staticmethod]
+    pub fn from_extension(extension: &str) -> Option<Self> {
+        Some(Self {
+            inner: RdfFormat::from_extension(extension)?,
+        })
+    }
+
+    fn __str__(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<RdfFormat {}>", self.inner.name())
+    }
+
+    fn __hash__(&self) -> u64 {
+        hash(&self.inner)
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+
+    fn __ne__(&self, other: &Self) -> bool {
+        self.inner != other.inner
+    }
+
+    /// :rtype: RdfFormat
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: RdfFormat
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+        slf
     }
 }
 
@@ -233,24 +419,20 @@ pub enum PyWritable {
 }
 
 impl PyWritable {
-    pub fn do_write<'a, F: Format>(
-        write: impl FnOnce(BufWriter<Self>, F) -> PyResult<BufWriter<Self>>,
-        output: Option<&PyAny>,
-        format: Option<&str>,
-        py: Python<'a>,
-    ) -> PyResult<Option<&'a PyBytes>> {
-        let file_path = output.and_then(|output| output.extract::<PathBuf>().ok());
-        let format = parse_format::<F>(format, file_path.as_deref())?;
-        let output = if let Some(output) = output {
-            if let Some(file_path) = &file_path {
-                Self::File(py.allow_threads(|| File::create(file_path))?)
-            } else {
-                Self::Io(PyIo(output.into()))
-            }
-        } else {
-            PyWritable::Bytes(Vec::new())
+    pub fn do_write(
+        write: impl FnOnce(BufWriter<Self>, Option<PathBuf>) -> PyResult<BufWriter<Self>>,
+        output: Option<PyWritableOutput>,
+        py: Python<'_>,
+    ) -> PyResult<Option<&PyBytes>> {
+        let (output, file_path) = match output {
+            Some(PyWritableOutput::Path(file_path)) => (
+                Self::File(py.allow_threads(|| File::create(&file_path))?),
+                Some(file_path),
+            ),
+            Some(PyWritableOutput::Io(object)) => (Self::Io(PyIo(object)), None),
+            None => (Self::Bytes(Vec::new()), None),
         };
-        let writer = write(BufWriter::new(output), format)?;
+        let writer = write(BufWriter::new(output), file_path)?;
         py.allow_threads(|| writer.into_inner())?.close(py)
     }
 
@@ -288,6 +470,12 @@ impl Write for PyWritable {
             Self::File(file) => file.flush(),
         }
     }
+}
+
+#[derive(FromPyObject)]
+pub enum PyWritableOutput {
+    Path(PathBuf),
+    Io(PyObject),
 }
 
 pub struct PyIo(PyObject);
@@ -331,57 +519,23 @@ impl Write for PyIo {
     }
 }
 
-pub trait Format: Sized {
-    fn from_media_type(media_type: &str) -> Option<Self>;
-    fn from_extension(extension: &str) -> Option<Self>;
-}
-
-impl Format for RdfFormat {
-    fn from_media_type(media_type: &str) -> Option<Self> {
-        Self::from_media_type(media_type)
+pub fn lookup_rdf_format(format: Option<PyRdfFormat>, path: Option<&Path>) -> PyResult<RdfFormat> {
+    if let Some(format) = format {
+        return Ok(format.inner);
     }
-
-    fn from_extension(extension: &str) -> Option<Self> {
-        Self::from_extension(extension)
-    }
-}
-
-impl Format for QueryResultsFormat {
-    fn from_media_type(media_type: &str) -> Option<Self> {
-        Self::from_media_type(media_type)
-    }
-
-    fn from_extension(extension: &str) -> Option<Self> {
-        Self::from_extension(extension)
-    }
-}
-
-pub fn parse_format<F: Format>(format: Option<&str>, path: Option<&Path>) -> PyResult<F> {
-    let format = if let Some(format) = format {
-        format
-    } else if let Some(path) = path {
-        if let Some(ext) = path.extension().and_then(OsStr::to_str) {
-            ext
-        } else {
-            return Err(PyValueError::new_err(format!(
-                "The file name {} has no extension to guess a file format from",
-                path.display()
-            )));
-        }
-    } else {
+    let Some(path) = path else {
         return Err(PyValueError::new_err(
             "The format parameter is required when a file path is not given",
         ));
     };
-    if format.contains('/') {
-        F::from_media_type(format).ok_or_else(|| {
-            PyValueError::new_err(format!("Not supported RDF format media type: {format}"))
-        })
-    } else {
-        F::from_extension(format).ok_or_else(|| {
-            PyValueError::new_err(format!("Not supported RDF format extension: {format}"))
-        })
-    }
+    let Some(ext) = path.extension().and_then(OsStr::to_str) else {
+        return Err(PyValueError::new_err(format!(
+            "The file name {} has no extension to guess a file format from",
+            path.display()
+        )));
+    };
+    RdfFormat::from_extension(ext)
+        .ok_or_else(|| PyValueError::new_err(format!("Not supported RDF format extension: {ext}")))
 }
 
 pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
