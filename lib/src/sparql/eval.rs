@@ -1575,7 +1575,7 @@ impl SimpleEvaluator {
                             }
                         })
                     }
-                    Function::BNode => match parameters.get(0) {
+                    Function::BNode => match parameters.first() {
                         Some(id) => {
                             let id =
                                 self.expression_evaluator(id, encoded_variables, stat_children);
@@ -2612,7 +2612,7 @@ impl SimpleEvaluator {
                                         Some(Decimal::try_from(value).ok()?.into())
                                     }
                                     EncodedTerm::IntegerLiteral(value) => {
-                                        Some(Decimal::try_from(value).ok()?.into())
+                                        Some(Decimal::from(value).into())
                                     }
                                     EncodedTerm::DecimalLiteral(value) => Some(value.into()),
                                     EncodedTerm::BooleanLiteral(value) => {
@@ -2658,7 +2658,7 @@ impl SimpleEvaluator {
                                 Rc::new(move |tuple| match e(tuple)? {
                                     EncodedTerm::TimeLiteral(value) => Some(value.into()),
                                     EncodedTerm::DateTimeLiteral(value) => {
-                                        Some(Time::try_from(value).ok()?.into())
+                                        Some(Time::from(value).into())
                                     }
                                     EncodedTerm::SmallStringLiteral(value) => {
                                         parse_time_str(&value)
@@ -3250,7 +3250,7 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
             EncodedTerm::FloatLiteral(b) => Some(a == b),
             EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
             EncodedTerm::IntegerLiteral(b) => Some(*a == Float::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).try_into().ok()?),
+            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).into()),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
         },
@@ -3258,7 +3258,7 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
             EncodedTerm::FloatLiteral(b) => Some(*a == Double::from(*b)),
             EncodedTerm::DoubleLiteral(b) => Some(a == b),
             EncodedTerm::IntegerLiteral(b) => Some(*a == Double::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).try_into().ok()?),
+            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).into()),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
         },
@@ -3271,8 +3271,8 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
             _ => Some(false),
         },
         EncodedTerm::DecimalLiteral(a) => match b {
-            EncodedTerm::FloatLiteral(b) => Some(Float::try_from(*a).ok()? == *b),
-            EncodedTerm::DoubleLiteral(b) => Some(Double::try_from(*a).ok()? == *b),
+            EncodedTerm::FloatLiteral(b) => Some(Float::from(*a) == *b),
+            EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
             EncodedTerm::IntegerLiteral(b) => Some(*a == Decimal::from(*b)),
             EncodedTerm::DecimalLiteral(b) => Some(a == b),
             _ if b.is_unknown_typed_literal() => None,
@@ -3537,14 +3537,14 @@ fn partial_cmp_literals(
             EncodedTerm::FloatLiteral(b) => a.partial_cmp(b),
             EncodedTerm::DoubleLiteral(b) => Double::from(*a).partial_cmp(b),
             EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Float::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).try_into().ok()?),
+            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).into()),
             _ => None,
         },
         EncodedTerm::DoubleLiteral(a) => match b {
             EncodedTerm::FloatLiteral(b) => a.partial_cmp(&(*b).into()),
             EncodedTerm::DoubleLiteral(b) => a.partial_cmp(b),
             EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Double::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).try_into().ok()?),
+            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).into()),
             _ => None,
         },
         EncodedTerm::IntegerLiteral(a) => match b {
@@ -3555,8 +3555,8 @@ fn partial_cmp_literals(
             _ => None,
         },
         EncodedTerm::DecimalLiteral(a) => match b {
-            EncodedTerm::FloatLiteral(b) => Float::try_from(*a).ok()?.partial_cmp(b),
-            EncodedTerm::DoubleLiteral(b) => Double::try_from(*a).ok()?.partial_cmp(b),
+            EncodedTerm::FloatLiteral(b) => Float::from(*a).partial_cmp(b),
+            EncodedTerm::DoubleLiteral(b) => Double::from(*a).partial_cmp(b),
             EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(*b)),
             EncodedTerm::DecimalLiteral(b) => a.partial_cmp(b),
             _ => None,
