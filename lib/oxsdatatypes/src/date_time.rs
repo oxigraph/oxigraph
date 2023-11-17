@@ -420,19 +420,20 @@ impl Time {
     #[inline]
     #[must_use]
     pub fn checked_add_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
-        DateTime::new(
-            1972,
-            12,
-            31,
-            self.hour(),
-            self.minute(),
-            self.second(),
-            self.timezone_offset(),
+        Some(
+            DateTime::new(
+                1972,
+                12,
+                31,
+                self.hour(),
+                self.minute(),
+                self.second(),
+                self.timezone_offset(),
+            )
+            .ok()?
+            .checked_add_duration(rhs)?
+            .into(),
         )
-        .ok()?
-        .checked_add_duration(rhs)?
-        .try_into()
-        .ok()
     }
 
     /// [op:subtract-dayTimeDuration-from-time](https://www.w3.org/TR/xpath-functions-31/#func-subtract-dayTimeDuration-from-time)
@@ -450,38 +451,40 @@ impl Time {
     #[inline]
     #[must_use]
     pub fn checked_sub_duration(self, rhs: impl Into<Duration>) -> Option<Self> {
-        DateTime::new(
-            1972,
-            12,
-            31,
-            self.hour(),
-            self.minute(),
-            self.second(),
-            self.timezone_offset(),
+        Some(
+            DateTime::new(
+                1972,
+                12,
+                31,
+                self.hour(),
+                self.minute(),
+                self.second(),
+                self.timezone_offset(),
+            )
+            .ok()?
+            .checked_sub_duration(rhs)?
+            .into(),
         )
-        .ok()?
-        .checked_sub_duration(rhs)?
-        .try_into()
-        .ok()
     }
 
     // [fn:adjust-time-to-timezone](https://www.w3.org/TR/xpath-functions-31/#func-adjust-time-to-timezone)
     #[inline]
     #[must_use]
     pub fn adjust(self, timezone_offset: Option<TimezoneOffset>) -> Option<Self> {
-        DateTime::new(
-            1972,
-            12,
-            31,
-            self.hour(),
-            self.minute(),
-            self.second(),
-            self.timezone_offset(),
+        Some(
+            DateTime::new(
+                1972,
+                12,
+                31,
+                self.hour(),
+                self.minute(),
+                self.second(),
+                self.timezone_offset(),
+            )
+            .ok()?
+            .adjust(timezone_offset)?
+            .into(),
         )
-        .ok()?
-        .adjust(timezone_offset)?
-        .try_into()
-        .ok()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).

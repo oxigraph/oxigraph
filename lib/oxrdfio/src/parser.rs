@@ -1,6 +1,6 @@
 //! Utilities to read RDF graphs and datasets.
 
-pub use crate::error::{ParseError, SyntaxError};
+pub use crate::error::ParseError;
 use crate::format::RdfFormat;
 use oxrdf::{BlankNode, GraphName, IriParseError, Quad, Subject, Term, Triple};
 #[cfg(feature = "async-tokio")]

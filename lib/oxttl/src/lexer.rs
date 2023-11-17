@@ -350,9 +350,7 @@ impl N3Lexer {
                             let a = char::from(*data.get(i)?);
                             i += 1;
                             let b = char::from(*data.get(i)?);
-                            if !matches!(a, '0'..='9' | 'A'..='F' | 'a'..='f')
-                                || !matches!(b, '0'..='9' | 'A'..='F' | 'a'..='f')
-                            {
+                            if !a.is_ascii_hexdigit() || !b.is_ascii_hexdigit() {
                                 return Some((i + 1, Err((
                                     i - 2..=i, format!("escapes in IRIs should be % followed by two hexadecimal characters, found '%{a}{b}'")
                                 ).into())));
