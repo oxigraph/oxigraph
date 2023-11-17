@@ -1276,7 +1276,7 @@ fn eq_compare_other_type(op: CompareOp) -> PyResult<bool> {
     }
 }
 
-fn hash(t: &impl Hash) -> u64 {
+pub(crate) fn hash(t: &impl Hash) -> u64 {
     let mut s = DefaultHasher::new();
     t.hash(&mut s);
     s.finish()

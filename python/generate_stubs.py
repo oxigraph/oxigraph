@@ -141,6 +141,17 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
                     simple=1,
                 )
             )
+        elif member_value is not None:
+            constants.append(
+                ast.AnnAssign(
+                    target=ast.Name(id=member_name, ctx=ast.Store()),
+                    annotation=concatenated_path_to_type(
+                        member_value.__class__.__name__, element_path, types_to_import
+                    ),
+                    value=ast.Ellipsis(),
+                    simple=1,
+                )
+            )
         else:
             logging.warning(f"Unsupported member {member_name} of class {'.'.join(element_path)}")
 

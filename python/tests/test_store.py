@@ -9,9 +9,12 @@ from pyoxigraph import (
     DefaultGraph,
     NamedNode,
     Quad,
+    QueryBoolean,
+    QueryResultsFormat,
     QuerySolution,
     QuerySolutions,
     QueryTriples,
+    RdfFormat,
     Store,
     Triple,
     Variable,
@@ -190,9 +193,10 @@ class TestStore(unittest.TestCase):
     def test_select_query_dump(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        results = store.query("SELECT ?s WHERE { ?s ?p ?o }")
+        results: QuerySolutions = store.query("SELECT ?s WHERE { ?s ?p ?o }")  # type: ignore[assignment]
+        self.assertIsInstance(results, QuerySolutions)
         output = BytesIO()
-        results.serialize(output, "csv")
+        results.serialize(output, QueryResultsFormat.CSV)
         self.assertEqual(
             output.getvalue().decode(),
             "s\r\nhttp://foo\r\n",
@@ -201,9 +205,10 @@ class TestStore(unittest.TestCase):
     def test_ask_query_dump(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        results = store.query("ASK { ?s ?p ?o }")
+        results: QueryBoolean = store.query("ASK { ?s ?p ?o }")  # type: ignore[assignment]
+        self.assertIsInstance(results, QueryBoolean)
         output = BytesIO()
-        results.serialize(output, "csv")
+        results.serialize(output, QueryResultsFormat.CSV)
         self.assertEqual(
             output.getvalue().decode(),
             "true",
@@ -212,9 +217,10 @@ class TestStore(unittest.TestCase):
     def test_construct_query_dump(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))
-        results = store.query("CONSTRUCT WHERE { ?s ?p ?o }")
+        results: QueryTriples = store.query("CONSTRUCT WHERE { ?s ?p ?o }")  # type: ignore[assignment]
+        self.assertIsInstance(results, QueryTriples)
         output = BytesIO()
-        results.serialize(output, "nt")
+        results.serialize(output, RdfFormat.N_TRIPLES)
         self.assertEqual(
             output.getvalue().decode(),
             "<http://foo> <http://bar> <http://baz> .\n",
@@ -254,7 +260,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             b"<http://foo> <http://bar> <http://baz> .",
-            "application/n-triples",
+            RdfFormat.N_TRIPLES,
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
 
@@ -262,7 +268,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             "<http://foo> <http://bar> <http://baz> .",
-            "application/n-triples",
+            RdfFormat.N_TRIPLES,
             to_graph=graph,
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
@@ -271,7 +277,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <> ."),
-            "text/turtle",
+            RdfFormat.TURTLE,
             base_iri="http://baz",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
@@ -280,7 +286,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             StringIO("<http://foo> <http://bar> <http://baz> <http://graph>."),
-            "nq",
+            RdfFormat.N_QUADS,
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
@@ -288,7 +294,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             "<http://graph> { <http://foo> <http://bar> <> . }",
-            "application/trig",
+            RdfFormat.TRIG,
             base_iri="http://baz",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
@@ -303,13 +309,13 @@ class TestStore(unittest.TestCase):
 
     def test_load_with_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
-            Store().load(fp, "application/n-triples")
+            Store().load(fp, RdfFormat.N_TRIPLES)
 
     def test_dump_ntriples(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
         output = BytesIO()
-        store.dump(output, "application/n-triples", from_graph=graph)
+        store.dump(output, RdfFormat.N_TRIPLES, from_graph=graph)
         self.assertEqual(
             output.getvalue(),
             b"<http://foo> <http://bar> <http://baz> .\n",
@@ -319,7 +325,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
         self.assertEqual(
-            store.dump(format="nq"),
+            store.dump(format=RdfFormat.N_QUADS),
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
@@ -328,7 +334,7 @@ class TestStore(unittest.TestCase):
         store.add(Quad(foo, bar, baz, graph))
         store.add(Quad(foo, bar, baz))
         output = BytesIO()
-        store.dump(output, "application/trig")
+        store.dump(output, RdfFormat.TRIG)
         self.assertEqual(
             output.getvalue(),
             b"<http://foo> <http://bar> <http://baz> .\n"
@@ -340,7 +346,7 @@ class TestStore(unittest.TestCase):
             store = Store()
             store.add(Quad(foo, bar, baz, graph))
             file_name = Path(fp.name)
-            store.dump(file_name, "nq")
+            store.dump(file_name, RdfFormat.N_QUADS)
             self.assertEqual(
                 file_name.read_text(),
                 "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
@@ -350,7 +356,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.add(Quad(foo, bar, bar))
         with self.assertRaises(OSError) as _, TemporaryFile("rb") as fp:
-            store.dump(fp, "application/trig")
+            store.dump(fp, RdfFormat.TRIG)
 
     def test_write_in_read(self) -> None:
         store = Store()
