@@ -2,6 +2,7 @@ use crate::utils::*;
 use oxrdf::{Subject, SubjectRef, TermRef, TripleRef};
 use quick_xml::events::*;
 use quick_xml::Writer;
+use std::borrow::Cow;
 use std::io;
 use std::io::Write;
 use std::sync::Arc;
@@ -21,7 +22,7 @@ use tokio::io::AsyncWrite;
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<rdf:type rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
 ///     writer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -52,7 +53,7 @@ impl RdfXmlSerializer {
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// ))?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<rdf:type rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
     ///     writer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -84,7 +85,7 @@ impl RdfXmlSerializer {
     ///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
     /// )).await?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<rdf:type rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
     ///     writer.finish().await?.as_slice()
     /// );
     /// # Ok(())
@@ -118,7 +119,7 @@ impl RdfXmlSerializer {
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<type xmlns=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
+///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<rdf:type rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
 ///     writer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -253,13 +254,29 @@ impl InnerRdfXmlWriter {
         self.current_subject = Some(triple.subject.into_owned());
 
         let (prop_prefix, prop_value) = split_iri(triple.predicate.as_str());
-        let (prop_qname, prop_xmlns) = if prop_value.is_empty() {
-            ("prop:", ("xmlns:prop", prop_prefix))
-        } else {
-            (prop_value, ("xmlns", prop_prefix))
-        };
-        let mut property_open = BytesStart::new(prop_qname);
-        property_open.push_attribute(prop_xmlns);
+        let (prop_qname, prop_xmlns) =
+            if prop_prefix == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" {
+                (Cow::Owned(format!("rdf:{prop_value}")), None)
+            } else if prop_prefix == "http://www.w3.org/2000/xmlns/" {
+                if prop_value.is_empty() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "The http://www.w3.org/2000/xmlns/ predicate IRI is not allowed in XML",
+                    ));
+                }
+                (
+                    Cow::Borrowed("p:"),
+                    Some(("xmlns:p", triple.predicate.as_str())),
+                )
+            } else if prop_value.is_empty() {
+                (Cow::Borrowed("p:"), Some(("xmlns:p", prop_prefix)))
+            } else {
+                (Cow::Borrowed(prop_value), Some(("xmlns", prop_prefix)))
+            };
+        let mut property_open = BytesStart::new(prop_qname.clone());
+        if let Some(prop_xmlns) = prop_xmlns {
+            property_open.push_attribute(prop_xmlns);
+        }
         let content = match triple.object {
             TermRef::NamedNode(node) => {
                 property_open.push_attribute(("rdf:resource", node.as_str()));
