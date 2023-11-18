@@ -1918,26 +1918,26 @@ parser! {
         rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
 
         rule Aggregate() -> AggregateExpression =
-            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression::Count { expr: None, distinct: true } } /
-            i("COUNT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Count { expr: Some(Box::new(e)), distinct: true } } /
-            i("COUNT") _ "(" _ "*" _ ")" { AggregateExpression::Count { expr: None, distinct: false } } /
-            i("COUNT") _ "(" _ e:Expression() _ ")" { AggregateExpression::Count { expr: Some(Box::new(e)), distinct: false } } /
-            i("SUM") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Sum { expr: Box::new(e), distinct: true } } /
-            i("SUM") _ "(" _ e:Expression() _ ")" { AggregateExpression::Sum { expr: Box::new(e), distinct: false } } /
-            i("MIN") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Min { expr: Box::new(e), distinct: true } } /
-            i("MIN") _ "(" _ e:Expression() _ ")" { AggregateExpression::Min { expr: Box::new(e), distinct: false } } /
-            i("MAX") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Max { expr: Box::new(e), distinct: true } } /
-            i("MAX") _ "(" _ e:Expression() _ ")" { AggregateExpression::Max { expr: Box::new(e), distinct: false } } /
-            i("AVG") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Avg { expr: Box::new(e), distinct: true } } /
-            i("AVG") _ "(" _ e:Expression() _ ")" { AggregateExpression::Avg { expr: Box::new(e), distinct: false } } /
-            i("SAMPLE") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Sample { expr: Box::new(e), distinct: true } } /
-            i("SAMPLE") _ "(" _ e:Expression() _ ")" { AggregateExpression::Sample { expr: Box::new(e), distinct: false } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: true, separator: None } } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: true, separator: Some(s) } } /
-            i("GROUP_CONCAT") _ "(" _ e:Expression() _ ")" { AggregateExpression::GroupConcat { expr: Box::new(e), distinct: false, separator: None } } /
-            name:iri() _ "(" _ i("DISTINCT") _ e:Expression() _ ")" { AggregateExpression::Custom { name, expr: Box::new(e), distinct: true } } /
-            name:iri() _ "(" _ e:Expression() _ ")" { AggregateExpression::Custom { name, expr: Box::new(e), distinct: false } }
+            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: true } } /
+            i("COUNT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: true } } /
+            i("COUNT") _ "(" _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: false } } /
+            i("COUNT") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: false } } /
+            i("SUM") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: true } } /
+            i("SUM") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: false } } /
+            i("MIN") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: true } } /
+            i("MIN") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: false } } /
+            i("MAX") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: true } } /
+            i("MAX") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: false } } /
+            i("AVG") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: true } } /
+            i("AVG") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: false } } /
+            i("SAMPLE") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr, distinct: true } } /
+            i("SAMPLE") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr, distinct: false } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: Some(s) }, expr, distinct: true } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: true } } /
+            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: Some(s) }, expr, distinct: true } } /
+            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: false } } /
+            name:iri() _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: true } } /
+            name:iri() _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: false } }
 
         rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {
             match a {

@@ -3,7 +3,7 @@
 use oxrdf::vocab::xsd;
 use rand::random;
 use spargebra::algebra::{
-    AggregateExpression as AlAggregateExpression, Expression as AlExpression,
+    AggregateExpression as AlAggregateExpression, AggregateFunction, Expression as AlExpression,
     GraphPattern as AlGraphPattern, OrderExpression as AlOrderExpression,
 };
 pub use spargebra::algebra::{Function, PropertyPathExpression};
@@ -1538,46 +1538,12 @@ impl Default for MinusAlgorithm {
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum AggregateExpression {
-    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount).
-    Count {
-        expr: Option<Box<Expression>>,
+    CountSolutions {
         distinct: bool,
     },
-    /// [Sum](https://www.w3.org/TR/sparql11-query/#defn_aggSum).
-    Sum {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [Avg](https://www.w3.org/TR/sparql11-query/#defn_aggAvg).
-    Avg {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [Min](https://www.w3.org/TR/sparql11-query/#defn_aggMin).
-    Min {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax).
-    Max {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
-    GroupConcat {
-        expr: Box<Expression>,
-        distinct: bool,
-        separator: Option<String>,
-    },
-    /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
-    Sample {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// Custom function.
-    Custom {
-        name: NamedNode,
-        expr: Box<Expression>,
+    FunctionCall {
+        name: AggregateFunction,
+        expr: Expression,
         distinct: bool,
     },
 }
@@ -1588,48 +1554,16 @@ impl AggregateExpression {
         graph_name: Option<&NamedNodePattern>,
     ) -> Self {
         match expression {
-            AlAggregateExpression::Count { expr, distinct } => Self::Count {
-                expr: expr
-                    .as_ref()
-                    .map(|e| Box::new(Expression::from_sparql_algebra(e, graph_name))),
+            AlAggregateExpression::CountSolutions { distinct } => Self::CountSolutions {
                 distinct: *distinct,
             },
-            AlAggregateExpression::Sum { expr, distinct } => Self::Sum {
-                expr: Box::new(Expression::from_sparql_algebra(expr, graph_name)),
-                distinct: *distinct,
-            },
-            AlAggregateExpression::Avg { expr, distinct } => Self::Avg {
-                expr: Box::new(Expression::from_sparql_algebra(expr, graph_name)),
-                distinct: *distinct,
-            },
-            AlAggregateExpression::Min { expr, distinct } => Self::Min {
-                expr: Box::new(Expression::from_sparql_algebra(expr, graph_name)),
-                distinct: *distinct,
-            },
-            AlAggregateExpression::Max { expr, distinct } => Self::Max {
-                expr: Box::new(Expression::from_sparql_algebra(expr, graph_name)),
-                distinct: *distinct,
-            },
-            AlAggregateExpression::GroupConcat {
-                expr,
-                distinct,
-                separator,
-            } => Self::GroupConcat {
-                expr: Box::new(Expression::from_sparql_algebra(expr, graph_name)),
-                distinct: *distinct,
-                separator: separator.clone(),
-            },
-            AlAggregateExpression::Sample { expr, distinct } => Self::Sample {
-                expr: Box::new(Expression::from_sparql_algebra(expr, graph_name)),
-                distinct: *distinct,
-            },
-            AlAggregateExpression::Custom {
+            AlAggregateExpression::FunctionCall {
                 name,
                 expr,
                 distinct,
-            } => Self::Custom {
+            } => Self::FunctionCall {
                 name: name.clone(),
-                expr: Box::new(Expression::from_sparql_algebra(expr, graph_name)),
+                expr: Expression::from_sparql_algebra(expr, graph_name),
                 distinct: *distinct,
             },
         }
@@ -1639,46 +1573,16 @@ impl AggregateExpression {
 impl From<&AggregateExpression> for AlAggregateExpression {
     fn from(expression: &AggregateExpression) -> Self {
         match expression {
-            AggregateExpression::Count { expr, distinct } => Self::Count {
-                expr: expr.as_ref().map(|e| Box::new(e.as_ref().into())),
+            AggregateExpression::CountSolutions { distinct } => Self::CountSolutions {
                 distinct: *distinct,
             },
-            AggregateExpression::Sum { expr, distinct } => Self::Sum {
-                expr: Box::new(expr.as_ref().into()),
-                distinct: *distinct,
-            },
-            AggregateExpression::Avg { expr, distinct } => Self::Avg {
-                expr: Box::new(expr.as_ref().into()),
-                distinct: *distinct,
-            },
-            AggregateExpression::Min { expr, distinct } => Self::Min {
-                expr: Box::new(expr.as_ref().into()),
-                distinct: *distinct,
-            },
-            AggregateExpression::Max { expr, distinct } => Self::Max {
-                expr: Box::new(expr.as_ref().into()),
-                distinct: *distinct,
-            },
-            AggregateExpression::GroupConcat {
-                expr,
-                distinct,
-                separator,
-            } => Self::GroupConcat {
-                expr: Box::new(expr.as_ref().into()),
-                distinct: *distinct,
-                separator: separator.clone(),
-            },
-            AggregateExpression::Sample { expr, distinct } => Self::Sample {
-                expr: Box::new(expr.as_ref().into()),
-                distinct: *distinct,
-            },
-            AggregateExpression::Custom {
+            AggregateExpression::FunctionCall {
                 name,
                 expr,
                 distinct,
-            } => Self::Custom {
+            } => Self::FunctionCall {
                 name: name.clone(),
-                expr: Box::new(expr.as_ref().into()),
+                expr: expr.into(),
                 distinct: *distinct,
             },
         }
