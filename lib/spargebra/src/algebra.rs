@@ -1114,46 +1114,11 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum AggregateExpression {
-    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount).
-    Count {
-        expr: Option<Box<Expression>>,
-        distinct: bool,
-    },
-    /// [Sum](https://www.w3.org/TR/sparql11-query/#defn_aggSum).
-    Sum {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [Avg](https://www.w3.org/TR/sparql11-query/#defn_aggAvg).
-    Avg {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [Min](https://www.w3.org/TR/sparql11-query/#defn_aggMin).
-    Min {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax).
-    Max {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
-    GroupConcat {
-        expr: Box<Expression>,
-        distinct: bool,
-        separator: Option<String>,
-    },
-    /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
-    Sample {
-        expr: Box<Expression>,
-        distinct: bool,
-    },
-    /// Custom function.
-    Custom {
-        name: NamedNode,
-        expr: Box<Expression>,
+    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
+    CountSolutions { distinct: bool },
+    FunctionCall {
+        name: AggregateFunction,
+        expr: Expression,
         distinct: bool,
     },
 }
@@ -1162,82 +1127,39 @@ impl AggregateExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::Count { expr, distinct } => {
-                write!(f, "(sum")?;
+            Self::CountSolutions { distinct } => {
+                write!(f, "(count")?;
                 if *distinct {
                     write!(f, " distinct")?;
                 }
-                if let Some(expr) = expr {
-                    write!(f, " ")?;
-                    expr.fmt_sse(f)?;
-                }
                 write!(f, ")")
             }
-            Self::Sum { expr, distinct } => {
-                write!(f, "(sum ")?;
-                if *distinct {
-                    write!(f, "distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                write!(f, ")")
-            }
-            Self::Avg { expr, distinct } => {
-                write!(f, "(avg ")?;
-                if *distinct {
-                    write!(f, "distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                write!(f, ")")
-            }
-            Self::Min { expr, distinct } => {
-                write!(f, "(min ")?;
-                if *distinct {
-                    write!(f, "distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                write!(f, ")")
-            }
-            Self::Max { expr, distinct } => {
-                write!(f, "(max ")?;
-                if *distinct {
-                    write!(f, "distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                write!(f, ")")
-            }
-            Self::Sample { expr, distinct } => {
-                write!(f, "(sample ")?;
-                if *distinct {
-                    write!(f, "distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                write!(f, ")")
-            }
-            Self::GroupConcat {
+            Self::FunctionCall {
+                name:
+                    AggregateFunction::GroupConcat {
+                        separator: Some(separator),
+                    },
                 expr,
                 distinct,
-                separator,
             } => {
                 write!(f, "(group_concat ")?;
                 if *distinct {
                     write!(f, "distinct ")?;
                 }
                 expr.fmt_sse(f)?;
-                if let Some(separator) = separator {
-                    write!(f, " {}", LiteralRef::new_simple_literal(separator))?;
-                }
-                write!(f, ")")
+                write!(f, " {})", LiteralRef::new_simple_literal(separator))
             }
-            Self::Custom {
+            Self::FunctionCall {
                 name,
                 expr,
                 distinct,
             } => {
-                write!(f, "({name}")?;
-                if *distinct {
-                    write!(f, " distinct")?;
-                }
+                write!(f, "(")?;
+                name.fmt_sse(f)?;
                 write!(f, " ")?;
+                if *distinct {
+                    write!(f, "distinct ")?;
+                }
                 expr.fmt_sse(f)?;
                 write!(f, ")")
             }
@@ -1248,82 +1170,38 @@ impl AggregateExpression {
 impl fmt::Display for AggregateExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Count { expr, distinct } => {
+            Self::CountSolutions { distinct } => {
                 if *distinct {
-                    if let Some(expr) = expr {
-                        write!(f, "COUNT(DISTINCT {expr})")
-                    } else {
-                        write!(f, "COUNT(DISTINCT *)")
-                    }
-                } else if let Some(expr) = expr {
-                    write!(f, "COUNT({expr})")
+                    write!(f, "COUNT(DISTINCT *)")
                 } else {
                     write!(f, "COUNT(*)")
                 }
             }
-            Self::Sum { expr, distinct } => {
-                if *distinct {
-                    write!(f, "SUM(DISTINCT {expr})")
-                } else {
-                    write!(f, "SUM({expr})")
-                }
-            }
-            Self::Min { expr, distinct } => {
-                if *distinct {
-                    write!(f, "MIN(DISTINCT {expr})")
-                } else {
-                    write!(f, "MIN({expr})")
-                }
-            }
-            Self::Max { expr, distinct } => {
-                if *distinct {
-                    write!(f, "MAX(DISTINCT {expr})")
-                } else {
-                    write!(f, "MAX({expr})")
-                }
-            }
-            Self::Avg { expr, distinct } => {
-                if *distinct {
-                    write!(f, "AVG(DISTINCT {expr})")
-                } else {
-                    write!(f, "AVG({expr})")
-                }
-            }
-            Self::Sample { expr, distinct } => {
-                if *distinct {
-                    write!(f, "SAMPLE(DISTINCT {expr})")
-                } else {
-                    write!(f, "SAMPLE({expr})")
-                }
-            }
-            Self::GroupConcat {
+            Self::FunctionCall {
+                name:
+                    AggregateFunction::GroupConcat {
+                        separator: Some(separator),
+                    },
                 expr,
                 distinct,
-                separator,
             } => {
                 if *distinct {
-                    if let Some(separator) = separator {
-                        write!(
-                            f,
-                            "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
-                            expr,
-                            LiteralRef::new_simple_literal(separator)
-                        )
-                    } else {
-                        write!(f, "GROUP_CONCAT(DISTINCT {expr})")
-                    }
-                } else if let Some(separator) = separator {
+                    write!(
+                        f,
+                        "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
+                        expr,
+                        LiteralRef::new_simple_literal(separator)
+                    )
+                } else {
                     write!(
                         f,
                         "GROUP_CONCAT({}; SEPARATOR = {})",
                         expr,
                         LiteralRef::new_simple_literal(separator)
                     )
-                } else {
-                    write!(f, "GROUP_CONCAT({expr})")
                 }
             }
-            Self::Custom {
+            Self::FunctionCall {
                 name,
                 expr,
                 distinct,
@@ -1334,6 +1212,59 @@ impl fmt::Display for AggregateExpression {
                     write!(f, "{name}({expr})")
                 }
             }
+        }
+    }
+}
+
+/// An aggregate function name.
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub enum AggregateFunction {
+    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
+    Count,
+    /// [Sum](https://www.w3.org/TR/sparql11-query/#defn_aggSum).
+    Sum,
+    /// [Avg](https://www.w3.org/TR/sparql11-query/#defn_aggAvg).
+    Avg,
+    /// [Min](https://www.w3.org/TR/sparql11-query/#defn_aggMin).
+    Min,
+    /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax).
+    Max,
+    /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
+    GroupConcat {
+        separator: Option<String>,
+    },
+    /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
+    Sample,
+    Custom(NamedNode),
+}
+
+impl AggregateFunction {
+    /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
+    pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        match self {
+            Self::Count => write!(f, "count"),
+            Self::Sum => write!(f, "sum"),
+            Self::Avg => write!(f, "avg"),
+            Self::Min => write!(f, "min"),
+            Self::Max => write!(f, "max"),
+            Self::GroupConcat { .. } => write!(f, "group_concat"),
+            Self::Sample => write!(f, "sample"),
+            Self::Custom(iri) => write!(f, "{iri}"),
+        }
+    }
+}
+
+impl fmt::Display for AggregateFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Count => write!(f, "COUNT"),
+            Self::Sum => write!(f, "SUM"),
+            Self::Avg => write!(f, "AVG"),
+            Self::Min => write!(f, "MIN"),
+            Self::Max => write!(f, "MAX"),
+            Self::GroupConcat { .. } => write!(f, "GROUP_CONCAT"),
+            Self::Sample => write!(f, "SAMPLE"),
+            Self::Custom(iri) => iri.fmt(f),
         }
     }
 }

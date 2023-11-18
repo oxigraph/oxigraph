@@ -18,7 +18,7 @@ use rand::random;
 use regex::{Regex, RegexBuilder};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
-use spargebra::algebra::{Function, PropertyPathExpression};
+use spargebra::algebra::{AggregateFunction, Function, PropertyPathExpression};
 use spargebra::term::{
     GroundSubject, GroundTerm, GroundTermPattern, GroundTriple, NamedNodePattern, TermPattern,
     TriplePattern,
@@ -974,16 +974,8 @@ impl SimpleEvaluator {
                 let aggregate_input_expressions = aggregates
                     .iter()
                     .map(|(_, expression)| match expression {
-                        AggregateExpression::Count { expr, .. } => expr.as_ref().map(|e| {
-                            self.expression_evaluator(e, encoded_variables, stat_children)
-                        }),
-                        AggregateExpression::Sum { expr, .. }
-                        | AggregateExpression::Avg { expr, .. }
-                        | AggregateExpression::Min { expr, .. }
-                        | AggregateExpression::Max { expr, .. }
-                        | AggregateExpression::GroupConcat { expr, .. }
-                        | AggregateExpression::Sample { expr, .. }
-                        | AggregateExpression::Custom { expr, .. } => {
+                        AggregateExpression::CountSolutions { .. } => None,
+                        AggregateExpression::FunctionCall { expr, .. } => {
                             Some(self.expression_evaluator(expr, encoded_variables, stat_children))
                         }
                     })
@@ -1101,52 +1093,26 @@ impl SimpleEvaluator {
         dataset: &Rc<DatasetView>,
         expression: &AggregateExpression,
     ) -> Box<dyn Fn() -> Box<dyn Accumulator>> {
-        match expression {
-            AggregateExpression::Count { distinct, .. } => {
-                if *distinct {
-                    Box::new(|| Box::new(DistinctAccumulator::new(CountAccumulator::default())))
-                } else {
-                    Box::new(|| Box::<CountAccumulator>::default())
-                }
+        let mut accumulator: Box<dyn Fn() -> Box<dyn Accumulator>> = match expression {
+            AggregateExpression::CountSolutions { .. } => {
+                Box::new(|| Box::<CountAccumulator>::default())
             }
-            AggregateExpression::Sum { distinct, .. } => {
-                if *distinct {
-                    Box::new(|| Box::new(DistinctAccumulator::new(SumAccumulator::default())))
-                } else {
-                    Box::new(|| Box::<SumAccumulator>::default())
+            AggregateExpression::FunctionCall { name, .. } => match name {
+                AggregateFunction::Count => Box::new(|| Box::<CountAccumulator>::default()),
+                AggregateFunction::Sum => Box::new(|| Box::<SumAccumulator>::default()),
+                AggregateFunction::Min => {
+                    let dataset = Rc::clone(dataset);
+                    Box::new(move || Box::new(MinAccumulator::new(Rc::clone(&dataset))))
                 }
-            }
-            AggregateExpression::Min { .. } => {
-                let dataset = Rc::clone(dataset);
-                Box::new(move || Box::new(MinAccumulator::new(Rc::clone(&dataset))))
-            } // DISTINCT does not make sense with min
-            AggregateExpression::Max { .. } => {
-                let dataset = Rc::clone(dataset);
-                Box::new(move || Box::new(MaxAccumulator::new(Rc::clone(&dataset))))
-            } // DISTINCT does not make sense with max
-            AggregateExpression::Avg { distinct, .. } => {
-                if *distinct {
-                    Box::new(|| Box::new(DistinctAccumulator::new(AvgAccumulator::default())))
-                } else {
-                    Box::new(|| Box::<AvgAccumulator>::default())
+                AggregateFunction::Max => {
+                    let dataset = Rc::clone(dataset);
+                    Box::new(move || Box::new(MaxAccumulator::new(Rc::clone(&dataset))))
                 }
-            }
-            AggregateExpression::Sample { .. } => Box::new(|| Box::<SampleAccumulator>::default()), // DISTINCT does not make sense with sample
-            AggregateExpression::GroupConcat {
-                distinct,
-                separator,
-                ..
-            } => {
-                let dataset = Rc::clone(dataset);
-                let separator = Rc::from(separator.as_deref().unwrap_or(" "));
-                if *distinct {
-                    Box::new(move || {
-                        Box::new(DistinctAccumulator::new(GroupConcatAccumulator::new(
-                            Rc::clone(&dataset),
-                            Rc::clone(&separator),
-                        )))
-                    })
-                } else {
+                AggregateFunction::Avg => Box::new(|| Box::<AvgAccumulator>::default()),
+                AggregateFunction::Sample => Box::new(|| Box::<SampleAccumulator>::default()),
+                AggregateFunction::GroupConcat { separator } => {
+                    let dataset = Rc::clone(dataset);
+                    let separator = Rc::from(separator.as_deref().unwrap_or(" "));
                     Box::new(move || {
                         Box::new(GroupConcatAccumulator::new(
                             Rc::clone(&dataset),
@@ -1154,9 +1120,17 @@ impl SimpleEvaluator {
                         ))
                     })
                 }
-            }
-            AggregateExpression::Custom { .. } => Box::new(|| Box::new(FailingAccumulator)),
+                AggregateFunction::Custom(_) => Box::new(|| Box::new(FailingAccumulator)),
+            },
+        };
+        if matches!(
+            expression,
+            AggregateExpression::CountSolutions { distinct: true }
+                | AggregateExpression::FunctionCall { distinct: true, .. }
+        ) {
+            accumulator = Box::new(move || Box::new(Deduplicate::new(accumulator())));
         }
+        accumulator
     }
 
     fn expression_evaluator(
@@ -5262,14 +5236,13 @@ trait Accumulator {
     fn state(&self) -> Option<EncodedTerm>;
 }
 
-#[derive(Default, Debug)]
-struct DistinctAccumulator<T: Accumulator> {
+struct Deduplicate {
     seen: HashSet<Option<EncodedTerm>>,
-    inner: T,
+    inner: Box<dyn Accumulator>,
 }
 
-impl<T: Accumulator> DistinctAccumulator<T> {
-    fn new(inner: T) -> Self {
+impl Deduplicate {
+    fn new(inner: Box<dyn Accumulator>) -> Self {
         Self {
             seen: HashSet::default(),
             inner,
@@ -5277,7 +5250,7 @@ impl<T: Accumulator> DistinctAccumulator<T> {
     }
 }
 
-impl<T: Accumulator> Accumulator for DistinctAccumulator<T> {
+impl Accumulator for Deduplicate {
     fn add(&mut self, element: Option<EncodedTerm>) {
         if self.seen.insert(element.clone()) {
             self.inner.add(element)

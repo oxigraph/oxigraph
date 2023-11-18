@@ -157,11 +157,14 @@ impl Optimizer {
                 inner,
                 variables,
                 aggregates,
-            } => GraphPattern::group(
-                Self::normalize_pattern(*inner, input_types),
-                variables,
-                aggregates,
-            ),
+            } => {
+                // TODO: min, max and sample don't care about DISTINCT
+                GraphPattern::group(
+                    Self::normalize_pattern(*inner, input_types),
+                    variables,
+                    aggregates,
+                )
+            }
             GraphPattern::Service {
                 name,
                 inner,
