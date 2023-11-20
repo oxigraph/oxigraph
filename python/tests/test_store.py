@@ -1,3 +1,4 @@
+import gc
 import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
@@ -386,6 +387,7 @@ class TestStore(unittest.TestCase):
             store = Store(dir)
             store.add(quad)
             del store
+            gc.collect()
             store = Store.read_only(dir)
             self.assertEqual(list(store), [quad])
 

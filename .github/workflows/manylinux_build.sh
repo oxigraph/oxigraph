@@ -18,4 +18,7 @@ if [ %for_each_version% ]; then
   for VERSION in 8 9 10 11 12; do
     maturin build --release --no-default-features --features rustls --interpreter "python3.$VERSION" --compatibility manylinux2014
   done
+  for VERSION in 9 10; do
+    maturin build --release --no-default-features --features rustls --interpreter "pypy3.$VERSION" --compatibility manylinux2014
+  done
 fi
