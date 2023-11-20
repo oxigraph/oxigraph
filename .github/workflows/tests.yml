@@ -268,6 +268,26 @@ jobs:
       - run: python -m unittest
         working-directory: ./python/tests
 
+  python_pypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update && rustup toolchain install nightly && rustup default 1.70.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "pypy3.10"
+          cache: pip
+          cache-dependency-path: '**/requirements.dev.txt'
+      - run: pip install -r python/requirements.dev.txt
+      - run: maturin build -m python/Cargo.toml
+      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: rm -r target/wheels
+      - run: python -m unittest
+        working-directory: ./python/tests
+
   python_windows:
     runs-on: windows-latest
     steps:
