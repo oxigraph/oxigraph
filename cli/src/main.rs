@@ -22,6 +22,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufWriter, Read, Write};
+use std::net::ToSocketAddrs;
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixDatagram;
 use std::path::{Path, PathBuf};
@@ -312,7 +313,7 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 Store::new()
             }?,
-            bind,
+            &bind,
             false,
             cors,
         ),
@@ -320,7 +321,7 @@ pub fn main() -> anyhow::Result<()> {
             location,
             bind,
             cors,
-        } => serve(Store::open_read_only(location)?, bind, true, cors),
+        } => serve(Store::open_read_only(location)?, &bind, true, cors),
         Command::ServeSecondary {
             primary_location,
             secondary_location,
@@ -332,7 +333,7 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 Store::open_secondary(primary_location)
             }?,
-            bind,
+            &bind,
             true,
             cors,
         ),
@@ -878,8 +879,8 @@ fn rdf_format_from_name(name: &str) -> anyhow::Result<RdfFormat> {
     bail!("The file format '{name}' is unknown")
 }
 
-fn serve(store: Store, bind: String, read_only: bool, cors: bool) -> anyhow::Result<()> {
-    let server = if cors {
+fn serve(store: Store, bind: &str, read_only: bool, cors: bool) -> anyhow::Result<()> {
+    let mut server = if cors {
         Server::new(cors_middleware(move |request| {
             handle_request(request, store.clone(), read_only)
                 .unwrap_or_else(|(status, message)| error(status, message))
@@ -892,11 +893,15 @@ fn serve(store: Store, bind: String, read_only: bool, cors: bool) -> anyhow::Res
     }
     .with_global_timeout(HTTP_TIMEOUT)
     .with_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))?
-    .with_max_num_threads(available_parallelism()?.get() * 128);
+    .with_max_concurrent_connections(available_parallelism()?.get() * 128);
+    for socket in bind.to_socket_addrs()? {
+        server = server.bind(socket);
+    }
+    let server = server.spawn()?;
     #[cfg(target_os = "linux")]
     systemd_notify_ready()?;
     eprintln!("Listening for requests at http://{}", &bind);
-    server.listen(bind)?;
+    server.join()?;
     Ok(())
 }
 
