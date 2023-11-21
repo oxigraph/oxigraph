@@ -28,7 +28,7 @@ rocksdb-debug = []
 [dependencies]
 digest = "0.10"
 hex = "0.4"
-json-event-parser = "0.2.0-alpha.1"
+json-event-parser = "0.2.0-alpha.2"
 md-5 = "0.10"
 oxilangtag = "0.1"
 oxiri = "0.2"
@@ -47,7 +47,7 @@ sparopt = { version = "0.1.0-alpha.1-dev", path="sparopt", features = ["rdf-star
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc = "0.2.147"
 oxrocksdb-sys = { version = "0.4.0-alpha.1-dev", path="../oxrocksdb-sys" }
-oxhttp = { version = "0.2.0-alpha.1", optional = true }
+oxhttp = { version = "0.2.0-alpha.2", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom = "0.2"
@@ -55,7 +55,7 @@ js-sys = { version = "0.3.60", optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 criterion = "0.5"
-oxhttp = "0.2.0-alpha.1"
+oxhttp = "0.2.0-alpha.2"
 zstd = ">=0.12, <0.14"
 
 [package.metadata.docs.rs]
