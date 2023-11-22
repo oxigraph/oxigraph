@@ -814,6 +814,9 @@ impl Db {
         &self,
         ssts_for_cf: &[(&ColumnFamily, PathBuf)],
     ) -> Result<(), StorageError> {
+        if ssts_for_cf.is_empty() {
+            return Ok(()); // Rocksdb does not support empty lists
+        }
         if let DbKind::ReadWrite(db) = &self.inner {
             let mut paths_by_cf = HashMap::<_, Vec<_>>::new();
             for (cf, path) in ssts_for_cf {
