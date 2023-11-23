@@ -459,7 +459,7 @@ enum LiteralRefContent<'a> {
 impl<'a> LiteralRef<'a> {
     /// Builds an RDF [simple literal](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal).
     #[inline]
-    pub fn new_simple_literal(value: &'a str) -> Self {
+    pub const fn new_simple_literal(value: &'a str) -> Self {
         LiteralRef(LiteralRefContent::String(value))
     }
 
@@ -482,13 +482,13 @@ impl<'a> LiteralRef<'a> {
     ///
     /// [`Literal::new_language_tagged_literal()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_language_tagged_literal_unchecked(value: &'a str, language: &'a str) -> Self {
+    pub const fn new_language_tagged_literal_unchecked(value: &'a str, language: &'a str) -> Self {
         LiteralRef(LiteralRefContent::LanguageTaggedString { value, language })
     }
 
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
     #[inline]
-    pub fn value(self) -> &'a str {
+    pub const fn value(self) -> &'a str {
         match self.0 {
             LiteralRefContent::String(value)
             | LiteralRefContent::LanguageTaggedString { value, .. }
@@ -501,7 +501,7 @@ impl<'a> LiteralRef<'a> {
     /// Language tags are defined by the [BCP47](https://tools.ietf.org/html/bcp47).
     /// They are normalized to lowercase by this implementation.
     #[inline]
-    pub fn language(self) -> Option<&'a str> {
+    pub const fn language(self) -> Option<&'a str> {
         match self.0 {
             LiteralRefContent::LanguageTaggedString { language, .. } => Some(language),
             _ => None,
@@ -513,7 +513,7 @@ impl<'a> LiteralRef<'a> {
     /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
-    pub fn datatype(self) -> NamedNodeRef<'a> {
+    pub const fn datatype(self) -> NamedNodeRef<'a> {
         match self.0 {
             LiteralRefContent::String(_) => xsd::STRING,
             LiteralRefContent::LanguageTaggedString { .. } => rdf::LANG_STRING,
@@ -526,7 +526,7 @@ impl<'a> LiteralRef<'a> {
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     /// or has the datatype [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
-    pub fn is_plain(self) -> bool {
+    pub const fn is_plain(self) -> bool {
         matches!(
             self.0,
             LiteralRefContent::String(_) | LiteralRefContent::LanguageTaggedString { .. }
@@ -552,7 +552,7 @@ impl<'a> LiteralRef<'a> {
 
     /// Extract components from this literal
     #[inline]
-    pub fn destruct(self) -> (&'a str, Option<NamedNodeRef<'a>>, Option<&'a str>) {
+    pub const fn destruct(self) -> (&'a str, Option<NamedNodeRef<'a>>, Option<&'a str>) {
         match self.0 {
             LiteralRefContent::String(s) => (s, None, None),
             LiteralRefContent::LanguageTaggedString { value, language } => {

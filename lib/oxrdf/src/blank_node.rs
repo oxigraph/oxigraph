@@ -180,7 +180,7 @@ impl<'a> BlankNodeRef<'a> {
 
     /// Returns the underlying ID of this blank node.
     #[inline]
-    pub fn as_str(self) -> &'a str {
+    pub const fn as_str(self) -> &'a str {
         match self.0 {
             BlankNodeRefContent::Named(id) => id,
             BlankNodeRefContent::Anonymous { str, .. } => str,
@@ -197,7 +197,7 @@ impl<'a> BlankNodeRef<'a> {
     /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
     /// ```
     #[inline]
-    pub fn unique_id(&self) -> Option<u128> {
+    pub const fn unique_id(&self) -> Option<u128> {
         match self.0 {
             BlankNodeRefContent::Named(_) => None,
             BlankNodeRefContent::Anonymous { id, .. } => Some(id),

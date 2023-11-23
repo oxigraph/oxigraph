@@ -96,12 +96,12 @@ impl<'a> VariableRef<'a> {
     ///
     /// [`Variable::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_unchecked(name: &'a str) -> Self {
+    pub const fn new_unchecked(name: &'a str) -> Self {
         Self { name }
     }
 
     #[inline]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(self) -> &'a str {
         self.name
     }
 
