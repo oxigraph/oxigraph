@@ -1,6 +1,8 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
 use crate::error::{ParseError, SyntaxError};
+#[cfg(feature = "async-tokio")]
+use json_event_parser::ToTokioAsyncWriteJsonWriter;
 use json_event_parser::{FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
 use oxrdf::vocab::rdf;
 use oxrdf::Variable;
@@ -8,6 +10,8 @@ use oxrdf::*;
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::mem::take;
+#[cfg(feature = "async-tokio")]
+use tokio::io::AsyncWrite;
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
 /// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
@@ -15,116 +19,210 @@ const MAX_NUMBER_OF_NESTED_TRIPLES: usize = 128;
 
 pub fn write_boolean_json_result<W: Write>(write: W, value: bool) -> io::Result<W> {
     let mut writer = ToWriteJsonWriter::new(write);
-    writer.write_event(JsonEvent::StartObject)?;
-    writer.write_event(JsonEvent::ObjectKey("head".into()))?;
-    writer.write_event(JsonEvent::StartObject)?;
-    writer.write_event(JsonEvent::EndObject)?;
-    writer.write_event(JsonEvent::ObjectKey("boolean".into()))?;
-    writer.write_event(JsonEvent::Boolean(value))?;
-    writer.write_event(JsonEvent::EndObject)?;
+    for event in inner_write_boolean_json_result(value) {
+        writer.write_event(event)?;
+    }
     writer.finish()
 }
 
-pub struct JsonSolutionsWriter<W: Write> {
+#[cfg(feature = "async-tokio")]
+pub async fn tokio_async_write_boolean_json_result<W: AsyncWrite + Unpin>(
+    write: W,
+    value: bool,
+) -> io::Result<W> {
+    let mut writer = ToTokioAsyncWriteJsonWriter::new(write);
+    for event in inner_write_boolean_json_result(value) {
+        writer.write_event(event).await?;
+    }
+    writer.finish()
+}
+
+fn inner_write_boolean_json_result(value: bool) -> [JsonEvent<'static>; 7] {
+    [
+        JsonEvent::StartObject,
+        JsonEvent::ObjectKey("head".into()),
+        JsonEvent::StartObject,
+        JsonEvent::EndObject,
+        JsonEvent::ObjectKey("boolean".into()),
+        JsonEvent::Boolean(value),
+        JsonEvent::EndObject,
+    ]
+}
+
+pub struct ToWriteJsonSolutionsWriter<W: Write> {
+    inner: InnerJsonSolutionsWriter,
     writer: ToWriteJsonWriter<W>,
 }
 
-impl<W: Write> JsonSolutionsWriter<W> {
+impl<W: Write> ToWriteJsonSolutionsWriter<W> {
     pub fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
         let mut writer = ToWriteJsonWriter::new(write);
-        writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("head".into()))?;
-        writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("vars".into()))?;
-        writer.write_event(JsonEvent::StartArray)?;
-        for variable in variables {
-            writer.write_event(JsonEvent::String(variable.as_str().into()))?;
-        }
-        writer.write_event(JsonEvent::EndArray)?;
-        writer.write_event(JsonEvent::EndObject)?;
-        writer.write_event(JsonEvent::ObjectKey("results".into()))?;
-        writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("bindings".into()))?;
-        writer.write_event(JsonEvent::StartArray)?;
-        Ok(Self { writer })
+        let mut buffer = Vec::with_capacity(48);
+        let inner = InnerJsonSolutionsWriter::start(&mut buffer, variables);
+        Self::do_write(&mut writer, buffer)?;
+        Ok(Self { inner, writer })
     }
 
     pub fn write<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
-        self.writer.write_event(JsonEvent::StartObject)?;
-        for (variable, value) in solution {
-            self.writer
-                .write_event(JsonEvent::ObjectKey(variable.as_str().into()))?;
-            write_json_term(value, &mut self.writer)?;
-        }
-        self.writer.write_event(JsonEvent::EndObject)?;
-        Ok(())
+        let mut buffer = Vec::with_capacity(48);
+        self.inner.write(&mut buffer, solution);
+        Self::do_write(&mut self.writer, buffer)
     }
 
     pub fn finish(mut self) -> io::Result<W> {
-        self.writer.write_event(JsonEvent::EndArray)?;
-        self.writer.write_event(JsonEvent::EndObject)?;
-        self.writer.write_event(JsonEvent::EndObject)?;
+        let mut buffer = Vec::with_capacity(4);
+        self.inner.finish(&mut buffer);
+        Self::do_write(&mut self.writer, buffer)?;
         self.writer.finish()
+    }
+
+    fn do_write(writer: &mut ToWriteJsonWriter<W>, output: Vec<JsonEvent<'_>>) -> io::Result<()> {
+        for event in output {
+            writer.write_event(event)?;
+        }
+        Ok(())
     }
 }
 
-fn write_json_term(
-    term: TermRef<'_>,
-    writer: &mut ToWriteJsonWriter<impl Write>,
-) -> io::Result<()> {
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteJsonSolutionsWriter<W: AsyncWrite + Unpin> {
+    inner: InnerJsonSolutionsWriter,
+    writer: ToTokioAsyncWriteJsonWriter<W>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteJsonSolutionsWriter<W> {
+    pub async fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = ToTokioAsyncWriteJsonWriter::new(write);
+        let mut buffer = Vec::with_capacity(48);
+        let inner = InnerJsonSolutionsWriter::start(&mut buffer, variables);
+        Self::do_write(&mut writer, buffer).await?;
+        Ok(Self { writer, inner })
+    }
+
+    pub async fn write<'a>(
+        &mut self,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) -> io::Result<()> {
+        let mut buffer = Vec::with_capacity(48);
+        self.inner.write(&mut buffer, solution);
+        Self::do_write(&mut self.writer, buffer).await
+    }
+
+    pub async fn finish(mut self) -> io::Result<W> {
+        let mut buffer = Vec::with_capacity(4);
+        self.inner.finish(&mut buffer);
+        Self::do_write(&mut self.writer, buffer).await?;
+        self.writer.finish()
+    }
+
+    async fn do_write(
+        writer: &mut ToTokioAsyncWriteJsonWriter<W>,
+        output: Vec<JsonEvent<'_>>,
+    ) -> io::Result<()> {
+        for event in output {
+            writer.write_event(event).await?;
+        }
+        Ok(())
+    }
+}
+
+struct InnerJsonSolutionsWriter;
+
+impl InnerJsonSolutionsWriter {
+    fn start<'a>(output: &mut Vec<JsonEvent<'a>>, variables: &'a [Variable]) -> Self {
+        output.push(JsonEvent::StartObject);
+        output.push(JsonEvent::ObjectKey("head".into()));
+        output.push(JsonEvent::StartObject);
+        output.push(JsonEvent::ObjectKey("vars".into()));
+        output.push(JsonEvent::StartArray);
+        for variable in variables {
+            output.push(JsonEvent::String(variable.as_str().into()));
+        }
+        output.push(JsonEvent::EndArray);
+        output.push(JsonEvent::EndObject);
+        output.push(JsonEvent::ObjectKey("results".into()));
+        output.push(JsonEvent::StartObject);
+        output.push(JsonEvent::ObjectKey("bindings".into()));
+        output.push(JsonEvent::StartArray);
+        Self {}
+    }
+
+    #[allow(clippy::unused_self)]
+    fn write<'a>(
+        &self,
+        output: &mut Vec<JsonEvent<'a>>,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) {
+        output.push(JsonEvent::StartObject);
+        for (variable, value) in solution {
+            output.push(JsonEvent::ObjectKey(variable.as_str().into()));
+            write_json_term(output, value);
+        }
+        output.push(JsonEvent::EndObject);
+    }
+
+    #[allow(clippy::unused_self)]
+    fn finish(self, output: &mut Vec<JsonEvent<'_>>) {
+        output.push(JsonEvent::EndArray);
+        output.push(JsonEvent::EndObject);
+        output.push(JsonEvent::EndObject);
+    }
+}
+
+fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
     match term {
         TermRef::NamedNode(uri) => {
-            writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
-            writer.write_event(JsonEvent::String("uri".into()))?;
-            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
-            writer.write_event(JsonEvent::String(uri.as_str().into()))?;
-            writer.write_event(JsonEvent::EndObject)?;
+            output.push(JsonEvent::StartObject);
+            output.push(JsonEvent::ObjectKey("type".into()));
+            output.push(JsonEvent::String("uri".into()));
+            output.push(JsonEvent::ObjectKey("value".into()));
+            output.push(JsonEvent::String(uri.as_str().into()));
+            output.push(JsonEvent::EndObject);
         }
         TermRef::BlankNode(bnode) => {
-            writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
-            writer.write_event(JsonEvent::String("bnode".into()))?;
-            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
-            writer.write_event(JsonEvent::String(bnode.as_str().into()))?;
-            writer.write_event(JsonEvent::EndObject)?;
+            output.push(JsonEvent::StartObject);
+            output.push(JsonEvent::ObjectKey("type".into()));
+            output.push(JsonEvent::String("bnode".into()));
+            output.push(JsonEvent::ObjectKey("value".into()));
+            output.push(JsonEvent::String(bnode.as_str().into()));
+            output.push(JsonEvent::EndObject);
         }
         TermRef::Literal(literal) => {
-            writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
-            writer.write_event(JsonEvent::String("literal".into()))?;
-            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
-            writer.write_event(JsonEvent::String(literal.value().into()))?;
+            output.push(JsonEvent::StartObject);
+            output.push(JsonEvent::ObjectKey("type".into()));
+            output.push(JsonEvent::String("literal".into()));
+            output.push(JsonEvent::ObjectKey("value".into()));
+            output.push(JsonEvent::String(literal.value().into()));
             if let Some(language) = literal.language() {
-                writer.write_event(JsonEvent::ObjectKey("xml:lang".into()))?;
-                writer.write_event(JsonEvent::String(language.into()))?;
+                output.push(JsonEvent::ObjectKey("xml:lang".into()));
+                output.push(JsonEvent::String(language.into()));
             } else if !literal.is_plain() {
-                writer.write_event(JsonEvent::ObjectKey("datatype".into()))?;
-                writer.write_event(JsonEvent::String(literal.datatype().as_str().into()))?;
+                output.push(JsonEvent::ObjectKey("datatype".into()));
+                output.push(JsonEvent::String(literal.datatype().as_str().into()));
             }
-            writer.write_event(JsonEvent::EndObject)?;
+            output.push(JsonEvent::EndObject);
         }
         #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
-            writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("type".into()))?;
-            writer.write_event(JsonEvent::String("triple".into()))?;
-            writer.write_event(JsonEvent::ObjectKey("value".into()))?;
-            writer.write_event(JsonEvent::StartObject)?;
-            writer.write_event(JsonEvent::ObjectKey("subject".into()))?;
-            write_json_term(triple.subject.as_ref().into(), writer)?;
-            writer.write_event(JsonEvent::ObjectKey("predicate".into()))?;
-            write_json_term(triple.predicate.as_ref().into(), writer)?;
-            writer.write_event(JsonEvent::ObjectKey("object".into()))?;
-            write_json_term(triple.object.as_ref(), writer)?;
-            writer.write_event(JsonEvent::EndObject)?;
-            writer.write_event(JsonEvent::EndObject)?;
+            output.push(JsonEvent::StartObject);
+            output.push(JsonEvent::ObjectKey("type".into()));
+            output.push(JsonEvent::String("triple".into()));
+            output.push(JsonEvent::ObjectKey("value".into()));
+            output.push(JsonEvent::StartObject);
+            output.push(JsonEvent::ObjectKey("subject".into()));
+            write_json_term(output, triple.subject.as_ref().into());
+            output.push(JsonEvent::ObjectKey("predicate".into()));
+            write_json_term(output, triple.predicate.as_ref().into());
+            output.push(JsonEvent::ObjectKey("object".into()));
+            write_json_term(output, triple.object.as_ref());
+            output.push(JsonEvent::EndObject);
+            output.push(JsonEvent::EndObject);
         }
     }
-    Ok(())
 }
 
 pub enum JsonQueryResultsReader<R: Read> {
