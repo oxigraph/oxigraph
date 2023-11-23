@@ -11,147 +11,212 @@ use std::collections::BTreeMap;
 use std::io::{self, BufReader, Read, Write};
 use std::str;
 use std::sync::Arc;
+#[cfg(feature = "async-tokio")]
+use tokio::io::AsyncWrite;
 
-pub fn write_boolean_xml_result<W: Write>(sink: W, value: bool) -> io::Result<W> {
-    do_write_boolean_xml_result(sink, value).map_err(map_xml_error)
-}
-
-fn do_write_boolean_xml_result<W: Write>(sink: W, value: bool) -> Result<W, quick_xml::Error> {
-    let mut writer = Writer::new(sink);
-    writer.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
-    writer
-        .create_element("sparql")
-        .with_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"))
-        .write_inner_content(|writer| {
-            writer
-                .create_element("head")
-                .write_text_content(BytesText::new(""))?
-                .create_element("boolean")
-                .write_text_content(BytesText::new(if value { "true" } else { "false" }))?;
-            quick_xml::Result::Ok(())
-        })?;
+pub fn write_boolean_xml_result<W: Write>(write: W, value: bool) -> io::Result<W> {
+    let mut writer = Writer::new(write);
+    for event in inner_write_boolean_xml_result(value) {
+        writer.write_event(event).map_err(map_xml_error)?;
+    }
     Ok(writer.into_inner())
 }
 
-pub struct XmlSolutionsWriter<W: Write> {
+#[cfg(feature = "async-tokio")]
+pub async fn tokio_async_write_boolean_xml_result<W: AsyncWrite + Unpin>(
+    write: W,
+    value: bool,
+) -> io::Result<W> {
+    let mut writer = Writer::new(write);
+    for event in inner_write_boolean_xml_result(value) {
+        writer
+            .write_event_async(event)
+            .await
+            .map_err(map_xml_error)?;
+    }
+    Ok(writer.into_inner())
+}
+
+fn inner_write_boolean_xml_result(value: bool) -> [Event<'static>; 8] {
+    [
+        Event::Decl(BytesDecl::new("1.0", None, None)),
+        Event::Start(
+            BytesStart::new("sparql")
+                .with_attributes([("xmlns", "http://www.w3.org/2005/sparql-results#")]),
+        ),
+        Event::Start(BytesStart::new("head")),
+        Event::End(BytesEnd::new("head")),
+        Event::Start(BytesStart::new("boolean")),
+        Event::Text(BytesText::new(if value { "true" } else { "false" })),
+        Event::End(BytesEnd::new("boolean")),
+        Event::End(BytesEnd::new("sparql")),
+    ]
+}
+
+pub struct ToWriteXmlSolutionsWriter<W: Write> {
+    inner: InnerXmlSolutionsWriter,
     writer: Writer<W>,
 }
 
-impl<W: Write> XmlSolutionsWriter<W> {
-    pub fn start(sink: W, variables: &[Variable]) -> io::Result<Self> {
-        Self::do_start(sink, variables).map_err(map_xml_error)
-    }
-
-    fn do_start(sink: W, variables: &[Variable]) -> Result<Self, quick_xml::Error> {
-        let mut writer = Writer::new(sink);
-        writer.write_event(Event::Decl(BytesDecl::new("1.0", None, None)))?;
-        let mut sparql_open = BytesStart::new("sparql");
-        sparql_open.push_attribute(("xmlns", "http://www.w3.org/2005/sparql-results#"));
-        writer.write_event(Event::Start(sparql_open))?;
-        writer
-            .create_element("head")
-            .write_inner_content(|writer| {
-                for variable in variables {
-                    writer
-                        .create_element("variable")
-                        .with_attribute(("name", variable.as_str()))
-                        .write_empty()?;
-                }
-                quick_xml::Result::Ok(())
-            })?;
-        writer.write_event(Event::Start(BytesStart::new("results")))?;
-        Ok(Self { writer })
+impl<W: Write> ToWriteXmlSolutionsWriter<W> {
+    pub fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = Writer::new(write);
+        let mut buffer = Vec::with_capacity(48);
+        let inner = InnerXmlSolutionsWriter::start(&mut buffer, variables);
+        Self::do_write(&mut writer, buffer)?;
+        Ok(Self { inner, writer })
     }
 
     pub fn write<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
-        self.do_write(solution).map_err(map_xml_error)
+        let mut buffer = Vec::with_capacity(48);
+        self.inner.write(&mut buffer, solution);
+        Self::do_write(&mut self.writer, buffer)
     }
 
-    fn do_write<'a>(
-        &mut self,
-        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
-    ) -> Result<(), quick_xml::Error> {
-        self.writer
-            .create_element("result")
-            .write_inner_content(|writer| {
-                for (variable, value) in solution {
-                    writer
-                        .create_element("binding")
-                        .with_attribute(("name", variable.as_str()))
-                        .write_inner_content(|writer| write_xml_term(value, writer))?;
-                }
-                quick_xml::Result::Ok(())
-            })?;
-        Ok(())
-    }
-
-    pub fn finish(self) -> io::Result<W> {
-        self.do_finish().map_err(map_xml_error)
-    }
-
-    fn do_finish(mut self) -> Result<W, quick_xml::Error> {
-        self.writer
-            .write_event(Event::End(BytesEnd::new("results")))?;
-        self.writer
-            .write_event(Event::End(BytesEnd::new("sparql")))?;
+    pub fn finish(mut self) -> io::Result<W> {
+        let mut buffer = Vec::with_capacity(4);
+        self.inner.finish(&mut buffer);
+        Self::do_write(&mut self.writer, buffer)?;
         Ok(self.writer.into_inner())
+    }
+
+    fn do_write(writer: &mut Writer<W>, output: Vec<Event<'_>>) -> io::Result<()> {
+        for event in output {
+            writer.write_event(event).map_err(map_xml_error)?;
+        }
+        Ok(())
     }
 }
 
-fn write_xml_term(
-    term: TermRef<'_>,
-    writer: &mut Writer<impl Write>,
-) -> Result<(), quick_xml::Error> {
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteXmlSolutionsWriter<W: AsyncWrite + Unpin> {
+    inner: InnerXmlSolutionsWriter,
+    writer: Writer<W>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteXmlSolutionsWriter<W> {
+    pub async fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = Writer::new(write);
+        let mut buffer = Vec::with_capacity(48);
+        let inner = InnerXmlSolutionsWriter::start(&mut buffer, variables);
+        Self::do_write(&mut writer, buffer).await?;
+        Ok(Self { writer, inner })
+    }
+
+    pub async fn write<'a>(
+        &mut self,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) -> io::Result<()> {
+        let mut buffer = Vec::with_capacity(48);
+        self.inner.write(&mut buffer, solution);
+        Self::do_write(&mut self.writer, buffer).await
+    }
+
+    pub async fn finish(mut self) -> io::Result<W> {
+        let mut buffer = Vec::with_capacity(4);
+        self.inner.finish(&mut buffer);
+        Self::do_write(&mut self.writer, buffer).await?;
+        Ok(self.writer.into_inner())
+    }
+
+    async fn do_write(writer: &mut Writer<W>, output: Vec<Event<'_>>) -> io::Result<()> {
+        for event in output {
+            writer
+                .write_event_async(event)
+                .await
+                .map_err(map_xml_error)?;
+        }
+        Ok(())
+    }
+}
+
+struct InnerXmlSolutionsWriter;
+
+impl InnerXmlSolutionsWriter {
+    fn start<'a>(output: &mut Vec<Event<'a>>, variables: &'a [Variable]) -> Self {
+        output.push(Event::Decl(BytesDecl::new("1.0", None, None)));
+        output.push(Event::Start(BytesStart::new("sparql").with_attributes([(
+            "xmlns",
+            "http://www.w3.org/2005/sparql-results#",
+        )])));
+        output.push(Event::Start(BytesStart::new("head")));
+        for variable in variables {
+            output.push(Event::Empty(
+                BytesStart::new("variable").with_attributes([("name", variable.as_str())]),
+            ));
+        }
+        output.push(Event::End(BytesEnd::new("head")));
+        output.push(Event::Start(BytesStart::new("results")));
+        Self {}
+    }
+
+    #[allow(clippy::unused_self)]
+
+    fn write<'a>(
+        &self,
+        output: &mut Vec<Event<'a>>,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) {
+        output.push(Event::Start(BytesStart::new("result")));
+        for (variable, value) in solution {
+            output.push(Event::Start(
+                BytesStart::new("binding").with_attributes([("name", variable.as_str())]),
+            ));
+            write_xml_term(output, value);
+            output.push(Event::End(BytesEnd::new("binding")));
+        }
+        output.push(Event::End(BytesEnd::new("result")));
+    }
+
+    #[allow(clippy::unused_self)]
+    fn finish(self, output: &mut Vec<Event<'_>>) {
+        output.push(Event::End(BytesEnd::new("results")));
+        output.push(Event::End(BytesEnd::new("sparql")));
+    }
+}
+
+fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
     match term {
         TermRef::NamedNode(uri) => {
-            writer
-                .create_element("uri")
-                .write_text_content(BytesText::new(uri.as_str()))?;
+            output.push(Event::Start(BytesStart::new("uri")));
+            output.push(Event::Text(BytesText::new(uri.as_str())));
+            output.push(Event::End(BytesEnd::new("uri")));
         }
         TermRef::BlankNode(bnode) => {
-            writer
-                .create_element("bnode")
-                .write_text_content(BytesText::new(bnode.as_str()))?;
+            output.push(Event::Start(BytesStart::new("bnode")));
+            output.push(Event::Text(BytesText::new(bnode.as_str())));
+            output.push(Event::End(BytesEnd::new("bnode")));
         }
         TermRef::Literal(literal) => {
-            let element = writer.create_element("literal");
-            let element = if let Some(language) = literal.language() {
-                element.with_attribute(("xml:lang", language))
+            let mut start = BytesStart::new("literal");
+            if let Some(language) = literal.language() {
+                start.push_attribute(("xml:lang", language));
             } else if !literal.is_plain() {
-                element.with_attribute(("datatype", literal.datatype().as_str()))
-            } else {
-                element
-            };
-            element.write_text_content(BytesText::new(literal.value()))?;
+                start.push_attribute(("datatype", literal.datatype().as_str()))
+            }
+            output.push(Event::Start(start));
+            output.push(Event::Text(BytesText::new(literal.value())));
+            output.push(Event::End(BytesEnd::new("literal")));
         }
         #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
-            writer
-                .create_element("triple")
-                .write_inner_content(|writer| {
-                    writer
-                        .create_element("subject")
-                        .write_inner_content(|writer| {
-                            write_xml_term(triple.subject.as_ref().into(), writer)
-                        })?;
-                    writer
-                        .create_element("predicate")
-                        .write_inner_content(|writer| {
-                            write_xml_term(triple.predicate.as_ref().into(), writer)
-                        })?;
-                    writer
-                        .create_element("object")
-                        .write_inner_content(|writer| {
-                            write_xml_term(triple.object.as_ref(), writer)
-                        })?;
-                    quick_xml::Result::Ok(())
-                })?;
+            output.push(Event::Start(BytesStart::new("triple")));
+            output.push(Event::Start(BytesStart::new("subject")));
+            write_xml_term(output, triple.subject.as_ref().into());
+            output.push(Event::End(BytesEnd::new("subject")));
+            output.push(Event::Start(BytesStart::new("predicate")));
+            write_xml_term(output, triple.predicate.as_ref().into());
+            output.push(Event::End(BytesEnd::new("predicate")));
+            output.push(Event::Start(BytesStart::new("object")));
+            write_xml_term(output, triple.object.as_ref());
+            output.push(Event::End(BytesEnd::new("object")));
+            output.push(Event::End(BytesEnd::new("triple")));
         }
     }
-    Ok(())
 }
 
 pub enum XmlQueryResultsReader<R: Read> {

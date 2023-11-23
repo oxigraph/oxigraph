@@ -780,6 +780,9 @@ name = "json-event-parser"
 version = "0.2.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b5ddd02379e99769e117ab30d21ad42dcec8ad3c12be77f9a34779e62d46346"
+dependencies = [
+ "tokio",
+]
 
 [[package]]
 name = "kernel32-sys"
@@ -1731,6 +1734,7 @@ dependencies = [
  "memchr",
  "oxrdf",
  "quick-xml",
+ "tokio",
 ]
 
 [[package]]
