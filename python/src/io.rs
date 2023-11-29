@@ -3,7 +3,7 @@
 use crate::model::{hash, PyQuad, PyTriple};
 use oxigraph::io::{FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::QuadRef;
-use pyo3::exceptions::{PySyntaxError, PyValueError};
+use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -53,7 +53,7 @@ use std::sync::OnceLock;
 #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
 pub fn parse(
     input: Option<PyReadableInput>,
-    format: Option<PyRdfFormat>,
+    format: Option<PyRdfFormatInput>,
     path: Option<PathBuf>,
     base_iri: Option<&str>,
     without_named_graphs: bool,
@@ -120,7 +120,7 @@ pub fn parse(
 pub fn serialize<'a>(
     input: &PyAny,
     output: Option<PyWritableOutput>,
-    format: Option<PyRdfFormat>,
+    format: Option<PyRdfFormatInput>,
     py: Python<'a>,
 ) -> PyResult<Option<&'a PyBytes>> {
     PyWritable::do_write(
@@ -519,9 +519,22 @@ impl Write for PyIo {
     }
 }
 
-pub fn lookup_rdf_format(format: Option<PyRdfFormat>, path: Option<&Path>) -> PyResult<RdfFormat> {
+pub fn lookup_rdf_format(
+    format: Option<PyRdfFormatInput>,
+    path: Option<&Path>,
+) -> PyResult<RdfFormat> {
     if let Some(format) = format {
-        return Ok(format.inner);
+        return match format {
+            PyRdfFormatInput::Object(format) => Ok(format.inner),
+            PyRdfFormatInput::MediaType(media_type) => {
+                deprecation_warning("Using string to specify a RDF format is deprecated, please use a RdfFormat object instead.")?;
+                RdfFormat::from_media_type(&media_type).ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "The media type {media_type} is not supported by pyoxigraph"
+                    ))
+                })
+            }
+        };
     }
     let Some(path) = path else {
         return Err(PyValueError::new_err(
@@ -536,6 +549,12 @@ pub fn lookup_rdf_format(format: Option<PyRdfFormat>, path: Option<&Path>) -> Py
     };
     RdfFormat::from_extension(ext)
         .ok_or_else(|| PyValueError::new_err(format!("Not supported RDF format extension: {ext}")))
+}
+
+#[derive(FromPyObject)]
+pub enum PyRdfFormatInput {
+    Object(PyRdfFormat),
+    MediaType(String),
 }
 
 pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
@@ -607,4 +626,8 @@ pub fn python_version() -> (u8, u8) {
             (v.major, v.minor)
         })
     })
+}
+
+pub fn deprecation_warning(message: &str) -> PyResult<()> {
+    Python::with_gil(|py| PyErr::warn(py, py.get_type::<PyDeprecationWarning>(), message, 0))
 }

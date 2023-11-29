@@ -1,7 +1,7 @@
 #![allow(clippy::needless_option_as_deref)]
 
 use crate::io::{
-    allow_threads_unsafe, lookup_rdf_format, map_parse_error, PyRdfFormat, PyReadable,
+    allow_threads_unsafe, lookup_rdf_format, map_parse_error, PyRdfFormatInput, PyReadable,
     PyReadableInput, PyWritable, PyWritableOutput,
 };
 use crate::model::*;
@@ -385,7 +385,7 @@ impl PyStore {
     fn load(
         &self,
         input: Option<PyReadableInput>,
-        format: Option<PyRdfFormat>,
+        format: Option<PyRdfFormatInput>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
@@ -452,7 +452,7 @@ impl PyStore {
     fn bulk_load(
         &self,
         input: Option<PyReadableInput>,
-        format: Option<PyRdfFormat>,
+        format: Option<PyRdfFormatInput>,
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
@@ -520,7 +520,7 @@ impl PyStore {
     fn dump<'a>(
         &self,
         output: Option<PyWritableOutput>,
-        format: Option<PyRdfFormat>,
+        format: Option<PyRdfFormatInput>,
         from_graph: Option<&PyAny>,
         py: Python<'a>,
     ) -> PyResult<Option<&'a PyBytes>> {
