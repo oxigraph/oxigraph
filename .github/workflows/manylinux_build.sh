@@ -15,7 +15,10 @@ maturin develop --release -m Cargo.toml
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --black
 maturin build --release -m Cargo.toml --features abi3 --compatibility manylinux2014
 if [ %for_each_version% ]; then
-  for VERSION in 7 8 9 10 11; do
+  for VERSION in 7 8 9 10 11 12; do
     maturin build --release -m Cargo.toml --interpreter "python3.$VERSION" --compatibility manylinux2014
+  done
+  for VERSION in 9 10; do
+    maturin build --release -m Cargo.toml --interpreter "pypy3.$VERSION" --compatibility manylinux2014
   done
 fi
