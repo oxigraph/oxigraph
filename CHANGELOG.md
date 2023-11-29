@@ -1,3 +1,11 @@
+## [0.3.21] - 2023-11-29
+
+### Changed
+- Bulk loader: do not fail when loading empty files.
+- Python: fixes source distribution.
+- Upgrades RocksDB to 7.8.1.
+
+
 ## [0.3.20] - 2023-10-23
 
 ### Changed
