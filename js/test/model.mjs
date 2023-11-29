@@ -6,32 +6,32 @@ import oxigraph from "../pkg/oxigraph.js";
 
 runTests({ factory: oxigraph });
 
-describe("DataModel", function () {
-    describe("#toString()", function () {
-        it("namedNode().toString() should return SPARQL compatible syntax", function () {
+describe("DataModel", () => {
+    describe("#toString()", () => {
+        it("namedNode().toString() should return SPARQL compatible syntax", () => {
             assert.strictEqual(
                 "<http://example.com>",
                 oxigraph.namedNode("http://example.com").toString(),
             );
         });
 
-        it("blankNode().toString() should return SPARQL compatible syntax", function () {
+        it("blankNode().toString() should return SPARQL compatible syntax", () => {
             assert.strictEqual("_:a", oxigraph.blankNode("a").toString());
         });
 
-        it("literal().toString() should return SPARQL compatible syntax", function () {
+        it("literal().toString() should return SPARQL compatible syntax", () => {
             assert.strictEqual('"a\\"b"@en', oxigraph.literal('a"b', "en").toString());
         });
 
-        it("defaultGraph().toString() should return SPARQL compatible syntax", function () {
+        it("defaultGraph().toString() should return SPARQL compatible syntax", () => {
             assert.strictEqual("DEFAULT", oxigraph.defaultGraph().toString());
         });
 
-        it("variable().toString() should return SPARQL compatible syntax", function () {
+        it("variable().toString() should return SPARQL compatible syntax", () => {
             assert.strictEqual("?a", oxigraph.variable("a").toString());
         });
 
-        it("quad().toString() should return SPARQL compatible syntax", function () {
+        it("quad().toString() should return SPARQL compatible syntax", () => {
             assert.strictEqual(
                 "<http://example.com/s> <http://example.com/p> <<<http://example.com/s1> <http://example.com/p1> <http://example.com/o1>>> <http://example.com/g>",
                 oxigraph
