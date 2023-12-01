@@ -36,7 +36,7 @@ rio_api = "0.8"
 rio_turtle = "0.8"
 rio_xml = "0.8"
 hex = "0.4"
-siphasher = "0.3"
+siphasher = ">=0.3,<2.0"
 lazy_static = "1"
 json-event-parser = "0.1"
 oxrdf = { version = "0.1.7", path="oxrdf", features = ["rdf-star", "oxsdatatypes"] }
