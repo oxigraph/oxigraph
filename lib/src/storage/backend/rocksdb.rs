@@ -1398,6 +1398,7 @@ impl From<ErrorStatus> for StorageError {
 struct UnsafeEnv(*mut rocksdb_env_t);
 
 // Hack for lazy_static. OK because only written in lazy static and used in a thread-safe way by RocksDB
+unsafe impl Send for UnsafeEnv {}
 unsafe impl Sync for UnsafeEnv {}
 
 fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
