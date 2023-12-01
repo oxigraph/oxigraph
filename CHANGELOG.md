@@ -1,3 +1,10 @@
+## [0.3.22] - 2023-11-29
+
+### Changed
+- Allows to compile with more recent `bindgen` and `cc`
+- Fixes compatibility with `spin_no_std` feature of `lazy_static`
+
+
 ## [0.3.21] - 2023-11-29
 
 ### Changed
