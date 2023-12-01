@@ -132,6 +132,17 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+  test_linux_latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: rustup update
+      - uses: Swatinem/rust-cache@v2
+      - run: rm Cargo.lock && cargo update
+      - run: cargo test
+
   address_sanitizer:
     runs-on: ubuntu-latest
     steps:
