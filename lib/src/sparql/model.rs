@@ -8,7 +8,7 @@ use crate::sparql::results::{
 use oxrdf::{Variable, VariableRef};
 pub use sparesults::QuerySolution;
 use std::io::{Read, Write};
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 pub enum QueryResults {
@@ -170,22 +170,20 @@ impl<R: Read + 'static> From<FromReadQueryResultsReader<R>> for QueryResults {
 /// }
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[allow(clippy::rc_buffer)]
 pub struct QuerySolutionIter {
-    variables: Rc<Vec<Variable>>,
+    variables: Arc<[Variable]>,
     iter: Box<dyn Iterator<Item = Result<QuerySolution, EvaluationError>>>,
 }
 
 impl QuerySolutionIter {
-    #[allow(clippy::rc_buffer)]
     pub fn new(
-        variables: Rc<Vec<Variable>>,
+        variables: Arc<[Variable]>,
         iter: impl Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
     ) -> Self {
         Self {
-            variables: Rc::clone(&variables),
+            variables: Arc::clone(&variables),
             iter: Box::new(
-                iter.map(move |t| t.map(|values| (Rc::clone(&variables), values).into())),
+                iter.map(move |t| t.map(|values| (Arc::clone(&variables), values).into())),
             ),
         }
     }
@@ -211,7 +209,7 @@ impl QuerySolutionIter {
 impl<R: Read + 'static> From<FromReadSolutionsReader<R>> for QuerySolutionIter {
     fn from(reader: FromReadSolutionsReader<R>) -> Self {
         Self {
-            variables: Rc::new(reader.variables().to_vec()),
+            variables: reader.variables().into(),
             iter: Box::new(reader.map(|t| t.map_err(EvaluationError::from))),
         }
     }
@@ -291,10 +289,12 @@ mod tests {
                 QueryResults::Boolean(true),
                 QueryResults::Boolean(false),
                 QueryResults::Solutions(QuerySolutionIter::new(
-                    Rc::new(vec![
+                    [
                         Variable::new_unchecked("foo"),
                         Variable::new_unchecked("bar"),
-                    ]),
+                    ]
+                    .as_ref()
+                    .into(),
                     Box::new(
                         vec![
                             Ok(vec![None, None]),

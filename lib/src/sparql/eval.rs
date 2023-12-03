@@ -1,10 +1,11 @@
 use crate::model::vocab::{rdf, xsd};
-use crate::model::{BlankNode, LiteralRef, NamedNode, NamedNodeRef, Term, Triple};
+use crate::model::{BlankNode, LiteralRef, NamedNodeRef, Term, Triple};
 use crate::sparql::algebra::{Query, QueryDataset};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::service::ServiceHandler;
+use crate::sparql::CustomFunctionRegistry;
 use crate::storage::numeric_encoder::*;
 use crate::storage::small_string::SmallString;
 use digest::Digest;
@@ -35,6 +36,7 @@ use std::hash::{Hash, Hasher};
 use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::{fmt, io, str};
 
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
@@ -119,15 +121,14 @@ impl IntoIterator for EncodedTuple {
 }
 
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
-type CustomFunctionRegistry = HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>;
 
 #[derive(Clone)]
 pub struct SimpleEvaluator {
     dataset: Rc<DatasetView>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
-    service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
-    custom_functions: Rc<CustomFunctionRegistry>,
+    service_handler: Arc<dyn ServiceHandler<Error = EvaluationError>>,
+    custom_functions: Arc<CustomFunctionRegistry>,
     run_stats: bool,
 }
 
@@ -135,8 +136,8 @@ impl SimpleEvaluator {
     pub fn new(
         dataset: Rc<DatasetView>,
         base_iri: Option<Rc<Iri<String>>>,
-        service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
-        custom_functions: Rc<CustomFunctionRegistry>,
+        service_handler: Arc<dyn ServiceHandler<Error = EvaluationError>>,
+        custom_functions: Arc<CustomFunctionRegistry>,
         run_stats: bool,
     ) -> Self {
         Self {
@@ -149,7 +150,6 @@ impl SimpleEvaluator {
         }
     }
 
-    #[allow(clippy::rc_buffer)]
     pub fn evaluate_select(&self, pattern: &GraphPattern) -> (QueryResults, Rc<EvalNodeWithStats>) {
         let mut variables = Vec::new();
         let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
@@ -158,7 +158,7 @@ impl SimpleEvaluator {
             QueryResults::Solutions(decode_bindings(
                 Rc::clone(&self.dataset),
                 eval(from),
-                Rc::from(variables),
+                Arc::from(variables),
             )),
             stats,
         )
@@ -3127,11 +3127,10 @@ pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Rege
     regex_builder.build().ok()
 }
 
-#[allow(clippy::rc_buffer)]
 fn decode_bindings(
     dataset: Rc<DatasetView>,
     iter: EncodedTuplesIterator,
-    variables: Rc<Vec<Variable>>,
+    variables: Arc<[Variable]>,
 ) -> QuerySolutionIter {
     let tuple_size = variables.len();
     QuerySolutionIter::new(
@@ -3223,15 +3222,15 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
         EncodedTerm::FloatLiteral(a) => match b {
             EncodedTerm::FloatLiteral(b) => Some(a == b),
             EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
-            EncodedTerm::IntegerLiteral(b) => Some(*a == Float::from(*b)),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == (*b).into()),
             EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).into()),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
         },
         EncodedTerm::DoubleLiteral(a) => match b {
-            EncodedTerm::FloatLiteral(b) => Some(*a == Double::from(*b)),
+            EncodedTerm::FloatLiteral(b) => Some(*a == (*b).into()),
             EncodedTerm::DoubleLiteral(b) => Some(a == b),
-            EncodedTerm::IntegerLiteral(b) => Some(*a == Double::from(*b)),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == (*b).into()),
             EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).into()),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
@@ -3247,7 +3246,7 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
         EncodedTerm::DecimalLiteral(a) => match b {
             EncodedTerm::FloatLiteral(b) => Some(Float::from(*a) == *b),
             EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
-            EncodedTerm::IntegerLiteral(b) => Some(*a == Decimal::from(*b)),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == (*b).into()),
             EncodedTerm::DecimalLiteral(b) => Some(a == b),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),

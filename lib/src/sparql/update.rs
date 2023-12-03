@@ -19,6 +19,7 @@ use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub fn evaluate_update<'a, 'b: 'a>(
     transaction: &'a mut StorageWriter<'b>,
@@ -131,7 +132,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             Rc::clone(&dataset),
             self.base_iri.clone(),
             self.options.query_options.service_handler(),
-            Rc::new(self.options.query_options.custom_functions.clone()),
+            Arc::new(self.options.query_options.custom_functions.clone()),
             false,
         );
         let mut variables = Vec::new();

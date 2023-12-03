@@ -30,6 +30,7 @@ use sparopt::algebra::GraphPattern;
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, io};
 
@@ -56,7 +57,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
-                Rc::new(options.custom_functions),
+                Arc::new(options.custom_functions),
                 run_stats,
             )
             .evaluate_select(&pattern);
@@ -76,7 +77,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
-                Rc::new(options.custom_functions),
+                Arc::new(options.custom_functions),
                 run_stats,
             )
             .evaluate_ask(&pattern);
@@ -99,7 +100,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
-                Rc::new(options.custom_functions),
+                Arc::new(options.custom_functions),
                 run_stats,
             )
             .evaluate_construct(&pattern, &template);
@@ -119,7 +120,7 @@ pub(crate) fn evaluate_query(
                 Rc::new(dataset),
                 base_iri.map(Rc::new),
                 options.service_handler(),
-                Rc::new(options.custom_functions),
+                Arc::new(options.custom_functions),
                 run_stats,
             )
             .evaluate_describe(&pattern);
@@ -155,19 +156,22 @@ pub(crate) fn evaluate_query(
 /// ```
 #[derive(Clone, Default)]
 pub struct QueryOptions {
-    service_handler: Option<Rc<dyn ServiceHandler<Error = EvaluationError>>>,
-    custom_functions: HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>,
+    service_handler: Option<Arc<dyn ServiceHandler<Error = EvaluationError>>>,
+    custom_functions: CustomFunctionRegistry,
     http_timeout: Option<Duration>,
     http_redirection_limit: usize,
     without_optimizations: bool,
 }
+
+pub(crate) type CustomFunctionRegistry =
+    HashMap<NamedNode, Arc<dyn (Fn(&[Term]) -> Option<Term>) + Send + Sync>>;
 
 impl QueryOptions {
     /// Use a given [`ServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     #[inline]
     #[must_use]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
-        self.service_handler = Some(Rc::new(ErrorConversionServiceHandler::wrap(
+        self.service_handler = Some(Arc::new(ErrorConversionServiceHandler::wrap(
             service_handler,
         )));
         self
@@ -177,7 +181,7 @@ impl QueryOptions {
     #[inline]
     #[must_use]
     pub fn without_service_handler(mut self) -> Self {
-        self.service_handler = Some(Rc::new(EmptyServiceHandler));
+        self.service_handler = Some(Arc::new(EmptyServiceHandler));
         self
     }
 
@@ -227,21 +231,21 @@ impl QueryOptions {
     pub fn with_custom_function(
         mut self,
         name: NamedNode,
-        evaluator: impl Fn(&[Term]) -> Option<Term> + 'static,
+        evaluator: impl Fn(&[Term]) -> Option<Term> + Send + Sync + 'static,
     ) -> Self {
-        self.custom_functions.insert(name, Rc::new(evaluator));
+        self.custom_functions.insert(name, Arc::new(evaluator));
         self
     }
 
-    fn service_handler(&self) -> Rc<dyn ServiceHandler<Error = EvaluationError>> {
+    fn service_handler(&self) -> Arc<dyn ServiceHandler<Error = EvaluationError>> {
         self.service_handler.clone().unwrap_or_else(|| {
             if cfg!(feature = "http-client") {
-                Rc::new(service::SimpleServiceHandler::new(
+                Arc::new(service::SimpleServiceHandler::new(
                     self.http_timeout,
                     self.http_redirection_limit,
                 ))
             } else {
-                Rc::new(EmptyServiceHandler)
+                Arc::new(EmptyServiceHandler)
             }
         })
     }

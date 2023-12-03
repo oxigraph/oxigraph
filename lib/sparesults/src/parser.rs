@@ -6,7 +6,7 @@ use crate::solution::QuerySolution;
 use crate::xml::{XmlQueryResultsReader, XmlSolutionsReader};
 use oxrdf::Variable;
 use std::io::Read;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Parsers for [SPARQL query](https://www.w3.org/TR/sparql11-query/) results serialization formats.
 ///
@@ -81,7 +81,7 @@ impl QueryResultsParser {
                     solutions,
                     variables,
                 } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
-                    variables: Rc::new(variables),
+                    variables: variables.into(),
                     solutions: SolutionsReaderKind::Xml(solutions),
                 }),
             },
@@ -91,7 +91,7 @@ impl QueryResultsParser {
                     solutions,
                     variables,
                 } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
-                    variables: Rc::new(variables),
+                    variables: variables.into(),
                     solutions: SolutionsReaderKind::Json(solutions),
                 }),
             },
@@ -102,7 +102,7 @@ impl QueryResultsParser {
                     solutions,
                     variables,
                 } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
-                    variables: Rc::new(variables),
+                    variables: variables.into(),
                     solutions: SolutionsReaderKind::Tsv(solutions),
                 }),
             },
@@ -166,9 +166,8 @@ pub enum FromReadQueryResultsReader<R: Read> {
 /// }
 /// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
-#[allow(clippy::rc_buffer)]
 pub struct FromReadSolutionsReader<R: Read> {
-    variables: Rc<Vec<Variable>>,
+    variables: Arc<[Variable]>,
     solutions: SolutionsReaderKind<R>,
 }
 
@@ -209,7 +208,7 @@ impl<R: Read> Iterator for FromReadSolutionsReader<R> {
                 SolutionsReaderKind::Tsv(reader) => reader.read_next(),
             }
             .transpose()?
-            .map(|values| (Rc::clone(&self.variables), values).into()),
+            .map(|values| (Arc::clone(&self.variables), values).into()),
         )
     }
 }

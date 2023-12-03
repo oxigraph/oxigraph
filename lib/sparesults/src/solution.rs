@@ -4,7 +4,7 @@ use oxrdf::{Term, Variable, VariableRef};
 use std::fmt;
 use std::iter::Zip;
 use std::ops::Index;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Tuple associating variables and terms that are the result of a SPARQL query.
 ///
@@ -18,9 +18,8 @@ use std::rc::Rc;
 /// assert_eq!(solution.get("foo"), Some(&Literal::from(1).into())); // Get the value of the variable ?foo if it exists (here yes).
 /// assert_eq!(solution.get(1), None); // Get the value of the second column if it exists (here no).
 /// ```
-#[allow(clippy::rc_buffer)]
 pub struct QuerySolution {
-    variables: Rc<Vec<Variable>>,
+    variables: Arc<[Variable]>,
     values: Vec<Option<Term>>,
 }
 
@@ -116,7 +115,7 @@ impl QuerySolution {
     }
 }
 
-impl<V: Into<Rc<Vec<Variable>>>, S: Into<Vec<Option<Term>>>> From<(V, S)> for QuerySolution {
+impl<V: Into<Arc<[Variable]>>, S: Into<Vec<Option<Term>>>> From<(V, S)> for QuerySolution {
     #[inline]
     fn from((v, s): (V, S)) -> Self {
         Self {
