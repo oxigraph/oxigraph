@@ -628,7 +628,6 @@ mod tests {
 
     use super::*;
     use std::error::Error;
-    use std::rc::Rc;
 
     fn build_example() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) {
         (
@@ -682,7 +681,6 @@ mod tests {
         let (variables, solutions) = build_example();
         let mut buffer = String::new();
         let writer = InnerCsvSolutionsWriter::start(&mut buffer, variables.clone());
-        let variables = Rc::new(variables);
         for solution in solutions {
             writer.write(
                 &mut buffer,
@@ -702,7 +700,6 @@ mod tests {
         // Write
         let mut buffer = String::new();
         let writer = InnerTsvSolutionsWriter::start(&mut buffer, variables.clone());
-        let variables = Rc::new(variables);
         for solution in &solutions {
             writer.write(
                 &mut buffer,
