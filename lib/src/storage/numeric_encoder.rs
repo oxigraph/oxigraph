@@ -8,8 +8,8 @@ use siphasher::sip128::{Hasher128, SipHasher24};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::rc::Rc;
 use std::str;
+use std::sync::Arc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[repr(transparent)]
@@ -96,7 +96,7 @@ pub enum EncodedTerm {
     DurationLiteral(Duration),
     YearMonthDurationLiteral(YearMonthDuration),
     DayTimeDurationLiteral(DayTimeDuration),
-    Triple(Rc<EncodedTriple>),
+    Triple(Arc<EncodedTriple>),
 }
 
 impl PartialEq for EncodedTerm {
@@ -471,7 +471,7 @@ impl From<DayTimeDuration> for EncodedTerm {
 
 impl From<EncodedTriple> for EncodedTerm {
     fn from(value: EncodedTriple) -> Self {
-        Self::Triple(Rc::new(value))
+        Self::Triple(Arc::new(value))
     }
 }
 
@@ -634,7 +634,7 @@ impl From<GraphNameRef<'_>> for EncodedTerm {
 
 impl From<TripleRef<'_>> for EncodedTerm {
     fn from(triple: TripleRef<'_>) -> Self {
-        Self::Triple(Rc::new(triple.into()))
+        Self::Triple(Arc::new(triple.into()))
     }
 }
 

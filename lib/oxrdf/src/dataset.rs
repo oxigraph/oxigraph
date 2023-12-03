@@ -183,6 +183,7 @@ impl Dataset {
             .map(move |q| self.decode_spog(q))
     }
 
+    #[allow(clippy::map_identity)]
     fn interned_quads_for_subject(
         &self,
         subject: &InternedSubject,

@@ -1,11 +1,12 @@
 use crate::model::vocab::{rdf, xsd};
-use crate::model::{BlankNode, LiteralRef, NamedNode, NamedNodeRef, Term, Triple};
+use crate::model::{BlankNode, LiteralRef, NamedNodeRef, Term, Triple};
 use crate::sparql::algebra::{Query, QueryDataset};
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::model::*;
 use crate::sparql::plan::*;
 use crate::sparql::service::ServiceHandler;
+use crate::sparql::CustomFunctionRegistry;
 use crate::storage::numeric_encoder::*;
 use crate::storage::small_string::SmallString;
 use digest::Digest;
@@ -28,6 +29,7 @@ use std::iter::Iterator;
 use std::iter::{empty, once};
 use std::rc::Rc;
 use std::str;
+use std::sync::Arc;
 use std::time::Duration as StdDuration;
 #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 use std::time::Instant;
@@ -35,15 +37,14 @@ use std::time::Instant;
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 type EncodedTuplesIterator = Box<dyn Iterator<Item = Result<EncodedTuple, EvaluationError>>>;
-type CustomFunctionRegistry = HashMap<NamedNode, Rc<dyn Fn(&[Term]) -> Option<Term>>>;
 
 #[derive(Clone)]
 pub struct SimpleEvaluator {
     dataset: Rc<DatasetView>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
-    service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
-    custom_functions: Rc<CustomFunctionRegistry>,
+    service_handler: Arc<dyn ServiceHandler<Error = EvaluationError>>,
+    custom_functions: Arc<CustomFunctionRegistry>,
     run_stats: bool,
 }
 
@@ -51,8 +52,8 @@ impl SimpleEvaluator {
     pub fn new(
         dataset: Rc<DatasetView>,
         base_iri: Option<Rc<Iri<String>>>,
-        service_handler: Rc<dyn ServiceHandler<Error = EvaluationError>>,
-        custom_functions: Rc<CustomFunctionRegistry>,
+        service_handler: Arc<dyn ServiceHandler<Error = EvaluationError>>,
+        custom_functions: Arc<CustomFunctionRegistry>,
         run_stats: bool,
     ) -> Self {
         Self {
@@ -69,7 +70,7 @@ impl SimpleEvaluator {
     pub fn evaluate_select_plan(
         &self,
         plan: Rc<PlanNode>,
-        variables: Rc<Vec<Variable>>,
+        variables: Arc<[Variable]>,
     ) -> (QueryResults, Rc<PlanNodeWithStats>) {
         let (eval, stats) = self.plan_evaluator(plan);
         (
@@ -1982,9 +1983,7 @@ impl SimpleEvaluator {
                     EncodedTerm::DoubleLiteral(value) => {
                         Some(Decimal::try_from(value).ok()?.into())
                     }
-                    EncodedTerm::IntegerLiteral(value) => {
-                        Some(Decimal::try_from(value).ok()?.into())
-                    }
+                    EncodedTerm::IntegerLiteral(value) => Some(Decimal::from(value).into()),
                     EncodedTerm::DecimalLiteral(value) => Some(value.into()),
                     EncodedTerm::BooleanLiteral(value) => Some(Decimal::from(value).into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
@@ -2359,7 +2358,7 @@ pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Rege
 fn decode_bindings(
     dataset: Rc<DatasetView>,
     iter: EncodedTuplesIterator,
-    variables: Rc<Vec<Variable>>,
+    variables: Arc<[Variable]>,
 ) -> QuerySolutionIter {
     let tuple_size = variables.len();
     QuerySolutionIter::new(
@@ -2451,16 +2450,16 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
         EncodedTerm::FloatLiteral(a) => match b {
             EncodedTerm::FloatLiteral(b) => Some(a == b),
             EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
-            EncodedTerm::IntegerLiteral(b) => Some(*a == Float::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).try_into().ok()?),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == (*b).into()),
+            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).into()),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
         },
         EncodedTerm::DoubleLiteral(a) => match b {
-            EncodedTerm::FloatLiteral(b) => Some(*a == Double::from(*b)),
+            EncodedTerm::FloatLiteral(b) => Some(*a == (*b).into()),
             EncodedTerm::DoubleLiteral(b) => Some(a == b),
-            EncodedTerm::IntegerLiteral(b) => Some(*a == Double::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).try_into().ok()?),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == (*b).into()),
+            EncodedTerm::DecimalLiteral(b) => Some(*a == (*b).into()),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
         },
@@ -2473,9 +2472,9 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
             _ => Some(false),
         },
         EncodedTerm::DecimalLiteral(a) => match b {
-            EncodedTerm::FloatLiteral(b) => Some(Float::try_from(*a).ok()? == *b),
-            EncodedTerm::DoubleLiteral(b) => Some(Double::try_from(*a).ok()? == *b),
-            EncodedTerm::IntegerLiteral(b) => Some(*a == Decimal::from(*b)),
+            EncodedTerm::FloatLiteral(b) => Some(Float::from(*a) == *b),
+            EncodedTerm::DoubleLiteral(b) => Some(Double::from(*a) == *b),
+            EncodedTerm::IntegerLiteral(b) => Some(*a == (*b).into()),
             EncodedTerm::DecimalLiteral(b) => Some(a == b),
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
@@ -2739,14 +2738,14 @@ fn partial_cmp_literals(
             EncodedTerm::FloatLiteral(b) => a.partial_cmp(b),
             EncodedTerm::DoubleLiteral(b) => Double::from(*a).partial_cmp(b),
             EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Float::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).try_into().ok()?),
+            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).into()),
             _ => None,
         },
         EncodedTerm::DoubleLiteral(a) => match b {
             EncodedTerm::FloatLiteral(b) => a.partial_cmp(&(*b).into()),
             EncodedTerm::DoubleLiteral(b) => a.partial_cmp(b),
             EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Double::from(*b)),
-            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).try_into().ok()?),
+            EncodedTerm::DecimalLiteral(b) => a.partial_cmp(&(*b).into()),
             _ => None,
         },
         EncodedTerm::IntegerLiteral(a) => match b {
@@ -2757,8 +2756,8 @@ fn partial_cmp_literals(
             _ => None,
         },
         EncodedTerm::DecimalLiteral(a) => match b {
-            EncodedTerm::FloatLiteral(b) => Float::try_from(*a).ok()?.partial_cmp(b),
-            EncodedTerm::DoubleLiteral(b) => Double::try_from(*a).ok()?.partial_cmp(b),
+            EncodedTerm::FloatLiteral(b) => Float::from(*a).partial_cmp(b),
+            EncodedTerm::DoubleLiteral(b) => Double::from(*a).partial_cmp(b),
             EncodedTerm::IntegerLiteral(b) => a.partial_cmp(&Decimal::from(*b)),
             EncodedTerm::DecimalLiteral(b) => a.partial_cmp(b),
             _ => None,

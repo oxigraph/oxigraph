@@ -1,8 +1,8 @@
-use crate::model::Term as OxTerm;
 use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::eval::compile_pattern;
 use crate::sparql::plan::*;
+use crate::sparql::CustomFunctionRegistry;
 use crate::storage::numeric_encoder::{EncodedTerm, EncodedTriple};
 use oxrdf::vocab::xsd;
 use oxrdf::TermRef;
@@ -10,13 +10,13 @@ use rand::random;
 use regex::Regex;
 use spargebra::algebra::*;
 use spargebra::term::*;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::mem::swap;
 use std::rc::Rc;
 
 pub struct PlanBuilder<'a> {
     dataset: &'a DatasetView,
-    custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
+    custom_functions: &'a CustomFunctionRegistry,
     with_optimizations: bool,
 }
 
@@ -25,7 +25,7 @@ impl<'a> PlanBuilder<'a> {
         dataset: &'a DatasetView,
         pattern: &GraphPattern,
         is_cardinality_meaningful: bool,
-        custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
+        custom_functions: &'a CustomFunctionRegistry,
         without_optimizations: bool,
     ) -> Result<(PlanNode, Vec<Variable>), EvaluationError> {
         let mut variables = Vec::default();
@@ -58,7 +58,7 @@ impl<'a> PlanBuilder<'a> {
         dataset: &'a DatasetView,
         template: &[TriplePattern],
         mut variables: Vec<Variable>,
-        custom_functions: &'a HashMap<NamedNode, Rc<dyn Fn(&[OxTerm]) -> Option<OxTerm>>>,
+        custom_functions: &'a CustomFunctionRegistry,
         without_optimizations: bool,
     ) -> Vec<TripleTemplate> {
         PlanBuilder {
@@ -507,7 +507,7 @@ impl<'a> PlanBuilder<'a> {
                     variables,
                     graph_name,
                 )?)),
-                Function::BNode => PlanExpression::BNode(match parameters.get(0) {
+                Function::BNode => PlanExpression::BNode(match parameters.first() {
                     Some(e) => Some(Box::new(
                         self.build_for_expression(e, variables, graph_name)?,
                     )),

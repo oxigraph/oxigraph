@@ -376,7 +376,6 @@ mod tests {
     use super::*;
     use std::error::Error;
     use std::io::Cursor;
-    use std::rc::Rc;
     use std::str;
 
     fn build_example() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) {
@@ -430,7 +429,6 @@ mod tests {
     fn test_csv_serialization() -> io::Result<()> {
         let (variables, solutions) = build_example();
         let mut writer = CsvSolutionsWriter::start(Vec::new(), variables.clone())?;
-        let variables = Rc::new(variables);
         for solution in solutions {
             writer.write(
                 variables
@@ -450,7 +448,6 @@ mod tests {
 
         // Write
         let mut writer = TsvSolutionsWriter::start(Vec::new(), variables.clone())?;
-        let variables = Rc::new(variables);
         for solution in &solutions {
             writer.write(
                 variables

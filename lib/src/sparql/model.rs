@@ -9,7 +9,7 @@ use sparesults::{
     SolutionsReader,
 };
 use std::io::{BufRead, Write};
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 pub enum QueryResults {
@@ -162,19 +162,19 @@ impl<R: BufRead + 'static> From<QueryResultsReader<R>> for QueryResults {
 /// ```
 #[allow(clippy::rc_buffer)]
 pub struct QuerySolutionIter {
-    variables: Rc<Vec<Variable>>,
+    variables: Arc<[Variable]>,
     iter: Box<dyn Iterator<Item = Result<QuerySolution, EvaluationError>>>,
 }
 
 impl QuerySolutionIter {
     pub fn new(
-        variables: Rc<Vec<Variable>>,
+        variables: Arc<[Variable]>,
         iter: impl Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
     ) -> Self {
         Self {
-            variables: Rc::clone(&variables),
+            variables: Arc::clone(&variables),
             iter: Box::new(
-                iter.map(move |t| t.map(|values| (Rc::clone(&variables), values).into())),
+                iter.map(move |t| t.map(|values| (Arc::clone(&variables), values).into())),
             ),
         }
     }
@@ -200,7 +200,7 @@ impl QuerySolutionIter {
 impl<R: BufRead + 'static> From<SolutionsReader<R>> for QuerySolutionIter {
     fn from(reader: SolutionsReader<R>) -> Self {
         Self {
-            variables: Rc::new(reader.variables().to_vec()),
+            variables: reader.variables().into(),
             iter: Box::new(reader.map(|t| t.map_err(EvaluationError::from))),
         }
     }
@@ -274,10 +274,11 @@ fn test_serialization_roundtrip() -> Result<(), EvaluationError> {
             QueryResults::Boolean(true),
             QueryResults::Boolean(false),
             QueryResults::Solutions(QuerySolutionIter::new(
-                Rc::new(vec![
+                [
                     Variable::new_unchecked("foo"),
                     Variable::new_unchecked("bar"),
-                ]),
+                ]
+                .into(),
                 Box::new(
                     vec![
                         Ok(vec![None, None]),

@@ -49,7 +49,7 @@ use std::time::Duration;
 /// }
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub trait ServiceHandler {
+pub trait ServiceHandler: Send + Sync {
     type Error: Error + Send + Sync + 'static;
 
     /// Evaluates a [`Query`] against a given service identified by a [`NamedNode`].
