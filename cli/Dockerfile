@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1-bullseye as builder
+FROM --platform=$BUILDPLATFORM rust:1-bookworm as builder
 ARG BUILDARCH TARGETARCH
 RUN apt-get update && \
     apt-get install -y libclang-dev clang && \
