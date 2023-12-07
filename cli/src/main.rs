@@ -780,16 +780,21 @@ pub fn main() -> anyhow::Result<()> {
 
 fn bulk_load(
     loader: &BulkLoader,
-    reader: impl Read,
+    read: impl Read,
     format: RdfFormat,
     base_iri: Option<&str>,
     to_graph_name: Option<NamedNode>,
 ) -> anyhow::Result<()> {
+    let mut parser = RdfParser::from_format(format);
     if let Some(to_graph_name) = to_graph_name {
-        loader.load_graph(reader, format, to_graph_name, base_iri)
-    } else {
-        loader.load_dataset(reader, format, base_iri)
-    }?;
+        parser = parser.with_default_graph(to_graph_name);
+    }
+    if let Some(base_iri) = base_iri {
+        parser = parser
+            .with_base_iri(base_iri)
+            .with_context(|| format!("Invalid base IRI {base_iri}"))?;
+    }
+    loader.load_from_read(parser, read)?;
     Ok(())
 }
 
@@ -1646,15 +1651,16 @@ fn web_load_graph(
     } else {
         None
     };
+    let mut parser = RdfParser::from_format(format)
+        .without_named_graphs()
+        .with_default_graph(to_graph_name.clone());
+    if let Some(base_iri) = base_iri {
+        parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
+    }
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_graph(
-            request.body_mut(),
-            format,
-            to_graph_name.clone(),
-            base_iri,
-        )
+        web_bulk_loader(store, request).load_from_read(parser, request.body_mut())
     } else {
-        store.load_graph(request.body_mut(), format, to_graph_name.clone(), base_iri)
+        store.load_from_read(parser, request.body_mut())
     }
     .map_err(loader_to_http_error)
 }
@@ -1665,9 +1671,9 @@ fn web_load_dataset(
     format: RdfFormat,
 ) -> Result<(), HttpError> {
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_dataset(request.body_mut(), format, None)
+        web_bulk_loader(store, request).load_from_read(format, request.body_mut())
     } else {
-        store.load_dataset(request.body_mut(), format, None)
+        store.load_from_read(format, request.body_mut())
     }
     .map_err(loader_to_http_error)
 }

@@ -110,12 +110,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 #[test]
 fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.load_graph(
-        DATA.as_bytes(),
-        RdfFormat::Turtle,
-        GraphNameRef::DefaultGraph,
-        None,
-    )?;
+    store.load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -127,12 +122,9 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 #[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.bulk_loader().load_graph(
-        DATA.as_bytes(),
-        RdfFormat::Turtle,
-        GraphName::DefaultGraph,
-        None,
-    )?;
+    store
+        .bulk_loader()
+        .load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -144,11 +136,9 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
 #[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.bulk_loader().on_parse_error(|_| Ok(())).load_graph(
-        b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> .".as_slice(),
+    store.bulk_loader().on_parse_error(|_| Ok(())).load_from_read(
         RdfFormat::NTriples,
-        GraphName::DefaultGraph,
-        None,
+        b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> .".as_slice(),
     )?;
     assert_eq!(store.len()?, 1);
     assert!(store.contains(QuadRef::new(
@@ -164,7 +154,7 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.load_dataset(GRAPH_DATA.as_bytes(), RdfFormat::TriG, None)?;
+    store.load_from_read(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
     for q in quads(NamedNodeRef::new_unchecked(
         "http://www.wikidata.org/wiki/Special:EntityData/Q90",
     )) {
@@ -180,7 +170,7 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
         .bulk_loader()
-        .load_dataset(GRAPH_DATA.as_bytes(), RdfFormat::TriG, None)?;
+        .load_from_read(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
     let graph_name =
         NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
     for q in quads(graph_name) {
@@ -195,11 +185,9 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
 fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     for _ in 0..2 {
-        store.load_graph(
-            "_:a <http://example.com/p> <http://example.com/p> .".as_bytes(),
+        store.load_from_read(
             RdfFormat::NTriples,
-            GraphName::DefaultGraph,
-            None,
+            "_:a <http://example.com/p> <http://example.com/p> .".as_bytes(),
         )?;
     }
     assert_eq!(store.len()?, 2);

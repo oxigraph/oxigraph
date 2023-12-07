@@ -158,6 +158,12 @@ impl RdfSerializer {
     }
 }
 
+impl From<RdfFormat> for RdfSerializer {
+    fn from(format: RdfFormat) -> Self {
+        Self::from_format(format)
+    }
+}
+
 /// Writes quads or triples to a [`Write`] implementation.
 ///
 /// Can be built using [`RdfSerializer::serialize_to_write`].

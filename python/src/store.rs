@@ -6,6 +6,7 @@ use crate::io::{
 };
 use crate::model::*;
 use crate::sparql::*;
+use oxigraph::io::RdfParser;
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
@@ -399,13 +400,18 @@ impl PyStore {
         let input = PyReadable::from_args(&path, input, py)?;
         let format = lookup_rdf_format(format, path.as_deref())?;
         py.allow_threads(|| {
-            if let Some(to_graph_name) = to_graph_name {
-                self.inner
-                    .load_graph(input, format, to_graph_name, base_iri)
-            } else {
-                self.inner.load_dataset(input, format, base_iri)
+            let mut parser = RdfParser::from_format(format);
+            if let Some(base_iri) = base_iri {
+                parser = parser
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
             }
-            .map_err(|e| map_loader_error(e, path))
+            if let Some(to_graph_name) = to_graph_name {
+                parser = parser.with_default_graph(to_graph_name);
+            }
+            self.inner
+                .load_from_read(parser, input)
+                .map_err(|e| map_loader_error(e, path))
         })
     }
 
@@ -466,16 +472,18 @@ impl PyStore {
         let input = PyReadable::from_args(&path, input, py)?;
         let format = lookup_rdf_format(format, path.as_deref())?;
         py.allow_threads(|| {
-            if let Some(to_graph_name) = to_graph_name {
-                self.inner
-                    .bulk_loader()
-                    .load_graph(input, format, to_graph_name, base_iri)
-            } else {
-                self.inner
-                    .bulk_loader()
-                    .load_dataset(input, format, base_iri)
+            let mut parser = RdfParser::from_format(format);
+            if let Some(base_iri) = base_iri {
+                parser = parser
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
             }
-            .map_err(|e| map_loader_error(e, path))
+            if let Some(to_graph_name) = to_graph_name {
+                parser = parser.with_default_graph(to_graph_name);
+            }
+            self.inner
+                .load_from_read(parser, input)
+                .map_err(|e| map_loader_error(e, path))
         })
     }
 
