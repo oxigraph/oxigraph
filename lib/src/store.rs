@@ -445,6 +445,57 @@ impl Store {
             .transaction(|mut t| evaluate_update(&mut t, &update, &options))
     }
 
+    /// Loads a RDF file under into the store.
+    ///
+    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use the [`bulk_loader`](Store::bulk_loader).
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::model::*;
+    /// use oxrdfio::RdfParser;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insert a dataset file (former load_dataset method)
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// store.load_from_read(RdfFormat::NQuads, file.as_ref())?;
+    ///
+    /// // insert a graph file (former load_graph method)
+    /// let file = b"<> <> <> .";
+    /// store.load_from_read(
+    ///     RdfParser::from_format(RdfFormat::Turtle)
+    ///         .with_base_iri("http://example.com")?
+    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///     file.as_ref()
+    /// )?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_from_read(
+        &self,
+        parser: impl Into<RdfParser>,
+        read: impl Read,
+    ) -> Result<(), LoaderError> {
+        let quads = parser
+            .into()
+            .rename_blank_nodes()
+            .parse_read(read)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.storage.transaction(move |mut t| {
+            for quad in &quads {
+                t.insert(quad.as_ref())?;
+            }
+            Ok(())
+        })
+    }
+
     /// Loads a graph file (i.e. triples) into the store.
     ///
     /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use the [`bulk_loader`](Store::bulk_loader).
@@ -466,6 +517,7 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use Store.load_from_read instead")]
     pub fn load_graph(
         &self,
         read: impl Read,
@@ -475,8 +527,7 @@ impl Store {
     ) -> Result<(), LoaderError> {
         let mut parser = RdfParser::from_format(format.into())
             .without_named_graphs()
-            .with_default_graph(to_graph_name)
-            .rename_blank_nodes();
+            .with_default_graph(to_graph_name);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
@@ -485,13 +536,7 @@ impl Store {
                     error: e,
                 })?;
         }
-        let quads = parser.parse_read(read).collect::<Result<Vec<_>, _>>()?;
-        self.storage.transaction(move |mut t| {
-            for quad in &quads {
-                t.insert(quad.as_ref())?;
-            }
-            Ok(())
-        })
+        self.load_from_read(parser, read)
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -515,13 +560,14 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use Store.load_from_read instead")]
     pub fn load_dataset(
         &self,
         read: impl Read,
         format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = RdfParser::from_format(format.into()).rename_blank_nodes();
+        let mut parser = RdfParser::from_format(format.into());
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
@@ -530,13 +576,7 @@ impl Store {
                     error: e,
                 })?;
         }
-        let quads = parser.parse_read(read).collect::<Result<Vec<_>, _>>()?;
-        self.storage.transaction(move |mut t| {
-            for quad in &quads {
-                t.insert(quad.as_ref())?;
-            }
-            Ok(())
-        })
+        self.load_from_read(parser, read)
     }
 
     /// Adds a quad to this store.
@@ -1062,6 +1102,53 @@ impl<'a> Transaction<'a> {
         )
     }
 
+    /// Loads a RDF file into the store.
+    ///
+    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use the [`bulk_loader`](Store::bulk_loader).
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::model::*;
+    /// use oxrdfio::RdfParser;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insert a dataset file (former load_dataset method)
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// store.transaction(|mut t| t.load_from_read(RdfFormat::NQuads, file.as_ref()))?;
+    ///
+    /// // insert a graph file (former load_graph method)
+    /// let file = b"<> <> <> .";
+    /// store.transaction(|mut t|
+    ///     t.load_from_read(
+    ///         RdfParser::from_format(RdfFormat::Turtle)
+    ///             .with_base_iri("http://example.com")
+    ///             .unwrap()
+    ///             .without_named_graphs() // No named graphs allowed in the input
+    ///             .with_default_graph(NamedNodeRef::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
+    ///         file.as_ref()
+    ///     )
+    /// )?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_from_read(
+        &mut self,
+        parser: impl Into<RdfParser>,
+        read: impl Read,
+    ) -> Result<(), LoaderError> {
+        for quad in parser.into().rename_blank_nodes().parse_read(read) {
+            self.insert(quad?.as_ref())?;
+        }
+        Ok(())
+    }
+
     /// Loads a graph file (i.e. triples) into the store.
     ///
     /// Usage example:
@@ -1083,6 +1170,7 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
     /// ```
+    #[deprecated(note = "Use Transaction.load_from_read instead")]
     pub fn load_graph(
         &mut self,
         read: impl Read,
@@ -1092,8 +1180,7 @@ impl<'a> Transaction<'a> {
     ) -> Result<(), LoaderError> {
         let mut parser = RdfParser::from_format(format.into())
             .without_named_graphs()
-            .with_default_graph(to_graph_name)
-            .rename_blank_nodes();
+            .with_default_graph(to_graph_name);
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
@@ -1102,10 +1189,7 @@ impl<'a> Transaction<'a> {
                     error: e,
                 })?;
         }
-        for quad in parser.parse_read(read) {
-            self.writer.insert(quad?.as_ref())?;
-        }
-        Ok(())
+        self.load_from_read(parser, read)
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -1129,13 +1213,14 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
     /// ```
+    #[deprecated(note = "Use Transaction.load_from_read instead")]
     pub fn load_dataset(
         &mut self,
         read: impl Read,
         format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
-        let mut parser = RdfParser::from_format(format.into()).rename_blank_nodes();
+        let mut parser = RdfParser::from_format(format.into());
         if let Some(base_iri) = base_iri {
             parser = parser
                 .with_base_iri(base_iri)
@@ -1144,10 +1229,7 @@ impl<'a> Transaction<'a> {
                     error: e,
                 })?;
         }
-        for quad in parser.parse_read(read) {
-            self.writer.insert(quad?.as_ref())?;
-        }
-        Ok(())
+        self.load_from_read(parser, read)
     }
 
     /// Adds a quad to this store.
@@ -1448,6 +1530,73 @@ impl BulkLoader {
         self
     }
 
+    /// Loads a file using the bulk loader.
+    ///
+    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_dataset`] might be more convenient.
+    ///
+    /// <div class="warning">This method is not atomic.
+    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
+    /// Results might get weird if you delete data during the loading process.</div>
+    ///
+    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
+    ///
+    /// Usage example:
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::model::*;
+    /// use oxrdfio::RdfParser;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insert a dataset file (former load_dataset method)
+    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// store.bulk_loader().load_from_read(RdfFormat::NQuads, file.as_ref())?;
+    ///
+    /// // insert a graph file (former load_graph method)
+    /// let file = b"<> <> <> .";
+    /// store.bulk_loader().load_from_read(
+    ///     RdfParser::from_format(RdfFormat::Turtle)
+    ///         .with_base_iri("http://example.com")?
+    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///     file.as_ref()
+    /// )?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_from_read(
+        &self,
+        parser: impl Into<RdfParser>,
+        read: impl Read,
+    ) -> Result<(), LoaderError> {
+        self.load_ok_quads(
+            parser
+                .into()
+                .rename_blank_nodes()
+                .parse_read(read)
+                .filter_map(|r| match r {
+                    Ok(q) => Some(Ok(q)),
+                    Err(e) => {
+                        if let Some(callback) = &self.on_parse_error {
+                            if let Err(e) = callback(e) {
+                                Some(Err(e))
+                            } else {
+                                None
+                            }
+                        } else {
+                            Some(Err(e))
+                        }
+                    }
+                }),
+        )
+    }
+
     /// Loads a dataset file using the bulk loader.
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`Store::load_dataset`] might be more convenient.
@@ -1475,6 +1624,7 @@ impl BulkLoader {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use BulkLoader.load_from_read instead")]
     pub fn load_dataset(
         &self,
         read: impl Read,
@@ -1533,6 +1683,7 @@ impl BulkLoader {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use BulkLoader.load_from_read instead")]
     pub fn load_graph(
         &self,
         read: impl Read,

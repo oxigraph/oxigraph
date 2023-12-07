@@ -4,6 +4,7 @@ use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
 use anyhow::{bail, ensure, Context, Error, Result};
+use oxigraph::io::RdfParser;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
@@ -129,10 +130,10 @@ fn evaluate_negative_result_syntax_test(test: &Test, format: QueryResultsFormat)
 fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     let store = get_store()?;
     if let Some(data) = &test.data {
-        load_dataset_to_store(data, &store)?;
+        load_to_store(data, &store, GraphName::DefaultGraph)?;
     }
     for (name, value) in &test.graph_data {
-        load_graph_to_store(value, &store, name.clone())?;
+        load_to_store(value, &store, name.clone())?;
     }
     let query_file = test.query.as_deref().context("No action found")?;
     let options = QueryOptions::default()
@@ -150,13 +151,13 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
             let GraphName::NamedNode(graph_name) = graph_name else {
                 bail!("Invalid FROM in query {query}");
             };
-            load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+            load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
         }
         for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
             let NamedOrBlankNode::NamedNode(graph_name) = graph_name else {
                 bail!("Invalid FROM NAMED in query {query}");
             };
-            load_graph_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+            load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
         }
     }
 
@@ -210,18 +211,18 @@ fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     let store = get_store()?;
     if let Some(data) = &test.data {
-        load_dataset_to_store(data, &store)?;
+        load_to_store(data, &store, GraphName::DefaultGraph)?;
     }
     for (name, value) in &test.graph_data {
-        load_graph_to_store(value, &store, name.clone())?;
+        load_to_store(value, &store, name.clone())?;
     }
 
     let result_store = get_store()?;
     if let Some(data) = &test.result {
-        load_dataset_to_store(data, &result_store)?;
+        load_to_store(data, &result_store, GraphName::DefaultGraph)?;
     }
     for (name, value) in &test.result_graph_data {
-        load_graph_to_store(value, &result_store, name.clone())?;
+        load_to_store(value, &result_store, name.clone())?;
     }
 
     let update_file = test.update.as_deref().context("No action found")?;
@@ -271,7 +272,7 @@ impl StaticServiceHandler {
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
                         let store = get_store()?;
-                        load_dataset_to_store(data, &store)?;
+                        load_to_store(data, &store, GraphName::DefaultGraph)?;
                         Ok((name, store))
                     })
                     .collect::<Result<_>>()?,
@@ -643,22 +644,13 @@ fn solutions_to_string(solutions: Vec<Vec<(Variable, Term)>>, ordered: bool) -> 
     lines.join("\n")
 }
 
-fn load_graph_to_store(
-    url: &str,
-    store: &Store,
-    to_graph_name: impl Into<GraphName>,
-) -> Result<()> {
-    store.load_graph(
+fn load_to_store(url: &str, store: &Store, to_graph_name: impl Into<GraphName>) -> Result<()> {
+    store.load_from_read(
+        RdfParser::from_format(guess_rdf_format(url)?)
+            .with_base_iri(url)?
+            .with_default_graph(to_graph_name),
         read_file(url)?,
-        guess_rdf_format(url)?,
-        to_graph_name,
-        Some(url),
     )?;
-    Ok(())
-}
-
-fn load_dataset_to_store(url: &str, store: &Store) -> Result<()> {
-    store.load_dataset(read_file(url)?, guess_rdf_format(url)?, Some(url))?;
     Ok(())
 }
 

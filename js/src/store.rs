@@ -4,7 +4,7 @@ use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
-use oxigraph::io::RdfFormat;
+use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::Store;
@@ -161,18 +161,16 @@ impl JsStore {
             ));
         };
 
+        let mut parser = RdfParser::from_format(format);
         if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
-            self.store.load_graph(
-                data.as_bytes(),
-                format,
-                GraphName::try_from(to_graph_name)?,
-                base_iri.as_deref(),
-            )
-        } else {
-            self.store
-                .load_dataset(data.as_bytes(), format, base_iri.as_deref())
+            parser = parser.with_default_graph(GraphName::try_from(to_graph_name)?);
         }
-        .map_err(to_err)
+        if let Some(base_iri) = base_iri {
+            parser = parser.with_base_iri(base_iri).map_err(to_err)?;
+        }
+        self.store
+            .load_from_read(parser, data.as_bytes())
+            .map_err(to_err)
     }
 
     pub fn dump(&self, format: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {

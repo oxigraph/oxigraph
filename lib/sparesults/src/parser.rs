@@ -118,6 +118,12 @@ impl QueryResultsParser {
     }
 }
 
+impl From<QueryResultsFormat> for QueryResultsParser {
+    fn from(format: QueryResultsFormat) -> Self {
+        Self::from_format(format)
+    }
+}
+
 /// The reader for a given read of a results file.
 ///
 /// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`FromReadSolutionsReader`]).

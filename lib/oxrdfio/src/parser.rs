@@ -321,6 +321,12 @@ impl RdfParser {
     }
 }
 
+impl From<RdfFormat> for RdfParser {
+    fn from(format: RdfFormat) -> Self {
+        Self::from_format(format)
+    }
+}
+
 /// Parses a RDF file from a [`Read`] implementation. Can be built using [`RdfParser::parse_read`].
 ///
 /// Reads are buffered.

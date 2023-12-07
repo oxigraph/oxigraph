@@ -213,6 +213,12 @@ impl QueryResultsSerializer {
     }
 }
 
+impl From<QueryResultsFormat> for QueryResultsSerializer {
+    fn from(format: QueryResultsFormat) -> Self {
+        Self::from_format(format)
+    }
+}
+
 /// Allows writing query results into a [`Write`] implementation.
 ///
 /// Could be built using a [`QueryResultsSerializer`].
