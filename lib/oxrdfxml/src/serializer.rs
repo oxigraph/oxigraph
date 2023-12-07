@@ -258,16 +258,7 @@ impl InnerRdfXmlWriter {
             if prop_prefix == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" {
                 (Cow::Owned(format!("rdf:{prop_value}")), None)
             } else if prop_prefix == "http://www.w3.org/2000/xmlns/" {
-                if prop_value.is_empty() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "The http://www.w3.org/2000/xmlns/ predicate IRI is not allowed in XML",
-                    ));
-                }
-                (
-                    Cow::Borrowed("p:"),
-                    Some(("xmlns:p", triple.predicate.as_str())),
-                )
+                (Cow::Owned(format!("xmlns:{prop_value}")), None)
             } else if prop_value.is_empty() {
                 (Cow::Borrowed("p:"), Some(("xmlns:p", prop_prefix)))
             } else {
