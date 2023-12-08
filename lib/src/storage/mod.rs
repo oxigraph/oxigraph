@@ -378,8 +378,14 @@ impl StorageReader {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
-    ) -> Vec<crate::model::Term> {
-        return Vec::new();
+    ) -> ChainedDecodingQuadIterator {
+        return ChainedDecodingQuadIterator {
+            first: DecodingQuadIterator {
+                terms: Vec::new(),
+                encoding: QuadEncoding::Spog,
+            },
+            second: None,
+        };
         // match subject {
         //     Some(subject) => match predicate {
         //         Some(predicate) => match object {
@@ -436,8 +442,11 @@ impl StorageReader {
         // }
     }
 
-    pub fn quads(&self) -> Vec<crate::model::Term> {
-        Vec::new()
+    pub fn quads(&self) -> ChainedDecodingQuadIterator {
+        ChainedDecodingQuadIterator::new(DecodingQuadIterator {
+            terms: Vec::new(),
+            encoding: QuadEncoding::Spog,
+        })
         // ChainedDecodingQuadIterator::pair(self.dspo_quads(&[]), self.gspo_quads(&[]))
     }
 
@@ -608,8 +617,8 @@ impl StorageReader {
     //     })
     // }
 
-    pub fn named_graphs(&self) -> Vec<crate::model::Term> {
-        Vec::new()
+    pub fn named_graphs(&self) -> DecodingGraphIterator {
+        DecodingGraphIterator { terms: Vec::new() }
     }
 
     pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
@@ -671,7 +680,7 @@ impl Iterator for ChainedDecodingQuadIterator {
 }
 
 pub struct DecodingQuadIterator {
-    iter: Iter,
+    terms: Vec<EncodedQuad>,
     encoding: QuadEncoding,
 }
 
@@ -679,29 +688,29 @@ impl Iterator for DecodingQuadIterator {
     type Item = Result<EncodedQuad, StorageError>;
 
     fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
-        if let Err(e) = self.iter.status() {
-            return Some(Err(e));
-        }
-        let term = self.encoding.decode(self.iter.key()?);
-        self.iter.next();
-        Some(term)
+        // if let Err(e) = self.iter.status() {
+        //     return Some(Err(e));
+        // }
+        // let term = self.encoding.decode(self.iter.key()?);
+        // self.iter.next();
+        self.terms.pop().map(|x| Ok(x))
     }
 }
 
 pub struct DecodingGraphIterator {
-    iter: Iter,
+    terms: Vec<EncodedTerm>,
 }
 
 impl Iterator for DecodingGraphIterator {
     type Item = Result<EncodedTerm, StorageError>;
 
     fn next(&mut self) -> Option<Result<EncodedTerm, StorageError>> {
-        if let Err(e) = self.iter.status() {
-            return Some(Err(e));
-        }
-        let term = decode_term(self.iter.key()?);
-        self.iter.next();
-        Some(term)
+        // if let Err(e) = self.iter.status() {
+        //     return Some(Err(e));
+        // }
+        // let term = self.encoding.decode(self.iter.key()?);
+        // self.iter.next();
+        self.terms.pop().map(|x| Ok(x))
     }
 }
 

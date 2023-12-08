@@ -237,10 +237,7 @@ impl Store {
         options: QueryOptions,
         with_stats: bool,
     ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
-        // evaluate_query(self.storage.snapshot(), query, options, with_stats)
-        Err(EvaluationError::Storage(StorageError::Io(
-            std::io::Error::new(std::io::ErrorKind::NotFound, "Not yet implemented"),
-        )))
+        evaluate_query(self.storage.snapshot(), query, options, with_stats)
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -268,14 +265,17 @@ impl Store {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
-    ) -> Vec<Term> {
+    ) -> QuadIter {
         let reader = self.storage.snapshot();
-        reader.quads_for_pattern(
-            subject.map(EncodedTerm::from).as_ref(),
-            predicate.map(EncodedTerm::from).as_ref(),
-            object.map(EncodedTerm::from).as_ref(),
-            graph_name.map(EncodedTerm::from).as_ref(),
-        )
+        QuadIter {
+            iter: reader.quads_for_pattern(
+                subject.map(EncodedTerm::from).as_ref(),
+                predicate.map(EncodedTerm::from).as_ref(),
+                object.map(EncodedTerm::from).as_ref(),
+                graph_name.map(EncodedTerm::from).as_ref(),
+            ),
+            reader,
+        }
     }
 
     /// Returns all the quads contained in the store.
@@ -297,7 +297,7 @@ impl Store {
     /// assert_eq!(vec![quad], results);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn iter(&self) -> Vec<Term> {
+    pub fn iter(&self) -> QuadIter {
         self.quads_for_pattern(None, None, None, None)
     }
 
@@ -489,9 +489,8 @@ impl Store {
         //     for quad in &quads {
         //         t.insert(quad.as_ref().in_graph(to_graph_name))?;
         //     }
-        //     Ok(())
-        // })
         Ok(())
+        // })
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -532,9 +531,8 @@ impl Store {
         //     for quad in &quads {
         //         t.insert(quad.into())?;
         //     }
-        //     Ok(())
-        // })
         Ok(())
+        // })
     }
 
     /// Adds a quad to this store.
@@ -625,9 +623,9 @@ impl Store {
         from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), SerializerError> {
         let mut writer = GraphSerializer::from_format(format).triple_writer(writer)?;
-        // for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
-        //     writer.write(quad?.as_ref())?;
-        // }
+        for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
+            writer.write(quad?.as_ref())?;
+        }
         writer.finish()?;
         Ok(())
     }
@@ -654,9 +652,9 @@ impl Store {
         format: DatasetFormat,
     ) -> Result<(), SerializerError> {
         let mut writer = DatasetSerializer::from_format(format).quad_writer(writer)?;
-        // for quad in self.iter() {
-        //     writer.write(&quad?)?;
-        // }
+        for quad in self.iter() {
+            writer.write(&quad?)?;
+        }
         writer.finish()?;
         Ok(())
     }
@@ -675,13 +673,13 @@ impl Store {
     /// assert_eq!(vec![NamedOrBlankNode::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    // pub fn named_graphs(&self) -> GraphNameIter {
-    //     let reader = self.storage.snapshot();
-    //     GraphNameIter {
-    //         iter: reader.named_graphs().iter(),
-    //         reader,
-    //     }
-    // }
+    pub fn named_graphs(&self) -> GraphNameIter {
+        let reader = self.storage.snapshot();
+        GraphNameIter {
+            iter: reader.named_graphs(),
+            reader,
+        }
+    }
 
     /// Checks if the store contains a given graph
     ///
@@ -883,7 +881,7 @@ impl Store {
 impl fmt::Display for Store {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self.iter() {
-            writeln!(f, "{} .", t)?;
+            writeln!(f, "{} .", t.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
     }
@@ -990,18 +988,21 @@ impl<'a> Transaction<'a> {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
-    ) -> Vec<Term> {
+    ) -> QuadIter {
         let reader = self.writer.reader();
-        reader.quads_for_pattern(
-            subject.map(EncodedTerm::from).as_ref(),
-            predicate.map(EncodedTerm::from).as_ref(),
-            object.map(EncodedTerm::from).as_ref(),
-            graph_name.map(EncodedTerm::from).as_ref(),
-        )
+        QuadIter {
+            iter: reader.quads_for_pattern(
+                subject.map(EncodedTerm::from).as_ref(),
+                predicate.map(EncodedTerm::from).as_ref(),
+                object.map(EncodedTerm::from).as_ref(),
+                graph_name.map(EncodedTerm::from).as_ref(),
+            ),
+            reader,
+        }
     }
 
     /// Returns all the quads contained in the store.
-    pub fn iter(&self) -> Vec<Term> {
+    pub fn iter(&self) -> QuadIter {
         self.quads_for_pattern(None, None, None, None)
     }
 
@@ -1202,13 +1203,12 @@ impl<'a> Transaction<'a> {
     }
 
     /// Returns all the store named graphs.
-    pub fn named_graphs(&self) -> Vec<Term> {
-        // let reader = self.writer.reader();
-        // GraphNameIter {
-        //     iter: reader.named_graphs(),
-        //     reader,
-        // }
-        Vec::new()
+    pub fn named_graphs(&self) -> GraphNameIter {
+        let reader = self.writer.reader();
+        GraphNameIter {
+            iter: reader.named_graphs(),
+            reader,
+        }
     }
 
     /// Checks if the store contains a given graph.
@@ -1617,23 +1617,22 @@ fn store() -> Result<(), StorageError> {
             GraphName::DefaultGraph,
         ),
     ];
-    // let all_quads = vec![
-    //     Quad::new(
-    //         main_s.clone(),
-    //         main_p.clone(),
-    //         Literal::from(0),
-    //         GraphName::DefaultGraph,
-    //     ),
-    //     default_quad.clone(),
-    //     Quad::new(
-    //         main_s.clone(),
-    //         main_p.clone(),
-    //         Literal::from(200_000_000),
-    //         GraphName::DefaultGraph,
-    //     ),
-    //     named_quad.clone(),
-    // ];
-    let all_quads = Vec::new();
+    let all_quads = vec![
+        Quad::new(
+            main_s.clone(),
+            main_p.clone(),
+            Literal::from(0),
+            GraphName::DefaultGraph,
+        ),
+        default_quad.clone(),
+        Quad::new(
+            main_s.clone(),
+            main_p.clone(),
+            Literal::from(200_000_000),
+            GraphName::DefaultGraph,
+        ),
+        named_quad.clone(),
+    ];
 
     let store = Store::new()?;
     for t in &default_quads {
@@ -1649,140 +1648,147 @@ fn store() -> Result<(), StorageError> {
     assert!(!store.insert(&default_quad)?);
 
     assert_eq!(store.len()?, 4);
-    assert_eq!(store.iter(), all_quads);
+    assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, all_quads);
     assert_eq!(
-        store.quads_for_pattern(Some(main_s.as_ref()), None, None, None),
+        store
+            .quads_for_pattern(Some(main_s.as_ref()), None, None, None)
+            .collect::<Result<Vec<_>, _>>()?,
         all_quads
     );
     assert_eq!(
-        store.quads_for_pattern(Some(main_s.as_ref()), Some(main_p.as_ref()), None, None),
+        store
+            .quads_for_pattern(Some(main_s.as_ref()), Some(main_p.as_ref()), None, None)
+            .collect::<Result<Vec<_>, _>>()?,
         all_quads
     );
     assert_eq!(
-        store.quads_for_pattern(
-            Some(main_s.as_ref()),
-            Some(main_p.as_ref()),
-            Some(main_o.as_ref()),
-            None
-        ),
-        // vec![default_quad.clone(), named_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                None
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(
-            Some(main_s.as_ref()),
-            Some(main_p.as_ref()),
-            Some(main_o.as_ref()),
-            Some(GraphNameRef::DefaultGraph)
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![default_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(GraphNameRef::DefaultGraph)
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![default_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(
-            Some(main_s.as_ref()),
-            Some(main_p.as_ref()),
-            Some(main_o.as_ref()),
-            Some(main_g.as_ref())
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![named_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(main_g.as_ref())
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![named_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(
-            Some(main_s.as_ref()),
-            Some(main_p.as_ref()),
-            None,
-            Some(GraphNameRef::DefaultGraph)
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // default_quads
-        Vec::new()
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                Some(main_p.as_ref()),
+                None,
+                Some(GraphNameRef::DefaultGraph)
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        default_quads
     );
     assert_eq!(
-        store.quads_for_pattern(Some(main_s.as_ref()), None, Some(main_o.as_ref()), None),
-        // vec![default_quad.clone(), named_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(Some(main_s.as_ref()), None, Some(main_o.as_ref()), None)
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(
-            Some(main_s.as_ref()),
-            None,
-            Some(main_o.as_ref()),
-            Some(GraphNameRef::DefaultGraph)
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![default_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                None,
+                Some(main_o.as_ref()),
+                Some(GraphNameRef::DefaultGraph)
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![default_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(
-            Some(main_s.as_ref()),
-            None,
-            Some(main_o.as_ref()),
-            Some(main_g.as_ref())
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![named_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                None,
+                Some(main_o.as_ref()),
+                Some(main_g.as_ref())
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![named_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(
-            Some(main_s.as_ref()),
-            None,
-            None,
-            Some(GraphNameRef::DefaultGraph)
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // default_quads
-        Vec::new()
+        store
+            .quads_for_pattern(
+                Some(main_s.as_ref()),
+                None,
+                None,
+                Some(GraphNameRef::DefaultGraph)
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        default_quads
     );
     assert_eq!(
-        store.quads_for_pattern(None, Some(main_p.as_ref()), None, None),
-        // .collect::<Result<Vec<_>, _>>()?,
+        store
+            .quads_for_pattern(None, Some(main_p.as_ref()), None, None)
+            .collect::<Result<Vec<_>, _>>()?,
         all_quads
     );
     assert_eq!(
-        store.quads_for_pattern(None, Some(main_p.as_ref()), Some(main_o.as_ref()), None),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![default_quad.clone(), named_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(None, Some(main_p.as_ref()), Some(main_o.as_ref()), None)
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(None, None, Some(main_o.as_ref()), None),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![default_quad.clone(), named_quad.clone()]
-        Vec::new()
+        store
+            .quads_for_pattern(None, None, Some(main_o.as_ref()), None)
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![default_quad.clone(), named_quad.clone()]
     );
     assert_eq!(
-        store.quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph)),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // default_quads
-        Vec::new()
+        store
+            .quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph))
+            .collect::<Result<Vec<_>, _>>()?,
+        default_quads
     );
     assert_eq!(
-        store.quads_for_pattern(
-            None,
-            Some(main_p.as_ref()),
-            Some(main_o.as_ref()),
-            Some(GraphNameRef::DefaultGraph)
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![default_quad]
-        Vec::new()
+        store
+            .quads_for_pattern(
+                None,
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(GraphNameRef::DefaultGraph)
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![default_quad]
     );
     assert_eq!(
-        store.quads_for_pattern(
-            None,
-            Some(main_p.as_ref()),
-            Some(main_o.as_ref()),
-            Some(main_g.as_ref())
-        ),
-        // .collect::<Result<Vec<_>, _>>()?,
-        // vec![named_quad]
-        Vec::new()
+        store
+            .quads_for_pattern(
+                None,
+                Some(main_p.as_ref()),
+                Some(main_o.as_ref()),
+                Some(main_g.as_ref())
+            )
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![named_quad]
     );
 
     Ok(())
