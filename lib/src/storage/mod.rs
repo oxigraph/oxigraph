@@ -1,7 +1,8 @@
 #![allow(clippy::same_name_method)]
+use crate::model::vocab::rdf;
 #[cfg(not(target_family = "wasm"))]
 use crate::model::Quad;
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, Term, TermRef};
+use crate::model::{GraphNameRef, NamedNodeRef, NamedOrBlankNodeRef, QuadRef, Term, TermRef};
 use crate::storage::backend::{Reader, Transaction};
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::binary_encoder::LATEST_STORAGE_VERSION;
@@ -15,10 +16,17 @@ pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, S
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::numeric_encoder::Decoder;
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use crate::storage::vg_vocab::{faldo, vg};
 use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
+use gfa::gfa::Orientation;
 use gfa::parser::GFAParser;
-use handlegraph::{conversion::from_gfa, packedgraph::PackedGraph};
-use oxrdf::NamedNode;
+use handlegraph::handle::{Direction, Handle};
+use handlegraph::{
+    conversion::from_gfa, handlegraph::IntoHandles, handlegraph::IntoNeighbors,
+    handlegraph::IntoSequences, packedgraph::PackedGraph,
+};
+use oxrdf::{Literal, NamedNode};
+use std::str;
 
 #[cfg(not(target_family = "wasm"))]
 use std::collections::VecDeque;
@@ -43,6 +51,7 @@ mod binary_encoder;
 mod error;
 pub mod numeric_encoder;
 pub mod small_string;
+mod vg_vocab;
 
 const ID2STR_CF: &str = "id2str";
 const SPOG_CF: &str = "spog";
@@ -64,12 +73,14 @@ const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 #[derive(Clone)]
 pub struct Storage {
     graph: PackedGraph,
+    base: String,
 }
 
 impl Storage {
     pub fn new() -> Result<Self, StorageError> {
         Ok(Self {
             graph: PackedGraph::new(),
+            base: "https://example.org".to_owned(),
         })
     }
 
@@ -80,7 +91,10 @@ impl Storage {
             .parse_file(path)
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
-        Ok(Self { graph })
+        Ok(Self {
+            graph,
+            base: "https://example.org".to_owned(),
+        })
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -90,7 +104,10 @@ impl Storage {
             .parse_file(primary_path)
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
-        Ok(Self { graph })
+        Ok(Self {
+            graph,
+            base: "https://example.org".to_owned(),
+        })
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -103,7 +120,10 @@ impl Storage {
             .parse_file(primary_path)
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
-        Ok(Self { graph })
+        Ok(Self {
+            graph,
+            base: "https://example.org".to_owned(),
+        })
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -113,7 +133,10 @@ impl Storage {
             .parse_file(path)
             .map_err(|err| StorageError::Other(Box::new(err)))?;
         let graph = from_gfa::<PackedGraph, ()>(&gfa);
-        Ok(Self { graph })
+        Ok(Self {
+            graph,
+            base: "https://example.org".to_owned(),
+        })
     }
 
     pub fn snapshot(&self) -> StorageReader {
@@ -191,10 +214,11 @@ impl StorageReader {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> ChainedDecodingQuadIterator {
-        let sub = subject.map(|s| self.decode_term(s).ok()).flatten();
-        let pre = predicate.map(|s| self.decode_term(s).ok()).flatten();
-        let obj = object.map(|s| self.decode_term(s).ok()).flatten();
-        self.nodes(&sub, &pre, &obj);
+        // let sub = subject.map(|s| self.decode_term(s).ok()).flatten();
+        // let pre = predicate.map(|s| self.decode_term(s).ok()).flatten();
+        let graph_name = graph_name.expect("Graph name is given");
+        // let obj = object.map(|s| self.decode_term(s).ok()).flatten();
+        self.nodes(subject, predicate, object, graph_name);
         return ChainedDecodingQuadIterator {
             first: DecodingQuadIterator {
                 terms: Vec::new(),
@@ -204,19 +228,265 @@ impl StorageReader {
         };
     }
 
-    fn nodes(&self, subject: &Option<Term>, predicate: &Option<Term>, object: &Option<Term>) {
+    fn nodes(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: &EncodedTerm,
+    ) -> Vec<EncodedQuad> {
+        let mut results = Vec::new();
         match subject {
             Some(sub) => {
                 let is_node_iri = self.is_node_iri_in_graph(sub);
+                if self.is_vocab(predicate, rdf::TYPE)
+                    && self.is_vocab(object, vg::NODE)
+                    && is_node_iri
+                {
+                    results.push(EncodedQuad::new(
+                        sub.to_owned(),
+                        rdf::TYPE.into(),
+                        vg::NODE.into(),
+                        graph_name.to_owned(),
+                    ));
+                } else if predicate.is_none() && self.is_vocab(object, vg::NODE) && is_node_iri {
+                    results.push(EncodedQuad::new(
+                        sub.to_owned(),
+                        rdf::TYPE.into(),
+                        vg::NODE.into(),
+                        graph_name.to_owned(),
+                    ));
+                } else if predicate.is_none() && is_node_iri {
+                    results.push(EncodedQuad::new(
+                        sub.to_owned(),
+                        rdf::TYPE.into(),
+                        vg::NODE.into(),
+                        graph_name.to_owned(),
+                    ));
+                }
+
+                if is_node_iri {
+                    let mut triples = self.handle_to_triples(sub, predicate, object, graph_name);
+                    let mut edge_triples =
+                        self.handle_to_edge_triples(sub, predicate, object, graph_name);
+                    results.append(&mut triples);
+                    results.append(&mut edge_triples);
+                }
             }
-            None => {}
+            None => {
+                for handle in self.storage.graph.handles() {
+                    let term = self
+                        .handle_to_namednode(handle)
+                        .expect("Can turn handle to namednode");
+                    let mut recursion_results =
+                        self.nodes(Some(&term), predicate, object, graph_name);
+                    results.append(&mut recursion_results);
+                }
+            }
+        }
+        results
+    }
+
+    fn handle_to_triples(
+        &self,
+        subject: &EncodedTerm,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: &EncodedTerm,
+    ) -> Vec<EncodedQuad> {
+        let mut results = Vec::new();
+        if self.is_vocab(predicate, rdf::VALUE) || predicate.is_none() {
+            let handle = Handle::new(
+                self.get_node_id(subject).expect("Subject is node"),
+                Orientation::Forward,
+            );
+            let seq_bytes = self.storage.graph.sequence_vec(handle);
+            let seq = str::from_utf8(&seq_bytes).expect("Node contains sequence");
+            let seq_value = Literal::new_simple_literal(seq);
+            if object.is_none()
+                || self.decode_term(object.unwrap()).unwrap() == Term::Literal(seq_value.clone())
+            {
+                results.push(EncodedQuad::new(
+                    subject.to_owned(),
+                    rdf::VALUE.into(),
+                    seq_value.as_ref().into(),
+                    graph_name.to_owned(),
+                ));
+            }
+        } else if (self.is_vocab(predicate, rdf::TYPE) || predicate.is_none())
+            && (object.is_none() || self.is_vocab(object, vg::NODE))
+        {
+            results.push(EncodedQuad::new(
+                subject.to_owned(),
+                rdf::TYPE.into(),
+                vg::NODE.into(),
+                graph_name.to_owned(),
+            ));
+        }
+        results
+    }
+
+    fn handle_to_edge_triples(
+        &self,
+        subject: &EncodedTerm,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: &EncodedTerm,
+    ) -> Vec<EncodedQuad> {
+        let mut results = Vec::new();
+        if predicate.is_none() || self.is_node_related(predicate) {
+            let handle = Handle::new(
+                self.get_node_id(subject).expect("Subject has node id"),
+                Orientation::Forward,
+            );
+            let neighbors = self.storage.graph.neighbors(handle, Direction::Right);
+            for neighbor in neighbors {
+                if object.is_none()
+                    || self
+                        .get_node_id(object.unwrap())
+                        .expect("Object has node id")
+                        == neighbor.unpack_number()
+                {
+                    let mut edge_triples =
+                        self.generate_edge_triples(handle, neighbor, predicate, graph_name);
+                    results.append(&mut edge_triples);
+                }
+            }
+        }
+        results
+    }
+
+    fn generate_edge_triples(
+        &self,
+        subject: Handle,
+        object: Handle,
+        predicate: Option<&EncodedTerm>,
+        graph_name: &EncodedTerm,
+    ) -> Vec<EncodedQuad> {
+        let mut results = Vec::new();
+        let node_is_reverse = subject.is_reverse();
+        let other_is_reverse = object.is_reverse();
+        if (predicate.is_none() || self.is_vocab(predicate, vg::LINKS_FORWARD_TO_FORWARD))
+            && !node_is_reverse
+            && !other_is_reverse
+        {
+            results.push(EncodedQuad::new(
+                self.handle_to_namednode(subject).expect("Subject is fine"),
+                vg::LINKS_FORWARD_TO_FORWARD.into(),
+                self.handle_to_namednode(object).expect("Object is fine"),
+                graph_name.to_owned(),
+            ));
+        }
+        if (predicate.is_none() || self.is_vocab(predicate, vg::LINKS_FORWARD_TO_REVERSE))
+            && !node_is_reverse
+            && other_is_reverse
+        {
+            results.push(EncodedQuad::new(
+                self.handle_to_namednode(subject).expect("Subject is fine"),
+                vg::LINKS_FORWARD_TO_REVERSE.into(),
+                self.handle_to_namednode(object).expect("Object is fine"),
+                graph_name.to_owned(),
+            ));
+        }
+        if (predicate.is_none() || self.is_vocab(predicate, vg::LINKS_REVERSE_TO_FORWARD))
+            && node_is_reverse
+            && !other_is_reverse
+        {
+            results.push(EncodedQuad::new(
+                self.handle_to_namednode(subject).expect("Subject is fine"),
+                vg::LINKS_REVERSE_TO_FORWARD.into(),
+                self.handle_to_namednode(object).expect("Object is fine"),
+                graph_name.to_owned(),
+            ));
+        }
+        if (predicate.is_none() || self.is_vocab(predicate, vg::LINKS_REVERSE_TO_REVERSE))
+            && node_is_reverse
+            && other_is_reverse
+        {
+            results.push(EncodedQuad::new(
+                self.handle_to_namednode(subject).expect("Subject is fine"),
+                vg::LINKS_REVERSE_TO_REVERSE.into(),
+                self.handle_to_namednode(object).expect("Object is fine"),
+                graph_name.to_owned(),
+            ));
+        }
+        if predicate.is_none() || self.is_vocab(predicate, vg::LINKS) {
+            results.push(EncodedQuad::new(
+                self.handle_to_namednode(subject).expect("Subject is fine"),
+                vg::LINKS.into(),
+                self.handle_to_namednode(object).expect("Object is fine"),
+                graph_name.to_owned(),
+            ));
+        }
+        results
+    }
+
+    fn handle_to_namednode(&self, handle: Handle) -> Option<EncodedTerm> {
+        let id = handle.unpack_number();
+        let text = format!("<{}/node/{}>", self.storage.base, id);
+        let named_node = NamedNode::new(text).ok()?;
+        Some(named_node.as_ref().into())
+    }
+
+    fn is_node_related(&self, predicate: Option<&EncodedTerm>) -> bool {
+        let predicates = [
+            vg::LINKS,
+            vg::LINKS_FORWARD_TO_FORWARD,
+            vg::LINKS_FORWARD_TO_REVERSE,
+            vg::LINKS_REVERSE_TO_FORWARD,
+            vg::LINKS_REVERSE_TO_REVERSE,
+        ];
+        if predicate.is_none() {
+            return false;
+        }
+        predicates
+            .into_iter()
+            .map(|x| self.is_vocab(predicate, x))
+            .reduce(|acc, x| acc || x)
+            .unwrap()
+    }
+
+    fn is_vocab(&self, term: Option<&EncodedTerm>, vocab: NamedNodeRef) -> bool {
+        if term.is_none() {
+            return false;
+        }
+        let term = term.unwrap();
+        if !term.is_named_node() {
+            return false;
+        }
+        let named_node = self.decode_named_node(term).expect("Is named node");
+        named_node == vocab
+    }
+
+    fn is_node_iri_in_graph(&self, term: &EncodedTerm) -> bool {
+        match self.get_node_id(term) {
+            Some(id) => self.storage.graph.has_node(id),
+            None => false,
         }
     }
 
-    fn is_node_iri_in_graph(&self, term: &Term) -> bool {
-        let named_node: NamedNodeRef = term.into();
-        // term.is_named_node() && Ok(term.into::<NamedNode>())
-        true
+    fn get_node_id(&self, term: &EncodedTerm) -> Option<u64> {
+        match term.is_named_node() {
+            true => {
+                let named_node = self.decode_named_node(term).expect("Is named node");
+                let mut text = named_node.to_string();
+
+                // Remove trailing '>'
+                text.pop();
+
+                let mut parts_iter = text.rsplit("/");
+                let last = parts_iter.next();
+                let pre_last = parts_iter.next();
+                match last.is_some()
+                    && pre_last.is_some()
+                    && pre_last.expect("Option is some") == "node"
+                {
+                    true => last.expect("Option is some").parse::<u64>().ok(),
+                    false => None,
+                }
+            }
+            false => None,
+        }
     }
 
     pub fn quads(&self) -> ChainedDecodingQuadIterator {
