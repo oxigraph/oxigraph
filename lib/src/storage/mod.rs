@@ -214,11 +214,43 @@ impl StorageReader {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> ChainedDecodingQuadIterator {
+        println!("Receiving quads_for_pattern");
         // let sub = subject.map(|s| self.decode_term(s).ok()).flatten();
         // let pre = predicate.map(|s| self.decode_term(s).ok()).flatten();
         let graph_name = graph_name.expect("Graph name is given");
         // let obj = object.map(|s| self.decode_term(s).ok()).flatten();
-        self.nodes(subject, predicate, object, graph_name);
+        if subject.is_some_and(|s| s.is_blank_node()) || object.is_some_and(|o| o.is_blank_node()) {
+            println!("Containing blank nodes");
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms: Vec::new(),
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
+        }
+
+        if self.is_vocab(predicate, rdf::TYPE) && object.is_some() {
+            //TODO
+            println!("Containing type predicate");
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms: Vec::new(),
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
+        } else if self.is_node_related(predicate) {
+            println!("Containing node-related predicate");
+            let terms = self.nodes(subject, predicate, object, graph_name);
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms,
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
+        }
         return ChainedDecodingQuadIterator {
             first: DecodingQuadIterator {
                 terms: Vec::new(),
