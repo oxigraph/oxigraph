@@ -14,7 +14,7 @@ fn main() {
     println!("Oxigraph/HDT - Driver for Testing");
 
     // Open the HDT file.
-    let dataset = Rc::new(HDTDatasetView::new("hdt_driver/test.hdt"));
+    let dataset = Rc::new(HDTDatasetView::new("oxhdt-sys/tests/resources/test.hdt"));
 
     // Test
     println!();
