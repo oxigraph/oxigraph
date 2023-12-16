@@ -108,7 +108,7 @@ impl QueryResultsSerializer {
         }
     }
 
-    #[deprecated(note = "Use serialize_boolean_to_write")]
+    #[deprecated(note = "use serialize_boolean_to_write", since = "0.4.0")]
     pub fn write_boolean_result<W: Write>(&self, writer: W, value: bool) -> io::Result<W> {
         self.serialize_boolean_to_write(writer, value)
     }
@@ -203,7 +203,7 @@ impl QueryResultsSerializer {
         })
     }
 
-    #[deprecated(note = "Use serialize_solutions_to_write")]
+    #[deprecated(note = "use serialize_solutions_to_write", since = "0.4.0")]
     pub fn solutions_writer<W: Write>(
         &self,
         writer: W,

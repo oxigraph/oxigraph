@@ -517,7 +517,7 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "Use Store.load_from_read instead")]
+    #[deprecated(note = "use Store.load_from_read instead", since = "0.4.0")]
     pub fn load_graph(
         &self,
         read: impl Read,
@@ -560,7 +560,7 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "Use Store.load_from_read instead")]
+    #[deprecated(note = "use Store.load_from_read instead", since = "0.4.0")]
     pub fn load_dataset(
         &self,
         read: impl Read,
@@ -1170,7 +1170,7 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
     /// ```
-    #[deprecated(note = "Use Transaction.load_from_read instead")]
+    #[deprecated(note = "use Transaction.load_from_read instead", since = "0.4.0")]
     pub fn load_graph(
         &mut self,
         read: impl Read,
@@ -1213,7 +1213,7 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
     /// ```
-    #[deprecated(note = "Use Transaction.load_from_read instead")]
+    #[deprecated(note = "use Transaction.load_from_read instead", since = "0.4.0")]
     pub fn load_dataset(
         &mut self,
         read: impl Read,
@@ -1624,7 +1624,7 @@ impl BulkLoader {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "Use BulkLoader.load_from_read instead")]
+    #[deprecated(note = "use BulkLoader.load_from_read instead", since = "0.4.0")]
     pub fn load_dataset(
         &self,
         read: impl Read,
@@ -1683,7 +1683,7 @@ impl BulkLoader {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "Use BulkLoader.load_from_read instead")]
+    #[deprecated(note = "use BulkLoader.load_from_read instead", since = "0.4.0")]
     pub fn load_graph(
         &self,
         read: impl Read,

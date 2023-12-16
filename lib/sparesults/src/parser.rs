@@ -109,7 +109,7 @@ impl QueryResultsParser {
         })
     }
 
-    #[deprecated(note = "Use parse_read")]
+    #[deprecated(note = "use parse_read", since = "0.4.0")]
     pub fn read_results<R: Read>(
         &self,
         reader: R,

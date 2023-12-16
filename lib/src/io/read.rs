@@ -27,7 +27,7 @@ use std::io::Read;
 /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
-#[deprecated(note = "Use RdfParser instead")]
+#[deprecated(note = "use RdfParser instead", since = "0.4.0")]
 pub struct GraphParser {
     inner: RdfParser,
 }
@@ -118,7 +118,7 @@ impl<R: Read> Iterator for TripleReader<R> {
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
-#[deprecated(note = "Use RdfParser instead")]
+#[deprecated(note = "use RdfParser instead", since = "0.4.0")]
 pub struct DatasetParser {
     inner: RdfParser,
 }

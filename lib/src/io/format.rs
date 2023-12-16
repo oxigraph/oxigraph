@@ -7,7 +7,7 @@ use oxrdfio::RdfFormat;
 /// This enumeration is non exhaustive. New formats like JSON-LD will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
-#[deprecated(note = "Use RdfFormat instead")]
+#[deprecated(note = "use RdfFormat instead", since = "0.4.0")]
 pub enum GraphFormat {
     /// [N-Triples](https://www.w3.org/TR/n-triples/)
     NTriples,
@@ -122,7 +122,7 @@ impl From<GraphFormat> for RdfFormat {
 /// This enumeration is non exhaustive. New formats like JSON-LD will be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
-#[deprecated(note = "Use RdfFormat instead")]
+#[deprecated(note = "use RdfFormat instead", since = "0.4.0")]
 pub enum DatasetFormat {
     /// [N-Quads](https://www.w3.org/TR/n-quads/)
     NQuads,
