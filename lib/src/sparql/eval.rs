@@ -1790,7 +1790,7 @@ impl SimpleEvaluator {
                 let dataset = Rc::clone(&self.dataset);
                 Rc::new(move |tuple| {
                     let value = to_simple_string(&dataset, &lexical_form(tuple)?)?;
-                    let datatype = if let EncodedTerm::NamedNode { iri_id } = datatype(tuple)? {
+                    let datatype = if let EncodedTerm::NamedNode { iri_id, .. } = datatype(tuple)? {
                         dataset.get_str(&iri_id).ok()?
                     } else {
                         None
@@ -2134,7 +2134,7 @@ fn to_bool(term: &EncodedTerm) -> Option<bool> {
 
 fn to_string_id(dataset: &DatasetView, term: &EncodedTerm) -> Option<SmallStringOrId> {
     match term {
-        EncodedTerm::NamedNode { iri_id } => Some(
+        EncodedTerm::NamedNode { iri_id, .. } => Some(
             if let Ok(value) = SmallString::try_from(dataset.get_str(iri_id).ok()??.as_str()) {
                 value.into()
             } else {
@@ -2594,8 +2594,8 @@ fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedT
                     _ => Ordering::Less,
                 }
             }
-            EncodedTerm::NamedNode { iri_id: a } => match b {
-                EncodedTerm::NamedNode { iri_id: b } => {
+            EncodedTerm::NamedNode { iri_id: a, .. } => match b {
+                EncodedTerm::NamedNode { iri_id: b, .. } => {
                     compare_str_ids(dataset, a, b).unwrap_or(Ordering::Equal)
                 }
                 _ if b.is_blank_node() => Ordering::Greater,
@@ -2874,6 +2874,7 @@ fn datatype(dataset: &DatasetView, value: &EncodedTerm) -> Option<EncodedTerm> {
         EncodedTerm::SmallTypedLiteral { datatype_id, .. }
         | EncodedTerm::BigTypedLiteral { datatype_id, .. } => Some(EncodedTerm::NamedNode {
             iri_id: *datatype_id,
+            value: "Created by DATATYPE id (lib/src/sparql/eval.rs:2877)".to_string(),
         }),
         EncodedTerm::BooleanLiteral(..) => Some(encode_named_node(dataset, xsd::BOOLEAN)),
         EncodedTerm::FloatLiteral(..) => Some(encode_named_node(dataset, xsd::FLOAT)),

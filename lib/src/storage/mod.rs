@@ -270,11 +270,13 @@ impl StorageReader {
         let mut results = Vec::new();
         match subject {
             Some(sub) => {
+                println!("Real subject: {}", sub.get_named_node_value().unwrap());
                 let is_node_iri = self.is_node_iri_in_graph(sub);
                 if self.is_vocab(predicate, rdf::TYPE)
                     && self.is_vocab(object, vg::NODE)
                     && is_node_iri
                 {
+                    println!("First");
                     results.push(EncodedQuad::new(
                         sub.to_owned(),
                         rdf::TYPE.into(),
@@ -282,6 +284,7 @@ impl StorageReader {
                         graph_name.to_owned(),
                     ));
                 } else if predicate.is_none() && self.is_vocab(object, vg::NODE) && is_node_iri {
+                    println!("Second");
                     results.push(EncodedQuad::new(
                         sub.to_owned(),
                         rdf::TYPE.into(),
@@ -289,6 +292,7 @@ impl StorageReader {
                         graph_name.to_owned(),
                     ));
                 } else if predicate.is_none() && is_node_iri {
+                    println!("Third");
                     results.push(EncodedQuad::new(
                         sub.to_owned(),
                         rdf::TYPE.into(),
@@ -298,24 +302,33 @@ impl StorageReader {
                 }
 
                 if is_node_iri {
+                    println!("Fourth");
                     let mut triples = self.handle_to_triples(sub, predicate, object, graph_name);
                     let mut edge_triples =
                         self.handle_to_edge_triples(sub, predicate, object, graph_name);
+                    println!("Normal: {:?}", triples);
+                    println!("Edge: {:?}", edge_triples);
                     results.append(&mut triples);
                     results.append(&mut edge_triples);
                 }
             }
             None => {
+                println!("None subject");
                 for handle in self.storage.graph.handles() {
+                    println!("{:?}", handle);
                     let term = self
                         .handle_to_namednode(handle)
                         .expect("Can turn handle to namednode");
                     let mut recursion_results =
                         self.nodes(Some(&term), predicate, object, graph_name);
+                    println!("{:?}", recursion_results);
+                    println!("---------------------------");
                     results.append(&mut recursion_results);
                 }
+                // println!("{:?}", results);
             }
         }
+        println!("Nodes successfully done!");
         results
     }
 
@@ -335,6 +348,7 @@ impl StorageReader {
             let seq_bytes = self.storage.graph.sequence_vec(handle);
             let seq = str::from_utf8(&seq_bytes).expect("Node contains sequence");
             let seq_value = Literal::new_simple_literal(seq);
+            println!("Decoding 338");
             if object.is_none()
                 || self.decode_term(object.unwrap()).unwrap() == Term::Literal(seq_value.clone())
             {
@@ -345,6 +359,7 @@ impl StorageReader {
                     graph_name.to_owned(),
                 ));
             }
+            println!("Done decoding 338");
         } else if (self.is_vocab(predicate, rdf::TYPE) || predicate.is_none())
             && (object.is_none() || self.is_vocab(object, vg::NODE))
         {
@@ -366,11 +381,13 @@ impl StorageReader {
         graph_name: &EncodedTerm,
     ) -> Vec<EncodedQuad> {
         let mut results = Vec::new();
+        print!("Subject: {:?}, ", subject);
         if predicate.is_none() || self.is_node_related(predicate) {
             let handle = Handle::new(
                 self.get_node_id(subject).expect("Subject has node id"),
                 Orientation::Forward,
             );
+            println!("Handle: {:?}", handle);
             let neighbors = self.storage.graph.neighbors(handle, Direction::Right);
             for neighbor in neighbors {
                 if object.is_none()
@@ -455,8 +472,8 @@ impl StorageReader {
 
     fn handle_to_namednode(&self, handle: Handle) -> Option<EncodedTerm> {
         let id = handle.unpack_number();
-        let text = format!("<{}/node/{}>", self.storage.base, id);
-        let named_node = NamedNode::new(text).ok()?;
+        let text = format!("{}/node/{}", self.storage.base, id);
+        let named_node = NamedNode::new(text).unwrap();
         Some(named_node.as_ref().into())
     }
 
@@ -486,8 +503,8 @@ impl StorageReader {
         if !term.is_named_node() {
             return false;
         }
-        let named_node = self.decode_named_node(term).expect("Is named node");
-        named_node == vocab
+        let named_node = term.get_named_node_value().expect("Is named node");
+        named_node == vocab.as_str()
     }
 
     fn is_node_iri_in_graph(&self, term: &EncodedTerm) -> bool {
@@ -500,11 +517,14 @@ impl StorageReader {
     fn get_node_id(&self, term: &EncodedTerm) -> Option<u64> {
         match term.is_named_node() {
             true => {
-                let named_node = self.decode_named_node(term).expect("Is named node");
-                let mut text = named_node.to_string();
+                let mut text = term
+                    .get_named_node_value()
+                    .expect("Encoded NamedNode has to have value")
+                    .to_owned();
 
                 // Remove trailing '>'
-                text.pop();
+                println!("Text: {}", text);
+                // text.pop();
 
                 let mut parts_iter = text.rsplit("/");
                 let last = parts_iter.next();

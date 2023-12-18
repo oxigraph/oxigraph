@@ -44,6 +44,7 @@ pub enum EncodedTerm {
     DefaultGraph,
     NamedNode {
         iri_id: StrHash,
+        value: String,
     },
     NumericalBlankNode {
         id: u128,
@@ -103,9 +104,16 @@ impl PartialEq for EncodedTerm {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::DefaultGraph, Self::DefaultGraph) => true,
-            (Self::NamedNode { iri_id: iri_id_a }, Self::NamedNode { iri_id: iri_id_b }) => {
-                iri_id_a == iri_id_b
-            }
+            (
+                Self::NamedNode {
+                    iri_id: iri_id_a,
+                    value: value_a,
+                },
+                Self::NamedNode {
+                    iri_id: iri_id_b,
+                    value: value_b,
+                },
+            ) => iri_id_a == iri_id_b,
             (Self::NumericalBlankNode { id: id_a }, Self::NumericalBlankNode { id: id_b }) => {
                 id_a == id_b
             }
@@ -213,7 +221,7 @@ impl Eq for EncodedTerm {}
 impl Hash for EncodedTerm {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Self::NamedNode { iri_id } => iri_id.hash(state),
+            Self::NamedNode { iri_id, value } => iri_id.hash(state),
             Self::NumericalBlankNode { id } => id.hash(state),
             Self::SmallBlankNode(id) => id.hash(state),
             Self::BigBlankNode { id_id } => id_id.hash(state),
@@ -328,6 +336,13 @@ impl EncodedTerm {
 
     pub fn is_triple(&self) -> bool {
         matches!(self, Self::Triple { .. })
+    }
+
+    pub fn get_named_node_value(&self) -> Option<&str> {
+        match self {
+            Self::NamedNode { value, .. } => Some(value),
+            _ => None,
+        }
     }
 }
 
@@ -479,6 +494,7 @@ impl From<NamedNodeRef<'_>> for EncodedTerm {
     fn from(named_node: NamedNodeRef<'_>) -> Self {
         Self::NamedNode {
             iri_id: StrHash::new(named_node.as_str()),
+            value: named_node.as_str().to_owned(),
         }
     }
 }
@@ -713,7 +729,7 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
 ) -> Result<(), StorageError> {
     match term {
         TermRef::NamedNode(node) => {
-            if let EncodedTerm::NamedNode { iri_id } = encoded {
+            if let EncodedTerm::NamedNode { iri_id, value } = encoded {
                 insert_str(iri_id, node.as_str())
             } else {
                 unreachable!("Invalid term encoding {:?} for {}", encoded, term)
@@ -950,9 +966,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::DefaultGraph => {
                 Err(CorruptionError::msg("The default graph tag is not a valid term").into())
             }
-            EncodedTerm::NamedNode { iri_id } => {
-                Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
-            }
+            EncodedTerm::NamedNode { value, .. } => Ok(NamedNode::new_unchecked(value).into()),
             EncodedTerm::NumericalBlankNode { id } => Ok(BlankNode::new_from_unique_id(*id).into()),
             EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
             EncodedTerm::BigBlankNode { id_id } => {

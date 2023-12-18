@@ -210,6 +210,7 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::NamedNode {
                     iri_id: StrHash::from_be_bytes(buffer),
+                    value: "READ USING BE BYTES".to_string(),
                 })
             }
             TYPE_NUMERICAL_BLANK_NODE_ID => {
@@ -498,7 +499,7 @@ pub fn encode_term_quad(
 pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
     match term {
         EncodedTerm::DefaultGraph => (),
-        EncodedTerm::NamedNode { iri_id } => {
+        EncodedTerm::NamedNode { iri_id, .. } => {
             sink.push(TYPE_NAMED_NODE_ID);
             sink.extend_from_slice(&iri_id.to_be_bytes());
         }
