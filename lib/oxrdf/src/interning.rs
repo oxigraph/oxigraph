@@ -101,7 +101,7 @@ impl InternedNamedNode {
         })
     }
 
-    pub fn decode_from(self, interner: &Interner) -> NamedNodeRef {
+    pub fn decode_from(self, interner: &Interner) -> NamedNodeRef<'_> {
         NamedNodeRef::new_unchecked(interner.resolve(self.id))
     }
 
@@ -154,7 +154,7 @@ impl InternedBlankNode {
         }
     }
 
-    pub fn decode_from(self, interner: &Interner) -> BlankNodeRef {
+    pub fn decode_from(self, interner: &Interner) -> BlankNodeRef<'_> {
         BlankNodeRef::new_unchecked(match self {
             Self::Number { id } => &interner.string_for_blank_node_id[&id],
             Self::Other { id } => interner.resolve(id),

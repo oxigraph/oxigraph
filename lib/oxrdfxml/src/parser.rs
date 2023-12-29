@@ -417,7 +417,11 @@ struct RdfXmlReader<R> {
 }
 
 impl<R> RdfXmlReader<R> {
-    fn parse_event(&mut self, event: Event, results: &mut Vec<Triple>) -> Result<(), ParseError> {
+    fn parse_event(
+        &mut self,
+        event: Event<'_>,
+        results: &mut Vec<Triple>,
+    ) -> Result<(), ParseError> {
         match event {
             Event::Start(event) => self.parse_start_event(&event, results),
             Event::End(event) => self.parse_end_event(&event, results),
@@ -902,7 +906,7 @@ impl<R> RdfXmlReader<R> {
 
     fn resolve_ns_name(
         &self,
-        namespace: ResolveResult,
+        namespace: ResolveResult<'_>,
         local_name: LocalName<'_>,
     ) -> Result<String, ParseError> {
         match namespace {
@@ -1141,7 +1145,7 @@ impl<R> RdfXmlReader<R> {
         }
     }
 
-    fn convert_attribute(&self, attribute: &Attribute) -> Result<String, ParseError> {
+    fn convert_attribute(&self, attribute: &Attribute<'_>) -> Result<String, ParseError> {
         Ok(attribute
             .decode_and_unescape_value_with(&self.reader, |e| self.resolve_entity(e))?
             .into_owned())

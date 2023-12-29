@@ -30,24 +30,14 @@ use std::thread::{available_parallelism, yield_now};
 use std::{ptr, slice};
 
 macro_rules! ffi_result {
-    ( $($function:ident)::*() ) => {
-        ffi_result_impl!($($function)::*())
-    };
-
-    ( $($function:ident)::*( $arg1:expr $(, $arg:expr)* $(,)? ) ) => {
-        ffi_result_impl!($($function)::*($arg1 $(, $arg)* ,))
-    };
-}
-
-macro_rules! ffi_result_impl {
-    ( $($function:ident)::*( $($arg:expr,)*) ) => {{
+    ( $($function:ident)::*( $arg1:expr $(, $arg:expr)* $(,)? ) ) => {{
         let mut status = rocksdb_status_t {
             code: rocksdb_status_code_t_rocksdb_status_code_ok,
             subcode: rocksdb_status_subcode_t_rocksdb_status_subcode_none,
             severity: rocksdb_status_severity_t_rocksdb_status_severity_none,
             string: ptr::null()
         };
-        let result = $($function)::*($($arg,)* &mut status);
+        let result = $($function)::*($arg1 $(, $arg)* , &mut status);
         if status.code == rocksdb_status_code_t_rocksdb_status_code_ok {
             Ok(result)
         } else {
@@ -119,8 +109,7 @@ impl Drop for RwDbHandler {
             rocksdb_block_based_options_destroy(self.block_based_table_options);
         }
         if self.in_memory {
-            #[allow(clippy::let_underscore_must_use)]
-            let _: io::Result<()> = remove_dir_all(&self.path);
+            drop(remove_dir_all(&self.path));
         }
     }
 }
@@ -154,8 +143,7 @@ impl Drop for RoDbHandler {
             rocksdb_options_destroy(self.options);
         }
         if let Some(path) = &self.path_to_remove {
-            #[allow(clippy::let_underscore_must_use)]
-            let _: io::Result<()> = remove_dir_all(path);
+            drop(remove_dir_all(path));
         }
     }
 }
@@ -571,9 +559,9 @@ impl Db {
                 DbKind::ReadOnly(db) => {
                     if db.is_secondary {
                         // We try to refresh (and ignore the errors)
-                        #[allow(clippy::let_underscore_must_use)]
-                        let _: Result<(), ErrorStatus> =
-                            ffi_result!(rocksdb_try_catch_up_with_primary_with_status(db.db));
+                        drop(ffi_result!(rocksdb_try_catch_up_with_primary_with_status(
+                            db.db
+                        )));
                     }
                     let options = rocksdb_readoptions_create_copy(db.read_options);
                     Reader {

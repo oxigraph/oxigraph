@@ -45,7 +45,7 @@ impl RuleRecognizer for TriGRecognizer {
 
     fn recognize_next(
         mut self,
-        token: N3Token,
+        token: N3Token<'_>,
         context: &mut TriGRecognizerContext,
         results: &mut Vec<Quad>,
         errors: &mut Vec<RuleRecognizerError>,

@@ -3178,8 +3178,9 @@ mod tests {
     #[cfg(feature = "custom-now")]
     #[test]
     fn custom_now() {
+        #[allow(unsafe_code)]
         #[no_mangle]
-        fn custom_ox_now() -> Duration {
+        extern "Rust" fn custom_ox_now() -> Duration {
             Duration::default()
         }
         DateTime::now();

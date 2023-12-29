@@ -70,7 +70,7 @@ impl FromStr for Query {
     }
 }
 
-impl<'a> TryFrom<&'a str> for Query {
+impl TryFrom<&str> for Query {
     type Error = spargebra::ParseError;
 
     fn try_from(query: &str) -> Result<Self, spargebra::ParseError> {
@@ -78,7 +78,7 @@ impl<'a> TryFrom<&'a str> for Query {
     }
 }
 
-impl<'a> TryFrom<&'a String> for Query {
+impl TryFrom<&String> for Query {
     type Error = spargebra::ParseError;
 
     fn try_from(query: &String) -> Result<Self, spargebra::ParseError> {
@@ -163,7 +163,7 @@ impl FromStr for Update {
     }
 }
 
-impl<'a> TryFrom<&'a str> for Update {
+impl TryFrom<&str> for Update {
     type Error = spargebra::ParseError;
 
     fn try_from(update: &str) -> Result<Self, spargebra::ParseError> {
@@ -171,7 +171,7 @@ impl<'a> TryFrom<&'a str> for Update {
     }
 }
 
-impl<'a> TryFrom<&'a String> for Update {
+impl TryFrom<&String> for Update {
     type Error = spargebra::ParseError;
 
     fn try_from(update: &String) -> Result<Self, spargebra::ParseError> {

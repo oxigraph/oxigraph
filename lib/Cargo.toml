@@ -58,6 +58,9 @@ criterion = "0.5"
 oxhttp = "0.2.0-alpha.3"
 zstd = ">=0.12, <0.14"
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

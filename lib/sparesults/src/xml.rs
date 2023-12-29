@@ -104,7 +104,7 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteXmlSolutionsWriter<W> {
         let mut buffer = Vec::with_capacity(48);
         let inner = InnerXmlSolutionsWriter::start(&mut buffer, variables);
         Self::do_write(&mut writer, buffer).await?;
-        Ok(Self { writer, inner })
+        Ok(Self { inner, writer })
     }
 
     pub async fn write<'a>(

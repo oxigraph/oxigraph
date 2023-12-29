@@ -767,7 +767,7 @@ pub struct QuadIter {
 
 #[pymethods]
 impl QuadIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -786,7 +786,7 @@ pub struct GraphNameIter {
 
 #[pymethods]
 impl GraphNameIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
