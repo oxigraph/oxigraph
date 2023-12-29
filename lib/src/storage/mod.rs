@@ -1193,6 +1193,7 @@ impl<'a> StorageWriter<'a> {
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[must_use]
 pub struct StorageBulkLoader {
     storage: Storage,
     hooks: Vec<Box<dyn Fn(u64)>>,
@@ -1211,19 +1212,16 @@ impl StorageBulkLoader {
         }
     }
 
-    #[must_use]
-    pub fn set_num_threads(mut self, num_threads: usize) -> Self {
+    pub fn with_num_threads(mut self, num_threads: usize) -> Self {
         self.num_threads = Some(num_threads);
         self
     }
 
-    #[must_use]
-    pub fn set_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
+    pub fn with_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
         self.max_memory_size = Some(max_memory_size);
         self
     }
 
-    #[must_use]
     pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
         self.hooks.push(Box::new(callback));
         self

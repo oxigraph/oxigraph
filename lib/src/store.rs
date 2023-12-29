@@ -1451,8 +1451,8 @@ impl Iterator for GraphNameIter {
 /// Results might get weird if you delete data during the loading process.
 ///
 /// <div class="warning">It is optimized for speed.</div>
-/// Memory usage is configurable using [`BulkLoader::set_max_memory_size_in_megabytes`]
-/// and the number of used threads with [`BulkLoader::set_num_threads`].
+/// Memory usage is configurable using [`BulkLoader::with_max_memory_size_in_megabytes`]
+/// and the number of used threads with [`BulkLoader::with_num_threads`].
 /// By default the memory consumption target (excluding the system and RocksDB internal consumption)
 /// is around 2GB per thread and 2 threads.
 /// These targets are considered per loaded file.
@@ -1475,6 +1475,7 @@ impl Iterator for GraphNameIter {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[cfg(not(target_family = "wasm"))]
+#[must_use]
 pub struct BulkLoader {
     storage: StorageBulkLoader,
     on_parse_error: Option<Box<dyn Fn(ParseError) -> Result<(), ParseError>>>,
@@ -1487,10 +1488,15 @@ impl BulkLoader {
     /// This number must be at last 2 (one for parsing and one for loading).
     ///
     /// The default value is 2.
-    #[must_use]
-    pub fn set_num_threads(mut self, num_threads: usize) -> Self {
-        self.storage = self.storage.set_num_threads(num_threads);
+    pub fn with_num_threads(mut self, num_threads: usize) -> Self {
+        self.storage = self.storage.with_num_threads(num_threads);
         self
+    }
+
+    #[doc(hidden)]
+    #[deprecated(note = "Use with_num_threads", since = "0.4.0")]
+    pub fn set_num_threads(self, num_threads: usize) -> Self {
+        self.with_num_threads(num_threads)
     }
 
     /// Sets a rough idea of the maximal amount of memory to be used by this operation.
@@ -1502,16 +1508,20 @@ impl BulkLoader {
     /// (for example if the data contains very long IRIs or literals).
     ///
     /// By default, a target 2GB per used thread is used.
-    #[must_use]
-    pub fn set_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
+    pub fn with_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
         self.storage = self
             .storage
-            .set_max_memory_size_in_megabytes(max_memory_size);
+            .with_max_memory_size_in_megabytes(max_memory_size);
         self
     }
 
+    #[doc(hidden)]
+    #[deprecated(note = "Use with_max_memory_size_in_megabytes", since = "0.4.0")]
+    pub fn set_max_memory_size_in_megabytes(self, max_memory_size: usize) -> Self {
+        self.with_max_memory_size_in_megabytes(max_memory_size)
+    }
+
     /// Adds a `callback` evaluated from time to time with the number of loaded triples.
-    #[must_use]
     pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
         self.storage = self.storage.on_progress(callback);
         self
@@ -1521,7 +1531,6 @@ impl BulkLoader {
     /// by returning `Ok` or fail by returning `Err`.
     ///
     /// By default the parsing fails.
-    #[must_use]
     pub fn on_parse_error(
         mut self,
         callback: impl Fn(ParseError) -> Result<(), ParseError> + 'static,
