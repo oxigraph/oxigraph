@@ -725,10 +725,10 @@ impl PyStore {
     /// If you want to move your data to another RDF storage system, you should have a look at the :py:func:`dump_dataset` function instead.
     ///
     /// :param target_directory: the directory name to save the database to.
-    /// :type target_directory: str
+    /// :type target_directory: str or os.PathLike[str]
     /// :rtype: None
     /// :raises OSError: if an error happens during the backup.
-    fn backup(&self, target_directory: &str, py: Python<'_>) -> PyResult<()> {
+    fn backup(&self, target_directory: PathBuf, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             self.inner
                 .backup(target_directory)
