@@ -177,10 +177,13 @@ impl JsStore {
         let format = rdf_format(format)?;
         let buffer =
             if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-                self.store
-                    .dump_graph(Vec::new(), format, &GraphName::try_from(from_graph_name)?)
+                self.store.dump_graph_to_write(
+                    &GraphName::try_from(from_graph_name)?,
+                    format,
+                    Vec::new(),
+                )
             } else {
-                self.store.dump_dataset(Vec::new(), format)
+                self.store.dump_to_write(format, Vec::new())
             }
             .map_err(to_err)?;
         String::from_utf8(buffer).map_err(to_err)

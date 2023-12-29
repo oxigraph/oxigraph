@@ -806,9 +806,9 @@ fn dump<W: Write>(
 ) -> anyhow::Result<W> {
     ensure!(format.supports_datasets() || from_graph_name.is_some(), "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML");
     Ok(if let Some(from_graph_name) = from_graph_name {
-        store.dump_graph(write, format, from_graph_name)
+        store.dump_graph_to_write(from_graph_name, format, write)
     } else {
-        store.dump_dataset(write, format)
+        store.dump_to_write(format, write)
     }?)
 }
 

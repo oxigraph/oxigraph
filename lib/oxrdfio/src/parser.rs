@@ -125,6 +125,24 @@ impl RdfParser {
         }
     }
 
+    /// The format the parser uses.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfParser, RdfFormat};
+    ///
+    /// assert_eq!(RdfParser::from_format(RdfFormat::Turtle).format(), RdfFormat::Turtle);
+    /// ```
+    pub fn format(&self) -> RdfFormat {
+        match &self.inner {
+            RdfParserKind::N3(_) => RdfFormat::N3,
+            RdfParserKind::NQuads(_) => RdfFormat::NQuads,
+            RdfParserKind::NTriples(_) => RdfFormat::NTriples,
+            RdfParserKind::RdfXml(_) => RdfFormat::RdfXml,
+            RdfParserKind::TriG(_) => RdfFormat::TriG,
+            RdfParserKind::Turtle(_) => RdfFormat::Turtle,
+        }
+    }
+
     /// Provides an IRI that could be used to resolve the file relative IRIs.
     ///
     /// ```

@@ -60,6 +60,17 @@ impl RdfSerializer {
         Self { format }
     }
 
+    /// The format the serializer serializes to.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfSerializer, RdfFormat};
+    ///
+    /// assert_eq!(RdfSerializer::from_format(RdfFormat::Turtle).format(), RdfFormat::Turtle);
+    /// ```
+    pub fn format(&self) -> RdfFormat {
+        self.format
+    }
+
     /// Writes to a [`Write`] implementation.
     ///
     /// <div class="warning">Do not forget to run the [`finish`](ToWriteQuadWriter::finish()) method to properly write the last bytes of the file.</div>
