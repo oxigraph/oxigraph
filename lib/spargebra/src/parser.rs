@@ -1,3 +1,4 @@
+#![allow(clippy::ignored_unit_patterns)]
 use crate::algebra::*;
 use crate::query::*;
 use crate::term::*;
@@ -87,9 +88,9 @@ impl fmt::Display for ParseError {
 impl Error for ParseError {
     #[inline]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self.inner {
-            ParseErrorKind::InvalidBaseIri(ref e) => Some(e),
-            ParseErrorKind::Parser(ref e) => Some(e),
+        match &self.inner {
+            ParseErrorKind::InvalidBaseIri(e) => Some(e),
+            ParseErrorKind::Parser(e) => Some(e),
         }
     }
 }
@@ -1072,7 +1073,7 @@ parser! {
                     GraphNamePattern::Variable(graph_name) => GraphPattern::Graph { name: graph_name.clone().into(), inner: Box::new(bgp) },
                 }
             }).reduce(new_join).unwrap_or_default();
-            let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")?;
+            let delete = d.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|()| "Blank nodes are not allowed in DELETE WHERE")?;
             Ok(vec![GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert: Vec::new(),
@@ -1150,7 +1151,7 @@ parser! {
         }
 
         rule DeleteClause() -> Vec<GroundQuadPattern> = i("DELETE") _ q:QuadPattern() {?
-            q.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|_| "Blank nodes are not allowed in DELETE WHERE")
+            q.into_iter().map(GroundQuadPattern::try_from).collect::<Result<Vec<_>,_>>().map_err(|()| "Blank nodes are not allowed in DELETE WHERE")
         }
 
         rule InsertClause() -> Vec<QuadPattern> = i("INSERT") _ q:QuadPattern() { q }
@@ -1179,10 +1180,10 @@ parser! {
         rule QuadPattern() -> Vec<QuadPattern> = "{" _ q:Quads() _ "}" { q }
 
         rule QuadData() -> Vec<Quad> = "{" _ q:Quads() _ "}" {?
-            q.into_iter().map(Quad::try_from).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables are not allowed in INSERT DATA")
+            q.into_iter().map(Quad::try_from).collect::<Result<Vec<_>, ()>>().map_err(|()| "Variables are not allowed in INSERT DATA")
         }
         rule GroundQuadData() -> Vec<GroundQuad> = "{" _ q:Quads() _ "}" {?
-            q.into_iter().map(|q| GroundQuad::try_from(Quad::try_from(q)?)).collect::<Result<Vec<_>, ()>>().map_err(|_| "Variables and blank nodes are not allowed in DELETE DATA")
+            q.into_iter().map(|q| GroundQuad::try_from(Quad::try_from(q)?)).collect::<Result<Vec<_>, ()>>().map_err(|()| "Variables and blank nodes are not allowed in DELETE DATA")
         }
 
         rule Quads() -> Vec<QuadPattern> = q:(Quads_TriplesTemplate() / Quads_QuadsNotTriples()) ** (_) {
@@ -1703,7 +1704,7 @@ parser! {
 
         rule QuotedTripleData() -> GroundTriple = "<<" _ s:DataValueTerm() _ p:QuotedTripleData_p() _ o:DataValueTerm() _ ">>" {?
             Ok(GroundTriple {
-                subject: s.try_into().map_err(|_| "Literals are not allowed in subject position of nested patterns")?,
+                subject: s.try_into().map_err(|()| "Literals are not allowed in subject position of nested patterns")?,
                 predicate: p,
                 object: o
             })

@@ -969,7 +969,7 @@ impl GraphPattern {
                 right.lookup_in_scope_variables(callback);
             }
             Self::Graph { name, inner } => {
-                if let NamedNodePattern::Variable(ref g) = name {
+                if let NamedNodePattern::Variable(g) = &name {
                     callback(g);
                 }
                 inner.lookup_in_scope_variables(callback);

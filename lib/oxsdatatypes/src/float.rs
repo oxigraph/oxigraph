@@ -75,7 +75,7 @@ impl Float {
     #[inline]
     #[must_use]
     pub fn is_identical_with(self, other: Self) -> bool {
-        self.value.to_ne_bytes() == other.value.to_ne_bytes()
+        self.value.to_bits() == other.value.to_bits()
     }
 
     pub const MIN: Self = Self { value: f32::MIN };

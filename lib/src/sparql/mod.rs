@@ -320,6 +320,6 @@ impl fmt::Debug for QueryExplanation {
             );
         }
         obj.field("tree", &self.inner);
-        obj.finish()
+        obj.finish_non_exhaustive()
     }
 }

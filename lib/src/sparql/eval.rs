@@ -5508,7 +5508,7 @@ fn slice_key<T: Eq>(slice: &[T], element: &T) -> Option<usize> {
 }
 
 fn generate_uuid(buffer: &mut String) {
-    let mut uuid = random::<u128>().to_ne_bytes();
+    let mut uuid = random::<u128>().to_le_bytes();
     uuid[6] = (uuid[6] & 0x0F) | 0x40;
     uuid[8] = (uuid[8] & 0x3F) | 0x80;
 
