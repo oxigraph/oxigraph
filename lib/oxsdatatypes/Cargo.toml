@@ -21,6 +21,9 @@ custom-now = []
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 js-sys = { version = "0.3.60", optional = true }
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

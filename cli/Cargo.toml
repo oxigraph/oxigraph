@@ -41,3 +41,6 @@ assert_cmd = "2.0"
 assert_fs = "1.0"
 escargot = "0.5"
 predicates = ">=2.0, <4.0"
+
+[lints]
+workspace = true

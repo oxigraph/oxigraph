@@ -24,6 +24,9 @@ oxilangtag = "0.1"
 oxiri = "0.2"
 oxsdatatypes = { version = "0.2.0-alpha.1-dev", path="../oxsdatatypes", optional = true }
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

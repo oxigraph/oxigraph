@@ -53,7 +53,7 @@ impl RuleRecognizer for NQuadsRecognizer {
 
     fn recognize_next(
         mut self,
-        token: N3Token,
+        token: N3Token<'_>,
         context: &mut NQuadsRecognizerContext,
         results: &mut Vec<Quad>,
         errors: &mut Vec<RuleRecognizerError>,

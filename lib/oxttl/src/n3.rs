@@ -615,7 +615,7 @@ impl RuleRecognizer for N3Recognizer {
 
     fn recognize_next(
         mut self,
-        token: N3Token,
+        token: N3Token<'_>,
         context: &mut N3RecognizerContext,
         results: &mut Vec<N3Quad>,
         errors: &mut Vec<RuleRecognizerError>,

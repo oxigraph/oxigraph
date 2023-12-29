@@ -128,7 +128,12 @@ pub enum LoaderError {
     /// An error raised during the insertion in the store.
     Storage(StorageError),
     /// The base IRI is invalid.
-    InvalidBaseIri { iri: String, error: IriParseError },
+    InvalidBaseIri {
+        /// The IRI itself.
+        iri: String,
+        /// The parsing error.
+        error: IriParseError,
+    },
 }
 
 impl fmt::Display for LoaderError {

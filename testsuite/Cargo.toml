@@ -25,6 +25,9 @@ criterion = "0.5"
 rio_api = "0.8"
 rio_turtle = "0.8"
 
+[lints]
+workspace = true
+
 [[bench]]
 name = "parser"
 harness = false

@@ -164,7 +164,7 @@ pub struct SolutionValueIter {
 
 #[pymethods]
 impl SolutionValueIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -278,7 +278,7 @@ impl PyQuerySolutions {
         )
     }
 
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -435,7 +435,7 @@ impl PyQueryTriples {
         )
     }
 
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -637,7 +637,7 @@ impl PyQueryResultsFormat {
     }
 
     /// :rtype: QueryResultsFormat
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 

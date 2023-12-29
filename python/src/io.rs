@@ -129,10 +129,10 @@ pub fn serialize<'a>(
             let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
             for i in input.iter()? {
                 let i = i?;
-                if let Ok(triple) = i.extract::<PyRef<PyTriple>>() {
+                if let Ok(triple) = i.extract::<PyRef<'_, PyTriple>>() {
                     writer.write_triple(&*triple)
                 } else {
-                    let quad = i.extract::<PyRef<PyQuad>>()?;
+                    let quad = i.extract::<PyRef<'_, PyQuad>>()?;
                     let quad = QuadRef::from(&*quad);
                     if !quad.graph_name.is_default_graph() && !format.supports_datasets() {
                         return Err(PyValueError::new_err(
@@ -157,7 +157,7 @@ pub struct PyQuadReader {
 
 #[pymethods]
 impl PyQuadReader {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -348,7 +348,7 @@ impl PyRdfFormat {
     }
 
     /// :rtype: RdfFormat
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
