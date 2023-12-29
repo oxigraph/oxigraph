@@ -1,7 +1,8 @@
 import json
+from pathlib import Path
 from urllib.request import urlopen
 
-MSRV = "1.70.0"
+MSRV = "1.74.0"
 DEFAULT_BUILD_FLAGS = {
     "-Wtrivial-casts",
     "-Wtrivial-numeric-casts",
@@ -10,9 +11,11 @@ DEFAULT_BUILD_FLAGS = {
     "-Wunused-qualifications",
 }
 FLAGS_BLACKLIST = {
+    "-Wclippy::absolute-paths", # TODO: might be nice
     "-Wclippy::alloc-instead-of-core",
     "-Wclippy::arithmetic-side-effects",  # TODO: might be nice
     "-Wclippy::as-conversions",
+    "-Wclippy::big-endian-bytes",
     "-Wclippy::cargo-common-metadata",  # TODO: might be nice
     "-Wclippy::doc-markdown",  # Too many false positives
     "-Wclippy::default-numeric-fallback",
@@ -25,9 +28,10 @@ FLAGS_BLACKLIST = {
     "-Wclippy::impl-trait-in-params",
     "-Wclippy::implicit-return",
     "-Wclippy::indexing-slicing",
-    "-Wclippy::integer-arithmetic",
     "-Wclippy::integer-division",
+    "-Wclippy::little-endian-bytes",
     "-Wclippy::map-err-ignore",
+    "-Wclippy::min-ident-chars",
     "-Wclippy::missing-docs-in-private-items",
     "-Wclippy::missing-errors-doc",
     "-Wclippy::missing-inline-in-public-items",
@@ -43,11 +47,13 @@ FLAGS_BLACKLIST = {
     "-Wclippy::option-option",
     "-Wclippy::pattern-type-mismatch",
     "-Wclippy::pub-use",
+    "-Wclippy::pub-with-shorthand",
     "-Wclippy::question-mark-used",
     "-Wclippy::self-named-module-files",  # TODO: might be nice
     "-Wclippy::semicolon-if-nothing-returned",  # TODO: might be nice
     "-Wclippy::semicolon-outside-block",
     "-Wclippy::similar-names",
+    "-Wclippy::single-call-fn",
     "-Wclippy::single-char-lifetime-names",
     "-Wclippy::std-instead-of-alloc",
     "-Wclippy::std-instead-of-core",
@@ -76,7 +82,7 @@ for flag in FLAGS_BLACKLIST:
     else:
         print(f"Unused blacklisted flag: {flag}")
 
-with open("./config.toml", "wt") as fp:
+with (Path(__file__).parent.parent / ".cargo" / "config.toml").open("wt") as fp:
     fp.write("[build]\n")
     fp.write("rustflags = [\n")
     for flag in sorted(build_flags):
