@@ -542,9 +542,10 @@ impl PyStore {
                 py.allow_threads(|| {
                     let format = lookup_rdf_format(format, file_path.as_deref())?;
                     if let Some(from_graph_name) = &from_graph_name {
-                        self.inner.dump_graph(output, format, from_graph_name)
+                        self.inner
+                            .dump_graph_to_write(from_graph_name, format, output)
                     } else {
-                        self.inner.dump_dataset(output, format)
+                        self.inner.dump_to_write(format, output)
                     }
                     .map_err(map_serializer_error)
                 })

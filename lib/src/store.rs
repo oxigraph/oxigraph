@@ -639,6 +639,68 @@ impl Store {
         self.transaction(move |mut t| t.remove(quad))
     }
 
+    /// Dumps the store into a file.
+    ///    
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::RdfFormat;
+    ///
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    ///
+    /// let store = Store::new()?;
+    /// store.load_from_read(RdfFormat::NQuads, file)?;
+    ///
+    /// let buffer = store.dump_to_write(RdfFormat::NQuads, Vec::new())?;
+    /// assert_eq!(file, buffer.as_slice());
+    /// # std::io::Result::Ok(())
+    /// ```
+    pub fn dump_to_write<W: Write>(
+        &self,
+        serializer: impl Into<RdfSerializer>,
+        write: W,
+    ) -> Result<W, SerializerError> {
+        let serializer = serializer.into();
+        if !serializer.format().supports_datasets() {
+            return Err(SerializerError::DatasetFormatExpected(serializer.format()));
+        }
+        let mut writer = serializer.serialize_to_write(write);
+        for quad in self.iter() {
+            writer.write_quad(&quad?)?;
+        }
+        Ok(writer.finish()?)
+    }
+
+    /// Dumps a store graph into a file.
+    ///    
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::model::*;
+    ///
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    ///
+    /// let store = Store::new()?;
+    /// store.load_graph(file, RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
+    ///
+    /// let mut buffer = Vec::new();
+    /// store.dump_graph_to_write(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
+    /// assert_eq!(file, buffer.as_slice());
+    /// # std::io::Result::Ok(())
+    /// ```
+    pub fn dump_graph_to_write<'a, W: Write>(
+        &self,
+        from_graph_name: impl Into<GraphNameRef<'a>>,
+        serializer: impl Into<RdfSerializer>,
+        write: W,
+    ) -> Result<W, SerializerError> {
+        let mut writer = serializer.into().serialize_to_write(write);
+        for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
+            writer.write_triple(quad?.as_ref())?;
+        }
+        Ok(writer.finish()?)
+    }
+
     /// Dumps a store graph into a file.
     ///    
     /// Usage example:
@@ -657,17 +719,14 @@ impl Store {
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
+    #[deprecated(note = "use Store.dump_graph_to_write instead", since = "0.4.0")]
     pub fn dump_graph<'a, W: Write>(
         &self,
         write: W,
         format: impl Into<RdfFormat>,
         from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<W, SerializerError> {
-        let mut writer = RdfSerializer::from_format(format.into()).serialize_to_write(write);
-        for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
-            writer.write_triple(quad?.as_ref())?;
-        }
-        Ok(writer.finish()?)
+        self.dump_graph_to_write(from_graph_name, format.into(), write)
     }
 
     /// Dumps the store into a file.
@@ -679,26 +738,19 @@ impl Store {
     /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// let store = Store::new()?;
-    /// store.load_dataset(file, RdfFormat::NQuads, None)?;
+    /// store.load_from_read(RdfFormat::NQuads, file)?;
     ///
     /// let buffer = store.dump_dataset(Vec::new(), RdfFormat::NQuads)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
+    #[deprecated(note = "use Store.dump_to_write instead", since = "0.4.0")]
     pub fn dump_dataset<W: Write>(
         &self,
         write: W,
         format: impl Into<RdfFormat>,
     ) -> Result<W, SerializerError> {
-        let format = format.into();
-        if !format.supports_datasets() {
-            return Err(SerializerError::DatasetFormatExpected(format));
-        }
-        let mut writer = RdfSerializer::from_format(format).serialize_to_write(write);
-        for quad in self.iter() {
-            writer.write_quad(&quad?)?;
-        }
-        Ok(writer.finish()?)
+        self.dump_to_write(format.into(), write)
     }
 
     /// Returns all the store named graphs.
@@ -876,7 +928,7 @@ impl Store {
     /// but hard links will be used to point to the original database immutable snapshots.
     /// This allows cheap regular backups.
     ///
-    /// If you want to move your data to another RDF storage system, you should have a look at the [`Store::dump_dataset`] function instead.
+    /// If you want to move your data to another RDF storage system, you should have a look at the [`Store::dump_to_write`] function instead.
     #[cfg(not(target_family = "wasm"))]
     pub fn backup(&self, target_directory: impl AsRef<Path>) -> Result<(), StorageError> {
         self.storage.backup(target_directory.as_ref())
@@ -894,7 +946,7 @@ impl Store {
     ///
     /// // quads file insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_loader().load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
+    /// store.bulk_loader().load_from_read(RdfFormat::NQuads, file.as_ref())?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1467,7 +1519,7 @@ impl Iterator for GraphNameIter {
 ///
 /// // quads file insertion
 /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-/// store.bulk_loader().load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
+/// store.bulk_loader().load_from_read(RdfFormat::NQuads, file.as_ref())?;
 ///
 /// // we inspect the store contents
 /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1532,7 +1584,7 @@ impl BulkLoader {
 
     /// Loads a file using the bulk loader.
     ///
-    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_dataset`] might be more convenient.
+    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_read`] might be more convenient.
     ///
     /// <div class="warning">This method is not atomic.
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.

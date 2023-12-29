@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 
-use oxrdfio::RdfFormat;
+use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 
 /// [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) serialization formats.
 ///
@@ -108,12 +108,27 @@ impl GraphFormat {
 }
 
 impl From<GraphFormat> for RdfFormat {
+    #[inline]
     fn from(format: GraphFormat) -> Self {
         match format {
             GraphFormat::NTriples => Self::NTriples,
             GraphFormat::Turtle => Self::Turtle,
             GraphFormat::RdfXml => Self::RdfXml,
         }
+    }
+}
+
+impl From<GraphFormat> for RdfParser {
+    #[inline]
+    fn from(format: GraphFormat) -> Self {
+        RdfFormat::from(format).into()
+    }
+}
+
+impl From<GraphFormat> for RdfSerializer {
+    #[inline]
+    fn from(format: GraphFormat) -> Self {
+        RdfFormat::from(format).into()
     }
 }
 
@@ -215,11 +230,26 @@ impl DatasetFormat {
 }
 
 impl From<DatasetFormat> for RdfFormat {
+    #[inline]
     fn from(format: DatasetFormat) -> Self {
         match format {
             DatasetFormat::NQuads => Self::NQuads,
             DatasetFormat::TriG => Self::TriG,
         }
+    }
+}
+
+impl From<DatasetFormat> for RdfParser {
+    #[inline]
+    fn from(format: DatasetFormat) -> Self {
+        RdfFormat::from(format).into()
+    }
+}
+
+impl From<DatasetFormat> for RdfSerializer {
+    #[inline]
+    fn from(format: DatasetFormat) -> Self {
+        RdfFormat::from(format).into()
     }
 }
 
