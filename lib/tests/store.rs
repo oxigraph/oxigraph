@@ -14,6 +14,8 @@ use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
 #[cfg(not(target_family = "wasm"))]
 use std::io::Write;
+#[cfg(not(target_family = "wasm"))]
+use std::iter::empty;
 #[cfg(target_os = "linux")]
 use std::iter::once;
 #[cfg(not(target_family = "wasm"))]
@@ -147,6 +149,16 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
         NamedNodeRef::new_unchecked("http://example.com"),
         GraphNameRef::DefaultGraph
     ))?);
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
+#[cfg(not(target_family = "wasm"))]
+fn test_bulk_load_empty() -> Result<(), Box<dyn Error>> {
+    let store = Store::new()?;
+    store.bulk_loader().load_quads(empty::<Quad>())?;
+    assert!(store.is_empty()?);
     store.validate()?;
     Ok(())
 }

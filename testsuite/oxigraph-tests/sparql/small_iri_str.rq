@@ -1,0 +1,3 @@
+ASK {
+    FILTER(STR(<ex:a>) = "ex:a")
+}

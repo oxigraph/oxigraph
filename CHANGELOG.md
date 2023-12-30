@@ -1,3 +1,36 @@
+## [0.3.22] - 2023-11-29
+
+### Changed
+- Allows to compile with more recent `bindgen` and `cc`
+- Fixes compatibility with `spin_no_std` feature of `lazy_static`
+
+
+## [0.3.21] - 2023-11-29
+
+### Changed
+- Bulk loader: do not fail when loading empty files.
+- Python: fixes source distribution.
+- Upgrades RocksDB to 7.8.1.
+
+
+## [0.3.20] - 2023-10-23
+
+### Changed
+- SPARQL: fixes `STR` evaluation on small IRI (less than 16 bytes) that was broken.
+- SPARQL update: fixes `WHERE` clause evaluation that was generating too many solutions in some cases.
+- Upgrades RocksDB to 8.7.1.
+
+
+## [0.3.19] - 2023-08-18
+
+### Added
+- Python: allows to give `pathlib.Path` argument when a path is expected.
+- Cargo.toml: add a documentation field to link to docs.rs documentation.
+
+### Changed
+- Upgrades RocksDB to 8.3.2.
+
+
 ## [0.3.18] - 2023-06-13
 
 ### Changed
