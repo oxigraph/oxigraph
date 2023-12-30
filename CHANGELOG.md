@@ -1,3 +1,58 @@
+## [0.4.0-alpha.1] - 2024-01-03
+
+### Added
+- `sparopt` crate: A new still quite naive query optimizer.
+- `oxttl` crate: A N-Triples/N-Quads/Turtle/TriG/N3 parser and serializer compatible with Tokio.
+- `oxrdfxml` crate: A RDF/XML parser and serializer compatible with Tokio.
+- `oxrdfio` crate: A stand-alone crate with oxigraph I/O related APIs.
+- Rust: SPARQL results I/O is now exposed in the `oxigraph` crate (`oxigraph::sparql::results` module).
+- Rust: It is now possible to dynamically link rocksdb with the `rocksdb-pkg-config` feature.
+- Python: error location is now included in some `SyntaxError` exceptions.
+- Python: the file type can be guessed from the file path extension during parsing and serialization.
+- Python: the serialization method returns a `bytes` value if no output-related argument is given.
+- Python: SPARQL query results I/O is now exposed (`parse_query_results` function and `.serialize` method).
+- Python: `RdfFormat` and `QueryResultsFormat` enum to encode supported formats.
+- CLI: a `convert` command to convert RDF file between different formats.
+
+### Removed
+- Rust: automated flush at the end of serialization. This should be done explicitly now.
+- oxsdatatypes: Deprecated methods.
+- Python: 3.7 and Musl linux 1.1 support.
+- Python: `GraphName.value`.
+
+### Changed
+- SPARQL: a digit after `.` is now required for `xsd:decimal`.
+- SPARQL: calendar subtraction returns `xsd:dayTimeDuration` and not `xsd:duration`.
+- SPARQL: Unicode escapes (`\u` and `\U`) are now only supported in IRIs and strings and not everywhere.
+- Literal serialization now produces canonical N-Triples according to the RDF 1.2 and RDF Dataset Canonicalization drafts
+- Rust: MSRV is now 1.70.
+- Rust Makes `GraphName` implement `Default`.
+- Rust: `wasm32-unknown-unknown` does not assumes JS platform by default. Enable the `js` feature for that.
+- Rust: Parsers take `Read` and not `BufRead` for input.
+- Rust: `GraphFormat` and `DatasetFormat` have been merged into `RdfFormat`.
+- Rust: `GraphParser` and `DatasetParser` have been merged into `RdfParser`.
+- Rust: `GraphSerializer` and `DatasetSerializer` have been merged into `RdfSerializer`.
+- Rust: query results are now `Send` and `Sync`.
+- Rust: `Store.load_graph` and `Store.load_dataset` have been merged into a `load_from_read` method.
+- Rust: `Store.dump_graph` and `Store.dump_dataset` have been renamed to `dump_graph_to_write` and `dump_to_write`.
+- Rust: `BulkLoader.set_*` methods have been renamed to `BulkLoader.with_*`.
+- oxsdatatypes: pass by-values instead of by-reference parameters when relevant.
+- oxsdatatypes: error types have been redesigned.
+- oxsdatatypes: return an error when building not serializable duration (year-month and day-time of opposite signs).
+- sparesults: renames some methods to move closer to the new oxrdfio crate.
+- Python: raise `OSError` instead of `IOError` on OS errors.
+- Python: the `mime_type` parameter have been renamed to `format`.
+- Python: boolean SPARQL results are now encoded with a `QueryBoolean` class and not a simple `bool`.
+- Python: a `path` parameter has been added to all I/O method to read from a file.
+  The existing `input` parameter now consider `str` values to be a serialization to parse.
+- JS: the `mime_type` parameter have been renamed to `format`.
+- CLI: the `oxigraph_server` binary has been renamed to `oxigraph`.
+- CLI: the `--location` argument is now part of sub-commands where it is relevant.
+  `oxigraph_server --location foo serve` is not possible anymore.
+  One need to write `oxigraph serve --location foo`.
+- CLI: is is now possible to upload gzip encoded files to the HTTP API with the `Content-Encoding: gzip` header.
+
+
 ## [0.3.22] - 2023-11-29
 
 ### Changed

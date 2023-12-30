@@ -1,5 +1,7 @@
 //! Utilities to read and write RDF graphs and datasets using [OxRDF I/O](https://crates.io/crates/oxrdfio).
 //!
+//! The entry points of this module are the two [`RdfParser`] and [`RdfSerializer`] structs.
+//!
 //! Usage example converting a Turtle file to a N-Triples file:
 //! ```
 //! use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};

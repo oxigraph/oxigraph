@@ -55,7 +55,9 @@ impl GraphSerializer {
 /// Allows writing triples.
 /// Could be built using a [`GraphSerializer`].
 ///
-/// <div class="warning">Do not forget to run the [`finish`](TripleWriter::finish()) method to properly write the last bytes of the file.</div>
+/// <div class="warning">
+///
+/// Do not forget to run the [`finish`](TripleWriter::finish()) method to properly write the last bytes of the file.</div>
 ///
 /// ```
 /// use oxigraph::io::{GraphFormat, GraphSerializer};
@@ -138,7 +140,9 @@ impl DatasetSerializer {
 /// Allows writing triples.
 /// Could be built using a [`DatasetSerializer`].
 ///
-/// <div class="warning">Do not forget to run the [`finish`](QuadWriter::finish()) method to properly write the last bytes of the file.</div>
+/// <div class="warning">
+///
+/// Do not forget to run the [`finish`](QuadWriter::finish()) method to properly write the last bytes of the file.</div>
 ///
 /// ```
 /// use oxigraph::io::{DatasetFormat, DatasetSerializer};

@@ -115,9 +115,13 @@ impl QueryResultsSerializer {
 
     /// Returns a `SolutionsWriter` allowing writing query solutions into the given [`Write`] implementation.
     ///
-    /// <div class="warning">Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+    /// <div class="warning">
     ///
-    /// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
+    /// Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+    ///
+    /// <div class="warning">
+    ///
+    /// This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
     ///
     /// Example in XML (the API is the same for JSON, CSV and TSV):
     /// ```
@@ -158,9 +162,13 @@ impl QueryResultsSerializer {
 
     /// Returns a `SolutionsWriter` allowing writing query solutions into the given [`Write`] implementation.
     ///
-    /// <div class="warning">Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+    /// <div class="warning">
     ///
-    /// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
+    /// Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+    ///
+    /// <div class="warning">
+    ///
+    /// This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
     ///
     /// Example in XML (the API is the same for JSON, CSV and TSV):
     /// ```
@@ -223,9 +231,13 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 ///
 /// Could be built using a [`QueryResultsSerializer`].
 ///
-/// <div class="warning">Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+/// <div class="warning">
 ///
-/// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
+/// Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+///
+/// <div class="warning">
+///
+/// This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
 ///
 /// Example in TSV (the API is the same for JSON, XML and CSV):
 /// ```
@@ -299,9 +311,13 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
 
 /// Could be built using a [`QueryResultsSerializer`].
 ///
-/// <div class="warning">Do not forget to run the [`finish`](ToTokioAsyncWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+/// <div class="warning">
 ///
-/// <div class="warning">This writer does unbuffered writes. You might want to use [`BufWriter`](tokio::io::BufWriter) to avoid that.</div>
+/// Do not forget to run the [`finish`](ToTokioAsyncWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+///
+/// <div class="warning">
+///
+/// This writer does unbuffered writes. You might want to use [`BufWriter`](tokio::io::BufWriter) to avoid that.</div>
 ///
 /// Example in TSV (the API is the same for JSON, CSV and XML):
 /// ```

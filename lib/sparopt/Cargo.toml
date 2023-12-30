@@ -1,6 +1,6 @@
 [package]
 name = "sparopt"
-version = "0.1.0-alpha.1-dev"
+version = "0.1.0-alpha.1"
 authors.workspace  = true
 license.workspace  = true
 readme = "README.md"
@@ -21,9 +21,9 @@ sep-0002 = ["spargebra/sep-0002"]
 sep-0006 = ["spargebra/sep-0006"]
 
 [dependencies]
-oxrdf = { version = "0.2.0-alpha.1-dev", path="../oxrdf" }
+oxrdf = { version = "0.2.0-alpha.1", path="../oxrdf" }
 rand = "0.8"
-spargebra = { version = "0.3.0-alpha.1-dev", path="../spargebra" }
+spargebra = { version = "0.3.0-alpha.1", path="../spargebra" }
 
 [lints]
 workspace = true

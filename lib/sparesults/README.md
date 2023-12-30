@@ -15,8 +15,9 @@ Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html
 
 This crate is intended to be a building piece for SPARQL client and server implementations in Rust like [Oxigraph](https://oxigraph.org).
 
-Usage example converting a JSON result file into a TSV result file:
+The entry points of this library are the two [`QueryResultsParser`] and [`QueryResultsSerializer`] structs.
 
+Usage example converting a JSON result file into a TSV result file:
 ```rust
 use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader, QueryResultsSerializer};
 use std::io::Result;
