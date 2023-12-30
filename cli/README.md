@@ -13,7 +13,7 @@ It also allows to spawn a HTTP server on top of the database.
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
-Oxigraph provides different installation methods for Oxigraph server:
+Oxigraph provides different installation methods for Oxigraph CLI:
 * [`cargo install`](#installation) (multiplatform)
 * [A Docker image](#using-a-docker-image)
 * [A Homebrew formula](#homebrew)
@@ -29,6 +29,9 @@ Oxigraph implements the following specifications:
 * [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation) and [SPARQL 1.1 Graph Store HTTP Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/).
 
 A preliminary benchmark [is provided](../bench/README.md).
+
+Note that Oxigraph CLI was previously named Oxigraph Server before version 0.4. Older versions are available under [this name](https://crates.io/crates/oxigraph_server).
+
 
 ## Installation
 

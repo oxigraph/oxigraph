@@ -19,8 +19,6 @@ Oxigraph is in heavy development and SPARQL query evaluation has not been optimi
 The development roadmap is using [GitHub milestones](https://github.com/oxigraph/oxigraph/milestones?direction=desc&sort=completeness&state=open).
 Oxigraph internal design [is described on the wiki](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
-The future 0.4 release is currently in development in the [next branch](https://github.com/oxigraph/oxigraph/tree/next).
-
 It is split into multiple parts:
 
 - [The database written as a Rust library](https://crates.io/crates/oxigraph). Its source code is in the `lib` directory.
@@ -30,6 +28,7 @@ It is split into multiple parts:
 - [JavaScript bindings for Oxigraph](https://www.npmjs.com/package/oxigraph). WebAssembly is used to package Oxigraph into a NodeJS compatible NPM package. Its source code is in the `js` directory.
   [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
 - [Oxigraph binary](https://crates.io/crates/oxigraph-cli) that provides a standalone command line tool allowing to manipulate RDF data and spawn a a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code is in the `cli` directory.
+  Note that it was previously named [Oxigraph server](https://crates.io/crates/oxigraph-server).
   [![Latest Version](https://img.shields.io/crates/v/oxigraph-cli.svg)](https://crates.io/crates/oxigraph-cli)
 
 Oxigraph implements the following specifications:
@@ -72,8 +71,9 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 ## Sponsors
 
 * [RelationLabs](https://relationlabs.ai/) that is building [Relation-Graph](https://github.com/relationlabs/Relation-Graph), a SPARQL database module for the [Substrate blockchain platform](https://substrate.io/) based on Oxigraph.
-* [Field 33](https://field33.com) that is building [an ontology management platform](https://plow.pm/).
-* [Magnus Bakken](https://github.com/magbak) who is building [chrontext](https://github.com/magbak/chrontext), providing a SPARQL query endpoint on top of joint RDF and time series databases.
+* [Field 33](https://field33.com) that was building [an ontology management platform](https://plow.pm/).
+* [Magnus Bakken](https://github.com/magbak) who is building [Data Treehouse](https://www.data-treehouse.com/), a time-series + RDF datalake platform, and [chrontext](https://github.com/magbak/chrontext), a SPARQL query endpoint on top of joint RDF and time series databases.
+* [DeciSym.AI](https://www.decisym.ai/) a cyber security consulting company providing RDF-based software.
 * [ACE IoT Solutions](https://aceiotsolutions.com/), a building IOT platform.
 * [Albin Larsson](https://byabbe.se/) who is building [GovDirectory](https://www.govdirectory.org/), a directory of public agencies based on Wikidata.
 
