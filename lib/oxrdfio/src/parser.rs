@@ -37,9 +37,10 @@ use tokio::io::AsyncRead;
 /// * [Turtle](https://www.w3.org/TR/turtle/) ([`RdfFormat::Turtle`])
 ///
 /// Note the useful options:
-/// - [`with_base_iri`](RdfParser::with_base_iri) to resolve the relative IRIs.
-/// - [`rename_blank_nodes`](RdfParser::rename_blank_nodes) to rename the blank nodes to auto-generated numbers to avoid conflicts when merging RDF graphs together.
-/// - [`without_named_graphs`](RdfParser::without_named_graphs) to parse a single graph.
+/// - [`with_base_iri`](Self::with_base_iri) to resolve the relative IRIs.
+/// - [`rename_blank_nodes`](Self::rename_blank_nodes) to rename the blank nodes to auto-generated numbers to avoid conflicts when merging RDF graphs together.
+/// - [`without_named_graphs`](Self::without_named_graphs) to parse a single graph.
+/// - [`unchecked`](Self::unchecked) to skip some validations if the file is already known to be valid.
 ///
 /// ```
 /// use oxrdfio::{RdfFormat, RdfParser};

@@ -1,5 +1,7 @@
 //! API to access an on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 //!
+//! The entry point of the module is the [`Store`] struct.
+//!
 //! Usage example:
 //! ```
 //! use oxigraph::store::Store;
@@ -605,7 +607,9 @@ impl Store {
 
     /// Adds atomically a set of quads to this store.
     ///
-    /// <div class="warning">This operation uses a memory heavy transaction internally, use the [`bulk_loader`](Store::bulk_loader) if you plan to add ten of millions of triples.</div>
+    /// <div class="warning">
+    ///
+    /// This operation uses a memory heavy transaction internally, use the [`bulk_loader`](Store::bulk_loader) if you plan to add ten of millions of triples.</div>
     pub fn extend(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
@@ -918,7 +922,9 @@ impl Store {
     /// After its creation, the backup is usable using [`Store::open`]
     /// like a regular Oxigraph database and operates independently from the original database.
     ///
-    /// <div class="warning">Backups are only possible for on-disk databases created using [`Store::open`].</div>
+    /// <div class="warning">
+    ///
+    /// Backups are only possible for on-disk databases created using [`Store::open`].</div>
     /// Temporary in-memory databases created using [`Store::new`] are not compatible with RocksDB backup system.
     ///
     /// <div class="warning">An error is raised if the `target_directory` already exists.</div>
@@ -1497,13 +1503,15 @@ impl Iterator for GraphNameIter {
 
 /// A bulk loader allowing to load at lot of data quickly into the store.
 ///
-/// <div class="warning">The operations provided here are not atomic.</div>
+/// <div class="warning">The operations provided here are not atomic.
 /// If the operation fails in the middle, only a part of the data may be written to the store.
-/// Results might get weird if you delete data during the loading process.
+/// Results might get weird if you delete data during the loading process.</div>
 ///
-/// <div class="warning">It is optimized for speed.</div>
-/// Memory usage is configurable using [`BulkLoader::with_max_memory_size_in_megabytes`]
-/// and the number of used threads with [`BulkLoader::with_num_threads`].
+/// <div class="warning">
+///
+/// It is optimized for speed.</div>
+/// Memory usage is configurable using [`with_max_memory_size_in_megabytes`](Self::with_max_memory_size_in_megabytes)
+/// and the number of used threads with [`with_num_threads`](Self::with_num_threads).
 /// By default the memory consumption target (excluding the system and RocksDB internal consumption)
 /// is around 2GB per thread and 2 threads.
 /// These targets are considered per loaded file.
@@ -1598,7 +1606,9 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
+    /// <div class="warning">
+    ///
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
     ///
     /// To get better speed on valid datasets, consider enabling [`RdfParser::unchecked`] option to skip some validations.
     ///
@@ -1668,7 +1678,9 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
+    /// <div class="warning">
+    ///
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
     ///
     /// Usage example:
     /// ```
@@ -1727,7 +1739,9 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
+    /// <div class="warning">
+    ///
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
     ///
     /// Usage example:
     /// ```
@@ -1788,7 +1802,9 @@ impl BulkLoader {
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
+    /// <div class="warning">
+    ///
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
     pub fn load_quads(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
@@ -1802,7 +1818,9 @@ impl BulkLoader {
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
+    /// <div class="warning">
+    ///
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
     pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,

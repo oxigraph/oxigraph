@@ -9,6 +9,8 @@ OxRDF/XML
 
 OxRdfXml is a parser and serializer for [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 
+The entry points of this library are the two [`RdfXmlParser`] and [`RdfXmlSerializer`] structs.
+
 Usage example counting the number of people in a RDF/XML file:
 ```rust
 use oxrdf::{NamedNodeRef, vocab::rdf};

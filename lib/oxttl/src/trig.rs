@@ -1,4 +1,5 @@
-//! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`].
+//! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`]
+//! and a serializer implemented by [`TriGSerializer`].
 
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]

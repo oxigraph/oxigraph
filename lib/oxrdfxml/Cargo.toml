@@ -1,6 +1,6 @@
 [package]
 name = "oxrdfxml"
-version = "0.1.0-alpha.1-dev"
+version = "0.1.0-alpha.1"
 authors.workspace  = true
 license.workspace  = true
 readme = "README.md"
@@ -8,7 +8,7 @@ keywords = ["RDFXML", "XML", "RDF"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
 homepage.workspace  = true
 description = """
-Parser for the RDF/XML language
+Parser and serializer for the RDF/XML format
 """
 documentation = "https://docs.rs/oxrdfxml"
 edition.workspace  = true
@@ -19,7 +19,7 @@ default = []
 async-tokio = ["dep:tokio", "quick-xml/async-tokio"]
 
 [dependencies]
-oxrdf = { version = "0.2.0-alpha.1-dev", path = "../oxrdf" }
+oxrdf = { version = "0.2.0-alpha.1", path = "../oxrdf" }
 oxilangtag = "0.1"
 oxiri = "0.2.3-alpha.1"
 quick-xml = ">=0.29, <0.32"

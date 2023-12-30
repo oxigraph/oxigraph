@@ -1,6 +1,6 @@
 [package]
 name = "oxrdfio"
-version = "0.1.0-alpha.1-dev"
+version = "0.1.0-alpha.1"
 authors.workspace  = true
 license.workspace  = true
 readme = "README.md"
@@ -9,7 +9,7 @@ repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
 homepage.workspace  = true
 documentation = "https://docs.rs/oxrdfio"
 description = """
-Parser for various RDF serializations
+Parser and serializer for various RDF formats
 """
 edition.workspace  = true
 rust-version.workspace  = true
@@ -20,9 +20,9 @@ async-tokio = ["dep:tokio", "oxrdfxml/async-tokio", "oxttl/async-tokio"]
 rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
 
 [dependencies]
-oxrdf = { version = "0.2.0-alpha.1-dev", path = "../oxrdf" }
-oxrdfxml = { version = "0.1.0-alpha.1-dev", path = "../oxrdfxml" }
-oxttl = { version = "0.1.0-alpha.1-dev", path = "../oxttl" }
+oxrdf = { version = "0.2.0-alpha.1", path = "../oxrdf" }
+oxrdfxml = { version = "0.1.0-alpha.1", path = "../oxrdfxml" }
+oxttl = { version = "0.1.0-alpha.1", path = "../oxttl" }
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
 
 [dev-dependencies]

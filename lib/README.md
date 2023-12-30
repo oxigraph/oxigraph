@@ -14,7 +14,7 @@ It also provides a set of utility functions for reading, writing, and processing
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
 
-Oxigraph also provides [a standalone HTTP server](https://crates.io/crates/oxigraph-cli) and [a Python library](https://pyoxigraph.readthedocs.io/) based on this library.
+Oxigraph also provides [a CLI tool](https://crates.io/crates/oxigraph-cli) and [a Python library](https://pyoxigraph.readthedocs.io/) based on this library.
 
 
 Oxigraph implements the following specifications:
@@ -48,8 +48,8 @@ if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { 
 ```
 
 Some parts of this library are available as standalone crates:
-* [`oxrdf`](https://crates.io/crates/oxrdf), datastructures encoding RDF basic concepts (the `oxigraph::model` module).
-* [`oxrdfio`](https://crates.io/crates/oxrdfio), a unified parser and serializer API for RDF formats. It itself relies on:
+* [`oxrdf`](https://crates.io/crates/oxrdf), datastructures encoding RDF basic concepts (the [`oxigraph::model`](crate::model) module).
+* [`oxrdfio`](https://crates.io/crates/oxrdfio), a unified parser and serializer API for RDF formats (the [`oxigraph::io`](crate::io) module). It itself relies on:
   * [`oxttl`](https://crates.io/crates/oxttl), N-Triple, N-Quad, Turtle, TriG and N3 parsing and serialization.
   * [`oxrdfxml`](https://crates.io/crates/oxrdfxml), RDF/XML parsing and serialization.
 * [`spargebra`](https://crates.io/crates/spargebra), a SPARQL parser.
@@ -57,7 +57,7 @@ Some parts of this library are available as standalone crates:
 * [`sparopt`](https://crates.io/crates/sparesults), a SPARQL optimizer.
 * [`oxsdatatypes`](https://crates.io/crates/oxsdatatypes), an implementation of some XML Schema datatypes.
 
-To build the library, don't forget to clone the submodules using `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or `git submodule update --init` to add submodules to the already cloned repository.
+To build the library locally, don't forget to clone the submodules using `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or `git submodule update --init` to add submodules to the already cloned repository.
 
 
 ## License

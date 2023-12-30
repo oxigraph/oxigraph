@@ -15,6 +15,8 @@ Support for [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) i
 
 OxRDF is inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
 
+Use [`oxrdfio`](https://crates.io/crates/oxrdfio) if you need to read or write RDF files.
+
 Usage example:
 
 ```rust

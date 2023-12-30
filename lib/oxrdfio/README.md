@@ -21,6 +21,8 @@ Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html
 
 It is designed as a low level parser compatible with both synchronous and asynchronous I/O (behind the `async-tokio` feature).
 
+The entry points of this library are the two [`RdfParser`] and [`RdfSerializer`] structs.
+
 Usage example converting a Turtle file to a N-Triples file:
 ```rust
 use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};

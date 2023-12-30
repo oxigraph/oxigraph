@@ -1,4 +1,5 @@
-//! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`].
+//! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`]
+//! and a serializer implemented by [`NQuadsSerializer`].
 
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]

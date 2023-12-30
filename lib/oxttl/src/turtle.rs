@@ -1,4 +1,5 @@
-//! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`].
+//! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`]
+//! and a serializer implemented by [`TurtleSerializer`].
 
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
