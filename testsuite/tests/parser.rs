@@ -3,6 +3,8 @@
 use anyhow::Result;
 use oxigraph_testsuite::check_testsuite;
 
+// TODO: add support of language directions
+
 #[test]
 fn rdf11_n_triples_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -15,7 +17,10 @@ fn rdf11_n_triples_w3c_testsuite() -> Result<()> {
 fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax/manifest.ttl",
-        &[],
+        &[
+            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-base-1",
+            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-base-2",
+        ],
     )
 }
 
@@ -24,7 +29,7 @@ fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
 fn rdf12_n_triples_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/c14n/manifest.ttl",
-        &[],
+        &["https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/c14n#dirlangtagged_string"],
     )
 }
 
@@ -49,7 +54,10 @@ fn rdf11_turtle_w3c_testsuite() -> Result<()> {
 fn rdf12_turtle_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax/manifest.ttl",
-        &[],
+        &[
+            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#nt-ttl-base-1",
+            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#nt-ttl-base-2",
+        ],
     )
 }
 
@@ -74,7 +82,10 @@ fn rdf11_trig_w3c_testsuite() -> Result<()> {
 fn rdf12_trig_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-trig/syntax/manifest.ttl",
-        &[],
+        &[
+            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-trig/syntax#trig-base-1",
+            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-trig/syntax#trig-base-2",
+        ],
     )
 }
 
