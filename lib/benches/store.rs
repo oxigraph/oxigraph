@@ -1,65 +1,56 @@
 #![allow(clippy::panic)]
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion, Throughput};
 use oxhttp::model::{Method, Request, Status};
-use oxigraph::io::RdfFormat;
+use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
 use rand::random;
 use std::env::temp_dir;
 use std::fs::{remove_dir_all, File};
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::str;
+
+fn parse_nt(c: &mut Criterion) {
+    let data = read_data("explore-1000.nt.zst");
+    let mut group = c.benchmark_group("parse");
+    group.throughput(Throughput::Bytes(data.len() as u64));
+    group.sample_size(50);
+    group.bench_function("parse BSBM explore 1000", |b| {
+        b.iter(|| {
+            for r in RdfParser::from_format(RdfFormat::NTriples).parse_read(data.as_slice()) {
+                r.unwrap();
+            }
+        })
+    });
+}
 
 fn store_load(c: &mut Criterion) {
-    {
-        let mut data = Vec::new();
-        read_data("explore-1000.nt.zst")
-            .read_to_end(&mut data)
-            .unwrap();
-
-        let mut group = c.benchmark_group("store load");
-        group.throughput(Throughput::Bytes(data.len() as u64));
-        group.sample_size(10);
-        group.bench_function("load BSBM explore 1000 in memory", |b| {
-            b.iter(|| {
-                let store = Store::new().unwrap();
-                do_load(&store, &data);
-            })
-        });
-        group.bench_function("load BSBM explore 1000 in on disk", |b| {
-            b.iter(|| {
-                let path = TempDir::default();
-                let store = Store::open(&path).unwrap();
-                do_load(&store, &data);
-            })
-        });
-        group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
-            b.iter(|| {
-                let path = TempDir::default();
-                let store = Store::open(&path).unwrap();
-                do_bulk_load(&store, &data);
-            })
-        });
-    }
-
-    {
-        let mut data = Vec::new();
-        read_data("explore-10000.nt.zst")
-            .read_to_end(&mut data)
-            .unwrap();
-
-        let mut group = c.benchmark_group("store load large");
-        group.throughput(Throughput::Bytes(data.len() as u64));
-        group.sample_size(10);
-        group.bench_function("load BSBM explore 10000 in on disk with bulk load", |b| {
-            b.iter(|| {
-                let path = TempDir::default();
-                let store = Store::open(&path).unwrap();
-                do_bulk_load(&store, &data);
-            })
-        });
-    }
+    let data = read_data("explore-1000.nt.zst");
+    let mut group = c.benchmark_group("store load");
+    group.throughput(Throughput::Bytes(data.len() as u64));
+    group.sample_size(10);
+    group.bench_function("load BSBM explore 1000 in memory", |b| {
+        b.iter(|| {
+            let store = Store::new().unwrap();
+            do_load(&store, &data);
+        })
+    });
+    group.bench_function("load BSBM explore 1000 in on disk", |b| {
+        b.iter(|| {
+            let path = TempDir::default();
+            let store = Store::open(&path).unwrap();
+            do_load(&store, &data);
+        })
+    });
+    group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
+        b.iter(|| {
+            let path = TempDir::default();
+            let store = Store::open(&path).unwrap();
+            do_bulk_load(&store, &data);
+        })
+    });
 }
 
 fn do_load(store: &Store, data: &[u8]) {
@@ -76,23 +67,12 @@ fn do_bulk_load(store: &Store, data: &[u8]) {
 }
 
 fn store_query_and_update(c: &mut Criterion) {
-    let mut data = Vec::new();
-    read_data("explore-1000.nt.zst")
-        .read_to_end(&mut data)
-        .unwrap();
-
-    let operations = BufReader::new(read_data("mix-exploreAndUpdate-1000.tsv.zst"))
-        .lines()
-        .map(|l| {
-            let l = l.unwrap();
-            let mut parts = l.trim().split('\t');
-            let kind = parts.next().unwrap();
-            let operation = parts.next().unwrap();
-            match kind {
-                "query" => Operation::Query(Query::parse(operation, None).unwrap()),
-                "update" => Operation::Update(Update::parse(operation, None).unwrap()),
-                _ => panic!("Unexpected operation kind {kind}"),
-            }
+    let data = read_data("explore-1000.nt.zst");
+    let operations = bsbm_sparql_operation()
+        .into_iter()
+        .map(|op| match op {
+            RawOperation::Query(q) => Operation::Query(Query::parse(&q, None).unwrap()),
+            RawOperation::Update(q) => Operation::Update(Update::parse(&q, None).unwrap()),
         })
         .collect::<Vec<_>>();
     let query_operations = operations
@@ -151,26 +131,7 @@ fn run_operation(store: &Store, operations: &[Operation]) {
 }
 
 fn sparql_parsing(c: &mut Criterion) {
-    let mut data = Vec::new();
-    read_data("explore-1000.nt.zst")
-        .read_to_end(&mut data)
-        .unwrap();
-
-    let operations = BufReader::new(read_data("mix-exploreAndUpdate-1000.tsv.zst"))
-        .lines()
-        .map(|l| {
-            let l = l.unwrap();
-            let mut parts = l.trim().split('\t');
-            let kind = parts.next().unwrap();
-            let operation = parts.next().unwrap();
-            match kind {
-                "query" => RawOperation::Query(operation.to_owned()),
-                "update" => RawOperation::Update(operation.to_owned()),
-                _ => panic!("Unexpected operation kind {kind}"),
-            }
-        })
-        .collect::<Vec<_>>();
-
+    let operations = bsbm_sparql_operation();
     let mut group = c.benchmark_group("sparql parsing");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(
@@ -198,11 +159,12 @@ fn sparql_parsing(c: &mut Criterion) {
     });
 }
 
+criterion_group!(parse, parse_nt);
 criterion_group!(store, sparql_parsing, store_query_and_update, store_load);
 
-criterion_main!(store);
+criterion_main!(parse, store);
 
-fn read_data(file: &str) -> impl Read {
+fn read_data(file: &str) -> Vec<u8> {
     if !Path::new(file).exists() {
         let client = oxhttp::Client::new().with_redirection_limit(5);
         let url = format!("https://github.com/Tpt/bsbm-tools/releases/download/v0.2/{file}");
@@ -216,7 +178,31 @@ fn read_data(file: &str) -> impl Read {
         );
         std::io::copy(&mut response.into_body(), &mut File::create(file).unwrap()).unwrap();
     }
-    zstd::Decoder::new(File::open(file).unwrap()).unwrap()
+    let mut buf = Vec::new();
+    zstd::Decoder::new(File::open(file).unwrap())
+        .unwrap()
+        .read_to_end(&mut buf)
+        .unwrap();
+    buf
+}
+
+fn bsbm_sparql_operation() -> Vec<RawOperation> {
+    String::from_utf8(read_data("mix-exploreAndUpdate-1000.tsv.zst"))
+        .unwrap()
+        .lines()
+        .rev()
+        .take(300) // We take only 10 groups
+        .map(|l| {
+            let mut parts = l.trim().split('\t');
+            let kind = parts.next().unwrap();
+            let operation = parts.next().unwrap();
+            match kind {
+                "query" => RawOperation::Query(operation.into()),
+                "update" => RawOperation::Update(operation.into()),
+                _ => panic!("Unexpected operation kind {kind}"),
+            }
+        })
+        .collect()
 }
 
 #[derive(Clone)]

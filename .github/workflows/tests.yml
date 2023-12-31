@@ -429,3 +429,18 @@ jobs:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/setup-rust
       - run: python lints/test_debian_compatibility.py
+
+  codspeed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - run: cargo install cargo-codspeed || true
+      - run: cargo codspeed build -p oxigraph --features http-client-native-tls
+      - run: cargo codspeed build -p oxigraph-testsuite
+      - uses: CodSpeedHQ/action@v2
+        with:
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
