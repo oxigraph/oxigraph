@@ -44,6 +44,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[derive(Default)]
 #[must_use]
 pub struct TurtleParser {
+    unchecked: bool,
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
     #[cfg(feature = "rdf-star")]
@@ -55,6 +56,17 @@ impl TurtleParser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Assumes the file is valid to make parsing faster.
+    ///
+    /// It will skip some validations.
+    ///
+    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    #[inline]
+    pub fn unchecked(mut self) -> Self {
+        self.unchecked = true;
+        self
     }
 
     #[inline]
@@ -194,6 +206,7 @@ impl TurtleParser {
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
+                self.unchecked,
                 self.base,
                 self.prefixes,
             ),

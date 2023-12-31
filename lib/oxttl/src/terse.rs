@@ -107,8 +107,13 @@ impl RuleRecognizer for TriGRecognizer {
                 },
                 TriGState::BaseExpectIri => match token {
                     N3Token::IriRef(iri) => {
-                        context.lexer_options.base_iri = Some(iri);
-                        self
+                        match Iri::parse_unchecked(iri) {
+                            Ok(iri) => {
+                                context.lexer_options.base_iri = Some(iri);
+                                self
+                            }
+                            Err(e) => self.error(errors, format!("Invalid base IRI: {e}"))
+                        }
                     }
                     _ => self.error(errors, "The BASE keyword should be followed by an IRI"),
                 },
@@ -123,9 +128,13 @@ impl RuleRecognizer for TriGRecognizer {
                 },
                 TriGState::PrefixExpectIri { name } => match token {
                     N3Token::IriRef(iri) => {
-                        context.prefixes.insert(name, iri);
-                        self
-                    }
+                        match Iri::parse_unchecked(iri) {
+                            Ok(iri) => {
+                                context.prefixes.insert(name, iri);
+                                self
+                            }
+                            Err(e) => self.error(errors, format!("Invalid prefix IRI: {e}"))
+                        }                    }
                     _ => self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI"),
                 },
                 // [3g] 	triplesOrGraph 	::= 	labelOrSubject ( wrappedGraph | predicateObjectList '.' ) | quotedTriple predicateObjectList '.'
@@ -133,7 +142,7 @@ impl RuleRecognizer for TriGRecognizer {
                 TriGState::TriplesOrGraph => match token {
                     N3Token::IriRef(iri) => {
                         self.stack.push(TriGState::WrappedGraphOrPredicateObjectList {
-                            term: NamedNode::from(iri).into()
+                            term: NamedNode::new_unchecked(iri).into()
                         });
                         self
                     }
@@ -291,7 +300,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_subject.push(NamedNode::from(iri).into());
+                        self.cur_subject.push(NamedNode::new_unchecked(iri).into());
                         self.stack.push(TriGState::PredicateObjectList);
                         self
                     }
@@ -337,7 +346,7 @@ impl RuleRecognizer for TriGRecognizer {
                 // [7g] 	labelOrSubject 	::= 	iri | BlankNode
                 TriGState::GraphName => match token {
                     N3Token::IriRef(iri) => {
-                        self.cur_graph = NamedNode::from(iri).into();
+                        self.cur_graph = NamedNode::new_unchecked(iri).into();
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
@@ -451,7 +460,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_predicate.push(NamedNode::from(iri));
+                        self.cur_predicate.push(NamedNode::new_unchecked(iri));
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
@@ -479,7 +488,7 @@ impl RuleRecognizer for TriGRecognizer {
                 // [137s] 	BlankNode 	::= 	BLANK_NODE_LABEL | ANON
                 TriGState::Object => match token {
                     N3Token::IriRef(iri) => {
-                        self.cur_object.push(NamedNode::from(iri).into());
+                        self.cur_object.push(NamedNode::new_unchecked(iri).into());
                         self.emit_quad(results);
                         self
                     }
@@ -626,7 +635,7 @@ impl RuleRecognizer for TriGRecognizer {
                 TriGState::LiteralExpectDatatype { value, emit } => {
                     match token {
                         N3Token::IriRef(datatype) => {
-                            self.cur_object.push(Literal::new_typed_literal(value, datatype).into());
+                            self.cur_object.push(Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype)).into());
                             if emit {
                                 self.emit_quad(results);
                             }
@@ -688,7 +697,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_subject.push(NamedNode::from(iri).into());
+                        self.cur_subject.push(NamedNode::new_unchecked(iri).into());
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
@@ -720,7 +729,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::IriRef(iri) => {
-                        self.cur_object.push(NamedNode::from(iri).into());
+                        self.cur_object.push(NamedNode::new_unchecked(iri).into());
                         self
                     }
                     N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
@@ -823,12 +832,13 @@ impl TriGRecognizer {
     pub fn new_parser(
         with_graph_name: bool,
         #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
+        unchecked: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
     ) -> Parser<Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::Turtle),
+                N3Lexer::new(N3LexerMode::Turtle, unchecked),
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,

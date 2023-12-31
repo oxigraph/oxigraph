@@ -52,6 +52,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 #[derive(Default)]
 #[must_use]
 pub struct RdfXmlParser {
+    unchecked: bool,
     base: Option<Iri<String>>,
 }
 
@@ -60,6 +61,17 @@ impl RdfXmlParser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Assumes the file is valid to make parsing faster.
+    ///
+    /// It will skip some validations.
+    ///
+    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    #[inline]
+    pub fn unchecked(mut self) -> Self {
+        self.unchecked = true;
+        self
     }
 
     #[inline]
@@ -158,6 +170,7 @@ impl RdfXmlParser {
             in_literal_depth: 0,
             known_rdf_id: HashSet::default(),
             is_end: false,
+            unchecked: self.unchecked,
         }
     }
 }
@@ -414,6 +427,7 @@ struct RdfXmlReader<R> {
     in_literal_depth: usize,
     known_rdf_id: HashSet<String>,
     is_end: bool,
+    unchecked: bool,
 }
 
 impl<R> RdfXmlReader<R> {
@@ -551,19 +565,28 @@ impl<R> RdfXmlReader<R> {
             let attribute = attribute.map_err(Error::InvalidAttr)?;
             if attribute.key.as_ref().starts_with(b"xml") {
                 if attribute.key.as_ref() == b"xml:lang" {
-                    let tag = self.convert_attribute(&attribute)?;
-                    language = Some(
+                    let tag = self.convert_attribute(&attribute)?.to_ascii_lowercase();
+                    language = Some(if self.unchecked {
+                        tag
+                    } else {
                         LanguageTag::parse(tag.to_ascii_lowercase())
                             .map_err(|error| SyntaxError {
                                 inner: SyntaxErrorKind::InvalidLanguageTag { tag, error },
                             })?
-                            .into_inner(),
-                    );
+                            .into_inner()
+                    });
                 } else if attribute.key.as_ref() == b"xml:base" {
                     let iri = self.convert_attribute(&attribute)?;
-                    base_iri = Some(Iri::parse(iri.clone()).map_err(|error| SyntaxError {
-                        inner: SyntaxErrorKind::InvalidIri { iri, error },
-                    })?)
+                    base_iri = Some(
+                        if self.unchecked {
+                            Iri::parse_unchecked(iri.clone())
+                        } else {
+                            Iri::parse(iri.clone())
+                        }
+                        .map_err(|error| SyntaxError {
+                            inner: SyntaxErrorKind::InvalidIri { iri, error },
+                        })?,
+                    )
                 } else {
                     // We ignore other xml attributes
                 }
@@ -622,12 +645,7 @@ impl<R> RdfXmlReader<R> {
                     .into());
                 } else {
                     property_attrs.push((
-                        NamedNode::new(attribute_url.clone()).map_err(|error| SyntaxError {
-                            inner: SyntaxErrorKind::InvalidIri {
-                                iri: attribute_url,
-                                error,
-                            },
-                        })?,
+                        self.parse_iri(attribute_url)?,
                         self.convert_attribute(&attribute)?,
                     ));
                 }
@@ -637,7 +655,7 @@ impl<R> RdfXmlReader<R> {
         //Parsing with the base URI
         let id_attr = match id_attr {
             Some(iri) => {
-                let iri = resolve(&base_iri, iri)?;
+                let iri = self.resolve_iri(&base_iri, iri)?;
                 if self.known_rdf_id.contains(iri.as_str()) {
                     return Err(SyntaxError::msg(format!(
                         "{} has already been used as rdf:ID value",
@@ -701,12 +719,7 @@ impl<R> RdfXmlReader<R> {
                     .into());
                 } else {
                     Self::build_node_elt(
-                        NamedNode::new(tag_name.clone()).map_err(|error| SyntaxError {
-                            inner: SyntaxErrorKind::InvalidIri {
-                                iri: tag_name,
-                                error,
-                            },
-                        })?,
+                        self.parse_iri(tag_name)?,
                         base_iri,
                         language,
                         id_attr,
@@ -727,12 +740,7 @@ impl<R> RdfXmlReader<R> {
                     .into());
                 }
                 Self::build_node_elt(
-                    NamedNode::new(tag_name.clone()).map_err(|error| SyntaxError {
-                        inner: SyntaxErrorKind::InvalidIri {
-                            iri: tag_name,
-                            error,
-                        },
-                    })?,
+                    self.parse_iri(tag_name)?,
                     base_iri,
                     language,
                     id_attr,
@@ -766,12 +774,7 @@ impl<R> RdfXmlReader<R> {
                     ))
                     .into());
                 } else {
-                    NamedNode::new(tag_name.clone()).map_err(|error| SyntaxError {
-                        inner: SyntaxErrorKind::InvalidIri {
-                            iri: tag_name,
-                            error,
-                        },
-                    })?
+                    self.parse_iri(tag_name)?
                 };
                 match parse_type {
                     RdfXmlParseType::Default => {
@@ -1156,32 +1159,51 @@ impl<R> RdfXmlReader<R> {
         base_iri: &Option<Iri<String>>,
         attribute: &Attribute<'_>,
     ) -> Result<NamedNode, ParseError> {
-        Ok(resolve(base_iri, self.convert_attribute(attribute)?)?)
+        Ok(self.resolve_iri(base_iri, self.convert_attribute(attribute)?)?)
+    }
+
+    fn resolve_iri(
+        &self,
+        base_iri: &Option<Iri<String>>,
+        relative_iri: String,
+    ) -> Result<NamedNode, SyntaxError> {
+        if let Some(base_iri) = base_iri {
+            Ok(NamedNode::new_unchecked(
+                if self.unchecked {
+                    base_iri.resolve_unchecked(&relative_iri)
+                } else {
+                    base_iri.resolve(&relative_iri)
+                }
+                .map_err(|error| SyntaxError {
+                    inner: SyntaxErrorKind::InvalidIri {
+                        iri: relative_iri,
+                        error,
+                    },
+                })?
+                .into_inner(),
+            ))
+        } else {
+            self.parse_iri(relative_iri)
+        }
+    }
+
+    fn parse_iri(&self, relative_iri: String) -> Result<NamedNode, SyntaxError> {
+        Ok(NamedNode::new_unchecked(if self.unchecked {
+            relative_iri
+        } else {
+            Iri::parse(relative_iri.clone())
+                .map_err(|error| SyntaxError {
+                    inner: SyntaxErrorKind::InvalidIri {
+                        iri: relative_iri,
+                        error,
+                    },
+                })?
+                .into_inner()
+        }))
     }
 
     fn resolve_entity(&self, e: &str) -> Option<&str> {
         self.custom_entities.get(e).map(String::as_str)
-    }
-}
-
-fn resolve(base_iri: &Option<Iri<String>>, relative_iri: String) -> Result<NamedNode, SyntaxError> {
-    if let Some(base_iri) = base_iri {
-        Ok(base_iri
-            .resolve(&relative_iri)
-            .map_err(|error| SyntaxError {
-                inner: SyntaxErrorKind::InvalidIri {
-                    iri: relative_iri,
-                    error,
-                },
-            })?
-            .into())
-    } else {
-        NamedNode::new(relative_iri.clone()).map_err(|error| SyntaxError {
-            inner: SyntaxErrorKind::InvalidIri {
-                iri: relative_iri,
-                error,
-            },
-        })
     }
 }
 

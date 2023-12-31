@@ -21,7 +21,7 @@ rdf-star = []
 [dependencies]
 rand = "0.8"
 oxilangtag = "0.1"
-oxiri = "0.2"
+oxiri = "0.2.3-alpha.1"
 oxsdatatypes = { version = "0.2.0-alpha.1-dev", path="../oxsdatatypes", optional = true }
 
 [lints]

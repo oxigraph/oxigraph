@@ -63,7 +63,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 NQuadsState::ExpectSubject => match token {
                     N3Token::IriRef(s) => {
                         self.subjects
-                            .push(NamedNode::from(s).into());
+                            .push(NamedNode::new_unchecked(s).into());
                         self.stack.push(NQuadsState::ExpectPredicate);
                         self
                     }
@@ -86,7 +86,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 NQuadsState::ExpectPredicate => match token {
                     N3Token::IriRef(p) => {
                         self.predicates
-                            .push(p.into());
+                            .push(NamedNode::new_unchecked(p));
                         self.stack.push(NQuadsState::ExpectedObject);
                         self
                     }
@@ -98,7 +98,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 NQuadsState::ExpectedObject => match token {
                     N3Token::IriRef(o) => {
                         self.objects
-                            .push(NamedNode::from(o).into());
+                            .push(NamedNode::new_unchecked(o).into());
                         self.stack
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                         self
@@ -155,7 +155,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self.objects.push(
                             Literal::new_typed_literal(
                                 value,
-                                d
+                                NamedNode::new_unchecked(d)
                             )
                             .into(),
                         );
@@ -171,7 +171,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                             N3Token::IriRef(g) if context.with_graph_name => {
                                 self.emit_quad(
                                     results,
-                                    NamedNode::from(g).into(),
+                                    NamedNode::new_unchecked(g).into(),
                                 );
                                 self.stack.push(NQuadsState::ExpectDot);
                                 self
@@ -264,10 +264,11 @@ impl NQuadsRecognizer {
     pub fn new_parser(
         with_graph_name: bool,
         #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
+        unchecked: bool,
     ) -> Parser<Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::NTriples),
+                N3Lexer::new(N3LexerMode::NTriples, unchecked),
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,

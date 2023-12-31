@@ -38,6 +38,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[derive(Default)]
 #[must_use]
 pub struct NTriplesParser {
+    unchecked: bool,
     #[cfg(feature = "rdf-star")]
     with_quoted_triples: bool,
 }
@@ -47,6 +48,17 @@ impl NTriplesParser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Assumes the file is valid to make parsing faster.
+    ///
+    /// It will skip some validations.
+    ///
+    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.    ///
+    #[inline]
+    pub fn unchecked(mut self) -> Self {
+        self.unchecked = true;
+        self
     }
 
     /// Enables [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star).
@@ -166,6 +178,7 @@ impl NTriplesParser {
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
+                self.unchecked,
             ),
         }
     }
@@ -540,5 +553,28 @@ impl LowLevelNTriplesWriter {
         mut write: impl Write,
     ) -> io::Result<()> {
         writeln!(write, "{} .", t.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxrdf::{Literal, NamedNode};
+
+    #[test]
+    fn unchecked_parsing() {
+        let triples = NTriplesParser::new()
+            .unchecked()
+            .parse_read("<foo> <bar> \"baz\"@toolonglangtag .".as_bytes())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            triples,
+            [Triple::new(
+                NamedNode::new_unchecked("foo"),
+                NamedNode::new_unchecked("bar"),
+                Literal::new_language_tagged_literal_unchecked("baz", "toolonglangtag"),
+            )]
+        )
     }
 }

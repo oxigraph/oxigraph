@@ -1053,7 +1053,6 @@ impl<'a> Transaction<'a> {
     /// Retrieves quads with a filter on each quad component.
     ///
     /// Usage example:
-    /// Usage example:
     /// ```
     /// use oxigraph::store::{StorageError, Store};
     /// use oxigraph::model::*;
@@ -1601,19 +1600,22 @@ impl BulkLoader {
     ///
     /// <div class="warning">This method is optimized for speed. See [the struct](BulkLoader) documentation for more details.</div>
     ///
-    /// Usage example:
+    /// To get better speed on valid datasets, consider enabling [`RdfParser::unchecked`] option to skip some validations.
+    ///
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::io::{RdfParser, RdfFormat};
     /// use oxigraph::model::*;
-    /// use oxrdfio::RdfParser;
     ///
     /// let store = Store::new()?;
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.bulk_loader().load_from_read(RdfFormat::NQuads, file.as_ref())?;
+    /// store.bulk_loader().load_from_read(
+    ///     RdfParser::from_format(RdfFormat::NQuads).unchecked(), // we inject a custom parser with options
+    ///     file.as_ref()
+    /// )?;
     ///
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";

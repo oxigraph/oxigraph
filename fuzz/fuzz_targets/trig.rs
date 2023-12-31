@@ -4,31 +4,37 @@ use libfuzzer_sys::fuzz_target;
 use oxrdf::{Dataset, GraphName, Quad, Subject, Term, Triple};
 use oxttl::{TriGParser, TriGSerializer};
 
-fn parse<'a>(chunks: impl IntoIterator<Item = &'a [u8]>) -> (Vec<Quad>, Vec<String>) {
+fn parse<'a>(
+    chunks: impl IntoIterator<Item = &'a [u8]>,
+    unchecked: bool,
+) -> (Vec<Quad>, Vec<String>) {
     let mut quads = Vec::new();
     let mut errors = Vec::new();
     let mut parser = TriGParser::new()
         .with_quoted_triples()
         .with_base_iri("http://example.com/")
-        .unwrap()
-        .parse();
+        .unwrap();
+    if unchecked {
+        parser = parser.unchecked();
+    }
+    let mut reader = parser.parse();
     for chunk in chunks {
-        parser.extend_from_slice(chunk);
-        while let Some(result) = parser.read_next() {
+        reader.extend_from_slice(chunk);
+        while let Some(result) = reader.read_next() {
             match result {
                 Ok(quad) => quads.push(quad),
                 Err(error) => errors.push(error.to_string()),
             }
         }
     }
-    parser.end();
-    while let Some(result) = parser.read_next() {
+    reader.end();
+    while let Some(result) = reader.read_next() {
         match result {
             Ok(quad) => quads.push(quad),
             Err(error) => errors.push(error.to_string()),
         }
     }
-    assert!(parser.is_end());
+    assert!(reader.is_end());
     (quads, errors)
 }
 
@@ -66,14 +72,22 @@ fn serialize_quads(quads: &[Quad]) -> Vec<u8> {
 
 fuzz_target!(|data: &[u8]| {
     // We parse with splitting
-    let (quads, errors) = parse(data.split(|c| *c == 0xFF));
+    let (quads, errors) = parse(data.split(|c| *c == 0xFF), false);
     // We parse without splitting
-    let (quads_without_split, errors_without_split) = parse([data
-        .iter()
-        .copied()
-        .filter(|c| *c != 0xFF)
-        .collect::<Vec<_>>()
-        .as_slice()]);
+    let (quads_without_split, errors_without_split) = parse(
+        [data
+            .iter()
+            .copied()
+            .filter(|c| *c != 0xFF)
+            .collect::<Vec<_>>()
+            .as_slice()],
+        false,
+    );
+    let (quads_unchecked, errors_unchecked) = parse(data.split(|c| *c == 0xFF), true);
+    if errors.is_empty() {
+        assert!(errors_unchecked.is_empty());
+    }
+
     let bnodes_count = quads.iter().map(count_quad_blank_nodes).sum::<usize>();
     if bnodes_count == 0 {
         assert_eq!(
@@ -83,6 +97,15 @@ fuzz_target!(|data: &[u8]| {
             String::from_utf8_lossy(&serialize_quads(&quads)),
             String::from_utf8_lossy(&serialize_quads(&quads_without_split))
         );
+        if errors.is_empty() {
+            assert_eq!(
+                quads,
+                quads_unchecked,
+                "Validating:\n{}\nUnchecked:\n{}",
+                String::from_utf8_lossy(&serialize_quads(&quads)),
+                String::from_utf8_lossy(&serialize_quads(&quads_unchecked))
+            );
+        }
     } else if bnodes_count <= 4 {
         let mut dataset_with_split = quads.iter().collect::<Dataset>();
         let mut dataset_without_split = quads_without_split.iter().collect::<Dataset>();
@@ -95,6 +118,19 @@ fuzz_target!(|data: &[u8]| {
             String::from_utf8_lossy(&serialize_quads(&quads)),
             String::from_utf8_lossy(&serialize_quads(&quads_without_split))
         );
+        if errors.is_empty() {
+            if errors.is_empty() {
+                let mut dataset_unchecked = quads_unchecked.iter().collect::<Dataset>();
+                dataset_unchecked.canonicalize();
+                assert_eq!(
+                    dataset_with_split,
+                    dataset_unchecked,
+                    "Validating:\n{}\nUnchecked:\n{}",
+                    String::from_utf8_lossy(&serialize_quads(&quads)),
+                    String::from_utf8_lossy(&serialize_quads(&quads_unchecked))
+                );
+            }
+        }
     }
     assert_eq!(errors, errors_without_split);
 
