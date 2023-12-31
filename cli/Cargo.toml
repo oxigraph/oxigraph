@@ -32,7 +32,7 @@ clap = { version = "4.0", features = ["derive"] }
 oxigraph = { version = "0.4.0-alpha.1-dev", path = "../lib" }
 rand = "0.8"
 url = "2.4"
-oxiri = "0.2"
+oxiri = "0.2.3-alpha.1"
 flate2 = "1.0"
 rayon-core = "1.11"
 

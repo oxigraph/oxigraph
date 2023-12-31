@@ -206,6 +206,7 @@ impl From<Quad> for N3Quad {
 #[derive(Default)]
 #[must_use]
 pub struct N3Parser {
+    unchecked: bool,
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
 }
@@ -215,6 +216,17 @@ impl N3Parser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Assumes the file is valid to make parsing faster.
+    ///
+    /// It will skip some validations.
+    ///
+    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    #[inline]
+    pub fn unchecked(mut self) -> Self {
+        self.unchecked = true;
+        self
     }
 
     #[inline]
@@ -345,7 +357,7 @@ impl N3Parser {
     /// ```
     pub fn parse(self) -> LowLevelN3Reader {
         LowLevelN3Reader {
-            parser: N3Recognizer::new_parser(self.base, self.prefixes),
+            parser: N3Recognizer::new_parser(self.unchecked, self.base, self.prefixes),
         }
     }
 }
@@ -665,8 +677,13 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::BaseExpectIri => return match token {
                     N3Token::IriRef(iri) => {
-                        context.lexer_options.base_iri = Some(iri);
-                        self
+                        match Iri::parse_unchecked(iri) {
+                            Ok(iri) => {
+                                context.lexer_options.base_iri = Some(iri);
+                                self
+                            }
+                            Err(e) => self.error(errors, format!("Invalid base IRI: {e}"))
+                        }
                     }
                     _ => self.error(errors, "The BASE keyword should be followed by an IRI"),
                 },
@@ -681,8 +698,13 @@ impl RuleRecognizer for N3Recognizer {
                 },
                 N3State::PrefixExpectIri { name } => return match token {
                     N3Token::IriRef(iri) => {
-                        context.prefixes.insert(name, iri);
-                        self
+                        match Iri::parse_unchecked(iri) {
+                            Ok(iri) => {
+                                context.prefixes.insert(name, iri);
+                                self
+                            }
+                            Err(e) => self.error(errors, format!("Invalid prefix IRI: {e}"))
+                        }
                     }
                     _ => self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI"),
                 },
@@ -843,7 +865,7 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::PathItem => {
                     return match token {
                         N3Token::IriRef(iri) => {
-                            self.terms.push(NamedNode::from(iri).into());
+                            self.terms.push(NamedNode::new_unchecked(iri).into());
                             self
                         }
                         N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
@@ -925,7 +947,7 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::IriPropertyList => return match token {
                     N3Token::IriRef(id) => {
-                        self.terms.push(NamedNode::from(id).into());
+                        self.terms.push(NamedNode::new_unchecked(id).into());
                         self.stack.push(N3State::PropertyListEnd);
                         self.stack.push(N3State::PredicateObjectList);
                         self
@@ -999,7 +1021,7 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::LiteralExpectDatatype { value } => {
                     match token {
                         N3Token::IriRef(datatype) => {
-                            self.terms.push(Literal::new_typed_literal(value, datatype).into());
+                            self.terms.push(Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype)).into());
                             return self;
                         }
                         N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
@@ -1096,12 +1118,13 @@ impl RuleRecognizer for N3Recognizer {
 
 impl N3Recognizer {
     pub fn new_parser(
+        unchecked: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
     ) -> Parser<Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::N3),
+                N3Lexer::new(N3LexerMode::N3, unchecked),
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,

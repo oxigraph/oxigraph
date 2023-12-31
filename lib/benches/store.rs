@@ -24,6 +24,16 @@ fn parse_nt(c: &mut Criterion) {
             }
         })
     });
+    group.bench_function("parse BSBM explore 1000 unchecked", |b| {
+        b.iter(|| {
+            for r in RdfParser::from_format(RdfFormat::NTriples)
+                .unchecked()
+                .parse_read(data.as_slice())
+            {
+                r.unwrap();
+            }
+        })
+    });
 }
 
 fn store_load(c: &mut Criterion) {

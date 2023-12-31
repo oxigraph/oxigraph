@@ -121,6 +121,8 @@ enum Command {
         destination: PathBuf,
     },
     /// Load file(s) into the store.
+    ///
+    /// Feel free to enable the --lenient option if you know your input is valid to get better performances.
     Load {
         /// Directory in which Oxigraph data are persisted.
         #[arg(short, long, value_hint = ValueHint::DirPath)]
@@ -143,6 +145,8 @@ enum Command {
         #[arg(long, value_hint = ValueHint::Url)]
         base: Option<String>,
         /// Attempt to keep loading even if the data file is invalid.
+        ///
+        /// This disables most of validation on RDF content.
         #[arg(long)]
         lenient: bool,
         /// Name of the graph to load the data to.
@@ -391,6 +395,7 @@ pub fn main() -> anyhow::Result<()> {
                     format.context("The --format option must be set when loading from stdin")?,
                     base.as_deref(),
                     graph,
+                    lenient,
                 )
             } else {
                 ThreadPoolBuilder::new()
@@ -444,6 +449,7 @@ pub fn main() -> anyhow::Result<()> {
                                             }),
                                             base.as_deref(),
                                             graph,
+                                            lenient,
                                         )
                                     } else {
                                         bulk_load(
@@ -454,6 +460,7 @@ pub fn main() -> anyhow::Result<()> {
                                             }),
                                             base.as_deref(),
                                             graph,
+                                            lenient,
                                         )
                                     }
                                 } {
@@ -784,6 +791,7 @@ fn bulk_load(
     format: RdfFormat,
     base_iri: Option<&str>,
     to_graph_name: Option<NamedNode>,
+    lenient: bool,
 ) -> anyhow::Result<()> {
     let mut parser = RdfParser::from_format(format);
     if let Some(to_graph_name) = to_graph_name {
@@ -793,6 +801,9 @@ fn bulk_load(
         parser = parser
             .with_base_iri(base_iri)
             .with_context(|| format!("Invalid base IRI {base_iri}"))?;
+    }
+    if lenient {
+        parser = parser.unchecked();
     }
     loader.load_from_read(parser, read)?;
     Ok(())

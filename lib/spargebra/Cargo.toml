@@ -23,7 +23,7 @@ sep-0006 = []
 [dependencies]
 peg = "0.8"
 rand = "0.8"
-oxiri = "0.2"
+oxiri = "0.2.3-alpha.1"
 oxilangtag = "0.1"
 oxrdf = { version = "0.2.0-alpha.1-dev", path="../oxrdf" }
 

@@ -37,6 +37,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[derive(Default)]
 #[must_use]
 pub struct NQuadsParser {
+    unchecked: bool,
     #[cfg(feature = "rdf-star")]
     with_quoted_triples: bool,
 }
@@ -46,6 +47,17 @@ impl NQuadsParser {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Assumes the file is valid to make parsing faster.
+    ///
+    /// It will skip some validations.
+    ///
+    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    #[inline]
+    pub fn unchecked(mut self) -> Self {
+        self.unchecked = true;
+        self
     }
 
     /// Enables [N-Quads-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-quads-star).
@@ -165,6 +177,7 @@ impl NQuadsParser {
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
+                self.unchecked,
             ),
         }
     }

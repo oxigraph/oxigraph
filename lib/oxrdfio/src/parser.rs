@@ -158,20 +158,16 @@ impl RdfParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_base_iri(self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
-        Ok(Self {
-            inner: match self.inner {
-                RdfParserKind::N3(p) => RdfParserKind::N3(p),
-                RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p),
-                RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p),
-                RdfParserKind::RdfXml(p) => RdfParserKind::RdfXml(p.with_base_iri(base_iri)?),
-                RdfParserKind::TriG(p) => RdfParserKind::TriG(p.with_base_iri(base_iri)?),
-                RdfParserKind::Turtle(p) => RdfParserKind::Turtle(p.with_base_iri(base_iri)?),
-            },
-            default_graph: self.default_graph,
-            without_named_graphs: self.without_named_graphs,
-            rename_blank_nodes: self.rename_blank_nodes,
-        })
+    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+        self.inner = match self.inner {
+            RdfParserKind::N3(p) => RdfParserKind::N3(p),
+            RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p),
+            RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p),
+            RdfParserKind::RdfXml(p) => RdfParserKind::RdfXml(p.with_base_iri(base_iri)?),
+            RdfParserKind::TriG(p) => RdfParserKind::TriG(p.with_base_iri(base_iri)?),
+            RdfParserKind::Turtle(p) => RdfParserKind::Turtle(p.with_base_iri(base_iri)?),
+        };
+        Ok(self)
     }
 
     /// Provides the name graph name that should replace the default graph in the returned quads.
@@ -190,13 +186,9 @@ impl RdfParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn with_default_graph(self, default_graph: impl Into<GraphName>) -> Self {
-        Self {
-            inner: self.inner,
-            default_graph: default_graph.into(),
-            without_named_graphs: self.without_named_graphs,
-            rename_blank_nodes: self.rename_blank_nodes,
-        }
+    pub fn with_default_graph(mut self, default_graph: impl Into<GraphName>) -> Self {
+        self.default_graph = default_graph.into();
+        self
     }
 
     /// Sets that the parser must fail if parsing a named graph.
@@ -212,13 +204,9 @@ impl RdfParser {
     /// assert!(parser.parse_read(file.as_bytes()).next().unwrap().is_err());
     /// ```
     #[inline]
-    pub fn without_named_graphs(self) -> Self {
-        Self {
-            inner: self.inner,
-            default_graph: self.default_graph,
-            without_named_graphs: true,
-            rename_blank_nodes: self.rename_blank_nodes,
-        }
+    pub fn without_named_graphs(mut self) -> Self {
+        self.without_named_graphs = true;
+        self
     }
 
     /// Renames the blank nodes ids from the ones set in the serialization to random ids.
@@ -240,13 +228,27 @@ impl RdfParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
-    pub fn rename_blank_nodes(self) -> Self {
-        Self {
-            inner: self.inner,
-            default_graph: self.default_graph,
-            without_named_graphs: self.without_named_graphs,
-            rename_blank_nodes: true,
-        }
+    pub fn rename_blank_nodes(mut self) -> Self {
+        self.rename_blank_nodes = true;
+        self
+    }
+
+    /// Assumes the file is valid to make parsing faster.
+    ///
+    /// It will skip some validations.
+    ///
+    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    #[inline]
+    pub fn unchecked(mut self) -> Self {
+        self.inner = match self.inner {
+            RdfParserKind::N3(p) => RdfParserKind::N3(p.unchecked()),
+            RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.unchecked()),
+            RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p.unchecked()),
+            RdfParserKind::RdfXml(p) => RdfParserKind::RdfXml(p.unchecked()),
+            RdfParserKind::TriG(p) => RdfParserKind::TriG(p.unchecked()),
+            RdfParserKind::Turtle(p) => RdfParserKind::Turtle(p.unchecked()),
+        };
+        self
     }
 
     /// Parses from a [`Read`] implementation and returns an iterator of quads.
