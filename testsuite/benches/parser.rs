@@ -1,11 +1,11 @@
 #![allow(clippy::print_stderr)]
 
 use anyhow::Result;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use codspeed_criterion_compat::{
+    criterion_group, criterion_main, BenchmarkId, Criterion, Throughput,
+};
 use oxigraph_testsuite::files::read_file;
 use oxigraph_testsuite::manifest::TestManifest;
-use rio_api::parser::*;
-use rio_turtle::*;
 use std::io::Read;
 
 fn test_data_from_testsuite(manifest_uri: String, include_tests_types: &[&str]) -> Result<Vec<u8>> {
@@ -53,7 +53,7 @@ fn parse_bench(
     group.finish();
 }
 
-fn parse_oxttl_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
+fn parse_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "oxttl ntriples", name, data, |data| {
         let mut parser = oxttl::NTriplesParser::new().parse();
         parser.extend_from_slice(data);
@@ -64,7 +64,7 @@ fn parse_oxttl_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
     });
 }
 
-fn parse_oxttl_turtle(c: &mut Criterion, name: &str, data: &[u8]) {
+fn parse_turtle(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "oxttl turtle", name, data, |data| {
         let mut parser = oxttl::TurtleParser::new().parse();
         parser.extend_from_slice(data);
@@ -75,32 +75,8 @@ fn parse_oxttl_turtle(c: &mut Criterion, name: &str, data: &[u8]) {
     });
 }
 
-fn parse_rio_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
-    parse_bench(c, "rio ntriples", name, data, |data| {
-        let mut count: u64 = 0;
-        NTriplesParser::new(data)
-            .parse_all::<TurtleError>(&mut |_| {
-                count += 1;
-                Ok(())
-            })
-            .unwrap();
-    });
-}
-
-fn parse_rio_turtle(c: &mut Criterion, name: &str, data: &[u8]) {
-    parse_bench(c, "rio turtle", name, data, |data| {
-        let mut count: u64 = 0;
-        TurtleParser::new(data, None)
-            .parse_all::<TurtleError>(&mut |_| {
-                count += 1;
-                Ok(())
-            })
-            .unwrap();
-    });
-}
-
-fn bench_parse_oxttl_ntriples_with_ntriples(c: &mut Criterion) {
-    parse_oxttl_ntriples(
+fn bench_parse_ntriples_with_ntriples(c: &mut Criterion) {
+    parse_ntriples(
         c,
         "ntriples",
         &match ntriples_test_data() {
@@ -113,8 +89,8 @@ fn bench_parse_oxttl_ntriples_with_ntriples(c: &mut Criterion) {
     )
 }
 
-fn bench_parse_oxttl_ntriples_with_turtle(c: &mut Criterion) {
-    parse_oxttl_turtle(
+fn bench_parse_ntriples_with_turtle(c: &mut Criterion) {
+    parse_turtle(
         c,
         "ntriples",
         &match ntriples_test_data() {
@@ -127,50 +103,8 @@ fn bench_parse_oxttl_ntriples_with_turtle(c: &mut Criterion) {
     )
 }
 
-fn bench_parse_oxttl_turtle_with_turtle(c: &mut Criterion) {
-    parse_oxttl_turtle(
-        c,
-        "turtle",
-        &match turtle_test_data() {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("{e}");
-                return;
-            }
-        },
-    )
-}
-
-fn bench_parse_rio_ntriples_with_ntriples(c: &mut Criterion) {
-    parse_rio_ntriples(
-        c,
-        "ntriples",
-        &match ntriples_test_data() {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("{e}");
-                return;
-            }
-        },
-    )
-}
-
-fn bench_parse_rio_ntriples_with_turtle(c: &mut Criterion) {
-    parse_rio_turtle(
-        c,
-        "ntriples",
-        &match ntriples_test_data() {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("{e}");
-                return;
-            }
-        },
-    )
-}
-
-fn bench_parse_rio_turtle_with_turtle(c: &mut Criterion) {
-    parse_rio_turtle(
+fn bench_parse_turtle_with_turtle(c: &mut Criterion) {
+    parse_turtle(
         c,
         "turtle",
         &match turtle_test_data() {
@@ -185,12 +119,9 @@ fn bench_parse_rio_turtle_with_turtle(c: &mut Criterion) {
 
 criterion_group!(
     w3c_testsuite,
-    bench_parse_rio_ntriples_with_ntriples,
-    bench_parse_rio_ntriples_with_turtle,
-    bench_parse_rio_turtle_with_turtle,
-    bench_parse_oxttl_ntriples_with_ntriples,
-    bench_parse_oxttl_ntriples_with_turtle,
-    bench_parse_oxttl_turtle_with_turtle
+    bench_parse_ntriples_with_ntriples,
+    bench_parse_ntriples_with_turtle,
+    bench_parse_turtle_with_turtle
 );
 
 criterion_main!(w3c_testsuite);
