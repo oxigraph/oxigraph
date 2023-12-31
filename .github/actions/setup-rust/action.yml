@@ -1,0 +1,27 @@
+name: 'Setup Rust'
+description: 'Setup Rust using Rustup'
+inputs:
+  version:
+    description: 'Rust version to use. By default latest stable version'
+    required: false
+    default: 'stable'
+  component:
+    description: 'Rust extra component to install like clippy'
+    required: false
+  target:
+    description: 'Rust extra target to install like wasm32-unknown-unknown'
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - run: rustup update
+      shell: bash
+    - run: rustup default ${{ inputs.version }}
+      shell: bash
+    - run: rustup component add ${{ inputs.component }}
+      shell: bash
+      if: ${{ inputs.component }}
+    - run: rustup target add ${{ inputs.target }}
+      shell: bash
+      if: ${{ inputs.target }}
+    - uses: Swatinem/rust-cache@v2
