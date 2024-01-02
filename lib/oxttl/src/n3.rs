@@ -620,7 +620,7 @@ impl RuleRecognizer for N3Recognizer {
         results: &mut Vec<N3Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
-        if let Some(rule) = self.stack.pop() {
+        while let Some(rule) = self.stack.pop() {
             match rule {
                 // [1] 	n3Doc 	::= 	( ( n3Statement ".") | sparqlDirective) *
                 // [2] 	n3Statement 	::= 	n3Directive | triples
@@ -635,45 +635,42 @@ impl RuleRecognizer for N3Recognizer {
                     match token {
                         N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("base") => {
                             self.stack.push(N3State::BaseExpectIri);
-                            self
+                            return self;
                         }
                         N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("prefix") => {
                             self.stack.push(N3State::PrefixExpectPrefix);
-                            self
+                            return self;
                         }
                         N3Token::LangTag("prefix") => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::PrefixExpectPrefix);
-                            self
+                            return self;
                         }
                         N3Token::LangTag("base") => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::BaseExpectIri);
-                            self
+                            return self;
                         }
                         _ => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::Triples);
-                            self.recognize_next(token, context, results, errors)
                         }
                     }
-                },
+                }
                 N3State::N3DocExpectDot => {
                     if token == N3Token::Punctuation(".") {
-                        self
-                    } else  {
-                        errors.push("A dot is expected at the end of N3 statements".into());
-                        self.recognize_next(token, context, results, errors)
+                        return self;
                     }
-                },
-                N3State::BaseExpectIri => match token {
+                    errors.push("A dot is expected at the end of N3 statements".into());
+                }
+                N3State::BaseExpectIri => return match token {
                     N3Token::IriRef(iri) => {
                         context.lexer_options.base_iri = Some(iri);
                         self
                     }
                     _ => self.error(errors, "The BASE keyword should be followed by an IRI"),
                 },
-                N3State::PrefixExpectPrefix => match token {
+                N3State::PrefixExpectPrefix => return match token {
                     N3Token::PrefixedName { prefix, local, .. } if local.is_empty() => {
                         self.stack.push(N3State::PrefixExpectIri { name: prefix.to_owned() });
                         self
@@ -682,7 +679,7 @@ impl RuleRecognizer for N3Recognizer {
                         self.error(errors, "The PREFIX keyword should be followed by a prefix like 'ex:'")
                     }
                 },
-                N3State::PrefixExpectIri { name } => match token {
+                N3State::PrefixExpectIri { name } => return match token {
                     N3Token::IriRef(iri) => {
                         context.prefixes.insert(name, iri);
                         self
@@ -693,51 +690,39 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::Triples => {
                     self.stack.push(N3State::TriplesMiddle);
                     self.stack.push(N3State::Path);
-                    self.recognize_next(token, context, results, errors)
-                },
-                N3State::TriplesMiddle => if matches!(token, N3Token::Punctuation("." | "]" | "}" | ")")) {
-                    self.recognize_next(token, context, results, errors)
-                } else {
+                }
+                N3State::TriplesMiddle => if matches!(token, N3Token::Punctuation("." | "]" | "}" | ")")) {} else {
                     self.stack.push(N3State::TriplesEnd);
                     self.stack.push(N3State::PredicateObjectList);
-                    self.recognize_next(token, context, results, errors)
                 },
                 N3State::TriplesEnd => {
                     self.terms.pop();
-                    self.recognize_next(token, context, results, errors)
-                },
+                }
                 // [10] 	predicateObjectList 	::= 	verb objectList ( ";" ( verb objectList) ? ) *
                 N3State::PredicateObjectList => {
                     self.stack.push(N3State::PredicateObjectListEnd);
                     self.stack.push(N3State::ObjectsList);
                     self.stack.push(N3State::Verb);
-                    self.recognize_next(token, context, results, errors)
-                },
+                }
                 N3State::PredicateObjectListEnd => {
                     self.predicates.pop();
                     if token == N3Token::Punctuation(";") {
                         self.stack.push(N3State::PredicateObjectListPossibleContinuation);
-                        self
-                    } else {
-                        self.recognize_next(token, context, results, errors)
+                        return self;
                     }
-                },
+                }
                 N3State::PredicateObjectListPossibleContinuation => if token == N3Token::Punctuation(";") {
                     self.stack.push(N3State::PredicateObjectListPossibleContinuation);
-                    self
-                } else if matches!(token, N3Token::Punctuation(";" | "." | "}" | "]" | ")")) {
-                    self.recognize_next(token, context, results, errors)
-                } else {
+                    return self;
+                } else if matches!(token, N3Token::Punctuation(";" | "." | "}" | "]" | ")")) {} else {
                     self.stack.push(N3State::PredicateObjectListEnd);
                     self.stack.push(N3State::ObjectsList);
                     self.stack.push(N3State::Verb);
-                    self.recognize_next(token, context, results, errors)
                 },
                 // [11] 	objectList 	::= 	object ( "," object) *
                 N3State::ObjectsList => {
                     self.stack.push(N3State::ObjectsListEnd);
                     self.stack.push(N3State::Path);
-                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::ObjectsListEnd => {
                     let object = self.terms.pop().unwrap();
@@ -757,68 +742,63 @@ impl RuleRecognizer for N3Recognizer {
                     if token == N3Token::Punctuation(",") {
                         self.stack.push(N3State::ObjectsListEnd);
                         self.stack.push(N3State::Path);
-                        self
-                    } else {
-                        self.recognize_next(token, context, results, errors)
+                        return self;
                     }
-                },
+                }
                 // [12] 	verb 	::= 	predicate | "a" | ( "has" expression) | ( "is" expression "of") | "=" | "<=" | "=>"
                 // [14] 	predicate 	::= 	expression | ( "<-" expression)
                 N3State::Verb => match token {
                     N3Token::PlainKeyword("a") => {
                         self.predicates.push(Predicate::Regular(rdf::TYPE.into()));
-                        self
+                        return self;
                     }
                     N3Token::PlainKeyword("has") => {
                         self.stack.push(N3State::AfterRegularVerb);
                         self.stack.push(N3State::Path);
-                        self
+                        return self;
                     }
                     N3Token::PlainKeyword("is") => {
                         self.stack.push(N3State::AfterVerbIs);
                         self.stack.push(N3State::Path);
-                        self
+                        return self;
                     }
                     N3Token::Punctuation("=") => {
                         self.predicates.push(Predicate::Regular(NamedNode::new_unchecked("http://www.w3.org/2002/07/owl#sameAs").into()));
-                        self
+                        return self;
                     }
                     N3Token::Punctuation("=>") => {
                         self.predicates.push(Predicate::Regular(NamedNode::new_unchecked("http://www.w3.org/2000/10/swap/log#implies").into()));
-                        self
+                        return self;
                     }
                     N3Token::Punctuation("<=") => {
                         self.predicates.push(Predicate::Inverted(NamedNode::new_unchecked("http://www.w3.org/2000/10/swap/log#implies").into()));
-                        self
+                        return self;
                     }
                     N3Token::Punctuation("<-") => {
                         self.stack.push(N3State::AfterInvertedVerb);
                         self.stack.push(N3State::Path);
-                        self
+                        return self;
                     }
-                   _ => {
+                    _ => {
                         self.stack.push(N3State::AfterRegularVerb);
                         self.stack.push(N3State::Path);
-                        self.recognize_next(token, context, results, errors)
                     }
                 }
                 N3State::AfterRegularVerb => {
                     self.predicates.push(Predicate::Regular(self.terms.pop().unwrap()));
-                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::AfterInvertedVerb => {
                     self.predicates.push(Predicate::Inverted(self.terms.pop().unwrap()));
-                    self.recognize_next(token, context, results, errors)
                 }
-                N3State::AfterVerbIs => match token {
+                N3State::AfterVerbIs => return match token {
                     N3Token::PlainKeyword("of") => {
                         self.predicates.push(Predicate::Inverted(self.terms.pop().unwrap()));
                         self
-                    },
+                    }
                     _ => {
                         self.error(errors, "The keyword 'is' should be followed by a predicate then by the keyword 'of'")
                     }
-                }
+                },
                 // [13] 	subject 	::= 	expression
                 // [15] 	object 	::= 	expression
                 // [16] 	expression 	::= 	path
@@ -826,30 +806,28 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::Path => {
                     self.stack.push(N3State::PathFollowUp);
                     self.stack.push(N3State::PathItem);
-                    self.recognize_next(token, context, results, errors)
                 }
                 N3State::PathFollowUp => match token {
                     N3Token::Punctuation("!") => {
                         self.stack.push(N3State::PathAfterIndicator { is_inverse: false });
                         self.stack.push(N3State::PathItem);
-                        self
+                        return self;
                     }
                     N3Token::Punctuation("^") => {
                         self.stack.push(N3State::PathAfterIndicator { is_inverse: true });
                         self.stack.push(N3State::PathItem);
-                        self
+                        return self;
                     }
-                   _ => self.recognize_next(token, context, results, errors)
+                    _ => ()
                 },
                 N3State::PathAfterIndicator { is_inverse } => {
                     let predicate = self.terms.pop().unwrap();
                     let previous = self.terms.pop().unwrap();
                     let current = BlankNode::default();
-                    results.push(if is_inverse { self.quad(current.clone(), predicate, previous) } else { self.quad(previous, predicate, current.clone())});
+                    results.push(if is_inverse { self.quad(current.clone(), predicate, previous) } else { self.quad(previous, predicate, current.clone()) });
                     self.terms.push(current.into());
                     self.stack.push(N3State::PathFollowUp);
-                    self.recognize_next(token, context, results, errors)
-                },
+                }
                 // [18] 	pathItem 	::= 	iri | blankNode | quickVar | collection | blankNodePropertyList | iriPropertyList | literal | formula
                 // [19] 	literal 	::= 	rdfLiteral | numericLiteral | BOOLEAN_LITERAL
                 // [20] 	blankNodePropertyList 	::= 	"[" predicateObjectList "]"
@@ -863,7 +841,7 @@ impl RuleRecognizer for N3Recognizer {
                 // [29] 	blankNode 	::= 	BLANK_NODE_LABEL | ANON
                 // [30] 	quickVar 	::= 	QUICK_VAR_NAME
                 N3State::PathItem => {
-                    match token {
+                    return match token {
                         N3Token::IriRef(iri) => {
                             self.terms.push(NamedNode::from(iri).into());
                             self
@@ -872,8 +850,8 @@ impl RuleRecognizer for N3Recognizer {
                             Ok(t) => {
                                 self.terms.push(t.into());
                                 self
-                            },
-                            Err(e) => self.error(errors, e)
+                            }
+                            Err(e) =>  self.error(errors, e)
                         }
                         N3Token::BlankNodeLabel(bnode) => {
                             self.terms.push(BlankNode::new_unchecked(bnode).into());
@@ -920,32 +898,32 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::FormulaContent);
                             self
                         }
-                       _ => self.error(errors, "TOKEN is not a valid RDF value")
+                        _ =>
+                            self.error(errors, "TOKEN is not a valid RDF value")
+
                     }
                 }
                 N3State::PropertyListMiddle => match token {
                     N3Token::Punctuation("]") => {
                         self.terms.push(BlankNode::default().into());
-                        self
-                    },
+                        return self;
+                    }
                     N3Token::PlainKeyword("id") => {
                         self.stack.push(N3State::IriPropertyList);
-                        self
-                    },
-                   _ => {
+                        return self;
+                    }
+                    _ => {
                         self.terms.push(BlankNode::default().into());
                         self.stack.push(N3State::PropertyListEnd);
                         self.stack.push(N3State::PredicateObjectList);
-                        self.recognize_next(token, context, results, errors)
                     }
                 }
                 N3State::PropertyListEnd => if token == N3Token::Punctuation("]") {
-                    self
+                    return self;
                 } else {
                     errors.push("blank node property lists should end with a ']'".into());
-                    self.recognize_next(token, context, results, errors)
                 }
-                N3State::IriPropertyList => match token {
+                N3State::IriPropertyList => return match token {
                     N3Token::IriRef(id) => {
                         self.terms.push(NamedNode::from(id).into());
                         self.stack.push(N3State::PropertyListEnd);
@@ -958,23 +936,24 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::PropertyListEnd);
                             self.stack.push(N3State::PredicateObjectList);
                             self
-                        },
-                        Err(e) => self.error(errors, e)
+                        }
+                        Err(e) => {
+                            self.error(errors, e)
+                        }
                     }
                     _ => {
                         self.error(errors, "The '[ id' construction should be followed by an IRI")
                     }
-                }
+                },
                 N3State::CollectionBeginning => if let N3Token::Punctuation(")") = token {
                     self.terms.push(rdf::NIL.into());
-                    self
+                    return self;
                 } else {
                     let root = BlankNode::default();
                     self.terms.push(root.clone().into());
                     self.terms.push(root.into());
                     self.stack.push(N3State::CollectionPossibleEnd);
                     self.stack.push(N3State::Path);
-                    self.recognize_next(token, context, results, errors)
                 },
                 N3State::CollectionPossibleEnd => {
                     let value = self.terms.pop().unwrap();
@@ -988,35 +967,32 @@ impl RuleRecognizer for N3Recognizer {
                         results.push(self.quad(
                             old,
                             rdf::REST,
-                            rdf::NIL
+                            rdf::NIL,
                         ));
-                        self
-                    } else {
-                        let new = BlankNode::default();
-                        results.push(self.quad(
-                            old,
-                            rdf::REST,
-                            new.clone()
-                        ));
-                        self.terms.push(new.into());
-                        self.stack.push(N3State::CollectionPossibleEnd);
-                        self.stack.push(N3State::Path);
-                        self.recognize_next(token, context, results, errors)
+                        return self;
                     }
+                    let new = BlankNode::default();
+                    results.push(self.quad(
+                        old,
+                        rdf::REST,
+                        new.clone(),
+                    ));
+                    self.terms.push(new.into());
+                    self.stack.push(N3State::CollectionPossibleEnd);
+                    self.stack.push(N3State::Path);
                 }
                 N3State::LiteralPossibleSuffix { value } => {
                     match token {
                         N3Token::LangTag(lang) => {
                             self.terms.push(Literal::new_language_tagged_literal_unchecked(value, lang.to_ascii_lowercase()).into());
-                            self
-                        },
+                            return self;
+                        }
                         N3Token::Punctuation("^^") => {
                             self.stack.push(N3State::LiteralExpectDatatype { value });
-                            self
+                            return self;
                         }
-                       _ => {
+                        _ => {
                             self.terms.push(Literal::new_simple_literal(value).into());
-                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 }
@@ -1024,17 +1000,20 @@ impl RuleRecognizer for N3Recognizer {
                     match token {
                         N3Token::IriRef(datatype) => {
                             self.terms.push(Literal::new_typed_literal(value, datatype).into());
-                            self
-                        },
-                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
-                            Ok(datatype) =>{
-                                self.terms.push(Literal::new_typed_literal(value, datatype).into());
-                                self
-                            },
-                            Err(e) => self.error(errors, e)
+                            return self;
                         }
-                       _ => {
-                            self.error(errors, "Expecting a datatype IRI after '^^, found TOKEN").recognize_next(token, context, results, errors)
+                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                            Ok(datatype) => {
+                                self.terms.push(Literal::new_typed_literal(value, datatype).into());
+                                return self;
+                            }
+                            Err(e) => {
+                                return self.error(errors, e);
+                            }
+                        }
+                        _ => {
+                            errors.push("Expecting a datatype IRI after '^^, found TOKEN".into());
+                            self.stack.clear();
                         }
                     }
                 }
@@ -1043,32 +1022,31 @@ impl RuleRecognizer for N3Recognizer {
                     match token {
                         N3Token::Punctuation("}") => {
                             self.terms.push(self.contexts.pop().unwrap().into());
-                            self
+                            return self;
                         }
                         N3Token::PlainKeyword(k)if k.eq_ignore_ascii_case("base") => {
                             self.stack.push(N3State::FormulaContent);
                             self.stack.push(N3State::BaseExpectIri);
-                            self
+                            return self;
                         }
                         N3Token::PlainKeyword(k)if k.eq_ignore_ascii_case("prefix") => {
                             self.stack.push(N3State::FormulaContent);
                             self.stack.push(N3State::PrefixExpectPrefix);
-                            self
+                            return self;
                         }
                         N3Token::LangTag("prefix") => {
                             self.stack.push(N3State::FormulaContentExpectDot);
                             self.stack.push(N3State::PrefixExpectPrefix);
-                            self
+                            return self;
                         }
                         N3Token::LangTag("base") => {
                             self.stack.push(N3State::FormulaContentExpectDot);
                             self.stack.push(N3State::BaseExpectIri);
-                            self
+                            return self;
                         }
-                       _ => {
+                        _ => {
                             self.stack.push(N3State::FormulaContentExpectDot);
                             self.stack.push(N3State::Triples);
-                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 }
@@ -1076,21 +1054,22 @@ impl RuleRecognizer for N3Recognizer {
                     match token {
                         N3Token::Punctuation("}") => {
                             self.terms.push(self.contexts.pop().unwrap().into());
-                            self
+                            return self;
                         }
                         N3Token::Punctuation(".") => {
                             self.stack.push(N3State::FormulaContent);
-                            self
+                            return self;
                         }
-                       _ => {
+                        _ => {
                             errors.push("A dot is expected at the end of N3 statements".into());
                             self.stack.push(N3State::FormulaContent);
-                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 }
             }
-        } else if token == N3Token::Punctuation(".") {
+        }
+        // Empty stack
+        if token == N3Token::Punctuation(".") {
             self.stack.push(N3State::N3Doc);
             self
         } else {
