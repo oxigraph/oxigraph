@@ -13,6 +13,7 @@ use libc::{self, c_void, free};
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
+#[cfg(unix)]
 use std::cmp::min;
 use std::collections::HashMap;
 use std::env::temp_dir;
@@ -1405,7 +1406,7 @@ fn path_to_cstring(path: &Path) -> Result<CString, StorageError> {
 }
 
 #[cfg(unix)]
-fn available_file_descriptors() -> io::Result<Option<u64>> {
+fn available_file_descriptors() -> io::Result<Option<libc::rlim_t>> {
     let mut rlimit = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,
@@ -1418,12 +1419,12 @@ fn available_file_descriptors() -> io::Result<Option<u64>> {
 }
 
 #[cfg(windows)]
-fn available_file_descriptors() -> io::Result<Option<u64>> {
+fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
     Ok(Some(512)) // https://docs.microsoft.com/en-us/cpp/c-runtime-library/file-handling
 }
 
 #[cfg(not(any(unix, windows)))]
-fn available_file_descriptors() -> io::Result<Option<u64>> {
+fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
     Ok(None)
 }
 

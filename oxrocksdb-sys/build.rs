@@ -153,7 +153,7 @@ fn build_rocksdb() {
         config.define("NOMINMAX", None);
         config.define("ROCKSDB_WINDOWS_UTF8_FILENAMES", None);
 
-        if target == "x86_64-pc-windows-gnu" {
+        if target.contains("pc-windows-gnu") {
             // Tell MinGW to create localtime_r wrapper of localtime_s function.
             config.define("_POSIX_C_SOURCE", Some("1"));
             // Tell MinGW to use at least Windows Vista headers instead of the ones of Windows XP.
@@ -193,10 +193,10 @@ fn build_rocksdb() {
     if target.contains("msvc") {
         config.flag("-EHsc").flag("-std:c++17");
     } else {
-        config
-            .flag("-std=c++17")
-            .flag("-Wno-invalid-offsetof")
-            .define("HAVE_UINT128_EXTENSION", Some("1"));
+        config.flag("-std=c++17").flag("-Wno-invalid-offsetof");
+        if target.contains("x86_64") || target.contains("aarch64") {
+            config.define("HAVE_UINT128_EXTENSION", Some("1"));
+        }
     }
 
     for file in lib_sources {
