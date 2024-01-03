@@ -111,6 +111,11 @@ jobs:
 
   python_sdist:
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyoxigraph
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@v3
         with:
@@ -132,14 +137,18 @@ jobs:
         with:
           name: pyoxigraph_source
           path: target/wheels/*.tar.gz
-      - run: pip install twine && twine upload target/wheels/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: target/wheels
         if: github.event_name == 'release'
 
   wheel_linux:
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyoxigraph
+    permissions:
+      id-token: write
     strategy:
       matrix:
         architecture: [ "x86_64", "aarch64" ]
@@ -158,17 +167,20 @@ jobs:
         if: github.event_name == 'release' || matrix.architecture == 'x86_64'
       - uses: actions/upload-artifact@v3
         with:
-          name: pyoxigraph_wheel_x86_64_linux_gnu
+          name: pyoxigraph_wheel_linux_gnu
           path: target/wheels/*.whl
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
           packages-dir: target/wheels
         if: github.event_name == 'release'
 
   wheel_linux_musl:
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyoxigraph
+    permissions:
+      id-token: write
     strategy:
       matrix:
         architecture: [ "x86_64", "aarch64" ]
@@ -187,17 +199,20 @@ jobs:
         if: github.event_name == 'release' || matrix.architecture == 'x86_64'
       - uses: actions/upload-artifact@v3
         with:
-          name: pyoxigraph_wheel_x86_64_linux_musl
+          name: pyoxigraph_wheel_linux_musl
           path: target/wheels/*.whl
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
           packages-dir: target/wheels
         if: github.event_name == 'release'
 
   wheel_mac:
     runs-on: macos-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyoxigraph
+    permissions:
+      id-token: write
     env:
       DEVELOPER_DIR: '/Applications/Xcode.app/Contents/Developer'
       SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
@@ -231,16 +246,20 @@ jobs:
         if: github.event_name == 'release'
       - uses: actions/upload-artifact@v3
         with:
-          name: pyoxigraph_wheel_universal2_mac
+          name: pyoxigraph_wheel_mac
           path: target/wheels/*.whl
-      - run: pip install twine && twine upload target/wheels/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: target/wheels
         if: github.event_name == 'release'
 
   wheel_windows:
     runs-on: windows-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyoxigraph
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@v3
         with:
@@ -262,12 +281,11 @@ jobs:
       - run: maturin build --release -m python/Cargo.toml --features abi3
       - uses: actions/upload-artifact@v3
         with:
-          name: pyoxigraph_wheel_x86_64_windows
+          name: pyoxigraph_wheel_windows
           path: target/wheels/*.whl
-      - run: pip install twine && twine upload target/wheels/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: target/wheels
         if: github.event_name == 'release'
 
   npm_tarball:
