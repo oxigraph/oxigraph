@@ -11,7 +11,7 @@ cd python
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.dev.txt
-maturin develop --release
+maturin develop --release --no-default-features --features rustls
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
 maturin build --release --no-default-features --features abi3 --features rustls --compatibility manylinux2014
 if [ %for_each_version% ]; then
