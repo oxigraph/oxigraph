@@ -1,14 +1,14 @@
 [package]
 name = "oxigraph-js"
-version.workspace  = true
-authors.workspace  = true
-license.workspace  = true
+version = "0.4.0-alpha.2-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "N-Triples", "Turtle", "RDF/XML", "SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/js"
 description = "JavaScript bindings of Oxigraph"
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 publish = false
 
 [lib]
@@ -16,7 +16,7 @@ crate-type = ["cdylib"]
 name = "oxigraph"
 
 [dependencies]
-oxigraph = { version = "0.4.0-alpha.1", path="../lib", features = ["js"] }
+oxigraph = { path = "../lib", features = ["js"] }
 wasm-bindgen = "0.2.83"
 js-sys = "0.3.60"
 console_error_panic_hook = "0.1.7"

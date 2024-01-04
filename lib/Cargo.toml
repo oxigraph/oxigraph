@@ -1,19 +1,19 @@
 [package]
 name = "oxigraph"
-version.workspace  = true
-authors.workspace  = true
-license.workspace  = true
+version = "0.4.0-alpha.2-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib"
-homepage.workspace  = true
+homepage = "https://oxigraph.org/"
 documentation = "https://docs.rs/oxigraph"
 description = """
 a SPARQL database and RDF toolkit
 """
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 
 [features]
 default = []
@@ -34,7 +34,7 @@ oxilangtag = "0.1"
 oxiri = "0.2.3-alpha.1"
 oxrdf = { version = "0.2.0-alpha.1", path = "oxrdf", features = ["rdf-star", "oxsdatatypes"] }
 oxrdfio = { version = "0.1.0-alpha.1", path = "oxrdfio", features = ["rdf-star"] }
-oxsdatatypes = { version = "0.2.0-alpha.1", path="oxsdatatypes" }
+oxsdatatypes = { version = "0.2.0-alpha.1", path = "oxsdatatypes" }
 rand = "0.8"
 regex = "1.7"
 sha1 = "0.10"
@@ -42,11 +42,11 @@ sha2 = "0.10"
 siphasher = ">=0.3, <2.0"
 sparesults = { version = "0.2.0-alpha.1", path = "sparesults", features = ["rdf-star"] }
 spargebra = { version = "0.3.0-alpha.1", path = "spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
-sparopt = { version = "0.1.0-alpha.1", path="sparopt", features = ["rdf-star", "sep-0002", "sep-0006"] }
+sparopt = { version = "0.1.0-alpha.1", path = "sparopt", features = ["rdf-star", "sep-0002", "sep-0006"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc = "0.2.147"
-oxrocksdb-sys = { version = "0.4.0-alpha.1", path="../oxrocksdb-sys" }
+oxrocksdb-sys = { version = "0.4.0-alpha.2-dev", path = "../oxrocksdb-sys" }
 oxhttp = { version = "0.2.0-alpha.3", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]

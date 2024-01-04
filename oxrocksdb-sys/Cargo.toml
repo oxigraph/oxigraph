@@ -1,7 +1,7 @@
 [package]
 name = "oxrocksdb-sys"
-version.workspace  = true
-authors.workspace  = true
+version = "0.4.0-alpha.2-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "GPL-2.0 OR Apache-2.0"
 repository = "https://github.com/oxigraph/oxigraph/tree/main/oxrocksdb-sys"
 readme = "README.md"
@@ -9,8 +9,8 @@ description = """
 Rust bindings for RocksDB for Oxigraph usage.
 """
 documentation = "https://docs.rs/oxrocksdb-sys"
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 build = "build.rs"
 links = "rocksdb"
 

@@ -1,22 +1,22 @@
 [package]
 name = "oxigraph-testsuite"
-version.workspace = true
-authors.workspace = true
-license.workspace  = true
+version = "0.4.0-alpha.2-dev"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 description = """
 Implementation of W3C testsuites for Oxigraph
 """
-edition.workspace  = true
-rust-version.workspace = true
+edition = "2021"
+rust-version = "1.70"
 publish = false
 
 [dependencies]
 anyhow = "1.0.72"
 clap = { version = "4.0", features = ["derive"] }
-oxigraph = { path = "../lib" }
-oxttl = { path= "../lib/oxttl" }
-sparopt = { path = "../lib/sparopt" }
-spargebra = { path = "../lib/spargebra" }
+oxigraph.path = "../lib"
+oxttl.path = "../lib/oxttl"
+sparopt.path = "../lib/sparopt"
+spargebra.path = "../lib/spargebra"
 text-diff = "0.4"
 time = { version = "0.3", features = ["formatting"] }
 

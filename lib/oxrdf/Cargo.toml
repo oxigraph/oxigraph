@@ -1,18 +1,17 @@
 [package]
 name = "oxrdf"
 version = "0.2.0-alpha.1"
-authors.workspace  = true
-license.workspace  = true
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxrdf"
-homepage.workspace  = true
 description = """
 A library providing basic data structures related to RDF
 """
 documentation = "https://docs.rs/oxrdf"
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 
 [features]
 default = []
@@ -22,7 +21,7 @@ rdf-star = []
 rand = "0.8"
 oxilangtag = "0.1"
 oxiri = "0.2.3-alpha.1"
-oxsdatatypes = { version = "0.2.0-alpha.1", path="../oxsdatatypes", optional = true }
+oxsdatatypes = { version = "0.2.0-alpha.1", path = "../oxsdatatypes", optional = true }
 
 [lints]
 workspace = true
