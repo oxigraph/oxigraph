@@ -1,18 +1,17 @@
 [package]
 name = "sparesults"
 version = "0.2.0-alpha.1"
-authors.workspace  = true
-license.workspace  = true
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparesults"
-homepage.workspace  = true
 description = """
 SPARQL query results formats parsers and serializers
 """
 documentation = "https://docs.rs/sparesults"
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 
 [features]
 default = []
@@ -22,7 +21,7 @@ async-tokio = ["dep:tokio", "quick-xml/async-tokio", "json-event-parser/async-to
 [dependencies]
 json-event-parser = "0.2.0-alpha.2"
 memchr = "2.5"
-oxrdf = { version = "0.2.0-alpha.1", path="../oxrdf" }
+oxrdf = { version = "0.2.0-alpha.1", path = "../oxrdf" }
 quick-xml = ">=0.29, <0.32"
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
 

@@ -1,18 +1,17 @@
 [package]
 name = "sparql-smith"
 version = "0.1.0-alpha.5"
-authors.workspace  = true
-license.workspace  = true
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparql-smith"
-homepage.workspace  = true
 documentation = "https://docs.rs/sparql-smith"
 description = """
 A SPARQL test cases generator
 """
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 
 [features]
 default = []

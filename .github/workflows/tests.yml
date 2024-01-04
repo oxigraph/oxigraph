@@ -109,13 +109,17 @@ jobs:
 
   semver_checks:
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
       - run: cargo install cargo-semver-checks || true
+      - uses: actions/cache@v3
+        with:
+          path: rocksdb
+          key: ${{ runner.os }}-rocksdb-8.0.0
+      - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
 
   test_linux_x86_64:

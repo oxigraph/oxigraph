@@ -1,18 +1,17 @@
 [package]
 name = "oxttl"
 version = "0.1.0-alpha.1"
-authors.workspace  = true
-license.workspace  = true
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["N-Triples", "N-Quads", "Turtle", "TriG", "N3"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxttl"
-homepage.workspace  = true
 description = """
 Parser and serializer for languages related to RDF Turtle (N-Triples, N-Quads, Turtle, TriG and N3)
 """
 documentation = "https://docs.rs/oxttl"
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 
 [features]
 default = []

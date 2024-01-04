@@ -1,18 +1,17 @@
 [package]
 name = "oxsdatatypes"
 version = "0.2.0-alpha.1"
-authors.workspace  = true
-license.workspace  = true
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["XSD"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxsdatatypes"
-homepage.workspace  = true
 description = """
 An implementation of some XSD datatypes for SPARQL implementations
 """
 documentation = "https://docs.rs/oxsdatatypes"
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 
 [features]
 js = ["js-sys"]

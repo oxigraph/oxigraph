@@ -1,18 +1,17 @@
 [package]
 name = "oxrdfio"
 version = "0.1.0-alpha.1"
-authors.workspace  = true
-license.workspace  = true
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["RDF"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
-homepage.workspace  = true
 documentation = "https://docs.rs/oxrdfio"
 description = """
 Parser and serializer for various RDF formats
 """
-edition.workspace  = true
-rust-version.workspace  = true
+edition = "2021"
+rust-version = "1.70"
 
 [features]
 default = []

@@ -18,13 +18,7 @@ members = [
 ]
 resolver = "2"
 
-[workspace.package]
-version = "0.4.0-alpha.1"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
-homepage = "https://oxigraph.org/"
-edition = "2021"
-rust-version = "1.70"
+# TODO: use workspace.package shared metadata when https://github.com/obi1kenobi/cargo-semver-checks/issues/462 will be fixed
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
