@@ -101,7 +101,7 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObjec
 /// >>> s, p, o = solution
 /// >>> s
 /// <NamedNode value=http://example.com>
-#[pyclass(frozen, unsendable, name = "QuerySolution", module = "pyoxigraph")]
+#[pyclass(frozen, name = "QuerySolution", module = "pyoxigraph")]
 pub struct PyQuerySolution {
     inner: QuerySolution,
 }
