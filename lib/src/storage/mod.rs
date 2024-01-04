@@ -21,11 +21,17 @@ use backend::{ColumnFamily, ColumnFamilyDefinition, Db, Iter};
 use gfa::gfa::Orientation;
 use gfa::parser::GFAParser;
 use handlegraph::handle::{Direction, Handle};
+use handlegraph::hashgraph::path::StepIx;
+use handlegraph::pathhandlegraph::{
+    path::PathStep, GraphPaths, GraphPathsRef, IntoPathIds, PathBase,
+};
+use handlegraph::pathhandlegraph::{GraphPathNames, PathId};
 use handlegraph::{
     conversion::from_gfa, handlegraph::IntoHandles, handlegraph::IntoNeighbors,
     handlegraph::IntoSequences, packedgraph::PackedGraph,
 };
 use oxrdf::{Literal, NamedNode};
+use rio_api::model::NamedNode;
 use std::str;
 
 #[cfg(not(target_family = "wasm"))]
@@ -250,6 +256,16 @@ impl StorageReader {
                 },
                 second: None,
             };
+        } else if self.is_step_associated(predicate) {
+            println!("Containing node-related predicate");
+            let terms = self.steps(subject, predicate, object, graph_name);
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms,
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
         }
         return ChainedDecodingQuadIterator {
             first: DecodingQuadIterator {
@@ -329,6 +345,59 @@ impl StorageReader {
             }
         }
         println!("Nodes successfully done!");
+        results
+    }
+
+    fn steps(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: &EncodedTerm,
+    ) -> Vec<EncodedQuad> {
+        let mut results = Vec::new();
+        if subject.is_none() {
+            for path_id in self.storage.graph.path_ids() {
+                if let Some(path_ref) = self.storage.graph.get_path_ref(path_id) {
+                    let mut rank = 1;
+                    let mut position = 1;
+                    let step_handle = path_ref.step_at(path_ref.first_step());
+                    if step_handle.is_none() {
+                        continue;
+                    }
+                    let step_handle = step_handle.unwrap();
+                    let node_handle = step_handle.handle();
+                    let mut triples = self.step_handle_to_triples(
+                        path_id,
+                        step_handle,
+                        subject,
+                        predicate,
+                        object,
+                        node_handle,
+                        rank,
+                        position,
+                    );
+                    results.append(&mut triples);
+                }
+            }
+        }
+        results
+    }
+
+    fn step_handle_to_triples(
+        &self,
+        path_id: PathId,
+        step_handle: Option<StepIx>,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        node_handle: Handle,
+        rank: u32,
+        position: u32,
+    ) -> Vec<EncodedQuad> {
+        let mut results = Vec::new();
+
+        if subject.is_none() || self.step_to_namednode(path_id, step_handle.unwrap()) == subject {}
         results
     }
 
@@ -477,6 +546,23 @@ impl StorageReader {
         Some(named_node.as_ref().into())
     }
 
+    fn step_to_namednode(&self, path: PathId, step: StepIx) -> Option<EncodedTerm> {
+        if let Some(path_name_iter) = self.storage.graph.get_path_name(path) {
+            let path_name: Vec<u8> = path_name_iter.collect();
+            let path_name = std::str::from_utf8(&path_name).ok()?;
+            let text = format!(
+                "{}/path/{}/step/{}",
+                self.storage.base,
+                path_name,
+                step.index()?
+            );
+            let named_node = NamedNode::new(text).unwrap();
+            Some(named_node.as_ref().into())
+        } else {
+            None
+        }
+    }
+
     fn is_node_related(&self, predicate: Option<&EncodedTerm>) -> bool {
         let predicates = [
             vg::LINKS,
@@ -484,6 +570,28 @@ impl StorageReader {
             vg::LINKS_FORWARD_TO_REVERSE,
             vg::LINKS_REVERSE_TO_FORWARD,
             vg::LINKS_REVERSE_TO_REVERSE,
+        ];
+        if predicate.is_none() {
+            return false;
+        }
+        predicates
+            .into_iter()
+            .map(|x| self.is_vocab(predicate, x))
+            .reduce(|acc, x| acc || x)
+            .unwrap()
+    }
+
+    fn is_step_associated(&self, predicate: Option<&EncodedTerm>) -> bool {
+        let predicates = [
+            vg::RANK,
+            vg::POSITION,
+            vg::PATH_PRED,
+            vg::NODE_PRED,
+            vg::REVERSE_OF_NODE,
+            faldo::BEGIN,
+            faldo::END,
+            faldo::REFERENCE,
+            faldo::POSITION_PRED,
         ];
         if predicate.is_none() {
             return false;
