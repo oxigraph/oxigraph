@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="624" height="384" class="svgbob">
+    <style>.svgbob line, .svgbob path, .svgbob circle, .svgbob rect, .svgbob polygon {
+        stroke: black;
+        stroke-width: 2;
+        stroke-opacity: 1;
+        fill-opacity: 1;
+        stroke-linecap: round;
+        stroke-linejoin: miter;
+        }
+        .svgbob text {
+        white-space: pre;
+        fill: black;
+        font-family: Iosevka Fixed, monospace;
+        font-size: 14px;
+        }
+        .svgbob rect.backdrop {
+        stroke: none;
+        fill: white;
+        }
+        .svgbob .broken {
+        stroke-dasharray: 8;
+        }
+        .svgbob .filled {
+        fill: black;
+        }
+        .svgbob .bg_filled {
+        fill: white;
+        stroke-width: 1;
+        }
+        .svgbob .nofill {
+        fill: white;
+        }
+        .svgbob .end_marked_arrow {
+        marker-end: url(#arrow);
+        }
+        .svgbob .start_marked_arrow {
+        marker-start: url(#arrow);
+        }
+        .svgbob .end_marked_diamond {
+        marker-end: url(#diamond);
+        }
+        .svgbob .start_marked_diamond {
+        marker-start: url(#diamond);
+        }
+        .svgbob .end_marked_circle {
+        marker-end: url(#circle);
+        }
+        .svgbob .start_marked_circle {
+        marker-start: url(#circle);
+        }
+        .svgbob .end_marked_open_circle {
+        marker-end: url(#open_circle);
+        }
+        .svgbob .start_marked_open_circle {
+        marker-start: url(#open_circle);
+        }
+        .svgbob .end_marked_big_open_circle {
+        marker-end: url(#big_open_circle);
+        }
+        .svgbob .start_marked_big_open_circle {
+        marker-start: url(#big_open_circle);
+        }<!--separator-->.svgbob .r{
+        fill: papayawhip;
+        }
+        .svgbob .p{
+        fill: lightyellow;
+        }
+        .svgbob .j{
+        fill: lightgreen;
+        }
+    </style>
+    <defs>
+        <marker id="arrow" viewBox="-2 -2 8 8" refX="4" refY="2" markerWidth="7" markerHeight="7"
+                orient="auto-start-reverse">
+            <polygon points="0,0 0,4 4,2 0,0"></polygon>
+        </marker>
+        <marker id="diamond" viewBox="-2 -2 8 8" refX="4" refY="2" markerWidth="7" markerHeight="7"
+                orient="auto-start-reverse">
+            <polygon points="0,2 2,0 4,2 2,4 0,2"></polygon>
+        </marker>
+        <marker id="circle" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="7" markerHeight="7"
+                orient="auto-start-reverse">
+            <circle cx="4" cy="4" r="2" class="filled"></circle>
+        </marker>
+        <marker id="open_circle" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="7" markerHeight="7"
+                orient="auto-start-reverse">
+            <circle cx="4" cy="4" r="2" class="bg_filled"></circle>
+        </marker>
+        <marker id="big_open_circle" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="7" markerHeight="7"
+                orient="auto-start-reverse">
+            <circle cx="4" cy="4" r="3" class="bg_filled"></circle>
+        </marker>
+    </defs>
+    <rect class="backdrop" x="0" y="0" width="624" height="384"></rect>
+    <rect x="4" y="8" width="152" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="18" y="28">oxigraph CLI</text>
+    <rect x="244" y="8" width="136" height="32" class="solid nofill p" rx="0"></rect>
+    <text x="258" y="28">pyoxigraph</text>
+    <rect x="468" y="8" width="144" height="32" class="solid nofill j" rx="0"></rect>
+    <text x="482" y="28">oxigraph</text>
+    <text x="554" y="28">JS</text>
+    <rect x="4" y="72" width="608" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="18" y="92">oxigraph</text>
+    <rect x="68" y="136" width="232" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="82" y="156">oxrdfio</text>
+    <rect x="348" y="136" width="112" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="362" y="156">sparopt</text>
+    <rect x="68" y="200" width="96" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="82" y="220">oxttl</text>
+    <rect x="180" y="200" width="120" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="194" y="220">oxrdfxml</text>
+    <rect x="316" y="200" width="144" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="330" y="220">spargebra</text>
+    <rect x="476" y="200" width="136" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="490" y="220">sparesults</text>
+    <rect x="36" y="264" width="576" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="50" y="284">oxrdf</text>
+    <rect x="4" y="328" width="152" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="18" y="348">oxsdatatypes</text>
+</svg>
