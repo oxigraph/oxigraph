@@ -266,8 +266,6 @@ jobs:
       - run: rm -r target/wheels
       - run: python -m unittest
         working-directory: ./python/tests
-      - run: sphinx-build -M doctest . build
-        working-directory: ./python/docs
       - run: sphinx-build -M html . build
         working-directory: ./python/docs
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff

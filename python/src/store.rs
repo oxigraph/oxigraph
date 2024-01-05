@@ -518,6 +518,7 @@ impl PyStore {
     /// >>> store.dump(format=RdfFormat.TRIG)
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
     ///
+    /// >>> import io
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> output = io.BytesIO()
