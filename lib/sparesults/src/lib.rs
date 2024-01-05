@@ -16,5 +16,9 @@ mod xml;
 pub use crate::error::{QueryResultsParseError, QueryResultsSyntaxError, TextPosition};
 pub use crate::format::QueryResultsFormat;
 pub use crate::parser::{FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsParser};
+#[cfg(feature = "async-tokio")]
+pub use crate::parser::{FromTokioAsyncReadQueryResultsReader, FromTokioAsyncReadSolutionsReader};
+#[cfg(feature = "async-tokio")]
+pub use crate::serializer::ToTokioAsyncWriteSolutionsWriter;
 pub use crate::serializer::{QueryResultsSerializer, ToWriteSolutionsWriter};
 pub use crate::solution::QuerySolution;
