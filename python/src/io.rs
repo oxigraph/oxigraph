@@ -111,6 +111,7 @@ pub fn parse(
 /// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], format=RdfFormat.TURTLE)
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 ///
+/// >>> import io
 /// >>> output = io.BytesIO()
 /// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, RdfFormat.TURTLE)
 /// >>> output.getvalue()
@@ -182,6 +183,9 @@ impl PyQuadReader {
 /// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
 /// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
 /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
+///
+/// >>> RdfFormat.N3.media_type
+/// 'text/n3'
 #[pyclass(name = "RdfFormat", module = "pyoxigraph")]
 #[derive(Clone)]
 pub struct PyRdfFormat {
