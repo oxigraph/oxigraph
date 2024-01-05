@@ -3,3 +3,4 @@ maturin~=1.0
 mypy~=1.0
 ruff~=0.1.0
 sphinx~=7.0
+sphinx-lint~=0.9.1

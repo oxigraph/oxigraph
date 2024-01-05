@@ -280,6 +280,8 @@ jobs:
         working-directory: ./python
       - run: python -m ruff check --output-format=github .
         working-directory: ./python
+      - run: sphinx-lint docs
+        working-directory: ./python
 
   python_msv:
     runs-on: ubuntu-latest
