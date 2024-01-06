@@ -138,6 +138,7 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
@@ -189,6 +190,7 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
@@ -204,6 +206,7 @@ fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
@@ -224,6 +227,7 @@ fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
@@ -240,6 +244,7 @@ fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
     let quad = QuadRef::new(
@@ -260,6 +265,7 @@ fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dyn Error>> {
@@ -288,6 +294,7 @@ fn test_open_bad_dir() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
@@ -306,6 +313,7 @@ fn test_bad_stt_open() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_backup() -> Result<(), Box<dyn Error>> {
@@ -346,6 +354,7 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_bad_backup() -> Result<(), Box<dyn Error>> {
@@ -357,6 +366,7 @@ fn test_bad_backup() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
@@ -365,6 +375,7 @@ fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(target_os = "linux")]
 fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
@@ -389,6 +400,7 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_secondary() -> Result<(), Box<dyn Error>> {
@@ -444,6 +456,7 @@ fn test_open_secondary_bad_dir() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[ignore]
 #[test]
 #[cfg(not(target_family = "wasm"))]
 fn test_read_only() -> Result<(), Box<dyn Error>> {

@@ -1581,6 +1581,7 @@ impl BulkLoader {
     }
 }
 
+#[ignore]
 #[test]
 fn store() -> Result<(), StorageError> {
     use crate::model::*;

@@ -672,8 +672,7 @@ checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 [[package]]
 name = "handlegraph"
 version = "0.7.0-alpha.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aa7cd95ba5db6dfcc1654d0a7ba04b1c9becdd860b907d68f5b320f796334bb"
+source = "git+https://github.com/chfi/rs-handlegraph?branch=master#3ac575e4216ce16a16667503a8875e469a40a97a"
 dependencies = [
  "anyhow",
  "boomphf",
