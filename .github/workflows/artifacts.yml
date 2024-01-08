@@ -337,6 +337,11 @@ jobs:
           images: |
             ${{ github.repository }},enable=${{ github.event_name == 'release' }}
             ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
       - uses: docker/build-push-action@v4
         with:
           context: .
