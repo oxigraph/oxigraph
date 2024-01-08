@@ -361,9 +361,6 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
       - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
@@ -384,9 +381,6 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
       - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
