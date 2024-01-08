@@ -1,3 +1,14 @@
+## [0.4.0-alpha.2] - 2024-01-08
+
+### Added
+- i686 linux support
+
+### Changed
+- Docker: fixes Docker image Glib version error.
+- Docker: tags now use semver e.g. `0.3.22` and not `v0.3.22`. Preversions are also not tagged `latest` anymore.
+- Python: `QuerySolution` is now thread safe.
+
+
 ## [0.4.0-alpha.1] - 2024-01-03
 
 ### Added

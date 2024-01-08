@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph"
-version = "0.4.0-alpha.2-dev"
+version = "0.4.0-alpha.2"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -46,7 +46,7 @@ sparopt = { version = "0.1.0-alpha.1", path = "sparopt", features = ["rdf-star",
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc = "0.2.147"
-oxrocksdb-sys = { version = "0.4.0-alpha.2-dev", path = "../oxrocksdb-sys" }
+oxrocksdb-sys = { version = "0.4.0-alpha.2", path = "../oxrocksdb-sys" }
 oxhttp = { version = "0.2.0-alpha.3", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]

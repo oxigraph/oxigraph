@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph-testsuite"
-version = "0.4.0-alpha.2-dev"
+version = "0.0.0"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 description = """
