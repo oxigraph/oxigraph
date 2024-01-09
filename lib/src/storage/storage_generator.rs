@@ -12,10 +12,12 @@ use super::numeric_encoder::{StrLookup, StrHash};
 use super::{Storage, ChainedDecodingQuadIterator};
 use gfa::gfa::Orientation;
 use handlegraph::handle::{Direction, Handle};
+use handlegraph::packed::PackedElement;
+use handlegraph::packedgraph::paths::StepPtr;
 use handlegraph::pathhandlegraph::{
     path::PathStep, GraphPathsRef, IntoPathIds, PathBase,
 };
-use handlegraph::pathhandlegraph::{GraphPathNames, PathId};
+use handlegraph::pathhandlegraph::{GraphPathNames, PathId, PathSequences, GraphPaths};
 use handlegraph::{
     handlegraph::IntoHandles, handlegraph::IntoNeighbors,
     handlegraph::IntoSequences,
@@ -219,8 +221,78 @@ impl StorageGenerator {
                     }
                 }
             }
+        } else if let Some(step_type) = self.get_step_iri_fields(subject) {
+            match step_type {
+                StepType::Rank(path_name, target_rank) => {
+                    if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
+                        let path_ref = self.storage.graph.get_path_ref(id).unwrap();
+                        let step_handle = path_ref.step_at(path_ref.first_step());
+                        let step_handle = step_handle.unwrap();
+                        let mut node_handle = step_handle.handle();
+                        let mut rank = 1;
+                        let mut position = 1;
+
+                        while path_ref.next_step(step_handle.0).is_some() && rank < target_rank {
+                            let step_handle = path_ref.next_step(step_handle.0).unwrap();
+                            position += self.storage.graph.node_len(node_handle);
+                            node_handle = step_handle.handle();
+                            rank += 1;
+                        }
+                        let mut triples = self.step_handle_to_triples(
+                            &path_name,
+                            subject,
+                            predicate,
+                            object,
+                            graph_name,
+                            node_handle,
+                            Some(rank),
+                            Some(position),
+                            );
+                        results.append(&mut triples);
+                    }
+                },
+                StepType::Position(path_name, position) => {
+                    if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
+                        if let Some(step) = self.storage.graph.path_step_at_base(id, position) {
+                            let node_handle = self.storage.graph.path_handle_at_step(id, step).unwrap(); 
+                            let rank = step.pack() as usize + 1;
+                            let mut triples = self.step_handle_to_triples(
+                                &path_name,
+                                subject,
+                                predicate,
+                                object,
+                                graph_name,
+                                node_handle,
+                                Some(rank),
+                                Some(position)
+                                );
+                            results.append(&mut triples);
+                        }
+                    }
+
+                }
+            }
         }
         results
+    }
+
+    fn get_step_iri_fields(&self, term: Option<&EncodedTerm>) -> Option<StepType> {
+        let term = term?;
+        if let EncodedTerm::NamedNode { iri_id, value } = term {
+            let mut parts = value.split("/").collect::<Vec<_>>();
+            parts.reverse();
+            if parts.len() < 5 || parts[3] != "path" {
+                return None;
+            }
+            let path_name = parts[2].to_owned();
+            match parts[1] {
+                "step" => Some(StepType::Rank(path_name, parts[0].parse().ok()?)),
+                "position" => Some(StepType::Position(path_name, parts[0].parse().ok()?)),
+                _ => None
+            }
+        } else {
+            None
+        }
     }
 
     fn step_handle_to_triples(
@@ -671,6 +743,12 @@ impl StrLookup for StorageGenerator {
     fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
         self.contains_str(key)
     }
+}
+
+// FIX: Change usize to u64
+enum StepType {
+    Rank(String, usize),
+    Position(String, usize),
 }
 
 #[cfg(test)]
