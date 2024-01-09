@@ -179,9 +179,9 @@ impl StorageGenerator {
         if subject.is_none() {
             for path_id in self.storage.graph.path_ids() {
                 if let Some(path_ref) = self.storage.graph.get_path_ref(path_id) {
-                    let path_name = self.get_path_name(path_id);
-                    let mut rank = Some(1);
-                    let mut position = Some(1);
+                    let path_name = self.get_path_name(path_id).unwrap();
+                    let mut rank = 1;
+                    let mut position = 1;
                     let step_handle = path_ref.step_at(path_ref.first_step());
                     if step_handle.is_none() {
                         continue;
@@ -189,16 +189,34 @@ impl StorageGenerator {
                     let step_handle = step_handle.unwrap();
                     let node_handle = step_handle.handle();
                     let mut triples = self.step_handle_to_triples(
-                        &path_name.unwrap(),
+                        &path_name,
                         subject,
                         predicate,
                         object,
                         graph_name,
                         node_handle,
-                        rank,
-                        position,
+                        Some(rank),
+                        Some(position),
                     );
                     results.append(&mut triples);
+
+                    while path_ref.next_step(step_handle.0).is_some() {
+                        let step_handle = path_ref.next_step(step_handle.0).unwrap();
+                        position += self.storage.graph.node_len(node_handle);
+                        let node_handle = step_handle.handle();
+                        rank += 1;
+                        let mut triples = self.step_handle_to_triples(
+                            &path_name,
+                            subject,
+                            predicate,
+                            object,
+                            graph_name,
+                            node_handle,
+                            Some(rank),
+                            Some(position),
+                        );
+                        results.append(&mut triples);
+                    }
                 }
             }
         }
