@@ -13,12 +13,12 @@ use crate::storage::DecodingQuadIterator;
 use gfa::gfa::Orientation;
 use handlegraph::handle::{Direction, Handle};
 use handlegraph::packed::PackedElement;
-use handlegraph::packedgraph::paths::StepPtr;
 use handlegraph::pathhandlegraph::{path::PathStep, GraphPathsRef, IntoPathIds, PathBase};
 use handlegraph::pathhandlegraph::{GraphPathNames, GraphPaths, PathId, PathSequences};
 use handlegraph::{
     handlegraph::IntoHandles, handlegraph::IntoNeighbors, handlegraph::IntoSequences,
 };
+use oxrdf::vocab::rdfs;
 use oxrdf::{Literal, NamedNode};
 use std::str;
 
@@ -39,9 +39,8 @@ impl StorageGenerator {
         graph_name: &EncodedTerm,
     ) -> ChainedDecodingQuadIterator {
         println!("Receiving quads_for_pattern");
-        // let sub = subject.map(|s| self.decode_term(s).ok()).flatten();
-        // let pre = predicate.map(|s| self.decode_term(s).ok()).flatten();
-        // let obj = object.map(|s| self.decode_term(s).ok()).flatten();
+
+        // There should be no blank nodes in the data
         if subject.is_some_and(|s| s.is_blank_node()) || object.is_some_and(|o| o.is_blank_node()) {
             println!("Containing blank nodes");
             return ChainedDecodingQuadIterator {
@@ -54,17 +53,17 @@ impl StorageGenerator {
         }
 
         if self.is_vocab(predicate, rdf::TYPE) && object.is_some() {
-            //TODO
-            println!("Containing type predicate");
+            let terms = self.type_triples(subject, predicate, object, graph_name);
+            println!("OF: rdf::type");
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
-                    terms: Vec::new(),
+                    terms,
                     encoding: QuadEncoding::Spog,
                 },
                 second: None,
             };
         } else if self.is_node_related(predicate) {
-            println!("Containing node-related predicate");
+            println!("OF: nodes");
             let terms = self.nodes(subject, predicate, object, graph_name);
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -74,7 +73,7 @@ impl StorageGenerator {
                 second: None,
             };
         } else if self.is_step_associated(predicate) {
-            println!("Containing node-related predicate");
+            println!("OF: steps");
             let terms = self.steps(subject, predicate, object, graph_name);
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
@@ -83,14 +82,108 @@ impl StorageGenerator {
                 },
                 second: None,
             };
+        } else if self.is_vocab(predicate, rdfs::LABEL) {
+            println!("OF: rdfs::label");
+            let terms = self.paths(subject, predicate, object, graph_name);
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms,
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
+
+        } else if subject.is_none() && predicate.is_none() && object.is_none() {
+            println!("OF: triple none");
+            let mut terms = self.nodes(subject, predicate, object, graph_name);
+            let terms_paths = self.paths(subject, predicate, object, graph_name);
+            let terms_steps = self.steps(subject, predicate, object, graph_name);
+            terms.extend(terms_paths);
+            terms.extend(terms_steps);
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms,
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
+        } else if subject.is_some() {
+            let terms = match self.get_term_type(subject.unwrap()) {
+                Some(SubjectType::NodeIri) => {
+                    let mut terms = self.handle_to_triples(subject.unwrap(), predicate, object, graph_name);
+                    let terms_edge = self.handle_to_edge_triples(subject.unwrap(), predicate, object, graph_name);
+                    terms.extend(terms_edge);
+                    terms
+                },
+                Some(SubjectType::PathIri) => {
+                    self.paths(subject, predicate, object, graph_name)
+                },
+                Some(SubjectType::StepIri) => {
+                    self.steps(subject, predicate, object, graph_name)
+                },
+                Some(SubjectType::StepBorderIri) => {
+                    self.steps(subject, predicate, object, graph_name)
+                },
+                None => {
+                    Vec::new()
+                }
+            };
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms,
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
+
+        } else {
+            return ChainedDecodingQuadIterator {
+                first: DecodingQuadIterator {
+                    terms: Vec::new(),
+                    encoding: QuadEncoding::Spog,
+                },
+                second: None,
+            };
         }
-        return ChainedDecodingQuadIterator {
-            first: DecodingQuadIterator {
-                terms: Vec::new(),
-                encoding: QuadEncoding::Spog,
-            },
-            second: None,
-        };
+    }
+
+    fn get_term_type(&self, term: &EncodedTerm) -> Option<SubjectType> {
+    if let EncodedTerm::NamedNode { iri_id: _, value } = term {
+        let mut parts = value.split("/").collect::<Vec<_>>();
+        parts.reverse();
+        if parts[1] == "node" {
+            return Some(SubjectType::NodeIri);
+        } else if parts[3] == "path" && parts[1] == "step" {
+            return Some(SubjectType::StepIri);
+        } else if parts[3] == "path" && parts[1] == "position" {
+            return Some(SubjectType::StepBorderIri);
+        } else if parts[1] == "path" {
+            return Some(SubjectType::PathIri);
+        } else {
+            return None;
+        }
+    } else {
+        None
+    }
+
+    }
+
+    fn type_triples(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: &EncodedTerm,
+        ) -> Vec<EncodedQuad> {
+        if self.is_vocab(object, vg::NODE) {
+            self.nodes(subject, predicate, object, graph_name)
+        } else if self.is_vocab(object, vg::PATH) {
+            self.paths(subject, predicate, object, graph_name)
+        } else if self.is_step_associated_type(object) {
+            self.steps(subject, predicate, object, graph_name)
+        } else {
+            Vec::new()
+        }
     }
 
     fn nodes(
@@ -304,7 +397,7 @@ impl StorageGenerator {
 
     fn get_step_iri_fields(&self, term: Option<&EncodedTerm>) -> Option<StepType> {
         let term = term?;
-        if let EncodedTerm::NamedNode { iri_id, value } = term {
+        if let EncodedTerm::NamedNode { iri_id: _, value } = term {
             let mut parts = value.split("/").collect::<Vec<_>>();
             parts.reverse();
             if parts.len() < 5 || parts[3] != "path" {
@@ -709,6 +802,24 @@ impl StorageGenerator {
             .unwrap()
     }
 
+    fn is_step_associated_type(&self, object: Option<&EncodedTerm>) -> bool {
+        let types = [
+            faldo::REGION,
+            faldo::EXACT_POSITION,
+            faldo::POSITION,
+            vg::STEP,
+        ];
+        if object.is_none() {
+            return false;
+        }
+        types
+            .into_iter()
+            .map(|x| self.is_vocab(object, x))
+            .reduce(|acc, x| acc || x)
+            .unwrap()
+
+    }
+
     fn is_step_associated(&self, predicate: Option<&EncodedTerm>) -> bool {
         let predicates = [
             vg::RANK,
@@ -804,6 +915,13 @@ enum StepType {
     Position(String, usize),
 }
 
+enum SubjectType {
+    PathIri,
+    StepBorderIri,
+    NodeIri,
+    StepIri,
+}
+
 #[cfg(test)]
 mod tests {
     use std::{path::Path, str::FromStr};
@@ -814,7 +932,7 @@ mod tests {
     use super::*;
     const BASE: &'static str = "https://example.org";
 
-    fn get_generator(gfa: &str) -> StorageGenerator {
+    fn _get_generator(gfa: &str) -> StorageGenerator {
         let storage = Storage::from_str(gfa).unwrap();
         StorageGenerator::new(storage)
     }
