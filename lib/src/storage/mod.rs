@@ -8,9 +8,7 @@ pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, S
 #[cfg(not(target_family = "wasm"))]
 use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
 use gfa::parser::GFAParser;
-use handlegraph::{
-    conversion::from_gfa, packedgraph::PackedGraph,
-};
+use handlegraph::{conversion::from_gfa, packedgraph::PackedGraph};
 use std::str;
 
 #[cfg(not(target_family = "wasm"))]
@@ -35,9 +33,9 @@ use self::storage_generator::StorageGenerator;
 mod backend;
 mod binary_encoder;
 mod error;
-mod storage_generator;
 pub mod numeric_encoder;
 pub mod small_string;
+mod storage_generator;
 mod vg_vocab;
 
 #[cfg(not(target_family = "wasm"))]
@@ -204,7 +202,8 @@ impl StorageReader {
         graph_name: Option<&EncodedTerm>,
     ) -> ChainedDecodingQuadIterator {
         let graph_name = graph_name.expect("Graph name is given");
-        self.generator.quads_for_pattern(subject, predicate, object, graph_name)
+        self.generator
+            .quads_for_pattern(subject, predicate, object, graph_name)
     }
 
     pub fn quads(&self) -> ChainedDecodingQuadIterator {
