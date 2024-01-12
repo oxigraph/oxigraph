@@ -1076,6 +1076,7 @@ impl SimpleEvaluator {
                 inner: spargebra::Query::Select {
                     dataset: None,
                     pattern: graph_pattern.clone(),
+                    #[allow(clippy::useless_asref)]
                     base_iri: self.base_iri.as_ref().map(|iri| iri.as_ref().clone()),
                 },
                 dataset: QueryDataset::new(),

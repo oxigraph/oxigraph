@@ -22,7 +22,7 @@ pub struct TriGRecognizer {
 
 #[allow(clippy::partial_pub_fields)]
 pub struct TriGRecognizerContext {
-    lexer_options: N3LexerOptions,
+    pub lexer_options: N3LexerOptions,
     pub with_graph_name: bool,
     #[cfg(feature = "rdf-star")]
     pub with_quoted_triples: bool,

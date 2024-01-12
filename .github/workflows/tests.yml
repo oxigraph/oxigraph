@@ -140,7 +140,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           target: i686-unknown-linux-gnu
-      - run: sudo apt-get install -y g++-multilib
+      - run: sudo apt-get update && sudo apt-get install -y g++-multilib
       - run: cargo test --target i686-unknown-linux-gnu --no-default-features --features http-client-rustls-native
         working-directory: ./lib
 
@@ -176,7 +176,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           version: nightly
-      - run: sudo apt-get install -y llvm
+      - run: sudo apt-get update && sudo apt-get install -y llvm
       - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
         env:
           RUSTFLAGS: -Z sanitizer=address
@@ -354,7 +354,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: sudo apt-get install -y clang-format
+      - run: sudo apt-get update && sudo apt-get install -y clang-format
       - run: clang-format --Werror --dry-run oxrocksdb-sys/api/*
 
   fuzz_changes:
@@ -425,7 +425,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: sudo apt-get install -y shellcheck
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: git grep -l '^#\( *shellcheck \|!\(/bin/\|/usr/bin/env \)\(sh\|bash\|dash\|ksh\)\)' | xargs shellcheck
 
   spec_links:
