@@ -101,7 +101,7 @@ impl fmt::Display for SmallString {
 impl PartialEq for SmallString {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.as_str().eq(&**other)
+        self.as_str() == other.as_str()
     }
 }
 

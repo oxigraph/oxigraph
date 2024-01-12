@@ -110,10 +110,11 @@ impl<RR: RuleRecognizer> Parser<RR> {
                 }
             }
             if self.lexer.is_end() {
-                let Some(state) = self.state.take() else {
-                    return None;
-                };
-                state.recognize_end(&mut self.context, &mut self.results, &mut self.errors)
+                self.state.take()?.recognize_end(
+                    &mut self.context,
+                    &mut self.results,
+                    &mut self.errors,
+                )
             } else {
                 return None;
             }

@@ -418,6 +418,33 @@ impl<R: Read> FromReadN3Reader<R> {
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.inner.parser.context.prefixes
     }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = N3Parser::new().parse_read(file.as_ref());
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        self.inner
+            .parser
+            .context
+            .lexer_options
+            .base_iri
+            .as_ref()
+            .map(Iri::as_str)
+    }
 }
 
 impl<R: Read> Iterator for FromReadN3Reader<R> {
@@ -497,6 +524,36 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.inner.parser.context.prefixes
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = N3Parser::new().parse_tokio_async_read(file.as_ref());
+    /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
+    ///
+    /// reader.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        self.inner
+            .parser
+            .context
+            .lexer_options
+            .base_iri
+            .as_ref()
+            .map(Iri::as_str)
     }
 }
 
@@ -591,6 +648,33 @@ impl LowLevelN3Reader {
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.parser.context.prefixes
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// let file = b"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name \"Foo\" .";
+    ///
+    /// let mut reader = N3Parser::new().parse();
+    /// reader.extend_from_slice(file);
+    /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
+    ///
+    /// reader.read_next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        self.parser
+            .context
+            .lexer_options
+            .base_iri
+            .as_ref()
+            .map(Iri::as_str)
     }
 }
 
