@@ -1,15 +1,7 @@
 #! /usr/bin/env node
 
-const fs = require("fs");
+const fs= require("fs");
 
-// We copy file to the new directory
-fs.mkdirSync("pkg");
-for (const file of fs.readdirSync("./pkg-web")) {
-    fs.copyFileSync(`./pkg-web/${file}`, `./pkg/${file}`);
-}
-for (const file of fs.readdirSync("./pkg-node")) {
-    fs.copyFileSync(`./pkg-node/${file}`, `./pkg/${file}`);
-}
 
 const pkg = JSON.parse(fs.readFileSync("./pkg/package.json"));
 pkg.name = "oxigraph";
