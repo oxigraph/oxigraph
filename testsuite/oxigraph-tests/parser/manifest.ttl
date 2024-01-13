@@ -18,6 +18,8 @@
 		<#keyword_vs_prefix_ttl>
         <#keyword_vs_prefix_trig>
         <#at_keywords_as_lang_tag>
+        <#escaped_trailing_dot_ttl>
+        <#escaped_trailing_dot_trig>
 	) .
 
 <#no_end_line_jump>
@@ -88,3 +90,15 @@
 	mf:name "usage of at keywords as language tags" ;
 	mf:action <at_keywords_as_lang_tag.ttl> ;
 	mf:result <at_keywords_as_lang_tag.nt> .
+
+<#escaped_trailing_dot_ttl>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "escaped dot at the end of a local name" ;
+	mf:action <escaped_trailing_dot.ttl> ;
+	mf:result <escaped_trailing_dot.nt> .
+
+<#escaped_trailing_dot_trig>
+	rdf:type rdft:TestTrigEval ;
+	mf:name "escaped dot at the end of a local name" ;
+	mf:action <escaped_trailing_dot.trig> ;
+	mf:result <escaped_trailing_dot.nq> .

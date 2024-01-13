@@ -354,6 +354,7 @@ impl N3Lexer {
         let mut buffer = None; // Buffer if there are some escaped characters
         let mut position_that_is_already_in_buffer = 0;
         let mut might_be_invalid_iri = false;
+        let mut ends_with_unescaped_dot = 0;
         loop {
             if let Some(r) = Self::recognize_unicode_char(&data[i..], i) {
                 match r {
@@ -369,6 +370,7 @@ impl N3Lexer {
                                 ).into())));
                             }
                             i += 1;
+                            ends_with_unescaped_dot = 0;
                         } else if c == '\\' {
                             i += 1;
                             let a = char::from(*data.get(i)?);
@@ -416,6 +418,7 @@ impl N3Lexer {
                             buffer.push(a);
                             i += 1;
                             position_that_is_already_in_buffer = i;
+                            ends_with_unescaped_dot = 0;
                         } else if i == 0 {
                             if !(Self::is_possible_pn_chars_u(c) || c == ':' || c.is_ascii_digit())
                             {
@@ -427,13 +430,17 @@ impl N3Lexer {
                                         || c == ':';
                             }
                             i += consumed;
-                        } else if Self::is_possible_pn_chars(c) || c == ':' || c == '.' {
+                        } else if Self::is_possible_pn_chars(c) || c == ':' {
                             if !self.unchecked {
                                 might_be_invalid_iri |=
                                     Self::is_possible_pn_chars_base_but_not_valid_iri(c)
                                         || c == ':';
                             }
                             i += consumed;
+                            ends_with_unescaped_dot = 0;
+                        } else if c == '.' {
+                            i += consumed;
+                            ends_with_unescaped_dot += 1;
                         } else {
                             let buffer = if let Some(mut buffer) = buffer {
                                 buffer.push_str(
@@ -445,22 +452,20 @@ impl N3Lexer {
                                         Err(e) => return Some((i, Err(e))),
                                     },
                                 );
-                                // We do not include the last dot
-                                while buffer.ends_with('.') {
+                                // We do not include the last dots
+                                for _ in 0..ends_with_unescaped_dot {
                                     buffer.pop();
-                                    i -= 1;
                                 }
+                                i -= ends_with_unescaped_dot;
                                 Cow::Owned(buffer)
                             } else {
                                 let mut data = match str_from_utf8(&data[..i], 0..i) {
                                     Ok(data) => data,
                                     Err(e) => return Some((i, Err(e))),
                                 };
-                                // We do not include the last dot
-                                while let Some(d) = data.strip_suffix('.') {
-                                    data = d;
-                                    i -= 1;
-                                }
+                                // We do not include the last dots
+                                data = &data[..data.len() - ends_with_unescaped_dot];
+                                i -= ends_with_unescaped_dot;
                                 Cow::Borrowed(data)
                             };
                             return Some((i, Ok((buffer, might_be_invalid_iri))));

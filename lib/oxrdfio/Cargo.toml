@@ -1,6 +1,6 @@
 [package]
 name = "oxrdfio"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -21,7 +21,7 @@ rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
 [dependencies]
 oxrdf = { version = "0.2.0-alpha.1", path = "../oxrdf" }
 oxrdfxml = { version = "0.1.0-alpha.1", path = "../oxrdfxml" }
-oxttl = { version = "0.1.0-alpha.1", path = "../oxttl" }
+oxttl = { version = "0.1.0-alpha.2-dev", path = "../oxttl" }
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
 
 [dev-dependencies]
