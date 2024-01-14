@@ -1,11 +1,20 @@
 import json
 import subprocess
 from pathlib import Path
+from time import sleep
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 TARGET_DEBIAN_VERSIONS = ["sid"]
 IGNORE_PACKAGES = {"oxigraph-js", "oxigraph-testsuite", "pyoxigraph", "sparql-smith"}
-ALLOWED_MISSING_PACKAGES = {"codspeed-criterion-compat", "escargot", "json-event-parser", "oxhttp", "oxiri", "quick-xml"}
+ALLOWED_MISSING_PACKAGES = {
+    "codspeed-criterion-compat",
+    "escargot",
+    "json-event-parser",
+    "oxhttp",
+    "oxiri",
+    "quick-xml",
+}
 
 base_path = Path(__file__).parent.parent
 
@@ -25,6 +34,22 @@ def parse_version(version):
     return tuple(int(e) for e in version.split("-")[0].split("."))
 
 
+def fetch_debian_package_desc(debian_name):
+    url = f"https://sources.debian.org/api/src/{debian_name}/"
+    for i in range(0, 10):
+        try:
+            with urlopen(url) as response:
+                return json.loads(response.read().decode())
+        except HTTPError as e:
+            if e.code / 100 == 5:
+                wait = 2**i
+                print(f"Error {e} from {url}, retrying after {wait}s")
+                sleep(wait)
+            else:
+                raise e
+    raise Exception(f"Failed to fetch {url}")
+
+
 for package_id in cargo_metadata["workspace_default_members"]:
     package = package_by_id[package_id]
     if package["name"] in IGNORE_PACKAGES:
@@ -37,11 +62,9 @@ for package_id in cargo_metadata["workspace_default_members"]:
             continue
         candidate_debian_name = f"rust-{dependency['name'].replace('_', '-')}"
         if dependency["name"] not in debian_cache:
-            with urlopen(
-                f"https://sources.debian.org/api/src/{candidate_debian_name}/"
-            ) as response:
-                debian_package = json.loads(response.read().decode())
-                debian_cache[candidate_debian_name] = debian_package
+            debian_cache[candidate_debian_name] = fetch_debian_package_desc(
+                candidate_debian_name
+            )
         debian_package = debian_cache[candidate_debian_name]
         if "error" in debian_package:
             errors.add(f"No Debian package found for {dependency['name']}")
