@@ -1932,8 +1932,8 @@ impl SimpleEvaluator {
                     EncodedTerm::DecimalLiteral(value) => Some(Double::from(value).into()),
                     EncodedTerm::BooleanLiteral(value) => Some(Double::from(value).into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_double_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_double_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_double_str(&value)
                     }
                     _ => None,
                 })
@@ -1948,8 +1948,8 @@ impl SimpleEvaluator {
                     EncodedTerm::DecimalLiteral(value) => Some(Float::from(value).into()),
                     EncodedTerm::BooleanLiteral(value) => Some(Float::from(value).into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_float_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_float_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_float_str(&value)
                     }
                     _ => None,
                 })
@@ -1968,8 +1968,8 @@ impl SimpleEvaluator {
                     }
                     EncodedTerm::BooleanLiteral(value) => Some(Integer::from(value).into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_integer_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_integer_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_integer_str(&value)
                     }
                     _ => None,
                 })
@@ -1988,8 +1988,8 @@ impl SimpleEvaluator {
                     EncodedTerm::DecimalLiteral(value) => Some(value.into()),
                     EncodedTerm::BooleanLiteral(value) => Some(Decimal::from(value).into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_decimal_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_decimal_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_decimal_str(&value)
                     }
                     _ => None,
                 })
@@ -2001,8 +2001,8 @@ impl SimpleEvaluator {
                     EncodedTerm::DateLiteral(value) => Some(value.into()),
                     EncodedTerm::DateTimeLiteral(value) => Some(Date::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_date_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_date_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_date_str(&value)
                     }
                     _ => None,
                 })
@@ -2014,8 +2014,8 @@ impl SimpleEvaluator {
                     EncodedTerm::TimeLiteral(value) => Some(value.into()),
                     EncodedTerm::DateTimeLiteral(value) => Some(Time::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_time_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_time_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_time_str(&value)
                     }
                     _ => None,
                 })
@@ -2027,8 +2027,8 @@ impl SimpleEvaluator {
                     EncodedTerm::DateTimeLiteral(value) => Some(value.into()),
                     EncodedTerm::DateLiteral(value) => Some(DateTime::try_from(value).ok()?.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_date_time_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_date_time_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_date_time_str(&value)
                     }
                     _ => None,
                 })
@@ -2045,8 +2045,8 @@ impl SimpleEvaluator {
                         Some(Duration::from(value).into())
                     }
                     EncodedTerm::SmallStringLiteral(value) => parse_duration_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_duration_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_duration_str(&value)
                     }
                     _ => None,
                 })
@@ -2060,8 +2060,8 @@ impl SimpleEvaluator {
                     }
                     EncodedTerm::YearMonthDurationLiteral(value) => Some(value.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_year_month_duration_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_year_month_duration_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_year_month_duration_str(&value)
                     }
                     _ => None,
                 })
@@ -2075,8 +2075,8 @@ impl SimpleEvaluator {
                     }
                     EncodedTerm::DayTimeDurationLiteral(value) => Some(value.into()),
                     EncodedTerm::SmallStringLiteral(value) => parse_day_time_duration_str(&value),
-                    EncodedTerm::BigStringLiteral { value_id } => {
-                        parse_day_time_duration_str(&dataset.get_str(&value_id).ok()??)
+                    EncodedTerm::BigStringLiteral { value_id, value } => {
+                        parse_day_time_duration_str(&value)
                     }
                     _ => None,
                 })
@@ -2150,7 +2150,7 @@ fn to_string_id(dataset: &DatasetView, term: &EncodedTerm) -> Option<SmallString
         | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
         | EncodedTerm::SmallBigLangStringLiteral { value, .. }
         | EncodedTerm::SmallTypedLiteral { value, .. } => Some((*value).into()),
-        EncodedTerm::BigStringLiteral { value_id }
+        EncodedTerm::BigStringLiteral { value_id, .. }
         | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
         | EncodedTerm::BigBigLangStringLiteral { value_id, .. }
         | EncodedTerm::BigTypedLiteral { value_id, .. } => Some((*value_id).into()),
@@ -2183,7 +2183,7 @@ fn to_string_id(dataset: &DatasetView, term: &EncodedTerm) -> Option<SmallString
 fn to_simple_string(dataset: &DatasetView, term: &EncodedTerm) -> Option<String> {
     match term {
         EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
-        EncodedTerm::BigStringLiteral { value_id } => dataset.get_str(value_id).ok()?,
+        EncodedTerm::BigStringLiteral { value_id, value } => Some(value.to_owned()),
         _ => None,
     }
 }
@@ -2191,7 +2191,7 @@ fn to_simple_string(dataset: &DatasetView, term: &EncodedTerm) -> Option<String>
 fn to_simple_string_id(term: &EncodedTerm) -> Option<SmallStringOrId> {
     match term {
         EncodedTerm::SmallStringLiteral(value) => Some((*value).into()),
-        EncodedTerm::BigStringLiteral { value_id } => Some((*value_id).into()),
+        EncodedTerm::BigStringLiteral { value_id, .. } => Some((*value_id).into()),
         _ => None,
     }
 }
@@ -2201,8 +2201,8 @@ fn to_string(dataset: &DatasetView, term: &EncodedTerm) -> Option<String> {
         EncodedTerm::SmallStringLiteral(value)
         | EncodedTerm::SmallSmallLangStringLiteral { value, .. }
         | EncodedTerm::SmallBigLangStringLiteral { value, .. } => Some((*value).into()),
-        EncodedTerm::BigStringLiteral { value_id }
-        | EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
+        EncodedTerm::BigStringLiteral { value_id, value } => Some(value.to_owned()),
+        EncodedTerm::BigSmallLangStringLiteral { value_id, .. }
         | EncodedTerm::BigBigLangStringLiteral { value_id, .. } => {
             dataset.get_str(value_id).ok()?
         }
@@ -2216,8 +2216,8 @@ fn to_string_and_language(
 ) -> Option<(String, Option<SmallStringOrId>)> {
     match term {
         EncodedTerm::SmallStringLiteral(value) => Some(((*value).into(), None)),
-        EncodedTerm::BigStringLiteral { value_id } => {
-            Some((dataset.get_str(value_id).ok()??, None))
+        EncodedTerm::BigStringLiteral { value_id, value } => {
+            Some((value.to_owned(), None))
         }
         EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
             Some(((*value).into(), Some((*language).into())))
@@ -2254,7 +2254,7 @@ fn build_string_literal(dataset: &DatasetView, value: &str) -> EncodedTerm {
 fn build_string_literal_from_id(id: SmallStringOrId) -> EncodedTerm {
     match id {
         SmallStringOrId::Small(value) => EncodedTerm::SmallStringLiteral(value),
-        SmallStringOrId::Big(value_id) => EncodedTerm::BigStringLiteral { value_id },
+        SmallStringOrId::Big(value_id) => EncodedTerm::BigStringLiteral { value_id, value: "Why are we here?".to_owned() },
     }
 }
 
@@ -2412,8 +2412,8 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
             EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
             _ => Some(false),
         },
-        EncodedTerm::BigStringLiteral { value_id: a } => match b {
-            EncodedTerm::BigStringLiteral { value_id: b } => Some(a == b),
+        EncodedTerm::BigStringLiteral { value_id: a, .. } => match b {
+            EncodedTerm::BigStringLiteral { value_id: b, .. } => Some(a == b),
             EncodedTerm::SmallTypedLiteral { .. } | EncodedTerm::BigTypedLiteral { .. } => None,
             _ => Some(false),
         },
@@ -2671,12 +2671,12 @@ fn partial_cmp_literals(
     match a {
         EncodedTerm::SmallStringLiteral(a) => match b {
             EncodedTerm::SmallStringLiteral(b) => a.partial_cmp(b),
-            EncodedTerm::BigStringLiteral { value_id: b } => compare_str_str_id(dataset, a, b),
+            EncodedTerm::BigStringLiteral { value_id: b, .. } => compare_str_str_id(dataset, a, b),
             _ => None,
         },
-        EncodedTerm::BigStringLiteral { value_id: a } => match b {
+        EncodedTerm::BigStringLiteral { value_id: a, .. } => match b {
             EncodedTerm::SmallStringLiteral(b) => compare_str_id_str(dataset, a, b),
-            EncodedTerm::BigStringLiteral { value_id: b } => compare_str_ids(dataset, a, b),
+            EncodedTerm::BigStringLiteral { value_id: b, .. } => compare_str_ids(dataset, a, b),
             _ => None,
         },
         EncodedTerm::SmallSmallLangStringLiteral {

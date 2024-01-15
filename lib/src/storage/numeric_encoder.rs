@@ -56,6 +56,7 @@ pub enum EncodedTerm {
     SmallStringLiteral(SmallString),
     BigStringLiteral {
         value_id: StrHash,
+        value: String,
     },
     SmallSmallLangStringLiteral {
         value: SmallString,
@@ -125,9 +126,11 @@ impl PartialEq for EncodedTerm {
             (
                 Self::BigStringLiteral {
                     value_id: value_id_a,
+                    value: value_a,
                 },
                 Self::BigStringLiteral {
                     value_id: value_id_b,
+                    value: value_b,
                 },
             ) => value_id_a == value_id_b,
             (
@@ -227,7 +230,7 @@ impl Hash for EncodedTerm {
             Self::BigBlankNode { id_id } => id_id.hash(state),
             Self::DefaultGraph => (),
             Self::SmallStringLiteral(value) => value.hash(state),
-            Self::BigStringLiteral { value_id } => value_id.hash(state),
+            Self::BigStringLiteral { value_id, value } => value_id.hash(state),
             Self::SmallSmallLangStringLiteral { value, language } => {
                 value.hash(state);
                 language.hash(state);
@@ -552,6 +555,7 @@ impl From<LiteralRef<'_>> for EncodedTerm {
                 } else {
                     Self::BigStringLiteral {
                         value_id: StrHash::new(value),
+                        value: value.to_owned(),
                     }
                 })
             }
@@ -741,7 +745,7 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
             _ => unreachable!("Invalid term encoding {:?} for {}", encoded, term),
         },
         TermRef::Literal(literal) => match encoded {
-            EncodedTerm::BigStringLiteral { value_id }
+            EncodedTerm::BigStringLiteral { value_id, .. }
             | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
                 insert_str(value_id, literal.value())
             }
@@ -962,6 +966,7 @@ pub trait Decoder: StrLookup {
 
 impl<S: StrLookup> Decoder for S {
     fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError> {
+        println!("DECODING: {:?}", encoded);
         match encoded {
             EncodedTerm::DefaultGraph => {
                 Err(CorruptionError::msg("The default graph tag is not a valid term").into())
@@ -975,8 +980,8 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::SmallStringLiteral(value) => {
                 Ok(Literal::new_simple_literal(*value).into())
             }
-            EncodedTerm::BigStringLiteral { value_id } => {
-                Ok(Literal::new_simple_literal(get_required_str(self, value_id)?).into())
+            EncodedTerm::BigStringLiteral { value_id, value } => {
+                Ok(Literal::new_simple_literal(value).into())
             }
             EncodedTerm::SmallSmallLangStringLiteral { value, language } => {
                 Ok(Literal::new_language_tagged_literal_unchecked(*value, *language).into())

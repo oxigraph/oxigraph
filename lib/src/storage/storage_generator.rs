@@ -31,6 +31,24 @@ impl StorageGenerator {
         Self { storage }
     }
 
+    fn print_quad(&self, quad: &EncodedQuad) {
+        let sub = match &quad.subject {
+            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            _ => "NOT NAMED".to_owned(),
+        };
+        let pre = match &quad.predicate {
+            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            _ => "NOT NAMED".to_owned(),
+        };
+        let obj = match &quad.object {
+            EncodedTerm::NamedNode { iri_id: _, value } => value.to_owned(),
+            EncodedTerm::SmallStringLiteral(value) => format!("\"{}\"", value).to_string(),
+            EncodedTerm::IntegerLiteral(value) => value.to_string(),
+            _ => "NOT NAMED".to_owned(),
+        };
+        println!("\t- {}\t{}\t{} .", sub, pre, obj);
+    }
+
     pub fn quads_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
@@ -54,6 +72,9 @@ impl StorageGenerator {
         if self.is_vocab(predicate, rdf::TYPE) && object.is_some() {
             println!("OF: rdf::type");
             let terms = self.type_triples(subject, predicate, object, graph_name);
+            for triple in &terms {
+                self.print_quad(triple);
+            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -64,6 +85,9 @@ impl StorageGenerator {
         } else if self.is_node_related(predicate) {
             println!("OF: nodes");
             let terms = self.nodes(subject, predicate, object, graph_name);
+            for triple in &terms {
+                self.print_quad(triple);
+            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -74,6 +98,9 @@ impl StorageGenerator {
         } else if self.is_step_associated(predicate) {
             println!("OF: steps");
             let terms = self.steps(subject, predicate, object, graph_name);
+            for triple in &terms {
+                self.print_quad(triple);
+            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -84,6 +111,9 @@ impl StorageGenerator {
         } else if self.is_vocab(predicate, rdfs::LABEL) {
             println!("OF: rdfs::label");
             let terms = self.paths(subject, predicate, object, graph_name);
+            for triple in &terms {
+                self.print_quad(triple);
+            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -99,6 +129,9 @@ impl StorageGenerator {
             let terms_steps = self.steps(subject, predicate, object, graph_name);
             terms.extend(terms_paths);
             terms.extend(terms_steps);
+            for triple in &terms {
+                self.print_quad(triple);
+            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -128,6 +161,9 @@ impl StorageGenerator {
                     Vec::new()
                 }
             };
+            for triple in &terms {
+                self.print_quad(triple);
+            }
             return ChainedDecodingQuadIterator {
                 first: DecodingQuadIterator {
                     terms,
@@ -338,20 +374,26 @@ impl StorageGenerator {
             println!("SF: some subject");
             match step_type {
                 StepType::Rank(path_name, target_rank) => {
+                    println!("RANK: {}, {}", path_name, target_rank);
                     if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
                         let path_ref = self.storage.graph.get_path_ref(id).unwrap();
                         let step_handle = path_ref.step_at(path_ref.first_step());
-                        let step_handle = step_handle.unwrap();
+                        let mut step_handle = step_handle.unwrap();
                         let mut node_handle = step_handle.handle();
                         let mut rank = 1;
                         let mut position = 1;
 
-                        while path_ref.next_step(step_handle.0).is_some() && rank < target_rank {
-                            let step_handle = path_ref.next_step(step_handle.0).unwrap();
+                        let steps = self.storage.graph.path_steps(id).expect("Path has steps");
+                        for _ in steps.skip(1) {
+                            if rank >= target_rank {
+                                break;
+                            }
+                            step_handle = path_ref.next_step(step_handle.0).unwrap();
                             position += self.storage.graph.node_len(node_handle);
                             node_handle = step_handle.handle();
                             rank += 1;
                         }
+                        println!("Now handling: {}, {}, {}", rank, position, node_handle.0);
                         let mut triples = self.step_handle_to_triples(
                             &path_name,
                             subject,
@@ -366,6 +408,7 @@ impl StorageGenerator {
                     }
                 }
                 StepType::Position(path_name, position) => {
+                    println!("POSITION: {}, {}", path_name, position);
                     if let Some(id) = self.storage.graph.get_path_id(path_name.as_bytes()) {
                         if let Some(step) = self.storage.graph.path_step_at_base(id, position) {
                             let node_handle =
@@ -646,6 +689,7 @@ impl StorageGenerator {
             let seq_bytes = self.storage.graph.sequence_vec(handle);
             let seq = str::from_utf8(&seq_bytes).expect("Node contains sequence");
             let seq_value = Literal::new_simple_literal(seq);
+            println!("Decoding1");
             if object.is_none()
                 || self.decode_term(object.unwrap()).unwrap() == Term::Literal(seq_value.clone())
             {

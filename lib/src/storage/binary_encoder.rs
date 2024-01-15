@@ -311,6 +311,7 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut buffer)?;
                 Ok(EncodedTerm::BigStringLiteral {
                     value_id: StrHash::from_be_bytes(buffer),
+                    value: std::str::from_utf8(&buffer).expect("Should be fine to convert").to_owned(),
                 })
             }
             TYPE_BOOLEAN_LITERAL_TRUE => Ok(true.into()),
@@ -519,7 +520,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
             sink.push(TYPE_SMALL_STRING_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
-        EncodedTerm::BigStringLiteral { value_id } => {
+        EncodedTerm::BigStringLiteral { value_id, .. } => {
             sink.push(TYPE_BIG_STRING_LITERAL);
             sink.extend_from_slice(&value_id.to_be_bytes());
         }
