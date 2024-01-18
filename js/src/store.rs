@@ -1,5 +1,3 @@
-#![allow(clippy::use_self)]
-
 use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
