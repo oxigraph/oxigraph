@@ -22,12 +22,12 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::TriGParser;
 ///
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -100,12 +100,12 @@ impl TriGParser {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxttl::TriGParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .
+    ///     schema:name "Foo" .
     /// <bar> a schema:Person ;
-    ///     schema:name \"Bar\" .";
+    ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
@@ -133,12 +133,12 @@ impl TriGParser {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .
+    ///     schema:name "Foo" .
     /// <bar> a schema:Person ;
-    ///     schema:name \"Bar\" .";
+    ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
@@ -220,12 +220,12 @@ impl TriGParser {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::TriGParser;
 ///
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -253,10 +253,10 @@ impl<R: Read> FromReadTriGReader<R> {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse_read(file.as_ref());
     /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
@@ -274,10 +274,10 @@ impl<R: Read> FromReadTriGReader<R> {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse_read(file.as_ref());
     /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
@@ -314,12 +314,12 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), oxttl::ParseError> {
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
@@ -358,10 +358,10 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse_tokio_async_read(file.as_ref());
     /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
@@ -382,10 +382,10 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse_tokio_async_read(file.as_ref());
     /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
@@ -481,10 +481,10 @@ impl LowLevelTriGReader {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse();
     /// reader.extend_from_slice(file);
@@ -503,10 +503,10 @@ impl LowLevelTriGReader {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse();
     /// reader.extend_from_slice(file);

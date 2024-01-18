@@ -43,7 +43,7 @@ impl QueryResults {
     ///
     /// let mut results = Vec::new();
     /// store.query("SELECT ?s WHERE { ?s ?p ?o }")?.write(&mut results, QueryResultsFormat::Json)?;
-    /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
+    /// assert_eq!(results, r#"{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"}}]}}"#.as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write(

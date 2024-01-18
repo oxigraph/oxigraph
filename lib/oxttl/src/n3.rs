@@ -184,12 +184,12 @@ impl From<Quad> for N3Quad {
 /// use oxrdf::{NamedNode, vocab::rdf};
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
@@ -253,12 +253,12 @@ impl N3Parser {
     /// use oxrdf::NamedNode;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .
+    ///     schema:name "Foo" .
     /// <bar> a schema:Person ;
-    ///     schema:name \"Bar\" .";
+    ///     schema:name "Bar" ."#;
     ///
     /// let rdf_type = N3Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
     /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
@@ -287,12 +287,12 @@ impl N3Parser {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .
+    ///     schema:name "Foo" .
     /// <bar> a schema:Person ;
-    ///     schema:name \"Bar\" .";
+    ///     schema:name "Bar" ."#;
     ///
     /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
     /// let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
@@ -369,12 +369,12 @@ impl N3Parser {
 /// use oxrdf::{NamedNode, vocab::rdf};
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
@@ -403,10 +403,10 @@ impl<R: Read> FromReadN3Reader<R> {
     /// ```
     /// use oxttl::N3Parser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse_read(file.as_ref());
     /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
@@ -424,10 +424,10 @@ impl<R: Read> FromReadN3Reader<R> {
     /// ```
     /// use oxttl::N3Parser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse_read(file.as_ref());
     /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
@@ -464,12 +464,12 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), oxttl::ParseError> {
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
 /// let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
@@ -509,10 +509,10 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse_tokio_async_read(file.as_ref());
     /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
@@ -533,10 +533,10 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse_tokio_async_read(file.as_ref());
     /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
@@ -633,10 +633,10 @@ impl LowLevelN3Reader {
     /// ```
     /// use oxttl::N3Parser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse();
     /// reader.extend_from_slice(file);
@@ -655,10 +655,10 @@ impl LowLevelN3Reader {
     /// ```
     /// use oxttl::N3Parser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse();
     /// reader.extend_from_slice(file);

@@ -29,14 +29,14 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxrdfxml::RdfXmlParser;
 ///
-/// let file = b"<?xml version=\"1.0\"?>
-/// <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
-///  <rdf:Description rdf:about=\"http://example.com/foo\">
-///    <rdf:type rdf:resource=\"http://schema.org/Person\" />
+/// let file = br#"<?xml version="1.0"?>
+/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+///  <rdf:Description rdf:about="http://example.com/foo">
+///    <rdf:type rdf:resource="http://schema.org/Person" />
 ///    <schema:name>Foo</schema:name>
 ///  </rdf:Description>
-///  <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-/// </rdf:RDF>";
+///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+/// </rdf:RDF>"#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -87,14 +87,14 @@ impl RdfXmlParser {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = b"<?xml version=\"1.0\"?>
-    /// <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
-    ///  <rdf:Description rdf:about=\"http://example.com/foo\">
-    ///    <rdf:type rdf:resource=\"http://schema.org/Person\" />
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+    ///  <rdf:Description rdf:about="http://example.com/foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
     ///    <schema:name>Foo</schema:name>
     ///  </rdf:Description>
-    ///  <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-    /// </rdf:RDF>";
+    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+    /// </rdf:RDF>"#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
@@ -124,14 +124,14 @@ impl RdfXmlParser {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxrdfxml::ParseError> {
-    /// let file = b"<?xml version=\"1.0\"?>
-    /// <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
-    ///   <rdf:Description rdf:about=\"http://example.com/foo\">
-    ///     <rdf:type rdf:resource=\"http://schema.org/Person\" />
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+    ///   <rdf:Description rdf:about="http://example.com/foo">
+    ///     <rdf:type rdf:resource="http://schema.org/Person" />
     ///     <schema:name>Foo</schema:name>
     ///   </rdf:Description>
-    ///   <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-    /// </rdf:RDF>";
+    ///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+    /// </rdf:RDF>"#;
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
@@ -182,14 +182,14 @@ impl RdfXmlParser {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxrdfxml::RdfXmlParser;
 ///
-/// let file = b"<?xml version=\"1.0\"?>
-/// <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
-///  <rdf:Description rdf:about=\"http://example.com/foo\">
-///    <rdf:type rdf:resource=\"http://schema.org/Person\" />
+/// let file = br#"<?xml version="1.0"?>
+/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+///  <rdf:Description rdf:about="http://example.com/foo">
+///    <rdf:type rdf:resource="http://schema.org/Person" />
 ///    <schema:name>Foo</schema:name>
 ///  </rdf:Description>
-///  <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-/// </rdf:RDF>";
+///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+/// </rdf:RDF>"#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -251,14 +251,14 @@ impl<R: Read> FromReadRdfXmlReader<R> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), oxrdfxml::ParseError> {
-/// let file = b"<?xml version=\"1.0\"?>
-/// <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
-///   <rdf:Description rdf:about=\"http://example.com/foo\">
-///     <rdf:type rdf:resource=\"http://schema.org/Person\" />
+/// let file = br#"<?xml version="1.0"?>
+/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+///   <rdf:Description rdf:about="http://example.com/foo">
+///     <rdf:type rdf:resource="http://schema.org/Person" />
 ///     <schema:name>Foo</schema:name>
 ///   </rdf:Description>
-///   <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-/// </rdf:RDF>";
+///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+/// </rdf:RDF>"#;
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
