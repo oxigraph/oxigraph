@@ -274,7 +274,7 @@ impl NQuadsRecognizer {
                 true,
                 Some(b"#"),
             ),
-            NQuadsRecognizer {
+            Self {
                 stack: vec![NQuadsState::ExpectSubject],
                 subjects: Vec::new(),
                 predicates: Vec::new(),

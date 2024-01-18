@@ -48,7 +48,7 @@ impl TryFrom<Subject> for GroundSubject {
     type Error = ();
 
     #[inline]
-    fn try_from(subject: Subject) -> Result<Self, ()> {
+    fn try_from(subject: Subject) -> Result<Self, Self::Error> {
         match subject {
             Subject::NamedNode(t) => Ok(t.into()),
             Subject::BlankNode(_) => Err(()),
@@ -62,7 +62,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
     type Error = ();
 
     #[inline]
-    fn try_from(term: GroundTerm) -> Result<Self, ()> {
+    fn try_from(term: GroundTerm) -> Result<Self, Self::Error> {
         match term {
             GroundTerm::NamedNode(t) => Ok(t.into()),
             GroundTerm::Literal(_) => Err(()),
@@ -125,7 +125,7 @@ impl TryFrom<Term> for GroundTerm {
     type Error = ();
 
     #[inline]
-    fn try_from(term: Term) -> Result<Self, ()> {
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
         match term {
             Term::NamedNode(t) => Ok(t.into()),
             Term::BlankNode(_) => Err(()),
@@ -171,7 +171,7 @@ impl TryFrom<Triple> for GroundTriple {
     type Error = ();
 
     #[inline]
-    fn try_from(triple: Triple) -> Result<Self, ()> {
+    fn try_from(triple: Triple) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: triple.subject.try_into()?,
             predicate: triple.predicate,
@@ -221,7 +221,7 @@ impl TryFrom<GraphNamePattern> for GraphName {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: GraphNamePattern) -> Result<Self, ()> {
+    fn try_from(pattern: GraphNamePattern) -> Result<Self, Self::Error> {
         match pattern {
             GraphNamePattern::NamedNode(t) => Ok(t.into()),
             GraphNamePattern::DefaultGraph => Ok(Self::DefaultGraph),
@@ -295,7 +295,7 @@ impl TryFrom<QuadPattern> for Quad {
     type Error = ();
 
     #[inline]
-    fn try_from(quad: QuadPattern) -> Result<Self, ()> {
+    fn try_from(quad: QuadPattern) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: quad.subject.try_into()?,
             predicate: quad.predicate.try_into()?,
@@ -370,7 +370,7 @@ impl TryFrom<Quad> for GroundQuad {
     type Error = ();
 
     #[inline]
-    fn try_from(quad: Quad) -> Result<Self, ()> {
+    fn try_from(quad: Quad) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: quad.subject.try_into()?,
             predicate: quad.predicate,
@@ -425,7 +425,7 @@ impl TryFrom<NamedNodePattern> for NamedNode {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: NamedNodePattern) -> Result<Self, ()> {
+    fn try_from(pattern: NamedNodePattern) -> Result<Self, Self::Error> {
         match pattern {
             NamedNodePattern::NamedNode(t) => Ok(t),
             NamedNodePattern::Variable(_) => Err(()),
@@ -559,7 +559,7 @@ impl TryFrom<TermPattern> for Subject {
     type Error = ();
 
     #[inline]
-    fn try_from(term: TermPattern) -> Result<Self, ()> {
+    fn try_from(term: TermPattern) -> Result<Self, Self::Error> {
         match term {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
@@ -574,7 +574,7 @@ impl TryFrom<TermPattern> for Term {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
+    fn try_from(pattern: TermPattern) -> Result<Self, Self::Error> {
         match pattern {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
@@ -686,7 +686,7 @@ impl TryFrom<TermPattern> for GroundTermPattern {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
+    fn try_from(pattern: TermPattern) -> Result<Self, Self::Error> {
         Ok(match pattern {
             TermPattern::NamedNode(named_node) => named_node.into(),
             TermPattern::BlankNode(_) => return Err(()),
@@ -828,7 +828,7 @@ impl TryFrom<TriplePattern> for Triple {
     type Error = ();
 
     #[inline]
-    fn try_from(triple: TriplePattern) -> Result<Self, ()> {
+    fn try_from(triple: TriplePattern) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: triple.subject.try_into()?,
             predicate: triple.predicate.try_into()?,
@@ -1000,7 +1000,7 @@ impl TryFrom<QuadPattern> for GroundQuadPattern {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: QuadPattern) -> Result<Self, ()> {
+    fn try_from(pattern: QuadPattern) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: pattern.subject.try_into()?,
             predicate: pattern.predicate,

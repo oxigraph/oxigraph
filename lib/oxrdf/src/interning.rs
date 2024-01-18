@@ -510,8 +510,8 @@ struct IdentityHasherBuilder;
 impl BuildHasher for IdentityHasherBuilder {
     type Hasher = IdentityHasher;
 
-    fn build_hasher(&self) -> IdentityHasher {
-        IdentityHasher::default()
+    fn build_hasher(&self) -> Self::Hasher {
+        Self::Hasher::default()
     }
 }
 

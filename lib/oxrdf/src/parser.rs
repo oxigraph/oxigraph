@@ -25,10 +25,10 @@ impl FromStr for NamedNode {
     ///
     /// assert_eq!(NamedNode::from_str("<http://example.com>").unwrap(), NamedNode::new("http://example.com").unwrap())
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_named_node(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Named node serialization should end with a >",
             ));
         }
@@ -47,10 +47,10 @@ impl FromStr for BlankNode {
     ///
     /// assert_eq!(BlankNode::from_str("_:ex").unwrap(), BlankNode::new("ex").unwrap())
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_blank_node(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Blank node serialization should not contain whitespaces",
             ));
         }
@@ -75,10 +75,10 @@ impl FromStr for Literal {
     /// assert_eq!(Literal::from_str("-122.23").unwrap(), Literal::new_typed_literal("-122.23", xsd::DECIMAL));
     /// assert_eq!(Literal::from_str("-122e+1").unwrap(), Literal::new_typed_literal("-122e+1", xsd::DOUBLE));
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_literal(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg("Invalid literal serialization"));
+            return Err(Self::Err::msg("Invalid literal serialization"));
         }
         Ok(term)
     }
@@ -100,10 +100,10 @@ impl FromStr for Term {
     ///     Literal::new_simple_literal("o")
     /// ).into());
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_term(s, 0)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg("Invalid term serialization"));
+            return Err(Self::Err::msg("Invalid term serialization"));
         }
         Ok(term)
     }
@@ -120,13 +120,13 @@ impl FromStr for Variable {
     ///
     /// assert_eq!(Variable::from_str("$foo").unwrap(), Variable::new("foo").unwrap())
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with('?') && !s.starts_with('$') {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Variable serialization should start with ? or $",
             ));
         }
-        Self::new(&s[1..]).map_err(|error| TermParseError {
+        Self::new(&s[1..]).map_err(|error| Self::Err {
             kind: TermParseErrorKind::Variable {
                 value: s.to_owned(),
                 error,

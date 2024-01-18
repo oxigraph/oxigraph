@@ -19,10 +19,10 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::NTriplesParser;
 ///
-/// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-/// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-/// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+/// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -76,10 +76,10 @@ impl NTriplesParser {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxttl::NTriplesParser;
     ///
-    /// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-    /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-    /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+    /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
@@ -107,10 +107,10 @@ impl NTriplesParser {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-    /// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-    /// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+    /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
@@ -191,10 +191,10 @@ impl NTriplesParser {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::NTriplesParser;
 ///
-/// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-/// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-/// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+/// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -215,7 +215,7 @@ pub struct FromReadNTriplesReader<R: Read> {
 impl<R: Read> Iterator for FromReadNTriplesReader<R> {
     type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(self.inner.next()?.map(Into::into))
     }
 }
@@ -229,10 +229,10 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), oxttl::ParseError> {
-/// let file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-/// <http://example.com/foo> <http://schema.org/name> \"Foo\" .
+/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
-/// <http://example.com/bar> <http://schema.org/name> \"Bar\" .";
+/// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
@@ -565,7 +565,7 @@ mod tests {
     fn unchecked_parsing() {
         let triples = NTriplesParser::new()
             .unchecked()
-            .parse_read("<foo> <bar> \"baz\"@toolonglangtag .".as_bytes())
+            .parse_read(r#"<foo> <bar> "baz"@toolonglangtag ."#.as_bytes())
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert_eq!(

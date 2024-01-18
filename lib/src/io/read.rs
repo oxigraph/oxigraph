@@ -95,7 +95,7 @@ pub struct TripleReader<R: Read> {
 impl<R: Read> Iterator for TripleReader<R> {
     type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(self.parser.next()?.map(Into::into).map_err(Into::into))
     }
 }
@@ -184,7 +184,7 @@ pub struct QuadReader<R: Read> {
 impl<R: Read> Iterator for QuadReader<R> {
     type Item = Result<Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(self.parser.next()?.map_err(Into::into))
     }
 }

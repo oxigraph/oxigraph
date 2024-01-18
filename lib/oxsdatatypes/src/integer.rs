@@ -228,7 +228,7 @@ impl FromStr for Integer {
     type Err = ParseIntError;
 
     #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseIntError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(i64::from_str(input)?.into())
     }
 }
@@ -244,7 +244,7 @@ impl TryFrom<Float> for Integer {
     type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Float) -> Result<Self, TooLargeForIntegerError> {
+    fn try_from(value: Float) -> Result<Self, Self::Error> {
         Decimal::try_from(value)
             .map_err(|_| TooLargeForIntegerError)?
             .try_into()
@@ -255,7 +255,7 @@ impl TryFrom<Double> for Integer {
     type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Double) -> Result<Self, TooLargeForIntegerError> {
+    fn try_from(value: Double) -> Result<Self, Self::Error> {
         Decimal::try_from(value)
             .map_err(|_| TooLargeForIntegerError)?
             .try_into()

@@ -256,7 +256,7 @@ impl TryFrom<Date> for DateTime {
     type Error = DateTimeOverflowError;
 
     #[inline]
-    fn try_from(date: Date) -> Result<Self, DateTimeOverflowError> {
+    fn try_from(date: Date) -> Result<Self, Self::Error> {
         Self::new(
             date.year(),
             date.month(),
@@ -272,7 +272,7 @@ impl TryFrom<Date> for DateTime {
 impl FromStr for DateTime {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, date_time_lexical_rep)
     }
 }
@@ -528,7 +528,7 @@ impl From<DateTime> for Time {
 impl FromStr for Time {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, time_lexical_rep)
     }
 }
@@ -762,7 +762,7 @@ impl TryFrom<DateTime> for Date {
     type Error = DateTimeOverflowError;
 
     #[inline]
-    fn try_from(date_time: DateTime) -> Result<Self, DateTimeOverflowError> {
+    fn try_from(date_time: DateTime) -> Result<Self, Self::Error> {
         Self::new(
             date_time.year(),
             date_time.month(),
@@ -775,7 +775,7 @@ impl TryFrom<DateTime> for Date {
 impl FromStr for Date {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, date_lexical_rep)
     }
 }
@@ -896,7 +896,7 @@ impl TryFrom<DateTime> for GYearMonth {
     type Error = DateTimeOverflowError;
 
     #[inline]
-    fn try_from(date_time: DateTime) -> Result<Self, DateTimeOverflowError> {
+    fn try_from(date_time: DateTime) -> Result<Self, Self::Error> {
         Self::new(
             date_time.year(),
             date_time.month(),
@@ -917,7 +917,7 @@ impl From<Date> for GYearMonth {
 impl FromStr for GYearMonth {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, g_year_month_lexical_rep)
     }
 }
@@ -1031,7 +1031,7 @@ impl TryFrom<DateTime> for GYear {
     type Error = DateTimeOverflowError;
 
     #[inline]
-    fn try_from(date_time: DateTime) -> Result<Self, DateTimeOverflowError> {
+    fn try_from(date_time: DateTime) -> Result<Self, Self::Error> {
         Self::new(date_time.year(), date_time.timezone_offset())
     }
 }
@@ -1041,7 +1041,7 @@ impl TryFrom<Date> for GYear {
     type Error = DateTimeOverflowError;
 
     #[inline]
-    fn try_from(date: Date) -> Result<Self, DateTimeOverflowError> {
+    fn try_from(date: Date) -> Result<Self, Self::Error> {
         Self::new(date.year(), date.timezone_offset())
     }
 }
@@ -1050,7 +1050,7 @@ impl TryFrom<GYearMonth> for GYear {
     type Error = DateTimeOverflowError;
 
     #[inline]
-    fn try_from(year_month: GYearMonth) -> Result<Self, DateTimeOverflowError> {
+    fn try_from(year_month: GYearMonth) -> Result<Self, Self::Error> {
         Self::new(year_month.year(), year_month.timezone_offset())
     }
 }
@@ -1058,7 +1058,7 @@ impl TryFrom<GYearMonth> for GYear {
 impl FromStr for GYear {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, g_year_lexical_rep)
     }
 }
@@ -1186,7 +1186,7 @@ impl From<Date> for GMonthDay {
 impl FromStr for GMonthDay {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, g_month_day_lexical_rep)
     }
 }
@@ -1315,7 +1315,7 @@ impl From<GMonthDay> for GMonth {
 impl FromStr for GMonth {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, g_month_lexical_rep)
     }
 }
@@ -1436,7 +1436,7 @@ impl From<GMonthDay> for GDay {
 impl FromStr for GDay {
     type Err = ParseDateTimeError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDateTimeError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         ensure_complete(input, g_day_lexical_rep)
     }
 }
@@ -1499,18 +1499,18 @@ impl TryFrom<DayTimeDuration> for TimezoneOffset {
     type Error = InvalidTimezoneError;
 
     #[inline]
-    fn try_from(value: DayTimeDuration) -> Result<Self, InvalidTimezoneError> {
+    fn try_from(value: DayTimeDuration) -> Result<Self, Self::Error> {
         let offset_in_minutes = value.minutes() + value.hours() * 60;
         let result = Self::new(
             offset_in_minutes
                 .try_into()
-                .map_err(|_| InvalidTimezoneError { offset_in_minutes })?,
+                .map_err(|_| Self::Error { offset_in_minutes })?,
         )?;
         if DayTimeDuration::from(result) == value {
             Ok(result)
         } else {
             // The value is not an integral number of minutes or overflow problems
-            Err(InvalidTimezoneError { offset_in_minutes })
+            Err(Self::Error { offset_in_minutes })
         }
     }
 }
@@ -1519,9 +1519,9 @@ impl TryFrom<Duration> for TimezoneOffset {
     type Error = InvalidTimezoneError;
 
     #[inline]
-    fn try_from(value: Duration) -> Result<Self, InvalidTimezoneError> {
+    fn try_from(value: Duration) -> Result<Self, Self::Error> {
         DayTimeDuration::try_from(value)
-            .map_err(|_| InvalidTimezoneError {
+            .map_err(|_| Self::Error {
                 offset_in_minutes: 0,
             })?
             .try_into()
@@ -2426,7 +2426,7 @@ impl Error for DateTimeOverflowError {}
 
 impl From<DateTimeOverflowError> for ParseDateTimeError {
     fn from(error: DateTimeOverflowError) -> Self {
-        ParseDateTimeError {
+        Self {
             kind: ParseDateTimeErrorKind::Overflow(error),
         }
     }

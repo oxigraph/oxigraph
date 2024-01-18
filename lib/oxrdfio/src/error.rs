@@ -42,7 +42,7 @@ impl Error for ParseError {
 impl From<oxttl::SyntaxError> for SyntaxError {
     #[inline]
     fn from(error: oxttl::SyntaxError) -> Self {
-        SyntaxError {
+        Self {
             inner: SyntaxErrorKind::Turtle(error),
         }
     }
@@ -61,7 +61,7 @@ impl From<oxttl::ParseError> for ParseError {
 impl From<oxrdfxml::SyntaxError> for SyntaxError {
     #[inline]
     fn from(error: oxrdfxml::SyntaxError) -> Self {
-        SyntaxError {
+        Self {
             inner: SyntaxErrorKind::RdfXml(error),
         }
     }
@@ -166,7 +166,7 @@ impl From<SyntaxError> for io::Error {
         match error.inner {
             SyntaxErrorKind::Turtle(error) => error.into(),
             SyntaxErrorKind::RdfXml(error) => error.into(),
-            SyntaxErrorKind::Msg { msg } => io::Error::new(io::ErrorKind::InvalidData, msg),
+            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }

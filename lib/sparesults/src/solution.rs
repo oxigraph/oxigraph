@@ -130,7 +130,7 @@ impl<'a> IntoIterator for &'a QuerySolution {
     type IntoIter = Iter<'a>;
 
     #[inline]
-    fn into_iter(self) -> Iter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         Iter {
             inner: self.variables.iter().zip(&self.values),
         }
@@ -142,7 +142,7 @@ impl Index<usize> for QuerySolution {
 
     #[allow(clippy::panic)]
     #[inline]
-    fn index(&self, index: usize) -> &Term {
+    fn index(&self, index: usize) -> &Self::Output {
         self.get(index)
             .unwrap_or_else(|| panic!("The column {index} is not set in this solution"))
     }
@@ -153,7 +153,7 @@ impl Index<&str> for QuerySolution {
 
     #[allow(clippy::panic)]
     #[inline]
-    fn index(&self, index: &str) -> &Term {
+    fn index(&self, index: &str) -> &Self::Output {
         self.get(index)
             .unwrap_or_else(|| panic!("The variable ?{index} is not set in this solution"))
     }
@@ -164,7 +164,7 @@ impl Index<VariableRef<'_>> for QuerySolution {
 
     #[allow(clippy::panic)]
     #[inline]
-    fn index(&self, index: VariableRef<'_>) -> &Term {
+    fn index(&self, index: VariableRef<'_>) -> &Self::Output {
         self.get(index)
             .unwrap_or_else(|| panic!("The variable {index} is not set in this solution"))
     }
@@ -173,7 +173,7 @@ impl Index<Variable> for QuerySolution {
     type Output = Term;
 
     #[inline]
-    fn index(&self, index: Variable) -> &Term {
+    fn index(&self, index: Variable) -> &Self::Output {
         self.index(index.as_ref())
     }
 }
@@ -182,7 +182,7 @@ impl Index<&Variable> for QuerySolution {
     type Output = Term;
 
     #[inline]
-    fn index(&self, index: &Variable) -> &Term {
+    fn index(&self, index: &Variable) -> &Self::Output {
         self.index(index.as_ref())
     }
 }
@@ -228,7 +228,7 @@ impl<'a> Iterator for Iter<'a> {
     type Item = (&'a Variable, &'a Term);
 
     #[inline]
-    fn next(&mut self) -> Option<(&'a Variable, &'a Term)> {
+    fn next(&mut self) -> Option<Self::Item> {
         for (variable, value) in &mut self.inner {
             if let Some(value) = value {
                 return Some((variable, value));

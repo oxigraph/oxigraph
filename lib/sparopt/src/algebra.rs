@@ -364,25 +364,25 @@ impl Expression {
 
     fn returns_boolean(&self) -> bool {
         match self {
-            Expression::Or(_)
-            | Expression::And(_)
-            | Expression::Equal(_, _)
-            | Expression::SameTerm(_, _)
-            | Expression::Greater(_, _)
-            | Expression::GreaterOrEqual(_, _)
-            | Expression::Less(_, _)
-            | Expression::LessOrEqual(_, _)
-            | Expression::Not(_)
-            | Expression::Exists(_)
-            | Expression::Bound(_)
-            | Expression::FunctionCall(
+            Self::Or(_)
+            | Self::And(_)
+            | Self::Equal(_, _)
+            | Self::SameTerm(_, _)
+            | Self::Greater(_, _)
+            | Self::GreaterOrEqual(_, _)
+            | Self::Less(_, _)
+            | Self::LessOrEqual(_, _)
+            | Self::Not(_)
+            | Self::Exists(_)
+            | Self::Bound(_)
+            | Self::FunctionCall(
                 Function::IsBlank | Function::IsIri | Function::IsLiteral | Function::IsNumeric,
                 _,
             ) => true,
             #[cfg(feature = "rdf-star")]
-            Expression::FunctionCall(Function::IsTriple, _) => true,
-            Expression::Literal(literal) => literal.datatype() == xsd::BOOLEAN,
-            Expression::If(_, a, b) => a.returns_boolean() && b.returns_boolean(),
+            Self::FunctionCall(Function::IsTriple, _) => true,
+            Self::Literal(literal) => literal.datatype() == xsd::BOOLEAN,
+            Self::If(_, a, b) => a.returns_boolean() && b.returns_boolean(),
             _ => false,
         }
     }
@@ -847,7 +847,7 @@ impl GraphPattern {
             }
         }
         if all.is_empty() {
-            GraphPattern::empty()
+            Self::empty()
         } else {
             Self::Union {
                 inner: order_vec(all),

@@ -927,7 +927,7 @@ impl<'a> IntoIterator for &'a Dataset {
     type Item = QuadRef<'a>;
     type IntoIter = Iter<'a>;
 
-    fn into_iter(self) -> Iter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1285,7 +1285,7 @@ impl<'a> IntoIterator for GraphView<'a> {
     type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
 
-    fn into_iter(self) -> GraphViewIter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1294,7 +1294,7 @@ impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
     type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
 
-    fn into_iter(self) -> GraphViewIter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1496,7 +1496,7 @@ impl<'a> IntoIterator for &'a GraphViewMut<'a> {
     type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
 
-    fn into_iter(self) -> GraphViewIter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1527,7 +1527,7 @@ pub struct Iter<'a> {
 impl<'a> Iterator for Iter<'a> {
     type Item = QuadRef<'a>;
 
-    fn next(&mut self) -> Option<QuadRef<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
             .map(|(s, p, o, g)| self.dataset.decode_spog((s, p, o, g)))
@@ -1551,7 +1551,7 @@ pub struct GraphViewIter<'a> {
 impl<'a> Iterator for GraphViewIter<'a> {
     type Item = TripleRef<'a>;
 
-    fn next(&mut self) -> Option<TripleRef<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
             .map(|(_, s, p, o)| self.dataset.decode_spo((s, p, o)))

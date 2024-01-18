@@ -176,7 +176,7 @@ impl TryFrom<StdDuration> for Duration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: StdDuration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: StdDuration) -> Result<Self, Self::Error> {
         Ok(DayTimeDuration::try_from(value)?.into())
     }
 }
@@ -184,10 +184,10 @@ impl TryFrom<StdDuration> for Duration {
 impl FromStr for Duration {
     type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.year_month.is_none() && parts.day_time.is_none() {
-            return Err(ParseDurationError::msg("Empty duration"));
+            return Err(Self::Err::msg("Empty duration"));
         }
         Ok(Self::new(
             parts.year_month.unwrap_or(0),
@@ -394,7 +394,7 @@ impl TryFrom<Duration> for YearMonthDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: Duration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: Duration) -> Result<Self, Self::Error> {
         if value.day_time == DayTimeDuration::default() {
             Ok(value.year_month)
         } else {
@@ -406,16 +406,18 @@ impl TryFrom<Duration> for YearMonthDuration {
 impl FromStr for YearMonthDuration {
     type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.day_time.is_some() {
-            return Err(ParseDurationError::msg(
+            return Err(Self::Err::msg(
                 "There must not be any day or time component in a yearMonthDuration",
             ));
         }
-        Ok(Self::new(parts.year_month.ok_or(
-            ParseDurationError::msg("No year and month values found"),
-        )?))
+        Ok(Self::new(
+            parts
+                .year_month
+                .ok_or(Self::Err::msg("No year and month values found"))?,
+        ))
     }
 }
 
@@ -580,7 +582,7 @@ impl TryFrom<Duration> for DayTimeDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: Duration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: Duration) -> Result<Self, Self::Error> {
         if value.year_month == YearMonthDuration::default() {
             Ok(value.day_time)
         } else {
@@ -593,7 +595,7 @@ impl TryFrom<StdDuration> for DayTimeDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: StdDuration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: StdDuration) -> Result<Self, Self::Error> {
         Ok(Self {
             seconds: Decimal::new(
                 i128::try_from(value.as_nanos()).map_err(|_| DurationOverflowError)?,
@@ -608,7 +610,7 @@ impl TryFrom<DayTimeDuration> for StdDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: DayTimeDuration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: DayTimeDuration) -> Result<Self, Self::Error> {
         if value.seconds.is_negative() {
             return Err(DurationOverflowError);
         }
@@ -621,7 +623,7 @@ impl TryFrom<DayTimeDuration> for StdDuration {
             .ok_or(DurationOverflowError)?
             .checked_floor()
             .ok_or(DurationOverflowError)?;
-        Ok(StdDuration::new(
+        Ok(Self::new(
             secs.as_i128()
                 .try_into()
                 .map_err(|_| DurationOverflowError)?,
@@ -636,16 +638,18 @@ impl TryFrom<DayTimeDuration> for StdDuration {
 impl FromStr for DayTimeDuration {
     type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.year_month.is_some() {
-            return Err(ParseDurationError::msg(
+            return Err(Self::Err::msg(
                 "There must not be any year or month component in a dayTimeDuration",
             ));
         }
-        Ok(Self::new(parts.day_time.ok_or(ParseDurationError::msg(
-            "No day or time values found",
-        ))?))
+        Ok(Self::new(
+            parts
+                .day_time
+                .ok_or(Self::Err::msg("No day or time values found"))?,
+        ))
     }
 }
 
@@ -973,7 +977,7 @@ impl fmt::Display for DurationOverflowError {
 
 impl Error for DurationOverflowError {}
 
-/// The year-month and the day-time components of a [`Duration\] have an opposite sign.
+/// The year-month and the day-time components of a [`Duration`] have an opposite sign.
 #[derive(Debug, Clone, Copy)]
 pub struct OppositeSignInDurationComponentsError;
 

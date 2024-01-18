@@ -43,7 +43,7 @@ impl QueryResults {
     ///
     /// let mut results = Vec::new();
     /// store.query("SELECT ?s WHERE { ?s ?p ?o }")?.write(&mut results, QueryResultsFormat::Json)?;
-    /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
+    /// assert_eq!(results, r#"{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"}}]}}"#.as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write(
@@ -221,7 +221,7 @@ impl Iterator for QuerySolutionIter {
     type Item = Result<QuerySolution, EvaluationError>;
 
     #[inline]
-    fn next(&mut self) -> Option<Result<QuerySolution, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 
@@ -253,7 +253,7 @@ impl Iterator for QueryTripleIter {
     type Item = Result<Triple, EvaluationError>;
 
     #[inline]
-    fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 

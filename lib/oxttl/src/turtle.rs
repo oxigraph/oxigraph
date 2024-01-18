@@ -24,12 +24,12 @@ use tokio::io::{AsyncRead, AsyncWrite};
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::TurtleParser;
 ///
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -102,12 +102,12 @@ impl TurtleParser {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxttl::TurtleParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .
+    ///     schema:name "Foo" .
     /// <bar> a schema:Person ;
-    ///     schema:name \"Bar\" .";
+    ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
@@ -135,12 +135,12 @@ impl TurtleParser {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .
+    ///     schema:name "Foo" .
     /// <bar> a schema:Person ;
-    ///     schema:name \"Bar\" .";
+    ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
@@ -222,12 +222,12 @@ impl TurtleParser {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::TurtleParser;
 ///
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -255,10 +255,10 @@ impl<R: Read> FromReadTurtleReader<R> {
     /// ```
     /// use oxttl::TurtleParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse_read(file.as_ref());
     /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
@@ -276,10 +276,10 @@ impl<R: Read> FromReadTurtleReader<R> {
     /// ```
     /// use oxttl::TurtleParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse_read(file.as_ref());
     /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
@@ -302,7 +302,7 @@ impl<R: Read> FromReadTurtleReader<R> {
 impl<R: Read> Iterator for FromReadTurtleReader<R> {
     type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(self.inner.next()?.map(Into::into))
     }
 }
@@ -316,12 +316,12 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), oxttl::ParseError> {
-/// let file = b"@base <http://example.com/> .
+/// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
-///     schema:name \"Foo\" .
+///     schema:name "Foo" .
 /// <bar> a schema:Person ;
-///     schema:name \"Bar\" .";
+///     schema:name "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
@@ -360,10 +360,10 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse_tokio_async_read(file.as_ref());
     /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
@@ -384,10 +384,10 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxttl::ParseError> {
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse_tokio_async_read(file.as_ref());
     /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
@@ -483,10 +483,10 @@ impl LowLevelTurtleReader {
     /// ```
     /// use oxttl::TurtleParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse();
     /// reader.extend_from_slice(file);
@@ -505,10 +505,10 @@ impl LowLevelTurtleReader {
     /// ```
     /// use oxttl::TurtleParser;
     ///
-    /// let file = b"@base <http://example.com/> .
+    /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
-    ///     schema:name \"Foo\" .";
+    ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse();
     /// reader.extend_from_slice(file);

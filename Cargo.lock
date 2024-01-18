@@ -1033,7 +1033,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.4.0-alpha.2"
+version = "0.4.0-alpha.3-dev"
 dependencies = [
  "codspeed-criterion-compat",
  "digest",
@@ -1063,7 +1063,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.4.0-alpha.2"
+version = "0.4.0-alpha.3-dev"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.4.0-alpha.2"
+version = "0.4.0-alpha.3-dev"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1129,7 +1129,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfio"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2-dev"
 dependencies = [
  "oxrdf",
  "oxrdfxml",
@@ -1150,7 +1150,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.4.0-alpha.2"
+version = "0.4.0-alpha.3-dev"
 dependencies = [
  "bindgen",
  "cc",
@@ -1167,7 +1167,7 @@ dependencies = [
 
 [[package]]
 name = "oxttl"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2-dev"
 dependencies = [
  "memchr",
  "oxilangtag",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.4.0-alpha.2"
+version = "0.4.0-alpha.3-dev"
 dependencies = [
  "oxigraph",
  "pyo3",

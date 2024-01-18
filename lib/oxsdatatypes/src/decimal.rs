@@ -361,7 +361,7 @@ impl TryFrom<i128> for Decimal {
     type Error = TooLargeForDecimalError;
 
     #[inline]
-    fn try_from(value: i128) -> Result<Self, TooLargeForDecimalError> {
+    fn try_from(value: i128) -> Result<Self, Self::Error> {
         Ok(Self {
             value: value
                 .checked_mul(DECIMAL_PART_POW)
@@ -374,7 +374,7 @@ impl TryFrom<u128> for Decimal {
     type Error = TooLargeForDecimalError;
 
     #[inline]
-    fn try_from(value: u128) -> Result<Self, TooLargeForDecimalError> {
+    fn try_from(value: u128) -> Result<Self, Self::Error> {
         Ok(Self {
             value: i128::try_from(value)
                 .map_err(|_| TooLargeForDecimalError)?
@@ -395,7 +395,7 @@ impl TryFrom<Float> for Decimal {
     type Error = TooLargeForDecimalError;
 
     #[inline]
-    fn try_from(value: Float) -> Result<Self, TooLargeForDecimalError> {
+    fn try_from(value: Float) -> Result<Self, Self::Error> {
         Double::from(value).try_into()
     }
 }
@@ -405,7 +405,7 @@ impl TryFrom<Double> for Decimal {
 
     #[inline]
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-    fn try_from(value: Double) -> Result<Self, TooLargeForDecimalError> {
+    fn try_from(value: Double) -> Result<Self, Self::Error> {
         let shifted = f64::from(value) * (DECIMAL_PART_POW as f64);
         if (i128::MIN as f64) <= shifted && shifted <= (i128::MAX as f64) {
             Ok(Self {
@@ -448,7 +448,7 @@ impl TryFrom<Decimal> for Integer {
     type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Decimal) -> Result<Self, TooLargeForIntegerError> {
+    fn try_from(value: Decimal) -> Result<Self, Self::Error> {
         Ok(i64::try_from(
             value
                 .value
@@ -464,7 +464,7 @@ impl FromStr for Decimal {
     type Err = ParseDecimalError;
 
     /// Parses decimals lexical mapping
-    fn from_str(input: &str) -> Result<Self, ParseDecimalError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         // (\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)
         let input = input.as_bytes();
         if input.is_empty() {
