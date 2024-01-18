@@ -1,8 +1,6 @@
 #! /usr/bin/env node
 
 const fs = require("fs");
-
-
 const pkg = JSON.parse(fs.readFileSync("./pkg/package.json"));
 pkg.name = "oxigraph";
 pkg.main = "node.js";
