@@ -3892,9 +3892,9 @@ impl TupleSelector {
 
     fn get_pattern_value(&self, tuple: &EncodedTuple) -> Option<EncodedTerm> {
         match self {
-            TupleSelector::Constant(c) => Some(c.clone()),
-            TupleSelector::Variable(v) => tuple.get(*v).cloned(),
-            TupleSelector::TriplePattern(triple) => Some(
+            Self::Constant(c) => Some(c.clone()),
+            Self::Variable(v) => tuple.get(*v).cloned(),
+            Self::TriplePattern(triple) => Some(
                 EncodedTriple {
                     subject: triple.subject.get_pattern_value(tuple)?,
                     predicate: triple.predicate.get_pattern_value(tuple)?,

@@ -72,7 +72,7 @@ impl Error for SyntaxError {}
 impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
-        io::Error::new(io::ErrorKind::InvalidData, error)
+        Self::new(io::ErrorKind::InvalidData, error)
     }
 }
 

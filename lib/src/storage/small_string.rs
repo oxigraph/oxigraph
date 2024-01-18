@@ -153,10 +153,10 @@ impl FromStr for SmallString {
             inner[15] = value
                 .len()
                 .try_into()
-                .map_err(|_| BadSmallStringError::TooLong(value.len()))?;
+                .map_err(|_| Self::Err::TooLong(value.len()))?;
             Ok(Self { inner })
         } else {
-            Err(BadSmallStringError::TooLong(value.len()))
+            Err(Self::Err::TooLong(value.len()))
         }
     }
 }

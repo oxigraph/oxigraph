@@ -187,7 +187,7 @@ impl FromStr for Duration {
     fn from_str(input: &str) -> Result<Self, ParseDurationError> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.year_month.is_none() && parts.day_time.is_none() {
-            return Err(ParseDurationError::msg("Empty duration"));
+            return Err(Self::Err::msg("Empty duration"));
         }
         Ok(Self::new(
             parts.year_month.unwrap_or(0),
@@ -409,13 +409,15 @@ impl FromStr for YearMonthDuration {
     fn from_str(input: &str) -> Result<Self, ParseDurationError> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.day_time.is_some() {
-            return Err(ParseDurationError::msg(
+            return Err(Self::Err::msg(
                 "There must not be any day or time component in a yearMonthDuration",
             ));
         }
-        Ok(Self::new(parts.year_month.ok_or(
-            ParseDurationError::msg("No year and month values found"),
-        )?))
+        Ok(Self::new(
+            parts
+                .year_month
+                .ok_or(Self::Err::msg("No year and month values found"))?,
+        ))
     }
 }
 
@@ -621,7 +623,7 @@ impl TryFrom<DayTimeDuration> for StdDuration {
             .ok_or(DurationOverflowError)?
             .checked_floor()
             .ok_or(DurationOverflowError)?;
-        Ok(StdDuration::new(
+        Ok(Self::new(
             secs.as_i128()
                 .try_into()
                 .map_err(|_| DurationOverflowError)?,
@@ -639,13 +641,15 @@ impl FromStr for DayTimeDuration {
     fn from_str(input: &str) -> Result<Self, ParseDurationError> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.year_month.is_some() {
-            return Err(ParseDurationError::msg(
+            return Err(Self::Err::msg(
                 "There must not be any year or month component in a dayTimeDuration",
             ));
         }
-        Ok(Self::new(parts.day_time.ok_or(ParseDurationError::msg(
-            "No day or time values found",
-        ))?))
+        Ok(Self::new(
+            parts
+                .day_time
+                .ok_or(Self::Err::msg("No day or time values found"))?,
+        ))
     }
 }
 

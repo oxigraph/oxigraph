@@ -844,7 +844,7 @@ impl TriGRecognizer {
                 true,
                 Some(b"#"),
             ),
-            TriGRecognizer {
+            Self {
                 stack: vec![TriGState::TriGDoc],
                 cur_subject: Vec::new(),
                 cur_predicate: Vec::new(),
