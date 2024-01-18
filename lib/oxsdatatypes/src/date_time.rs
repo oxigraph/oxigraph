@@ -1504,13 +1504,13 @@ impl TryFrom<DayTimeDuration> for TimezoneOffset {
         let result = Self::new(
             offset_in_minutes
                 .try_into()
-                .map_err(|_| InvalidTimezoneError { offset_in_minutes })?,
+                .map_err(|_| Self::Error { offset_in_minutes })?,
         )?;
         if DayTimeDuration::from(result) == value {
             Ok(result)
         } else {
             // The value is not an integral number of minutes or overflow problems
-            Err(InvalidTimezoneError { offset_in_minutes })
+            Err(Self::Error { offset_in_minutes })
         }
     }
 }
@@ -1521,7 +1521,7 @@ impl TryFrom<Duration> for TimezoneOffset {
     #[inline]
     fn try_from(value: Duration) -> Result<Self, Self::Error> {
         DayTimeDuration::try_from(value)
-            .map_err(|_| InvalidTimezoneError {
+            .map_err(|_| Self::Error {
                 offset_in_minutes: 0,
             })?
             .try_into()
@@ -2426,7 +2426,7 @@ impl Error for DateTimeOverflowError {}
 
 impl From<DateTimeOverflowError> for ParseDateTimeError {
     fn from(error: DateTimeOverflowError) -> Self {
-        ParseDateTimeError {
+        Self {
             kind: ParseDateTimeErrorKind::Overflow(error),
         }
     }

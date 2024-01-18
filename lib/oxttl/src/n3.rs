@@ -1214,7 +1214,7 @@ impl N3Recognizer {
                 true,
                 Some(b"#"),
             ),
-            N3Recognizer {
+            Self {
                 stack: vec![N3State::N3Doc],
                 terms: Vec::new(),
                 predicates: Vec::new(),

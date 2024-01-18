@@ -179,7 +179,7 @@ impl From<LoaderError> for io::Error {
             LoaderError::Storage(error) => error.into(),
             LoaderError::Parsing(error) => error.into(),
             LoaderError::InvalidBaseIri { .. } => {
-                io::Error::new(io::ErrorKind::InvalidInput, error.to_string())
+                Self::new(io::ErrorKind::InvalidInput, error.to_string())
             }
         }
     }
@@ -242,7 +242,7 @@ impl From<SerializerError> for io::Error {
             SerializerError::Storage(error) => error.into(),
             SerializerError::Io(error) => error,
             SerializerError::DatasetFormatExpected(_) => {
-                io::Error::new(io::ErrorKind::InvalidInput, error.to_string())
+                Self::new(io::ErrorKind::InvalidInput, error.to_string())
             }
         }
     }

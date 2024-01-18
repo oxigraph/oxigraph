@@ -28,7 +28,7 @@ impl FromStr for NamedNode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_named_node(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Named node serialization should end with a >",
             ));
         }
@@ -50,7 +50,7 @@ impl FromStr for BlankNode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_blank_node(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Blank node serialization should not contain whitespaces",
             ));
         }
@@ -78,7 +78,7 @@ impl FromStr for Literal {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_literal(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg("Invalid literal serialization"));
+            return Err(Self::Err::msg("Invalid literal serialization"));
         }
         Ok(term)
     }
@@ -103,7 +103,7 @@ impl FromStr for Term {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_term(s, 0)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg("Invalid term serialization"));
+            return Err(Self::Err::msg("Invalid term serialization"));
         }
         Ok(term)
     }
@@ -122,11 +122,11 @@ impl FromStr for Variable {
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with('?') && !s.starts_with('$') {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Variable serialization should start with ? or $",
             ));
         }
-        Self::new(&s[1..]).map_err(|error| TermParseError {
+        Self::new(&s[1..]).map_err(|error| Self::Err {
             kind: TermParseErrorKind::Variable {
                 value: s.to_owned(),
                 error,

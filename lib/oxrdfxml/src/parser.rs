@@ -399,23 +399,23 @@ enum RdfXmlState {
 impl RdfXmlState {
     fn base_iri(&self) -> Option<&Iri<String>> {
         match self {
-            RdfXmlState::Doc { base_iri, .. }
-            | RdfXmlState::Rdf { base_iri, .. }
-            | RdfXmlState::NodeElt { base_iri, .. }
-            | RdfXmlState::PropertyElt { base_iri, .. }
-            | RdfXmlState::ParseTypeCollectionPropertyElt { base_iri, .. }
-            | RdfXmlState::ParseTypeLiteralPropertyElt { base_iri, .. } => base_iri.as_ref(),
+            Self::Doc { base_iri, .. }
+            | Self::Rdf { base_iri, .. }
+            | Self::NodeElt { base_iri, .. }
+            | Self::PropertyElt { base_iri, .. }
+            | Self::ParseTypeCollectionPropertyElt { base_iri, .. }
+            | Self::ParseTypeLiteralPropertyElt { base_iri, .. } => base_iri.as_ref(),
         }
     }
 
     fn language(&self) -> Option<&String> {
         match self {
-            RdfXmlState::Doc { .. } => None,
-            RdfXmlState::Rdf { language, .. }
-            | RdfXmlState::NodeElt { language, .. }
-            | RdfXmlState::PropertyElt { language, .. }
-            | RdfXmlState::ParseTypeCollectionPropertyElt { language, .. }
-            | RdfXmlState::ParseTypeLiteralPropertyElt { language, .. } => language.as_ref(),
+            Self::Doc { .. } => None,
+            Self::Rdf { language, .. }
+            | Self::NodeElt { language, .. }
+            | Self::PropertyElt { language, .. }
+            | Self::ParseTypeCollectionPropertyElt { language, .. }
+            | Self::ParseTypeLiteralPropertyElt { language, .. } => language.as_ref(),
         }
     }
 }
