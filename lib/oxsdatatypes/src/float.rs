@@ -179,7 +179,7 @@ impl FromStr for Float {
     type Err = ParseFloatError;
 
     #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseFloatError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(f32::from_str(input)?.into())
     }
 }

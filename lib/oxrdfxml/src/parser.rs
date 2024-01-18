@@ -212,7 +212,7 @@ pub struct FromReadRdfXmlReader<R: Read> {
 impl<R: Read> Iterator for FromReadRdfXmlReader<R> {
     type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(triple) = self.results.pop() {
                 return Some(Ok(triple));

@@ -24,7 +24,7 @@ use std::time::Duration;
 /// impl ServiceHandler for TestServiceHandler {
 ///     type Error = EvaluationError;
 ///
-///     fn handle(&self,service_name: NamedNode, query: Query) -> Result<QueryResults,EvaluationError> {
+///     fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error> {
 ///         if service_name == "http://example.com/service" {
 ///             self.store.query(query)
 ///         } else {
@@ -61,7 +61,7 @@ pub struct EmptyServiceHandler;
 impl ServiceHandler for EmptyServiceHandler {
     type Error = EvaluationError;
 
-    fn handle(&self, name: NamedNode, _: Query) -> Result<QueryResults, EvaluationError> {
+    fn handle(&self, name: NamedNode, _: Query) -> Result<QueryResults, Self::Error> {
         Err(EvaluationError::UnsupportedService(name))
     }
 }
@@ -79,11 +79,7 @@ impl<S: ServiceHandler> ErrorConversionServiceHandler<S> {
 impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
     type Error = EvaluationError;
 
-    fn handle(
-        &self,
-        service_name: NamedNode,
-        query: Query,
-    ) -> Result<QueryResults, EvaluationError> {
+    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error> {
         self.handler
             .handle(service_name, query)
             .map_err(|e| EvaluationError::Service(Box::new(e)))
@@ -105,11 +101,7 @@ impl SimpleServiceHandler {
 impl ServiceHandler for SimpleServiceHandler {
     type Error = EvaluationError;
 
-    fn handle(
-        &self,
-        service_name: NamedNode,
-        query: Query,
-    ) -> Result<QueryResults, EvaluationError> {
+    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error> {
         let (content_type, body) = self
             .client
             .post(

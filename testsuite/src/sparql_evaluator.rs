@@ -727,7 +727,7 @@ impl Drop for StoreRef {
 impl Deref for StoreRef {
     type Target = Store;
 
-    fn deref(&self) -> &Store {
+    fn deref(&self) -> &Self::Target {
         &self.store
     }
 }

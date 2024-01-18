@@ -275,7 +275,7 @@ impl fmt::Display for Query {
 impl FromStr for Query {
     type Err = ParseError;
 
-    fn from_str(query: &str) -> Result<Self, ParseError> {
+    fn from_str(query: &str) -> Result<Self, Self::Err> {
         Self::parse(query, None)
     }
 }
@@ -283,7 +283,7 @@ impl FromStr for Query {
 impl<'a> TryFrom<&'a str> for Query {
     type Error = ParseError;
 
-    fn try_from(query: &str) -> Result<Self, ParseError> {
+    fn try_from(query: &str) -> Result<Self, Self::Error> {
         Self::from_str(query)
     }
 }
@@ -291,7 +291,7 @@ impl<'a> TryFrom<&'a str> for Query {
 impl<'a> TryFrom<&'a String> for Query {
     type Error = ParseError;
 
-    fn try_from(query: &String) -> Result<Self, ParseError> {
+    fn try_from(query: &String) -> Result<Self, Self::Error> {
         Self::from_str(query)
     }
 }

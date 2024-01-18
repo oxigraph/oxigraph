@@ -70,7 +70,7 @@ impl fmt::Display for Update {
 impl FromStr for Update {
     type Err = ParseError;
 
-    fn from_str(update: &str) -> Result<Self, ParseError> {
+    fn from_str(update: &str) -> Result<Self, Self::Err> {
         Self::parse(update, None)
     }
 }
@@ -78,7 +78,7 @@ impl FromStr for Update {
 impl<'a> TryFrom<&'a str> for Update {
     type Error = ParseError;
 
-    fn try_from(update: &str) -> Result<Self, ParseError> {
+    fn try_from(update: &str) -> Result<Self, Self::Error> {
         Self::from_str(update)
     }
 }
@@ -86,7 +86,7 @@ impl<'a> TryFrom<&'a str> for Update {
 impl<'a> TryFrom<&'a String> for Update {
     type Error = ParseError;
 
-    fn try_from(update: &String) -> Result<Self, ParseError> {
+    fn try_from(update: &String) -> Result<Self, Self::Error> {
         Self::from_str(update)
     }
 }

@@ -66,7 +66,7 @@ impl FromStr for Boolean {
     type Err = ParseBoolError;
 
     #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseBoolError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(match input {
             "true" | "1" => true,
             "false" | "0" => false,

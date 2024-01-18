@@ -56,7 +56,7 @@ impl TokenRecognizer for N3Lexer {
         &mut self,
         data: &'a [u8],
         is_ending: bool,
-        options: &N3LexerOptions,
+        options: &Self::Options,
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         match *data.first()? {
             b'<' => match *data.get(1)? {

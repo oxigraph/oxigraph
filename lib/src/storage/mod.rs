@@ -814,7 +814,7 @@ impl ChainedDecodingQuadIterator {
 impl Iterator for ChainedDecodingQuadIterator {
     type Item = Result<EncodedQuad, StorageError>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         if let Some(result) = self.first.next() {
             Some(result)
         } else if let Some(second) = self.second.as_mut() {
@@ -833,7 +833,7 @@ pub struct DecodingQuadIterator {
 impl Iterator for DecodingQuadIterator {
     type Item = Result<EncodedQuad, StorageError>;
 
-    fn next(&mut self) -> Option<Result<EncodedQuad, StorageError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }
@@ -850,7 +850,7 @@ pub struct DecodingGraphIterator {
 impl Iterator for DecodingGraphIterator {
     type Item = Result<EncodedTerm, StorageError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTerm, StorageError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         if let Err(e) = self.iter.status() {
             return Some(Err(e));
         }

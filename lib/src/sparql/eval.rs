@@ -4732,7 +4732,7 @@ struct CartesianProductJoinIterator {
 impl Iterator for CartesianProductJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -4767,7 +4767,7 @@ struct HashJoinIterator {
 impl Iterator for HashJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -4806,7 +4806,7 @@ struct HashLeftJoinIterator {
 impl Iterator for HashLeftJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -4854,7 +4854,7 @@ struct ForLoopLeftJoinIterator {
 impl Iterator for ForLoopLeftJoinIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         if let Some(tuple) = self.current_right.next() {
             return Some(tuple);
         }
@@ -4881,7 +4881,7 @@ struct UnionIterator {
 impl Iterator for UnionIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(tuple) = self.current_iterator.next() {
                 return Some(tuple);
@@ -4903,7 +4903,7 @@ struct ConsecutiveDeduplication {
 impl Iterator for ConsecutiveDeduplication {
     type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         // Basic idea. We buffer the previous result and we only emit it when we kow the next one or it's the end
         loop {
             if let Some(next) = self.inner.next() {
@@ -4944,7 +4944,7 @@ struct ConstructIterator {
 impl Iterator for ConstructIterator {
     type Item = Result<Triple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(result) = self.buffered_results.pop() {
                 return Some(result);
@@ -5046,7 +5046,7 @@ struct DescribeIterator {
 impl Iterator for DescribeIterator {
     type Item = Result<Triple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(quad) = self.quads.next() {
                 return Some(match quad {
@@ -5097,7 +5097,7 @@ impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
 {
     type Item = (Option<T1>, Option<T2>);
 
-    fn next(&mut self) -> Option<(Option<T1>, Option<T2>)> {
+    fn next(&mut self) -> Option<Self::Item> {
         match (self.a.next(), self.b.next()) {
             (None, None) => None,
             r => Some(r),
@@ -5220,7 +5220,7 @@ impl<
 {
     type Item = Result<O, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<O, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(current) = &mut self.current {
                 if let Some(next) = current.next() {
@@ -5629,7 +5629,7 @@ struct StatsIterator {
 impl Iterator for StatsIterator {
     type Item = Result<EncodedTuple, EvaluationError>;
 
-    fn next(&mut self) -> Option<Result<EncodedTuple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         let start = Timer::now();
         let result = self.inner.next();
         self.stats.exec_duration.set(

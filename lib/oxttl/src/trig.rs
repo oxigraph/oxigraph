@@ -300,7 +300,7 @@ impl<R: Read> FromReadTriGReader<R> {
 impl<R: Read> Iterator for FromReadTriGReader<R> {
     type Item = Result<Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }

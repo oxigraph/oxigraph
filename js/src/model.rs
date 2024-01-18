@@ -564,7 +564,7 @@ impl From<Quad> for JsTerm {
 impl TryFrom<JsTerm> for NamedNode {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Err(format_err!(
@@ -588,7 +588,7 @@ impl TryFrom<JsTerm> for NamedNode {
 impl TryFrom<JsTerm> for NamedOrBlankNode {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
@@ -614,7 +614,7 @@ impl TryFrom<JsTerm> for NamedOrBlankNode {
 impl TryFrom<JsTerm> for Subject {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
@@ -637,7 +637,7 @@ impl TryFrom<JsTerm> for Subject {
 impl TryFrom<JsTerm> for Term {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
@@ -657,7 +657,7 @@ impl TryFrom<JsTerm> for Term {
 impl TryFrom<JsTerm> for GraphName {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),

@@ -229,7 +229,7 @@ impl<'a> IntoIterator for &'a Graph {
     type Item = TripleRef<'a>;
     type IntoIter = Iter<'a>;
 
-    fn into_iter(self) -> Iter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -276,7 +276,7 @@ pub struct Iter<'a> {
 impl<'a> Iterator for Iter<'a> {
     type Item = TripleRef<'a>;
 
-    fn next(&mut self) -> Option<TripleRef<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }
