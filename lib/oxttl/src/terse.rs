@@ -8,6 +8,7 @@ use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "rdf-star")]
 use oxrdf::Triple;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Subject, Term};
+use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 
 pub struct TriGRecognizer {
@@ -24,7 +25,13 @@ pub struct TriGRecognizerContext {
     pub with_graph_name: bool,
     #[cfg(feature = "rdf-star")]
     pub with_quoted_triples: bool,
-    pub prefixes: HashMap<String, Iri<String>>,
+    prefixes: HashMap<String, Iri<String>>,
+}
+
+impl TriGRecognizerContext {
+    pub fn prefixes(&self) -> Iter<'_, String, Iri<String>> {
+        self.prefixes.iter()
+    }
 }
 
 impl RuleRecognizer for TriGRecognizer {

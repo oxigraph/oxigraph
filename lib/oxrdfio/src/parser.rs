@@ -8,7 +8,7 @@ use oxrdfxml::FromTokioAsyncReadRdfXmlReader;
 use oxrdfxml::{FromReadRdfXmlReader, RdfXmlParser};
 #[cfg(feature = "async-tokio")]
 use oxttl::n3::FromTokioAsyncReadN3Reader;
-use oxttl::n3::{FromReadN3Reader, N3Parser, N3Quad, N3Term};
+use oxttl::n3::{FromReadN3Reader, N3Parser, N3PrefixesIter, N3Quad, N3Term};
 #[cfg(feature = "async-tokio")]
 use oxttl::nquads::FromTokioAsyncReadNQuadsReader;
 use oxttl::nquads::{FromReadNQuadsReader, NQuadsParser};
@@ -17,10 +17,10 @@ use oxttl::ntriples::FromTokioAsyncReadNTriplesReader;
 use oxttl::ntriples::{FromReadNTriplesReader, NTriplesParser};
 #[cfg(feature = "async-tokio")]
 use oxttl::trig::FromTokioAsyncReadTriGReader;
-use oxttl::trig::{FromReadTriGReader, TriGParser};
+use oxttl::trig::{FromReadTriGReader, TriGParser, TriGPrefixesIter};
 #[cfg(feature = "async-tokio")]
 use oxttl::turtle::FromTokioAsyncReadTurtleReader;
-use oxttl::turtle::{FromReadTurtleReader, TurtleParser};
+use oxttl::turtle::{FromReadTurtleReader, TurtleParser, TurtlePrefixesIter};
 use std::collections::HashMap;
 use std::io::Read;
 #[cfg(feature = "async-tokio")]
@@ -428,6 +428,77 @@ impl<R: Read> Iterator for FromReadQuadReader<R> {
     }
 }
 
+impl<R: Read> FromReadQuadReader<R> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// An empty iterator is return if the format does not support prefixes.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_read(file.as_slice());
+    /// assert!(reader.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> PrefixesIter<'_> {
+        PrefixesIter {
+            inner: match &self.parser {
+                FromReadQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
+                FromReadQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
+                FromReadQuadReaderKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
+                FromReadQuadReaderKind::NQuads(_)
+                | FromReadQuadReaderKind::NTriples(_)
+                | FromReadQuadReaderKind::RdfXml(_) => PrefixesIterKind::None, /* TODO: implement for RDF/XML */
+            },
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// `None` is returned if no base IRI is set or the format does not support base IRIs.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_read(file.as_slice());
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        match &self.parser {
+            FromReadQuadReaderKind::N3(p) => p.base_iri(),
+            FromReadQuadReaderKind::TriG(p) => p.base_iri(),
+            FromReadQuadReaderKind::Turtle(p) => p.base_iri(),
+            FromReadQuadReaderKind::NQuads(_)
+            | FromReadQuadReaderKind::NTriples(_)
+            | FromReadQuadReaderKind::RdfXml(_) => None, // TODO: implement for RDF/XML
+        }
+    }
+}
+
 /// Parses a RDF file from a Tokio [`AsyncRead`] implementation. Can be built using [`RdfParser::parse_tokio_async_read`].
 ///
 /// Reads are buffered.
@@ -493,6 +564,120 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
                 Err(e) => Err(e.into()),
             },
         })
+    }
+
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// An empty iterator is return if the format does not support prefixes.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_read(file.as_slice());
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    ///
+    /// reader.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn prefixes(&self) -> PrefixesIter<'_> {
+        PrefixesIter {
+            inner: match &self.parser {
+                FromReadQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
+                FromReadQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
+                FromReadQuadReaderKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
+                FromReadQuadReaderKind::NQuads(_)
+                | FromReadQuadReaderKind::NTriples(_)
+                | FromReadQuadReaderKind::RdfXml(_) => PrefixesIterKind::None, /* TODO: implement for RDF/XML */
+            },
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// `None` is returned if no base IRI is set or the format does not support base IRIs.
+    ///
+    /// ```
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader =
+    ///     RdfParser::from_format(RdfFormat::Turtle).parse_tokio_async_read(file.as_slice());
+    /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
+    ///
+    /// reader.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        match &self.parser {
+            FromReadQuadReaderKind::N3(p) => p.base_iri(),
+            FromReadQuadReaderKind::TriG(p) => p.base_iri(),
+            FromReadQuadReaderKind::Turtle(p) => p.base_iri(),
+            FromReadQuadReaderKind::NQuads(_)
+            | FromReadQuadReaderKind::NTriples(_)
+            | FromReadQuadReaderKind::RdfXml(_) => None, // TODO: implement for RDF/XML
+        }
+    }
+}
+
+/// Iterator on the file prefixes.
+///
+/// See [`FromReadQuadReader::prefixes`].
+pub struct PrefixesIter<'a> {
+    inner: PrefixesIterKind<'a>,
+}
+
+enum PrefixesIterKind<'a> {
+    Turtle(TurtlePrefixesIter<'a>),
+    TriG(TriGPrefixesIter<'a>),
+    N3(N3PrefixesIter<'a>),
+    None,
+}
+
+impl<'a> Iterator for PrefixesIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.inner {
+            PrefixesIterKind::Turtle(iter) => iter.next(),
+            PrefixesIterKind::TriG(iter) => iter.next(),
+            PrefixesIterKind::N3(iter) => iter.next(),
+            PrefixesIterKind::None => None,
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.inner {
+            PrefixesIterKind::Turtle(iter) => iter.size_hint(),
+            PrefixesIterKind::TriG(iter) => iter.size_hint(),
+            PrefixesIterKind::N3(iter) => iter.size_hint(),
+            PrefixesIterKind::None => (0, Some(0)),
+        }
     }
 }
 
