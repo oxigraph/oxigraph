@@ -24,12 +24,12 @@ use std::option::Option;
 /// );
 ///
 /// assert_eq!(
-///     "\"1999-01-01\"^^<http://www.w3.org/2001/XMLSchema#date>",
+///     r#""1999-01-01"^^<http://www.w3.org/2001/XMLSchema#date>"#,
 ///     Literal::new_typed_literal("1999-01-01", xsd::DATE).to_string()
 /// );
 ///
 /// assert_eq!(
-///     "\"foo\"@en",
+///     r#""foo"@en"#,
 ///     Literal::new_language_tagged_literal("foo", "en")?.to_string()
 /// );
 /// # Result::<(), LanguageTagParseError>::Ok(())
@@ -436,7 +436,7 @@ impl From<DayTimeDuration> for Literal {
 /// );
 ///
 /// assert_eq!(
-///     "\"1999-01-01\"^^<http://www.w3.org/2001/XMLSchema#date>",
+///     r#""1999-01-01"^^<http://www.w3.org/2001/XMLSchema#date>"#,
 ///     LiteralRef::new_typed_literal("1999-01-01", xsd::DATE).to_string()
 /// );
 /// ```

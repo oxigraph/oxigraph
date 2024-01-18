@@ -46,6 +46,7 @@ def fetch_debian_package_desc(debian_name):
                 print(f"Error {e} from {url}, retrying after {wait}s")
                 sleep(wait)
             else:
+                print(f"Failed to fetch debian name {debian_name} from {url}: {e}")
                 raise e
     raise Exception(f"Failed to fetch {url}")
 

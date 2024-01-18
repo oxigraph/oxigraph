@@ -2354,7 +2354,7 @@ mod tests {
         .build();
         ServerTest::new()?.test_body(
             request,
-            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+            r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
         )
     }
 
@@ -2369,7 +2369,7 @@ mod tests {
         .build();
         ServerTest::new()?.test_body(
             request,
-            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+            r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
         )
     }
 
@@ -2387,7 +2387,7 @@ mod tests {
         .build();
         ServerTest::new()?.test_body(
             request,
-            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+            r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
         )
     }
 
@@ -2414,7 +2414,7 @@ mod tests {
         .build();
         ServerTest::new()?.test_body(
             request,
-            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+            r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
         )
     }
 
@@ -2429,7 +2429,7 @@ mod tests {
         .build();
         ServerTest::new()?.test_body(
             request,
-            "{\"head\":{\"vars\":[\"s\",\"p\",\"o\"]},\"results\":{\"bindings\":[]}}",
+            r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
         )
     }
     #[test]
@@ -2679,16 +2679,16 @@ mod tests {
         let request = Request::builder(Method::PUT, "http://localhost/store/person/1.ttl".parse()?)
             .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
             .with_body(
-                "
+                r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
 
 <http://$HOST$/$GRAPHSTORE$/person/1> a foaf:Person;
     foaf:businessCard [
         a v:VCard;
-        v:fn \"John Doe\"
+        v:fn "John Doe"
     ].
-",
+"#,
             );
         server.test_status(request, Status::CREATED)?;
 
@@ -2717,16 +2717,16 @@ mod tests {
         let request = Request::builder(Method::PUT, "http://localhost/store/person/1.ttl".parse()?)
             .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
             .with_body(
-                "
+                r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
 
 <http://$HOST$/$GRAPHSTORE$/person/1> a foaf:Person;
     foaf:businessCard [
         a v:VCard;
-        v:fn \"Jane Doe\"
+        v:fn "Jane Doe"
     ].
-",
+"#,
             );
         server.test_status(request, Status::NO_CONTENT)?;
 
@@ -2740,16 +2740,16 @@ mod tests {
         let request = Request::builder(Method::PUT, "http://localhost/store?default".parse()?)
             .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
             .with_body(
-                "
+                r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
 
 []  a foaf:Person;
     foaf:businessCard [
         a v:VCard;
-        v:given-name \"Alice\"
+        v:given-name "Alice"
     ] .
-",
+"#,
             );
         server.test_status(request, Status::NO_CONTENT)?; // The default graph always exists in Oxigraph
 
@@ -2781,16 +2781,16 @@ mod tests {
         let request = Request::builder(Method::PUT, "http://localhost/store/person/2.ttl".parse()?)
             .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
             .with_body(
-                "
+                r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
 
 []  a foaf:Person;
     foaf:businessCard [
         a v:VCard;
-        v:given-name \"Alice\"
+        v:given-name "Alice"
     ] .
-",
+"#,
             );
         server.test_status(request, Status::NO_CONTENT)?;
 
@@ -2839,16 +2839,16 @@ mod tests {
         let request = Request::builder(Method::POST, "http://localhost/store".parse()?)
             .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
             .with_body(
-                "
+                r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
 
 []  a foaf:Person;
     foaf:businessCard [
         a v:VCard;
-        v:given-name \"Alice\"
+        v:given-name "Alice"
     ] .
-",
+"#,
             );
         let response = server.exec(request);
         assert_eq!(response.status(), Status::CREATED);

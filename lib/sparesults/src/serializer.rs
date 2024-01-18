@@ -35,14 +35,14 @@ use tokio::io::AsyncWrite;
 /// // boolean
 /// let mut buffer = Vec::new();
 /// json_serializer.serialize_boolean_to_write(&mut buffer, true)?;
-/// assert_eq!(buffer, b"{\"head\":{},\"boolean\":true}");
+/// assert_eq!(buffer, br#"{"head":{},"boolean":true}"#);
 ///
 /// // solutions
 /// let mut buffer = Vec::new();
 /// let mut writer = json_serializer.serialize_solutions_to_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
 /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
 /// writer.finish()?;
-/// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
+/// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
 /// # std::io::Result::Ok(())
 /// ```
 pub struct QueryResultsSerializer {
@@ -65,7 +65,7 @@ impl QueryResultsSerializer {
     /// let xml_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Xml);
     /// let mut buffer = Vec::new();
     /// xml_serializer.serialize_boolean_to_write(&mut buffer, true)?;
-    /// assert_eq!(buffer, b"<?xml version=\"1.0\"?><sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head></head><boolean>true</boolean></sparql>");
+    /// assert_eq!(buffer, br#"<?xml version="1.0"?><sparql xmlns="http://www.w3.org/2005/sparql-results#"><head></head><boolean>true</boolean></sparql>"#);
     /// # std::io::Result::Ok(())
     /// ```
     pub fn serialize_boolean_to_write<W: Write>(&self, write: W, value: bool) -> io::Result<W> {
@@ -89,7 +89,7 @@ impl QueryResultsSerializer {
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
     /// json_serializer.serialize_boolean_to_tokio_async_write(&mut buffer, false).await?;
-    /// assert_eq!(buffer, b"{\"head\":{},\"boolean\":false}");
+    /// assert_eq!(buffer, br#"{"head":{},"boolean":false}"r);
     /// # Ok(())
     /// # }
     /// ```
@@ -134,7 +134,7 @@ impl QueryResultsSerializer {
     /// let mut writer = xml_serializer.serialize_solutions_to_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
     /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
     /// writer.finish()?;
-    /// assert_eq!(buffer, b"<?xml version=\"1.0\"?><sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head><variable name=\"foo\"/><variable name=\"bar\"/></head><results><result><binding name=\"foo\"><literal>test</literal></binding></result></results></sparql>");
+    /// assert_eq!(buffer, br#"<?xml version="1.0"?><sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#);
     /// # std::io::Result::Ok(())
     /// ```
     pub fn serialize_solutions_to_write<W: Write>(
@@ -183,7 +183,7 @@ impl QueryResultsSerializer {
     /// let mut writer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]).await?;
     /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test")))).await?;
     /// writer.finish().await?;
-    /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
+    /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
     /// # Ok(())
     /// # }    
     /// ```
@@ -280,7 +280,7 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
     /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
     /// writer.write(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())])))?;
     /// writer.finish()?;
-    /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}},{\"bar\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
+    /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);
     /// # std::io::Result::Ok(())
     /// ```
     pub fn write<'a>(
@@ -368,7 +368,7 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteSolutionsWriter<W> {
     /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test")))).await?;
     /// writer.write(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())]))).await?;
     /// writer.finish().await?;
-    /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}},{\"bar\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
+    /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);
     /// # Ok(())
     /// # }
     /// ```

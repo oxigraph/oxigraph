@@ -12,30 +12,32 @@ OxRdfXml is a parser and serializer for [RDF/XML](https://www.w3.org/TR/rdf-synt
 The entry points of this library are the two [`RdfXmlParser`] and [`RdfXmlSerializer`] structs.
 
 Usage example counting the number of people in a RDF/XML file:
+
 ```rust
 use oxrdf::{NamedNodeRef, vocab::rdf};
 use oxrdfxml::RdfXmlParser;
 
-let file = b"<?xml version=\"1.0\"?>
-<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:schema=\"http://schema.org/\">
- <rdf:Description rdf:about=\"http://example.com/foo\">
-   <rdf:type rdf:resource=\"http://schema.org/Person\" />
+fn main() {
+    let file = br#"<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+ <rdf:Description rdf:about="http://example.com/foo">
+   <rdf:type rdf:resource="http://schema.org/Person" />
    <schema:name>Foo</schema:name>
  </rdf:Description>
- <schema:Person rdf:about=\"http://example.com/bar\" schema:name=\"Bar\" />
-</rdf:RDF>";
+ <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+</rdf:RDF>"#;
 
-let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
-let mut count = 0;
-for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
-    let triple = triple.unwrap();
-    if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-        count += 1;
+    let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
+    let mut count = 0;
+    for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
+        let triple = triple.unwrap();
+        if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+            count += 1;
+        }
     }
+    assert_eq!(2, count);
 }
-assert_eq!(2, count);
 ```
-
 
 ## License
 

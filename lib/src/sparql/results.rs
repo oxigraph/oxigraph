@@ -30,13 +30,13 @@
 //!
 //! // Let's test with a boolean
 //! assert_eq!(
-//!     convert_json_to_tsv(b"{\"boolean\":true}".as_slice()).unwrap(),
+//!     convert_json_to_tsv(br#"{"boolean":true}"#.as_slice()).unwrap(),
 //!     b"true"
 //! );
 //!
 //! // And with a set of solutions
 //! assert_eq!(
-//!     convert_json_to_tsv(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice()).unwrap(),
+//!     convert_json_to_tsv(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice()).unwrap(),
 //!     b"?foo\t?bar\n\"test\"\t\n"
 //! );
 //! ```

@@ -22,11 +22,11 @@ use std::sync::Arc;
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 /// // boolean
-/// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(b"{\"boolean\":true}".as_slice())? {
+/// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(br#"{"boolean":true}"#.as_slice())? {
 ///     assert_eq!(v, true);
 /// }
 /// // solutions
-/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice())? {
+/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -57,12 +57,12 @@ impl QueryResultsParser {
     /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(b"<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head/><boolean>true</boolean></sparql>".as_slice())? {
+    /// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice())? {
     ///     assert_eq!(v, true);
     /// }
     ///
     /// // solutions
-    /// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head><variable name=\"foo\"/><variable name=\"bar\"/></head><results><result><binding name=\"foo\"><literal>test</literal></binding></result></results></sparql>".as_slice())? {
+    /// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#.as_slice())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
     ///     for solution in solutions {
     ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -164,7 +164,7 @@ pub enum FromReadQueryResultsReader<R: Read> {
 /// use oxrdf::{Literal, Variable};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
-/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}".as_slice())? {
+/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
