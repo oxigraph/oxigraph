@@ -33,7 +33,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -90,7 +89,6 @@ impl NTriplesParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(self, read: R) -> FromReadNTriplesReader<R> {
         FromReadNTriplesReader {
@@ -169,7 +167,6 @@ impl NTriplesParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn parse(self) -> LowLevelNTriplesReader {
@@ -205,7 +202,6 @@ impl NTriplesParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct FromReadNTriplesReader<R: Read> {
@@ -295,7 +291,6 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNTriplesReader<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelNTriplesReader {
     parser: Parser<NQuadsRecognizer>,
@@ -346,7 +341,6 @@ impl LowLevelNTriplesReader {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
 ///     writer.finish().as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -375,7 +369,6 @@ impl NTriplesSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
     ///     writer.finish().as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteNTriplesWriter<W> {
         ToWriteNTriplesWriter {
@@ -434,7 +427,6 @@ impl NTriplesSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
     ///     buf.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn serialize(&self) -> LowLevelNTriplesWriter {
@@ -458,7 +450,6 @@ impl NTriplesSerializer {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
 ///     writer.finish().as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ToWriteNTriplesWriter<W: Write> {
@@ -540,7 +531,6 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNTriplesWriter<W> {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
 ///     buf.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelNTriplesWriter;
 

@@ -33,7 +33,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -90,7 +89,6 @@ impl NQuadsParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(self, read: R) -> FromReadNQuadsReader<R> {
         FromReadNQuadsReader {
@@ -169,7 +167,6 @@ impl NQuadsParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn parse(self) -> LowLevelNQuadsReader {
@@ -205,7 +202,6 @@ impl NQuadsParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct FromReadNQuadsReader<R: Read> {
@@ -295,7 +291,6 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelNQuadsReader {
     parser: Parser<NQuadsRecognizer>,
@@ -347,7 +342,6 @@ impl LowLevelNQuadsReader {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
 ///     writer.finish().as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -377,7 +371,6 @@ impl NQuadsSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
     ///     writer.finish().as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteNQuadsWriter<W> {
         ToWriteNQuadsWriter {
@@ -438,7 +431,6 @@ impl NQuadsSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
     ///     buf.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn serialize(&self) -> LowLevelNQuadsWriter {
@@ -463,7 +455,6 @@ impl NQuadsSerializer {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
 ///     writer.finish().as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ToWriteNQuadsWriter<W: Write> {
@@ -547,7 +538,6 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNQuadsWriter<W> {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
 ///     buf.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelNQuadsWriter;
 

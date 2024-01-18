@@ -38,7 +38,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -116,7 +115,6 @@ impl TriGParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(self, read: R) -> FromReadTriGReader<R> {
         FromReadTriGReader {
@@ -197,7 +195,6 @@ impl TriGParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse(self) -> LowLevelTriGReader {
         LowLevelTriGReader {
@@ -236,7 +233,6 @@ impl TriGParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct FromReadTriGReader<R: Read> {
@@ -263,7 +259,6 @@ impl<R: Read> FromReadTriGReader<R> {
     ///
     /// reader.next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.inner.parser.context.prefixes
@@ -284,7 +279,6 @@ impl<R: Read> FromReadTriGReader<R> {
     ///
     /// reader.next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -440,7 +434,6 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGReader {
     parser: Parser<TriGRecognizer>,
@@ -492,7 +485,6 @@ impl LowLevelTriGReader {
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.parser.context.prefixes
@@ -514,7 +506,6 @@ impl LowLevelTriGReader {
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser
@@ -545,7 +536,6 @@ impl LowLevelTriGReader {
 ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
 ///     writer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -575,7 +565,6 @@ impl TriGSerializer {
     ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
     ///     writer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteTriGWriter<W> {
         ToWriteTriGWriter {
@@ -637,7 +626,6 @@ impl TriGSerializer {
     ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
     ///     buf.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn serialize(&self) -> LowLevelTriGWriter {
@@ -665,7 +653,6 @@ impl TriGSerializer {
 ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
 ///     writer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ToWriteTriGWriter<W: Write> {
@@ -754,7 +741,6 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTriGWriter<W> {
 ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
 ///     buf.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGWriter {
     current_graph_name: GraphName,

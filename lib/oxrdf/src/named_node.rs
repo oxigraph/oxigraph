@@ -12,7 +12,6 @@ use std::fmt;
 ///     "<http://example.com/foo>",
 ///     NamedNode::new("http://example.com/foo")?.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
@@ -101,7 +100,6 @@ impl PartialEq<NamedNode> for &str {
 ///     "<http://example.com/foo>",
 ///     NamedNodeRef::new("http://example.com/foo")?.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct NamedNodeRef<'a> {

@@ -43,7 +43,6 @@ use tokio::io::AsyncWrite;
 /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
 /// writer.finish()?;
 /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
-/// # std::io::Result::Ok(())
 /// ```
 pub struct QueryResultsSerializer {
     format: QueryResultsFormat,
@@ -66,7 +65,6 @@ impl QueryResultsSerializer {
     /// let mut buffer = Vec::new();
     /// xml_serializer.serialize_boolean_to_write(&mut buffer, true)?;
     /// assert_eq!(buffer, b"<?xml version=\"1.0\"?><sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head></head><boolean>true</boolean></sparql>");
-    /// # std::io::Result::Ok(())
     /// ```
     pub fn serialize_boolean_to_write<W: Write>(&self, write: W, value: bool) -> io::Result<W> {
         match self.format {
@@ -135,7 +133,6 @@ impl QueryResultsSerializer {
     /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
     /// writer.finish()?;
     /// assert_eq!(buffer, b"<?xml version=\"1.0\"?><sparql xmlns=\"http://www.w3.org/2005/sparql-results#\"><head><variable name=\"foo\"/><variable name=\"bar\"/></head><results><result><binding name=\"foo\"><literal>test</literal></binding></result></results></sparql>");
-    /// # std::io::Result::Ok(())
     /// ```
     pub fn serialize_solutions_to_write<W: Write>(
         &self,
@@ -251,7 +248,6 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
 /// writer.finish()?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
-/// # std::io::Result::Ok(())
 /// ```
 #[must_use]
 pub struct ToWriteSolutionsWriter<W: Write> {
@@ -281,7 +277,6 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
     /// writer.write(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())])))?;
     /// writer.finish()?;
     /// assert_eq!(buffer, b"{\"head\":{\"vars\":[\"foo\",\"bar\"]},\"results\":{\"bindings\":[{\"foo\":{\"type\":\"literal\",\"value\":\"test\"}},{\"bar\":{\"type\":\"literal\",\"value\":\"test\"}}]}}");
-    /// # std::io::Result::Ok(())
     /// ```
     pub fn write<'a>(
         &mut self,

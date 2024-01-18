@@ -25,7 +25,6 @@ use tokio::io::AsyncWrite;
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<rdf:type rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
 ///     writer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -56,7 +55,6 @@ impl RdfXmlSerializer {
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<rdf:type rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
     ///     writer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteRdfXmlWriter<W> {
@@ -122,7 +120,6 @@ impl RdfXmlSerializer {
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<rdf:Description rdf:about=\"http://example.com#me\">\n\t\t<rdf:type rdf:resource=\"http://schema.org/Person\"/>\n\t</rdf:Description>\n</rdf:RDF>",
 ///     writer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ToWriteRdfXmlWriter<W: Write> {

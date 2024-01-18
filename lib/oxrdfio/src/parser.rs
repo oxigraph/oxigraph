@@ -52,7 +52,6 @@ use tokio::io::AsyncRead;
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
-/// # std::io::Result::Ok(())
 /// ```
 #[must_use]
 pub struct RdfParser {
@@ -156,7 +155,6 @@ impl RdfParser {
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
@@ -184,7 +182,6 @@ impl RdfParser {
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].graph_name.to_string(), "<http://example.com/g>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_default_graph(mut self, default_graph: impl Into<GraphName>) -> Self {
@@ -226,7 +223,6 @@ impl RdfParser {
     ///     .rename_blank_nodes()
     ///     .parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
     /// assert_ne!(result1, result2);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn rename_blank_nodes(mut self) -> Self {
@@ -266,7 +262,6 @@ impl RdfParser {
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
-    /// # std::io::Result::Ok(())
     /// ```
     pub fn parse_read<R: Read>(self, reader: R) -> FromReadQuadReader<R> {
         FromReadQuadReader {
@@ -362,7 +357,6 @@ impl From<RdfFormat> for RdfParser {
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
-/// # std::io::Result::Ok(())
 /// ```
 #[must_use]
 pub struct FromReadQuadReader<R: Read> {

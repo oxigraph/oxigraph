@@ -24,7 +24,6 @@ use std::str::FromStr;
 /// let default = vec![NamedNode::new("http://example.com")?.into()];
 /// query.dataset_mut().set_default_graph(default.clone());
 /// assert_eq!(query.dataset().default_graph_graphs(), Some(default.as_slice()));
-/// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Query {
@@ -110,7 +109,6 @@ impl From<spargebra::Query> for Query {
 /// let update = Update::parse(update_str, None)?;
 ///
 /// assert_eq!(update.to_string().trim(), update_str);
-/// # Ok::<_, oxigraph::sparql::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
@@ -220,7 +218,6 @@ impl QueryDataset {
     /// assert!(Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
     /// assert!(!Query::parse("SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
     ///
-    /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn is_default_dataset(&self) -> bool {
         self.default
@@ -252,7 +249,6 @@ impl QueryDataset {
     /// query.dataset_mut().set_default_graph(default.clone());
     /// assert_eq!(query.dataset().default_graph_graphs(), Some(default.as_slice()));    
     ///
-    /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn set_default_graph(&mut self, graphs: Vec<GraphName>) {
         self.default = Some(graphs)
@@ -274,7 +270,6 @@ impl QueryDataset {
     /// query.dataset_mut().set_available_named_graphs(named.clone());
     /// assert_eq!(query.dataset().available_named_graphs(), Some(named.as_slice()));
     ///
-    /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn set_available_named_graphs(&mut self, named_graphs: Vec<NamedOrBlankNode>) {
         self.named = Some(named_graphs);

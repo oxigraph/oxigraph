@@ -12,7 +12,6 @@ use std::fmt;
 ///     "?foo",
 ///     Variable::new("foo")?.to_string()
 /// );
-/// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct Variable {
@@ -73,7 +72,6 @@ impl fmt::Display for Variable {
 ///     "?foo",
 ///     VariableRef::new("foo")?.to_string()
 /// );
-/// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct VariableRef<'a> {

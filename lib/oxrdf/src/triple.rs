@@ -708,7 +708,6 @@ impl<'a> From<TermRef<'a>> for Term {
 ///         object: NamedNode::new("http://example.com/o")?.into(),
 ///     }.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Triple {
@@ -779,7 +778,6 @@ impl fmt::Display for Triple {
 ///         object: NamedNodeRef::new("http://example.com/o")?.into(),
 ///     }.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -1060,7 +1058,6 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
 ///         graph_name: NamedNode::new("http://example.com/g")?.into(),
 ///     }.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
@@ -1138,7 +1135,6 @@ impl From<Quad> for Triple {
 ///         graph_name: NamedNodeRef::new("http://example.com/g")?.into(),
 ///     }.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct QuadRef<'a> {

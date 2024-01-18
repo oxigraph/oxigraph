@@ -152,7 +152,6 @@ pub(crate) fn evaluate_query(
 ///     "SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> {} }",
 ///     QueryOptions::default().without_service_handler()
 /// )?;
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone, Default)]
 pub struct QueryOptions {
@@ -224,7 +223,6 @@ impl QueryOptions {
     /// )? {
     ///     assert_eq!(solutions.next().unwrap()?.get("nt"), Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into()));
     /// }
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     #[must_use]

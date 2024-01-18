@@ -201,7 +201,6 @@ impl From<Quad> for N3Quad {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -270,7 +269,6 @@ impl N3Parser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(self, read: R) -> FromReadN3Reader<R> {
         FromReadN3Reader {
@@ -353,7 +351,6 @@ impl N3Parser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse(self) -> LowLevelN3Reader {
         LowLevelN3Reader {
@@ -386,7 +383,6 @@ impl N3Parser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct FromReadN3Reader<R: Read> {
@@ -413,7 +409,6 @@ impl<R: Read> FromReadN3Reader<R> {
     ///
     /// reader.next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.inner.parser.context.prefixes
@@ -434,7 +429,6 @@ impl<R: Read> FromReadN3Reader<R> {
     ///
     /// reader.next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -592,7 +586,6 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelN3Reader {
     parser: Parser<N3Recognizer>,
@@ -644,7 +637,6 @@ impl LowLevelN3Reader {
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.parser.context.prefixes
@@ -666,7 +658,6 @@ impl LowLevelN3Reader {
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser

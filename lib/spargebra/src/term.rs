@@ -151,7 +151,6 @@ impl TryFrom<Term> for GroundTerm {
 ///         object: NamedNode::new("http://example.com/o")?.into(),
 ///     }.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriple {
@@ -246,7 +245,6 @@ impl TryFrom<GraphNamePattern> for GraphName {
 ///         graph_name: NamedNode::new("http://example.com/g")?.into(),
 ///     }.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
@@ -321,7 +319,6 @@ impl TryFrom<QuadPattern> for Quad {
 ///         graph_name: NamedNode::new("http://example.com/g")?.into(),
 ///     }.to_string()
 /// );
-/// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundQuad {

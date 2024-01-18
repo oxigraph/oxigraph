@@ -61,7 +61,6 @@ use std::hash::{Hash, Hasher};
 /// // direct access to a dataset graph
 /// let results: Vec<_> = dataset.graph(ex).iter().collect();
 /// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Debug, Default, Clone)]
 pub struct Dataset {
@@ -121,7 +120,6 @@ impl Dataset {
     ///
     /// let results: Vec<_> = dataset.graph(ex).iter().collect();
     /// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn graph<'a, 'b>(&'a self, graph_name: impl Into<GraphNameRef<'b>>) -> GraphView<'a> {
         let graph_name = self
@@ -152,7 +150,6 @@ impl Dataset {
     /// // We have also changes the dataset itself
     /// let results: Vec<_> = dataset.iter().collect();
     /// assert_eq!(vec![QuadRef::new(ex, ex, ex, ex)], results);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn graph_mut<'a, 'b>(
         &'a mut self,
@@ -529,7 +526,6 @@ impl Dataset {
     /// graph1.canonicalize();
     /// graph2.canonicalize();
     /// assert_eq!(graph1, graph2);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
     /// Warning 1: Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
@@ -987,7 +983,6 @@ impl fmt::Display for Dataset {
 ///
 /// let results: Vec<_> = dataset.graph(ex).iter().collect();
 /// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone, Debug)]
 pub struct GraphView<'a> {
@@ -1330,7 +1325,6 @@ impl<'a> fmt::Display for GraphView<'a> {
 /// // We have also changes the dataset itself
 /// let results: Vec<_> = dataset.iter().collect();
 /// assert_eq!(vec![QuadRef::new(ex, ex, ex, ex)], results);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Debug)]
 pub struct GraphViewMut<'a> {

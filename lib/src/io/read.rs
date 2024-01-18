@@ -25,7 +25,6 @@ use std::io::Read;
 ///
 /// assert_eq!(triples.len(), 1);
 /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
-/// # std::io::Result::Ok(())
 /// ```
 #[deprecated(note = "use RdfParser instead", since = "0.4.0")]
 pub struct GraphParser {
@@ -55,7 +54,6 @@ impl GraphParser {
     ///
     /// assert_eq!(triples.len(), 1);
     /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
@@ -85,7 +83,6 @@ impl GraphParser {
 ///
 /// assert_eq!(triples.len(), 1);
 /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
-/// # std::io::Result::Ok(())
 /// ```
 #[must_use]
 pub struct TripleReader<R: Read> {
@@ -116,7 +113,6 @@ impl<R: Read> Iterator for TripleReader<R> {
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
-/// # std::io::Result::Ok(())
 /// ```
 #[deprecated(note = "use RdfParser instead", since = "0.4.0")]
 pub struct DatasetParser {
@@ -144,7 +140,6 @@ impl DatasetParser {
     ///
     /// assert_eq!(triples.len(), 1);
     /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
@@ -174,7 +169,6 @@ impl DatasetParser {
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
-/// # std::io::Result::Ok(())
 /// ```
 #[must_use]
 pub struct QuadReader<R: Read> {

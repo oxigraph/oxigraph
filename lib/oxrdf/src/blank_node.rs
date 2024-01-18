@@ -19,7 +19,6 @@ use std::str;
 ///     "_:a122",
 ///     BlankNode::new("a122")?.to_string()
 /// );
-/// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct BlankNode(BlankNodeContent);
@@ -137,7 +136,6 @@ impl Default for BlankNode {
 ///     "_:a122",
 ///     BlankNodeRef::new("a122")?.to_string()
 /// );
-/// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct BlankNodeRef<'a>(BlankNodeRefContent<'a>);
@@ -194,7 +192,6 @@ impl<'a> BlankNodeRef<'a> {
     ///
     /// assert_eq!(BlankNode::new_from_unique_id(128).as_ref().unique_id(), Some(128));
     /// assert_eq!(BlankNode::new("foo")?.as_ref().unique_id(), None);
-    /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
     /// ```
     #[inline]
     pub const fn unique_id(&self) -> Option<u128> {

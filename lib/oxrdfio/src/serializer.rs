@@ -46,7 +46,6 @@ use tokio::io::AsyncWrite;
 /// writer.finish()?;
 ///
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct RdfSerializer {
@@ -96,7 +95,6 @@ impl RdfSerializer {
     /// writer.finish()?;
     ///
     /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteQuadWriter<W> {
         ToWriteQuadWriter {
@@ -210,7 +208,6 @@ impl From<RdfFormat> for RdfSerializer {
 /// writer.finish()?;
 ///
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ToWriteQuadWriter<W: Write> {

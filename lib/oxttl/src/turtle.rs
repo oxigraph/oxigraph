@@ -40,7 +40,6 @@ use tokio::io::{AsyncRead, AsyncWrite};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -118,7 +117,6 @@ impl TurtleParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(self, read: R) -> FromReadTurtleReader<R> {
         FromReadTurtleReader {
@@ -199,7 +197,6 @@ impl TurtleParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse(self) -> LowLevelTurtleReader {
         LowLevelTurtleReader {
@@ -238,7 +235,6 @@ impl TurtleParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct FromReadTurtleReader<R: Read> {
@@ -265,7 +261,6 @@ impl<R: Read> FromReadTurtleReader<R> {
     ///
     /// reader.next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.inner.parser.context.prefixes
@@ -286,7 +281,6 @@ impl<R: Read> FromReadTurtleReader<R> {
     ///
     /// reader.next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -442,7 +436,6 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTurtleReader {
     parser: Parser<TriGRecognizer>,
@@ -494,7 +487,6 @@ impl LowLevelTurtleReader {
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
         &self.parser.context.prefixes
@@ -516,7 +508,6 @@ impl LowLevelTurtleReader {
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
     /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser
@@ -546,7 +537,6 @@ impl LowLevelTurtleReader {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
 ///     writer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -577,7 +567,6 @@ impl TurtleSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
     ///     writer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteTurtleWriter<W> {
         ToWriteTurtleWriter {
@@ -634,7 +623,6 @@ impl TurtleSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
     ///     buf.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn serialize(&self) -> LowLevelTurtleWriter {
         LowLevelTurtleWriter {
@@ -659,7 +647,6 @@ impl TurtleSerializer {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
 ///     writer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ToWriteTurtleWriter<W: Write> {
@@ -739,7 +726,6 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTurtleWriter<W> {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
 ///     buf.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTurtleWriter {
     inner: LowLevelTriGWriter,

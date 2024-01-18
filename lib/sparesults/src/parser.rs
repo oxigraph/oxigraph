@@ -32,7 +32,6 @@ use std::sync::Arc;
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
 pub struct QueryResultsParser {
     format: QueryResultsFormat,
@@ -68,7 +67,6 @@ impl QueryResultsParser {
     ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
     ///     }
     /// }
-    /// # Result::<(),sparesults::ParseError>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(
         &self,
@@ -147,7 +145,6 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
 pub enum FromReadQueryResultsReader<R: Read> {
     Solutions(FromReadSolutionsReader<R>),
@@ -170,7 +167,6 @@ pub enum FromReadQueryResultsReader<R: Read> {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::ParseError>::Ok(())
 /// ```
 pub struct FromReadSolutionsReader<R: Read> {
     variables: Arc<[Variable]>,
@@ -195,7 +191,6 @@ impl<R: Read> FromReadSolutionsReader<R> {
     /// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
     /// }
-    /// # Result::<(),sparesults::ParseError>::Ok(())
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {

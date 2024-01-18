@@ -32,7 +32,6 @@ use std::option::Option;
 ///     "\"foo\"@en",
 ///     Literal::new_language_tagged_literal("foo", "en")?.to_string()
 /// );
-/// # Result::<(), LanguageTagParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Literal(LiteralContent);

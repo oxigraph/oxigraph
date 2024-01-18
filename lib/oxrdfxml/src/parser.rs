@@ -47,7 +47,6 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
@@ -105,7 +104,6 @@ impl RdfXmlParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(self, read: R) -> FromReadRdfXmlReader<R> {
         FromReadRdfXmlReader {
@@ -200,7 +198,6 @@ impl RdfXmlParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct FromReadRdfXmlReader<R: Read> {

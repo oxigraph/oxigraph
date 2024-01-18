@@ -44,7 +44,6 @@ impl QueryResults {
     /// let mut results = Vec::new();
     /// store.query("SELECT ?s WHERE { ?s ?p ?o }")?.write(&mut results, QueryResultsFormat::Json)?;
     /// assert_eq!(results, "{\"head\":{\"vars\":[\"s\"]},\"results\":{\"bindings\":[{\"s\":{\"type\":\"uri\",\"value\":\"http://example.com\"}}]}}".as_bytes());
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write(
         self,
@@ -116,7 +115,6 @@ impl QueryResults {
     /// let mut results = Vec::new();
     /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, RdfFormat::NTriples)?;
     /// assert_eq!(results, graph.as_bytes());
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write_graph(
         self,
@@ -168,7 +166,6 @@ impl<R: Read + 'static> From<FromReadQueryResultsReader<R>> for QueryResults {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
 /// }
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QuerySolutionIter {
     variables: Arc<[Variable]>,
@@ -200,7 +197,6 @@ impl QuerySolutionIter {
     /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
     ///     assert_eq!(solutions.variables(), &[Variable::new("s")?, Variable::new("o")?]);
     /// }
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
@@ -243,7 +239,6 @@ impl Iterator for QuerySolutionIter {
 ///         println!("{}", triple?);
 ///     }
 /// }
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QueryTripleIter {
     pub(crate) iter: Box<dyn Iterator<Item = Result<Triple, EvaluationError>>>,
