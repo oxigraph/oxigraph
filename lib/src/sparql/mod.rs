@@ -144,13 +144,13 @@ pub(crate) fn evaluate_query(
 ///
 /// Usage example disabling the federated query support:
 /// ```
-/// use oxigraph::store::Store;
 /// use oxigraph::sparql::QueryOptions;
+/// use oxigraph::store::Store;
 ///
 /// let store = Store::new()?;
 /// store.query_opt(
 ///     "SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> {} }",
-///     QueryOptions::default().without_service_handler()
+///     QueryOptions::default().without_service_handler(),
 /// )?;
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
@@ -209,9 +209,9 @@ impl QueryOptions {
     ///
     /// Example with a function serializing terms to N-Triples:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
@@ -219,10 +219,13 @@ impl QueryOptions {
     ///     "SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}",
     ///     QueryOptions::default().with_custom_function(
     ///         NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
-    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into())
-    ///     )
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
+    ///     ),
     /// )? {
-    ///     assert_eq!(solutions.next().unwrap()?.get("nt"), Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into()));
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("nt"),
+    ///         Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into())
+    ///     );
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```

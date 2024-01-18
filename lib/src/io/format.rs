@@ -23,7 +23,10 @@ impl GraphFormat {
     /// ```
     /// use oxigraph::io::GraphFormat;
     ///
-    /// assert_eq!(GraphFormat::NTriples.iri(), "http://www.w3.org/ns/formats/N-Triples")
+    /// assert_eq!(
+    ///     GraphFormat::NTriples.iri(),
+    ///     "http://www.w3.org/ns/formats/N-Triples"
+    /// )
     /// ```
     #[inline]
     pub fn iri(self) -> &'static str {
@@ -65,6 +68,7 @@ impl GraphFormat {
             Self::RdfXml => "rdf",
         }
     }
+
     /// Looks for a known format from a media type.
     ///
     /// It supports some media type aliases.
@@ -74,7 +78,10 @@ impl GraphFormat {
     /// ```
     /// use oxigraph::io::GraphFormat;
     ///
-    /// assert_eq!(GraphFormat::from_media_type("text/turtle; charset=utf-8"), Some(GraphFormat::Turtle))
+    /// assert_eq!(
+    ///     GraphFormat::from_media_type("text/turtle; charset=utf-8"),
+    ///     Some(GraphFormat::Turtle)
+    /// )
     /// ```
     #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
@@ -94,7 +101,10 @@ impl GraphFormat {
     /// ```
     /// use oxigraph::io::GraphFormat;
     ///
-    /// assert_eq!(GraphFormat::from_extension("nt"), Some(GraphFormat::NTriples))
+    /// assert_eq!(
+    ///     GraphFormat::from_extension("nt"),
+    ///     Some(GraphFormat::NTriples)
+    /// )
     /// ```
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
@@ -151,7 +161,10 @@ impl DatasetFormat {
     /// ```
     /// use oxigraph::io::DatasetFormat;
     ///
-    /// assert_eq!(DatasetFormat::NQuads.iri(), "http://www.w3.org/ns/formats/N-Quads")
+    /// assert_eq!(
+    ///     DatasetFormat::NQuads.iri(),
+    ///     "http://www.w3.org/ns/formats/N-Quads"
+    /// )
     /// ```
     #[inline]
     pub fn iri(self) -> &'static str {
@@ -190,6 +203,7 @@ impl DatasetFormat {
             Self::TriG => "trig",
         }
     }
+
     /// Looks for a known format from a media type.
     ///
     /// It supports some media type aliases.
@@ -198,7 +212,10 @@ impl DatasetFormat {
     /// ```
     /// use oxigraph::io::DatasetFormat;
     ///
-    /// assert_eq!(DatasetFormat::from_media_type("application/n-quads; charset=utf-8"), Some(DatasetFormat::NQuads))
+    /// assert_eq!(
+    ///     DatasetFormat::from_media_type("application/n-quads; charset=utf-8"),
+    ///     Some(DatasetFormat::NQuads)
+    /// )
     /// ```
     #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
@@ -217,7 +234,10 @@ impl DatasetFormat {
     /// ```
     /// use oxigraph::io::DatasetFormat;
     ///
-    /// assert_eq!(DatasetFormat::from_extension("nq"), Some(DatasetFormat::NQuads))
+    /// assert_eq!(
+    ///     DatasetFormat::from_extension("nq"),
+    ///     Some(DatasetFormat::NQuads)
+    /// )
     /// ```
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {

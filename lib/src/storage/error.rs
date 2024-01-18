@@ -1,8 +1,7 @@
 use crate::io::{ParseError, RdfFormat};
 use oxiri::IriParseError;
 use std::error::Error;
-use std::fmt;
-use std::io;
+use std::{fmt, io};
 
 /// An error related to storage operations (reads, writes...).
 #[derive(Debug)]

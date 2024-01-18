@@ -21,7 +21,9 @@ use std::io::Read;
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = GraphParser::from_format(GraphFormat::NTriples);
-/// let triples = parser.read_triples(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+/// let triples = parser
+///     .read_triples(file.as_bytes())
+///     .collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(triples.len(), 1);
 /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
@@ -50,8 +52,11 @@ impl GraphParser {
     ///
     /// let file = "</s> </p> </o> .";
     ///
-    /// let parser = GraphParser::from_format(GraphFormat::Turtle).with_base_iri("http://example.com")?;
-    /// let triples = parser.read_triples(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    /// let parser =
+    ///     GraphParser::from_format(GraphFormat::Turtle).with_base_iri("http://example.com")?;
+    /// let triples = parser
+    ///     .read_triples(file.as_bytes())
+    ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(triples.len(), 1);
     /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
@@ -81,7 +86,9 @@ impl GraphParser {
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = GraphParser::from_format(GraphFormat::NTriples);
-/// let triples = parser.read_triples(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+/// let triples = parser
+///     .read_triples(file.as_bytes())
+///     .collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(triples.len(), 1);
 /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
@@ -139,8 +146,11 @@ impl DatasetParser {
     ///
     /// let file = "<g> { </s> </p> </o> }";
     ///
-    /// let parser = DatasetParser::from_format(DatasetFormat::TriG).with_base_iri("http://example.com")?;
-    /// let triples = parser.read_quads(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    /// let parser =
+    ///     DatasetParser::from_format(DatasetFormat::TriG).with_base_iri("http://example.com")?;
+    /// let triples = parser
+    ///     .read_quads(file.as_bytes())
+    ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(triples.len(), 1);
     /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");

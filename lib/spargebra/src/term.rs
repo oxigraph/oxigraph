@@ -141,7 +141,7 @@ impl TryFrom<Term> for GroundTerm {
 /// The default string formatter is returning a N-Quads representation.
 ///
 /// ```
-/// use spargebra::term::{NamedNode, GroundTriple};
+/// use spargebra::term::{GroundTriple, NamedNode};
 ///
 /// assert_eq!(
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
@@ -149,7 +149,8 @@ impl TryFrom<Term> for GroundTerm {
 ///         subject: NamedNode::new("http://example.com/s")?.into(),
 ///         predicate: NamedNode::new("http://example.com/p")?,
 ///         object: NamedNode::new("http://example.com/o")?.into(),
-///     }.to_string()
+///     }
+///     .to_string()
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```

@@ -20,7 +20,10 @@ impl QueryResultsFormat {
     /// ```
     /// use sparesults::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultsFormat::Json.iri(), "http://www.w3.org/ns/formats/SPARQL_Results_JSON")
+    /// assert_eq!(
+    ///     QueryResultsFormat::Json.iri(),
+    ///     "http://www.w3.org/ns/formats/SPARQL_Results_JSON"
+    /// )
     /// ```
     #[inline]
     pub fn iri(self) -> &'static str {
@@ -31,12 +34,16 @@ impl QueryResultsFormat {
             Self::Tsv => "http://www.w3.org/ns/formats/SPARQL_Results_TSV",
         }
     }
+
     /// The format [IANA media type](https://tools.ietf.org/html/rfc2046).
     ///
     /// ```
     /// use sparesults::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultsFormat::Json.media_type(), "application/sparql-results+json")
+    /// assert_eq!(
+    ///     QueryResultsFormat::Json.media_type(),
+    ///     "application/sparql-results+json"
+    /// )
     /// ```
     #[inline]
     pub fn media_type(self) -> &'static str {
@@ -91,7 +98,10 @@ impl QueryResultsFormat {
     /// ```
     /// use sparesults::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultsFormat::from_media_type("application/sparql-results+json; charset=utf-8"), Some(QueryResultsFormat::Json))
+    /// assert_eq!(
+    ///     QueryResultsFormat::from_media_type("application/sparql-results+json; charset=utf-8"),
+    ///     Some(QueryResultsFormat::Json)
+    /// )
     /// ```
     #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
@@ -134,7 +144,10 @@ impl QueryResultsFormat {
     /// ```
     /// use sparesults::QueryResultsFormat;
     ///
-    /// assert_eq!(QueryResultsFormat::from_extension("json"), Some(QueryResultsFormat::Json))
+    /// assert_eq!(
+    ///     QueryResultsFormat::from_extension("json"),
+    ///     Some(QueryResultsFormat::Json)
+    /// )
     /// ```
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {

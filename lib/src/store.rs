@@ -4,9 +4,9 @@
 //!
 //! Usage example:
 //! ```
-//! use oxigraph::store::Store;
-//! use oxigraph::sparql::QueryResults;
 //! use oxigraph::model::*;
+//! use oxigraph::sparql::QueryResults;
+//! use oxigraph::store::Store;
 //!
 //! let store = Store::new()?;
 //!
@@ -16,7 +16,7 @@
 //! store.insert(&quad)?;
 //!
 //! // quad filter
-//! let results: Result<Vec<Quad>,_> = store.quads_for_pattern(None, None, None, None).collect();
+//! let results: Result<Vec<Quad>, _> = store.quads_for_pattern(None, None, None, None).collect();
 //! assert_eq!(vec![quad], results?);
 //!
 //! // SPARQL query
@@ -56,9 +56,9 @@ use std::{fmt, str};
 ///
 /// Usage example:
 /// ```
-/// use oxigraph::store::Store;
-/// use oxigraph::sparql::QueryResults;
 /// use oxigraph::model::*;
+/// use oxigraph::sparql::QueryResults;
+/// use oxigraph::store::Store;
 /// # use std::fs::remove_dir_all;
 ///
 /// # {
@@ -70,7 +70,7 @@ use std::{fmt, str};
 /// store.insert(&quad)?;
 ///
 /// // quad filter
-/// let results: Result<Vec<Quad>,_> = store.quads_for_pattern(None, None, None, None).collect();
+/// let results: Result<Vec<Quad>, _> = store.quads_for_pattern(None, None, None, None).collect();
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
@@ -160,9 +160,9 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::QueryResults;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
@@ -171,8 +171,11 @@ impl Store {
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     ///
     /// // SPARQL query
-    /// if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
-    ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into_owned().into()));
+    /// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("s"),
+    ///         Some(&ex.into_owned().into())
+    ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -187,19 +190,22 @@ impl Store {
     ///
     /// Usage example with a custom function serializing terms to N-Triples:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
     ///     "SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}",
     ///     QueryOptions::default().with_custom_function(
     ///         NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
-    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into())
-    ///     )
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
+    ///     ),
     /// )? {
-    ///     assert_eq!(solutions.next().unwrap()?.get("nt"), Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into()));
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("nt"),
+    ///         Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into())
+    ///     );
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -219,14 +225,17 @@ impl Store {
     ///
     /// Usage example serialising the explanation with statistics in JSON:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) =  store.explain_query_opt("SELECT ?s WHERE { VALUES ?s { 1 2 3 } }", QueryOptions::default(), true)? {
+    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) = store.explain_query_opt(
+    ///     "SELECT ?s WHERE { VALUES ?s { 1 2 3 } }",
+    ///     QueryOptions::default(),
+    ///     true,
+    /// )? {
     ///     // We make sure to have read all the solutions
-    ///     for _ in solutions {
-    ///     }
+    ///     for _ in solutions {}
     ///     let mut buf = Vec::new();
     ///     explanation.write_in_json(&mut buf)?;
     /// }
@@ -245,8 +254,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
@@ -256,7 +265,9 @@ impl Store {
     /// store.insert(&quad)?;
     ///
     /// // quad filter by object
-    /// let results = store.quads_for_pattern(None, None, Some((&ex).into()), None).collect::<Result<Vec<_>,_>>()?;
+    /// let results = store
+    ///     .quads_for_pattern(None, None, Some((&ex).into()), None)
+    ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_eq!(vec![quad], results);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -283,8 +294,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
@@ -294,7 +305,7 @@ impl Store {
     /// store.insert(&quad)?;
     ///
     /// // quad filter by object
-    /// let results = store.iter().collect::<Result<Vec<_>,_>>()?;
+    /// let results = store.iter().collect::<Result<Vec<_>, _>>()?;
     /// assert_eq!(vec![quad], results);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -306,8 +317,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
@@ -330,13 +341,13 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
-    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;    
+    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     /// assert_eq!(2, store.len()?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -348,8 +359,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// assert!(store.is_empty()?);
@@ -371,8 +382,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::{StorageError, Store};
     /// use oxigraph::model::*;
+    /// use oxigraph::store::{StorageError, Store};
     ///
     /// let store = Store::new()?;
     /// let a = NamedNodeRef::new("http://example.com/a")?;
@@ -399,13 +410,14 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
-    /// store.update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
+    /// store
+    ///     .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -504,15 +516,20 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.load_graph(file.as_ref(), RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
+    /// store.load_graph(
+    ///     file.as_ref(),
+    ///     RdfFormat::NTriples,
+    ///     GraphName::DefaultGraph,
+    ///     None,
+    /// )?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -547,14 +564,15 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// let file =
+    ///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
@@ -587,8 +605,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
@@ -624,8 +642,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
@@ -646,10 +664,12 @@ impl Store {
     /// Dumps the store into a file.
     ///    
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::store::Store;
     ///
-    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    /// let file =
+    ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
+    ///         .as_bytes();
     ///
     /// let store = Store::new()?;
     /// store.load_from_read(RdfFormat::NQuads, file)?;
@@ -678,9 +698,9 @@ impl Store {
     ///    
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
@@ -709,9 +729,9 @@ impl Store {
     ///    
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
@@ -736,10 +756,12 @@ impl Store {
     /// Dumps the store into a file.
     ///    
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::store::Store;
     ///
-    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    /// let file =
+    ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
+    ///         .as_bytes();
     ///
     /// let store = Store::new()?;
     /// store.load_from_read(RdfFormat::NQuads, file)?;
@@ -761,14 +783,17 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex))?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, GraphNameRef::DefaultGraph))?;
-    /// assert_eq!(vec![NamedOrBlankNode::from(ex)], store.named_graphs().collect::<Result<Vec<_>,_>>()?);
+    /// assert_eq!(
+    ///     vec![NamedOrBlankNode::from(ex)],
+    ///     store.named_graphs().collect::<Result<Vec<_>, _>>()?
+    /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn named_graphs(&self) -> GraphNameIter {
@@ -783,8 +808,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNode, QuadRef};
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new()?;
@@ -806,14 +831,17 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::NamedNodeRef;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert_named_graph(ex)?;
     ///
-    /// assert_eq!(store.named_graphs().collect::<Result<Vec<_>,_>>()?, vec![ex.into_owned().into()]);
+    /// assert_eq!(
+    ///     store.named_graphs().collect::<Result<Vec<_>, _>>()?,
+    ///     vec![ex.into_owned().into()]
+    /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn insert_named_graph<'a>(
@@ -828,8 +856,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
@@ -856,8 +884,8 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
@@ -882,13 +910,13 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let store = Store::new()?;
     /// store.insert(QuadRef::new(ex, ex, ex, ex))?;
-    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;    
+    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     /// assert_eq!(2, store.len()?);
     ///
     /// store.clear()?;
@@ -944,15 +972,18 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // quads file insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_loader().load_from_read(RdfFormat::NQuads, file.as_ref())?;
+    /// let file =
+    ///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// store
+    ///     .bulk_loader()
+    ///     .load_from_read(RdfFormat::NQuads, file.as_ref())?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -995,16 +1026,23 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::{EvaluationError, QueryResults};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// store.transaction(|mut transaction| {
-    ///     if let QueryResults::Solutions(solutions) = transaction.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+    ///     if let QueryResults::Solutions(solutions) =
+    ///         transaction.query("SELECT ?s WHERE { ?s ?p ?o }")?
+    ///     {
     ///         for solution in solutions {
-    ///             if let Some(Term::NamedNode(s)) =  solution?.get("s") {
-    ///                 transaction.insert(QuadRef::new(s, vocab::rdf::TYPE, NamedNodeRef::new_unchecked("http://example.com"), GraphNameRef::DefaultGraph))?;
+    ///             if let Some(Term::NamedNode(s)) = solution?.get("s") {
+    ///                 transaction.insert(QuadRef::new(
+    ///                     s,
+    ///                     vocab::rdf::TYPE,
+    ///                     NamedNodeRef::new_unchecked("http://example.com"),
+    ///                     GraphNameRef::DefaultGraph,
+    ///                 ))?;
     ///             }
     ///         }
     ///     }
@@ -1023,9 +1061,9 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example with a custom function serializing terms to N-Triples:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::{EvaluationError, QueryOptions, QueryResults};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// store.transaction(|mut transaction| {
@@ -1033,13 +1071,20 @@ impl<'a> Transaction<'a> {
     ///         "SELECT ?s (<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) WHERE { ?s ?p ?o }",
     ///         QueryOptions::default().with_custom_function(
     ///             NamedNode::new_unchecked("http://www.w3.org/ns/formats/N-Triples"),
-    ///             |args| args.get(0).map(|t| Literal::from(t.to_string()).into())
-    ///         )
+    ///             |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
+    ///         ),
     ///     )? {
     ///         for solution in solutions {
     ///             let solution = solution?;
-    ///             if let (Some(Term::NamedNode(s)), Some(nt)) = (solution.get("s"), solution.get("nt")) {
-    ///                 transaction.insert(QuadRef::new(s, NamedNodeRef::new_unchecked("http://example.com/n-triples-representation"), nt, GraphNameRef::DefaultGraph))?;
+    ///             if let (Some(Term::NamedNode(s)), Some(nt)) =
+    ///                 (solution.get("s"), solution.get("nt"))
+    ///             {
+    ///                 transaction.insert(QuadRef::new(
+    ///                     s,
+    ///                     NamedNodeRef::new_unchecked("http://example.com/n-triples-representation"),
+    ///                     nt,
+    ///                     GraphNameRef::DefaultGraph,
+    ///                 ))?;
     ///             }
     ///         }
     ///     }
@@ -1060,8 +1105,8 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::{StorageError, Store};
     /// use oxigraph::model::*;
+    /// use oxigraph::store::{StorageError, Store};
     ///
     /// let store = Store::new()?;
     /// let a = NamedNodeRef::new("http://example.com/a")?;
@@ -1123,14 +1168,16 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::EvaluationError;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// store.transaction(|mut transaction| {
     ///     // insertion
-    ///     transaction.update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
+    ///     transaction.update(
+    ///         "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+    ///     )?;
     ///
     ///     // we inspect the store contents
     ///     let ex = NamedNodeRef::new_unchecked("http://example.com");
@@ -1210,16 +1257,21 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|mut transaction| {
-    ///     transaction.load_graph(file.as_ref(), RdfFormat::NTriples, GraphName::DefaultGraph, None)
+    ///     transaction.load_graph(
+    ///         file.as_ref(),
+    ///         RdfFormat::NTriples,
+    ///         GraphName::DefaultGraph,
+    ///         None,
+    ///     )
     /// })?;
     ///
     /// // we inspect the store contents
@@ -1253,14 +1305,15 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// let file =
+    ///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store.transaction(|mut transaction| {
     ///     transaction.load_dataset(file.as_ref(), RdfFormat::NQuads, None)
     /// })?;
@@ -1295,16 +1348,14 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     transaction.insert(quad)
-    /// })?;
+    /// store.transaction(|mut transaction| transaction.insert(quad))?;
     /// assert!(store.contains(quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
@@ -1329,8 +1380,8 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
@@ -1371,15 +1422,16 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::NamedNodeRef;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     transaction.insert_named_graph(ex)
-    /// })?;
-    /// assert_eq!(store.named_graphs().collect::<Result<Vec<_>,_>>()?, vec![ex.into_owned().into()]);
+    /// store.transaction(|mut transaction| transaction.insert_named_graph(ex))?;
+    /// assert_eq!(
+    ///     store.named_graphs().collect::<Result<Vec<_>, _>>()?,
+    ///     vec![ex.into_owned().into()]
+    /// );
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
     pub fn insert_named_graph<'b>(
@@ -1393,8 +1445,8 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let quad = QuadRef::new(ex, ex, ex, ex);
@@ -1420,8 +1472,8 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::{NamedNodeRef, QuadRef};
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let quad = QuadRef::new(ex, ex, ex, ex);
@@ -1445,8 +1497,8 @@ impl<'a> Transaction<'a> {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let store = Store::new()?;
@@ -1518,15 +1570,18 @@ impl Iterator for GraphNameIter {
 ///
 /// Usage example with loading a dataset:
 /// ```
-/// use oxigraph::store::Store;
 /// use oxigraph::io::RdfFormat;
 /// use oxigraph::model::*;
+/// use oxigraph::store::Store;
 ///
 /// let store = Store::new()?;
 ///
 /// // quads file insertion
-/// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-/// store.bulk_loader().load_from_read(RdfFormat::NQuads, file.as_ref())?;
+/// let file =
+///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+/// store
+///     .bulk_loader()
+///     .load_from_read(RdfFormat::NQuads, file.as_ref())?;
 ///
 /// // we inspect the store contents
 /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1684,15 +1739,18 @@ impl BulkLoader {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_loader().load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
+    /// let file =
+    ///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    /// store
+    ///     .bulk_loader()
+    ///     .load_dataset(file.as_ref(), RdfFormat::NQuads, None)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1745,15 +1803,20 @@ impl BulkLoader {
     ///
     /// Usage example:
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> .";
-    /// store.bulk_loader().load_graph(file.as_ref(), RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
+    /// store.bulk_loader().load_graph(
+    ///     file.as_ref(),
+    ///     RdfFormat::NTriples,
+    ///     GraphName::DefaultGraph,
+    ///     None,
+    /// )?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;

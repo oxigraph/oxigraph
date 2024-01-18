@@ -102,7 +102,7 @@ impl Optimizer {
                 let expression = Self::normalize_expression(expression, &inner_types);
                 let expression_type = infer_expression_type(&expression, &inner_types);
                 if expression_type == VariableType::UNDEF {
-                    //TODO: valid?
+                    // TODO: valid?
                     inner
                 } else {
                     GraphPattern::extend(inner, variable, expression)
@@ -397,7 +397,7 @@ impl Optimizer {
                 expression,
                 variable,
             } => {
-                //TODO: handle the case where the filter overrides an expression variable (should not happen in SPARQL but allowed in the algebra)
+                // TODO: handle the case where the filter overrides an expression variable (should not happen in SPARQL but allowed in the algebra)
                 let mut inner_filters = Vec::new();
                 let mut final_filters = Vec::new();
                 for filter in filters {
@@ -735,7 +735,7 @@ fn is_fit_for_for_loop_join(
     global_input_types: &VariableTypes,
     entry_types: &VariableTypes,
 ) -> bool {
-    //TODO: think more about it
+    // TODO: think more about it
     match pattern {
         GraphPattern::Values { .. }
         | GraphPattern::QuadPattern { .. }

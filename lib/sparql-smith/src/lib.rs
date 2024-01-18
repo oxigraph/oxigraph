@@ -44,7 +44,7 @@ struct QueryContent {
 #[derive(Arbitrary)]
 enum QueryVariant {
     Select(SelectQuery),
-    //TODO: Other variants!
+    // TODO: Other variants!
 }
 
 impl<'a> Arbitrary<'a> for Query {
@@ -246,7 +246,7 @@ impl fmt::Display for GroupCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            //Self::FunctionCall(c) => write!(f, "{}", c),
+            // Self::FunctionCall(c) => write!(f, "{}", c),
             Self::Projection(e, v) => {
                 if let Some(v) = v {
                     write!(f, "({e} AS {v})")
@@ -705,7 +705,7 @@ impl fmt::Display for Constraint {
         match self {
             Self::BrackettedExpression(e) => write!(f, "{e}"),
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            //Self::FunctionCall(c) => write!(f, "{}", c),
+            // Self::FunctionCall(c) => write!(f, "{}", c),
         }
     }
 }
@@ -1530,7 +1530,7 @@ enum BuiltInCall {
     IsLiteral(Box<Expression>),
     IsNumeric(Box<Expression>),
     Exists(ExistsFunc),
-    NotExists(NotExistsFunc), //TODO: Other functions
+    NotExists(NotExistsFunc), // TODO: Other functions
 }
 
 impl fmt::Display for BuiltInCall {
@@ -1585,15 +1585,15 @@ impl fmt::Display for NotExistsFunc {
 struct IriOrFunction {
     // [128]  	iriOrFunction	  ::=  	iri ArgList?
     iri: Iri,
-    //TODO args: Option<ArgList>,
+    // TODO args: Option<ArgList>,
 }
 
 impl fmt::Display for IriOrFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.iri)?;
-        /*if let Some(args) = &self.args {
-            write!(f, "{}", args)?;
-        }*/
+        // if let Some(args) = &self.args {
+        // write!(f, "{}", args)?;
+        // }
         Ok(())
     }
 }

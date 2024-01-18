@@ -365,7 +365,7 @@ enum PartialGraphPattern {
 }
 
 fn new_join(l: GraphPattern, r: GraphPattern) -> GraphPattern {
-    //Avoid to output empty BGPs
+    // Avoid to output empty BGPs
     if let GraphPattern::Bgp { patterns: pl } = &l {
         if pl.is_empty() {
             return r;
@@ -449,7 +449,7 @@ fn build_select(
     let mut p = r#where;
     let mut with_aggregate = false;
 
-    //GROUP BY
+    // GROUP BY
     let aggregates = state.aggregates.pop().unwrap_or_default();
     if group.is_none() && !aggregates.is_empty() {
         group = Some((vec![], vec![]));
@@ -471,7 +471,7 @@ fn build_select(
         with_aggregate = true;
     }
 
-    //HAVING
+    // HAVING
     if let Some(expr) = having {
         p = GraphPattern::Filter {
             expr,
@@ -479,12 +479,12 @@ fn build_select(
         };
     }
 
-    //VALUES
+    // VALUES
     if let Some(data) = values {
         p = new_join(p, data);
     }
 
-    //SELECT
+    // SELECT
     let mut pv = Vec::new();
     let with_project = match select.variables {
         SelectionVariables::Explicit(sel_items) => {
@@ -533,7 +533,7 @@ fn build_select(
             if with_aggregate {
                 return Err("SELECT * is not authorized with GROUP BY");
             }
-            //TODO: is it really useful to do a projection?
+            // TODO: is it really useful to do a projection?
             p.on_in_scope_variable(|v| {
                 if !pv.contains(v) {
                     pv.push(v.clone());
@@ -547,7 +547,7 @@ fn build_select(
 
     let mut m = p;
 
-    //ORDER BY
+    // ORDER BY
     if let Some(expression) = order_by {
         m = GraphPattern::OrderBy {
             inner: Box::new(m),
@@ -555,7 +555,7 @@ fn build_select(
         };
     }
 
-    //PROJECT
+    // PROJECT
     if with_project {
         m = GraphPattern::Project {
             inner: Box::new(m),
@@ -568,7 +568,7 @@ fn build_select(
         SelectionOption::Default => (),
     }
 
-    //OFFSET LIMIT
+    // OFFSET LIMIT
     if let Some((start, length)) = offset_limit {
         m = GraphPattern::Slice {
             inner: Box::new(m),

@@ -14,6 +14,9 @@ pub struct Integer {
 }
 
 impl Integer {
+    pub const MAX: Self = Self { value: i64::MAX };
+    pub const MIN: Self = Self { value: i64::MIN };
+
     #[inline]
     #[must_use]
     pub fn from_be_bytes(bytes: [u8; 8]) -> Self {
@@ -134,10 +137,6 @@ impl Integer {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
-
-    pub const MIN: Self = Self { value: i64::MIN };
-
-    pub const MAX: Self = Self { value: i64::MAX };
 }
 
 impl From<bool> for Integer {

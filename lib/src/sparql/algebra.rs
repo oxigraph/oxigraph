@@ -23,7 +23,10 @@ use std::str::FromStr;
 /// // We edit the query dataset specification
 /// let default = vec![NamedNode::new("http://example.com")?.into()];
 /// query.dataset_mut().set_default_graph(default.clone());
-/// assert_eq!(query.dataset().default_graph_graphs(), Some(default.as_slice()));
+/// assert_eq!(
+///     query.dataset().default_graph_graphs(),
+///     Some(default.as_slice())
+/// );
 /// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -58,7 +61,7 @@ impl Query {
 
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.inner.fmt(f) //TODO: override
+        self.inner.fmt(f) // TODO: override
     }
 }
 
@@ -217,8 +220,15 @@ impl QueryDataset {
     /// ```
     /// use oxigraph::sparql::Query;
     ///
-    /// assert!(Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
-    /// assert!(!Query::parse("SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }", None)?.dataset().is_default_dataset());
+    /// assert!(Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?
+    ///     .dataset()
+    ///     .is_default_dataset());
+    /// assert!(!Query::parse(
+    ///     "SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }",
+    ///     None
+    /// )?
+    /// .dataset()
+    /// .is_default_dataset());
     ///
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
@@ -250,7 +260,10 @@ impl QueryDataset {
     /// let mut query = Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
     /// let default = vec![NamedNode::new("http://example.com")?.into()];
     /// query.dataset_mut().set_default_graph(default.clone());
-    /// assert_eq!(query.dataset().default_graph_graphs(), Some(default.as_slice()));    
+    /// assert_eq!(
+    ///     query.dataset().default_graph_graphs(),
+    ///     Some(default.as_slice())
+    /// );
     ///
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
@@ -271,8 +284,13 @@ impl QueryDataset {
     ///
     /// let mut query = Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
     /// let named = vec![NamedNode::new("http://example.com")?.into()];
-    /// query.dataset_mut().set_available_named_graphs(named.clone());
-    /// assert_eq!(query.dataset().available_named_graphs(), Some(named.as_slice()));
+    /// query
+    ///     .dataset_mut()
+    ///     .set_available_named_graphs(named.clone());
+    /// assert_eq!(
+    ///     query.dataset().available_named_graphs(),
+    ///     Some(named.as_slice())
+    /// );
     ///
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```

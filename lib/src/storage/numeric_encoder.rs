@@ -6,8 +6,7 @@ use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::fmt::Debug;
-use std::hash::Hash;
-use std::hash::Hasher;
+use std::hash::{Hash, Hasher};
 use std::str;
 use std::sync::Arc;
 

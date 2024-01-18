@@ -19,6 +19,11 @@ pub struct Decimal {
 }
 
 impl Decimal {
+    pub const MAX: Self = Self { value: i128::MAX };
+    pub const MIN: Self = Self { value: i128::MIN };
+    #[cfg(test)]
+    pub const STEP: Self = Self { value: 1 };
+
     /// Constructs the decimal i / 10^n
     #[inline]
     pub const fn new(i: i128, n: u32) -> Result<Self, TooLargeForDecimalError> {
@@ -260,13 +265,6 @@ impl Decimal {
     pub(super) const fn as_i128(self) -> i128 {
         self.value / DECIMAL_PART_POW
     }
-
-    pub const MIN: Self = Self { value: i128::MIN };
-
-    pub const MAX: Self = Self { value: i128::MAX };
-
-    #[cfg(test)]
-    pub const STEP: Self = Self { value: 1 };
 }
 
 impl From<bool> for Decimal {
@@ -499,7 +497,7 @@ impl FromStr for Decimal {
             }
             input = &input[1..];
             if input.is_empty() && !with_before_dot {
-                //We only have a dot
+                // We only have a dot
                 return Err(PARSE_UNEXPECTED_END);
             }
             while input.last() == Some(&b'0') {
@@ -520,11 +518,11 @@ impl FromStr for Decimal {
                 }
             }
             if exp == 0 {
-                //Underflow
+                // Underflow
                 return Err(PARSE_UNDERFLOW);
             }
         } else if !with_before_dot {
-            //It's empty
+            // It's empty
             return Err(PARSE_UNEXPECTED_END);
         }
 

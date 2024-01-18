@@ -13,18 +13,22 @@ use std::time::Duration;
 /// before evaluating a SPARQL query that uses SERVICE calls.
 ///
 /// ```
-/// use oxigraph::store::Store;
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::{QueryOptions, QueryResults, ServiceHandler, Query, EvaluationError};
+/// use oxigraph::sparql::{EvaluationError, Query, QueryOptions, QueryResults, ServiceHandler};
+/// use oxigraph::store::Store;
 ///
 /// struct TestServiceHandler {
-///     store: Store
+///     store: Store,
 /// }
 ///
 /// impl ServiceHandler for TestServiceHandler {
 ///     type Error = EvaluationError;
 ///
-///     fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error> {
+///     fn handle(
+///         &self,
+///         service_name: NamedNode,
+///         query: Query,
+///     ) -> Result<QueryResults, Self::Error> {
 ///         if service_name == "http://example.com/service" {
 ///             self.store.query(query)
 ///         } else {
@@ -35,14 +39,16 @@ use std::time::Duration;
 ///
 /// let store = Store::new()?;
 /// let service = TestServiceHandler {
-///     store: Store::new()?
+///     store: Store::new()?,
 /// };
 /// let ex = NamedNodeRef::new("http://example.com")?;
-/// service.store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
+/// service
+///     .store
+///     .insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
 ///
 /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
 ///     "SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }",
-///     QueryOptions::default().with_service_handler(service)
+///     QueryOptions::default().with_service_handler(service),
 /// )? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }

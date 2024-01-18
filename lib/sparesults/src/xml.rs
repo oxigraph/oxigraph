@@ -2,7 +2,6 @@
 
 use crate::error::{ParseError, SyntaxError};
 use oxrdf::vocab::rdf;
-use oxrdf::Variable;
 use oxrdf::*;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
@@ -245,7 +244,7 @@ impl<R: Read> XmlQueryResultsReader<R> {
         let mut variables = Vec::default();
         let mut state = State::Start;
 
-        //Read header
+        // Read header
         loop {
             buffer.clear();
             let event = reader.read_event_into(&mut buffer)?;
@@ -553,7 +552,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                     }
                     State::BNode => {
                         if term.is_none() {
-                            //We default to a random bnode
+                            // We default to a random bnode
                             term = Some(BlankNode::default().into())
                         }
                         state = self
@@ -563,7 +562,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                     }
                     State::Literal => {
                         if term.is_none() {
-                            //We default to the empty literal
+                            // We default to the empty literal
                             term = Some(build_literal("", lang.take(), datatype.take())?.into())
                         }
                         state = self

@@ -19,16 +19,14 @@ use std::collections::HashMap;
 use std::env::temp_dir;
 use std::error::Error;
 use std::ffi::{CStr, CString};
-use std::fmt;
 use std::fs::remove_dir_all;
-use std::io;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, OnceLock};
 use std::thread::{available_parallelism, yield_now};
-use std::{ptr, slice};
+use std::{fmt, io, ptr, slice};
 
 macro_rules! ffi_result {
     ( $($function:ident)::*( $arg1:expr $(, $arg:expr)* $(,)? ) ) => {{
@@ -711,7 +709,7 @@ impl Db {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
-        Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
+        Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
     }
 
     pub fn insert(
@@ -970,7 +968,7 @@ impl Reader {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
-        Ok(self.get(column_family, key)?.is_some()) //TODO: optimize
+        Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
     }
 
     #[allow(clippy::iter_not_returning_iterator)]
@@ -983,7 +981,7 @@ impl Reader {
         column_family: &ColumnFamily,
         prefix: &[u8],
     ) -> Result<Iter, StorageError> {
-        //We generate the upper bound
+        // We generate the upper bound
         let upper_bound = {
             let mut bound = prefix.to_vec();
             let mut found = false;
@@ -1101,7 +1099,7 @@ impl Transaction<'_> {
         column_family: &ColumnFamily,
         key: &[u8],
     ) -> Result<bool, StorageError> {
-        Ok(self.get_for_update(column_family, key)?.is_some()) //TODO: optimize
+        Ok(self.get_for_update(column_family, key)?.is_some()) // TODO: optimize
     }
 
     pub fn insert(
@@ -1228,7 +1226,7 @@ pub struct Iter {
     is_currently_valid: bool,
     _upper_bound: Option<Vec<u8>>,
     _reader: Reader, // needed to ensure that DB still lives while iter is used
-    options: *mut rocksdb_readoptions_t, // needed to ensure that options still lives while iter is used
+    options: *mut rocksdb_readoptions_t, /* needed to ensure that options still lives while iter is used */
 }
 
 impl Drop for Iter {

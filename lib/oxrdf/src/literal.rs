@@ -1,6 +1,5 @@
 use crate::named_node::NamedNode;
-use crate::vocab::rdf;
-use crate::vocab::xsd;
+use crate::vocab::{rdf, xsd};
 use crate::NamedNodeRef;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
@@ -15,8 +14,8 @@ use std::option::Option;
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// # use oxilangtag::LanguageTagParseError;
-/// use oxrdf::Literal;
 /// use oxrdf::vocab::xsd;
+/// use oxrdf::Literal;
 ///
 /// assert_eq!(
 ///     "\"foo\\nbar\"",
@@ -427,8 +426,8 @@ impl From<DayTimeDuration> for Literal {
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
-/// use oxrdf::LiteralRef;
 /// use oxrdf::vocab::xsd;
+/// use oxrdf::LiteralRef;
 ///
 /// assert_eq!(
 ///     "\"foo\\nbar\"",

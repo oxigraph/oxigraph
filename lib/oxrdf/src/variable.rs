@@ -8,10 +8,7 @@ use std::fmt;
 /// ```
 /// use oxrdf::{Variable, VariableNameParseError};
 ///
-/// assert_eq!(
-///     "?foo",
-///     Variable::new("foo")?.to_string()
-/// );
+/// assert_eq!("?foo", Variable::new("foo")?.to_string());
 /// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -67,12 +64,9 @@ impl fmt::Display for Variable {
 ///
 /// The default string formatter is returning a SPARQL compatible representation:
 /// ```
-/// use oxrdf::{VariableRef, VariableNameParseError};
+/// use oxrdf::{VariableNameParseError, VariableRef};
 ///
-/// assert_eq!(
-///     "?foo",
-///     VariableRef::new("foo")?.to_string()
-/// );
+/// assert_eq!("?foo", VariableRef::new("foo")?.to_string());
 /// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]

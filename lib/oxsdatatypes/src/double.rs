@@ -17,6 +17,16 @@ pub struct Double {
 }
 
 impl Double {
+    pub const INFINITY: Self = Self {
+        value: f64::INFINITY,
+    };
+    pub const MAX: Self = Self { value: f64::MAX };
+    pub const MIN: Self = Self { value: f64::MIN };
+    pub const NAN: Self = Self { value: f64::NAN };
+    pub const NEG_INFINITY: Self = Self {
+        value: f64::NEG_INFINITY,
+    };
+
     #[inline]
     #[must_use]
     pub fn from_be_bytes(bytes: [u8; 8]) -> Self {
@@ -77,20 +87,6 @@ impl Double {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.value.to_bits() == other.value.to_bits()
     }
-
-    pub const MIN: Self = Self { value: f64::MIN };
-
-    pub const MAX: Self = Self { value: f64::MAX };
-
-    pub const INFINITY: Self = Self {
-        value: f64::INFINITY,
-    };
-
-    pub const NEG_INFINITY: Self = Self {
-        value: f64::NEG_INFINITY,
-    };
-
-    pub const NAN: Self = Self { value: f64::NAN };
 }
 
 impl From<Double> for f64 {

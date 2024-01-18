@@ -197,10 +197,10 @@ impl Expression {
                 xsd::BOOLEAN => match literal.value() {
                     "true" | "1" => Some(true),
                     "false" | "0" => Some(false),
-                    _ => None, //TODO
+                    _ => None, // TODO
                 },
                 xsd::STRING => Some(!literal.value().is_empty()),
-                _ => None, //TODO
+                _ => None, // TODO
             }
         } else {
             None

@@ -21,13 +21,16 @@ use std::io::{self, Write};
 /// let mut buffer = Vec::new();
 /// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
 /// writer.write(&Triple {
-///    subject: NamedNode::new("http://example.com/s")?.into(),
-///    predicate: NamedNode::new("http://example.com/p")?,
-///    object: NamedNode::new("http://example.com/o")?.into()
+///     subject: NamedNode::new("http://example.com/s")?.into(),
+///     predicate: NamedNode::new("http://example.com/p")?,
+///     object: NamedNode::new("http://example.com/o")?.into(),
 /// })?;
 /// writer.finish()?;
 ///
-/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes());
+/// assert_eq!(
+///     buffer.as_slice(),
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes()
+/// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[deprecated(note = "use RdfSerializer instead", since = "0.4.0")]
@@ -66,13 +69,16 @@ impl GraphSerializer {
 /// let mut buffer = Vec::new();
 /// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
 /// writer.write(&Triple {
-///    subject: NamedNode::new("http://example.com/s")?.into(),
-///    predicate: NamedNode::new("http://example.com/p")?,
-///    object: NamedNode::new("http://example.com/o")?.into()
+///     subject: NamedNode::new("http://example.com/s")?.into(),
+///     predicate: NamedNode::new("http://example.com/p")?,
+///     object: NamedNode::new("http://example.com/o")?.into(),
 /// })?;
 /// writer.finish()?;
 ///
-/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes());
+/// assert_eq!(
+///     buffer.as_slice(),
+///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes()
+/// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]

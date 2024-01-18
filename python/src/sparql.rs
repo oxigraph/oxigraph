@@ -515,28 +515,25 @@ pub struct PyQueryResultsFormat {
 
 #[pymethods]
 impl PyQueryResultsFormat {
-    /// `SPARQL Query Results XML Format <https://www.w3.org/TR/rdf-sparql-XMLres/>`_
-    #[classattr]
-    const XML: Self = Self {
-        inner: QueryResultsFormat::Xml,
-    };
-
-    /// `SPARQL Query Results JSON Format <https://www.w3.org/TR/sparql11-results-json/>`_
-    #[classattr]
-    const JSON: Self = Self {
-        inner: QueryResultsFormat::Json,
-    };
-
     /// `SPARQL Query Results CSV Format <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_
     #[classattr]
     const CSV: Self = Self {
         inner: QueryResultsFormat::Csv,
     };
-
+    /// `SPARQL Query Results JSON Format <https://www.w3.org/TR/sparql11-results-json/>`_
+    #[classattr]
+    const JSON: Self = Self {
+        inner: QueryResultsFormat::Json,
+    };
     /// `SPARQL Query Results TSV Format <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_
     #[classattr]
     const TSV: Self = Self {
         inner: QueryResultsFormat::Tsv,
+    };
+    /// `SPARQL Query Results XML Format <https://www.w3.org/TR/rdf-sparql-XMLres/>`_
+    #[classattr]
+    const XML: Self = Self {
+        inner: QueryResultsFormat::Xml,
     };
 
     /// :return: the format canonical IRI according to the `Unique URIs for file formats registry <https://www.w3.org/ns/formats/>`_.

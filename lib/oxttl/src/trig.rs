@@ -6,7 +6,8 @@ use crate::terse::TriGRecognizer;
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxiri::{Iri, IriParseError};
-use oxrdf::{vocab::xsd, GraphName, NamedNode, Quad, QuadRef, Subject, TermRef};
+use oxrdf::vocab::xsd;
+use oxrdf::{GraphName, NamedNode, Quad, QuadRef, Subject, TermRef};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -19,7 +20,8 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TriGParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -97,7 +99,8 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxttl::TriGParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -128,7 +131,8 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxttl::TriGParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
@@ -167,14 +171,16 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxttl::TriGParser;
     ///
-    /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
+    /// let file: [&[u8]; 5] = [
+    ///     b"@base <http://example.com/>",
     ///     b". @prefix schema: <http://schema.org/> .",
     ///     b"<foo> a schema:Person",
     ///     b" ; schema:name \"Foo\" . <bar>",
-    ///     b" a schema:Person ; schema:name \"Bar\" ."
+    ///     b" a schema:Person ; schema:name \"Bar\" .",
     /// ];
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
@@ -184,7 +190,7 @@ impl TriGParser {
     /// while !parser.is_end() {
     ///     // We feed more data to the parser
     ///     if let Some(chunk) = file_chunks.next() {
-    ///         parser.extend_from_slice(chunk);    
+    ///         parser.extend_from_slice(chunk);
     ///     } else {
     ///         parser.end(); // It's finished
     ///     }
@@ -217,7 +223,8 @@ impl TriGParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TriGParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -309,7 +316,8 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TriGParser;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
@@ -410,14 +418,16 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TriGParser;
 ///
-/// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
+/// let file: [&[u8]; 5] = [
+///     b"@base <http://example.com/>",
 ///     b". @prefix schema: <http://schema.org/> .",
 ///     b"<foo> a schema:Person",
 ///     b" ; schema:name \"Foo\" . <bar>",
-///     b" a schema:Person ; schema:name \"Bar\" ."
+///     b" a schema:Person ; schema:name \"Bar\" .",
 /// ];
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
@@ -427,7 +437,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
 /// while !parser.is_end() {
 ///     // We feed more data to the parser
 ///     if let Some(chunk) = file_chunks.next() {
-///         parser.extend_from_slice(chunk);    
+///         parser.extend_from_slice(chunk);
 ///     } else {
 ///         parser.end(); // It's finished
 ///     }

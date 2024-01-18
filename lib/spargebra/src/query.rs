@@ -13,7 +13,10 @@ use std::str::FromStr;
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
 /// let query = Query::parse(query_str, None)?;
 /// assert_eq!(query.to_string(), query_str);
-/// assert_eq!(query.to_sse(), "(project (?s ?p ?o) (bgp (triple ?s ?p ?o)))");
+/// assert_eq!(
+///     query.to_sse(),
+///     "(project (?s ?p ?o) (bgp (triple ?s ?p ?o)))"
+/// );
 /// # Ok::<_, spargebra::ParseError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]

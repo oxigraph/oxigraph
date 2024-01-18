@@ -4,12 +4,10 @@ use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3T
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
+use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "rdf-star")]
 use oxrdf::Triple;
-use oxrdf::{
-    vocab::{rdf, xsd},
-    BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Subject, Term,
-};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Subject, Term};
 use std::collections::HashMap;
 
 pub struct TriGRecognizer {
@@ -30,9 +28,9 @@ pub struct TriGRecognizerContext {
 }
 
 impl RuleRecognizer for TriGRecognizer {
-    type TokenRecognizer = N3Lexer;
-    type Output = Quad;
     type Context = TriGRecognizerContext;
+    type Output = Quad;
+    type TokenRecognizer = N3Lexer;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
@@ -784,7 +782,7 @@ impl RuleRecognizer for TriGRecognizer {
                 }
             }
         } else if token == N3Token::Punctuation(".") || token == N3Token::Punctuation("}") {
-            //TODO: be smarter depending if we are in '{' or not
+            // TODO: be smarter depending if we are in '{' or not
             self.stack.push(TriGState::TriGDoc);
             self
         } else {
@@ -819,7 +817,7 @@ impl RuleRecognizer for TriGRecognizer {
                 self.emit_quad(results);
                 errors.push("Triples should be followed by a dot".into())
             }
-            _ => errors.push("Unexpected end".into()), //TODO
+            _ => errors.push("Unexpected end".into()), // TODO
         }
     }
 

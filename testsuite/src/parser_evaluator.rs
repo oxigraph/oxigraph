@@ -77,11 +77,11 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     );
     evaluator.register(
         "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10NegativeEvalTest",
-        |_| Ok(()), //TODO: not a proper implementation
+        |_| Ok(()), // TODO: not a proper implementation
     );
     evaluator.register(
         "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10MapTest",
-        |_| Ok(()), //TODO: not a proper implementation
+        |_| Ok(()), // TODO: not a proper implementation
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestNTripleRecovery",

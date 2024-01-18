@@ -199,31 +199,26 @@ impl PyRdfFormat {
     const N3: Self = Self {
         inner: RdfFormat::N3,
     };
-
     /// `N-Quads <https://www.w3.org/TR/n-quads/>`_
     #[classattr]
     const N_QUADS: Self = Self {
         inner: RdfFormat::NQuads,
     };
-
     /// `N-Triples <https://www.w3.org/TR/n-triples/>`_
     #[classattr]
     const N_TRIPLES: Self = Self {
         inner: RdfFormat::NTriples,
     };
-
     /// `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_
     #[classattr]
     const RDF_XML: Self = Self {
         inner: RdfFormat::RdfXml,
     };
-
     /// `TriG <https://www.w3.org/TR/trig/>`_
     #[classattr]
     const TRIG: Self = Self {
         inner: RdfFormat::TriG,
     };
-
     /// `Turtle <https://www.w3.org/TR/turtle/>`_
     #[classattr]
     const TURTLE: Self = Self {

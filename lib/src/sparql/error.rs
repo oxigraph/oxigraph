@@ -5,8 +5,7 @@ use crate::sparql::ParseError;
 use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error::Error;
-use std::fmt;
-use std::io;
+use std::{fmt, io};
 
 /// A SPARQL evaluation error.
 #[derive(Debug)]
