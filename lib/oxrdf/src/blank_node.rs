@@ -1,8 +1,7 @@
 use rand::random;
 use std::error::Error;
-use std::fmt;
 use std::io::Write;
-use std::str;
+use std::{fmt, str};
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
@@ -15,10 +14,7 @@ use std::str;
 /// ```
 /// use oxrdf::BlankNode;
 ///
-/// assert_eq!(
-///     "_:a122",
-///     BlankNode::new("a122")?.to_string()
-/// );
+/// assert_eq!("_:a122", BlankNode::new("a122")?.to_string());
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -36,7 +32,7 @@ impl BlankNode {
     /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
     /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`]
-    ///that creates a random ID that could be easily inlined by Oxigraph stores.
+    /// that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: impl Into<String>) -> Result<Self, BlankNodeIdParseError> {
         let id = id.into();
         validate_blank_node_identifier(&id)?;
@@ -133,10 +129,7 @@ impl Default for BlankNode {
 /// ```
 /// use oxrdf::BlankNodeRef;
 ///
-/// assert_eq!(
-///     "_:a122",
-///     BlankNodeRef::new("a122")?.to_string()
-/// );
+/// assert_eq!("_:a122", BlankNodeRef::new("a122")?.to_string());
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -192,7 +185,10 @@ impl<'a> BlankNodeRef<'a> {
     /// ```
     /// use oxrdf::BlankNode;
     ///
-    /// assert_eq!(BlankNode::new_from_unique_id(128).as_ref().unique_id(), Some(128));
+    /// assert_eq!(
+    ///     BlankNode::new_from_unique_id(128).as_ref().unique_id(),
+    ///     Some(128)
+    /// );
     /// assert_eq!(BlankNode::new("foo")?.as_ref().unique_id(), None);
     /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
     /// ```

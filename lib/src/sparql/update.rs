@@ -139,7 +139,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         let mut bnodes = HashMap::new();
         let (eval, _) = evaluator.graph_pattern_evaluator(&pattern, &mut variables);
         let tuples =
-            eval(EncodedTuple::with_capacity(variables.len())).collect::<Result<Vec<_>, _>>()?; //TODO: would be much better to stream
+            eval(EncodedTuple::with_capacity(variables.len())).collect::<Result<Vec<_>, _>>()?; // TODO: would be much better to stream
         for tuple in tuples {
             for quad in delete {
                 if let Some(quad) =

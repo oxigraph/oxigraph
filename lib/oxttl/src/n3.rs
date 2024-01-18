@@ -181,7 +181,8 @@ impl From<Quad> for N3Quad {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNode, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNode;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -260,7 +261,9 @@ impl N3Parser {
     /// <bar> a schema:Person ;
     ///     schema:name "Bar" ."#;
     ///
-    /// let rdf_type = N3Term::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
+    /// let rdf_type = N3Term::NamedNode(NamedNode::new(
+    ///     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    /// )?);
     /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
     /// let mut count = 0;
     /// for triple in N3Parser::new().parse_read(file.as_ref()) {
@@ -282,7 +285,8 @@ impl N3Parser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNode, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNode;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
@@ -322,14 +326,16 @@ impl N3Parser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNode, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNode;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
-    /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
+    /// let file: [&[u8]; 5] = [
+    ///     b"@base <http://example.com/>",
     ///     b". @prefix schema: <http://schema.org/> .",
     ///     b"<foo> a schema:Person",
     ///     b" ; schema:name \"Foo\" . <bar>",
-    ///     b" a schema:Person ; schema:name \"Bar\" ."
+    ///     b" a schema:Person ; schema:name \"Bar\" .",
     /// ];
     ///
     /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
@@ -340,7 +346,7 @@ impl N3Parser {
     /// while !parser.is_end() {
     ///     // We feed more data to the parser
     ///     if let Some(chunk) = file_chunks.next() {
-    ///         parser.extend_from_slice(chunk);    
+    ///         parser.extend_from_slice(chunk);
     ///     } else {
     ///         parser.end(); // It's finished
     ///     }
@@ -366,7 +372,8 @@ impl N3Parser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNode, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNode;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -459,7 +466,8 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNode, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNode;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// # #[tokio::main(flavor = "current_thread")]
@@ -561,14 +569,16 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNode, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNode;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
-/// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
+/// let file: [&[u8]; 5] = [
+///     b"@base <http://example.com/>",
 ///     b". @prefix schema: <http://schema.org/> .",
 ///     b"<foo> a schema:Person",
 ///     b" ; schema:name \"Foo\" . <bar>",
-///     b" a schema:Person ; schema:name \"Bar\" ."
+///     b" a schema:Person ; schema:name \"Bar\" .",
 /// ];
 ///
 /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
@@ -579,7 +589,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
 /// while !parser.is_end() {
 ///     // We feed more data to the parser
 ///     if let Some(chunk) = file_chunks.next() {
-///         parser.extend_from_slice(chunk);    
+///         parser.extend_from_slice(chunk);
 ///     } else {
 ///         parser.end(); // It's finished
 ///     }
@@ -697,9 +707,9 @@ struct N3RecognizerContext {
 }
 
 impl RuleRecognizer for N3Recognizer {
-    type TokenRecognizer = N3Lexer;
-    type Output = N3Quad;
     type Context = N3RecognizerContext;
+    type Output = N3Quad;
+    type TokenRecognizer = N3Lexer;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
@@ -1191,7 +1201,7 @@ impl RuleRecognizer for N3Recognizer {
     ) {
         match &*self.stack {
             [] | [N3State::N3Doc] => (),
-            _ => errors.push("Unexpected end".into()), //TODO
+            _ => errors.push("Unexpected end".into()), // TODO
         }
     }
 

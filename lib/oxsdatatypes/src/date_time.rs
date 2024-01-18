@@ -17,6 +17,13 @@ pub struct DateTime {
 }
 
 impl DateTime {
+    pub const MAX: Self = Self {
+        timestamp: Timestamp::MAX,
+    };
+    pub const MIN: Self = Self {
+        timestamp: Timestamp::MIN,
+    };
+
     #[inline]
     pub(super) fn new(
         year: i64,
@@ -241,14 +248,6 @@ impl DateTime {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
-
-    pub const MIN: Self = Self {
-        timestamp: Timestamp::MIN,
-    };
-
-    pub const MAX: Self = Self {
-        timestamp: Timestamp::MAX,
-    };
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -317,6 +316,21 @@ pub struct Time {
 }
 
 impl Time {
+    #[cfg(test)]
+    const MAX: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(62_230_255_200),
+            timezone_offset: Some(TimezoneOffset::MIN),
+        },
+    };
+    #[cfg(test)]
+    const MIN: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(62_230_154_400),
+            timezone_offset: Some(TimezoneOffset::MAX),
+        },
+    };
+
     #[inline]
     fn new(
         mut hour: u8,
@@ -493,22 +507,6 @@ impl Time {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
-
-    #[cfg(test)]
-    const MIN: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(62_230_154_400),
-            timezone_offset: Some(TimezoneOffset::MAX),
-        },
-    };
-
-    #[cfg(test)]
-    const MAX: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(62_230_255_200),
-            timezone_offset: Some(TimezoneOffset::MIN),
-        },
-    };
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -566,6 +564,19 @@ pub struct Date {
 }
 
 impl Date {
+    pub const MAX: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(170_141_183_460_469_216_800),
+            timezone_offset: Some(TimezoneOffset::MAX),
+        },
+    };
+    pub const MIN: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(-170_141_183_460_469_216_800),
+            timezone_offset: Some(TimezoneOffset::MIN),
+        },
+    };
+
     #[inline]
     fn new(
         year: i64,
@@ -742,19 +753,6 @@ impl Date {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
-
-    pub const MIN: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(-170_141_183_460_469_216_800),
-            timezone_offset: Some(TimezoneOffset::MIN),
-        },
-    };
-    pub const MAX: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(170_141_183_460_469_216_800),
-            timezone_offset: Some(TimezoneOffset::MAX),
-        },
-    };
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -805,6 +803,19 @@ pub struct GYearMonth {
 }
 
 impl GYearMonth {
+    pub const MAX: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(170_141_183_460_469_216_800),
+            timezone_offset: Some(TimezoneOffset::MAX),
+        },
+    };
+    pub const MIN: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(-170_141_183_460_466_970_400),
+            timezone_offset: Some(TimezoneOffset::MIN),
+        },
+    };
+
     #[inline]
     fn new(
         year: i64,
@@ -876,19 +887,6 @@ impl GYearMonth {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
-
-    pub const MIN: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(-170_141_183_460_466_970_400),
-            timezone_offset: Some(TimezoneOffset::MIN),
-        },
-    };
-    pub const MAX: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(170_141_183_460_469_216_800),
-            timezone_offset: Some(TimezoneOffset::MAX),
-        },
-    };
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -947,6 +945,19 @@ pub struct GYear {
 }
 
 impl GYear {
+    pub const MAX: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(170_141_183_460_461_440_800),
+            timezone_offset: Some(TimezoneOffset::MAX),
+        },
+    };
+    pub const MIN: Self = Self {
+        timestamp: Timestamp {
+            value: Decimal::new_from_i128_unchecked(-170_141_183_460_461_700_000),
+            timezone_offset: Some(TimezoneOffset::MIN),
+        },
+    };
+
     #[inline]
     fn new(
         year: i64,
@@ -1011,19 +1022,6 @@ impl GYear {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.timestamp.is_identical_with(other.timestamp)
     }
-
-    pub const MIN: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(-170_141_183_460_461_700_000),
-            timezone_offset: Some(TimezoneOffset::MIN),
-        },
-    };
-    pub const MAX: Self = Self {
-        timestamp: Timestamp {
-            value: Decimal::new_from_i128_unchecked(170_141_183_460_461_440_800),
-            timezone_offset: Some(TimezoneOffset::MAX),
-        },
-    };
 }
 
 /// Conversion according to [XPath cast rules](https://www.w3.org/TR/xpath-functions-31/#casting-to-datetimes).
@@ -1461,6 +1459,10 @@ pub struct TimezoneOffset {
 }
 
 impl TimezoneOffset {
+    pub const MAX: Self = Self { offset: 14 * 60 };
+    pub const MIN: Self = Self { offset: -14 * 60 };
+    pub const UTC: Self = Self { offset: 0 };
+
     /// From offset in minute with respect to UTC
     #[inline]
     pub fn new(offset_in_minutes: i16) -> Result<Self, InvalidTimezoneError> {
@@ -1489,10 +1491,6 @@ impl TimezoneOffset {
     pub fn to_be_bytes(self) -> [u8; 2] {
         self.offset.to_be_bytes()
     }
-
-    pub const MIN: Self = Self { offset: -14 * 60 };
-    pub const UTC: Self = Self { offset: 0 };
-    pub const MAX: Self = Self { offset: 14 * 60 };
 }
 
 impl TryFrom<DayTimeDuration> for TimezoneOffset {
@@ -1576,7 +1574,7 @@ impl PartialEq for Timestamp {
     fn eq(&self, other: &Self) -> bool {
         match (self.timezone_offset, other.timezone_offset) {
             (Some(_), Some(_)) | (None, None) => self.value.eq(&other.value),
-            _ => false, //TODO: implicit timezone
+            _ => false, // TODO: implicit timezone
         }
     }
 }
@@ -1622,6 +1620,15 @@ impl Hash for Timestamp {
 }
 
 impl Timestamp {
+    pub const MAX: Self = Self {
+        value: Decimal::MAX,
+        timezone_offset: Some(TimezoneOffset::MAX),
+    };
+    pub const MIN: Self = Self {
+        value: Decimal::MIN,
+        timezone_offset: Some(TimezoneOffset::MIN),
+    };
+
     #[inline]
     fn new(props: &DateTimeSevenPropertyModel) -> Result<Self, DateTimeOverflowError> {
         Ok(Self {
@@ -1790,7 +1797,7 @@ impl Timestamp {
             (Some(_), Some(_)) | (None, None) => {
                 Some(DayTimeDuration::new(self.value.checked_sub(rhs.value)?))
             }
-            _ => None, //TODO: implicit timezone
+            _ => None, // TODO: implicit timezone
         }
     }
 
@@ -1816,13 +1823,13 @@ impl Timestamp {
                 Self {
                     value: self
                         .value
-                        .checked_add(i64::from(from_timezone.offset) * 60)?, // We keep the literal value
+                        .checked_add(i64::from(from_timezone.offset) * 60)?, /* We keep the literal value */
                     timezone_offset: None,
                 }
             }
         } else if let Some(to_timezone) = timezone_offset {
             Self {
-                value: self.value.checked_sub(i64::from(to_timezone.offset) * 60)?, // We keep the literal value
+                value: self.value.checked_sub(i64::from(to_timezone.offset) * 60)?, /* We keep the literal value */
                 timezone_offset: Some(to_timezone),
             }
         } else {
@@ -1851,16 +1858,6 @@ impl Timestamp {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.value == other.value && self.timezone_offset == other.timezone_offset
     }
-
-    pub const MIN: Self = Self {
-        value: Decimal::MIN,
-        timezone_offset: Some(TimezoneOffset::MIN),
-    };
-
-    pub const MAX: Self = Self {
-        value: Decimal::MAX,
-        timezone_offset: Some(TimezoneOffset::MAX),
-    };
 }
 
 #[cfg(feature = "custom-now")]
@@ -1960,7 +1957,7 @@ fn normalize_second(
     mi: i64,
     se: Decimal,
 ) -> Option<(i64, u8, u8, u8, u8, Decimal)> {
-    let mi = mi.checked_add(i64::try_from(se.as_i128().checked_div(60)?).ok()?)?; //TODO: good idea?
+    let mi = mi.checked_add(i64::try_from(se.as_i128().checked_div(60)?).ok()?)?; // TODO: good idea?
     let se = se.checked_rem(60)?;
     let (yr, mo, da, hr, mi) = normalize_minute(yr, mo, da, hr, mi)?;
     Some((yr, mo, da, hr, mi, se))

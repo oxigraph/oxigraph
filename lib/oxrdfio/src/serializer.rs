@@ -63,9 +63,12 @@ impl RdfSerializer {
     /// The format the serializer serializes to.
     ///
     /// ```
-    /// use oxrdfio::{RdfSerializer, RdfFormat};
+    /// use oxrdfio::{RdfFormat, RdfSerializer};
     ///
-    /// assert_eq!(RdfSerializer::from_format(RdfFormat::Turtle).format(), RdfFormat::Turtle);
+    /// assert_eq!(
+    ///     RdfSerializer::from_format(RdfFormat::Turtle).format(),
+    ///     RdfFormat::Turtle
+    /// );
     /// ```
     pub fn format(&self) -> RdfFormat {
         self.format

@@ -26,7 +26,8 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxrdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -84,7 +85,8 @@ impl RdfXmlParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxrdfxml::RdfXmlParser;
     ///
     /// let file = br#"<?xml version="1.0"?>
@@ -119,7 +121,8 @@ impl RdfXmlParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxrdfxml::RdfXmlParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
@@ -179,7 +182,8 @@ impl RdfXmlParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxrdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -246,8 +250,9 @@ impl<R: Read> FromReadRdfXmlReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
-///  use oxrdfxml::RdfXmlParser;
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
+/// use oxrdfxml::RdfXmlParser;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), oxrdfxml::ParseError> {
@@ -368,7 +373,7 @@ enum RdfXmlState {
         li_counter: u64,
     },
     PropertyElt {
-        //Resource, Literal or Empty property element
+        // Resource, Literal or Empty property element
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
@@ -392,7 +397,7 @@ enum RdfXmlState {
         subject: Subject,
         writer: Writer<Vec<u8>>,
         id_attr: Option<NamedNode>,
-        emit: bool, //false for parseTypeOtherPropertyElt support
+        emit: bool, // false for parseTypeOtherPropertyElt support
     },
 }
 
@@ -523,7 +528,7 @@ impl<R> RdfXmlReader<R> {
             PropertyElt { subject: Subject },
         }
 
-        //Literal case
+        // Literal case
         if let Some(RdfXmlState::ParseTypeLiteralPropertyElt { writer, .. }) = self.state.last_mut()
         {
             let mut clean_event = BytesStart::new(
@@ -542,7 +547,7 @@ impl<R> RdfXmlReader<R> {
 
         let tag_name = self.resolve_tag_name(event.name())?;
 
-        //We read attributes
+        // We read attributes
         let (mut language, mut base_iri) = if let Some(current_state) = self.state.last() {
             (
                 current_state.language().cloned(),
@@ -652,7 +657,7 @@ impl<R> RdfXmlReader<R> {
             }
         }
 
-        //Parsing with the base URI
+        // Parsing with the base URI
         let id_attr = match id_attr {
             Some(iri) => {
                 let iri = self.resolve_iri(&base_iri, iri)?;
@@ -855,7 +860,7 @@ impl<R> RdfXmlReader<R> {
         event: &BytesEnd<'_>,
         results: &mut Vec<Triple>,
     ) -> Result<(), ParseError> {
-        //Literal case
+        // Literal case
         if self.in_literal_depth > 0 {
             if let Some(RdfXmlState::ParseTypeLiteralPropertyElt { writer, .. }) =
                 self.state.last_mut()

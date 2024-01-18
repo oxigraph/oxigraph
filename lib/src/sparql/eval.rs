@@ -33,8 +33,7 @@ use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::iter::Iterator;
-use std::iter::{empty, once};
+use std::iter::{empty, once, Iterator};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{fmt, io, str};
@@ -112,8 +111,8 @@ impl EncodedTuple {
 }
 
 impl IntoIterator for EncodedTuple {
-    type Item = Option<EncodedTerm>;
     type IntoIter = std::vec::IntoIter<Option<EncodedTerm>>;
+    type Item = Option<EncodedTerm>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
@@ -1010,7 +1009,7 @@ impl SimpleEvaluator {
                             }
                         })
                         .for_each(|tuple| {
-                            //TODO avoid copy for key?
+                            // TODO avoid copy for key?
                             let key = key_variables
                                 .iter()
                                 .map(|v| tuple.get(*v).cloned())
@@ -3127,7 +3126,7 @@ pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Rege
                 'x' => {
                     regex_builder.ignore_whitespace(true);
                 }
-                _ => (), //TODO: implement q
+                _ => (), // TODO: implement q
             }
         }
     }
@@ -3632,7 +3631,7 @@ fn compare_str_str_id(dataset: &DatasetView, a: &str, b: &StrHash) -> Option<Ord
 }
 
 fn datatype(dataset: &DatasetView, value: &EncodedTerm) -> Option<EncodedTerm> {
-    //TODO: optimize?
+    // TODO: optimize?
     match value {
         EncodedTerm::NamedNode { .. }
         | EncodedTerm::SmallBlankNode { .. }
@@ -4387,6 +4386,7 @@ impl PathEvaluator {
             }
         }
     }
+
     fn eval_to_in_unknown_graph(
         &self,
         path: &PropertyPath,
@@ -4968,7 +4968,7 @@ impl Iterator for ConstructIterator {
                         ));
                     }
                 }
-                self.bnodes.clear(); //We do not reuse old bnodes
+                self.bnodes.clear(); // We do not reuse old bnodes
             }
         }
     }
@@ -5300,7 +5300,7 @@ impl Accumulator for SumAccumulator {
         if let Some(sum) = &self.sum {
             if let Some(operands) = element.and_then(|e| NumericBinaryOperands::new(sum.clone(), e))
             {
-                //TODO: unify with addition?
+                // TODO: unify with addition?
                 self.sum = match operands {
                     NumericBinaryOperands::Float(v1, v2) => Some((v1 + v2).into()),
                     NumericBinaryOperands::Double(v1, v2) => Some((v1 + v2).into()),
@@ -5343,8 +5343,8 @@ impl Accumulator for AvgAccumulator {
         if self.count == 0 {
             Some(0.into())
         } else {
-            //TODO: deduplicate?
-            //TODO: duration?
+            // TODO: deduplicate?
+            // TODO: duration?
             let count = Integer::from(self.count);
             match sum {
                 EncodedTerm::FloatLiteral(sum) => Some((sum / Float::from(count)).into()),
@@ -5584,6 +5584,7 @@ impl EncodedTupleSet {
             len: 0,
         }
     }
+
     fn insert(&mut self, tuple: EncodedTuple) {
         self.map
             .entry(self.tuple_key(&tuple))

@@ -39,9 +39,9 @@ enum NQuadsState {
 }
 
 impl RuleRecognizer for NQuadsRecognizer {
-    type TokenRecognizer = N3Lexer;
-    type Output = Quad;
     type Context = NQuadsRecognizerContext;
+    type Output = Quad;
+    type TokenRecognizer = N3Lexer;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
@@ -251,7 +251,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 self.emit_quad(results, GraphName::DefaultGraph);
                 errors.push("Triples should be followed by a dot".into())
             }
-            _ => errors.push("Unexpected end".into()), //TODO
+            _ => errors.push("Unexpected end".into()), // TODO
         }
     }
 

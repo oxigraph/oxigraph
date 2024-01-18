@@ -20,19 +20,20 @@
 //! assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
 //!
 //! // Print
-//! assert_eq!(dataset.to_string(), "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n");
+//! assert_eq!(
+//!     dataset.to_string(),
+//!     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
+//! );
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
 //! See also [`Graph`] if you only care about plain triples.
 
 use crate::interning::*;
-use crate::SubjectRef;
 use crate::*;
 use std::cmp::min;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeSet;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -924,8 +925,8 @@ impl PartialEq for Dataset {
 impl Eq for Dataset {}
 
 impl<'a> IntoIterator for &'a Dataset {
-    type Item = QuadRef<'a>;
     type IntoIter = Iter<'a>;
+    type Item = QuadRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -1282,8 +1283,8 @@ impl<'a> GraphView<'a> {
 }
 
 impl<'a> IntoIterator for GraphView<'a> {
-    type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
+    type Item = TripleRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -1291,8 +1292,8 @@ impl<'a> IntoIterator for GraphView<'a> {
 }
 
 impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
-    type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
+    type Item = TripleRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -1493,8 +1494,8 @@ impl<'a, 'b, T: Into<TripleRef<'b>>> Extend<T> for GraphViewMut<'a> {
 }
 
 impl<'a> IntoIterator for &'a GraphViewMut<'a> {
-    type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
+    type Item = TripleRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

@@ -130,8 +130,8 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 ///
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
 /// use oxrdf::{Literal, Variable};
+/// use sparesults::{FromReadQueryResultsReader, QueryResultsFormat, QueryResultsParser};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
@@ -141,10 +141,24 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 /// }
 ///
 /// // solutions
-/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"?foo\t?bar\n\"test\"\t".as_slice())? {
-///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+/// if let FromReadQueryResultsReader::Solutions(solutions) =
+///     json_parser.parse_read(b"?foo\t?bar\n\"test\"\t".as_slice())?
+/// {
+///     assert_eq!(
+///         solutions.variables(),
+///         &[
+///             Variable::new_unchecked("foo"),
+///             Variable::new_unchecked("bar")
+///         ]
+///     );
 ///     for solution in solutions {
-///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+///         assert_eq!(
+///             solution?.iter().collect::<Vec<_>>(),
+///             vec![(
+///                 &Variable::new_unchecked("foo"),
+///                 &Literal::from("test").into()
+///             )]
+///         );
 ///     }
 /// }
 /// # Result::<(),sparesults::ParseError>::Ok(())
@@ -188,12 +202,20 @@ impl<R: Read> FromReadSolutionsReader<R> {
     ///
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
-    /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
     /// use oxrdf::Variable;
+    /// use sparesults::{FromReadQueryResultsReader, QueryResultsFormat, QueryResultsParser};
     ///
     /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
-    /// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())? {
-    ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+    /// if let FromReadQueryResultsReader::Solutions(solutions) =
+    ///     json_parser.parse_read(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())?
+    /// {
+    ///     assert_eq!(
+    ///         solutions.variables(),
+    ///         &[
+    ///             Variable::new_unchecked("foo"),
+    ///             Variable::new_unchecked("bar")
+    ///         ]
+    ///     );
     /// }
     /// # Result::<(),sparesults::ParseError>::Ok(())
     /// ```

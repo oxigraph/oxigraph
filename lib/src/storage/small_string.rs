@@ -1,11 +1,10 @@
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::error::Error;
-use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::str;
 use std::str::{FromStr, Utf8Error};
+use std::{fmt, str};
 
 /// A small inline string
 #[derive(Clone, Copy, Default)]

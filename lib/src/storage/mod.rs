@@ -579,7 +579,7 @@ impl StorageReader {
 
     pub fn named_graphs(&self) -> DecodingGraphIterator {
         DecodingGraphIterator {
-            iter: self.reader.iter(&self.storage.graphs_cf).unwrap(), //TODO: propagate error?
+            iter: self.reader.iter(&self.storage.graphs_cf).unwrap(), // TODO: propagate error?
         }
     }
 
@@ -786,7 +786,7 @@ impl StorageReader {
     #[cfg(target_family = "wasm")]
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
     pub fn validate(&self) -> Result<(), StorageError> {
-        Ok(()) //TODO
+        Ok(()) // TODO
     }
 }
 

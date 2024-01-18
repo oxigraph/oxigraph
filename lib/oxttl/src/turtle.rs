@@ -21,7 +21,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TurtleParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -99,7 +100,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxttl::TurtleParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -130,7 +132,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxttl::TurtleParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
@@ -169,14 +172,16 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
     /// use oxttl::TurtleParser;
     ///
-    /// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
+    /// let file: [&[u8]; 5] = [
+    ///     b"@base <http://example.com/>",
     ///     b". @prefix schema: <http://schema.org/> .",
     ///     b"<foo> a schema:Person",
     ///     b" ; schema:name \"Foo\" . <bar>",
-    ///     b" a schema:Person ; schema:name \"Bar\" ."
+    ///     b" a schema:Person ; schema:name \"Bar\" .",
     /// ];
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
@@ -186,7 +191,7 @@ impl TurtleParser {
     /// while !parser.is_end() {
     ///     // We feed more data to the parser
     ///     if let Some(chunk) = file_chunks.next() {
-    ///         parser.extend_from_slice(chunk);    
+    ///         parser.extend_from_slice(chunk);
     ///     } else {
     ///         parser.end(); // It's finished
     ///     }
@@ -219,7 +224,8 @@ impl TurtleParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TurtleParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -311,7 +317,8 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TurtleParser;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
@@ -412,14 +419,16 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
 /// use oxttl::TurtleParser;
 ///
-/// let file: [&[u8]; 5] = [b"@base <http://example.com/>",
+/// let file: [&[u8]; 5] = [
+///     b"@base <http://example.com/>",
 ///     b". @prefix schema: <http://schema.org/> .",
 ///     b"<foo> a schema:Person",
 ///     b" ; schema:name \"Foo\" . <bar>",
-///     b" a schema:Person ; schema:name \"Bar\" ."
+///     b" a schema:Person ; schema:name \"Bar\" .",
 /// ];
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
@@ -429,7 +438,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 /// while !parser.is_end() {
 ///     // We feed more data to the parser
 ///     if let Some(chunk) = file_chunks.next() {
-///         parser.extend_from_slice(chunk);    
+///         parser.extend_from_slice(chunk);
 ///     } else {
 ///         parser.end(); // It's finished
 ///     }

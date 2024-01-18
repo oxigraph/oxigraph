@@ -366,7 +366,7 @@ impl<R: TokenRecognizer> Lexer<R> {
                     _ => return Some(()),
                 }
                 i += 1;
-                //TODO: SIMD
+                // TODO: SIMD
             }
         } else {
             for c in &self.data[self.position.buffer_offset..] {
@@ -376,7 +376,7 @@ impl<R: TokenRecognizer> Lexer<R> {
                 } else {
                     return Some(());
                 }
-                //TODO: SIMD
+                // TODO: SIMD
             }
         }
         Some(())

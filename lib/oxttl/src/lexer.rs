@@ -49,8 +49,8 @@ pub struct N3Lexer {
 // TODO: simplify by not giving is_end and fail with an "unexpected eof" is none is returned when is_end=true?
 
 impl TokenRecognizer for N3Lexer {
-    type Token<'a> = N3Token<'a>;
     type Options = N3LexerOptions;
+    type Token<'a> = N3Token<'a>;
 
     fn recognize_next_token<'a>(
         &mut self,
@@ -790,7 +790,7 @@ impl N3Lexer {
                     format!("Unexpected escape character '\\{}'", char::from(c)),
                 )
                     .into()),
-            )), //TODO: read until end of string
+            )), // TODO: read until end of string
         }
     }
 

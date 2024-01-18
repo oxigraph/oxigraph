@@ -469,7 +469,7 @@ pub fn main() -> anyhow::Result<()> {
                                         file.display(),
                                         error
                                     )
-                                    //TODO: hard fail
+                                    // TODO: hard fail
                                 }
                             })
                         }
@@ -1845,7 +1845,8 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use assert_cmd::Command;
-    use assert_fs::{prelude::*, NamedTempFile, TempDir};
+    use assert_fs::prelude::*;
+    use assert_fs::{NamedTempFile, TempDir};
     use flate2::write::GzEncoder;
     use flate2::Compression;
     use oxhttp::model::Method;

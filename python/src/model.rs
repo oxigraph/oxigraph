@@ -6,8 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::PyTypeInfo;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
+use std::hash::{Hash, Hasher};
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
@@ -345,7 +344,6 @@ impl PyLiteral {
     /// >>> Literal('example', language='en').language
     /// 'en'
     /// >>> Literal('example').language
-    ///
     #[getter]
     fn language(&self) -> Option<&str> {
         self.inner.language()

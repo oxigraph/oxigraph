@@ -698,7 +698,7 @@ impl<'a> From<TermRef<'a>> for Term {
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
-/// use oxrdf::{Triple, NamedNode};
+/// use oxrdf::{NamedNode, Triple};
 ///
 /// assert_eq!(
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
@@ -706,7 +706,8 @@ impl<'a> From<TermRef<'a>> for Term {
 ///         subject: NamedNode::new("http://example.com/s")?.into(),
 ///         predicate: NamedNode::new("http://example.com/p")?,
 ///         object: NamedNode::new("http://example.com/o")?.into(),
-///     }.to_string()
+///     }
+///     .to_string()
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
@@ -769,7 +770,7 @@ impl fmt::Display for Triple {
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
-/// use oxrdf::{TripleRef, NamedNodeRef};
+/// use oxrdf::{NamedNodeRef, TripleRef};
 ///
 /// assert_eq!(
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
@@ -777,7 +778,8 @@ impl fmt::Display for Triple {
 ///         subject: NamedNodeRef::new("http://example.com/s")?.into(),
 ///         predicate: NamedNodeRef::new("http://example.com/p")?,
 ///         object: NamedNodeRef::new("http://example.com/o")?.into(),
-///     }.to_string()
+///     }
+///     .to_string()
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```

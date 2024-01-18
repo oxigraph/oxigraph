@@ -48,7 +48,9 @@ use tokio::io::AsyncRead;
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let quads = parser.parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+/// let quads = parser
+///     .parse_read(file.as_bytes())
+///     .collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
@@ -129,9 +131,12 @@ impl RdfParser {
     /// The format the parser uses.
     ///
     /// ```
-    /// use oxrdfio::{RdfParser, RdfFormat};
+    /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// assert_eq!(RdfParser::from_format(RdfFormat::Turtle).format(), RdfFormat::Turtle);
+    /// assert_eq!(
+    ///     RdfParser::from_format(RdfFormat::Turtle).format(),
+    ///     RdfFormat::Turtle
+    /// );
     /// ```
     pub fn format(&self) -> RdfFormat {
         match &self.inner {
@@ -152,7 +157,9 @@ impl RdfParser {
     /// let file = "</s> </p> </o> .";
     ///
     /// let parser = RdfParser::from_format(RdfFormat::Turtle).with_base_iri("http://example.com")?;
-    /// let quads = parser.parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    /// let quads = parser
+    ///     .parse_read(file.as_bytes())
+    ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
@@ -179,8 +186,11 @@ impl RdfParser {
     ///
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
-    /// let parser = RdfParser::from_format(RdfFormat::Turtle).with_default_graph(NamedNode::new("http://example.com/g")?);
-    /// let quads = parser.parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    /// let parser = RdfParser::from_format(RdfFormat::Turtle)
+    ///     .with_default_graph(NamedNode::new("http://example.com/g")?);
+    /// let quads = parser
+    ///     .parse_read(file.as_bytes())
+    ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].graph_name.to_string(), "<http://example.com/g>");
@@ -221,10 +231,12 @@ impl RdfParser {
     ///
     /// let result1 = RdfParser::from_format(RdfFormat::NQuads)
     ///     .rename_blank_nodes()
-    ///     .parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    ///     .parse_read(file.as_bytes())
+    ///     .collect::<Result<Vec<_>, _>>()?;
     /// let result2 = RdfParser::from_format(RdfFormat::NQuads)
     ///     .rename_blank_nodes()
-    ///     .parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    ///     .parse_read(file.as_bytes())
+    ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_ne!(result1, result2);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -262,7 +274,9 @@ impl RdfParser {
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
     /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-    /// let quads = parser.parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+    /// let quads = parser
+    ///     .parse_read(file.as_bytes())
+    ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
@@ -358,7 +372,9 @@ impl From<RdfFormat> for RdfParser {
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let quads = parser.parse_read(file.as_bytes()).collect::<Result<Vec<_>,_>>()?;
+/// let quads = parser
+///     .parse_read(file.as_bytes())
+///     .collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");

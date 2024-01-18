@@ -2,8 +2,8 @@
 
 use crate::error::{ParseError, SyntaxError, SyntaxErrorKind, TextPosition};
 use memchr::memchr;
-use oxrdf::Variable;
-use oxrdf::{vocab::xsd, *};
+use oxrdf::vocab::xsd;
+use oxrdf::*;
 use std::io::{self, Read, Write};
 use std::str::{self, FromStr};
 #[cfg(feature = "async-tokio")]

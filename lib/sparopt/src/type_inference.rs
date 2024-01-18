@@ -49,7 +49,7 @@ pub fn infer_graph_pattern_types(
             infer_graph_pattern_types(right, infer_graph_pattern_types(left, types))
         }
         GraphPattern::LeftJoin { left, right, .. } => {
-            let mut right_types = infer_graph_pattern_types(right, types.clone()); //TODO: expression
+            let mut right_types = infer_graph_pattern_types(right, types.clone()); // TODO: expression
             for t in right_types.inner.values_mut() {
                 t.undef = true; // Right might be unset
             }
@@ -352,24 +352,14 @@ pub struct VariableType {
 }
 
 impl VariableType {
-    pub const UNDEF: Self = Self {
+    const ANY: Self = Self {
         undef: true,
-        named_node: false,
-        blank_node: false,
-        literal: false,
-        #[cfg(feature = "rdf-star")]
-        triple: false,
-    };
-
-    const NAMED_NODE: Self = Self {
-        undef: false,
         named_node: true,
-        blank_node: false,
-        literal: false,
+        blank_node: true,
+        literal: true,
         #[cfg(feature = "rdf-star")]
-        triple: false,
+        triple: true,
     };
-
     const BLANK_NODE: Self = Self {
         undef: false,
         named_node: false,
@@ -378,7 +368,6 @@ impl VariableType {
         #[cfg(feature = "rdf-star")]
         triple: false,
     };
-
     const LITERAL: Self = Self {
         undef: false,
         named_node: false,
@@ -387,16 +376,14 @@ impl VariableType {
         #[cfg(feature = "rdf-star")]
         triple: false,
     };
-
-    #[cfg(feature = "rdf-star")]
-    const TRIPLE: Self = Self {
+    const NAMED_NODE: Self = Self {
         undef: false,
-        named_node: false,
+        named_node: true,
         blank_node: false,
         literal: false,
-        triple: true,
+        #[cfg(feature = "rdf-star")]
+        triple: false,
     };
-
     const SUBJECT: Self = Self {
         undef: false,
         named_node: true,
@@ -405,7 +392,6 @@ impl VariableType {
         #[cfg(feature = "rdf-star")]
         triple: true,
     };
-
     const TERM: Self = Self {
         undef: false,
         named_node: true,
@@ -414,14 +400,21 @@ impl VariableType {
         #[cfg(feature = "rdf-star")]
         triple: true,
     };
-
-    const ANY: Self = Self {
-        undef: true,
-        named_node: true,
-        blank_node: true,
-        literal: true,
-        #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-star")]
+    const TRIPLE: Self = Self {
+        undef: false,
+        named_node: false,
+        blank_node: false,
+        literal: false,
         triple: true,
+    };
+    pub const UNDEF: Self = Self {
+        undef: true,
+        named_node: false,
+        blank_node: false,
+        literal: false,
+        #[cfg(feature = "rdf-star")]
+        triple: false,
     };
 }
 

@@ -241,14 +241,23 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 ///
 /// Example in TSV (the API is the same for JSON, XML and CSV):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 /// use oxrdf::{LiteralRef, Variable, VariableRef};
+/// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 /// use std::iter::once;
 ///
 /// let tsv_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
 /// let mut buffer = Vec::new();
-/// let mut writer = tsv_serializer.serialize_solutions_to_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-/// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
+/// let mut writer = tsv_serializer.serialize_solutions_to_write(
+///     &mut buffer,
+///     vec![
+///         Variable::new_unchecked("foo"),
+///         Variable::new_unchecked("bar"),
+///     ],
+/// )?;
+/// writer.write(once((
+///     VariableRef::new_unchecked("foo"),
+///     LiteralRef::from("test"),
+/// )))?;
 /// writer.finish()?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
 /// # std::io::Result::Ok(())
@@ -321,16 +330,29 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
 ///
 /// Example in TSV (the API is the same for JSON, CSV and XML):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 /// use oxrdf::{LiteralRef, Variable, VariableRef};
+/// use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 /// use std::iter::once;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> std::io::Result<()> {
 /// let tsv_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
 /// let mut buffer = Vec::new();
-/// let mut writer = tsv_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]).await?;
-/// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test")))).await?;
+/// let mut writer = tsv_serializer
+///     .serialize_solutions_to_tokio_async_write(
+///         &mut buffer,
+///         vec![
+///             Variable::new_unchecked("foo"),
+///             Variable::new_unchecked("bar"),
+///         ],
+///     )
+///     .await?;
+/// writer
+///     .write(once((
+///         VariableRef::new_unchecked("foo"),
+///         LiteralRef::from("test"),
+///     )))
+///     .await?;
 /// writer.finish().await?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
 /// # Ok(())

@@ -15,6 +15,15 @@ pub struct Duration {
 }
 
 impl Duration {
+    pub const MAX: Self = Self {
+        year_month: YearMonthDuration::MAX,
+        day_time: DayTimeDuration::MAX,
+    };
+    pub const MIN: Self = Self {
+        year_month: YearMonthDuration::MIN,
+        day_time: DayTimeDuration::MIN,
+    };
+
     #[inline]
     pub fn new(
         months: impl Into<i64>,
@@ -160,16 +169,6 @@ impl Duration {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
-
-    pub const MIN: Self = Self {
-        year_month: YearMonthDuration::MIN,
-        day_time: DayTimeDuration::MIN,
-    };
-
-    pub const MAX: Self = Self {
-        year_month: YearMonthDuration::MAX,
-        day_time: DayTimeDuration::MAX,
-    };
 }
 
 impl TryFrom<StdDuration> for Duration {
@@ -301,6 +300,9 @@ pub struct YearMonthDuration {
 }
 
 impl YearMonthDuration {
+    pub const MAX: Self = Self { months: i64::MAX };
+    pub const MIN: Self = Self { months: i64::MIN };
+
     #[inline]
     pub fn new(months: impl Into<i64>) -> Self {
         Self {
@@ -374,10 +376,6 @@ impl YearMonthDuration {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
-
-    pub const MIN: Self = Self { months: i64::MIN };
-
-    pub const MAX: Self = Self { months: i64::MAX };
 }
 
 impl From<YearMonthDuration> for Duration {
@@ -469,6 +467,13 @@ pub struct DayTimeDuration {
 }
 
 impl DayTimeDuration {
+    pub const MAX: Self = Self {
+        seconds: Decimal::MAX,
+    };
+    pub const MIN: Self = Self {
+        seconds: Decimal::MIN,
+    };
+
     #[inline]
     pub fn new(seconds: impl Into<Decimal>) -> Self {
         Self {
@@ -558,14 +563,6 @@ impl DayTimeDuration {
     pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
-
-    pub const MIN: Self = Self {
-        seconds: Decimal::MIN,
-    };
-
-    pub const MAX: Self = Self {
-        seconds: Decimal::MAX,
-    };
 }
 
 impl From<DayTimeDuration> for Duration {

@@ -26,7 +26,10 @@ impl RdfFormat {
     /// ```
     /// use oxrdfio::RdfFormat;
     ///
-    /// assert_eq!(RdfFormat::NTriples.iri(), "http://www.w3.org/ns/formats/N-Triples")
+    /// assert_eq!(
+    ///     RdfFormat::NTriples.iri(),
+    ///     "http://www.w3.org/ns/formats/N-Triples"
+    /// )
     /// ```
     #[inline]
     pub const fn iri(self) -> &'static str {
@@ -136,7 +139,10 @@ impl RdfFormat {
     /// ```
     /// use oxrdfio::RdfFormat;
     ///
-    /// assert_eq!(RdfFormat::from_media_type("text/turtle; charset=utf-8"), Some(RdfFormat::Turtle))
+    /// assert_eq!(
+    ///     RdfFormat::from_media_type("text/turtle; charset=utf-8"),
+    ///     Some(RdfFormat::Turtle)
+    /// )
     /// ```
     #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {

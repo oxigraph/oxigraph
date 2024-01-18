@@ -5,7 +5,6 @@ use crate::error::{ParseError, SyntaxError};
 use json_event_parser::ToTokioAsyncWriteJsonWriter;
 use json_event_parser::{FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
 use oxrdf::vocab::rdf;
-use oxrdf::Variable;
 use oxrdf::*;
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
@@ -522,7 +521,7 @@ fn read_value<R: Read>(
             JsonEvent::EndObject => {
                 if let Some(s) = state {
                     if s == State::Value {
-                        state = None; //End of triple
+                        state = None; // End of triple
                     } else {
                         return Err(
                             SyntaxError::msg("Term description values should be string").into()

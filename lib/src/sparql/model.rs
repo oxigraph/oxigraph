@@ -104,17 +104,24 @@ impl QueryResults {
     /// This method fails if it is called on the `Solution` or `Boolean` results.
     ///
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n";
     ///
     /// let store = Store::new()?;
-    /// store.load_graph(graph.as_bytes(), RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
+    /// store.load_graph(
+    ///     graph.as_bytes(),
+    ///     RdfFormat::NTriples,
+    ///     GraphName::DefaultGraph,
+    ///     None,
+    /// )?;
     ///
     /// let mut results = Vec::new();
-    /// store.query("CONSTRUCT WHERE { ?s ?p ?o }")?.write_graph(&mut results, RdfFormat::NTriples)?;
+    /// store
+    ///     .query("CONSTRUCT WHERE { ?s ?p ?o }")?
+    ///     .write_graph(&mut results, RdfFormat::NTriples)?;
     /// assert_eq!(results, graph.as_bytes());
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -159,8 +166,8 @@ impl<R: Read + 'static> From<FromReadQueryResultsReader<R>> for QueryResults {
 /// An iterator over [`QuerySolution`]s.
 ///
 /// ```
-/// use oxigraph::store::Store;
 /// use oxigraph::sparql::QueryResults;
+/// use oxigraph::store::Store;
 ///
 /// let store = Store::new()?;
 /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
@@ -193,12 +200,15 @@ impl QuerySolutionIter {
     /// The variables used in the solutions.
     ///
     /// ```
-    /// use oxigraph::store::Store;
     /// use oxigraph::sparql::{QueryResults, Variable};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
-    ///     assert_eq!(solutions.variables(), &[Variable::new("s")?, Variable::new("o")?]);
+    ///     assert_eq!(
+    ///         solutions.variables(),
+    ///         &[Variable::new("s")?, Variable::new("o")?]
+    ///     );
     /// }
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -234,8 +244,8 @@ impl Iterator for QuerySolutionIter {
 /// An iterator over the triples that compose a graph solution.
 ///
 /// ```
-/// use oxigraph::store::Store;
 /// use oxigraph::sparql::QueryResults;
+/// use oxigraph::store::Store;
 ///
 /// let store = Store::new()?;
 /// if let QueryResults::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }")? {

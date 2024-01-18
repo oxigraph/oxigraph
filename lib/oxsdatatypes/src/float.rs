@@ -17,6 +17,16 @@ pub struct Float {
 }
 
 impl Float {
+    pub const INFINITY: Self = Self {
+        value: f32::INFINITY,
+    };
+    pub const MAX: Self = Self { value: f32::MAX };
+    pub const MIN: Self = Self { value: f32::MIN };
+    pub const NAN: Self = Self { value: f32::NAN };
+    pub const NEG_INFINITY: Self = Self {
+        value: f32::NEG_INFINITY,
+    };
+
     #[inline]
     #[must_use]
     pub fn from_be_bytes(bytes: [u8; 4]) -> Self {
@@ -77,20 +87,6 @@ impl Float {
     pub fn is_identical_with(self, other: Self) -> bool {
         self.value.to_bits() == other.value.to_bits()
     }
-
-    pub const MIN: Self = Self { value: f32::MIN };
-
-    pub const MAX: Self = Self { value: f32::MAX };
-
-    pub const INFINITY: Self = Self {
-        value: f32::INFINITY,
-    };
-
-    pub const NEG_INFINITY: Self = Self {
-        value: f32::NEG_INFINITY,
-    };
-
-    pub const NAN: Self = Self { value: f32::NAN };
 }
 
 impl From<Float> for f32 {
