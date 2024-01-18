@@ -1157,7 +1157,7 @@ impl Drop for PinnableSlice {
 impl Deref for PinnableSlice {
     type Target = [u8];
 
-    fn deref(&self) -> &[u8] {
+    fn deref(&self) -> &Self::Target {
         unsafe {
             let mut len = 0;
             let val = rocksdb_pinnableslice_value(self.0, &mut len);
@@ -1200,7 +1200,7 @@ impl Drop for Buffer {
 impl Deref for Buffer {
     type Target = [u8];
 
-    fn deref(&self) -> &[u8] {
+    fn deref(&self) -> &Self::Target {
         unsafe { slice::from_raw_parts(self.base, self.len) }
     }
 }

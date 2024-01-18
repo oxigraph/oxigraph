@@ -176,7 +176,7 @@ impl TryFrom<StdDuration> for Duration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: StdDuration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: StdDuration) -> Result<Self, Self::Error> {
         Ok(DayTimeDuration::try_from(value)?.into())
     }
 }
@@ -184,7 +184,7 @@ impl TryFrom<StdDuration> for Duration {
 impl FromStr for Duration {
     type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.year_month.is_none() && parts.day_time.is_none() {
             return Err(ParseDurationError::msg("Empty duration"));
@@ -394,7 +394,7 @@ impl TryFrom<Duration> for YearMonthDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: Duration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: Duration) -> Result<Self, Self::Error> {
         if value.day_time == DayTimeDuration::default() {
             Ok(value.year_month)
         } else {
@@ -406,7 +406,7 @@ impl TryFrom<Duration> for YearMonthDuration {
 impl FromStr for YearMonthDuration {
     type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.day_time.is_some() {
             return Err(ParseDurationError::msg(
@@ -580,7 +580,7 @@ impl TryFrom<Duration> for DayTimeDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: Duration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: Duration) -> Result<Self, Self::Error> {
         if value.year_month == YearMonthDuration::default() {
             Ok(value.day_time)
         } else {
@@ -593,7 +593,7 @@ impl TryFrom<StdDuration> for DayTimeDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: StdDuration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: StdDuration) -> Result<Self, Self::Error> {
         Ok(Self {
             seconds: Decimal::new(
                 i128::try_from(value.as_nanos()).map_err(|_| DurationOverflowError)?,
@@ -608,7 +608,7 @@ impl TryFrom<DayTimeDuration> for StdDuration {
     type Error = DurationOverflowError;
 
     #[inline]
-    fn try_from(value: DayTimeDuration) -> Result<Self, DurationOverflowError> {
+    fn try_from(value: DayTimeDuration) -> Result<Self, Self::Error> {
         if value.seconds.is_negative() {
             return Err(DurationOverflowError);
         }
@@ -636,7 +636,7 @@ impl TryFrom<DayTimeDuration> for StdDuration {
 impl FromStr for DayTimeDuration {
     type Err = ParseDurationError;
 
-    fn from_str(input: &str) -> Result<Self, ParseDurationError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         let parts = ensure_complete(input, duration_parts)?;
         if parts.year_month.is_some() {
             return Err(ParseDurationError::msg(

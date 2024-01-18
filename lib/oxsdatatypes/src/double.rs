@@ -189,7 +189,7 @@ impl FromStr for Double {
     type Err = ParseFloatError;
 
     #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseFloatError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(f64::from_str(input)?.into())
     }
 }

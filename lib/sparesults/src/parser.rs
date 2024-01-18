@@ -206,7 +206,7 @@ impl<R: Read> FromReadSolutionsReader<R> {
 impl<R: Read> Iterator for FromReadSolutionsReader<R> {
     type Item = Result<QuerySolution, ParseError>;
 
-    fn next(&mut self) -> Option<Result<QuerySolution, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(
             match &mut self.solutions {
                 SolutionsReaderKind::Xml(reader) => reader.read_next(),

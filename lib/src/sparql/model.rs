@@ -221,7 +221,7 @@ impl Iterator for QuerySolutionIter {
     type Item = Result<QuerySolution, EvaluationError>;
 
     #[inline]
-    fn next(&mut self) -> Option<Result<QuerySolution, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 
@@ -253,7 +253,7 @@ impl Iterator for QueryTripleIter {
     type Item = Result<Triple, EvaluationError>;
 
     #[inline]
-    fn next(&mut self) -> Option<Result<Triple, EvaluationError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 

@@ -215,7 +215,7 @@ pub struct FromReadNTriplesReader<R: Read> {
 impl<R: Read> Iterator for FromReadNTriplesReader<R> {
     type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(self.inner.next()?.map(Into::into))
     }
 }

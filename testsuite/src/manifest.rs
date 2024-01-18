@@ -58,7 +58,7 @@ pub struct TestManifest {
 impl Iterator for TestManifest {
     type Item = Result<Test>;
 
-    fn next(&mut self) -> Option<Result<Test>> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(next) = self.next_test().transpose() {
                 return Some(next);
@@ -355,7 +355,7 @@ impl<'a> RdfListIterator<'a> {
 impl<'a> Iterator for RdfListIterator<'a> {
     type Item = Term;
 
-    fn next(&mut self) -> Option<Term> {
+    fn next(&mut self) -> Option<Self::Item> {
         match self.current_node {
             Some(current) => {
                 let result = self

@@ -215,7 +215,7 @@ pub struct FromReadNQuadsReader<R: Read> {
 impl<R: Read> Iterator for FromReadNQuadsReader<R> {
     type Item = Result<Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }

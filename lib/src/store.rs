@@ -1471,7 +1471,7 @@ pub struct QuadIter {
 impl Iterator for QuadIter {
     type Item = Result<Quad, StorageError>;
 
-    fn next(&mut self) -> Option<Result<Quad, StorageError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(match self.iter.next()? {
             Ok(quad) => self.reader.decode_quad(&quad),
             Err(error) => Err(error),
@@ -1488,7 +1488,7 @@ pub struct GraphNameIter {
 impl Iterator for GraphNameIter {
     type Item = Result<NamedOrBlankNode, StorageError>;
 
-    fn next(&mut self) -> Option<Result<NamedOrBlankNode, StorageError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(
             self.iter
                 .next()?

@@ -258,7 +258,7 @@ impl TryFrom<DatasetFormat> for GraphFormat {
 
     /// Attempts to find a graph format that is a subset of this [`DatasetFormat`].
     #[inline]
-    fn try_from(value: DatasetFormat) -> Result<Self, ()> {
+    fn try_from(value: DatasetFormat) -> Result<Self, Self::Error> {
         match value {
             DatasetFormat::NQuads => Ok(Self::NTriples),
             DatasetFormat::TriG => Ok(Self::Turtle),
@@ -271,7 +271,7 @@ impl TryFrom<GraphFormat> for DatasetFormat {
 
     /// Attempts to find a dataset format that is a superset of this [`GraphFormat`].
     #[inline]
-    fn try_from(value: GraphFormat) -> Result<Self, ()> {
+    fn try_from(value: GraphFormat) -> Result<Self, Self::Error> {
         match value {
             GraphFormat::NTriples => Ok(Self::NQuads),
             GraphFormat::Turtle => Ok(Self::TriG),

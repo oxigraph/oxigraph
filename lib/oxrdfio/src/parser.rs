@@ -382,7 +382,7 @@ enum FromReadQuadReaderKind<R: Read> {
 impl<R: Read> Iterator for FromReadQuadReader<R> {
     type Item = Result<Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(match &mut self.parser {
             FromReadQuadReaderKind::N3(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_n3_quad(quad),

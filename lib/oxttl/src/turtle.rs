@@ -302,7 +302,7 @@ impl<R: Read> FromReadTurtleReader<R> {
 impl<R: Read> Iterator for FromReadTurtleReader<R> {
     type Item = Result<Triple, ParseError>;
 
-    fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         Some(self.inner.next()?.map(Into::into))
     }
 }

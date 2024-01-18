@@ -450,7 +450,7 @@ impl<R: Read> FromReadN3Reader<R> {
 impl<R: Read> Iterator for FromReadN3Reader<R> {
     type Item = Result<N3Quad, ParseError>;
 
-    fn next(&mut self) -> Option<Result<N3Quad, ParseError>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }

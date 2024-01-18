@@ -65,7 +65,7 @@ impl Deref for SmallString {
     type Target = str;
 
     #[inline]
-    fn deref(&self) -> &str {
+    fn deref(&self) -> &Self::Target {
         self.as_str()
     }
 }
@@ -146,7 +146,7 @@ impl FromStr for SmallString {
     type Err = BadSmallStringError;
 
     #[inline]
-    fn from_str(value: &str) -> Result<Self, BadSmallStringError> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.len() <= 15 {
             let mut inner = [0; 16];
             inner[..value.len()].copy_from_slice(value.as_bytes());
@@ -165,7 +165,7 @@ impl<'a> TryFrom<&'a str> for SmallString {
     type Error = BadSmallStringError;
 
     #[inline]
-    fn try_from(value: &'a str) -> Result<Self, BadSmallStringError> {
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         Self::from_str(value)
     }
 }
