@@ -1,9 +1,4 @@
-#![allow(
-    dead_code,
-    clippy::inherent_to_string,
-    clippy::unused_self,
-    clippy::use_self
-)]
+#![allow(dead_code, clippy::inherent_to_string, clippy::unused_self)]
 
 use crate::format_err;
 use crate::utils::to_err;
