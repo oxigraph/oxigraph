@@ -19,6 +19,7 @@ custom-now = []
 
 [dependencies]
 thiserror.workspace = true
+wkt.workspace = true
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 js-sys = { workspace = true, optional = true }

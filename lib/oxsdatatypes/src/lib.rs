@@ -10,6 +10,7 @@ mod decimal;
 mod double;
 mod duration;
 mod float;
+mod geopoint;
 mod integer;
 
 pub use self::boolean::Boolean;
