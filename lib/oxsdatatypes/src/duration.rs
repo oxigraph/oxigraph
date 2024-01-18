@@ -973,7 +973,7 @@ impl fmt::Display for DurationOverflowError {
 
 impl Error for DurationOverflowError {}
 
-/// The year-month and the day-time components of a [`Duration\] have an opposite sign.
+/// The year-month and the day-time components of a [`Duration`] have an opposite sign.
 #[derive(Debug, Clone, Copy)]
 pub struct OppositeSignInDurationComponentsError;
 
