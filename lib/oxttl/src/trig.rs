@@ -8,6 +8,7 @@ use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::xsd;
 use oxrdf::{GraphName, NamedNode, Quad, QuadRef, Subject, TermRef};
+use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -253,7 +254,7 @@ pub struct FromReadTriGReader<R: Read> {
 impl<R: Read> FromReadTriGReader<R> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -266,14 +267,19 @@ impl<R: Read> FromReadTriGReader<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse_read(file.as_ref());
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.inner.parser.context.prefixes
+    pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
+        TriGPrefixesIter {
+            inner: self.inner.parser.context.prefixes(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -357,7 +363,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
 
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -372,15 +378,20 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TriGParser::new().parse_tokio_async_read(file.as_ref());
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.next().await.unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Ok(())
     /// # }
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.inner.parser.context.prefixes
+    pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
+        TriGPrefixesIter {
+            inner: self.inner.parser.context.prefixes(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -484,7 +495,7 @@ impl LowLevelTriGReader {
 
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -498,14 +509,19 @@ impl LowLevelTriGReader {
     ///
     /// let mut reader = TriGParser::new().parse();
     /// reader.extend_from_slice(file);
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.parser.context.prefixes
+    pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
+        TriGPrefixesIter {
+            inner: self.parser.context.prefixes(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -533,6 +549,28 @@ impl LowLevelTriGReader {
             .base_iri
             .as_ref()
             .map(Iri::as_str)
+    }
+}
+
+/// Iterator on the file prefixes.
+///
+/// See [`LowLevelTriGReader::prefixes`].
+pub struct TriGPrefixesIter<'a> {
+    inner: Iter<'a, String, Iri<String>>,
+}
+
+impl<'a> Iterator for TriGPrefixesIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let (key, value) = self.inner.next()?;
+        Some((key.as_str(), value.as_str()))
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
 

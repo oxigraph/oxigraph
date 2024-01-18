@@ -15,6 +15,7 @@ use oxrdf::{
     BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Subject, Term,
     Variable,
 };
+use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Read;
@@ -403,7 +404,7 @@ pub struct FromReadN3Reader<R: Read> {
 impl<R: Read> FromReadN3Reader<R> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -416,14 +417,19 @@ impl<R: Read> FromReadN3Reader<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse_read(file.as_ref());
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.inner.parser.context.prefixes
+    pub fn prefixes(&self) -> N3PrefixesIter<'_> {
+        N3PrefixesIter {
+            inner: self.inner.parser.context.prefixes.iter(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -508,7 +514,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
 
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -523,15 +529,20 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = N3Parser::new().parse_tokio_async_read(file.as_ref());
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.next().await.unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Ok(())
     /// # }
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.inner.parser.context.prefixes
+    pub fn prefixes(&self) -> N3PrefixesIter<'_> {
+        N3PrefixesIter {
+            inner: self.inner.parser.context.prefixes.iter(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -636,7 +647,7 @@ impl LowLevelN3Reader {
 
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -650,14 +661,19 @@ impl LowLevelN3Reader {
     ///
     /// let mut reader = N3Parser::new().parse();
     /// reader.extend_from_slice(file);
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.parser.context.prefixes
+    pub fn prefixes(&self) -> N3PrefixesIter<'_> {
+        N3PrefixesIter {
+            inner: self.parser.context.prefixes.iter(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -1298,4 +1314,26 @@ enum N3State {
     LiteralExpectDatatype { value: String },
     FormulaContent,
     FormulaContentExpectDot,
+}
+
+/// Iterator on the file prefixes.
+///
+/// See [`LowLevelN3Reader::prefixes`].
+pub struct N3PrefixesIter<'a> {
+    inner: Iter<'a, String, Iri<String>>,
+}
+
+impl<'a> Iterator for N3PrefixesIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let (key, value) = self.inner.next()?;
+        Some((key.as_str(), value.as_str()))
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
 }

@@ -10,6 +10,7 @@ use crate::trig::ToTokioAsyncWriteTriGWriter;
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
+use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
@@ -254,7 +255,7 @@ pub struct FromReadTurtleReader<R: Read> {
 impl<R: Read> FromReadTurtleReader<R> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -267,14 +268,19 @@ impl<R: Read> FromReadTurtleReader<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse_read(file.as_ref());
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert!(reader.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
     ///
     /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.inner.parser.context.prefixes
+    pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
+        TurtlePrefixesIter {
+            inner: self.inner.parser.context.prefixes(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -358,7 +364,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -373,15 +379,20 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut reader = TurtleParser::new().parse_tokio_async_read(file.as_ref());
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.next().await.unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Ok(())
     /// # }
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.inner.parser.context.prefixes
+    pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
+        TurtlePrefixesIter {
+            inner: self.inner.parser.context.prefixes(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -485,7 +496,7 @@ impl LowLevelTurtleReader {
 
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
-    /// This method returns the mapping from prefix name to prefix value.
+    /// This method returns (prefix name, prefix value) tuples.
     /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
@@ -499,14 +510,19 @@ impl LowLevelTurtleReader {
     ///
     /// let mut reader = TurtleParser::new().parse();
     /// reader.extend_from_slice(file);
-    /// assert!(reader.prefixes().is_empty()); // No prefix at the beginning
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// reader.read_next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.prefixes()["schema"], "http://schema.org/"); // There are now prefixes
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn prefixes(&self) -> &HashMap<String, Iri<String>> {
-        &self.parser.context.prefixes
+    pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
+        TurtlePrefixesIter {
+            inner: self.parser.context.prefixes(),
+        }
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -534,6 +550,28 @@ impl LowLevelTurtleReader {
             .base_iri
             .as_ref()
             .map(Iri::as_str)
+    }
+}
+
+/// Iterator on the file prefixes.
+///
+/// See [`LowLevelTurtleReader::prefixes`].
+pub struct TurtlePrefixesIter<'a> {
+    inner: Iter<'a, String, Iri<String>>,
+}
+
+impl<'a> Iterator for TurtlePrefixesIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let (key, value) = self.inner.next()?;
+        Some((key.as_str(), value.as_str()))
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
 
