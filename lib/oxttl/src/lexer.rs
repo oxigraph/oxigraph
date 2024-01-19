@@ -57,7 +57,7 @@ impl TokenRecognizer for N3Lexer {
         data: &'a [u8],
         is_ending: bool,
         options: &Self::Options,
-    ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)> {
+    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         match *data.first()? {
             b'<' => match *data.get(1)? {
                 b'<' => Some((2, Ok(N3Token::Punctuation("<<")))),

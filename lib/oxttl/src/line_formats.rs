@@ -54,8 +54,8 @@ impl RuleRecognizer for NQuadsRecognizer {
     fn recognize_next(
         mut self,
         token: N3Token<'_>,
-        context: &mut Self::Context,
-        results: &mut Vec<Self::Output>,
+        context: &mut NQuadsRecognizerContext,
+        results: &mut Vec<Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
         if let Some(state) = self.stack.pop() {
@@ -235,8 +235,8 @@ impl RuleRecognizer for NQuadsRecognizer {
 
     fn recognize_end(
         mut self,
-        _context: &mut Self::Context,
-        results: &mut Vec<Self::Output>,
+        _context: &mut NQuadsRecognizerContext,
+        results: &mut Vec<Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) {
         match &*self.stack {
@@ -255,7 +255,7 @@ impl RuleRecognizer for NQuadsRecognizer {
         }
     }
 
-    fn lexer_options(context: &Self::Context) -> &N3LexerOptions {
+    fn lexer_options(context: &NQuadsRecognizerContext) -> &N3LexerOptions {
         &context.lexer_options
     }
 }

@@ -722,8 +722,8 @@ impl RuleRecognizer for N3Recognizer {
     fn recognize_next(
         mut self,
         token: N3Token<'_>,
-        context: &mut Self::Context,
-        results: &mut Vec<Self::Output>,
+        context: &mut N3RecognizerContext,
+        results: &mut Vec<N3Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
         while let Some(rule) = self.stack.pop() {
@@ -1195,7 +1195,7 @@ impl RuleRecognizer for N3Recognizer {
 
     fn recognize_end(
         self,
-        _state: &mut Self::Context,
+        _state: &mut N3RecognizerContext,
         _results: &mut Vec<Self::Output>,
         errors: &mut Vec<RuleRecognizerError>,
     ) {
@@ -1205,7 +1205,7 @@ impl RuleRecognizer for N3Recognizer {
         }
     }
 
-    fn lexer_options(context: &Self::Context) -> &N3LexerOptions {
+    fn lexer_options(context: &N3RecognizerContext) -> &N3LexerOptions {
         &context.lexer_options
     }
 }
