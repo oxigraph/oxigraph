@@ -42,7 +42,11 @@ jobs:
         working-directory: ./lib/oxttl
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfio
+      - run: cargo clippy --all-targets --features async-tokio -- -D warnings -D clippy::all
+        working-directory: ./lib/oxrdfio
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/sparesults
+      - run: cargo clippy --all-targets --features async-tokio -- -D warnings -D clippy::all
         working-directory: ./lib/sparesults
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/spargebra

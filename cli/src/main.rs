@@ -714,7 +714,7 @@ pub fn main() -> anyhow::Result<()> {
 
             let to_format = if let Some(format) = to_format {
                 rdf_format_from_name(&format)?
-            } else if let Some(file) = &from_file {
+            } else if let Some(file) = &to_file {
                 rdf_format_from_path(file)?
             } else {
                 bail!("The --to-format option must be set when writing to stdout")
@@ -826,14 +826,21 @@ fn dump<W: Write>(
 fn do_convert<R: Read, W: Write>(
     parser: RdfParser,
     read: R,
-    serializer: RdfSerializer,
+    mut serializer: RdfSerializer,
     write: W,
     lenient: bool,
     from_graph: &Option<GraphName>,
     default_graph: &GraphName,
 ) -> anyhow::Result<W> {
+    let mut parser = parser.parse_read(read);
+    let first = parser.next(); // We read the first element to get prefixes
+    for (prefix_name, prefix_iri) in parser.prefixes() {
+        serializer = serializer
+            .with_prefix(prefix_name, prefix_iri)
+            .with_context(|| format!("Invalid IRI for prefix {prefix_name}: {prefix_iri}"))?;
+    }
     let mut writer = serializer.serialize_to_write(write);
-    for quad_result in parser.parse_read(read) {
+    for quad_result in first.into_iter().chain(parser) {
         match quad_result {
             Ok(mut quad) => {
                 if let Some(from_graph) = from_graph {
@@ -2239,8 +2246,8 @@ mod tests {
     #[test]
     fn cli_convert_file() -> Result<()> {
         let input_file = NamedTempFile::new("input.ttl")?;
-        input_file.write_str("<s> <p> <o> .")?;
-        let output_file = NamedTempFile::new("output.nt")?;
+        input_file.write_str("@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person ;\n\tschema:name \"Foo Bar\"@en .\n")?;
+        let output_file = NamedTempFile::new("output.rdf")?;
         cli_command()?
             .arg("convert")
             .arg("--from-file")
@@ -2252,7 +2259,7 @@ mod tests {
             .assert()
             .success();
         output_file
-            .assert("<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n");
+            .assert("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>");
         Ok(())
     }
 

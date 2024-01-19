@@ -1104,7 +1104,7 @@ checksum = "b225dad32cfaa43a960b93f01fa7f87528ac07e794b80f6d9a0153e0222557e2"
 
 [[package]]
 name = "oxrdf"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2-dev"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfxml"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2-dev"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1719,7 +1719,7 @@ checksum = "e6ecd384b10a64542d77071bd64bd7b231f4ed5940fba55e98c3de13824cf3d7"
 
 [[package]]
 name = "sparesults"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2-dev"
 dependencies = [
  "json-event-parser",
  "memchr",
@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.3.0-alpha.1"
+version = "0.3.0-alpha.2-dev"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1741,7 +1741,7 @@ dependencies = [
 
 [[package]]
 name = "sparopt"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2-dev"
 dependencies = [
  "oxrdf",
  "rand",

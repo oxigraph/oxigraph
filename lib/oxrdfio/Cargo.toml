@@ -19,8 +19,8 @@ async-tokio = ["dep:tokio", "oxrdfxml/async-tokio", "oxttl/async-tokio"]
 rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
 
 [dependencies]
-oxrdf = { version = "0.2.0-alpha.1", path = "../oxrdf" }
-oxrdfxml = { version = "0.1.0-alpha.1", path = "../oxrdfxml" }
+oxrdf = { version = "0.2.0-alpha.2-dev", path = "../oxrdf" }
+oxrdfxml = { version = "0.1.0-alpha.2-dev", path = "../oxrdfxml" }
 oxttl = { version = "0.1.0-alpha.2-dev", path = "../oxttl" }
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
 

@@ -583,14 +583,16 @@ impl<'a> Iterator for TurtlePrefixesIter<'a> {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
-/// let mut writer = TurtleSerializer::new().serialize_to_write(Vec::new());
+/// let mut writer = TurtleSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize_to_write(Vec::new());
 /// writer.write_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
-///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     writer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -608,20 +610,32 @@ impl TurtleSerializer {
         Self::default()
     }
 
+    #[inline]
+    pub fn with_prefix(
+        mut self,
+        prefix_name: impl Into<String>,
+        prefix_iri: impl Into<String>,
+    ) -> Result<Self, IriParseError> {
+        self.inner = self.inner.with_prefix(prefix_name, prefix_iri)?;
+        Ok(self)
+    }
+
     /// Writes a Turtle file to a [`Write`] implementation.
     ///
     /// ```
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
     ///
-    /// let mut writer = TurtleSerializer::new().serialize_to_write(Vec::new());
+    /// let mut writer = TurtleSerializer::new()
+    ///     .with_prefix("schema", "http://schema.org/")?
+    ///     .serialize_to_write(Vec::new());
     /// writer.write_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// ))?;
     /// assert_eq!(
-    ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+    ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
     ///     writer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -639,15 +653,19 @@ impl TurtleSerializer {
     /// use oxttl::TurtleSerializer;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> std::io::Result<()> {
-    /// let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
-    /// writer.write_triple(TripleRef::new(
-    ///     NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
-    /// )).await?;
+    /// # async fn main() -> Result<(),Box<dyn std::error::Error>> {
+    /// let mut writer = TurtleSerializer::new()
+    ///     .with_prefix("schema", "http://schema.org/")?
+    ///     .serialize_to_tokio_async_write(Vec::new());
+    /// writer
+    ///     .write_triple(TripleRef::new(
+    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///     ))
+    ///     .await?;
     /// assert_eq!(
-    /// b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+    ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
     ///     writer.finish().await?.as_slice()
     /// );
     /// # Ok(())
@@ -670,20 +688,25 @@ impl TurtleSerializer {
     /// use oxttl::TurtleSerializer;
     ///
     /// let mut buf = Vec::new();
-    /// let mut writer = TurtleSerializer::new().serialize();
-    /// writer.write_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
-    /// ), &mut buf)?;
+    /// let mut writer = TurtleSerializer::new()
+    ///     .with_prefix("schema", "http://schema.org/")?
+    ///     .serialize();
+    /// writer.write_triple(
+    ///     TripleRef::new(
+    ///         NamedNodeRef::new("http://example.com#me")?,
+    ///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///         NamedNodeRef::new("http://schema.org/Person")?,
+    ///     ),
+    ///     &mut buf,
+    /// )?;
     /// writer.finish(&mut buf)?;
     /// assert_eq!(
-    ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+    ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
     ///     buf.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize(&self) -> LowLevelTurtleWriter {
+    pub fn serialize(self) -> LowLevelTurtleWriter {
         LowLevelTurtleWriter {
             inner: self.inner.serialize(),
         }
@@ -696,14 +719,16 @@ impl TurtleSerializer {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
-/// let mut writer = TurtleSerializer::new().serialize_to_write(Vec::new());
+/// let mut writer = TurtleSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize_to_write(Vec::new());
 /// writer.write_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
-///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     writer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -733,15 +758,19 @@ impl<W: Write> ToWriteTurtleWriter<W> {
 /// use oxttl::TurtleSerializer;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> std::io::Result<()> {
-/// let mut writer = TurtleSerializer::new().serialize_to_tokio_async_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
-///     NamedNodeRef::new_unchecked("http://example.com#me"),
-///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///     NamedNodeRef::new_unchecked("http://schema.org/Person")
-/// )).await?;
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let mut writer = TurtleSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize_to_tokio_async_write(Vec::new());
+/// writer
+///     .write_triple(TripleRef::new(
+///         NamedNodeRef::new_unchecked("http://example.com#me"),
+///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+///     ))
+///     .await?;
 /// assert_eq!(
-///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     writer.finish().await?.as_slice()
 /// );
 /// # Ok(())
@@ -775,15 +804,20 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTurtleWriter<W> {
 /// use oxttl::TurtleSerializer;
 ///
 /// let mut buf = Vec::new();
-/// let mut writer = TurtleSerializer::new().serialize();
-/// writer.write_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-///     NamedNodeRef::new("http://schema.org/Person")?,
-/// ), &mut buf)?;
+/// let mut writer = TurtleSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize();
+/// writer.write_triple(
+///     TripleRef::new(
+///         NamedNodeRef::new("http://example.com#me")?,
+///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///         NamedNodeRef::new("http://schema.org/Person")?,
+///     ),
+///     &mut buf,
+/// )?;
 /// writer.finish(&mut buf)?;
 /// assert_eq!(
-///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     buf.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())

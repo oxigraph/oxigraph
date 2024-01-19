@@ -437,7 +437,7 @@ impl NTriplesSerializer {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn serialize(&self) -> LowLevelNTriplesWriter {
+    pub fn serialize(self) -> LowLevelNTriplesWriter {
         LowLevelNTriplesWriter
     }
 }
