@@ -50,13 +50,13 @@ impl RuleRecognizer for TriGRecognizer {
     ) -> Self {
         if let Some(rule) = self.stack.pop() {
             match rule {
-                // [1g] 	trigDoc 	::= 	(directive | block)*
-                // [2g] 	block 	::= 	triplesOrGraph | wrappedGraph | triples2 | "GRAPH" labelOrSubject wrappedGraph
-                // [3] 	directive 	::= 	prefixID | base | sparqlPrefix | sparqlBase
-                // [4] 	prefixID 	::= 	'@prefix' PNAME_NS IRIREF '.'
-                // [5] 	base 	::= 	'@base' IRIREF '.'
-                // [5s] 	sparqlPrefix 	::= 	"PREFIX" PNAME_NS IRIREF
-                // [6s] 	sparqlBase 	::= 	"BASE" IRIREF
+                // [1g] trigDoc      ::=  (directive | block)*
+                // [2g] block        ::=  triplesOrGraph | wrappedGraph | triples2 | "GRAPH" labelOrSubject wrappedGraph
+                // [3]  directive    ::=  prefixID | base | sparqlPrefix | sparqlBase
+                // [4]  prefixID     ::=  '@prefix' PNAME_NS IRIREF '.'
+                // [5]  base         ::=  '@base' IRIREF '.'
+                // [5s] sparqlPrefix ::=  "PREFIX" PNAME_NS IRIREF
+                // [6s] sparqlBase   ::=  "BASE" IRIREF
                 TriGState::TriGDoc => {
                     self.cur_graph = GraphName::DefaultGraph;
                     self.stack.push(TriGState::TriGDoc);
@@ -135,8 +135,8 @@ impl RuleRecognizer for TriGRecognizer {
                         }                    }
                     _ => self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI"),
                 },
-                // [3g] 	triplesOrGraph 	::= 	labelOrSubject ( wrappedGraph | predicateObjectList '.' ) | quotedTriple predicateObjectList '.'
-                // [4g] 	triples2 	::= 	blankNodePropertyList predicateObjectList? '.' | collection predicateObjectList '.'
+                // [3g]  triplesOrGraph  ::=  labelOrSubject ( wrappedGraph | predicateObjectList '.' ) | quotedTriple predicateObjectList '.'
+                // [4g]  triples2        ::=  blankNodePropertyList predicateObjectList? '.' | collection predicateObjectList '.'
                 TriGState::TriplesOrGraph => match token {
                     N3Token::IriRef(iri) => {
                         self.stack.push(TriGState::WrappedGraphOrPredicateObjectList {
@@ -260,8 +260,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.recognize_next(token, context,results, errors)
                     }
                 }
-                // [5g] 	wrappedGraph 	::= 	'{' triplesBlock? '}'
-                // [6g] 	triplesBlock 	::= 	triples ('.' triplesBlock?)?
+                // [5g]  wrappedGraph  ::=  '{' triplesBlock? '}'
+                // [6g]  triplesBlock  ::=  triples ('.' triplesBlock?)?
                 TriGState::WrappedGraph => if token == N3Token::Punctuation("{") {
                     self.stack.push(TriGState::WrappedGraphPossibleEnd);
                     self.stack.push(TriGState::Triples);
@@ -286,8 +286,8 @@ impl RuleRecognizer for TriGRecognizer {
                         }
                     }
                 }
-                // [6] 	triples 	::= 	subject predicateObjectList | blankNodePropertyList predicateObjectList?
-                // [10] 	subject 	::= 	iri | BlankNode | collection | quotedTriple
+                // [6]  triples   ::=  subject predicateObjectList | blankNodePropertyList predicateObjectList?
+                // [10]  subject  ::=  iri | BlankNode | collection | quotedTriple
                 TriGState::Triples => match token {
                     N3Token::Punctuation("}") => {
                         self.recognize_next(token, context,results, errors) // Early end
@@ -341,7 +341,7 @@ impl RuleRecognizer for TriGRecognizer {
                     self.stack.push(TriGState::PredicateObjectList);
                     self.recognize_next(token, context,results, errors)
                 }
-                // [7g] 	labelOrSubject 	::= 	iri | BlankNode
+                // [7g]  labelOrSubject  ::=  iri | BlankNode
                 TriGState::GraphName => match token {
                     N3Token::IriRef(iri) => {
                         self.cur_graph = NamedNode::new_unchecked(iri).into();
@@ -372,7 +372,7 @@ impl RuleRecognizer for TriGRecognizer {
                 } else {
                     self.error(errors, "Anonymous blank node with a property list are not allowed as graph name")
                 }
-                // [7] 	predicateObjectList 	::= 	verb objectList (';' (verb objectList)?)*
+                // [7]  predicateObjectList  ::=  verb objectList (';' (verb objectList)?)*
                 TriGState::PredicateObjectList => {
                     self.stack.push(TriGState::PredicateObjectListEnd);
                     self.stack.push(TriGState::ObjectsList);
@@ -399,8 +399,8 @@ impl RuleRecognizer for TriGRecognizer {
                     self.stack.push(TriGState::Verb);
                     self.recognize_next(token, context,results, errors)
                 },
-                // [8] 	objectList 	::= 	object annotation? ( ',' object annotation? )*
-                // [30t] 	annotation 	::= 	'{|' predicateObjectList '|}'
+                // [8]   objectList  ::=  object annotation? ( ',' object annotation? )*
+                // [30t] annotation  ::=  '{|' predicateObjectList '|}'
                 TriGState::ObjectsList => {
                     self.stack.push(TriGState::ObjectsListEnd);
                     self.stack.push(TriGState::Object);
@@ -450,8 +450,8 @@ impl RuleRecognizer for TriGRecognizer {
                 } else {
                     self.recognize_next(token, context,results, errors)
                 },
-                // [9] 	verb 	::= 	predicate | 'a'
-                // [11] 	predicate 	::= 	iri
+                // [9]   verb       ::=  predicate | 'a'
+                // [11]  predicate  ::=  iri
                 TriGState::Verb => match token {
                     N3Token::PlainKeyword("a") => {
                         self.cur_predicate.push(rdf::TYPE.into());
@@ -472,18 +472,18 @@ impl RuleRecognizer for TriGRecognizer {
                         self.error(errors, "TOKEN is not a valid predicate")
                     }
                 }
-                // [12] 	object 	::= 	iri | BlankNode | collection | blankNodePropertyList | literal | quotedTriple
-                // [13] 	literal 	::= 	RDFLiteral | NumericLiteral | BooleanLiteral
-                // [14] 	blank 	::= 	BlankNode | collection
-                // [15] 	blankNodePropertyList 	::= 	'[' predicateObjectList ']'
-                // [16] 	collection 	::= 	'(' object* ')'
-                // [17] 	NumericLiteral 	::= 	INTEGER | DECIMAL | DOUBLE
-                // [128s] 	RDFLiteral 	::= 	String (LANGTAG | '^^' iri)?
-                // [133s] 	BooleanLiteral 	::= 	'true' | 'false'
-                // [18] 	String 	::= 	STRING_LITERAL_QUOTE | STRING_LITERAL_SINGLE_QUOTE | STRING_LITERAL_LONG_SINGLE_QUOTE | STRING_LITERAL_LONG_QUOTE
-                // [135s] 	iri 	::= 	IRIREF | PrefixedName
-                // [136s] 	PrefixedName 	::= 	PNAME_LN | PNAME_NS
-                // [137s] 	BlankNode 	::= 	BLANK_NODE_LABEL | ANON
+                // [12]    object                 ::=  iri | BlankNode | collection | blankNodePropertyList | literal | quotedTriple
+                // [13]    literal                ::=  RDFLiteral | NumericLiteral | BooleanLiteral
+                // [14]    blank                  ::=  BlankNode | collection
+                // [15]    blankNodePropertyList  ::=  '[' predicateObjectList ']'
+                // [16]    collection             ::=  '(' object* ')'
+                // [17]    NumericLiteral         ::=  INTEGER | DECIMAL | DOUBLE
+                // [128s]  RDFLiteral             ::=  String (LANGTAG | '^^' iri)?
+                // [133s]  BooleanLiteral         ::=  'true' | 'false'
+                // [18]    String                 ::=  STRING_LITERAL_QUOTE | STRING_LITERAL_SINGLE_QUOTE | STRING_LITERAL_LONG_SINGLE_QUOTE | STRING_LITERAL_LONG_QUOTE
+                // [135s]  iri                    ::=  IRIREF | PrefixedName
+                // [136s]  PrefixedName           ::=  PNAME_LN | PNAME_NS
+                // [137s]  BlankNode              ::=  BLANK_NODE_LABEL | ANON
                 TriGState::Object => match token {
                     N3Token::IriRef(iri) => {
                         self.cur_object.push(NamedNode::new_unchecked(iri).into());
@@ -654,7 +654,7 @@ impl RuleRecognizer for TriGRecognizer {
                         }
                     }
                 }
-                // [27t] 	quotedTriple 	::= 	'<<' qtSubject verb qtObject '>>'
+                // [27t]  quotedTriple  ::=  '<<' qtSubject verb qtObject '>>'
                 #[cfg(feature = "rdf-star")]
                 TriGState::SubjectQuotedTripleEnd => {
                     let triple = Triple::new(
@@ -686,7 +686,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.error(errors, "Expecting '>>' to close a quoted triple, found TOKEN")
                     }
                 }
-                // [28t] 	qtSubject 	::= 	iri | BlankNode | quotedTriple
+                // [28t]  qtSubject  ::=  iri | BlankNode | quotedTriple
                 #[cfg(feature = "rdf-star")]
                 TriGState::QuotedSubject => match token {
                     N3Token::Punctuation("[") => {
@@ -718,7 +718,7 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                     _ => self.error(errors, "TOKEN is not a valid RDF quoted triple subject: TOKEN")
                 }
-                // [29t] 	qtObject 	::= 	iri | BlankNode | literal | quotedTriple
+                // [29t]  qtObject  ::=  iri | BlankNode | literal | quotedTriple
                 #[cfg(feature = "rdf-star")]
                 TriGState::QuotedObject => match token {
                     N3Token::Punctuation("[") => {

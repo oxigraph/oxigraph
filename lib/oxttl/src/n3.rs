@@ -728,14 +728,14 @@ impl RuleRecognizer for N3Recognizer {
     ) -> Self {
         while let Some(rule) = self.stack.pop() {
             match rule {
-                // [1] 	n3Doc 	::= 	( ( n3Statement ".") | sparqlDirective) *
-                // [2] 	n3Statement 	::= 	n3Directive | triples
-                // [3] 	n3Directive 	::= 	prefixID | base
-                // [4] 	sparqlDirective 	::= 	sparqlBase | sparqlPrefix
-                // [5] 	sparqlBase 	::= 	BASE IRIREF
-                // [6] 	sparqlPrefix 	::= 	PREFIX PNAME_NS IRIREF
-                // [7] 	prefixID 	::= 	"@prefix" PNAME_NS IRIREF
-                // [8] 	base 	::= 	"@base" IRIREF
+                // [1]  n3Doc            ::=  ( ( n3Statement ".") | sparqlDirective) *
+                // [2]  n3Statement      ::=  n3Directive | triples
+                // [3]  n3Directive      ::=  prefixID | base
+                // [4]  sparqlDirective  ::=  sparqlBase | sparqlPrefix
+                // [5]  sparqlBase       ::=  BASE IRIREF
+                // [6]  sparqlPrefix     ::=  PREFIX PNAME_NS IRIREF
+                // [7]  prefixID         ::=  "@prefix" PNAME_NS IRIREF
+                // [8]  base             ::=  "@base" IRIREF
                 N3State::N3Doc => {
                     self.stack.push(N3State::N3Doc);
                     match token {
@@ -802,7 +802,7 @@ impl RuleRecognizer for N3Recognizer {
                     }
                     _ => self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI"),
                 },
-                // [9] 	triples 	::= 	subject predicateObjectList?
+                // [9]  triples  ::=  subject predicateObjectList?
                 N3State::Triples => {
                     self.stack.push(N3State::TriplesMiddle);
                     self.stack.push(N3State::Path);
@@ -814,7 +814,7 @@ impl RuleRecognizer for N3Recognizer {
                 N3State::TriplesEnd => {
                     self.terms.pop();
                 }
-                // [10] 	predicateObjectList 	::= 	verb objectList ( ";" ( verb objectList) ? ) *
+                // [10]  predicateObjectList  ::=  verb objectList ( ";" ( verb objectList) ? ) *
                 N3State::PredicateObjectList => {
                     self.stack.push(N3State::PredicateObjectListEnd);
                     self.stack.push(N3State::ObjectsList);
@@ -835,7 +835,7 @@ impl RuleRecognizer for N3Recognizer {
                     self.stack.push(N3State::ObjectsList);
                     self.stack.push(N3State::Verb);
                 },
-                // [11] 	objectList 	::= 	object ( "," object) *
+                // [11]  objectList  ::=  object ( "," object) *
                 N3State::ObjectsList => {
                     self.stack.push(N3State::ObjectsListEnd);
                     self.stack.push(N3State::Path);
@@ -861,8 +861,8 @@ impl RuleRecognizer for N3Recognizer {
                         return self;
                     }
                 }
-                // [12] 	verb 	::= 	predicate | "a" | ( "has" expression) | ( "is" expression "of") | "=" | "<=" | "=>"
-                // [14] 	predicate 	::= 	expression | ( "<-" expression)
+                // [12]  verb       ::=  predicate | "a" | ( "has" expression) | ( "is" expression "of") | "=" | "<=" | "=>"
+                // [14]  predicate  ::=  expression | ( "<-" expression)
                 N3State::Verb => match token {
                     N3Token::PlainKeyword("a") => {
                         self.predicates.push(Predicate::Regular(rdf::TYPE.into()));
@@ -915,10 +915,10 @@ impl RuleRecognizer for N3Recognizer {
                         self.error(errors, "The keyword 'is' should be followed by a predicate then by the keyword 'of'")
                     }
                 },
-                // [13] 	subject 	::= 	expression
-                // [15] 	object 	::= 	expression
-                // [16] 	expression 	::= 	path
-                // [17] 	path 	::= 	pathItem ( ( "!" path) | ( "^" path) ) ?
+                // [13]  subject     ::=  expression
+                // [15]  object      ::=  expression
+                // [16]  expression  ::=  path
+                // [17]  path        ::=  pathItem ( ( "!" path) | ( "^" path) ) ?
                 N3State::Path => {
                     self.stack.push(N3State::PathFollowUp);
                     self.stack.push(N3State::PathItem);
@@ -944,18 +944,18 @@ impl RuleRecognizer for N3Recognizer {
                     self.terms.push(current.into());
                     self.stack.push(N3State::PathFollowUp);
                 }
-                // [18] 	pathItem 	::= 	iri | blankNode | quickVar | collection | blankNodePropertyList | iriPropertyList | literal | formula
-                // [19] 	literal 	::= 	rdfLiteral | numericLiteral | BOOLEAN_LITERAL
-                // [20] 	blankNodePropertyList 	::= 	"[" predicateObjectList "]"
-                // [21] 	iriPropertyList 	::= 	IPLSTART iri predicateObjectList "]"
-                // [22] 	collection 	::= 	"(" object* ")"
-                // [23] 	formula 	::= 	"{" formulaContent? "}"
-                // [25] 	numericLiteral 	::= 	DOUBLE | DECIMAL | INTEGER
-                // [26] 	rdfLiteral 	::= 	STRING ( LANGTAG | ( "^^" iri) ) ?
-                // [27] 	iri 	::= 	IRIREF | prefixedName
-                // [28] 	prefixedName 	::= 	PNAME_LN | PNAME_NS
-                // [29] 	blankNode 	::= 	BLANK_NODE_LABEL | ANON
-                // [30] 	quickVar 	::= 	QUICK_VAR_NAME
+                // [18]  pathItem               ::=  iri | blankNode | quickVar | collection | blankNodePropertyList | iriPropertyList | literal | formula
+                // [19]  literal                ::=  rdfLiteral | numericLiteral | BOOLEAN_LITERAL
+                // [20]  blankNodePropertyList  ::=  "[" predicateObjectList "]"
+                // [21]  iriPropertyList        ::=  IPLSTART iri predicateObjectList "]"
+                // [22]  collection             ::=  "(" object* ")"
+                // [23]  formula                ::=  "{" formulaContent? "}"
+                // [25]  numericLiteral         ::=  DOUBLE | DECIMAL | INTEGER
+                // [26]  rdfLiteral             ::=  STRING ( LANGTAG | ( "^^" iri) ) ?
+                // [27]  iri                    ::=  IRIREF | prefixedName
+                // [28]  prefixedName           ::=  PNAME_LN | PNAME_NS
+                // [29]  blankNode              ::=  BLANK_NODE_LABEL | ANON
+                // [30]  quickVar               ::=  QUICK_VAR_NAME
                 N3State::PathItem => {
                     return match token {
                         N3Token::IriRef(iri) => {
@@ -1133,7 +1133,7 @@ impl RuleRecognizer for N3Recognizer {
                         }
                     }
                 }
-                // [24] 	formulaContent 	::= 	( n3Statement ( "." formulaContent? ) ? ) | ( sparqlDirective formulaContent? )
+                // [24]  formulaContent  ::=  ( n3Statement ( "." formulaContent? ) ? ) | ( sparqlDirective formulaContent? )
                 N3State::FormulaContent => {
                     match token {
                         N3Token::Punctuation("}") => {

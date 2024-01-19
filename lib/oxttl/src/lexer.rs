@@ -179,7 +179,7 @@ impl N3Lexer {
         data: &[u8],
         options: &N3LexerOptions,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
-        // [18] 	IRIREF 	::= 	'<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
+        // [18] IRIREF  ::=  '<' ([^#x00-#x20<>"{}|^`\] | UCHAR)* '>' /* #x00=NULL #01-#x1F=control codes #x20=space */
         let mut string = Vec::new();
         let mut i = 1;
         loop {
@@ -238,10 +238,9 @@ impl N3Lexer {
         data: &'a [u8],
         is_ending: bool,
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
-        // [139s] 	PNAME_NS 	::= 	PN_PREFIX? ':'
-        // [140s] 	PNAME_LN 	::= 	PNAME_NS PN_LOCAL
-
-        // [167s] 	PN_PREFIX 	::= 	PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)?
+        // [139s]  PNAME_NS   ::=  PN_PREFIX? ':'
+        // [140s]  PNAME_LN   ::=  PNAME_NS PN_LOCAL
+        // [167s]  PN_PREFIX  ::=  PN_CHARS_BASE ((PN_CHARS | '.')* PN_CHARS)?
         let mut i = 0;
         loop {
             if let Some(r) = Self::recognize_unicode_char(&data[i..], i) {
@@ -330,7 +329,7 @@ impl N3Lexer {
         data: &'a [u8],
         is_ending: bool,
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
-        // [36] 	QUICK_VAR_NAME 	::= 	"?" PN_LOCAL
+        // [36]  QUICK_VAR_NAME  ::=  "?" PN_LOCAL
         let (consumed, result) = self.recognize_optional_pn_local(&data[1..], is_ending)?;
         Some((
             consumed + 1,
@@ -349,7 +348,7 @@ impl N3Lexer {
         data: &'a [u8],
         is_ending: bool,
     ) -> Option<(usize, Result<(Cow<'a, str>, bool), TokenRecognizerError>)> {
-        // [168s] 	PN_LOCAL 	::= 	(PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
+        // [168s]  PN_LOCAL  ::=  (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
         let mut i = 0;
         let mut buffer = None; // Buffer if there are some escaped characters
         let mut position_that_is_already_in_buffer = 0;
@@ -503,7 +502,7 @@ impl N3Lexer {
     fn recognize_blank_node_label(
         data: &[u8],
     ) -> Option<(usize, Result<N3Token<'_>, TokenRecognizerError>)> {
-        // [141s] 	BLANK_NODE_LABEL 	::= 	'_:' (PN_CHARS_U | [0-9]) ((PN_CHARS | '.')* PN_CHARS)?
+        // [141s]  BLANK_NODE_LABEL  ::=  '_:' (PN_CHARS_U | [0-9]) ((PN_CHARS | '.')* PN_CHARS)?
         let mut i = 2;
         loop {
             match Self::recognize_unicode_char(&data[i..], i)? {
@@ -548,7 +547,7 @@ impl N3Lexer {
         &self,
         data: &'a [u8],
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
-        // [144s] 	LANGTAG 	::= 	'@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)*
+        // [144s]  LANGTAG  ::=  '@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)*
         let mut is_last_block_empty = true;
         for (i, c) in data[1..].iter().enumerate() {
             if c.is_ascii_alphabetic() {
@@ -588,8 +587,8 @@ impl N3Lexer {
         data: &[u8],
         delimiter: u8,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
-        // [22] 	STRING_LITERAL_QUOTE 	::= 	'"' ([^#x22#x5C#xA#xD] | ECHAR | UCHAR)* '"' /* #x22=" #x5C=\ #xA=new line #xD=carriage return */
-        // [23] 	STRING_LITERAL_SINGLE_QUOTE 	::= 	"'" ([^#x27#x5C#xA#xD] | ECHAR | UCHAR)* "'" /* #x27=' #x5C=\ #xA=new line #xD=carriage return */
+        // [22]  STRING_LITERAL_QUOTE         ::=  '"' ([^#x22#x5C#xA#xD] | ECHAR | UCHAR)* '"' /* #x22=" #x5C=\ #xA=new line #xD=carriage return */
+        // [23]  STRING_LITERAL_SINGLE_QUOTE  ::=  "'" ([^#x27#x5C#xA#xD] | ECHAR | UCHAR)* "'" /* #x27=' #x5C=\ #xA=new line #xD=carriage return */
         let mut string = String::new();
         let mut i = 1;
         loop {
@@ -626,8 +625,8 @@ impl N3Lexer {
         data: &[u8],
         delimiter: u8,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
-        // [24] 	STRING_LITERAL_LONG_SINGLE_QUOTE 	::= 	"'''" (("'" | "''")? ([^'\] | ECHAR | UCHAR))* "'''"
-        // [25] 	STRING_LITERAL_LONG_QUOTE 	::= 	'"""' (('"' | '""')? ([^"\] | ECHAR | UCHAR))* '"""'
+        // [24]  STRING_LITERAL_LONG_SINGLE_QUOTE  ::=  "'''" (("'" | "''")? ([^'\] | ECHAR | UCHAR))* "'''"
+        // [25]  STRING_LITERAL_LONG_QUOTE         ::=  '"""' (('"' | '""')? ([^"\] | ECHAR | UCHAR))* '"""'
         let mut string = String::new();
         let mut i = 3;
         loop {
@@ -661,10 +660,10 @@ impl N3Lexer {
     }
 
     fn recognize_number(data: &[u8]) -> Option<(usize, Result<N3Token<'_>, TokenRecognizerError>)> {
-        // [19] 	INTEGER 	::= 	[+-]? [0-9]+
-        // [20] 	DECIMAL 	::= 	[+-]? [0-9]* '.' [0-9]+
-        // [21] 	DOUBLE 	::= 	[+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
-        // [154s] 	EXPONENT 	::= 	[eE] [+-]? [0-9]+
+        // [19]  INTEGER    ::=  [+-]? [0-9]+
+        // [20]  DECIMAL    ::=  [+-]? [0-9]* '.' [0-9]+
+        // [21]  DOUBLE     ::=  [+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
+        // [154s] EXPONENT  ::=  [eE] [+-]? [0-9]+
         let mut i = 0;
         let c = *data.first()?;
         if matches!(c, b'+' | b'-') {
@@ -764,8 +763,8 @@ impl N3Lexer {
         position: usize,
         with_echar: bool,
     ) -> Option<(usize, Result<char, TokenRecognizerError>)> {
-        // [26] 	UCHAR 	::= 	'\u' HEX HEX HEX HEX | '\U' HEX HEX HEX HEX HEX HEX HEX HEX
-        // [159s] 	ECHAR 	::= 	'\' [tbnrf"'\]
+        // [26]   UCHAR  ::=  '\u' HEX HEX HEX HEX | '\U' HEX HEX HEX HEX HEX HEX HEX HEX
+        // [159s] ECHAR  ::=  '\' [tbnrf"'\]
         match *data.get(1)? {
             b'u' => match Self::recognize_hex_char(&data[2..], 4, 'u', position) {
                 Ok(c) => Some((5, Ok(c?))),
@@ -895,7 +894,7 @@ impl N3Lexer {
         )
     }
 
-    // [157s] 	PN_CHARS_BASE 	::= 	[A-Z] | [a-z] | [#x00C0-#x00D6] | [#x00D8-#x00F6] | [#x00F8-#x02FF] | [#x0370-#x037D] | [#x037F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
+    // [157s]  PN_CHARS_BASE  ::=  [A-Z] | [a-z] | [#x00C0-#x00D6] | [#x00D8-#x00F6] | [#x00F8-#x02FF] | [#x0370-#x037D] | [#x037F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
     fn is_possible_pn_chars_base(c: char) -> bool {
         matches!(c,
         'A'..='Z'
@@ -914,12 +913,12 @@ impl N3Lexer {
         | '\u{10000}'..='\u{EFFFF}')
     }
 
-    // [158s] 	PN_CHARS_U 	::= 	PN_CHARS_BASE | '_' | ':'
+    // [158s]  PN_CHARS_U  ::=  PN_CHARS_BASE | '_' | ':'
     fn is_possible_pn_chars_u(c: char) -> bool {
         Self::is_possible_pn_chars_base(c) || c == '_'
     }
 
-    // [160s] 	PN_CHARS 	::= 	PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F] | [#x203F-#x2040]
+    // [160s]  PN_CHARS  ::=  PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F] | [#x203F-#x2040]
     fn is_possible_pn_chars(c: char) -> bool {
         Self::is_possible_pn_chars_u(c)
             || matches!(c,

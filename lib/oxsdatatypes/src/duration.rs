@@ -713,16 +713,16 @@ impl PartialOrd<DayTimeDuration> for YearMonthDuration {
     }
 }
 
-// [6]   duYearFrag ::= unsignedNoDecimalPtNumeral 'Y'
-// [7]   duMonthFrag ::= unsignedNoDecimalPtNumeral 'M'
-// [8]   duDayFrag ::= unsignedNoDecimalPtNumeral 'D'
-// [9]   duHourFrag ::= unsignedNoDecimalPtNumeral 'H'
-// [10]   duMinuteFrag ::= unsignedNoDecimalPtNumeral 'M'
-// [11]   duSecondFrag ::= (unsignedNoDecimalPtNumeral | unsignedDecimalPtNumeral) 'S'
-// [12]   duYearMonthFrag ::= (duYearFrag duMonthFrag?) | duMonthFrag
-// [13]   duTimeFrag ::= 'T' ((duHourFrag duMinuteFrag? duSecondFrag?) | (duMinuteFrag duSecondFrag?) | duSecondFrag)
-// [14]   duDayTimeFrag ::= (duDayFrag duTimeFrag?) | duTimeFrag
-// [15]   durationLexicalRep ::= '-'? 'P' ((duYearMonthFrag duDayTimeFrag?) | duDayTimeFrag)
+// [6]   duYearFrag      ::= unsignedNoDecimalPtNumeral 'Y'
+// [7]   duMonthFrag     ::= unsignedNoDecimalPtNumeral 'M'
+// [8]   duDayFrag       ::= unsignedNoDecimalPtNumeral 'D'
+// [9]   duHourFrag      ::= unsignedNoDecimalPtNumeral 'H'
+// [10]  duMinuteFrag    ::= unsignedNoDecimalPtNumeral 'M'
+// [11]  duSecondFrag    ::= (unsignedNoDecimalPtNumeral | unsignedDecimalPtNumeral) 'S'
+// [12]  duYearMonthFrag ::= (duYearFrag duMonthFrag?) | duMonthFrag
+// [13]  duTimeFrag      ::= 'T' ((duHourFrag duMinuteFrag? duSecondFrag?) | (duMinuteFrag duSecondFrag?) | duSecondFrag)
+// [14]  duDayTimeFrag   ::= (duDayFrag duTimeFrag?) | duTimeFrag
+// [15]  durationLexicalRep ::= '-'? 'P' ((duYearMonthFrag duDayTimeFrag?) | duDayTimeFrag)
 struct DurationParts {
     year_month: Option<i64>,
     day_time: Option<Decimal>,

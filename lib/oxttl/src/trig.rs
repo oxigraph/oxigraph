@@ -902,7 +902,7 @@ fn is_turtle_boolean(value: &str) -> bool {
 }
 
 fn is_turtle_integer(value: &str) -> bool {
-    // [19] 	INTEGER 	::= 	[+-]? [0-9]+
+    // [19]  INTEGER  ::=  [+-]? [0-9]+
     let mut value = value.as_bytes();
     if let Some(v) = value.strip_prefix(b"+") {
         value = v;
@@ -913,7 +913,7 @@ fn is_turtle_integer(value: &str) -> bool {
 }
 
 fn is_turtle_decimal(value: &str) -> bool {
-    // [20] 	DECIMAL 	::= 	[+-]? [0-9]* '.' [0-9]+
+    // [20]  DECIMAL  ::=  [+-]? [0-9]* '.' [0-9]+
     let mut value = value.as_bytes();
     if let Some(v) = value.strip_prefix(b"+") {
         value = v;
@@ -930,8 +930,8 @@ fn is_turtle_decimal(value: &str) -> bool {
 }
 
 fn is_turtle_double(value: &str) -> bool {
-    // [21] 	DOUBLE 	::= 	[+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
-    // [154s] 	EXPONENT 	::= 	[eE] [+-]? [0-9]+
+    // [21]    DOUBLE    ::=  [+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
+    // [154s]  EXPONENT  ::=  [eE] [+-]? [0-9]+
     let mut value = value.as_bytes();
     if let Some(v) = value.strip_prefix(b"+") {
         value = v;
