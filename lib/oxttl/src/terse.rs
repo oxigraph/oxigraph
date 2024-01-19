@@ -28,9 +28,9 @@ pub struct TriGRecognizerContext {
 }
 
 impl RuleRecognizer for TriGRecognizer {
-    type Context = TriGRecognizerContext;
-    type Output = Quad;
     type TokenRecognizer = N3Lexer;
+    type Output = Quad;
+    type Context = TriGRecognizerContext;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
@@ -44,8 +44,8 @@ impl RuleRecognizer for TriGRecognizer {
     fn recognize_next(
         mut self,
         token: N3Token<'_>,
-        context: &mut TriGRecognizerContext,
-        results: &mut Vec<Quad>,
+        context: &mut Self::Context,
+        results: &mut Vec<Self::Output>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
         if let Some(rule) = self.stack.pop() {
@@ -792,7 +792,7 @@ impl RuleRecognizer for TriGRecognizer {
 
     fn recognize_end(
         mut self,
-        _context: &mut TriGRecognizerContext,
+        _context: &mut Self::Context,
         results: &mut Vec<Self::Output>,
         errors: &mut Vec<RuleRecognizerError>,
     ) {
@@ -821,7 +821,7 @@ impl RuleRecognizer for TriGRecognizer {
         }
     }
 
-    fn lexer_options(context: &TriGRecognizerContext) -> &N3LexerOptions {
+    fn lexer_options(context: &Self::Context) -> &N3LexerOptions {
         &context.lexer_options
     }
 }

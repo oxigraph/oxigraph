@@ -49,15 +49,15 @@ pub struct N3Lexer {
 // TODO: simplify by not giving is_end and fail with an "unexpected eof" is none is returned when is_end=true?
 
 impl TokenRecognizer for N3Lexer {
-    type Options = N3LexerOptions;
     type Token<'a> = N3Token<'a>;
+    type Options = N3LexerOptions;
 
     fn recognize_next_token<'a>(
         &mut self,
         data: &'a [u8],
         is_ending: bool,
         options: &Self::Options,
-    ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
+    ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)> {
         match *data.first()? {
             b'<' => match *data.get(1)? {
                 b'<' => Some((2, Ok(N3Token::Punctuation("<<")))),
