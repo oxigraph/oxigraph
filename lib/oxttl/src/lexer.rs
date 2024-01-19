@@ -49,14 +49,14 @@ pub struct N3Lexer {
 // TODO: simplify by not giving is_end and fail with an "unexpected eof" is none is returned when is_end=true?
 
 impl TokenRecognizer for N3Lexer {
-    type Token<'a> = N3Token<'a>;
     type Options = N3LexerOptions;
+    type Token<'a> = N3Token<'a>;
 
     fn recognize_next_token<'a>(
         &mut self,
         data: &'a [u8],
         is_ending: bool,
-        options: &Self::Options,
+        options: &N3LexerOptions,
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         match *data.first()? {
             b'<' => match *data.get(1)? {
@@ -914,12 +914,12 @@ impl N3Lexer {
     }
 
     // [158s]  PN_CHARS_U  ::=  PN_CHARS_BASE | '_' | ':'
-    fn is_possible_pn_chars_u(c: char) -> bool {
+    pub(super) fn is_possible_pn_chars_u(c: char) -> bool {
         Self::is_possible_pn_chars_base(c) || c == '_'
     }
 
     // [160s]  PN_CHARS  ::=  PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F] | [#x203F-#x2040]
-    fn is_possible_pn_chars(c: char) -> bool {
+    pub(crate) fn is_possible_pn_chars(c: char) -> bool {
         Self::is_possible_pn_chars_u(c)
             || matches!(c,
         '-' | '0'..='9' | '\u{00B7}' | '\u{0300}'..='\u{036F}' | '\u{203F}'..='\u{2040}')

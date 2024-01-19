@@ -1,7 +1,7 @@
 //! Utilities to write RDF graphs and datasets.
 
 use crate::format::RdfFormat;
-use oxrdf::{GraphNameRef, QuadRef, TripleRef};
+use oxrdf::{GraphNameRef, IriParseError, QuadRef, TripleRef};
 #[cfg(feature = "async-tokio")]
 use oxrdfxml::ToTokioAsyncWriteRdfXmlWriter;
 use oxrdfxml::{RdfXmlSerializer, ToWriteRdfXmlWriter};
@@ -35,29 +35,44 @@ use tokio::io::AsyncWrite;
 /// use oxrdfio::{RdfFormat, RdfSerializer};
 /// use oxrdf::{Quad, NamedNode};
 ///
-/// let mut buffer = Vec::new();
-/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(&mut buffer);
+/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(Vec::new());
 /// writer.write_quad(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
 ///    object: NamedNode::new("http://example.com/o")?.into(),
 ///    graph_name: NamedNode::new("http://example.com/g")?.into()
 /// })?;
-/// writer.finish()?;
-///
-/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+/// assert_eq!(writer.finish()?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct RdfSerializer {
-    format: RdfFormat,
+    inner: RdfSerializerKind,
+}
+
+enum RdfSerializerKind {
+    NQuads(NQuadsSerializer),
+    NTriples(NTriplesSerializer),
+    RdfXml(RdfXmlSerializer),
+    TriG(TriGSerializer),
+    Turtle(TurtleSerializer),
 }
 
 impl RdfSerializer {
     /// Builds a serializer for the given format
     #[inline]
     pub fn from_format(format: RdfFormat) -> Self {
-        Self { format }
+        Self {
+            inner: match format {
+                RdfFormat::NQuads => RdfSerializerKind::NQuads(NQuadsSerializer::new()),
+                RdfFormat::NTriples => RdfSerializerKind::NTriples(NTriplesSerializer::new()),
+                RdfFormat::RdfXml => RdfSerializerKind::RdfXml(RdfXmlSerializer::new()),
+                RdfFormat::TriG => RdfSerializerKind::TriG(TriGSerializer::new()),
+                RdfFormat::Turtle | RdfFormat::N3 => {
+                    RdfSerializerKind::Turtle(TurtleSerializer::new())
+                }
+            },
+        }
     }
 
     /// The format the serializer serializes to.
@@ -71,7 +86,56 @@ impl RdfSerializer {
     /// );
     /// ```
     pub fn format(&self) -> RdfFormat {
-        self.format
+        match &self.inner {
+            RdfSerializerKind::NQuads(_) => RdfFormat::NQuads,
+            RdfSerializerKind::NTriples(_) => RdfFormat::NTriples,
+            RdfSerializerKind::RdfXml(_) => RdfFormat::RdfXml,
+            RdfSerializerKind::TriG(_) => RdfFormat::TriG,
+            RdfSerializerKind::Turtle(_) => RdfFormat::Turtle,
+        }
+    }
+
+    /// If the format supports it, sets a prefix.
+    ///
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxrdfio::{RdfFormat, RdfSerializer};
+    ///
+    /// let mut writer = RdfSerializer::from_format(RdfFormat::Turtle)
+    ///     .with_prefix("schema", "http://schema.org/")?
+    ///     .serialize_to_write(Vec::new());
+    /// writer.write_triple(TripleRef {
+    ///     subject: NamedNodeRef::new("http://example.com/s")?.into(),
+    ///     predicate: rdf::TYPE.into(),
+    ///     object: NamedNodeRef::new("http://schema.org/Person")?.into(),
+    /// })?;
+    /// assert_eq!(
+    ///     writer.finish()?,
+    ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com/s> a schema:Person .\n"
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_prefix(
+        mut self,
+        prefix_name: impl Into<String>,
+        prefix_iri: impl Into<String>,
+    ) -> Result<Self, IriParseError> {
+        self.inner = match self.inner {
+            RdfSerializerKind::NQuads(s) => RdfSerializerKind::NQuads(s),
+            RdfSerializerKind::NTriples(s) => RdfSerializerKind::NTriples(s),
+            RdfSerializerKind::RdfXml(s) => {
+                RdfSerializerKind::RdfXml(s.with_prefix(prefix_name, prefix_iri)?)
+            }
+            RdfSerializerKind::TriG(s) => {
+                RdfSerializerKind::TriG(s.with_prefix(prefix_name, prefix_iri)?)
+            }
+            RdfSerializerKind::Turtle(s) => {
+                RdfSerializerKind::Turtle(s.with_prefix(prefix_name, prefix_iri)?)
+            }
+        };
+        Ok(self)
     }
 
     /// Writes to a [`Write`] implementation.
@@ -88,36 +152,33 @@ impl RdfSerializer {
     /// use oxrdfio::{RdfFormat, RdfSerializer};
     /// use oxrdf::{Quad, NamedNode};
     ///
-    /// let mut buffer = Vec::new();
-    /// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(&mut buffer);
+    /// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(Vec::new());
     /// writer.write_quad(&Quad {
     ///    subject: NamedNode::new("http://example.com/s")?.into(),
     ///    predicate: NamedNode::new("http://example.com/p")?,
     ///    object: NamedNode::new("http://example.com/o")?.into(),
     ///    graph_name: NamedNode::new("http://example.com/g")?.into()
     /// })?;
-    /// writer.finish()?;
-    ///
-    /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+    /// assert_eq!(writer.finish()?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteQuadWriter<W> {
         ToWriteQuadWriter {
-            formatter: match self.format {
-                RdfFormat::NQuads => {
-                    ToWriteQuadWriterKind::NQuads(NQuadsSerializer::new().serialize_to_write(write))
+            formatter: match self.inner {
+                RdfSerializerKind::NQuads(s) => {
+                    ToWriteQuadWriterKind::NQuads(s.serialize_to_write(write))
                 }
-                RdfFormat::NTriples => ToWriteQuadWriterKind::NTriples(
-                    NTriplesSerializer::new().serialize_to_write(write),
-                ),
-                RdfFormat::RdfXml => {
-                    ToWriteQuadWriterKind::RdfXml(RdfXmlSerializer::new().serialize_to_write(write))
+                RdfSerializerKind::NTriples(s) => {
+                    ToWriteQuadWriterKind::NTriples(s.serialize_to_write(write))
                 }
-                RdfFormat::TriG => {
-                    ToWriteQuadWriterKind::TriG(TriGSerializer::new().serialize_to_write(write))
+                RdfSerializerKind::RdfXml(s) => {
+                    ToWriteQuadWriterKind::RdfXml(s.serialize_to_write(write))
                 }
-                RdfFormat::Turtle | RdfFormat::N3 => {
-                    ToWriteQuadWriterKind::Turtle(TurtleSerializer::new().serialize_to_write(write))
+                RdfSerializerKind::TriG(s) => {
+                    ToWriteQuadWriterKind::TriG(s.serialize_to_write(write))
+                }
+                RdfSerializerKind::Turtle(s) => {
+                    ToWriteQuadWriterKind::Turtle(s.serialize_to_write(write))
                 }
             },
         }
@@ -139,17 +200,14 @@ impl RdfSerializer {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> std::io::Result<()> {
-    /// let mut buffer = Vec::new();
-    /// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
+    /// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(Vec::new());
     /// writer.write_quad(&Quad {
     ///     subject: NamedNode::new_unchecked("http://example.com/s").into(),
     ///     predicate: NamedNode::new_unchecked("http://example.com/p"),
     ///     object: NamedNode::new_unchecked("http://example.com/o").into(),
     ///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
     /// }).await?;
-    /// writer.finish().await?;
-    ///
-    /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+    /// assert_eq!(writer.finish().await?, "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
     /// # Ok(())
     /// # }
     /// ```
@@ -159,22 +217,22 @@ impl RdfSerializer {
         write: W,
     ) -> ToTokioAsyncWriteQuadWriter<W> {
         ToTokioAsyncWriteQuadWriter {
-            formatter: match self.format {
-                RdfFormat::NQuads => ToTokioAsyncWriteQuadWriterKind::NQuads(
-                    NQuadsSerializer::new().serialize_to_tokio_async_write(write),
+            formatter: match self.inner {
+                RdfSerializerKind::NQuads(s) => {
+                    ToTokioAsyncWriteQuadWriterKind::NQuads(s.serialize_to_tokio_async_write(write))
+                }
+                RdfSerializerKind::NTriples(s) => ToTokioAsyncWriteQuadWriterKind::NTriples(
+                    s.serialize_to_tokio_async_write(write),
                 ),
-                RdfFormat::NTriples => ToTokioAsyncWriteQuadWriterKind::NTriples(
-                    NTriplesSerializer::new().serialize_to_tokio_async_write(write),
-                ),
-                RdfFormat::RdfXml => ToTokioAsyncWriteQuadWriterKind::RdfXml(
-                    RdfXmlSerializer::new().serialize_to_tokio_async_write(write),
-                ),
-                RdfFormat::TriG => ToTokioAsyncWriteQuadWriterKind::TriG(
-                    TriGSerializer::new().serialize_to_tokio_async_write(write),
-                ),
-                RdfFormat::Turtle | RdfFormat::N3 => ToTokioAsyncWriteQuadWriterKind::Turtle(
-                    TurtleSerializer::new().serialize_to_tokio_async_write(write),
-                ),
+                RdfSerializerKind::RdfXml(s) => {
+                    ToTokioAsyncWriteQuadWriterKind::RdfXml(s.serialize_to_tokio_async_write(write))
+                }
+                RdfSerializerKind::TriG(s) => {
+                    ToTokioAsyncWriteQuadWriterKind::TriG(s.serialize_to_tokio_async_write(write))
+                }
+                RdfSerializerKind::Turtle(s) => {
+                    ToTokioAsyncWriteQuadWriterKind::Turtle(s.serialize_to_tokio_async_write(write))
+                }
             },
         }
     }
@@ -202,17 +260,14 @@ impl From<RdfFormat> for RdfSerializer {
 /// use oxrdfio::{RdfFormat, RdfSerializer};
 /// use oxrdf::{Quad, NamedNode};
 ///
-/// let mut buffer = Vec::new();
-/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(&mut buffer);
+/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_write(Vec::new());
 /// writer.write_quad(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
 ///    object: NamedNode::new("http://example.com/o")?.into(),
 ///    graph_name: NamedNode::new("http://example.com/g")?.into(),
 /// })?;
-/// writer.finish()?;
-///
-/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+/// assert_eq!(writer.finish()?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
@@ -277,17 +332,14 @@ impl<W: Write> ToWriteQuadWriter<W> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> std::io::Result<()> {
-/// let mut buffer = Vec::new();
-/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(&mut buffer);
+/// let mut writer = RdfSerializer::from_format(RdfFormat::NQuads).serialize_to_tokio_async_write(Vec::new());
 /// writer.write_quad(&Quad {
 ///     subject: NamedNode::new_unchecked("http://example.com/s").into(),
 ///     predicate: NamedNode::new_unchecked("http://example.com/p"),
 ///     object: NamedNode::new_unchecked("http://example.com/o").into(),
 ///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
 /// }).await?;
-/// writer.finish().await?;
-///
-/// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
+/// assert_eq!(writer.finish().await?, "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
 /// # Ok(())
 /// # }
 /// ```

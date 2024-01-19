@@ -1,15 +1,18 @@
 //! A [TriG](https://www.w3.org/TR/trig/) streaming parser implemented by [`TriGParser`]
 //! and a serializer implemented by [`TriGSerializer`].
 
+use crate::lexer::N3Lexer;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
 use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::xsd;
-use oxrdf::{GraphName, NamedNode, Quad, QuadRef, Subject, TermRef};
+use oxrdf::vocab::{rdf, xsd};
+use oxrdf::{
+    GraphName, GraphNameRef, LiteralRef, NamedNode, NamedNodeRef, Quad, QuadRef, Subject, TermRef,
+};
 use std::collections::hash_map::Iter;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
@@ -582,7 +585,9 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::TriGSerializer;
 ///
-/// let mut writer = TriGSerializer::new().serialize_to_write(Vec::new());
+/// let mut writer = TriGSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize_to_write(Vec::new());
 /// writer.write_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -590,20 +595,37 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 ///     NamedNodeRef::new("http://example.com")?,
 /// ))?;
 /// assert_eq!(
-///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
 ///     writer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default)]
 #[must_use]
-pub struct TriGSerializer;
+pub struct TriGSerializer {
+    prefixes: BTreeMap<String, String>,
+}
 
 impl TriGSerializer {
     /// Builds a new [`TriGSerializer`].
     #[inline]
     pub fn new() -> Self {
-        Self
+        Self {
+            prefixes: BTreeMap::new(),
+        }
+    }
+
+    #[inline]
+    pub fn with_prefix(
+        mut self,
+        prefix_name: impl Into<String>,
+        prefix_iri: impl Into<String>,
+    ) -> Result<Self, IriParseError> {
+        self.prefixes.insert(
+            Iri::parse(prefix_iri.into())?.into_inner(),
+            prefix_name.into(),
+        );
+        Ok(self)
     }
 
     /// Writes a TriG file to a [`Write`] implementation.
@@ -612,7 +634,9 @@ impl TriGSerializer {
     /// use oxrdf::{NamedNodeRef, QuadRef};
     /// use oxttl::TriGSerializer;
     ///
-    /// let mut writer = TriGSerializer::new().serialize_to_write(Vec::new());
+    /// let mut writer = TriGSerializer::new()
+    ///     .with_prefix("schema", "http://schema.org/")?
+    ///     .serialize_to_write(Vec::new());
     /// writer.write_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -620,7 +644,7 @@ impl TriGSerializer {
     ///     NamedNodeRef::new("http://example.com")?,
     /// ))?;
     /// assert_eq!(
-    ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+    ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
     ///     writer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -639,16 +663,20 @@ impl TriGSerializer {
     /// use oxttl::TriGSerializer;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> std::io::Result<()> {
-    /// let mut writer = TriGSerializer::new().serialize_to_tokio_async_write(Vec::new());
-    /// writer.write_quad(QuadRef::new(
-    ///     NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
-    ///     NamedNodeRef::new_unchecked("http://example.com"),
-    /// )).await?;
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut writer = TriGSerializer::new()
+    ///     .with_prefix("schema", "http://schema.org/")?
+    ///     .serialize_to_tokio_async_write(Vec::new());
+    /// writer
+    ///     .write_quad(QuadRef::new(
+    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
+    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///         NamedNodeRef::new_unchecked("http://example.com"),
+    ///     ))
+    ///     .await?;
     /// assert_eq!(
-    /// b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+    ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
     ///     writer.finish().await?.as_slice()
     /// );
     /// # Ok(())
@@ -673,23 +701,29 @@ impl TriGSerializer {
     /// use oxttl::TriGSerializer;
     ///
     /// let mut buf = Vec::new();
-    /// let mut writer = TriGSerializer::new().serialize();
-    /// writer.write_quad(QuadRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
-    ///     NamedNodeRef::new("http://example.com")?,
-    /// ), &mut buf)?;
+    /// let mut writer = TriGSerializer::new()
+    ///     .with_prefix("schema", "http://schema.org/")?
+    ///     .serialize();
+    /// writer.write_quad(
+    ///     QuadRef::new(
+    ///         NamedNodeRef::new("http://example.com#me")?,
+    ///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///         NamedNodeRef::new("http://schema.org/Person")?,
+    ///         NamedNodeRef::new("http://example.com")?,
+    ///     ),
+    ///     &mut buf,
+    /// )?;
     /// writer.finish(&mut buf)?;
     /// assert_eq!(
-    ///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+    ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
     ///     buf.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unused_self)]
-    pub fn serialize(&self) -> LowLevelTriGWriter {
+    pub fn serialize(self) -> LowLevelTriGWriter {
         LowLevelTriGWriter {
+            prefixes: self.prefixes,
+            prelude_written: false,
             current_graph_name: GraphName::DefaultGraph,
             current_subject_predicate: None,
         }
@@ -702,7 +736,9 @@ impl TriGSerializer {
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::TriGSerializer;
 ///
-/// let mut writer = TriGSerializer::new().serialize_to_write(Vec::new());
+/// let mut writer = TriGSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize_to_write(Vec::new());
 /// writer.write_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -710,7 +746,7 @@ impl TriGSerializer {
 ///     NamedNodeRef::new("http://example.com")?,
 /// ))?;
 /// assert_eq!(
-///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
 ///     writer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -741,16 +777,20 @@ impl<W: Write> ToWriteTriGWriter<W> {
 /// use oxttl::TriGSerializer;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> std::io::Result<()> {
-/// let mut writer = TriGSerializer::new().serialize_to_tokio_async_write(Vec::new());
-/// writer.write_quad(QuadRef::new(
-///     NamedNodeRef::new_unchecked("http://example.com#me"),
-///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
-///     NamedNodeRef::new_unchecked("http://example.com"),
-/// )).await?;
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let mut writer = TriGSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize_to_tokio_async_write(Vec::new());
+/// writer
+///     .write_quad(QuadRef::new(
+///         NamedNodeRef::new_unchecked("http://example.com#me"),
+///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+///         NamedNodeRef::new_unchecked("http://example.com"),
+///     ))
+///     .await?;
 /// assert_eq!(
-/// b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
 ///     writer.finish().await?.as_slice()
 /// );
 /// # Ok(())
@@ -790,21 +830,28 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTriGWriter<W> {
 /// use oxttl::TriGSerializer;
 ///
 /// let mut buf = Vec::new();
-/// let mut writer = TriGSerializer::new().serialize();
-/// writer.write_quad(QuadRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-///     NamedNodeRef::new("http://schema.org/Person")?,
-///     NamedNodeRef::new("http://example.com")?,
-/// ), &mut buf)?;
+/// let mut writer = TriGSerializer::new()
+///     .with_prefix("schema", "http://schema.org/")?
+///     .serialize();
+/// writer.write_quad(
+///     QuadRef::new(
+///         NamedNodeRef::new("http://example.com#me")?,
+///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///         NamedNodeRef::new("http://schema.org/Person")?,
+///         NamedNodeRef::new("http://example.com")?,
+///     ),
+///     &mut buf,
+/// )?;
 /// writer.finish(&mut buf)?;
 /// assert_eq!(
-///     b"<http://example.com> {\n\t<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n}\n",
+///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
 ///     buf.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGWriter {
+    prefixes: BTreeMap<String, String>,
+    prelude_written: bool,
     current_graph_name: GraphName,
     current_subject_predicate: Option<(Subject, NamedNode)>,
 }
@@ -816,6 +863,12 @@ impl LowLevelTriGWriter {
         q: impl Into<QuadRef<'a>>,
         mut write: impl Write,
     ) -> io::Result<()> {
+        if !self.prelude_written {
+            self.prelude_written = true;
+            for (prefix_iri, prefix_name) in &self.prefixes {
+                writeln!(write, "@prefix {prefix_name}: <{prefix_iri}> .")?;
+            }
+        }
         let q = q.into();
         if q.graph_name == self.current_graph_name.as_ref() {
             if let Some((current_subject, current_predicate)) =
@@ -824,7 +877,7 @@ impl LowLevelTriGWriter {
                 if q.subject == current_subject.as_ref() {
                     if q.predicate == current_predicate {
                         self.current_subject_predicate = Some((current_subject, current_predicate));
-                        write!(write, " , {}", TurtleTerm(q.object))
+                        write!(write, " , {}", self.term(q.object))
                     } else {
                         self.current_subject_predicate =
                             Some((current_subject, q.predicate.into_owned()));
@@ -832,7 +885,12 @@ impl LowLevelTriGWriter {
                         if !self.current_graph_name.is_default_graph() {
                             write!(write, "\t")?;
                         }
-                        write!(write, "\t{} {}", q.predicate, TurtleTerm(q.object))
+                        write!(
+                            write,
+                            "\t{} {}",
+                            self.predicate(q.predicate),
+                            self.term(q.object)
+                        )
                     }
                 } else {
                     self.current_subject_predicate =
@@ -844,9 +902,9 @@ impl LowLevelTriGWriter {
                     write!(
                         write,
                         "{} {} {}",
-                        TurtleTerm(q.subject.into()),
-                        q.predicate,
-                        TurtleTerm(q.object)
+                        self.term(q.subject),
+                        self.predicate(q.predicate),
+                        self.term(q.object)
                     )
                 }
             } else {
@@ -858,9 +916,9 @@ impl LowLevelTriGWriter {
                 write!(
                     write,
                     "{} {} {}",
-                    TurtleTerm(q.subject.into()),
-                    q.predicate,
-                    TurtleTerm(q.object)
+                    self.term(q.subject),
+                    self.predicate(q.predicate),
+                    self.term(q.object)
                 )
             }
         } else {
@@ -873,17 +931,39 @@ impl LowLevelTriGWriter {
             self.current_graph_name = q.graph_name.into_owned();
             self.current_subject_predicate =
                 Some((q.subject.into_owned(), q.predicate.into_owned()));
-            if !self.current_graph_name.is_default_graph() {
-                writeln!(write, "{} {{", q.graph_name)?;
-                write!(write, "\t")?;
+            match self.current_graph_name.as_ref() {
+                GraphNameRef::NamedNode(g) => {
+                    writeln!(write, "{} {{", self.term(g))?;
+                    write!(write, "\t")?;
+                }
+                GraphNameRef::BlankNode(g) => {
+                    writeln!(write, "{} {{", self.term(g))?;
+                    write!(write, "\t")?;
+                }
+                GraphNameRef::DefaultGraph => (),
             }
+
             write!(
                 write,
                 "{} {} {}",
-                TurtleTerm(q.subject.into()),
-                q.predicate,
-                TurtleTerm(q.object)
+                self.term(q.subject),
+                self.predicate(q.predicate),
+                self.term(q.object)
             )
+        }
+    }
+
+    fn predicate<'a>(&'a self, named_node: impl Into<NamedNodeRef<'a>>) -> TurtlePredicate<'a> {
+        TurtlePredicate {
+            named_node: named_node.into(),
+            prefixes: &self.prefixes,
+        }
+    }
+
+    fn term<'a>(&'a self, term: impl Into<TermRef<'a>>) -> TurtleTerm<'a> {
+        TurtleTerm {
+            term: term.into(),
+            prefixes: &self.prefixes,
         }
     }
 
@@ -899,12 +979,43 @@ impl LowLevelTriGWriter {
     }
 }
 
-struct TurtleTerm<'a>(TermRef<'a>);
+struct TurtlePredicate<'a> {
+    named_node: NamedNodeRef<'a>,
+    prefixes: &'a BTreeMap<String, String>,
+}
+
+impl<'a> fmt::Display for TurtlePredicate<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.named_node == rdf::TYPE {
+            write!(f, "a")
+        } else {
+            TurtleTerm {
+                term: self.named_node.into(),
+                prefixes: self.prefixes,
+            }
+            .fmt(f)
+        }
+    }
+}
+
+struct TurtleTerm<'a> {
+    term: TermRef<'a>,
+    prefixes: &'a BTreeMap<String, String>,
+}
 
 impl<'a> fmt::Display for TurtleTerm<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            TermRef::NamedNode(v) => write!(f, "{v}"),
+        match self.term {
+            TermRef::NamedNode(v) => {
+                for (prefix_iri, prefix_name) in self.prefixes {
+                    if let Some(local_name) = v.as_str().strip_prefix(prefix_iri) {
+                        if let Some(escaped_local_name) = escape_local_name(local_name) {
+                            return write!(f, "{prefix_name}:{escaped_local_name}");
+                        }
+                    }
+                }
+                write!(f, "{v}")
+            }
             TermRef::BlankNode(v) => write!(f, "{v}"),
             TermRef::Literal(v) => {
                 let value = v.value();
@@ -917,8 +1028,18 @@ impl<'a> fmt::Display for TurtleTerm<'a> {
                 };
                 if inline {
                     write!(f, "{value}")
-                } else {
+                } else if v.is_plain() {
                     write!(f, "{v}")
+                } else {
+                    write!(
+                        f,
+                        "{}^^{}",
+                        LiteralRef::new_simple_literal(v.value()),
+                        TurtleTerm {
+                            term: v.datatype().into(),
+                            prefixes: self.prefixes
+                        }
+                    )
                 }
             }
             #[cfg(feature = "rdf-star")]
@@ -926,9 +1047,18 @@ impl<'a> fmt::Display for TurtleTerm<'a> {
                 write!(
                     f,
                     "<< {} {} {} >>",
-                    TurtleTerm(t.subject.as_ref().into()),
-                    t.predicate,
-                    TurtleTerm(t.object.as_ref())
+                    TurtleTerm {
+                        term: t.subject.as_ref().into(),
+                        prefixes: self.prefixes
+                    },
+                    TurtleTerm {
+                        term: t.predicate.as_ref().into(),
+                        prefixes: self.prefixes
+                    },
+                    TurtleTerm {
+                        term: t.object.as_ref(),
+                        prefixes: self.prefixes
+                    }
                 )
             }
         }
@@ -1004,6 +1134,61 @@ fn is_turtle_double(value: &str) -> bool {
     (with_before || with_after) && !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
+fn escape_local_name(value: &str) -> Option<String> {
+    // TODO: PLX
+    // [168s] 	PN_LOCAL 	::= 	(PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
+    let mut output = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    let first = chars.next()?;
+    if N3Lexer::is_possible_pn_chars_u(first) || first == ':' || first.is_ascii_digit() {
+        output.push(first);
+    } else if can_be_escaped_in_local_name(first) {
+        output.push('\\');
+        output.push(first);
+    } else {
+        return None;
+    }
+
+    while let Some(c) = chars.next() {
+        if N3Lexer::is_possible_pn_chars(c) || c == ':' || (c == '.' && !chars.as_str().is_empty())
+        {
+            output.push(c);
+        } else if can_be_escaped_in_local_name(c) {
+            output.push('\\');
+            output.push(c);
+        } else {
+            return None;
+        }
+    }
+
+    Some(output)
+}
+
+fn can_be_escaped_in_local_name(c: char) -> bool {
+    matches!(
+        c,
+        '_' | '~'
+            | '.'
+            | '-'
+            | '!'
+            | '$'
+            | '&'
+            | '\''
+            | '('
+            | ')'
+            | '*'
+            | '+'
+            | ','
+            | ';'
+            | '='
+            | '/'
+            | '?'
+            | '#'
+            | '@'
+            | '%'
+    )
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
@@ -1014,11 +1199,20 @@ mod tests {
 
     #[test]
     fn test_write() -> io::Result<()> {
-        let mut writer = TriGSerializer::new().serialize_to_write(Vec::new());
+        let mut writer = TriGSerializer::new()
+            .with_prefix("ex", "http://example.com/")
+            .unwrap()
+            .serialize_to_write(Vec::new());
         writer.write_quad(QuadRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
             NamedNodeRef::new_unchecked("http://example.com/p"),
-            NamedNodeRef::new_unchecked("http://example.com/o"),
+            NamedNodeRef::new_unchecked("http://example.com/o."),
+            NamedNodeRef::new_unchecked("http://example.com/g"),
+        ))?;
+        writer.write_quad(QuadRef::new(
+            NamedNodeRef::new_unchecked("http://example.com/s"),
+            NamedNodeRef::new_unchecked("http://example.com/p"),
+            NamedNodeRef::new_unchecked("http://example.com/o{o}"),
             NamedNodeRef::new_unchecked("http://example.com/g"),
         ))?;
         writer.write_quad(QuadRef::new(
@@ -1047,11 +1241,14 @@ mod tests {
         ))?;
         writer.write_quad(QuadRef::new(
             BlankNodeRef::new_unchecked("b"),
-            NamedNodeRef::new_unchecked("http://example.com/p2"),
+            NamedNodeRef::new_unchecked("http://example.org/p2"),
             LiteralRef::new_typed_literal("false", xsd::BOOLEAN),
             NamedNodeRef::new_unchecked("http://example.com/g2"),
         ))?;
-        assert_eq!(String::from_utf8(writer.finish()?).unwrap(), "<http://example.com/g> {\n\t<http://example.com/s> <http://example.com/p> <http://example.com/o> , \"foo\" ;\n\t\t<http://example.com/p2> \"foo\"@en .\n\t_:b <http://example.com/p2> _:b2 .\n}\n_:b <http://example.com/p2> true .\n<http://example.com/g2> {\n\t_:b <http://example.com/p2> false .\n}\n");
+        assert_eq!(
+            String::from_utf8(writer.finish()?).unwrap(),
+            "@prefix ex: <http://example.com/> .\nex:g {\n\tex:s ex:p ex:o\\. , <http://example.com/o{o}> , \"foo\" ;\n\t\tex:p2 \"foo\"@en .\n\t_:b ex:p2 _:b2 .\n}\n_:b ex:p2 true .\nex:g2 {\n\t_:b <http://example.org/p2> false .\n}\n"
+        );
         Ok(())
     }
 }

@@ -598,12 +598,14 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.parser {
-                FromReadQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
-                FromReadQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
-                FromReadQuadReaderKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
-                FromReadQuadReaderKind::NQuads(_)
-                | FromReadQuadReaderKind::NTriples(_)
-                | FromReadQuadReaderKind::RdfXml(_) => PrefixesIterKind::None, /* TODO: implement for RDF/XML */
+                FromTokioAsyncReadQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
+                FromTokioAsyncReadQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
+                FromTokioAsyncReadQuadReaderKind::Turtle(p) => {
+                    PrefixesIterKind::Turtle(p.prefixes())
+                }
+                FromTokioAsyncReadQuadReaderKind::NQuads(_)
+                | FromTokioAsyncReadQuadReaderKind::NTriples(_)
+                | FromTokioAsyncReadQuadReaderKind::RdfXml(_) => PrefixesIterKind::None, /* TODO: implement for RDF/XML */
             },
         }
     }
@@ -633,12 +635,12 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         match &self.parser {
-            FromReadQuadReaderKind::N3(p) => p.base_iri(),
-            FromReadQuadReaderKind::TriG(p) => p.base_iri(),
-            FromReadQuadReaderKind::Turtle(p) => p.base_iri(),
-            FromReadQuadReaderKind::NQuads(_)
-            | FromReadQuadReaderKind::NTriples(_)
-            | FromReadQuadReaderKind::RdfXml(_) => None, // TODO: implement for RDF/XML
+            FromTokioAsyncReadQuadReaderKind::N3(p) => p.base_iri(),
+            FromTokioAsyncReadQuadReaderKind::TriG(p) => p.base_iri(),
+            FromTokioAsyncReadQuadReaderKind::Turtle(p) => p.base_iri(),
+            FromTokioAsyncReadQuadReaderKind::NQuads(_)
+            | FromTokioAsyncReadQuadReaderKind::NTriples(_)
+            | FromTokioAsyncReadQuadReaderKind::RdfXml(_) => None, // TODO: implement for RDF/XML
         }
     }
 }

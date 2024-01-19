@@ -1,6 +1,6 @@
 [package]
 name = "oxrdfxml"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2-dev"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -18,7 +18,7 @@ default = []
 async-tokio = ["dep:tokio", "quick-xml/async-tokio"]
 
 [dependencies]
-oxrdf = { version = "0.2.0-alpha.1", path = "../oxrdf" }
+oxrdf = { version = "0.2.0-alpha.2-dev", path = "../oxrdf" }
 oxilangtag = "0.1"
 oxiri = "0.2.3-alpha.1"
 quick-xml = ">=0.29, <0.32"
