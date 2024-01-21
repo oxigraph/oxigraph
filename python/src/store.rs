@@ -48,6 +48,7 @@ pub struct PyStore {
 
 #[pymethods]
 impl PyStore {
+    #[cfg(not(target_family = "wasm"))]
     #[new]
     #[pyo3(signature = (path = None))]
     fn new(path: Option<PathBuf>, py: Python<'_>) -> PyResult<Self> {
@@ -63,6 +64,16 @@ impl PyStore {
         })
     }
 
+    #[cfg(target_family = "wasm")]
+    #[new]
+    fn new(py: Python<'_>) -> PyResult<Self> {
+        py.allow_threads(|| {
+            Ok(Self {
+                inner: Store::new().map_err(map_storage_error)?,
+            })
+        })
+    }
+
     /// Opens a read-only store from disk.
     ///
     /// Opening as read-only while having an other process writing the database is undefined behavior.
@@ -73,6 +84,7 @@ impl PyStore {
     /// :return: the opened store.
     /// :rtype: Store
     /// :raises OSError: if the target directory contains invalid data or could not be accessed.
+    #[cfg(not(target_family = "wasm"))]
     #[staticmethod]
     fn read_only(path: &str, py: Python<'_>) -> PyResult<Self> {
         py.allow_threads(|| {
@@ -97,6 +109,7 @@ impl PyStore {
     /// :return: the opened store.
     /// :rtype: Store
     /// :raises OSError: if the target directories contain invalid data or could not be accessed.
+    #[cfg(not(target_family = "wasm"))]
     #[staticmethod]
     #[pyo3(signature = (primary_path, secondary_path = None))]
     fn secondary(
@@ -173,6 +186,7 @@ impl PyStore {
     /// >>> store.bulk_extend([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    #[cfg(not(target_family = "wasm"))]
     fn bulk_extend(&self, quads: &PyAny) -> PyResult<()> {
         self.inner
             .bulk_loader()
@@ -695,6 +709,7 @@ impl PyStore {
     ///
     /// :rtype: None
     /// :raises OSError: if an error happens during the flush.
+    #[cfg(not(target_family = "wasm"))]
     fn flush(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.flush().map_err(map_storage_error))
     }
@@ -705,6 +720,7 @@ impl PyStore {
     ///
     /// :rtype: None
     /// :raises OSError: if an error happens during the optimization.
+    #[cfg(not(target_family = "wasm"))]
     fn optimize(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.optimize().map_err(map_storage_error))
     }
@@ -730,6 +746,7 @@ impl PyStore {
     /// :type target_directory: str or os.PathLike[str]
     /// :rtype: None
     /// :raises OSError: if an error happens during the backup.
+    #[cfg(not(target_family = "wasm"))]
     fn backup(&self, target_directory: PathBuf, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             self.inner
