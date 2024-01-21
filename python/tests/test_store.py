@@ -1,4 +1,5 @@
 import gc
+import sys
 import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
@@ -26,6 +27,7 @@ bar = NamedNode("http://bar")
 baz = NamedNode("http://baz")
 triple = Triple(foo, foo, foo)
 graph = NamedNode("http://graph")
+is_wasm = sys.platform == "emscripten"
 
 
 class TestStore(unittest.TestCase):
@@ -49,6 +51,7 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(len(store), 2)
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_bulk_extend(self) -> None:
         store = Store()
         store.bulk_extend(
@@ -244,6 +247,7 @@ class TestStore(unittest.TestCase):
         store.update("DELETE WHERE { ?v ?v ?v }")
         self.assertEqual(len(store), 0)
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_update_load(self) -> None:
         store = Store()
         store.update("LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>")
@@ -381,6 +385,7 @@ class TestStore(unittest.TestCase):
         self.assertEqual(list(store.named_graphs()), [])
         self.assertEqual(list(store), [])
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_read_only(self) -> None:
         quad = Quad(foo, bar, baz, graph)
         with TemporaryDirectory() as dir:
@@ -391,6 +396,7 @@ class TestStore(unittest.TestCase):
             store = Store.read_only(dir)
             self.assertEqual(list(store), [quad])
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_secondary(self) -> None:
         quad = Quad(foo, bar, baz, graph)
         with TemporaryDirectory() as dir:

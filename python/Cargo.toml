@@ -27,7 +27,10 @@ pyo3 = { version = "0.20.1", features = ["extension-module"] }
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
 oxigraph = { path = "../lib", features = ["http-client-native-tls"] }
 
-[target.'cfg(not(any(target_family = "windows", target_os = "macos", target_os = "ios")))'.dependencies]
+[target.'cfg(target_family = "wasm")'.dependencies]
+oxigraph.path = "../lib"
+
+[target.'cfg(not(any(target_family = "windows", target_os = "macos", target_os = "ios", target_family = "wasm")))'.dependencies]
 oxigraph = { path = "../lib", features = ["http-client-rustls-native"] }
 
 [lints]
