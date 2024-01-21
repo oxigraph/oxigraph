@@ -398,17 +398,20 @@ impl Term {
     }
 
     #[inline]
+    #[allow(clippy::same_name_method)] // as in sophia's Term
     pub fn is_blank_node(&self) -> bool {
         self.as_ref().is_blank_node()
     }
 
     #[inline]
+    #[allow(clippy::same_name_method)] // as in sophia's Term
     pub fn is_literal(&self) -> bool {
         self.as_ref().is_literal()
     }
 
     #[cfg(feature = "rdf-star")]
     #[inline]
+    #[allow(clippy::same_name_method)] // as in sophia's Term
     pub fn is_triple(&self) -> bool {
         self.as_ref().is_triple()
     }
@@ -618,17 +621,20 @@ impl<'a> TermRef<'a> {
     }
 
     #[inline]
+    #[allow(clippy::same_name_method)] // as in sophia's Term
     pub fn is_blank_node(&self) -> bool {
         matches!(self, Self::BlankNode(_))
     }
 
     #[inline]
+    #[allow(clippy::same_name_method)] // as in sophia's Term
     pub fn is_literal(&self) -> bool {
         matches!(self, Self::Literal(_))
     }
 
     #[cfg(feature = "rdf-star")]
     #[inline]
+    #[allow(clippy::same_name_method)] // as in sophia's Term
     pub fn is_triple(&self) -> bool {
         matches!(self, Self::Triple(_))
     }

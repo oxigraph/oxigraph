@@ -16,6 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = []
+sophia = [ "rdf-star", "sophia_api" ]
 
 [dependencies]
 oxilangtag.workspace = true
@@ -23,6 +24,7 @@ oxiri.workspace = true
 oxsdatatypes = { workspace = true, optional = true }
 rand.workspace = true
 thiserror.workspace = true
+sophia_api = { version = "0.8.0", features=["test_macro"], optional = true }
 
 [lints]
 workspace = true
