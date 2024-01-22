@@ -25,6 +25,7 @@ http-client-rustls-webpki = ["http-client", "oxhttp/rustls-ring-webpki"]
 http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
+sophia = ["oxrdf/sophia", "dep:sophia_api"]
 
 [dependencies]
 dashmap.workspace = true
@@ -43,6 +44,7 @@ rustc-hash.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 siphasher.workspace = true
+sophia_api = { version = "0.8.0", features=["test_macro"], optional = true }
 sparesults = { workspace = true, features = ["rdf-star"] }
 spargebra = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
 sparopt = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
