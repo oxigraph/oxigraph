@@ -18,15 +18,17 @@ name = "pyoxigraph"
 doctest = false
 
 [features]
-default = ["native-tls"]
 abi3 = ["pyo3/abi3-py38"]
-native-tls = ["oxigraph/http-client-native-tls"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
-rustls = ["oxigraph/http-client-rustls-native"]
 
 [dependencies]
-oxigraph.path = "../lib"
 pyo3 = { version = "0.20.1", features = ["extension-module"] }
+
+[target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
+oxigraph = { path = "../lib", features = ["http-client-native-tls"] }
+
+[target.'cfg(not(any(target_family = "windows", target_os = "macos", target_os = "ios")))'.dependencies]
+oxigraph = { path = "../lib", features = ["http-client-rustls-native"] }
 
 [lints]
 workspace = true
