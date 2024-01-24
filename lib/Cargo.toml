@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph"
-version = "0.4.0-alpha.3-dev"
+version = "0.4.0-alpha.3"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -32,21 +32,21 @@ json-event-parser = "0.2.0-alpha.2"
 md-5 = "0.10"
 oxilangtag = "0.1"
 oxiri = "0.2.3-alpha.1"
-oxrdf = { version = "0.2.0-alpha.2-dev", path = "oxrdf", features = ["rdf-star", "oxsdatatypes"] }
-oxrdfio = { version = "0.1.0-alpha.2-dev", path = "oxrdfio", features = ["rdf-star"] }
+oxrdf = { version = "0.2.0-alpha.2", path = "oxrdf", features = ["rdf-star", "oxsdatatypes"] }
+oxrdfio = { version = "0.1.0-alpha.2", path = "oxrdfio", features = ["rdf-star"] }
 oxsdatatypes = { version = "0.2.0-alpha.1", path = "oxsdatatypes" }
 rand = "0.8"
 regex = "1.7"
 sha1 = "0.10"
 sha2 = "0.10"
 siphasher = ">=0.3, <2.0"
-sparesults = { version = "0.2.0-alpha.2-dev", path = "sparesults", features = ["rdf-star"] }
-spargebra = { version = "0.3.0-alpha.2-dev", path = "spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
-sparopt = { version = "0.1.0-alpha.2-dev", path = "sparopt", features = ["rdf-star", "sep-0002", "sep-0006"] }
+sparesults = { version = "0.2.0-alpha.2", path = "sparesults", features = ["rdf-star"] }
+spargebra = { version = "0.3.0-alpha.2", path = "spargebra", features = ["rdf-star", "sep-0002", "sep-0006"] }
+sparopt = { version = "0.1.0-alpha.2", path = "sparopt", features = ["rdf-star", "sep-0002", "sep-0006"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 libc = "0.2.147"
-oxrocksdb-sys = { version = "0.4.0-alpha.3-dev", path = "../oxrocksdb-sys" }
+oxrocksdb-sys = { version = "0.4.0-alpha.3", path = "../oxrocksdb-sys" }
 oxhttp = { version = "0.2.0-alpha.3", optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
@@ -62,7 +62,6 @@ zstd = ">=0.12, <0.14"
 workspace = true
 
 [package.metadata.docs.rs]
-all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[bench]]

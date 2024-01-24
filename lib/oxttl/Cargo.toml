@@ -1,6 +1,6 @@
 [package]
 name = "oxttl"
-version = "0.1.0-alpha.2-dev"
+version = "0.1.0-alpha.2"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -20,7 +20,7 @@ async-tokio = ["dep:tokio"]
 
 [dependencies]
 memchr = "2.5"
-oxrdf = { version = "0.2.0-alpha.2-dev", path = "../oxrdf" }
+oxrdf = { version = "0.2.0-alpha.2", path = "../oxrdf" }
 oxiri = "0.2.3-alpha.1"
 oxilangtag = "0.1"
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
