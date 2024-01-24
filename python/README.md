@@ -32,8 +32,8 @@ Pyoxigraph documentation is [available on the Oxigraph website](https://pyoxigra
 To build and install the development version of pyoxigraph you need to clone this git repository including submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`)
 and to run `pip install .` in the `python` directory (the one this README is in).
 
-Note that by default the installation will not use [cpython stable ABI](https://docs.python.org/3/c-api/stable.html) and will rely on the host TLS implementation.
-Use `--features abi3` feature to use cpython stable ABI and use `--no-default-features --features rustls` to use [rustls](https://github.com/rustls/rustls) with the system certificates.
+Note that by default the installation will not use [cpython stable ABI](https://docs.python.org/3/c-api/stable.html).
+Use `--features abi3` feature to use cpython stable ABI.
 
 ## Help
 
