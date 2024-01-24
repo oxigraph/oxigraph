@@ -1,6 +1,6 @@
 [package]
 name = "oxrdfio"
-version = "0.1.0-alpha.2-dev"
+version = "0.1.0-alpha.2"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -19,9 +19,9 @@ async-tokio = ["dep:tokio", "oxrdfxml/async-tokio", "oxttl/async-tokio"]
 rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
 
 [dependencies]
-oxrdf = { version = "0.2.0-alpha.2-dev", path = "../oxrdf" }
-oxrdfxml = { version = "0.1.0-alpha.2-dev", path = "../oxrdfxml" }
-oxttl = { version = "0.1.0-alpha.2-dev", path = "../oxttl" }
+oxrdf = { version = "0.2.0-alpha.2", path = "../oxrdf" }
+oxrdfxml = { version = "0.1.0-alpha.2", path = "../oxrdfxml" }
+oxttl = { version = "0.1.0-alpha.2", path = "../oxttl" }
 tokio = { version = "1.29", optional = true, features = ["io-util"] }
 
 [dev-dependencies]

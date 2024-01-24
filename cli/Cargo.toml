@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph-cli"
-version = "0.4.0-alpha.3-dev"
+version = "0.4.0-alpha.3"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -29,7 +29,7 @@ rustls-webpki = ["oxigraph/http-client-rustls-webpki"]
 anyhow = "1.0.72"
 oxhttp = { version = "0.2.0-alpha.3", features = ["flate2"] }
 clap = { version = "4.0", features = ["derive"] }
-oxigraph = { version = "0.4.0-alpha.3-dev", path = "../lib" }
+oxigraph = { version = "0.4.0-alpha.3", path = "../lib" }
 rand = "0.8"
 url = "2.4"
 oxiri = "0.2.3-alpha.1"

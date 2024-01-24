@@ -1,3 +1,18 @@
+## [0.4.0-alpha.3] - 2024-01-25
+
+### Added
+- `oxttl`: expose base IRIs.
+- `oxttl`: allows to inject prefixes for serialization.
+- `oxrdf`: `vocab::geosparql::WKT_LITERAL`.
+
+### Changed
+- Turtle: Fixes parsing bug with escaped dot at the end of local name.
+- `oxttl`: Changes `prefixes` getter return type. 
+- JS: simplify build.
+- Python: uses rustls by default all platforms that are not Windows/macOS/iOS/WASM.
+- Strips debug info of the Rust std library in release build.
+
+
 ## [0.4.0-alpha.2] - 2024-01-08
 
 ### Added

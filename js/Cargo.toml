@@ -1,6 +1,6 @@
 [package]
 name = "oxigraph-js"
-version = "0.4.0-alpha.3-dev"
+version = "0.4.0-alpha.3"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
