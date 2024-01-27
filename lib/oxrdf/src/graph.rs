@@ -229,8 +229,8 @@ impl PartialEq for Graph {
 impl Eq for Graph {}
 
 impl<'a> IntoIterator for &'a Graph {
-    type Item = TripleRef<'a>;
     type IntoIter = Iter<'a>;
+    type Item = TripleRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

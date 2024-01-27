@@ -111,8 +111,8 @@ impl EncodedTuple {
 }
 
 impl IntoIterator for EncodedTuple {
-    type Item = Option<EncodedTerm>;
     type IntoIter = std::vec::IntoIter<Option<EncodedTerm>>;
+    type Item = Option<EncodedTerm>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()

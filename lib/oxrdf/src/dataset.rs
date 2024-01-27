@@ -925,8 +925,8 @@ impl PartialEq for Dataset {
 impl Eq for Dataset {}
 
 impl<'a> IntoIterator for &'a Dataset {
-    type Item = QuadRef<'a>;
     type IntoIter = Iter<'a>;
+    type Item = QuadRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -1283,8 +1283,8 @@ impl<'a> GraphView<'a> {
 }
 
 impl<'a> IntoIterator for GraphView<'a> {
-    type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
+    type Item = TripleRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -1292,8 +1292,8 @@ impl<'a> IntoIterator for GraphView<'a> {
 }
 
 impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
-    type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
+    type Item = TripleRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -1494,8 +1494,8 @@ impl<'a, 'b, T: Into<TripleRef<'b>>> Extend<T> for GraphViewMut<'a> {
 }
 
 impl<'a> IntoIterator for &'a GraphViewMut<'a> {
-    type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
+    type Item = TripleRef<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
