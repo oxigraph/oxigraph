@@ -17,9 +17,4 @@
 //! assert_eq!(vec![triple], results);
 //! ```
 
-pub use oxrdf::{
-    dataset, graph, vocab, BlankNode, BlankNodeIdParseError, BlankNodeRef, Dataset, Graph,
-    GraphName, GraphNameRef, IriParseError, LanguageTagParseError, Literal, LiteralRef, NamedNode,
-    NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Subject, SubjectRef, Term,
-    TermParseError, TermRef, Triple, TripleRef,
-};
+pub use oxrdf::*;

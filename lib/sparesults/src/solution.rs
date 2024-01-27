@@ -171,8 +171,8 @@ impl<V: Into<Arc<[Variable]>>, S: Into<Vec<Option<Term>>>> From<(V, S)> for Quer
 }
 
 impl<'a> IntoIterator for &'a QuerySolution {
-    type Item = (&'a Variable, &'a Term);
     type IntoIter = Iter<'a>;
+    type Item = (&'a Variable, &'a Term);
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
