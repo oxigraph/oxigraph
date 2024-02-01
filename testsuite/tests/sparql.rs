@@ -105,6 +105,17 @@ fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
 }
 
 #[test]
+fn sparql12_w3c_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://w3c.github.io/rdf-tests/sparql/sparql12/manifest.ttl",
+        &[
+            // Literal normalization
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/grouping#group01",
+        ],
+    )
+}
+
+#[test]
 fn sparql_star_syntax_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-star/tests/sparql/syntax/manifest.ttl",
