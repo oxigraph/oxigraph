@@ -47,6 +47,9 @@ for quad in RdfParser::from_format(RdfFormat::Turtle).parse_read(turtle_file.as_
 assert_eq!(writer.finish().unwrap(), ntriples_file);
 ```
 
+Parsers for other RDF formats exists in Rust like [graph-rdfa-processor](https://github.com/nbittich/graph-rdfa-processor) for RDFa and [json-ld](https://github.com/timothee-haudebourg/json-ld) for JSON-LD.
+
+
 ## License
 
 This project is licensed under either of
