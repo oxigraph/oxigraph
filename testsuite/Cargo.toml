@@ -1,27 +1,27 @@
 [package]
 name = "oxigraph-testsuite"
 version = "0.0.0"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+authors.workspace = true
+license.workspace = true
 description = """
 Implementation of W3C testsuites for Oxigraph
 """
-edition = "2021"
-rust-version = "1.70"
+edition.workspace = true
+rust-version.workspace = true
 publish = false
 
 [dependencies]
-anyhow = "1.0.72"
-clap = { version = "4.0", features = ["derive"] }
-oxigraph.path = "../lib"
-oxttl.path = "../lib/oxttl"
-sparopt.path = "../lib/sparopt"
-spargebra.path = "../lib/spargebra"
-text-diff = "0.4"
-time = { version = "0.3", features = ["formatting"] }
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+oxigraph.workspace = true
+oxttl.workspace = true
+spargebra.workspace = true
+sparopt.workspace = true
+text-diff.workspace = true
+time = { workspace = true, features = ["formatting"] }
 
 [dev-dependencies]
-codspeed-criterion-compat = "2.3.3"
+codspeed-criterion-compat.workspace = true
 
 [lints]
 workspace = true

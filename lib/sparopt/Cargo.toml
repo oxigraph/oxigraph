@@ -1,8 +1,8 @@
 [package]
 name = "sparopt"
 version = "0.1.0-alpha.2"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+authors.workspace = true
+license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparopt"
@@ -10,8 +10,8 @@ documentation = "https://docs.rs/sparopt"
 description = """
 A SPARQL optimizer
 """
-edition = "2021"
-rust-version = "1.70"
+edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []
@@ -20,9 +20,9 @@ sep-0002 = ["spargebra/sep-0002"]
 sep-0006 = ["spargebra/sep-0006"]
 
 [dependencies]
-oxrdf = { version = "0.2.0-alpha.2", path = "../oxrdf" }
-rand = "0.8"
-spargebra = { version = "0.3.0-alpha.2", path = "../spargebra" }
+oxrdf.workspace = true
+rand.workspace = true
+spargebra.workspace = true
 
 [lints]
 workspace = true

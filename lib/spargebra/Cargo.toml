@@ -1,8 +1,8 @@
 [package]
 name = "spargebra"
 version = "0.3.0-alpha.2"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+authors.workspace = true
+license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargebra"
@@ -10,8 +10,8 @@ documentation = "https://docs.rs/spargebra"
 description = """
 A SPARQL parser
 """
-edition = "2021"
-rust-version = "1.70"
+edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []
@@ -20,11 +20,11 @@ sep-0002 = []
 sep-0006 = []
 
 [dependencies]
-peg = "0.8"
-rand = "0.8"
-oxiri = "0.2.3-alpha.1"
-oxilangtag = "0.1"
-oxrdf = { version = "0.2.0-alpha.2", path = "../oxrdf" }
+oxilangtag.workspace = true
+oxiri.workspace = true
+oxrdf.workspace = true
+peg.workspace = true
+rand.workspace = true
 
 [lints]
 workspace = true

@@ -1,8 +1,8 @@
 [package]
 name = "sparesults"
 version = "0.2.0-alpha.2"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+authors.workspace = true
+license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparesults"
@@ -10,8 +10,8 @@ description = """
 SPARQL query results formats parsers and serializers
 """
 documentation = "https://docs.rs/sparesults"
-edition = "2021"
-rust-version = "1.70"
+edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []
@@ -19,14 +19,14 @@ rdf-star = ["oxrdf/rdf-star"]
 async-tokio = ["dep:tokio", "quick-xml/async-tokio", "json-event-parser/async-tokio"]
 
 [dependencies]
-json-event-parser = "0.2.0-alpha.2"
-memchr = "2.5"
-oxrdf = { version = "0.2.0-alpha.2", path = "../oxrdf" }
-quick-xml = ">=0.29, <0.32"
-tokio = { version = "1.29", optional = true, features = ["io-util"] }
+json-event-parser.workspace = true
+memchr.workspace = true
+oxrdf.workspace = true
+quick-xml.workspace = true
+tokio = { workspace = true, optional = true, features = ["io-util"] }
 
 [dev-dependencies]
-tokio = { version = "1.29", features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros"] }
 
 [lints]
 workspace = true
