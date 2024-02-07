@@ -17,20 +17,7 @@ use std::{char, fmt};
 
 /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
-    let mut state = ParserState {
-        base_iri: if let Some(base_iri) = base_iri {
-            Some(Iri::parse(base_iri.to_owned()).map_err(|e| ParseError {
-                inner: ParseErrorKind::InvalidBaseIri(e),
-            })?)
-        } else {
-            None
-        },
-        namespaces: HashMap::default(),
-        used_bnodes: HashSet::default(),
-        currently_used_bnodes: HashSet::default(),
-        aggregates: Vec::new(),
-    };
-
+    let mut state = ParserState::from_base_iri(base_iri)?;
     parser::QueryUnit(query, &mut state).map_err(|e| ParseError {
         inner: ParseErrorKind::Parser(e),
     })
@@ -38,20 +25,7 @@ pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseEr
 
 /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, ParseError> {
-    let mut state = ParserState {
-        base_iri: if let Some(base_iri) = base_iri {
-            Some(Iri::parse(base_iri.to_owned()).map_err(|e| ParseError {
-                inner: ParseErrorKind::InvalidBaseIri(e),
-            })?)
-        } else {
-            None
-        },
-        namespaces: HashMap::default(),
-        used_bnodes: HashSet::default(),
-        currently_used_bnodes: HashSet::default(),
-        aggregates: Vec::new(),
-    };
-
+    let mut state = ParserState::from_base_iri(base_iri)?;
     let operations = parser::UpdateInit(update, &mut state).map_err(|e| ParseError {
         inner: ParseErrorKind::Parser(e),
     })?;
@@ -720,6 +694,22 @@ pub struct ParserState {
 }
 
 impl ParserState {
+    pub(crate) fn from_base_iri(base_iri: Option<&str>) -> Result<Self, ParseError> {
+        Ok(Self {
+            base_iri: if let Some(base_iri) = base_iri {
+                Some(Iri::parse(base_iri.to_owned()).map_err(|e| ParseError {
+                    inner: ParseErrorKind::InvalidBaseIri(e),
+                })?)
+            } else {
+                None
+            },
+            namespaces: HashMap::default(),
+            used_bnodes: HashSet::default(),
+            currently_used_bnodes: HashSet::default(),
+            aggregates: Vec::new(),
+        })
+    }
+
     fn parse_iri(&self, iri: String) -> Result<Iri<String>, IriParseError> {
         if let Some(base_iri) = &self.base_iri {
             base_iri.resolve(&iri)

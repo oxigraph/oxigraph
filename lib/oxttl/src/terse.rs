@@ -35,9 +35,9 @@ impl TriGRecognizerContext {
 }
 
 impl RuleRecognizer for TriGRecognizer {
-    type Context = TriGRecognizerContext;
-    type Output = Quad;
     type TokenRecognizer = N3Lexer;
+    type Output = Quad;
+    type Context = TriGRecognizerContext;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
