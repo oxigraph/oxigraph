@@ -78,7 +78,7 @@ impl From<SyntaxError> for io::Error {
 
 /// A parsing error.
 ///
-/// It is the union of [`SyntaxError`] and [`std::io::Error`].
+/// It is the union of [`SyntaxError`] and [`io::Error`].
 #[derive(Debug)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).

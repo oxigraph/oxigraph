@@ -723,9 +723,9 @@ struct N3RecognizerContext {
 }
 
 impl RuleRecognizer for N3Recognizer {
-    type Context = N3RecognizerContext;
-    type Output = N3Quad;
     type TokenRecognizer = N3Lexer;
+    type Output = N3Quad;
+    type Context = N3RecognizerContext;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();

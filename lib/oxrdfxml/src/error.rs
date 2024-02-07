@@ -61,10 +61,9 @@ impl From<quick_xml::Error> for ParseError {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
         match error {
-            quick_xml::Error::Io(error) => Self::Io(match Arc::try_unwrap(error) {
-                Ok(error) => error,
-                Err(error) => io::Error::new(error.kind(), error),
-            }),
+            quick_xml::Error::Io(error) => {
+                Self::Io(Arc::try_unwrap(error).unwrap_or_else(|e| io::Error::new(e.kind(), e)))
+            }
             _ => Self::Syntax(SyntaxError {
                 inner: SyntaxErrorKind::Xml(error),
             }),
@@ -137,10 +136,9 @@ impl From<SyntaxError> for io::Error {
     fn from(error: SyntaxError) -> Self {
         match error.inner {
             SyntaxErrorKind::Xml(error) => match error {
-                quick_xml::Error::Io(error) => match Arc::try_unwrap(error) {
-                    Ok(error) => error,
-                    Err(error) => Self::new(error.kind(), error),
-                },
+                quick_xml::Error::Io(error) => {
+                    Arc::try_unwrap(error).unwrap_or_else(|e| Self::new(e.kind(), e))
+                }
                 quick_xml::Error::UnexpectedEof(error) => {
                     Self::new(io::ErrorKind::UnexpectedEof, error)
                 }

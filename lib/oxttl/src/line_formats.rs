@@ -39,9 +39,9 @@ enum NQuadsState {
 }
 
 impl RuleRecognizer for NQuadsRecognizer {
-    type Context = NQuadsRecognizerContext;
-    type Output = Quad;
     type TokenRecognizer = N3Lexer;
+    type Output = Quad;
+    type Context = NQuadsRecognizerContext;
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();

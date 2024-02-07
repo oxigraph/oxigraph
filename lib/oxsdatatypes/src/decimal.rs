@@ -882,14 +882,16 @@ mod tests {
         );
         assert_eq!(Decimal::MAX.checked_round(), None);
         assert_eq!(
-            (Decimal::MAX.checked_sub(Decimal::from_str("0.5")?))
+            Decimal::MAX
+                .checked_sub(Decimal::from_str("0.5")?)
                 .unwrap()
                 .checked_round(),
             Some(Decimal::from_str("170141183460469231731")?)
         );
         assert_eq!(Decimal::MIN.checked_round(), None);
         assert_eq!(
-            (Decimal::MIN.checked_add(Decimal::from_str("0.5")?))
+            Decimal::MIN
+                .checked_add(Decimal::from_str("0.5")?)
                 .unwrap()
                 .checked_round(),
             Some(Decimal::from_str("-170141183460469231731")?)
@@ -958,7 +960,8 @@ mod tests {
         );
         assert_eq!(Decimal::MIN.checked_floor(), None);
         assert_eq!(
-            (Decimal::MIN.checked_add(Decimal::from_str("1")?))
+            Decimal::MIN
+                .checked_add(Decimal::from_str("1")?)
                 .unwrap()
                 .checked_floor(),
             Some(Decimal::from_str("-170141183460469231731")?)
