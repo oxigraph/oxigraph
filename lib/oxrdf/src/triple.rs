@@ -983,7 +983,7 @@ impl fmt::Display for GraphNameRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
         }
     }
 }

@@ -147,15 +147,15 @@ enum SelectProjection {
 
 impl fmt::Display for SelectClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SELECT")?;
+        f.write_str("SELECT")?;
         if let Some(option) = &self.option {
             match option {
-                SelectOption::Distinct => write!(f, " DISTINCT"),
-                SelectOption::Reduced => write!(f, " REDUCED"),
+                SelectOption::Distinct => f.write_str(" DISTINCT"),
+                SelectOption::Reduced => f.write_str(" REDUCED"),
             }?;
         }
         match &self.values {
-            SelectValues::Star => write!(f, " *"),
+            SelectValues::Star => f.write_str(" *"),
             SelectValues::Projection { start, others } => {
                 for e in once(start).chain(others) {
                     match e {
@@ -179,7 +179,7 @@ struct WhereClause {
 impl fmt::Display for WhereClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.with_where {
-            write!(f, " WHERE ")?;
+            f.write_str(" WHERE ")?;
         }
         write!(f, "{}", self.group_graph_pattern)
     }
@@ -400,12 +400,12 @@ enum GroupGraphPattern {
 
 impl fmt::Display for GroupGraphPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, " {{ ")?;
+        f.write_str(" { ")?;
         match self {
             Self::GroupGraphPatternSub(p) => write!(f, "{p}"),
             Self::SubSelect(s) => write!(f, "{s}"),
         }?;
-        write!(f, " }} ")
+        f.write_str(" } ")
     }
 }
 
@@ -431,7 +431,7 @@ impl fmt::Display for GroupGraphPatternSub {
         for other in &self.others {
             write!(f, "{}", other.start)?;
             if other.with_dot {
-                write!(f, " . ")?;
+                f.write_str(" . ")?;
             }
             if let Some(end) = &other.end {
                 write!(f, "{end}")?;
@@ -452,7 +452,7 @@ impl fmt::Display for TriplesBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.start)?;
         if let Some(end) = &self.end {
-            write!(f, " . ")?;
+            f.write_str(" . ")?;
             if let Some(end) = end {
                 write!(f, "{end}")?;
             }
@@ -617,19 +617,19 @@ impl<'a> Arbitrary<'a> for InlineDataFull {
 
 impl fmt::Display for InlineDataFull {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "( ")?;
+        f.write_str("( ")?;
         for v in &self.vars {
             write!(f, " {v}")?;
         }
-        write!(f, " ) {{")?;
+        f.write_str(" ) {")?;
         for vs in &self.values {
-            write!(f, " (")?;
+            f.write_str(" (")?;
             for v in vs {
                 write!(f, " {v}")?;
             }
-            write!(f, " )")?;
+            f.write_str(" )")?;
         }
-        write!(f, " }}")
+        f.write_str(" }")
     }
 }
 
@@ -646,7 +646,7 @@ impl fmt::Display for DataBlockValue {
         match self {
             Self::Iri(i) => write!(f, "{i}"),
             Self::Literal(l) => write!(f, "{l}"),
-            Self::Undef => write!(f, "UNDEF"),
+            Self::Undef => f.write_str("UNDEF"),
         }
     }
 }
@@ -736,14 +736,14 @@ enum ArgList {
 
 impl fmt::Display for ArgList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(")?;
+        f.write_str("(")?;
         if let Self::NotNil { start, others } = self {
             write!(f, "{start}")?;
             for e in others {
                 write!(f, ", {e}")?;
             }
         }
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -755,14 +755,14 @@ struct ExpressionList {
 
 impl fmt::Display for ExpressionList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(")?;
+        f.write_str("(")?;
         for (i, e) in self.inner.iter().enumerate() {
             if i > 0 {
-                write!(f, ", ")?;
+                f.write_str(", ")?;
             }
             write!(f, "{e}")?;
         }
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -784,7 +784,7 @@ impl fmt::Display for PropertyListNotEmpty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.start_predicate, self.start_object)?;
         for other in &self.others {
-            write!(f, " ; ")?;
+            f.write_str(" ; ")?;
             if let Some(e) = other {
                 write!(f, "{} {}", e.predicate, e.object)?;
             }
@@ -804,7 +804,7 @@ impl fmt::Display for Verb {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::VarOrIri(iri) => write!(f, "{iri}"),
-            Self::A => write!(f, " a "),
+            Self::A => f.write_str(" a "),
         }
     }
 }
@@ -820,7 +820,7 @@ impl fmt::Display for ObjectList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.start)?;
         for other in &self.others {
-            write!(f, " , ")?;
+            f.write_str(" , ")?;
             write!(f, "{other}")?;
         }
         Ok(())
@@ -906,7 +906,7 @@ impl fmt::Display for PropertyListPathNotEmpty {
         }?;
         write!(f, "{}", self.start_object)?;
         for other in &self.others {
-            write!(f, " ; ")?;
+            f.write_str(" ; ")?;
             if let Some(e) = other {
                 match &e.predicate {
                     PropertyListPathNotEmptyVerb::VerbPath(p) => write!(f, "{p}"),
@@ -1026,9 +1026,9 @@ enum PathMod {
 impl fmt::Display for PathMod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ZeroOrOne => write!(f, " ? "),
-            Self::ZeroOrMore => write!(f, " * "),
-            Self::OneOrMore => write!(f, " + "),
+            Self::ZeroOrOne => f.write_str(" ? "),
+            Self::ZeroOrMore => f.write_str(" * "),
+            Self::OneOrMore => f.write_str(" + "),
         }
     }
 }
@@ -1046,7 +1046,7 @@ impl fmt::Display for PathPrimary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Iri(iri) => write!(f, "{iri}"),
-            Self::A => write!(f, " a "),
+            Self::A => f.write_str(" a "),
             Self::Negated(n) => write!(f, "!{n}"),
             Self::Child(c) => write!(f, "({c})"),
         }
@@ -1072,7 +1072,7 @@ impl fmt::Display for PathNegatedPropertySet {
                 for other in others {
                     write!(f, " | {other}")?;
                 }
-                write!(f, " ) ")
+                f.write_str(" ) ")
             }
         }
     }
@@ -1091,9 +1091,9 @@ impl fmt::Display for PathOneInPropertySet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Iri(iri) => write!(f, "{iri}"),
-            Self::A => write!(f, " a "),
+            Self::A => f.write_str(" a "),
             Self::NegatedIri(iri) => write!(f, "^{iri}"),
-            Self::NegatedA => write!(f, " ^a "),
+            Self::NegatedA => f.write_str(" ^a "),
         }
     }
 }
@@ -1167,7 +1167,7 @@ impl fmt::Display for Collection {
         for e in &self.others {
             write!(f, " {e}")?;
         }
-        write!(f, " )")
+        f.write_str(" )")
     }
 }
 
@@ -1184,7 +1184,7 @@ impl fmt::Display for CollectionPath {
         for e in &self.others {
             write!(f, " {e}")?;
         }
-        write!(f, " )")
+        f.write_str(" )")
     }
 }
 
@@ -1289,7 +1289,7 @@ impl fmt::Display for GraphTerm {
         match self {
             Self::Iri(iri) => write!(f, "{iri}"),
             Self::Literal(l) => write!(f, "{l}"),
-            Self::Nil => write!(f, " () "),
+            Self::Nil => f.write_str(" () "),
         }
     }
 }

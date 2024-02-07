@@ -196,7 +196,7 @@ impl GraphName {
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
             Self::NamedNode(node) => write!(f, "{node}"),
-            Self::DefaultGraph => write!(f, "default"),
+            Self::DefaultGraph => f.write_str("default"),
         }
     }
 }
@@ -206,7 +206,7 @@ impl fmt::Display for GraphName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
         }
     }
 }
@@ -261,9 +261,9 @@ impl Quad {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
         write!(
             f,
@@ -271,7 +271,7 @@ impl Quad {
             self.subject, self.predicate, self.object
         )?;
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }
@@ -336,9 +336,9 @@ impl GroundQuad {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
         write!(
             f,
@@ -346,7 +346,7 @@ impl GroundQuad {
             self.subject, self.predicate, self.object
         )?;
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }
@@ -712,7 +712,7 @@ impl GraphNamePattern {
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
             Self::NamedNode(node) => write!(f, "{node}"),
-            Self::DefaultGraph => write!(f, "default"),
+            Self::DefaultGraph => f.write_str("default"),
             Self::Variable(var) => write!(f, "{var}"),
         }
     }
@@ -723,7 +723,7 @@ impl fmt::Display for GraphNamePattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
             Self::Variable(var) => var.fmt(f),
         }
     }
@@ -786,13 +786,13 @@ impl TriplePattern {
 
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -850,13 +850,13 @@ impl GroundTriplePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     #[allow(dead_code)]
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -918,19 +918,19 @@ impl QuadPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")?;
+        f.write_str(")")?;
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }
@@ -964,19 +964,19 @@ impl GroundQuadPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")?;
+        f.write_str(")")?;
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }

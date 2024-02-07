@@ -987,7 +987,7 @@ struct TurtlePredicate<'a> {
 impl<'a> fmt::Display for TurtlePredicate<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.named_node == rdf::TYPE {
-            write!(f, "a")
+            f.write_str("a")
         } else {
             TurtleTerm {
                 term: self.named_node.into(),
@@ -1027,7 +1027,7 @@ impl<'a> fmt::Display for TurtleTerm<'a> {
                     _ => false,
                 };
                 if inline {
-                    write!(f, "{value}")
+                    f.write_str(value)
                 } else if v.is_plain() {
                     write!(f, "{v}")
                 } else {

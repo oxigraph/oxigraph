@@ -629,12 +629,12 @@ fn solutions_to_string(solutions: Vec<Vec<(Variable, Term)>>, ordered: bool) -> 
         .into_iter()
         .map(|mut s| {
             let mut out = String::new();
-            write!(&mut out, "{{").unwrap();
+            out.write_str("{").unwrap();
             s.sort_unstable_by(|(v1, _), (v2, _)| v1.cmp(v2));
             for (variable, value) in s {
                 write!(&mut out, "{variable} = {value} ").unwrap();
             }
-            write!(&mut out, "}}").unwrap();
+            out.write_str("}").unwrap();
             out
         })
         .collect::<Vec<_>>();

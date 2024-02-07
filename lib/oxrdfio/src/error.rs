@@ -144,7 +144,7 @@ impl fmt::Display for SyntaxError {
         match &self.inner {
             SyntaxErrorKind::Turtle(e) => e.fmt(f),
             SyntaxErrorKind::RdfXml(e) => e.fmt(f),
-            SyntaxErrorKind::Msg { msg } => write!(f, "{msg}"),
+            SyntaxErrorKind::Msg { msg } => f.write_str(msg),
         }
     }
 }

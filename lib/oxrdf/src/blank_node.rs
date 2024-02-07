@@ -351,7 +351,7 @@ pub struct BlankNodeIdParseError;
 impl fmt::Display for BlankNodeIdParseError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "The blank node identifier is invalid")
+        f.write_str("The blank node identifier is invalid")
     }
 }
 
