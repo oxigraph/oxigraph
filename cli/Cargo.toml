@@ -1,8 +1,8 @@
 [package]
 name = "oxigraph-cli"
-version = "0.4.0-alpha.3"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["command-line-utilities", "database"]
@@ -11,12 +11,13 @@ homepage = "https://oxigraph.org/cli/"
 description = """
 Oxigraph command line toolkit and SPARQL HTTP server
 """
-edition = "2021"
-rust-version = "1.70"
+edition.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "oxigraph"
 path = "src/main.rs"
+doc = false
 
 [features]
 default = ["native-tls"]
@@ -26,21 +27,21 @@ rustls-native = ["oxigraph/http-client-rustls-native"]
 rustls-webpki = ["oxigraph/http-client-rustls-webpki"]
 
 [dependencies]
-anyhow = "1.0.72"
-oxhttp = { version = "0.2.0-alpha.3", features = ["flate2"] }
-clap = { version = "4.0", features = ["derive"] }
-oxigraph = { version = "0.4.0-alpha.3", path = "../lib" }
-rand = "0.8"
-url = "2.4"
-oxiri = "0.2.3-alpha.1"
-flate2 = "1.0"
-rayon-core = "1.11"
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+flate2.workspace = true
+oxhttp = { workspace = true, features = ["flate2"] }
+oxigraph.workspace = true
+oxiri.workspace = true
+rand.workspace = true
+rayon-core.workspace = true
+url.workspace = true
 
 [dev-dependencies]
-assert_cmd = "2.0"
-assert_fs = "1.0"
-escargot = "0.5"
-predicates = ">=2.0, <4.0"
+assert_cmd.workspace = true
+assert_fs.workspace = true
+escargot.workspace = true
+predicates.workspace = true
 
 [lints]
 workspace = true

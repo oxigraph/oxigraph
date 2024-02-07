@@ -1,0 +1,69 @@
+[package]
+name = "oxigraph"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["RDF", "SPARQL", "graph-database", "database"]
+categories = ["database-implementations"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxigraph"
+homepage = "https://oxigraph.org/"
+documentation = "https://docs.rs/oxigraph"
+description = """
+a SPARQL database and RDF toolkit
+"""
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+js = ["getrandom/js", "oxsdatatypes/js", "js-sys"]
+http-client = ["oxhttp"]
+http-client-native-tls = ["http-client", "oxhttp/native-tls"]
+http-client-rustls-webpki = ["http-client", "oxhttp/rustls-webpki"]
+http-client-rustls-native = ["http-client", "oxhttp/rustls-native"]
+rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
+rocksdb-debug = []
+
+[dependencies]
+digest.workspace = true
+hex.workspace = true
+json-event-parser.workspace = true
+md-5.workspace = true
+oxilangtag.workspace = true
+oxiri.workspace = true
+oxrdf = { workspace = true, features = ["rdf-star", "oxsdatatypes"] }
+oxrdfio = { workspace = true, features = ["rdf-star"] }
+oxsdatatypes.workspace = true
+rand.workspace = true
+regex.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+siphasher.workspace = true
+sparesults = { workspace = true, features = ["rdf-star"] }
+spargebra = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
+sparopt = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+libc.workspace = true
+oxhttp = { workspace = true, optional = true }
+oxrocksdb-sys.workspace = true
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom.workspace = true
+js-sys = { workspace = true, optional = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+codspeed-criterion-compat.workspace = true
+oxhttp.workspace = true
+zstd.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[[bench]]
+name = "store"
+harness = false

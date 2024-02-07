@@ -1,7 +1,7 @@
 [package]
 name = "oxrocksdb-sys"
-version = "0.4.0-alpha.3"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+version.workspace = true
+authors.workspace = true
 license = "GPL-2.0 OR Apache-2.0"
 repository = "https://github.com/oxigraph/oxigraph/tree/main/oxrocksdb-sys"
 readme = "README.md"
@@ -9,8 +9,8 @@ description = """
 Rust bindings for RocksDB for Oxigraph usage.
 """
 documentation = "https://docs.rs/oxrocksdb-sys"
-edition = "2021"
-rust-version = "1.70"
+edition.workspace = true
+rust-version.workspace = true
 build = "build.rs"
 links = "rocksdb"
 
@@ -18,9 +18,9 @@ links = "rocksdb"
 pkg-config = ["dep:pkg-config"]
 
 [dependencies]
-libc = "0.2.147"
+libc.workspace = true
 
 [build-dependencies]
-pkg-config = { version = "0.3.25", optional = true }
-bindgen = ">=0.60, <0.70"
-cc = { version = "1.0.73", features = ["parallel"] }
+bindgen.workspace = true
+cc = { workspace = true, features = ["parallel"] }
+pkg-config = { workspace = true, optional = true }

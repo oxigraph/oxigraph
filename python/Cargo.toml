@@ -1,37 +1,38 @@
 [package]
 name = "pyoxigraph"
-version = "0.4.0-alpha.3"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/python"
 homepage = "https://pyoxigraph.readthedocs.io/"
 description = "Python bindings of Oxigraph, a SPARQL database and RDF toolkit"
-edition = "2021"
-rust-version = "1.70"
+edition.workspace = true
+rust-version.workspace = true
 publish = false
 
 [lib]
 crate-type = ["cdylib"]
 name = "pyoxigraph"
 doctest = false
+doc = false
 
 [features]
 abi3 = ["pyo3/abi3-py38"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 
 [dependencies]
-pyo3 = { version = "0.20.1", features = ["extension-module"] }
+pyo3 = { workspace = true, features = ["extension-module"] }
 
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
-oxigraph = { path = "../lib", features = ["http-client-native-tls"] }
+oxigraph = { workspace = true, features = ["http-client-native-tls"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-oxigraph.path = "../lib"
+oxigraph.workspace = true
 
 [target.'cfg(not(any(target_family = "windows", target_os = "macos", target_os = "ios", target_family = "wasm")))'.dependencies]
-oxigraph = { path = "../lib", features = ["http-client-rustls-native"] }
+oxigraph = { workspace = true, features = ["http-client-rustls-native"] }
 
 [lints]
 workspace = true
