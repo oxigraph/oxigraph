@@ -121,15 +121,15 @@ zstd = ">=0.12, <0.14"
 
 # Internal dependencies
 oxigraph = { path = "lib", version = "0.4.0-alpha.3" }
-oxrdf = { path = "lib/oxrdf", version = "0.2.0-alpha.1" }
+oxrdf = { path = "lib/oxrdf", version = "0.2.0-alpha.2" }
 oxrdfio = { path = "lib/oxrdfio", version = "0.1.0-alpha.2" }
-oxrdfxml = { path = "lib/oxrdfxml", version = "0.1.0-alpha.1" }
+oxrdfxml = { path = "lib/oxrdfxml", version = "0.1.0-alpha.2" }
 oxrocksdb-sys = { path = "oxrocksdb-sys", version = "0.4.0-alpha.3" }
 oxsdatatypes = { path = "lib/oxsdatatypes", version = "0.2.0-alpha.1" }
 oxttl = { path = "lib/oxttl", version = "0.1.0-alpha.2" }
-sparesults = { path = "lib/sparesults", version = "0.2.0-alpha.1" }
-spargebra = { path = "lib/spargebra", version = "0.3.0-alpha.1" }
-sparopt = { path = "lib/sparopt", version = "0.1.0-alpha.1" }
+sparesults = { path = "lib/sparesults", version = "0.2.0-alpha.2" }
+spargebra = { path = "lib/spargebra", version = "0.3.0-alpha.2" }
+sparopt = { path = "lib/sparopt", version = "0.1.0-alpha.2" }
 sparql-smith = { path = "lib/sparql-smith" }
 
 [workspace.lints.rust]
