@@ -269,7 +269,7 @@ pub struct TooLargeForIntegerError;
 
 impl fmt::Display for TooLargeForIntegerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Value too large for xsd:integer internal representation")
+        f.write_str("Value too large for xsd:integer internal representation")
     }
 }
 

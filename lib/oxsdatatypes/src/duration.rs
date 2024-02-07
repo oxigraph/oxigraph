@@ -206,12 +206,12 @@ impl fmt::Display for Duration {
             return Err(fmt::Error); // Not able to format with only a part of the duration that is negative
         }
         if ym < 0 || ss < 0.into() {
-            write!(f, "-")?;
+            f.write_str("-")?;
         }
-        write!(f, "P")?;
+        f.write_str("P")?;
 
         if ym == 0 && ss == 0.into() {
-            return write!(f, "T0S");
+            return f.write_str("T0S");
         }
 
         {
@@ -245,7 +245,7 @@ impl fmt::Display for Duration {
             }
 
             if h != 0 || m != 0 || s != 0.into() {
-                write!(f, "T")?;
+                f.write_str("T")?;
                 if h != 0 {
                     write!(f, "{}H", h.abs())?;
                 }
@@ -423,7 +423,7 @@ impl fmt::Display for YearMonthDuration {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.months == 0 {
-            write!(f, "P0M")
+            f.write_str("P0M")
         } else {
             Duration::from(*self).fmt(f)
         }
@@ -948,7 +948,7 @@ const OVERFLOW_ERROR: ParseDurationError = ParseDurationError {
 
 impl fmt::Display for ParseDurationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.msg)
+        f.write_str(self.msg)
     }
 }
 
@@ -968,7 +968,7 @@ pub struct DurationOverflowError;
 
 impl fmt::Display for DurationOverflowError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "overflow during xsd:duration computation")
+        f.write_str("overflow during xsd:duration computation")
     }
 }
 
@@ -980,7 +980,7 @@ pub struct OppositeSignInDurationComponentsError;
 
 impl fmt::Display for OppositeSignInDurationComponentsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign")
+        f.write_str("The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign")
     }
 }
 

@@ -51,7 +51,9 @@ impl fmt::Display for EvaluationError {
             Self::Service(error) => error.fmt(f),
             Self::GraphAlreadyExists(graph) => write!(f, "The graph {graph} already exists"),
             Self::GraphDoesNotExist(graph) => write!(f, "The graph {graph} does not exist"),
-            Self::UnboundService => write!(f, "The variable encoding the service name is unbound"),
+            Self::UnboundService => {
+                f.write_str("The variable encoding the service name is unbound")
+            }
             Self::UnsupportedService(service) => {
                 write!(f, "The service {service} is not supported")
             }
@@ -62,7 +64,7 @@ impl fmt::Display for EvaluationError {
                 f,
                 "The service is not returning solutions but a boolean or a graph"
             ),
-            Self::NotAGraph => write!(f, "The query results are not a RDF graph"),
+            Self::NotAGraph => f.write_str("The query results are not a RDF graph"),
         }
     }
 }

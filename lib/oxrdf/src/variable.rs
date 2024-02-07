@@ -218,7 +218,7 @@ pub struct VariableNameParseError;
 impl fmt::Display for VariableNameParseError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "The variable name is invalid")
+        f.write_str("The variable name is invalid")
     }
 }
 

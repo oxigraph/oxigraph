@@ -281,7 +281,7 @@ impl fmt::Display for DateTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
-            write!(f, "-")?;
+            f.write_str("-")?;
         }
         let second = self.second();
         write!(
@@ -783,7 +783,7 @@ impl fmt::Display for Date {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
-            write!(f, "-")?;
+            f.write_str("-")?;
         }
         write!(f, "{:04}-{:02}-{:02}", year.abs(), self.month(), self.day())?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -925,7 +925,7 @@ impl fmt::Display for GYearMonth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
-            write!(f, "-")?;
+            f.write_str("-")?;
         }
         write!(f, "{:04}-{:02}", year.abs(), self.month())?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -1066,7 +1066,7 @@ impl fmt::Display for GYear {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let year = self.year();
         if year < 0 {
-            write!(f, "-")?;
+            f.write_str("-")?;
         }
         write!(f, "{:04}", year.abs())?;
         if let Some(timezone_offset) = self.timezone_offset() {
@@ -1544,7 +1544,7 @@ impl fmt::Display for TimezoneOffset {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.offset {
-            0 => write!(f, "Z"),
+            0 => f.write_str("Z"),
             offset if offset < 0 => write!(f, "-{:02}:{:02}", -offset / 60, -offset % 60),
             offset => write!(f, "+{:02}:{:02}", offset / 60, offset % 60),
         }
@@ -2060,7 +2060,7 @@ impl fmt::Display for ParseDateTimeError {
             }
             ParseDateTimeErrorKind::Overflow(error) => error.fmt(f),
             ParseDateTimeErrorKind::InvalidTimezone(error) => error.fmt(f),
-            ParseDateTimeErrorKind::Message(msg) => write!(f, "{msg}"),
+            ParseDateTimeErrorKind::Message(msg) => f.write_str(msg),
         }
     }
 }
@@ -2415,7 +2415,7 @@ pub struct DateTimeOverflowError;
 
 impl fmt::Display for DateTimeOverflowError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "overflow during xsd:dateTime computation")
+        f.write_str("overflow during xsd:dateTime computation")
     }
 }
 

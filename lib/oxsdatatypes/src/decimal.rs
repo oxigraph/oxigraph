@@ -638,10 +638,10 @@ const PARSE_UNEXPECTED_END: ParseDecimalError = ParseDecimalError {
 impl fmt::Display for ParseDecimalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            DecimalParseErrorKind::Overflow => write!(f, "Value overflow"),
-            DecimalParseErrorKind::Underflow => write!(f, "Value underflow"),
-            DecimalParseErrorKind::UnexpectedChar => write!(f, "Unexpected character"),
-            DecimalParseErrorKind::UnexpectedEnd => write!(f, "Unexpected end of string"),
+            DecimalParseErrorKind::Overflow => f.write_str("Value overflow"),
+            DecimalParseErrorKind::Underflow => f.write_str("Value underflow"),
+            DecimalParseErrorKind::UnexpectedChar => f.write_str("Unexpected character"),
+            DecimalParseErrorKind::UnexpectedEnd => f.write_str("Unexpected end of string"),
         }
     }
 }
@@ -664,7 +664,7 @@ pub struct TooLargeForDecimalError;
 
 impl fmt::Display for TooLargeForDecimalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Value too large for xsd:decimal internal representation")
+        f.write_str("Value too large for xsd:decimal internal representation")
     }
 }
 

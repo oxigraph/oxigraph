@@ -23,45 +23,45 @@ impl PropertyPathExpression {
         match self {
             Self::NamedNode(p) => write!(f, "{p}"),
             Self::Reverse(p) => {
-                write!(f, "(reverse ")?;
+                f.write_str("(reverse ")?;
                 p.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Alternative(a, b) => {
-                write!(f, "(alt ")?;
+                f.write_str("(alt ")?;
                 a.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 b.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Sequence(a, b) => {
-                write!(f, "(seq ")?;
+                f.write_str("(seq ")?;
                 a.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 b.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::ZeroOrMore(p) => {
-                write!(f, "(path* ")?;
+                f.write_str("(path* ")?;
                 p.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::OneOrMore(p) => {
-                write!(f, "(path+ ")?;
+                f.write_str("(path+ ")?;
                 p.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::ZeroOrOne(p) => {
-                write!(f, "(path? ")?;
+                f.write_str("(path? ")?;
                 p.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::NegatedPropertySet(p) => {
-                write!(f, "(notoneof")?;
+                f.write_str("(notoneof")?;
                 for p in p {
                     write!(f, " {p}")?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
         }
     }
@@ -78,14 +78,14 @@ impl fmt::Display for PropertyPathExpression {
             Self::OneOrMore(p) => write!(f, "({p})+"),
             Self::ZeroOrOne(p) => write!(f, "({p})?"),
             Self::NegatedPropertySet(p) => {
-                write!(f, "!(")?;
+                f.write_str("!(")?;
                 for (i, c) in p.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " | ")?;
+                        f.write_str(" | ")?;
                     }
                     write!(f, "{c}")?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
         }
     }
@@ -161,13 +161,13 @@ impl Expression {
             Self::Less(a, b) => fmt_sse_binary_expression(f, "<", a, b),
             Self::LessOrEqual(a, b) => fmt_sse_binary_expression(f, "<=", a, b),
             Self::In(a, b) => {
-                write!(f, "(in ")?;
+                f.write_str("(in ")?;
                 a.fmt_sse(f)?;
                 for p in b {
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                     p.fmt_sse(f)?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Add(a, b) => fmt_sse_binary_expression(f, "+", a, b),
             Self::Subtract(a, b) => fmt_sse_binary_expression(f, "-", a, b),
@@ -177,38 +177,38 @@ impl Expression {
             Self::UnaryMinus(e) => fmt_sse_unary_expression(f, "-", e),
             Self::Not(e) => fmt_sse_unary_expression(f, "!", e),
             Self::FunctionCall(function, parameters) => {
-                write!(f, "( ")?;
+                f.write_str("( ")?;
                 function.fmt_sse(f)?;
                 for p in parameters {
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                     p.fmt_sse(f)?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Exists(p) => {
-                write!(f, "(exists ")?;
+                f.write_str("(exists ")?;
                 p.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Bound(v) => {
                 write!(f, "(bound {v})")
             }
             Self::If(a, b, c) => {
-                write!(f, "(if ")?;
+                f.write_str("(if ")?;
                 a.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 b.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 c.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Coalesce(parameters) => {
-                write!(f, "(coalesce")?;
+                f.write_str("(coalesce")?;
                 for p in parameters {
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                     p.fmt_sse(f)?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
         }
     }
@@ -239,7 +239,7 @@ impl fmt::Display for Expression {
             Self::In(a, b) => {
                 write!(f, "({a} IN ")?;
                 write_arg_list(b, f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Add(a, b) => {
                 write!(f, "{a} + {b}")
@@ -267,7 +267,7 @@ impl fmt::Display for Expression {
             Self::Exists(p) => write!(f, "EXISTS {{ {p} }}"),
             Self::If(a, b, c) => write!(f, "IF({a}, {b}, {c})"),
             Self::Coalesce(parameters) => {
-                write!(f, "COALESCE")?;
+                f.write_str("COALESCE")?;
                 write_arg_list(parameters, f)
             }
         }
@@ -305,16 +305,16 @@ fn write_arg_list(
     params: impl IntoIterator<Item = impl fmt::Display>,
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
-    write!(f, "(")?;
+    f.write_str("(")?;
     let mut cont = false;
     for p in params {
         if cont {
-            write!(f, ", ")?;
+            f.write_str(", ")?;
         }
         p.fmt(f)?;
         cont = true;
     }
-    write!(f, ")")
+    f.write_str(")")
 }
 
 /// A function name.
@@ -385,64 +385,64 @@ impl Function {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::Str => write!(f, "str"),
-            Self::Lang => write!(f, "lang"),
-            Self::LangMatches => write!(f, "langmatches"),
-            Self::Datatype => write!(f, "datatype"),
-            Self::Iri => write!(f, "iri"),
-            Self::BNode => write!(f, "bnode"),
-            Self::Rand => write!(f, "rand"),
-            Self::Abs => write!(f, "abs"),
-            Self::Ceil => write!(f, "ceil"),
-            Self::Floor => write!(f, "floor"),
-            Self::Round => write!(f, "round"),
-            Self::Concat => write!(f, "concat"),
-            Self::SubStr => write!(f, "substr"),
-            Self::StrLen => write!(f, "strlen"),
-            Self::Replace => write!(f, "replace"),
-            Self::UCase => write!(f, "ucase"),
-            Self::LCase => write!(f, "lcase"),
-            Self::EncodeForUri => write!(f, "encode_for_uri"),
-            Self::Contains => write!(f, "contains"),
-            Self::StrStarts => write!(f, "strstarts"),
-            Self::StrEnds => write!(f, "strends"),
-            Self::StrBefore => write!(f, "strbefore"),
-            Self::StrAfter => write!(f, "strafter"),
-            Self::Year => write!(f, "year"),
-            Self::Month => write!(f, "month"),
-            Self::Day => write!(f, "day"),
-            Self::Hours => write!(f, "hours"),
-            Self::Minutes => write!(f, "minutes"),
-            Self::Seconds => write!(f, "seconds"),
-            Self::Timezone => write!(f, "timezone"),
-            Self::Tz => write!(f, "tz"),
-            Self::Now => write!(f, "now"),
-            Self::Uuid => write!(f, "uuid"),
-            Self::StrUuid => write!(f, "struuid"),
-            Self::Md5 => write!(f, "md5"),
-            Self::Sha1 => write!(f, "sha1"),
-            Self::Sha256 => write!(f, "sha256"),
-            Self::Sha384 => write!(f, "sha384"),
-            Self::Sha512 => write!(f, "sha512"),
-            Self::StrLang => write!(f, "strlang"),
-            Self::StrDt => write!(f, "strdt"),
-            Self::IsIri => write!(f, "isiri"),
-            Self::IsBlank => write!(f, "isblank"),
-            Self::IsLiteral => write!(f, "isliteral"),
-            Self::IsNumeric => write!(f, "isnumeric"),
-            Self::Regex => write!(f, "regex"),
+            Self::Str => f.write_str("str"),
+            Self::Lang => f.write_str("lang"),
+            Self::LangMatches => f.write_str("langmatches"),
+            Self::Datatype => f.write_str("datatype"),
+            Self::Iri => f.write_str("iri"),
+            Self::BNode => f.write_str("bnode"),
+            Self::Rand => f.write_str("rand"),
+            Self::Abs => f.write_str("abs"),
+            Self::Ceil => f.write_str("ceil"),
+            Self::Floor => f.write_str("floor"),
+            Self::Round => f.write_str("round"),
+            Self::Concat => f.write_str("concat"),
+            Self::SubStr => f.write_str("substr"),
+            Self::StrLen => f.write_str("strlen"),
+            Self::Replace => f.write_str("replace"),
+            Self::UCase => f.write_str("ucase"),
+            Self::LCase => f.write_str("lcase"),
+            Self::EncodeForUri => f.write_str("encode_for_uri"),
+            Self::Contains => f.write_str("contains"),
+            Self::StrStarts => f.write_str("strstarts"),
+            Self::StrEnds => f.write_str("strends"),
+            Self::StrBefore => f.write_str("strbefore"),
+            Self::StrAfter => f.write_str("strafter"),
+            Self::Year => f.write_str("year"),
+            Self::Month => f.write_str("month"),
+            Self::Day => f.write_str("day"),
+            Self::Hours => f.write_str("hours"),
+            Self::Minutes => f.write_str("minutes"),
+            Self::Seconds => f.write_str("seconds"),
+            Self::Timezone => f.write_str("timezone"),
+            Self::Tz => f.write_str("tz"),
+            Self::Now => f.write_str("now"),
+            Self::Uuid => f.write_str("uuid"),
+            Self::StrUuid => f.write_str("struuid"),
+            Self::Md5 => f.write_str("md5"),
+            Self::Sha1 => f.write_str("sha1"),
+            Self::Sha256 => f.write_str("sha256"),
+            Self::Sha384 => f.write_str("sha384"),
+            Self::Sha512 => f.write_str("sha512"),
+            Self::StrLang => f.write_str("strlang"),
+            Self::StrDt => f.write_str("strdt"),
+            Self::IsIri => f.write_str("isiri"),
+            Self::IsBlank => f.write_str("isblank"),
+            Self::IsLiteral => f.write_str("isliteral"),
+            Self::IsNumeric => f.write_str("isnumeric"),
+            Self::Regex => f.write_str("regex"),
             #[cfg(feature = "rdf-star")]
-            Self::Triple => write!(f, "triple"),
+            Self::Triple => f.write_str("triple"),
             #[cfg(feature = "rdf-star")]
-            Self::Subject => write!(f, "subject"),
+            Self::Subject => f.write_str("subject"),
             #[cfg(feature = "rdf-star")]
-            Self::Predicate => write!(f, "predicate"),
+            Self::Predicate => f.write_str("predicate"),
             #[cfg(feature = "rdf-star")]
-            Self::Object => write!(f, "object"),
+            Self::Object => f.write_str("object"),
             #[cfg(feature = "rdf-star")]
-            Self::IsTriple => write!(f, "istriple"),
+            Self::IsTriple => f.write_str("istriple"),
             #[cfg(feature = "sep-0002")]
-            Self::Adjust => write!(f, "adjust"),
+            Self::Adjust => f.write_str("adjust"),
             Self::Custom(iri) => write!(f, "{iri}"),
         }
     }
@@ -451,64 +451,64 @@ impl Function {
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Str => write!(f, "STR"),
-            Self::Lang => write!(f, "LANG"),
-            Self::LangMatches => write!(f, "LANGMATCHES"),
-            Self::Datatype => write!(f, "DATATYPE"),
-            Self::Iri => write!(f, "IRI"),
-            Self::BNode => write!(f, "BNODE"),
-            Self::Rand => write!(f, "RAND"),
-            Self::Abs => write!(f, "ABS"),
-            Self::Ceil => write!(f, "CEIL"),
-            Self::Floor => write!(f, "FLOOR"),
-            Self::Round => write!(f, "ROUND"),
-            Self::Concat => write!(f, "CONCAT"),
-            Self::SubStr => write!(f, "SUBSTR"),
-            Self::StrLen => write!(f, "STRLEN"),
-            Self::Replace => write!(f, "REPLACE"),
-            Self::UCase => write!(f, "UCASE"),
-            Self::LCase => write!(f, "LCASE"),
-            Self::EncodeForUri => write!(f, "ENCODE_FOR_URI"),
-            Self::Contains => write!(f, "CONTAINS"),
-            Self::StrStarts => write!(f, "STRSTARTS"),
-            Self::StrEnds => write!(f, "STRENDS"),
-            Self::StrBefore => write!(f, "STRBEFORE"),
-            Self::StrAfter => write!(f, "STRAFTER"),
-            Self::Year => write!(f, "YEAR"),
-            Self::Month => write!(f, "MONTH"),
-            Self::Day => write!(f, "DAY"),
-            Self::Hours => write!(f, "HOURS"),
-            Self::Minutes => write!(f, "MINUTES"),
-            Self::Seconds => write!(f, "SECONDS"),
-            Self::Timezone => write!(f, "TIMEZONE"),
-            Self::Tz => write!(f, "TZ"),
-            Self::Now => write!(f, "NOW"),
-            Self::Uuid => write!(f, "UUID"),
-            Self::StrUuid => write!(f, "STRUUID"),
-            Self::Md5 => write!(f, "MD5"),
-            Self::Sha1 => write!(f, "SHA1"),
-            Self::Sha256 => write!(f, "SHA256"),
-            Self::Sha384 => write!(f, "SHA384"),
-            Self::Sha512 => write!(f, "SHA512"),
-            Self::StrLang => write!(f, "STRLANG"),
-            Self::StrDt => write!(f, "STRDT"),
-            Self::IsIri => write!(f, "isIRI"),
-            Self::IsBlank => write!(f, "isBLANK"),
-            Self::IsLiteral => write!(f, "isLITERAL"),
-            Self::IsNumeric => write!(f, "isNUMERIC"),
-            Self::Regex => write!(f, "REGEX"),
+            Self::Str => f.write_str("STR"),
+            Self::Lang => f.write_str("LANG"),
+            Self::LangMatches => f.write_str("LANGMATCHES"),
+            Self::Datatype => f.write_str("DATATYPE"),
+            Self::Iri => f.write_str("IRI"),
+            Self::BNode => f.write_str("BNODE"),
+            Self::Rand => f.write_str("RAND"),
+            Self::Abs => f.write_str("ABS"),
+            Self::Ceil => f.write_str("CEIL"),
+            Self::Floor => f.write_str("FLOOR"),
+            Self::Round => f.write_str("ROUND"),
+            Self::Concat => f.write_str("CONCAT"),
+            Self::SubStr => f.write_str("SUBSTR"),
+            Self::StrLen => f.write_str("STRLEN"),
+            Self::Replace => f.write_str("REPLACE"),
+            Self::UCase => f.write_str("UCASE"),
+            Self::LCase => f.write_str("LCASE"),
+            Self::EncodeForUri => f.write_str("ENCODE_FOR_URI"),
+            Self::Contains => f.write_str("CONTAINS"),
+            Self::StrStarts => f.write_str("STRSTARTS"),
+            Self::StrEnds => f.write_str("STRENDS"),
+            Self::StrBefore => f.write_str("STRBEFORE"),
+            Self::StrAfter => f.write_str("STRAFTER"),
+            Self::Year => f.write_str("YEAR"),
+            Self::Month => f.write_str("MONTH"),
+            Self::Day => f.write_str("DAY"),
+            Self::Hours => f.write_str("HOURS"),
+            Self::Minutes => f.write_str("MINUTES"),
+            Self::Seconds => f.write_str("SECONDS"),
+            Self::Timezone => f.write_str("TIMEZONE"),
+            Self::Tz => f.write_str("TZ"),
+            Self::Now => f.write_str("NOW"),
+            Self::Uuid => f.write_str("UUID"),
+            Self::StrUuid => f.write_str("STRUUID"),
+            Self::Md5 => f.write_str("MD5"),
+            Self::Sha1 => f.write_str("SHA1"),
+            Self::Sha256 => f.write_str("SHA256"),
+            Self::Sha384 => f.write_str("SHA384"),
+            Self::Sha512 => f.write_str("SHA512"),
+            Self::StrLang => f.write_str("STRLANG"),
+            Self::StrDt => f.write_str("STRDT"),
+            Self::IsIri => f.write_str("isIRI"),
+            Self::IsBlank => f.write_str("isBLANK"),
+            Self::IsLiteral => f.write_str("isLITERAL"),
+            Self::IsNumeric => f.write_str("isNUMERIC"),
+            Self::Regex => f.write_str("REGEX"),
             #[cfg(feature = "rdf-star")]
-            Self::Triple => write!(f, "TRIPLE"),
+            Self::Triple => f.write_str("TRIPLE"),
             #[cfg(feature = "rdf-star")]
-            Self::Subject => write!(f, "SUBJECT"),
+            Self::Subject => f.write_str("SUBJECT"),
             #[cfg(feature = "rdf-star")]
-            Self::Predicate => write!(f, "PREDICATE"),
+            Self::Predicate => f.write_str("PREDICATE"),
             #[cfg(feature = "rdf-star")]
-            Self::Object => write!(f, "OBJECT"),
+            Self::Object => f.write_str("OBJECT"),
             #[cfg(feature = "rdf-star")]
-            Self::IsTriple => write!(f, "isTRIPLE"),
+            Self::IsTriple => f.write_str("isTRIPLE"),
             #[cfg(feature = "sep-0002")]
-            Self::Adjust => write!(f, "ADJUST"),
+            Self::Adjust => f.write_str("ADJUST"),
             Self::Custom(iri) => iri.fmt(f),
         }
     }
@@ -665,29 +665,29 @@ impl fmt::Display for GraphPattern {
                 variables,
                 bindings,
             } => {
-                write!(f, "VALUES ( ")?;
+                f.write_str("VALUES ( ")?;
                 for var in variables {
                     write!(f, "{var} ")?;
                 }
-                write!(f, ") {{ ")?;
+                f.write_str(") { ")?;
                 for row in bindings {
-                    write!(f, "( ")?;
+                    f.write_str("( ")?;
                     for val in row {
                         match val {
                             Some(val) => write!(f, "{val} "),
-                            None => write!(f, "UNDEF "),
+                            None => f.write_str("UNDEF "),
                         }?;
                     }
-                    write!(f, ") ")?;
+                    f.write_str(") ")?;
                 }
-                write!(f, " }}")
+                f.write_str(" }")
             }
             Self::Group {
                 inner,
                 variables,
                 aggregates,
             } => {
-                write!(f, "{{SELECT")?;
+                f.write_str("{SELECT")?;
                 for (a, v) in aggregates {
                     write!(f, " ({v} AS {a})")?;
                 }
@@ -696,12 +696,12 @@ impl fmt::Display for GraphPattern {
                 }
                 write!(f, " WHERE {{ {inner} }}")?;
                 if !variables.is_empty() {
-                    write!(f, " GROUP BY")?;
+                    f.write_str(" GROUP BY")?;
                     for v in variables {
                         write!(f, " {v}")?;
                     }
                 }
-                write!(f, "}}")
+                f.write_str("}")
             }
             p => write!(
                 f,
@@ -728,76 +728,76 @@ impl GraphPattern {
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::Bgp { patterns } => {
-                write!(f, "(bgp")?;
+                f.write_str("(bgp")?;
                 for pattern in patterns {
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                     pattern.fmt_sse(f)?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Path {
                 subject,
                 path,
                 object,
             } => {
-                write!(f, "(path ")?;
+                f.write_str("(path ")?;
                 subject.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 path.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 object.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Join { left, right } => {
-                write!(f, "(join ")?;
+                f.write_str("(join ")?;
                 left.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 right.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::LeftJoin {
                 left,
                 right,
                 expression,
             } => {
-                write!(f, "(leftjoin ")?;
+                f.write_str("(leftjoin ")?;
                 left.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 right.fmt_sse(f)?;
                 if let Some(expr) = expression {
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                     expr.fmt_sse(f)?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
             #[cfg(feature = "sep-0006")]
             Self::Lateral { left, right } => {
-                write!(f, "(lateral ")?;
+                f.write_str("(lateral ")?;
                 left.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 right.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Filter { expr, inner } => {
-                write!(f, "(filter ")?;
+                f.write_str("(filter ")?;
                 expr.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Union { left, right } => {
-                write!(f, "(union ")?;
+                f.write_str("(union ")?;
                 left.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 right.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Graph { name, inner } => {
-                write!(f, "(graph ")?;
+                f.write_str("(graph ")?;
                 name.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Extend {
                 inner,
@@ -806,109 +806,109 @@ impl GraphPattern {
             } => {
                 write!(f, "(extend (({variable} ")?;
                 expression.fmt_sse(f)?;
-                write!(f, ")) ")?;
+                f.write_str(")) ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Minus { left, right } => {
-                write!(f, "(minus ")?;
+                f.write_str("(minus ")?;
                 left.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 right.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Service {
                 name,
                 inner,
                 silent,
             } => {
-                write!(f, "(service ")?;
+                f.write_str("(service ")?;
                 if *silent {
-                    write!(f, "silent ")?;
+                    f.write_str("silent ")?;
                 }
                 name.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Group {
                 inner,
                 variables,
                 aggregates,
             } => {
-                write!(f, "(group (")?;
+                f.write_str("(group (")?;
                 for (i, v) in variables.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        f.write_str(" ")?;
                     }
                     write!(f, "{v}")?;
                 }
-                write!(f, ") (")?;
+                f.write_str(") (")?;
                 for (i, (v, a)) in aggregates.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        f.write_str(" ")?;
                     }
-                    write!(f, "(")?;
+                    f.write_str("(")?;
                     a.fmt_sse(f)?;
                     write!(f, " {v})")?;
                 }
-                write!(f, ") ")?;
+                f.write_str(") ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Values {
                 variables,
                 bindings,
             } => {
-                write!(f, "(table (vars")?;
+                f.write_str("(table (vars")?;
                 for var in variables {
                     write!(f, " {var}")?;
                 }
-                write!(f, ")")?;
+                f.write_str(")")?;
                 for row in bindings {
-                    write!(f, " (row")?;
+                    f.write_str(" (row")?;
                     for (value, var) in row.iter().zip(variables) {
                         if let Some(value) = value {
                             write!(f, " ({var} {value})")?;
                         }
                     }
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::OrderBy { inner, expression } => {
-                write!(f, "(order (")?;
+                f.write_str("(order (")?;
                 for (i, c) in expression.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        f.write_str(" ")?;
                     }
                     c.fmt_sse(f)?;
                 }
-                write!(f, ") ")?;
+                f.write_str(") ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Project { inner, variables } => {
-                write!(f, "(project (")?;
+                f.write_str("(project (")?;
                 for (i, v) in variables.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        f.write_str(" ")?;
                     }
                     write!(f, "{v}")?;
                 }
-                write!(f, ") ")?;
+                f.write_str(") ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Distinct { inner } => {
-                write!(f, "(distinct ")?;
+                f.write_str("(distinct ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Reduced { inner } => {
-                write!(f, "(reduced ")?;
+                f.write_str("(reduced ")?;
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Slice {
                 inner,
@@ -921,7 +921,7 @@ impl GraphPattern {
                     write!(f, "(slice {start} _ ")?;
                 }
                 inner.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
         }
     }
@@ -1074,15 +1074,15 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
                     child = inner;
                 }
                 p => {
-                    write!(f, "SELECT")?;
+                    f.write_str("SELECT")?;
                     if distinct {
-                        write!(f, " DISTINCT")?;
+                        f.write_str(" DISTINCT")?;
                     }
                     if reduced {
-                        write!(f, " REDUCED")?;
+                        f.write_str(" REDUCED")?;
                     }
                     if project.is_empty() {
-                        write!(f, " *")?;
+                        f.write_str(" *")?;
                     } else {
                         for v in project {
                             write!(f, " {v}")?;
@@ -1093,7 +1093,7 @@ impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
                     }
                     write!(f, " WHERE {{ {p} }}")?;
                     if let Some(order) = order {
-                        write!(f, " ORDER BY")?;
+                        f.write_str(" ORDER BY")?;
                         for c in order {
                             write!(f, " {c}")?;
                         }
@@ -1128,11 +1128,11 @@ impl AggregateExpression {
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::CountSolutions { distinct } => {
-                write!(f, "(count")?;
+                f.write_str("(count")?;
                 if *distinct {
-                    write!(f, " distinct")?;
+                    f.write_str(" distinct")?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::FunctionCall {
                 name:
@@ -1142,9 +1142,9 @@ impl AggregateExpression {
                 expr,
                 distinct,
             } => {
-                write!(f, "(group_concat ")?;
+                f.write_str("(group_concat ")?;
                 if *distinct {
-                    write!(f, "distinct ")?;
+                    f.write_str("distinct ")?;
                 }
                 expr.fmt_sse(f)?;
                 write!(f, " {})", LiteralRef::new_simple_literal(separator))
@@ -1154,14 +1154,14 @@ impl AggregateExpression {
                 expr,
                 distinct,
             } => {
-                write!(f, "(")?;
+                f.write_str("(")?;
                 name.fmt_sse(f)?;
-                write!(f, " ")?;
+                f.write_str(" ")?;
                 if *distinct {
-                    write!(f, "distinct ")?;
+                    f.write_str("distinct ")?;
                 }
                 expr.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
         }
     }
@@ -1172,9 +1172,9 @@ impl fmt::Display for AggregateExpression {
         match self {
             Self::CountSolutions { distinct } => {
                 if *distinct {
-                    write!(f, "COUNT(DISTINCT *)")
+                    f.write_str("COUNT(DISTINCT *)")
                 } else {
-                    write!(f, "COUNT(*)")
+                    f.write_str("COUNT(*)")
                 }
             }
             Self::FunctionCall {
@@ -1242,13 +1242,13 @@ impl AggregateFunction {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            Self::Count => write!(f, "count"),
-            Self::Sum => write!(f, "sum"),
-            Self::Avg => write!(f, "avg"),
-            Self::Min => write!(f, "min"),
-            Self::Max => write!(f, "max"),
-            Self::GroupConcat { .. } => write!(f, "group_concat"),
-            Self::Sample => write!(f, "sample"),
+            Self::Count => f.write_str("count"),
+            Self::Sum => f.write_str("sum"),
+            Self::Avg => f.write_str("avg"),
+            Self::Min => f.write_str("min"),
+            Self::Max => f.write_str("max"),
+            Self::GroupConcat { .. } => f.write_str("group_concat"),
+            Self::Sample => f.write_str("sample"),
             Self::Custom(iri) => write!(f, "{iri}"),
         }
     }
@@ -1257,13 +1257,13 @@ impl AggregateFunction {
 impl fmt::Display for AggregateFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Count => write!(f, "COUNT"),
-            Self::Sum => write!(f, "SUM"),
-            Self::Avg => write!(f, "AVG"),
-            Self::Min => write!(f, "MIN"),
-            Self::Max => write!(f, "MAX"),
-            Self::GroupConcat { .. } => write!(f, "GROUP_CONCAT"),
-            Self::Sample => write!(f, "SAMPLE"),
+            Self::Count => f.write_str("COUNT"),
+            Self::Sum => f.write_str("SUM"),
+            Self::Avg => f.write_str("AVG"),
+            Self::Min => f.write_str("MIN"),
+            Self::Max => f.write_str("MAX"),
+            Self::GroupConcat { .. } => f.write_str("GROUP_CONCAT"),
+            Self::Sample => f.write_str("SAMPLE"),
             Self::Custom(iri) => iri.fmt(f),
         }
     }
@@ -1283,14 +1283,14 @@ impl OrderExpression {
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::Asc(e) => {
-                write!(f, "(asc ")?;
+                f.write_str("(asc ")?;
                 e.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Desc(e) => {
-                write!(f, "(desc ")?;
+                f.write_str("(desc ")?;
                 e.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
         }
     }
@@ -1315,22 +1315,22 @@ pub struct QueryDataset {
 impl QueryDataset {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
-        write!(f, "(")?;
+        f.write_str("(")?;
         for (i, graph_name) in self.default.iter().enumerate() {
             if i > 0 {
-                write!(f, " ")?;
+                f.write_str(" ")?;
             }
             write!(f, "{graph_name}")?;
         }
         if let Some(named) = &self.named {
             for (i, graph_name) in named.iter().enumerate() {
                 if !self.default.is_empty() || i > 0 {
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                 }
                 write!(f, "(named {graph_name})")?;
             }
         }
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -1364,9 +1364,9 @@ impl GraphTarget {
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::NamedNode(node) => write!(f, "{node}"),
-            Self::DefaultGraph => write!(f, "default"),
-            Self::NamedGraphs => write!(f, "named"),
-            Self::AllGraphs => write!(f, "all"),
+            Self::DefaultGraph => f.write_str("default"),
+            Self::NamedGraphs => f.write_str("named"),
+            Self::AllGraphs => f.write_str("all"),
         }
     }
 }
@@ -1375,9 +1375,9 @@ impl fmt::Display for GraphTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => write!(f, "GRAPH {node}"),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
-            Self::NamedGraphs => write!(f, "NAMED"),
-            Self::AllGraphs => write!(f, "ALL"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
+            Self::NamedGraphs => f.write_str("NAMED"),
+            Self::AllGraphs => f.write_str("ALL"),
         }
     }
 }
@@ -1401,7 +1401,7 @@ impl From<GraphName> for GraphTarget {
 fn fmt_sse_unary_expression(f: &mut impl fmt::Write, name: &str, e: &Expression) -> fmt::Result {
     write!(f, "({name} ")?;
     e.fmt_sse(f)?;
-    write!(f, ")")
+    f.write_str(")")
 }
 
 #[inline]
@@ -1413,7 +1413,7 @@ fn fmt_sse_binary_expression(
 ) -> fmt::Result {
     write!(f, "({name} ")?;
     a.fmt_sse(f)?;
-    write!(f, " ")?;
+    f.write_str(" ")?;
     b.fmt_sse(f)?;
-    write!(f, ")")
+    f.write_str(")")
 }
