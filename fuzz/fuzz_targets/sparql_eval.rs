@@ -47,7 +47,7 @@ fn query_solutions_key(iter: QuerySolutionIter, is_reduced: bool) -> String {
             let mut b = t
                 .unwrap()
                 .iter()
-                .map(|(var, val)| format!("{}: {}", var, val))
+                .map(|(var, val)| format!("{var}: {val}"))
                 .collect::<Vec<_>>();
             b.sort_unstable();
             b.join(" ")

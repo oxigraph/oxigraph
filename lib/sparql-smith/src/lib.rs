@@ -246,7 +246,7 @@ impl fmt::Display for GroupCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            // Self::FunctionCall(c) => write!(f, "{}", c),
+            // Self::FunctionCall(c) => write!(f, "{c}"),
             Self::Projection(e, v) => {
                 if let Some(v) = v {
                     write!(f, "({e} AS {v})")
@@ -549,7 +549,7 @@ struct InlineData {
 
 impl fmt::Display for InlineData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "VALUES {}", &self.inner)
+        write!(f, "VALUES {}", self.inner)
     }
 }
 
@@ -705,7 +705,7 @@ impl fmt::Display for Constraint {
         match self {
             Self::BrackettedExpression(e) => write!(f, "{e}"),
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            // Self::FunctionCall(c) => write!(f, "{}", c),
+            // Self::FunctionCall(c) => write!(f, "{c}"),
         }
     }
 }
@@ -1592,7 +1592,7 @@ impl fmt::Display for IriOrFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.iri)?;
         // if let Some(args) = &self.args {
-        // write!(f, "{}", args)?;
+        // write!(f, "{args}")?;
         // }
         Ok(())
     }

@@ -60,10 +60,9 @@ impl fmt::Display for EvaluationError {
             Self::UnsupportedContentType(content_type) => {
                 write!(f, "The content media type {content_type} is not supported")
             }
-            Self::ServiceDoesNotReturnSolutions => write!(
-                f,
-                "The service is not returning solutions but a boolean or a graph"
-            ),
+            Self::ServiceDoesNotReturnSolutions => {
+                f.write_str("The service is not returning solutions but a boolean or a graph")
+            }
             Self::NotAGraph => f.write_str("The query results are not a RDF graph"),
         }
     }

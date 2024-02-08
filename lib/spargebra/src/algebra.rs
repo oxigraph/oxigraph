@@ -640,7 +640,7 @@ impl fmt::Display for GraphPattern {
             Self::Filter { expr, inner } => {
                 write!(f, "{inner} FILTER({expr})")
             }
-            Self::Union { left, right } => write!(f, "{{ {left} }} UNION {{ {right} }}",),
+            Self::Union { left, right } => write!(f, "{{ {left} }} UNION {{ {right} }}"),
             Self::Graph { name, inner } => {
                 write!(f, "GRAPH {name} {{ {inner} }}")
             }

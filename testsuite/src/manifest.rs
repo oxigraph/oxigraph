@@ -34,7 +34,7 @@ impl fmt::Display for Test {
             write!(f, " on file \"{action}\"")?;
         }
         if let Some(query) = &self.query {
-            write!(f, " on query {}", &query)?;
+            write!(f, " on query {query}")?;
         }
         for data in &self.data {
             write!(f, " with data {data}")?;
