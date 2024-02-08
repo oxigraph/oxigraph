@@ -864,10 +864,6 @@ impl StrLookup for StorageReader {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         self.get_str(key)
     }
-
-    fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-        self.contains_str(key)
-    }
 }
 
 pub struct StorageWriter<'a> {
