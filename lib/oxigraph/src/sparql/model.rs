@@ -41,23 +41,21 @@ impl QueryResults {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     ///
-    /// let mut results = Vec::new();
-    /// store.query("SELECT ?s WHERE { ?s ?p ?o }")?.write(&mut results, QueryResultsFormat::Json)?;
-    /// assert_eq!(results, r#"{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"}}]}}"#.as_bytes());
+    /// let results = store.query("SELECT ?s WHERE { ?s ?p ?o }")?;
+    /// assert_eq!(
+    ///     results.write(Vec::new(), QueryResultsFormat::Json)?,
+    ///     r#"{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"}}]}}"#.as_bytes()
+    /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn write(
+    pub fn write<W: Write>(
         self,
-        write: impl Write,
+        write: W,
         format: QueryResultsFormat,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<W, EvaluationError> {
         let serializer = QueryResultsSerializer::from_format(format);
         match self {
-            Self::Boolean(value) => {
-                serializer
-                    .serialize_boolean_to_write(write, value)
-                    .map_err(EvaluationError::ResultsSerialization)?;
-            }
+            Self::Boolean(value) => serializer.serialize_boolean_to_write(write, value),
             Self::Solutions(solutions) => {
                 let mut writer = serializer
                     .serialize_solutions_to_write(write, solutions.variables().to_vec())
@@ -67,9 +65,7 @@ impl QueryResults {
                         .write(&solution?)
                         .map_err(EvaluationError::ResultsSerialization)?;
                 }
-                writer
-                    .finish()
-                    .map_err(EvaluationError::ResultsSerialization)?;
+                writer.finish()
             }
             Self::Graph(triples) => {
                 let s = VariableRef::new_unchecked("subject");
@@ -91,12 +87,10 @@ impl QueryResults {
                         ])
                         .map_err(EvaluationError::ResultsSerialization)?;
                 }
-                writer
-                    .finish()
-                    .map_err(EvaluationError::ResultsSerialization)?;
+                writer.finish()
             }
         }
-        Ok(())
+        .map_err(EvaluationError::ResultsSerialization)
     }
 
     /// Writes the graph query results.
@@ -118,18 +112,18 @@ impl QueryResults {
     ///     None,
     /// )?;
     ///
-    /// let mut results = Vec::new();
-    /// store
-    ///     .query("CONSTRUCT WHERE { ?s ?p ?o }")?
-    ///     .write_graph(&mut results, RdfFormat::NTriples)?;
-    /// assert_eq!(results, graph.as_bytes());
+    /// let results = store.query("CONSTRUCT WHERE { ?s ?p ?o }")?;
+    /// assert_eq!(
+    ///     results.write_graph(Vec::new(), RdfFormat::NTriples)?,
+    ///     graph.as_bytes()
+    /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn write_graph(
+    pub fn write_graph<W: Write>(
         self,
-        write: impl Write,
+        write: W,
         format: impl Into<RdfFormat>,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<W, EvaluationError> {
         if let Self::Graph(triples) = self {
             let mut writer = RdfSerializer::from_format(format.into()).serialize_to_write(write);
             for triple in triples {
@@ -139,8 +133,7 @@ impl QueryResults {
             }
             writer
                 .finish()
-                .map_err(EvaluationError::ResultsSerialization)?;
-            Ok(())
+                .map_err(EvaluationError::ResultsSerialization)
         } else {
             Err(EvaluationError::NotAGraph)
         }
