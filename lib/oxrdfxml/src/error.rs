@@ -3,48 +3,17 @@ use oxiri::IriParseError;
 use std::error::Error;
 use std::sync::Arc;
 use std::{fmt, io};
+use thiserror::Error;
 
 /// Error returned during RDF/XML parsing.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).
-    Io(io::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     /// An error in the file syntax.
-    Syntax(SyntaxError),
-}
-
-impl fmt::Display for ParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => e.fmt(f),
-            Self::Syntax(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for ParseError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Syntax(e) => Some(e),
-        }
-    }
-}
-
-impl From<io::Error> for ParseError {
-    #[inline]
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
-}
-
-impl From<SyntaxError> for ParseError {
-    #[inline]
-    fn from(error: SyntaxError) -> Self {
-        Self::Syntax(error)
-    }
+    #[error(transparent)]
+    Syntax(#[from] SyntaxError),
 }
 
 impl From<ParseError> for io::Error {
