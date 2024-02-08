@@ -274,7 +274,8 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: cargo install wasm-pack || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: wasm-pack }
       - uses: actions/setup-node@v3
         with:
           node-version: 16

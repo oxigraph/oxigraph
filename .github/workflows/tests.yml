@@ -125,8 +125,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: ./.github/actions/setup-rust
-      - run: cargo install cargo-deny || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-deny }
       - run: cargo deny check
 
   semver_checks:
@@ -136,7 +136,8 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: cargo install cargo-semver-checks || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-semver-checks }
       - uses: actions/cache@v3
         with:
           path: rocksdb
@@ -236,8 +237,8 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           target: wasm32-wasi
-      - uses: taiki-e/install-action@wasmtime
-      - run: cargo install cargo-wasi || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: "wasmtime,cargo-wasi" }
       - run: cargo wasi test --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
 
   rustdoc:
@@ -258,7 +259,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/setup-rust
-      - run: cargo install wasm-pack || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: wasm-pack }
       - uses: actions/setup-node@v3
         with:
           node-version: 16
@@ -397,8 +399,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: ./.github/actions/setup-rust
-      - run: cargo install typos-cli || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: typos-cli }
       - run: typos
 
   clang_fmt:
@@ -499,7 +501,8 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: cargo install cargo-codspeed || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-codspeed }
       - run: cargo codspeed build -p oxigraph --features http-client-native-tls
       - run: cargo codspeed build -p oxigraph-testsuite
       - uses: CodSpeedHQ/action@v2
