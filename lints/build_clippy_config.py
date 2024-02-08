@@ -4,7 +4,6 @@ from urllib.request import urlopen
 
 import tomlkit
 
-MSRV = "1.74.0"
 LINT_BLACKLIST = {
     "absolute_paths",  # TODO: might be nice
     "alloc_instead_of_core",
@@ -63,6 +62,11 @@ LINT_BLACKLIST = {
     "wildcard_imports",  # TODO: might be nice
 }
 
+cargo_path = Path(__file__).parent.parent / "Cargo.toml"
+cargo_toml = tomlkit.parse(cargo_path.read_text())
+MSRV = cargo_toml["workspace"]["package"]["rust-version"]
+print(f"MSRV from the root Cargo.toml: {MSRV}")
+
 lints = set()
 with urlopen(
     f"https://rust-lang.github.io/rust-clippy/rust-{MSRV}/lints.json"
@@ -77,7 +81,5 @@ for flag in LINT_BLACKLIST:
     else:
         print(f"Unused blacklisted flag: {flag}")
 
-cargo_path = Path(__file__).parent.parent / "Cargo.toml"
-cargo_toml = tomlkit.parse(cargo_path.read_text())
 cargo_toml["workspace"]["lints"]["clippy"] = {lint: "warn" for lint in sorted(lints)}
 cargo_path.write_text(tomlkit.dumps(cargo_toml))

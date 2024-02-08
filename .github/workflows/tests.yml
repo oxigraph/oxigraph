@@ -167,15 +167,18 @@ jobs:
       - run: cargo test --target i686-unknown-linux-gnu --no-default-features --features http-client-rustls-native
         working-directory: ./lib/oxigraph
 
-  test_linux_msv:
+  test_linux_msrv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
+      - name: Read MSRV from Cargo.toml
+        id: metadata
+        run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.70.0
+          version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
       - run: cargo test
@@ -304,15 +307,18 @@ jobs:
       - run: sphinx-lint docs
         working-directory: ./python
 
-  python_msv:
+  python_msrv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
+      - name: Read MSRV from Cargo.toml
+        id: metadata
+        run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.70.0
+          version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - uses: actions/setup-python@v4
         with:
