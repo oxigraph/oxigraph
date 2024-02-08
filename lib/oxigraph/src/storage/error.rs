@@ -2,6 +2,7 @@ use crate::io::{ParseError, RdfFormat};
 use oxiri::IriParseError;
 use std::error::Error;
 use std::{fmt, io};
+use thiserror::Error;
 
 /// An error related to storage operations (reads, writes...).
 #[derive(Debug)]
@@ -185,53 +186,17 @@ impl From<LoaderError> for io::Error {
 }
 
 /// An error raised while writing a file from a [`Store`](crate::store::Store).
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SerializerError {
     /// An error raised while writing the content.
-    Io(io::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     /// An error raised during the lookup in the store.
-    Storage(StorageError),
+    #[error(transparent)]
+    Storage(#[from] StorageError),
     /// A format compatible with [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset) is required.
+    #[error("A RDF format supporting datasets was expected, {0} found")]
     DatasetFormatExpected(RdfFormat),
-}
-
-impl fmt::Display for SerializerError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => e.fmt(f),
-            Self::Storage(e) => e.fmt(f),
-            Self::DatasetFormatExpected(format) => write!(
-                f,
-                "A RDF format supporting datasets was expected, {format} found"
-            ),
-        }
-    }
-}
-
-impl Error for SerializerError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Storage(e) => Some(e),
-            Self::DatasetFormatExpected(_) => None,
-        }
-    }
-}
-
-impl From<io::Error> for SerializerError {
-    #[inline]
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
-}
-
-impl From<StorageError> for SerializerError {
-    #[inline]
-    fn from(error: StorageError) -> Self {
-        Self::Storage(error)
-    }
 }
 
 impl From<SerializerError> for io::Error {
