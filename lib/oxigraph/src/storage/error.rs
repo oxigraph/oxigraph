@@ -1,7 +1,7 @@
 use crate::io::{ParseError, RdfFormat};
 use oxiri::IriParseError;
 use std::error::Error;
-use std::{fmt, io};
+use std::io;
 use thiserror::Error;
 
 /// An error related to storage operations (reads, writes...).
@@ -15,8 +15,8 @@ pub enum StorageError {
     #[error(transparent)]
     Corruption(#[from] CorruptionError),
     #[doc(hidden)]
-    #[error(transparent)]
-    Other(Box<dyn Error + Send + Sync + 'static>),
+    #[error("{0}")]
+    Other(#[source] Box<dyn Error + Send + Sync + 'static>),
 }
 
 impl From<StorageError> for io::Error {
@@ -31,52 +31,25 @@ impl From<StorageError> for io::Error {
 }
 
 /// An error return if some content in the database is corrupted.
-#[derive(Debug)]
-pub struct CorruptionError {
-    inner: CorruptionErrorKind,
-}
-
-#[derive(Debug)]
-enum CorruptionErrorKind {
+#[derive(Debug, Error)]
+pub enum CorruptionError {
+    #[error("{0}")]
     Msg(String),
-    Other(Box<dyn Error + Send + Sync + 'static>),
+    #[error("{0}")]
+    Other(#[source] Box<dyn Error + Send + Sync + 'static>),
 }
 
 impl CorruptionError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn new(error: impl Into<Box<dyn Error + Send + Sync + 'static>>) -> Self {
-        Self {
-            inner: CorruptionErrorKind::Other(error.into()),
-        }
+        Self::Other(error.into())
     }
 
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self {
-            inner: CorruptionErrorKind::Msg(msg.into()),
-        }
-    }
-}
-
-impl fmt::Display for CorruptionError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.inner {
-            CorruptionErrorKind::Msg(e) => e.fmt(f),
-            CorruptionErrorKind::Other(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for CorruptionError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.inner {
-            CorruptionErrorKind::Msg(_) => None,
-            CorruptionErrorKind::Other(e) => Some(e.as_ref()),
-        }
+        Self::Msg(msg.into())
     }
 }
 

@@ -25,6 +25,7 @@ oxiri.workspace = true
 oxrdf.workspace = true
 peg.workspace = true
 rand.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

@@ -1,8 +1,7 @@
 use oxrdf::TermParseError;
-use std::error::Error;
+use std::io;
 use std::ops::Range;
 use std::sync::Arc;
-use std::{fmt, io};
 use thiserror::Error;
 
 /// Error returned during SPARQL result formats format parsing.
@@ -42,28 +41,26 @@ impl From<quick_xml::Error> for ParseError {
             quick_xml::Error::Io(error) => {
                 Self::Io(Arc::try_unwrap(error).unwrap_or_else(|e| io::Error::new(e.kind(), e)))
             }
-            _ => Self::Syntax(SyntaxError {
-                inner: SyntaxErrorKind::Xml(error),
-            }),
+            _ => Self::Syntax(SyntaxError::Xml(error)),
         }
     }
 }
 
 /// An error in the syntax of the parsed file.
-#[derive(Debug)]
-pub struct SyntaxError {
-    pub(crate) inner: SyntaxErrorKind,
-}
-
-#[derive(Debug)]
-pub(crate) enum SyntaxErrorKind {
-    Json(json_event_parser::SyntaxError),
-    Xml(quick_xml::Error),
+#[derive(Debug, Error)]
+pub enum SyntaxError {
+    #[error(transparent)]
+    Json(#[from] json_event_parser::SyntaxError),
+    #[error(transparent)]
+    Xml(#[from] quick_xml::Error),
+    #[error("Error {error} on '{term}' in line {}", location.start.line + 1)]
     Term {
+        #[source]
         error: TermParseError,
         term: String,
         location: Range<TextPosition>,
     },
+    #[error("{msg}")]
     Msg {
         msg: String,
         location: Option<Range<TextPosition>>,
@@ -74,30 +71,26 @@ impl SyntaxError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self {
-            inner: SyntaxErrorKind::Msg {
-                msg: msg.into(),
-                location: None,
-            },
+        Self::Msg {
+            msg: msg.into(),
+            location: None,
         }
     }
 
     /// Builds an error from a printable error message and a location
     #[inline]
     pub(crate) fn located_message(msg: impl Into<String>, location: Range<TextPosition>) -> Self {
-        Self {
-            inner: SyntaxErrorKind::Msg {
-                msg: msg.into(),
-                location: Some(location),
-            },
+        Self::Msg {
+            msg: msg.into(),
+            location: Some(location),
         }
     }
 
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
-        match &self.inner {
-            SyntaxErrorKind::Json(e) => {
+        match self {
+            Self::Json(e) => {
                 let location = e.location();
                 Some(
                     TextPosition {
@@ -111,37 +104,9 @@ impl SyntaxError {
                     },
                 )
             }
-            SyntaxErrorKind::Term { location, .. } => Some(location.clone()),
-            SyntaxErrorKind::Msg { location, .. } => location.clone(),
-            SyntaxErrorKind::Xml(_) => None,
-        }
-    }
-}
-
-impl fmt::Display for SyntaxError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.inner {
-            SyntaxErrorKind::Json(e) => e.fmt(f),
-            SyntaxErrorKind::Xml(e) => e.fmt(f),
-            SyntaxErrorKind::Term {
-                error,
-                term,
-                location,
-            } => write!(f, "{error} on '{term}' in line {}", location.start.line + 1),
-            SyntaxErrorKind::Msg { msg, .. } => f.write_str(msg),
-        }
-    }
-}
-
-impl Error for SyntaxError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.inner {
-            SyntaxErrorKind::Json(e) => Some(e),
-            SyntaxErrorKind::Xml(e) => Some(e),
-            SyntaxErrorKind::Term { error, .. } => Some(error),
-            SyntaxErrorKind::Msg { .. } => None,
+            Self::Term { location, .. } => Some(location.clone()),
+            Self::Msg { location, .. } => location.clone(),
+            Self::Xml(_) => None,
         }
     }
 }
@@ -149,9 +114,9 @@ impl Error for SyntaxError {
 impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
-        match error.inner {
-            SyntaxErrorKind::Json(error) => Self::new(io::ErrorKind::InvalidData, error),
-            SyntaxErrorKind::Xml(error) => match error {
+        match error {
+            SyntaxError::Json(error) => Self::new(io::ErrorKind::InvalidData, error),
+            SyntaxError::Xml(error) => match error {
                 quick_xml::Error::Io(error) => {
                     Arc::try_unwrap(error).unwrap_or_else(|e| Self::new(e.kind(), e))
                 }
@@ -160,16 +125,8 @@ impl From<SyntaxError> for io::Error {
                 }
                 _ => Self::new(io::ErrorKind::InvalidData, error),
             },
-            SyntaxErrorKind::Term { .. } => Self::new(io::ErrorKind::InvalidData, error),
-            SyntaxErrorKind::Msg { msg, .. } => Self::new(io::ErrorKind::InvalidData, msg),
-        }
-    }
-}
-
-impl From<json_event_parser::SyntaxError> for SyntaxError {
-    fn from(error: json_event_parser::SyntaxError) -> Self {
-        Self {
-            inner: SyntaxErrorKind::Json(error),
+            SyntaxError::Term { .. } => Self::new(io::ErrorKind::InvalidData, error),
+            SyntaxError::Msg { msg, .. } => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }
