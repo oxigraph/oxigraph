@@ -1145,6 +1145,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
+ "thiserror",
  "tokio",
 ]
 
@@ -1156,6 +1157,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
+ "thiserror",
  "tokio",
 ]
 
@@ -1184,6 +1186,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
+ "thiserror",
  "tokio",
 ]
 
@@ -1745,6 +1748,7 @@ dependencies = [
  "memchr",
  "oxrdf",
  "quick-xml",
+ "thiserror",
  "tokio",
 ]
 
