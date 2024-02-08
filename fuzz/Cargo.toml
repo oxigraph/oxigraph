@@ -8,15 +8,15 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-anyhow.workspace = true
-libfuzzer-sys.workspace = true
-oxigraph.workspace = true
-oxrdf = { workspace = true, features = ["rdf-star"] }
-oxrdfxml.workspace = true
-oxttl = { workspace = true, features = ["rdf-star"] }
-sparesults = { workspace = true, features = ["rdf-star"] }
-spargebra = { workspace = true, features = ["rdf-star", "sep-0006"] }
-sparql-smith = { workspace = true, features = ["sep-0006"] }
+anyhow = "1.0.72"
+libfuzzer-sys = "0.4"
+oxigraph = { path = "../lib/oxigraph" }
+oxrdf = { path = "../lib/oxrdf", features = ["rdf-star"] }
+oxrdfxml = { path = "../lib/oxrdfxml" }
+oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
+sparesults = { path = "../lib/sparesults", features = ["rdf-star"] }
+spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
+sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
 
 [profile.release]
 codegen-units = 1
