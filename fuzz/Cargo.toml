@@ -22,6 +22,8 @@ sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
 codegen-units = 1
 debug = true
 
+[workspace]
+
 [[bin]]
 name = "nquads"
 path = "fuzz_targets/nquads.rs"

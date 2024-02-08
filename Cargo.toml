@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "cli",
-    "fuzz",
     "js",
     "lib/oxigraph",
     "lib/oxrdf",
