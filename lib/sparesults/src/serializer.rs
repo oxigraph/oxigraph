@@ -88,8 +88,10 @@ impl QueryResultsSerializer {
     /// # async fn main() -> std::io::Result<()> {
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
-    /// json_serializer.serialize_boolean_to_tokio_async_write(&mut buffer, false).await?;
-    /// assert_eq!(buffer, br#"{"head":{},"boolean":false}"r);
+    /// json_serializer
+    ///     .serialize_boolean_to_tokio_async_write(&mut buffer, false)
+    ///     .await?;
+    /// assert_eq!(buffer, br#"{"head":{},"boolean":false}"#);
     /// # Ok(())
     /// # }
     /// ```

@@ -600,11 +600,9 @@ impl<R> RdfXmlReader<R> {
                 if *attribute_url == *RDF_ID {
                     let mut id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&id) {
-                        return Err(SyntaxError::msg(format!(
-                            "{} is not a valid rdf:ID value",
-                            &id
-                        ))
-                        .into());
+                        return Err(
+                            SyntaxError::msg(format!("{id} is not a valid rdf:ID value")).into(),
+                        );
                     }
                     id.insert(0, '#');
                     id_attr = Some(id);
@@ -612,8 +610,7 @@ impl<R> RdfXmlReader<R> {
                     let bag_id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&bag_id) {
                         return Err(SyntaxError::msg(format!(
-                            "{} is not a valid rdf:bagID value",
-                            &bag_id
+                            "{bag_id} is not a valid rdf:bagID value"
                         ))
                         .into());
                     }
@@ -621,8 +618,7 @@ impl<R> RdfXmlReader<R> {
                     let id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&id) {
                         return Err(SyntaxError::msg(format!(
-                            "{} is not a valid rdf:nodeID value",
-                            &id
+                            "{id} is not a valid rdf:nodeID value"
                         ))
                         .into());
                     }
@@ -644,8 +640,7 @@ impl<R> RdfXmlReader<R> {
                     type_attr = Some(attribute);
                 } else if RESERVED_RDF_ATTRIBUTES.contains(&&*attribute_url) {
                     return Err(SyntaxError::msg(format!(
-                        "{} is not a valid attribute",
-                        &attribute_url
+                        "{attribute_url} is not a valid attribute"
                     ))
                     .into());
                 } else {
@@ -663,8 +658,7 @@ impl<R> RdfXmlReader<R> {
                 let iri = self.resolve_iri(&base_iri, iri)?;
                 if self.known_rdf_id.contains(iri.as_str()) {
                     return Err(SyntaxError::msg(format!(
-                        "{} has already been used as rdf:ID value",
-                        &iri
+                        "{iri} has already been used as rdf:ID value"
                     ))
                     .into());
                 }
@@ -718,8 +712,7 @@ impl<R> RdfXmlReader<R> {
                     RdfXmlState::Rdf { base_iri, language }
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name) {
                     return Err(SyntaxError::msg(format!(
-                        "Invalid node element tag name: {}",
-                        &tag_name
+                        "Invalid node element tag name: {tag_name}"
                     ))
                     .into());
                 } else {
@@ -739,8 +732,7 @@ impl<R> RdfXmlReader<R> {
             RdfXmlNextProduction::NodeElt => {
                 if RESERVED_RDF_ELEMENTS.contains(&&*tag_name) {
                     return Err(SyntaxError::msg(format!(
-                        "Invalid property element tag name: {}",
-                        &tag_name
+                        "Invalid property element tag name: {tag_name}"
                     ))
                     .into());
                 }
@@ -761,8 +753,7 @@ impl<R> RdfXmlReader<R> {
                     let Some(RdfXmlState::NodeElt { li_counter, .. }) = self.state.last_mut()
                     else {
                         return Err(SyntaxError::msg(format!(
-                            "Invalid property element tag name: {}",
-                            &tag_name
+                            "Invalid property element tag name: {tag_name}"
                         ))
                         .into());
                     };
@@ -774,8 +765,7 @@ impl<R> RdfXmlReader<R> {
                     || *tag_name == *RDF_DESCRIPTION
                 {
                     return Err(SyntaxError::msg(format!(
-                        "Invalid property element tag name: {}",
-                        &tag_name
+                        "Invalid property element tag name: {tag_name}"
                     ))
                     .into());
                 } else {

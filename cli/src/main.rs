@@ -923,7 +923,7 @@ fn serve(store: Store, bind: &str, read_only: bool, cors: bool) -> anyhow::Resul
     let server = server.spawn()?;
     #[cfg(target_os = "linux")]
     systemd_notify_ready()?;
-    eprintln!("Listening for requests at http://{}", &bind);
+    eprintln!("Listening for requests at http://{bind}");
     server.join()?;
     Ok(())
 }

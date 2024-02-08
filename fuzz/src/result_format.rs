@@ -33,13 +33,13 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
             // And to parse again
             if let FromReadQueryResultsReader::Solutions(roundtrip_solutions) = parser
                 .parse_read(serialized.as_bytes())
-                .with_context(|| format!("Parsing {:?}", &serialized))
+                .with_context(|| format!("Parsing {serialized:?}"))
                 .unwrap()
             {
                 assert_eq!(
                     roundtrip_solutions
                         .collect::<Result<Vec<_>, _>>()
-                        .with_context(|| format!("Parsing {:?}", &serialized))
+                        .with_context(|| format!("Parsing {serialized:?}"))
                         .unwrap(),
                     solutions
                 )
