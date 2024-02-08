@@ -176,10 +176,6 @@ impl StrLookup for DatasetView {
             self.reader.get_str(key)?
         })
     }
-
-    fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-        Ok(self.extra.borrow().contains_key(key) || self.reader.contains_str(key)?)
-    }
 }
 
 struct EncodedDatasetSpec {

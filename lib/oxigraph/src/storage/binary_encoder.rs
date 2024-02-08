@@ -650,10 +650,6 @@ mod tests {
         fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
             Ok(self.id2str.borrow().get(key).cloned())
         }
-
-        fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-            Ok(self.id2str.borrow().contains_key(key))
-        }
     }
 
     impl MemoryStrStore {

@@ -701,8 +701,6 @@ impl From<QuadRef<'_>> for EncodedQuad {
 
 pub trait StrLookup {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError>;
-
-    fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError>;
 }
 
 pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
