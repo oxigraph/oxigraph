@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
 use std::str::FromStr;
+use thiserror::Error;
 
 const DECIMAL_PART_DIGITS: u32 = 18;
 const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;
@@ -466,7 +467,7 @@ impl FromStr for Decimal {
         // (\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)
         let input = input.as_bytes();
         if input.is_empty() {
-            return Err(PARSE_UNEXPECTED_END);
+            return Err(ParseDecimalError::UnexpectedEnd);
         }
 
         let (sign, mut input) = match input.first() {
@@ -481,9 +482,9 @@ impl FromStr for Decimal {
             if c.is_ascii_digit() {
                 value = value
                     .checked_mul(10)
-                    .ok_or(PARSE_OVERFLOW)?
+                    .ok_or(ParseDecimalError::Overflow)?
                     .checked_add(sign * i128::from(*c - b'0'))
-                    .ok_or(PARSE_OVERFLOW)?;
+                    .ok_or(ParseDecimalError::Overflow)?;
                 input = &input[1..];
             } else {
                 break;
@@ -493,12 +494,12 @@ impl FromStr for Decimal {
         let mut exp = DECIMAL_PART_POW;
         if let Some(c) = input.first() {
             if *c != b'.' {
-                return Err(PARSE_UNEXPECTED_CHAR);
+                return Err(ParseDecimalError::UnexpectedChar);
             }
             input = &input[1..];
             if input.is_empty() && !with_before_dot {
                 // We only have a dot
-                return Err(PARSE_UNEXPECTED_END);
+                return Err(ParseDecimalError::UnexpectedEnd);
             }
             while input.last() == Some(&b'0') {
                 // Hack to avoid underflows
@@ -509,25 +510,25 @@ impl FromStr for Decimal {
                     exp /= 10;
                     value = value
                         .checked_mul(10)
-                        .ok_or(PARSE_OVERFLOW)?
+                        .ok_or(ParseDecimalError::Overflow)?
                         .checked_add(sign * i128::from(*c - b'0'))
-                        .ok_or(PARSE_OVERFLOW)?;
+                        .ok_or(ParseDecimalError::Overflow)?;
                     input = &input[1..];
                 } else {
-                    return Err(PARSE_UNEXPECTED_CHAR);
+                    return Err(ParseDecimalError::UnexpectedChar);
                 }
             }
             if exp == 0 {
                 // Underflow
-                return Err(PARSE_UNDERFLOW);
+                return Err(ParseDecimalError::Underflow);
             }
         } else if !with_before_dot {
             // It's empty
-            return Err(PARSE_UNEXPECTED_END);
+            return Err(ParseDecimalError::UnexpectedEnd);
         }
 
         Ok(Self {
-            value: value.checked_mul(exp).ok_or(PARSE_OVERFLOW)?,
+            value: value.checked_mul(exp).ok_or(ParseDecimalError::Overflow)?,
         })
     }
 }
@@ -609,50 +610,21 @@ impl fmt::Display for Decimal {
 }
 
 /// An error when parsing a [`Decimal`].
-#[derive(Debug, Clone)]
-pub struct ParseDecimalError {
-    kind: DecimalParseErrorKind,
-}
-
-#[derive(Debug, Clone)]
-enum DecimalParseErrorKind {
+#[derive(Debug, Clone, Error)]
+pub enum ParseDecimalError {
+    #[error("Value overflow")]
     Overflow,
+    #[error("Value underflow")]
     Underflow,
+    #[error("Unexpected character")]
     UnexpectedChar,
+    #[error("Unexpected end of string")]
     UnexpectedEnd,
 }
 
-const PARSE_OVERFLOW: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::Overflow,
-};
-const PARSE_UNDERFLOW: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::Underflow,
-};
-const PARSE_UNEXPECTED_CHAR: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::UnexpectedChar,
-};
-const PARSE_UNEXPECTED_END: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::UnexpectedEnd,
-};
-
-impl fmt::Display for ParseDecimalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            DecimalParseErrorKind::Overflow => f.write_str("Value overflow"),
-            DecimalParseErrorKind::Underflow => f.write_str("Value underflow"),
-            DecimalParseErrorKind::UnexpectedChar => f.write_str("Unexpected character"),
-            DecimalParseErrorKind::UnexpectedEnd => f.write_str("Unexpected end of string"),
-        }
-    }
-}
-
-impl Error for ParseDecimalError {}
-
 impl From<TooLargeForDecimalError> for ParseDecimalError {
     fn from(_: TooLargeForDecimalError) -> Self {
-        Self {
-            kind: DecimalParseErrorKind::Overflow,
-        }
+        Self::Overflow
     }
 }
 

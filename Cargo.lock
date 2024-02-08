@@ -1136,6 +1136,7 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
+ "thiserror",
 ]
 
 [[package]]
@@ -1176,6 +1177,7 @@ name = "oxsdatatypes"
 version = "0.2.0-alpha.1"
 dependencies = [
  "js-sys",
+ "thiserror",
 ]
 
 [[package]]
@@ -1761,6 +1763,7 @@ dependencies = [
  "oxrdf",
  "peg",
  "rand",
+ "thiserror",
 ]
 
 [[package]]

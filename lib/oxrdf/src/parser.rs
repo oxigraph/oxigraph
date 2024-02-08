@@ -5,9 +5,9 @@ use crate::{
 };
 #[cfg(feature = "rdf-star")]
 use crate::{Subject, Triple};
-use std::error::Error;
+use std::char;
 use std::str::{Chars, FromStr};
-use std::{char, fmt};
+use thiserror::Error;
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
 /// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
@@ -166,11 +166,9 @@ impl FromStr for Variable {
                 "Variable serialization should start with ? or $",
             ));
         }
-        Self::new(&s[1..]).map_err(|error| Self::Err {
-            kind: TermParseErrorKind::Variable {
-                value: s.to_owned(),
-                error,
-            },
+        Self::new(&s[1..]).map_err(|error| Self::Err::Variable {
+            value: s.to_owned(),
+            error,
         })
     }
 }
@@ -183,11 +181,9 @@ fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
             .ok_or_else(|| TermParseError::msg("Named node serialization should end with a >"))?;
         let (value, remain) = remain.split_at(end);
         let remain = &remain[1..];
-        let term = NamedNode::new(value).map_err(|error| TermParseError {
-            kind: TermParseErrorKind::Iri {
-                value: value.to_owned(),
-                error,
-            },
+        let term = NamedNode::new(value).map_err(|error| TermParseError::Iri {
+            value: value.to_owned(),
+            error,
         })?;
         Ok((term, remain))
     } else {
@@ -207,11 +203,9 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
             })
             .unwrap_or(remain.len());
         let (value, remain) = remain.split_at(end);
-        let term = BlankNode::new(value).map_err(|error| TermParseError {
-            kind: TermParseErrorKind::BlankNode {
-                value: value.to_owned(),
-                error,
-            },
+        let term = BlankNode::new(value).map_err(|error| TermParseError::BlankNode {
+            value: value.to_owned(),
+            error,
         })?;
         Ok((term, remain))
     } else {
@@ -237,11 +231,9 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         let (language, remain) = remain.split_at(end);
                         Ok((
                             Literal::new_language_tagged_literal(value, language).map_err(
-                                |error| TermParseError {
-                                    kind: TermParseErrorKind::LanguageTag {
-                                        value: language.to_owned(),
-                                        error,
-                                    },
+                                |error| TermParseError::LanguageTag {
+                                    value: language.to_owned(),
+                                    error,
                                 },
                             )?,
                             remain,
@@ -421,61 +413,31 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
 }
 
 /// An error raised during term serialization parsing using the [`FromStr`] trait.
-#[derive(Debug)]
-pub struct TermParseError {
-    kind: TermParseErrorKind,
-}
-
-#[derive(Debug)]
-enum TermParseErrorKind {
-    Iri {
-        error: IriParseError,
-        value: String,
-    },
+#[derive(Debug, Error)]
+pub enum TermParseError {
+    #[error("Error while parsing the named node '{value}': {error}")]
+    Iri { error: IriParseError, value: String },
+    #[error("Error while parsing the blank node '{value}': {error}")]
     BlankNode {
         error: BlankNodeIdParseError,
         value: String,
     },
+    #[error("Error while parsing the language tag '{value}': {error}")]
     LanguageTag {
         error: LanguageTagParseError,
         value: String,
     },
+    #[error("Error while parsing the variable '{value}': {error}")]
     Variable {
         error: VariableNameParseError,
         value: String,
     },
-    Msg {
-        msg: &'static str,
-    },
+    #[error("{msg}")]
+    Msg { msg: &'static str },
 }
-
-impl fmt::Display for TermParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            TermParseErrorKind::Iri { error, value } => {
-                write!(f, "Error while parsing the named node '{value}': {error}")
-            }
-            TermParseErrorKind::BlankNode { error, value } => {
-                write!(f, "Error while parsing the blank node '{value}': {error}")
-            }
-            TermParseErrorKind::LanguageTag { error, value } => {
-                write!(f, "Error while parsing the language tag '{value}': {error}")
-            }
-            TermParseErrorKind::Variable { error, value } => {
-                write!(f, "Error while parsing the variable '{value}': {error}")
-            }
-            TermParseErrorKind::Msg { msg } => f.write_str(msg),
-        }
-    }
-}
-
-impl Error for TermParseError {}
 
 impl TermParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self {
-            kind: TermParseErrorKind::Msg { msg },
-        }
+        Self::Msg { msg }
     }
 }
