@@ -1,5 +1,6 @@
 use std::str::FromStr;
-use wkt::Wkt;
+use wkt::{Geometry, Wkt};
+
 // use std::time::Geo as StdDuration;
 
 /// [XML Schema `duration` datatype](https://www.w3.org/TR/xmlschema11-2/#duration)
@@ -8,6 +9,12 @@ use wkt::Wkt;
 #[derive(Debug, Clone)]
 pub struct GeoPoint {
     geom: wkt::Wkt<f64>,
+}
+
+#[derive(Error, Debug)]
+enum GeoPointError {
+    #[error("WKT type {0} is not supported")]
+    UnsupportedWktType(String),
 }
 
 type WktError = &'static str;
@@ -23,9 +30,11 @@ impl FromStr for GeoPoint {
     type Err = WktError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self {
-            geom: Wkt::from_str(input)?,
-        })
+        let geo = Wkt::from_str(input)?;
+        let Geometry::Point(point) = geo.item else {
+            return Err("Not a point");
+        }
+        Ok(Self { geom: geo })
     }
 }
 //
