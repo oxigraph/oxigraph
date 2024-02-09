@@ -2308,7 +2308,7 @@ fn timezone_frag(input: &str) -> Result<(TimezoneOffset, &str), ParseDateTimeErr
 
     Ok((
         TimezoneOffset::new(sign * (hours * 60 + i16::from(minutes)))
-            .map_err(|e| ParseDateTimeError::InvalidTimezone(e))?,
+            .map_err(ParseDateTimeError::InvalidTimezone)?,
         input,
     ))
 }
