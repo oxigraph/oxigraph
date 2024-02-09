@@ -1,3 +1,5 @@
+use std::fmt;
+use std::fmt::Formatter;
 use std::str::FromStr;
 use thiserror::Error;
 use wkt::types::Point;
@@ -38,6 +40,11 @@ impl FromStr for GeoPoint {
     }
 }
 
+impl fmt::Display for GeoPoint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 #[cfg(test)]
 mod tests {
     #![allow(clippy::panic_in_result_fn)]

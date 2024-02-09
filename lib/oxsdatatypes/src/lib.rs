@@ -25,4 +25,5 @@ pub use self::duration::{
     ParseDurationError, YearMonthDuration,
 };
 pub use self::float::Float;
+pub use self::geopoint::{GeoPoint, GeoPointError};
 pub use self::integer::{Integer, TooLargeForIntegerError};

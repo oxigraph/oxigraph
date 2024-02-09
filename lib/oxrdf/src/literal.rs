@@ -1,5 +1,5 @@
 use crate::named_node::NamedNode;
-use crate::vocab::{rdf, xsd};
+use crate::vocab::{geosparql, rdf, xsd};
 use crate::NamedNodeRef;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
@@ -419,6 +419,14 @@ impl From<DayTimeDuration> for Literal {
     #[inline]
     fn from(value: DayTimeDuration) -> Self {
         Self::new_typed_literal(value.to_string(), xsd::DAY_TIME_DURATION)
+    }
+}
+
+#[cfg(feature = "oxsdatatypes")]
+impl From<GeoPoint> for Literal {
+    #[inline]
+    fn from(value: GeoPoint) -> Self {
+        Self::new_typed_literal(value.to_string(), geosparql::WKT_LITERAL)
     }
 }
 
