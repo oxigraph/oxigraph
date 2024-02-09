@@ -167,7 +167,7 @@ jobs:
       - run: cargo test --target i686-unknown-linux-gnu --no-default-features --features http-client-rustls-native
         working-directory: ./lib/oxigraph
 
-  test_linux_msrv:
+  test_linux_msv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -307,7 +307,7 @@ jobs:
       - run: sphinx-lint docs
         working-directory: ./python
 
-  python_msrv:
+  python_msv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
