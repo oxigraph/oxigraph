@@ -63,7 +63,7 @@ impl SyntaxError {
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
-        match &self {
+        match self {
             Self::Turtle(e) => {
                 let location = e.location();
                 Some(
