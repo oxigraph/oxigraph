@@ -7,7 +7,6 @@ use crate::{
 use crate::{Subject, Triple};
 use std::char;
 use std::str::{Chars, FromStr};
-use thiserror::Error;
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
 /// The actual limit value is a wet finger compromise between not failing to parse valid files and avoiding to trigger stack overflow errors.
@@ -413,7 +412,7 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
 }
 
 /// An error raised during term serialization parsing using the [`FromStr`] trait.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum TermParseError {
     #[error("Error while parsing the named node '{value}': {error}")]
     Iri { error: IriParseError, value: String },

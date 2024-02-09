@@ -2,10 +2,9 @@ use crate::io::{ParseError, RdfFormat};
 use oxiri::IriParseError;
 use std::error::Error;
 use std::io;
-use thiserror::Error;
 
 /// An error related to storage operations (reads, writes...).
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum StorageError {
     /// Error from the OS I/O layer.
@@ -31,7 +30,7 @@ impl From<StorageError> for io::Error {
 }
 
 /// An error return if some content in the database is corrupted.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CorruptionError {
     #[error("{0}")]
     Msg(String),
@@ -61,7 +60,7 @@ impl From<CorruptionError> for io::Error {
 }
 
 /// An error raised while loading a file into a [`Store`](crate::store::Store).
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum LoaderError {
     /// An error raised while reading the file.
     #[error(transparent)]
@@ -94,7 +93,7 @@ impl From<LoaderError> for io::Error {
 }
 
 /// An error raised while writing a file from a [`Store`](crate::store::Store).
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SerializerError {
     /// An error raised while writing the content.
     #[error(transparent)]

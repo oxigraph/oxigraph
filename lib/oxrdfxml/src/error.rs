@@ -2,10 +2,9 @@ use oxilangtag::LanguageTagParseError;
 use oxiri::IriParseError;
 use std::io;
 use std::sync::Arc;
-use thiserror::Error;
 
 /// Error returned during RDF/XML parsing.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
@@ -38,7 +37,7 @@ impl From<quick_xml::Error> for ParseError {
 }
 
 /// An error in the syntax of the parsed file.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SyntaxError {
     #[error(transparent)]
     Xml(#[from] quick_xml::Error),

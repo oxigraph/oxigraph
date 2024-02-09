@@ -13,7 +13,6 @@ use std::char;
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
 use std::str::FromStr;
-use thiserror::Error;
 
 /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
@@ -32,7 +31,7 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
 }
 
 /// Error returned during SPARQL parsing.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     #[error("Invalid SPARQL base IRI provided: {0}")]
     InvalidBaseIri(#[from] IriParseError),

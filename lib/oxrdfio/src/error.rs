@@ -1,9 +1,8 @@
 use std::io;
 use std::ops::Range;
-use thiserror::Error;
 
 /// Error returned during RDF format parsing.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
@@ -50,7 +49,7 @@ impl From<ParseError> for io::Error {
 }
 
 /// An error in the syntax of the parsed file.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SyntaxError {
     #[error(transparent)]
     Turtle(#[from] oxttl::SyntaxError),
