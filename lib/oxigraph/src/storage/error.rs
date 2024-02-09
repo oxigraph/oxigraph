@@ -1,5 +1,7 @@
 use crate::io::{ParseError, RdfFormat};
+use crate::storage::numeric_encoder::EncodedTerm;
 use oxiri::IriParseError;
+use oxrdf::TermRef;
 use std::error::Error;
 use std::io;
 
@@ -43,6 +45,18 @@ impl CorruptionError {
     #[inline]
     pub(crate) fn new(error: impl Into<Box<dyn Error + Send + Sync + 'static>>) -> Self {
         Self::Other(error.into())
+    }
+
+    #[inline]
+    pub(crate) fn from_encoded_term(encoded: &EncodedTerm, term: &TermRef<'_>) -> Self {
+        // TODO: eventually use a dedicated error enum value
+        Self::new(format!("Invalid term encoding {encoded:?} for {term}"))
+    }
+
+    #[inline]
+    pub(crate) fn from_missing_column_family_name(name: &'static str) -> Self {
+        // TODO: eventually use a dedicated error enum value
+        Self::new(format!("Column family {name} does not exist"))
     }
 
     /// Builds an error from a printable error message.

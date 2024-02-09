@@ -548,7 +548,7 @@ impl Db {
                 return Ok(ColumnFamily(*cf_handle));
             }
         }
-        Err(CorruptionError::msg(format!("Column family {name} does not exist")).into())
+        Err(CorruptionError::from_missing_column_family_name(name).into())
     }
 
     #[must_use]
