@@ -1,5 +1,4 @@
 use crate::{Boolean, Double, Float, Integer, TooLargeForIntegerError};
-use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -630,16 +629,9 @@ impl From<TooLargeForDecimalError> for ParseDecimalError {
 /// The input is too large to fit into a [`Decimal`].
 ///
 /// Matches XPath [`FOCA0001` error](https://www.w3.org/TR/xpath-functions-31/#ERRFOCA0001).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("Value too large for xsd:decimal internal representation")]
 pub struct TooLargeForDecimalError;
-
-impl fmt::Display for TooLargeForDecimalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Value too large for xsd:decimal internal representation")
-    }
-}
-
-impl Error for TooLargeForDecimalError {}
 
 #[cfg(test)]
 mod tests {
