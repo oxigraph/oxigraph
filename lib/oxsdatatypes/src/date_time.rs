@@ -2,7 +2,6 @@
 
 use crate::{DayTimeDuration, Decimal, Duration, YearMonthDuration};
 use std::cmp::{min, Ordering};
-use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -2387,16 +2386,9 @@ fn validate_day_of_month(year: Option<i64>, month: u8, day: u8) -> Result<(), Pa
 /// An overflow during [`DateTime`]-related operations.
 ///
 /// Matches XPath [`FODT0001` error](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0001).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("overflow during xsd:dateTime computation")]
 pub struct DateTimeOverflowError;
-
-impl fmt::Display for DateTimeOverflowError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("overflow during xsd:dateTime computation")
-    }
-}
-
-impl Error for DateTimeOverflowError {}
 
 /// The value provided as timezone is not valid.
 ///
@@ -2414,6 +2406,7 @@ mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn from_str() -> Result<(), ParseDateTimeError> {
