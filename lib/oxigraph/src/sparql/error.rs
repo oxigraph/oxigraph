@@ -6,10 +6,9 @@ use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error::Error;
 use std::io;
-use thiserror::Error;
 
 /// A SPARQL evaluation error.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum EvaluationError {
     /// An error in SPARQL parsing.

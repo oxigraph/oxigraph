@@ -1,6 +1,5 @@
 use crate::{DateTime, Decimal};
 use std::cmp::Ordering;
-use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
@@ -937,7 +936,8 @@ fn decimal_prefix(input: &str) -> (&str, &str) {
 }
 
 /// A parsing error
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{msg}")]
 pub struct ParseDurationError {
     msg: &'static str,
 }
@@ -946,45 +946,23 @@ const OVERFLOW_ERROR: ParseDurationError = ParseDurationError {
     msg: "Overflow error",
 };
 
-impl fmt::Display for ParseDurationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.msg)
-    }
-}
-
 impl ParseDurationError {
     const fn msg(msg: &'static str) -> Self {
         Self { msg }
     }
 }
 
-impl Error for ParseDurationError {}
-
 /// An overflow during [`Duration`]-related operations.
 ///
 /// Matches XPath [`FODT0002` error](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0002).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("overflow during xsd:duration computation")]
 pub struct DurationOverflowError;
 
-impl fmt::Display for DurationOverflowError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("overflow during xsd:duration computation")
-    }
-}
-
-impl Error for DurationOverflowError {}
-
 /// The year-month and the day-time components of a [`Duration`] have an opposite sign.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign")]
 pub struct OppositeSignInDurationComponentsError;
-
-impl fmt::Display for OppositeSignInDurationComponentsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign")
-    }
-}
-
-impl Error for OppositeSignInDurationComponentsError {}
 
 impl From<OppositeSignInDurationComponentsError> for ParseDurationError {
     #[inline]
@@ -1000,6 +978,7 @@ mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn from_str() -> Result<(), ParseDurationError> {

@@ -2,10 +2,9 @@ use oxrdf::TermParseError;
 use std::io;
 use std::ops::Range;
 use std::sync::Arc;
-use thiserror::Error;
 
 /// Error returned during SPARQL result formats format parsing.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
@@ -47,7 +46,7 @@ impl From<quick_xml::Error> for ParseError {
 }
 
 /// An error in the syntax of the parsed file.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SyntaxError {
     #[error(transparent)]
     Json(#[from] json_event_parser::SyntaxError),

@@ -4,7 +4,6 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::str::{FromStr, Utf8Error};
 use std::{fmt, str};
-use thiserror::Error;
 
 /// A small inline string
 #[derive(Clone, Copy, Default)]
@@ -169,7 +168,7 @@ impl<'a> TryFrom<&'a str> for SmallString {
     }
 }
 
-#[derive(Debug, Clone, Copy, Error)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum BadSmallStringError {
     #[error("small strings could only contain at most 15 characters, found {0}")]
     TooLong(usize),

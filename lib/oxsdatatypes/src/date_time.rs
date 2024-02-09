@@ -6,7 +6,6 @@ use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use thiserror::Error;
 
 /// [XML Schema `dateTime` datatype](https://www.w3.org/TR/xmlschema11-2/#dateTime)
 ///
@@ -2040,7 +2039,7 @@ fn time_on_timeline(props: &DateTimeSevenPropertyModel) -> Option<Decimal> {
 }
 
 /// A parsing error
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ParseDateTimeError {
     #[error("{day} is not a valid day of {month}")]
     InvalidDayOfMonth { day: u8, month: u8 },
@@ -2402,23 +2401,13 @@ impl Error for DateTimeOverflowError {}
 /// The value provided as timezone is not valid.
 ///
 /// Matches XPath [`FODT0003` error](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0003).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("invalid timezone offset {}:{}",
+        self.offset_in_minutes / 60,
+        self.offset_in_minutes.abs() % 60)]
 pub struct InvalidTimezoneError {
     offset_in_minutes: i64,
 }
-
-impl fmt::Display for InvalidTimezoneError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid timezone offset {}:{}",
-            self.offset_in_minutes / 60,
-            self.offset_in_minutes.abs() % 60
-        )
-    }
-}
-
-impl Error for InvalidTimezoneError {}
 
 #[cfg(test)]
 mod tests {

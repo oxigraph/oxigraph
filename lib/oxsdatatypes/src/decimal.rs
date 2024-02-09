@@ -3,7 +3,6 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
 use std::str::FromStr;
-use thiserror::Error;
 
 const DECIMAL_PART_DIGITS: u32 = 18;
 const DECIMAL_PART_POW: i128 = 1_000_000_000_000_000_000;
@@ -610,7 +609,7 @@ impl fmt::Display for Decimal {
 }
 
 /// An error when parsing a [`Decimal`].
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ParseDecimalError {
     #[error("Value overflow")]
     Overflow,

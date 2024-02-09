@@ -1,7 +1,5 @@
-use std::error::Error;
 use std::ops::Range;
 use std::{fmt, io};
-use thiserror::Error;
 
 /// A position in a text i.e. a `line` number starting from 0, a `column` number starting from 0 (in number of code points) and a global file `offset` starting from 0 (in number of bytes).
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
@@ -14,7 +12,7 @@ pub struct TextPosition {
 /// An error in the syntax of the parsed file.
 ///
 /// It is composed of a message and a byte range in the input.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub struct SyntaxError {
     pub(super) location: Range<TextPosition>,
     pub(super) message: String,
@@ -68,8 +66,6 @@ impl fmt::Display for SyntaxError {
     }
 }
 
-impl Error for SyntaxError {}
-
 impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
@@ -80,7 +76,7 @@ impl From<SyntaxError> for io::Error {
 /// A parsing error.
 ///
 /// It is the union of [`SyntaxError`] and [`io::Error`].
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
