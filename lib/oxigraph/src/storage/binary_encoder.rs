@@ -46,6 +46,7 @@ const TYPE_G_MONTH_LITERAL: u8 = 41;
 const TYPE_DURATION_LITERAL: u8 = 42;
 const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 43;
 const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 44;
+const TYPE_GEO_POINT_LITERAL: u8 = 45;
 const TYPE_TRIPLE: u8 = 48;
 
 #[derive(Clone, Copy)]
@@ -388,6 +389,11 @@ impl<R: Read> TermReader for R {
                 self.read_exact(&mut buffer)?;
                 Ok(DayTimeDuration::from_be_bytes(buffer).into())
             }
+            TYPE_GEO_POINT_LITERAL => {
+                let mut buffer = [0; 16];
+                self.read_exact(&mut buffer)?;
+                Ok(DayTimeDuration::from_be_bytes(buffer).into())
+            }
             TYPE_TRIPLE => Ok(EncodedTriple {
                 subject: self.read_term()?,
                 predicate: self.read_term()?,
@@ -621,6 +627,11 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
         EncodedTerm::DayTimeDurationLiteral(value) => {
             sink.push(TYPE_DAY_TIME_DURATION_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
+        }
+        EncodedTerm::GeoPoint(value) => {
+            sink.push(TYPE_GEO_POINT_LITERAL);
+            sink.extend_from_slice(&value.x.to_be_bytes());
+            sink.extend_from_slice(&value.y.to_be_bytes());
         }
         EncodedTerm::Triple(value) => {
             sink.push(TYPE_TRIPLE);

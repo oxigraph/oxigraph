@@ -13,6 +13,7 @@ use json_event_parser::{JsonEvent, ToWriteJsonWriter};
 use md5::Md5;
 use oxilangtag::LanguageTag;
 use oxiri::Iri;
+use oxrdf::vocab::geosparql;
 use oxrdf::{TermRef, Variable};
 use oxsdatatypes::*;
 use rand::random;
@@ -2930,6 +2931,7 @@ fn to_string_id(dataset: &DatasetView, term: &EncodedTerm) -> Option<SmallString
         EncodedTerm::DayTimeDurationLiteral(value) => {
             Some(build_string_id(dataset, &value.to_string()))
         }
+        EncodedTerm::GeoPoint(value) => Some(build_string_id(dataset, &value.to_string())),
     }
 }
 
@@ -3318,6 +3320,11 @@ fn equals(a: &EncodedTerm, b: &EncodedTerm) -> Option<bool> {
             _ if b.is_unknown_typed_literal() => None,
             _ => Some(false),
         },
+        EncodedTerm::GeoPoint(a) => match b {
+            EncodedTerm::GeoPoint(b) => Some(a == b),
+            _ if b.is_unknown_typed_literal() => None,
+            _ => Some(false),
+        },
         EncodedTerm::Triple(a) => {
             if let EncodedTerm::Triple(b) = b {
                 Some(
@@ -3672,6 +3679,7 @@ fn datatype(dataset: &DatasetView, value: &EncodedTerm) -> Option<EncodedTerm> {
         EncodedTerm::DayTimeDurationLiteral(..) => {
             Some(encode_named_node(dataset, xsd::DAY_TIME_DURATION))
         }
+        EncodedTerm::GeoPoint(..) => Some(encode_named_node(dataset, geosparql::WKT_LITERAL)),
     }
 }
 
