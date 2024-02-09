@@ -13,12 +13,12 @@ documentation = "https://docs.rs/oxsdatatypes"
 edition.workspace = true
 rust-version.workspace = true
 
-[dependencies]
-thiserror.workspace = true
-
 [features]
 js = ["js-sys"]
 custom-now = []
+
+[dependencies]
+thiserror.workspace = true
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 js-sys = { workspace = true, optional = true }
