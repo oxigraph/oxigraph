@@ -1,4 +1,4 @@
-use crate::io::{ParseError, RdfFormat};
+use crate::io::{RdfFormat, RdfParseError};
 use crate::storage::numeric_encoder::EncodedTerm;
 use oxiri::IriParseError;
 use oxrdf::TermRef;
@@ -83,7 +83,7 @@ impl From<CorruptionError> for io::Error {
 pub enum LoaderError {
     /// An error raised while reading the file.
     #[error(transparent)]
-    Parsing(#[from] ParseError),
+    Parsing(#[from] RdfParseError),
     /// An error raised during the insertion in the store.
     #[error(transparent)]
     Storage(#[from] StorageError),

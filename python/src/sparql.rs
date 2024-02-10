@@ -4,8 +4,8 @@ use crate::store::map_storage_error;
 use oxigraph::io::RdfSerializer;
 use oxigraph::model::Term;
 use oxigraph::sparql::results::{
-    FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsFormat,
-    QueryResultsParser, QueryResultsSerializer,
+    FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsFormat,
+    QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
 };
 use oxigraph::sparql::{
     EvaluationError, Query, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
@@ -699,9 +699,12 @@ pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     }
 }
 
-pub fn map_query_results_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
+pub fn map_query_results_parse_error(
+    error: QueryResultsParseError,
+    file_path: Option<PathBuf>,
+) -> PyErr {
     match error {
-        ParseError::Syntax(error) => {
+        QueryResultsParseError::Syntax(error) => {
             // Python 3.9 does not support end line and end column
             if python_version() >= (3, 10) {
                 let params = if let Some(location) = error.location() {
@@ -731,6 +734,6 @@ pub fn map_query_results_parse_error(error: ParseError, file_path: Option<PathBu
                 PySyntaxError::new_err((error.to_string(), params))
             }
         }
-        ParseError::Io(error) => error.into(),
+        QueryResultsParseError::Io(error) => error.into(),
     }
 }

@@ -4,7 +4,7 @@
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
+use crate::toolkit::{FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError};
 use oxrdf::{Triple, TripleRef};
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
@@ -106,7 +106,7 @@ impl NTriplesParser {
     /// use oxttl::NTriplesParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
@@ -213,7 +213,7 @@ pub struct FromReadNTriplesReader<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadNTriplesReader<R> {
-    type Item = Result<Triple, ParseError>;
+    type Item = Result<Triple, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(self.inner.next()?.map(Into::into))
@@ -228,7 +228,7 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 /// use oxttl::NTriplesParser;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxttl::ParseError> {
+/// # async fn main() -> Result<(), oxttl::TurtleParseError> {
 /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
@@ -256,7 +256,7 @@ pub struct FromTokioAsyncReadNTriplesReader<R: AsyncRead + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<R: AsyncRead + Unpin> FromTokioAsyncReadNTriplesReader<R> {
     /// Reads the next triple or returns `None` if the file is finished.
-    pub async fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    pub async fn next(&mut self) -> Option<Result<Triple, TurtleParseError>> {
         Some(self.inner.next().await?.map(Into::into))
     }
 }
@@ -323,7 +323,7 @@ impl LowLevelNTriplesReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Triple, SyntaxError>> {
+    pub fn read_next(&mut self) -> Option<Result<Triple, TurtleSyntaxError>> {
         Some(self.parser.read_next()?.map(Into::into))
     }
 }

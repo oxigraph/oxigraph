@@ -3,61 +3,61 @@ use std::ops::Range;
 
 /// Error returned during RDF format parsing.
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError {
+pub enum RdfParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
     Io(#[from] io::Error),
     /// An error in the file syntax.
     #[error(transparent)]
-    Syntax(#[from] SyntaxError),
+    Syntax(#[from] RdfSyntaxError),
 }
 
-impl ParseError {
+impl RdfParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self::Syntax(SyntaxError(SyntaxErrorKind::Msg(msg)))
+        Self::Syntax(RdfSyntaxError(SyntaxErrorKind::Msg(msg)))
     }
 }
 
-impl From<oxttl::SyntaxError> for SyntaxError {
+impl From<oxttl::TurtleSyntaxError> for RdfSyntaxError {
     #[inline]
-    fn from(error: oxttl::SyntaxError) -> Self {
+    fn from(error: oxttl::TurtleSyntaxError) -> Self {
         Self(SyntaxErrorKind::Turtle(error))
     }
 }
 
-impl From<oxttl::ParseError> for ParseError {
+impl From<oxttl::TurtleParseError> for RdfParseError {
     #[inline]
-    fn from(error: oxttl::ParseError) -> Self {
+    fn from(error: oxttl::TurtleParseError) -> Self {
         match error {
-            oxttl::ParseError::Syntax(e) => Self::Syntax(e.into()),
-            oxttl::ParseError::Io(e) => Self::Io(e),
+            oxttl::TurtleParseError::Syntax(e) => Self::Syntax(e.into()),
+            oxttl::TurtleParseError::Io(e) => Self::Io(e),
         }
     }
 }
 
-impl From<oxrdfxml::SyntaxError> for SyntaxError {
+impl From<oxrdfxml::RdfXmlSyntaxError> for RdfSyntaxError {
     #[inline]
-    fn from(error: oxrdfxml::SyntaxError) -> Self {
+    fn from(error: oxrdfxml::RdfXmlSyntaxError) -> Self {
         Self(SyntaxErrorKind::RdfXml(error))
     }
 }
 
-impl From<oxrdfxml::ParseError> for ParseError {
+impl From<oxrdfxml::RdfXmlParseError> for RdfParseError {
     #[inline]
-    fn from(error: oxrdfxml::ParseError) -> Self {
+    fn from(error: oxrdfxml::RdfXmlParseError) -> Self {
         match error {
-            oxrdfxml::ParseError::Syntax(e) => Self::Syntax(e.into()),
-            oxrdfxml::ParseError::Io(e) => Self::Io(e),
+            oxrdfxml::RdfXmlParseError::Syntax(e) => Self::Syntax(e.into()),
+            oxrdfxml::RdfXmlParseError::Io(e) => Self::Io(e),
         }
     }
 }
 
-impl From<ParseError> for io::Error {
+impl From<RdfParseError> for io::Error {
     #[inline]
-    fn from(error: ParseError) -> Self {
+    fn from(error: RdfParseError) -> Self {
         match error {
-            ParseError::Io(error) => error,
-            ParseError::Syntax(error) => error.into(),
+            RdfParseError::Io(error) => error,
+            RdfParseError::Syntax(error) => error.into(),
         }
     }
 }
@@ -65,20 +65,20 @@ impl From<ParseError> for io::Error {
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct SyntaxError(#[from] SyntaxErrorKind);
+pub struct RdfSyntaxError(#[from] SyntaxErrorKind);
 
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
 enum SyntaxErrorKind {
     #[error(transparent)]
-    Turtle(#[from] oxttl::SyntaxError),
+    Turtle(#[from] oxttl::TurtleSyntaxError),
     #[error(transparent)]
-    RdfXml(#[from] oxrdfxml::SyntaxError),
+    RdfXml(#[from] oxrdfxml::RdfXmlSyntaxError),
     #[error("{0}")]
     Msg(&'static str),
 }
 
-impl SyntaxError {
+impl RdfSyntaxError {
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
@@ -102,9 +102,9 @@ impl SyntaxError {
     }
 }
 
-impl From<SyntaxError> for io::Error {
+impl From<RdfSyntaxError> for io::Error {
     #[inline]
-    fn from(error: SyntaxError) -> Self {
+    fn from(error: RdfSyntaxError) -> Self {
         match error.0 {
             SyntaxErrorKind::Turtle(error) => error.into(),
             SyntaxErrorKind::RdfXml(error) => error.into(),

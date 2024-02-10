@@ -25,7 +25,7 @@ use crate::storage::StorageReader;
 use json_event_parser::{JsonEvent, ToWriteJsonWriter};
 pub use oxrdf::{Variable, VariableNameParseError};
 use oxsdatatypes::{DayTimeDuration, Float};
-pub use spargebra::ParseError;
+pub use spargebra::SparqlSyntaxError;
 use sparopt::algebra::GraphPattern;
 use sparopt::Optimizer;
 use std::collections::HashMap;

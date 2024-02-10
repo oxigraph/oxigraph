@@ -1,5 +1,5 @@
 use crate::algebra::*;
-use crate::parser::{parse_update, ParseError};
+use crate::parser::{parse_update, SparqlSyntaxError};
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -14,7 +14,7 @@ use std::str::FromStr;
 /// let update = Update::parse(update_str, None)?;
 /// assert_eq!(update.to_string().trim(), update_str);
 /// assert_eq!(update.to_sse(), "(update (clear all))");
-/// # Ok::<_, spargebra::ParseError>(())
+/// # Ok::<_, spargebra::SparqlSyntaxError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
@@ -26,7 +26,7 @@ pub struct Update {
 
 impl Update {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
+    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
         parse_update(update, base_iri)
     }
 
@@ -68,7 +68,7 @@ impl fmt::Display for Update {
 }
 
 impl FromStr for Update {
-    type Err = ParseError;
+    type Err = SparqlSyntaxError;
 
     fn from_str(update: &str) -> Result<Self, Self::Err> {
         Self::parse(update, None)
@@ -76,7 +76,7 @@ impl FromStr for Update {
 }
 
 impl<'a> TryFrom<&'a str> for Update {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
     fn try_from(update: &str) -> Result<Self, Self::Error> {
         Self::from_str(update)
@@ -84,7 +84,7 @@ impl<'a> TryFrom<&'a str> for Update {
 }
 
 impl<'a> TryFrom<&'a String> for Update {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
     fn try_from(update: &String) -> Result<Self, Self::Error> {
         Self::from_str(update)

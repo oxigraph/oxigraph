@@ -1,6 +1,6 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
-use crate::error::{ParseError, SyntaxError};
+use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::ToTokioAsyncWriteJsonWriter;
 use json_event_parser::{FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
@@ -233,14 +233,16 @@ pub enum JsonQueryResultsReader<R: Read> {
 }
 
 impl<R: Read> JsonQueryResultsReader<R> {
-    pub fn read(read: R) -> Result<Self, ParseError> {
+    pub fn read(read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = FromReadJsonReader::new(read);
         let mut variables = None;
         let mut buffered_bindings: Option<Vec<_>> = None;
         let mut output_iter = None;
 
         if reader.read_next_event()? != JsonEvent::StartObject {
-            return Err(SyntaxError::msg("SPARQL JSON results should be an object").into());
+            return Err(
+                QueryResultsSyntaxError::msg("SPARQL JSON results should be an object").into(),
+            );
         }
 
         loop {
@@ -269,14 +271,17 @@ impl<R: Read> JsonQueryResultsReader<R> {
                     }
                     "results" => {
                         if reader.read_next_event()? != JsonEvent::StartObject {
-                            return Err(SyntaxError::msg("'results' should be an object").into());
+                            return Err(QueryResultsSyntaxError::msg(
+                                "'results' should be an object",
+                            )
+                            .into());
                         }
                         loop {
                             match reader.read_next_event()? {
                                 JsonEvent::ObjectKey(k) if k == "bindings" => break, // Found
                                 JsonEvent::ObjectKey(_) => ignore_value(&mut reader)?,
                                 _ => {
-                                    return Err(SyntaxError::msg(
+                                    return Err(QueryResultsSyntaxError::msg(
                                         "'results' should contain a 'bindings' key",
                                     )
                                     .into())
@@ -284,7 +289,10 @@ impl<R: Read> JsonQueryResultsReader<R> {
                             }
                         }
                         if reader.read_next_event()? != JsonEvent::StartArray {
-                            return Err(SyntaxError::msg("'bindings' should be an object").into());
+                            return Err(QueryResultsSyntaxError::msg(
+                                "'bindings' should be an object",
+                            )
+                            .into());
                         }
                         if let Some(variables) = variables {
                             let mut mapping = BTreeMap::default();
@@ -318,9 +326,10 @@ impl<R: Read> JsonQueryResultsReader<R> {
                                     values.push(read_value(&mut reader, 0)?);
                                 }
                                 _ => {
-                                    return Err(
-                                        SyntaxError::msg("Invalid result serialization").into()
+                                    return Err(QueryResultsSyntaxError::msg(
+                                        "Invalid result serialization",
                                     )
+                                    .into())
                                 }
                             }
                         }
@@ -329,11 +338,11 @@ impl<R: Read> JsonQueryResultsReader<R> {
                         return if let JsonEvent::Boolean(v) = reader.read_next_event()? {
                             Ok(Self::Boolean(v))
                         } else {
-                            Err(SyntaxError::msg("Unexpected boolean value").into())
+                            Err(QueryResultsSyntaxError::msg("Unexpected boolean value").into())
                         }
                     }
                     _ => {
-                        return Err(SyntaxError::msg(format!(
+                        return Err(QueryResultsSyntaxError::msg(format!(
                             "Expecting head or result key, found {key}"
                         ))
                         .into());
@@ -344,13 +353,18 @@ impl<R: Read> JsonQueryResultsReader<R> {
                     return if let Some(output_iter) = output_iter {
                         Ok(output_iter)
                     } else {
-                        Err(SyntaxError::msg(
+                        Err(QueryResultsSyntaxError::msg(
                             "Unexpected end of JSON object without 'results' or 'boolean' key",
                         )
                         .into())
                     }
                 }
-                _ => return Err(SyntaxError::msg("Invalid SPARQL results serialization").into()),
+                _ => {
+                    return Err(QueryResultsSyntaxError::msg(
+                        "Invalid SPARQL results serialization",
+                    )
+                    .into())
+                }
             }
         }
     }
@@ -371,7 +385,7 @@ enum JsonSolutionsReaderKind<R: Read> {
 }
 
 impl<R: Read> JsonSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match &mut self.kind {
             JsonSolutionsReaderKind::Streaming { reader } => {
                 let mut new_bindings = vec![None; self.mapping.len()];
@@ -382,13 +396,18 @@ impl<R: Read> JsonSolutionsReader<R> {
                         JsonEvent::EndArray | JsonEvent::Eof => return Ok(None),
                         JsonEvent::ObjectKey(key) => {
                             let k = *self.mapping.get(key.as_ref()).ok_or_else(|| {
-                                SyntaxError::msg(format!(
+                                QueryResultsSyntaxError::msg(format!(
                                     "The variable {key} has not been defined in the header"
                                 ))
                             })?;
                             new_bindings[k] = Some(read_value(reader, 0)?)
                         }
-                        _ => return Err(SyntaxError::msg("Invalid result serialization").into()),
+                        _ => {
+                            return Err(QueryResultsSyntaxError::msg(
+                                "Invalid result serialization",
+                            )
+                            .into())
+                        }
                     }
                 }
             }
@@ -397,7 +416,7 @@ impl<R: Read> JsonSolutionsReader<R> {
                     let mut new_bindings = vec![None; self.mapping.len()];
                     for (variable, value) in variables.into_iter().zip(values) {
                         let k = *self.mapping.get(&variable).ok_or_else(|| {
-                            SyntaxError::msg(format!(
+                            QueryResultsSyntaxError::msg(format!(
                                 "The variable {variable} has not been defined in the header"
                             ))
                         })?;
@@ -415,7 +434,7 @@ impl<R: Read> JsonSolutionsReader<R> {
 fn read_value<R: Read>(
     reader: &mut FromReadJsonReader<R>,
     number_of_recursive_calls: usize,
-) -> Result<Term, ParseError> {
+) -> Result<Term, QueryResultsParseError> {
     enum Type {
         Uri,
         BNode,
@@ -432,7 +451,7 @@ fn read_value<R: Read>(
     }
 
     if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
-        return Err(SyntaxError::msg(format!(
+        return Err(QueryResultsSyntaxError::msg(format!(
             "Too many nested triples ({MAX_NUMBER_OF_NESTED_TRIPLES}). The parser fails here to avoid a stack overflow."
         ))
             .into());
@@ -449,7 +468,7 @@ fn read_value<R: Read>(
     #[cfg(feature = "rdf-star")]
     let mut object = None;
     if reader.read_next_event()? != JsonEvent::StartObject {
-        return Err(SyntaxError::msg("Term serializations should be an object").into());
+        return Err(QueryResultsSyntaxError::msg("Term serializations should be an object").into());
     }
     loop {
         #[allow(unsafe_code)]
@@ -472,7 +491,7 @@ fn read_value<R: Read>(
                 #[cfg(feature = "rdf-star")]
                 "object" => object = Some(read_value(reader, number_of_recursive_calls + 1)?),
                 _ => {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(QueryResultsSyntaxError::msg(format!(
                         "Unexpected key in term serialization: '{key}'"
                     ))
                     .into())
@@ -480,9 +499,10 @@ fn read_value<R: Read>(
             },
             JsonEvent::StartObject => {
                 if state != Some(State::Value) {
-                    return Err(
-                        SyntaxError::msg("Unexpected nested object in term serialization").into(),
-                    );
+                    return Err(QueryResultsSyntaxError::msg(
+                        "Unexpected nested object in term serialization",
+                    )
+                    .into());
                 }
             }
             JsonEvent::String(s) => match state {
@@ -494,9 +514,10 @@ fn read_value<R: Read>(
                         #[cfg(feature = "rdf-star")]
                         "triple" => t = Some(Type::Triple),
                         _ => {
-                            return Err(
-                                SyntaxError::msg(format!("Unexpected term type: '{s}'")).into()
-                            )
+                            return Err(QueryResultsSyntaxError::msg(format!(
+                                "Unexpected term type: '{s}'"
+                            ))
+                            .into())
                         }
                     };
                     state = None;
@@ -510,10 +531,9 @@ fn read_value<R: Read>(
                     state = None;
                 }
                 Some(State::Datatype) => {
-                    datatype = Some(
-                        NamedNode::new(s)
-                            .map_err(|e| SyntaxError::msg(format!("Invalid datatype IRI: {e}")))?,
-                    );
+                    datatype = Some(NamedNode::new(s).map_err(|e| {
+                        QueryResultsSyntaxError::msg(format!("Invalid datatype IRI: {e}"))
+                    })?);
                     state = None;
                 }
                 _ => (), // impossible
@@ -523,41 +543,52 @@ fn read_value<R: Read>(
                     if s == State::Value {
                         state = None; // End of triple
                     } else {
-                        return Err(
-                            SyntaxError::msg("Term description values should be string").into()
-                        );
+                        return Err(QueryResultsSyntaxError::msg(
+                            "Term description values should be string",
+                        )
+                        .into());
                     }
                 } else {
                     return match t {
-                        None => Err(SyntaxError::msg(
+                        None => Err(QueryResultsSyntaxError::msg(
                             "Term serialization should have a 'type' key",
                         )
                         .into()),
                         Some(Type::Uri) => Ok(NamedNode::new(value.ok_or_else(|| {
-                            SyntaxError::msg("uri serialization should have a 'value' key")
+                            QueryResultsSyntaxError::msg(
+                                "uri serialization should have a 'value' key",
+                            )
                         })?)
-                        .map_err(|e| SyntaxError::msg(format!("Invalid uri value: {e}")))?
+                        .map_err(|e| {
+                            QueryResultsSyntaxError::msg(format!("Invalid uri value: {e}"))
+                        })?
                         .into()),
                         Some(Type::BNode) => Ok(BlankNode::new(value.ok_or_else(|| {
-                            SyntaxError::msg("bnode serialization should have a 'value' key")
+                            QueryResultsSyntaxError::msg(
+                                "bnode serialization should have a 'value' key",
+                            )
                         })?)
-                        .map_err(|e| SyntaxError::msg(format!("Invalid bnode value: {e}")))?
+                        .map_err(|e| {
+                            QueryResultsSyntaxError::msg(format!("Invalid bnode value: {e}"))
+                        })?
                         .into()),
                         Some(Type::Literal) => {
                             let value = value.ok_or_else(|| {
-                                SyntaxError::msg("literal serialization should have a 'value' key")
+                                QueryResultsSyntaxError::msg(
+                                    "literal serialization should have a 'value' key",
+                                )
                             })?;
                             Ok(match lang {
                                 Some(lang) => {
                                     if let Some(datatype) = datatype {
                                         if datatype.as_ref() != rdf::LANG_STRING {
-                                            return Err(SyntaxError::msg(format!(
+                                            return Err(QueryResultsSyntaxError::msg(format!(
                                                 "xml:lang value '{lang}' provided with the datatype {datatype}"
                                             )).into())
                                         }
                                     }
                                     Literal::new_language_tagged_literal(value, &*lang).map_err(|e| {
-                                        SyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
+                                        QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
                                     })?
                                 }
                                 None => if let Some(datatype) = datatype {
@@ -571,47 +602,53 @@ fn read_value<R: Read>(
                         #[cfg(feature = "rdf-star")]
                         Some(Type::Triple) => Ok(Triple::new(
                             match subject.ok_or_else(|| {
-                                SyntaxError::msg("triple serialization should have a 'subject' key")
+                                QueryResultsSyntaxError::msg(
+                                    "triple serialization should have a 'subject' key",
+                                )
                             })? {
                                 Term::NamedNode(subject) => subject.into(),
                                 Term::BlankNode(subject) => subject.into(),
                                 Term::Triple(subject) => Subject::Triple(subject),
                                 Term::Literal(_) => {
-                                    return Err(SyntaxError::msg(
+                                    return Err(QueryResultsSyntaxError::msg(
                                         "The 'subject' value should not be a literal",
                                     )
                                     .into())
                                 }
                             },
                             match predicate.ok_or_else(|| {
-                                SyntaxError::msg(
+                                QueryResultsSyntaxError::msg(
                                     "triple serialization should have a 'predicate' key",
                                 )
                             })? {
                                 Term::NamedNode(predicate) => predicate,
                                 _ => {
-                                    return Err(SyntaxError::msg(
+                                    return Err(QueryResultsSyntaxError::msg(
                                         "The 'predicate' value should be a uri",
                                     )
                                     .into())
                                 }
                             },
                             object.ok_or_else(|| {
-                                SyntaxError::msg("triple serialization should have a 'object' key")
+                                QueryResultsSyntaxError::msg(
+                                    "triple serialization should have a 'object' key",
+                                )
                             })?,
                         )
                         .into()),
                     };
                 }
             }
-            _ => return Err(SyntaxError::msg("Invalid term serialization").into()),
+            _ => return Err(QueryResultsSyntaxError::msg("Invalid term serialization").into()),
         }
     }
 }
 
-fn read_head<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<Vec<Variable>, ParseError> {
+fn read_head<R: Read>(
+    reader: &mut FromReadJsonReader<R>,
+) -> Result<Vec<Variable>, QueryResultsParseError> {
     if reader.read_next_event()? != JsonEvent::StartObject {
-        return Err(SyntaxError::msg("head should be an object").into());
+        return Err(QueryResultsSyntaxError::msg("head should be an object").into());
     }
     let mut variables = Vec::new();
     loop {
@@ -619,18 +656,21 @@ fn read_head<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<Vec<Variable
             JsonEvent::ObjectKey(key) => match key.as_ref() {
                 "vars" => {
                     if reader.read_next_event()? != JsonEvent::StartArray {
-                        return Err(SyntaxError::msg("Variable list should be an array").into());
+                        return Err(QueryResultsSyntaxError::msg(
+                            "Variable list should be an array",
+                        )
+                        .into());
                     }
                     loop {
                         match reader.read_next_event()? {
                             JsonEvent::String(s) => {
                                 let new_var = Variable::new(s.as_ref()).map_err(|e| {
-                                    SyntaxError::msg(format!(
+                                    QueryResultsSyntaxError::msg(format!(
                                         "Invalid variable declaration '{s}': {e}"
                                     ))
                                 })?;
                                 if variables.contains(&new_var) {
-                                    return Err(SyntaxError::msg(format!(
+                                    return Err(QueryResultsSyntaxError::msg(format!(
                                         "The variable {new_var} is declared twice"
                                     ))
                                     .into());
@@ -639,23 +679,30 @@ fn read_head<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<Vec<Variable
                             }
                             JsonEvent::EndArray => break,
                             _ => {
-                                return Err(
-                                    SyntaxError::msg("Variable names should be strings").into()
+                                return Err(QueryResultsSyntaxError::msg(
+                                    "Variable names should be strings",
                                 )
+                                .into())
                             }
                         }
                     }
                 }
                 "link" => {
                     if reader.read_next_event()? != JsonEvent::StartArray {
-                        return Err(SyntaxError::msg("Variable list should be an array").into());
+                        return Err(QueryResultsSyntaxError::msg(
+                            "Variable list should be an array",
+                        )
+                        .into());
                     }
                     loop {
                         match reader.read_next_event()? {
                             JsonEvent::String(_) => (),
                             JsonEvent::EndArray => break,
                             _ => {
-                                return Err(SyntaxError::msg("Link names should be strings").into())
+                                return Err(QueryResultsSyntaxError::msg(
+                                    "Link names should be strings",
+                                )
+                                .into())
                             }
                         }
                     }
@@ -663,12 +710,12 @@ fn read_head<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<Vec<Variable
                 _ => ignore_value(reader)?,
             },
             JsonEvent::EndObject => return Ok(variables),
-            _ => return Err(SyntaxError::msg("Invalid head serialization").into()),
+            _ => return Err(QueryResultsSyntaxError::msg("Invalid head serialization").into()),
         }
     }
 }
 
-fn ignore_value<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<(), ParseError> {
+fn ignore_value<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<(), QueryResultsParseError> {
     let mut nesting = 0;
     loop {
         match reader.read_next_event()? {
@@ -688,7 +735,9 @@ fn ignore_value<R: Read>(reader: &mut FromReadJsonReader<R>) -> Result<(), Parse
                     return Ok(());
                 }
             }
-            JsonEvent::Eof => return Err(SyntaxError::msg("Unexpected end of file").into()),
+            JsonEvent::Eof => {
+                return Err(QueryResultsSyntaxError::msg("Unexpected end of file").into())
+            }
         }
     }
 }

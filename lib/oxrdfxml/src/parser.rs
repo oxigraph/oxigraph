@@ -1,4 +1,4 @@
-use crate::error::{ParseError, SyntaxError, SyntaxErrorKind};
+use crate::error::{RdfXmlParseError, RdfXmlSyntaxError, SyntaxErrorKind};
 use crate::utils::*;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
@@ -126,7 +126,7 @@ impl RdfXmlParser {
     /// use oxrdfxml::RdfXmlParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxrdfxml::ParseError> {
+    /// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
     /// let file = br#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///   <rdf:Description rdf:about="http://example.com/foo">
@@ -214,7 +214,7 @@ pub struct FromReadRdfXmlReader<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadRdfXmlReader<R> {
-    type Item = Result<Triple, ParseError>;
+    type Item = Result<Triple, RdfXmlParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -236,7 +236,7 @@ impl<R: Read> FromReadRdfXmlReader<R> {
         self.reader.reader.buffer_position()
     }
 
-    fn parse_step(&mut self) -> Result<(), ParseError> {
+    fn parse_step(&mut self) -> Result<(), RdfXmlParseError> {
         self.reader_buffer.clear();
         let event = self
             .reader
@@ -255,7 +255,7 @@ impl<R: Read> FromReadRdfXmlReader<R> {
 /// use oxrdfxml::RdfXmlParser;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxrdfxml::ParseError> {
+/// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
 /// let file = br#"<?xml version="1.0"?>
 /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
 ///   <rdf:Description rdf:about="http://example.com/foo">
@@ -289,7 +289,7 @@ pub struct FromTokioAsyncReadRdfXmlReader<R: AsyncRead + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
     /// Reads the next triple or returns `None` if the file is finished.
-    pub async fn next(&mut self) -> Option<Result<Triple, ParseError>> {
+    pub async fn next(&mut self) -> Option<Result<Triple, RdfXmlParseError>> {
         loop {
             if let Some(triple) = self.results.pop() {
                 return Some(Ok(triple));
@@ -307,7 +307,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
         self.reader.reader.buffer_position()
     }
 
-    async fn parse_step(&mut self) -> Result<(), ParseError> {
+    async fn parse_step(&mut self) -> Result<(), RdfXmlParseError> {
         self.reader_buffer.clear();
         let event = self
             .reader
@@ -440,20 +440,21 @@ impl<R> RdfXmlReader<R> {
         &mut self,
         event: Event<'_>,
         results: &mut Vec<Triple>,
-    ) -> Result<(), ParseError> {
+    ) -> Result<(), RdfXmlParseError> {
         match event {
             Event::Start(event) => self.parse_start_event(&event, results),
             Event::End(event) => self.parse_end_event(&event, results),
-            Event::Empty(_) => {
-                Err(SyntaxError::msg("The expand_empty_elements option must be enabled").into())
-            }
+            Event::Empty(_) => Err(RdfXmlSyntaxError::msg(
+                "The expand_empty_elements option must be enabled",
+            )
+            .into()),
             Event::Text(event) => self.parse_text_event(&event),
             Event::CData(event) => self.parse_text_event(&event.escape()?),
             Event::Comment(_) | Event::PI(_) => Ok(()),
             Event::Decl(decl) => {
                 if let Some(encoding) = decl.encoding() {
                     if !is_utf8(&encoding?) {
-                        return Err(SyntaxError::msg(
+                        return Err(RdfXmlSyntaxError::msg(
                             "Only UTF-8 is supported by the RDF/XML parser",
                         )
                         .into());
@@ -469,7 +470,7 @@ impl<R> RdfXmlReader<R> {
         }
     }
 
-    fn parse_doctype(&mut self, dt: &BytesText<'_>) -> Result<(), ParseError> {
+    fn parse_doctype(&mut self, dt: &BytesText<'_>) -> Result<(), RdfXmlParseError> {
         // we extract entities
         for input in self
             .reader
@@ -481,20 +482,20 @@ impl<R> RdfXmlReader<R> {
             if let Some(input) = input.strip_prefix("!ENTITY") {
                 let input = input.trim_start().strip_prefix('%').unwrap_or(input);
                 let (entity_name, input) = input.trim_start().split_once(|c: char| c.is_ascii_whitespace()).ok_or_else(|| {
-                    SyntaxError::msg(
+                    RdfXmlSyntaxError::msg(
                         "<!ENTITY declarations should contain both an entity name and an entity value",
                     )
                 })?;
                 let input = input.trim_start().strip_prefix('\"').ok_or_else(|| {
-                    SyntaxError::msg("<!ENTITY values should be enclosed in double quotes")
+                    RdfXmlSyntaxError::msg("<!ENTITY values should be enclosed in double quotes")
                 })?;
                 let (entity_value, input) = input.split_once('"').ok_or_else(|| {
-                    SyntaxError::msg(
+                    RdfXmlSyntaxError::msg(
                         "<!ENTITY declarations values should be enclosed in double quotes",
                     )
                 })?;
                 input.trim_start().strip_prefix('>').ok_or_else(|| {
-                    SyntaxError::msg("<!ENTITY declarations values should end with >")
+                    RdfXmlSyntaxError::msg("<!ENTITY declarations values should end with >")
                 })?;
 
                 // Resolves custom entities within the current entity definition.
@@ -511,7 +512,7 @@ impl<R> RdfXmlReader<R> {
         &mut self,
         event: &BytesStart<'_>,
         results: &mut Vec<Triple>,
-    ) -> Result<(), ParseError> {
+    ) -> Result<(), RdfXmlParseError> {
         #[derive(PartialEq, Eq)]
         enum RdfXmlParseType {
             Default,
@@ -576,7 +577,10 @@ impl<R> RdfXmlReader<R> {
                     } else {
                         LanguageTag::parse(tag.to_ascii_lowercase())
                             .map_err(|error| {
-                                SyntaxError(SyntaxErrorKind::InvalidLanguageTag { tag, error })
+                                RdfXmlSyntaxError(SyntaxErrorKind::InvalidLanguageTag {
+                                    tag,
+                                    error,
+                                })
                             })?
                             .into_inner()
                     });
@@ -588,7 +592,9 @@ impl<R> RdfXmlReader<R> {
                         } else {
                             Iri::parse(iri.clone())
                         }
-                        .map_err(|error| SyntaxError(SyntaxErrorKind::InvalidIri { iri, error }))?,
+                        .map_err(|error| {
+                            RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri { iri, error })
+                        })?,
                     )
                 } else {
                     // We ignore other xml attributes
@@ -598,16 +604,17 @@ impl<R> RdfXmlReader<R> {
                 if *attribute_url == *RDF_ID {
                     let mut id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&id) {
-                        return Err(
-                            SyntaxError::msg(format!("{id} is not a valid rdf:ID value")).into(),
-                        );
+                        return Err(RdfXmlSyntaxError::msg(format!(
+                            "{id} is not a valid rdf:ID value"
+                        ))
+                        .into());
                     }
                     id.insert(0, '#');
                     id_attr = Some(id);
                 } else if *attribute_url == *RDF_BAG_ID {
                     let bag_id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&bag_id) {
-                        return Err(SyntaxError::msg(format!(
+                        return Err(RdfXmlSyntaxError::msg(format!(
                             "{bag_id} is not a valid rdf:bagID value"
                         ))
                         .into());
@@ -615,7 +622,7 @@ impl<R> RdfXmlReader<R> {
                 } else if *attribute_url == *RDF_NODE_ID {
                     let id = self.convert_attribute(&attribute)?;
                     if !is_nc_name(&id) {
-                        return Err(SyntaxError::msg(format!(
+                        return Err(RdfXmlSyntaxError::msg(format!(
                             "{id} is not a valid rdf:nodeID value"
                         ))
                         .into());
@@ -637,7 +644,7 @@ impl<R> RdfXmlReader<R> {
                 } else if attribute_url == rdf::TYPE.as_str() {
                     type_attr = Some(attribute);
                 } else if RESERVED_RDF_ATTRIBUTES.contains(&&*attribute_url) {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(RdfXmlSyntaxError::msg(format!(
                         "{attribute_url} is not a valid attribute"
                     ))
                     .into());
@@ -655,7 +662,7 @@ impl<R> RdfXmlReader<R> {
             Some(iri) => {
                 let iri = self.resolve_iri(&base_iri, iri)?;
                 if self.known_rdf_id.contains(iri.as_str()) {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(RdfXmlSyntaxError::msg(format!(
                         "{iri} has already been used as rdf:ID value"
                     ))
                     .into());
@@ -694,13 +701,14 @@ impl<R> RdfXmlReader<R> {
             },
             Some(RdfXmlState::ParseTypeLiteralPropertyElt { .. }) => {
                 return Err(
-                    SyntaxError::msg("ParseTypeLiteralPropertyElt production children should never be considered as a RDF/XML content").into()
+                    RdfXmlSyntaxError::msg("ParseTypeLiteralPropertyElt production children should never be considered as a RDF/XML content").into()
                 );
             }
             None => {
-                return Err(
-                    SyntaxError::msg("No state in the stack: the XML is not balanced").into(),
-                );
+                return Err(RdfXmlSyntaxError::msg(
+                    "No state in the stack: the XML is not balanced",
+                )
+                .into());
             }
         };
 
@@ -709,7 +717,7 @@ impl<R> RdfXmlReader<R> {
                 if *tag_name == *RDF_RDF {
                     RdfXmlState::Rdf { base_iri, language }
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name) {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(RdfXmlSyntaxError::msg(format!(
                         "Invalid node element tag name: {tag_name}"
                     ))
                     .into());
@@ -729,7 +737,7 @@ impl<R> RdfXmlReader<R> {
             }
             RdfXmlNextProduction::NodeElt => {
                 if RESERVED_RDF_ELEMENTS.contains(&&*tag_name) {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(RdfXmlSyntaxError::msg(format!(
                         "Invalid property element tag name: {tag_name}"
                     ))
                     .into());
@@ -750,7 +758,7 @@ impl<R> RdfXmlReader<R> {
                 let iri = if *tag_name == *RDF_LI {
                     let Some(RdfXmlState::NodeElt { li_counter, .. }) = self.state.last_mut()
                     else {
-                        return Err(SyntaxError::msg(format!(
+                        return Err(RdfXmlSyntaxError::msg(format!(
                             "Invalid property element tag name: {tag_name}"
                         ))
                         .into());
@@ -762,7 +770,7 @@ impl<R> RdfXmlReader<R> {
                 } else if RESERVED_RDF_ELEMENTS.contains(&&*tag_name)
                     || *tag_name == *RDF_DESCRIPTION
                 {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(RdfXmlSyntaxError::msg(format!(
                         "Invalid property element tag name: {tag_name}"
                     ))
                     .into());
@@ -780,7 +788,7 @@ impl<R> RdfXmlReader<R> {
                         (Some(resource_attr), None) => Subject::from(resource_attr),
                         (None, Some(node_id_attr)) => node_id_attr.into(),
                         (None, None) => BlankNode::default().into(),
-                        (Some(_), Some(_)) => return Err(SyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time").into())
+                        (Some(_), Some(_)) => return Err(RdfXmlSyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time").into())
                     };
                             Self::emit_property_attrs(&object, property_attrs, &language, results);
                             if let Some(type_attr) = type_attr {
@@ -847,7 +855,7 @@ impl<R> RdfXmlReader<R> {
         &mut self,
         event: &BytesEnd<'_>,
         results: &mut Vec<Triple>,
-    ) -> Result<(), ParseError> {
+    ) -> Result<(), RdfXmlParseError> {
         // Literal case
         if self.in_literal_depth > 0 {
             if let Some(RdfXmlState::ParseTypeLiteralPropertyElt { writer, .. }) =
@@ -867,7 +875,7 @@ impl<R> RdfXmlReader<R> {
         Ok(())
     }
 
-    fn parse_text_event(&mut self, event: &BytesText<'_>) -> Result<(), ParseError> {
+    fn parse_text_event(&mut self, event: &BytesText<'_>) -> Result<(), RdfXmlParseError> {
         let text = event.unescape_with(|e| self.resolve_entity(e))?.to_string();
         match self.state.last_mut() {
             Some(RdfXmlState::PropertyElt { object, .. }) => {
@@ -884,18 +892,18 @@ impl<R> RdfXmlReader<R> {
                 if event.iter().copied().all(is_whitespace) {
                     Ok(())
                 } else {
-                    Err(SyntaxError::msg(format!("Unexpected text event: '{text}'")).into())
+                    Err(RdfXmlSyntaxError::msg(format!("Unexpected text event: '{text}'")).into())
                 }
             }
         }
     }
 
-    fn resolve_tag_name(&self, qname: QName<'_>) -> Result<String, ParseError> {
+    fn resolve_tag_name(&self, qname: QName<'_>) -> Result<String, RdfXmlParseError> {
         let (namespace, local_name) = self.reader.resolve_element(qname);
         self.resolve_ns_name(namespace, local_name)
     }
 
-    fn resolve_attribute_name(&self, qname: QName<'_>) -> Result<String, ParseError> {
+    fn resolve_attribute_name(&self, qname: QName<'_>) -> Result<String, RdfXmlParseError> {
         let (namespace, local_name) = self.reader.resolve_attribute(qname);
         self.resolve_ns_name(namespace, local_name)
     }
@@ -904,7 +912,7 @@ impl<R> RdfXmlReader<R> {
         &self,
         namespace: ResolveResult<'_>,
         local_name: LocalName<'_>,
-    ) -> Result<String, ParseError> {
+    ) -> Result<String, RdfXmlParseError> {
         match namespace {
             ResolveResult::Bound(ns) => {
                 let mut value = Vec::with_capacity(ns.as_ref().len() + local_name.as_ref().len());
@@ -917,9 +925,9 @@ impl<R> RdfXmlReader<R> {
                 .to_string())
             }
             ResolveResult::Unbound => {
-                Err(SyntaxError::msg("XML namespaces are required in RDF/XML").into())
+                Err(RdfXmlSyntaxError::msg("XML namespaces are required in RDF/XML").into())
             }
-            ResolveResult::Unknown(v) => Err(SyntaxError::msg(format!(
+            ResolveResult::Unknown(v) => Err(RdfXmlSyntaxError::msg(format!(
                 "Unknown prefix {}:",
                 self.reader.decoder().decode(&v)?
             ))
@@ -938,24 +946,24 @@ impl<R> RdfXmlReader<R> {
         type_attr: Option<NamedNode>,
         property_attrs: Vec<(NamedNode, String)>,
         results: &mut Vec<Triple>,
-    ) -> Result<RdfXmlState, SyntaxError> {
+    ) -> Result<RdfXmlState, RdfXmlSyntaxError> {
         let subject = match (id_attr, node_id_attr, about_attr) {
             (Some(id_attr), None, None) => Subject::from(id_attr),
             (None, Some(node_id_attr), None) => node_id_attr.into(),
             (None, None, Some(about_attr)) => about_attr.into(),
             (None, None, None) => BlankNode::default().into(),
             (Some(_), Some(_), _) => {
-                return Err(SyntaxError::msg(
+                return Err(RdfXmlSyntaxError::msg(
                     "Not both rdf:ID and rdf:nodeID could be set at the same time",
                 ))
             }
             (_, Some(_), Some(_)) => {
-                return Err(SyntaxError::msg(
+                return Err(RdfXmlSyntaxError::msg(
                     "Not both rdf:nodeID and rdf:resource could be set at the same time",
                 ))
             }
             (Some(_), _, Some(_)) => {
-                return Err(SyntaxError::msg(
+                return Err(RdfXmlSyntaxError::msg(
                     "Not both rdf:ID and rdf:resource could be set at the same time",
                 ))
             }
@@ -1004,7 +1012,7 @@ impl<R> RdfXmlReader<R> {
         &mut self,
         state: RdfXmlState,
         results: &mut Vec<Triple>,
-    ) -> Result<(), SyntaxError> {
+    ) -> Result<(), RdfXmlSyntaxError> {
         match state {
             RdfXmlState::PropertyElt {
                 iri,
@@ -1059,7 +1067,7 @@ impl<R> RdfXmlReader<R> {
                 if emit {
                     let object = writer.into_inner();
                     if object.is_empty() {
-                        return Err(SyntaxError::msg(format!(
+                        return Err(RdfXmlSyntaxError::msg(format!(
                             "No value found for rdf:XMLLiteral value of property {iri}"
                         )));
                     }
@@ -1068,7 +1076,9 @@ impl<R> RdfXmlReader<R> {
                         iri,
                         Literal::new_typed_literal(
                             str::from_utf8(&object).map_err(|_| {
-                                SyntaxError::msg("The XML literal is not in valid UTF-8".to_owned())
+                                RdfXmlSyntaxError::msg(
+                                    "The XML literal is not in valid UTF-8".to_owned(),
+                                )
                             })?,
                             rdf::XML_LITERAL,
                         ),
@@ -1141,7 +1151,7 @@ impl<R> RdfXmlReader<R> {
         }
     }
 
-    fn convert_attribute(&self, attribute: &Attribute<'_>) -> Result<String, ParseError> {
+    fn convert_attribute(&self, attribute: &Attribute<'_>) -> Result<String, RdfXmlParseError> {
         Ok(attribute
             .decode_and_unescape_value_with(&self.reader, |e| self.resolve_entity(e))?
             .into_owned())
@@ -1151,7 +1161,7 @@ impl<R> RdfXmlReader<R> {
         &self,
         base_iri: &Option<Iri<String>>,
         attribute: &Attribute<'_>,
-    ) -> Result<NamedNode, ParseError> {
+    ) -> Result<NamedNode, RdfXmlParseError> {
         Ok(self.resolve_iri(base_iri, self.convert_attribute(attribute)?)?)
     }
 
@@ -1159,7 +1169,7 @@ impl<R> RdfXmlReader<R> {
         &self,
         base_iri: &Option<Iri<String>>,
         relative_iri: String,
-    ) -> Result<NamedNode, SyntaxError> {
+    ) -> Result<NamedNode, RdfXmlSyntaxError> {
         if let Some(base_iri) = base_iri {
             Ok(NamedNode::new_unchecked(
                 if self.unchecked {
@@ -1168,7 +1178,7 @@ impl<R> RdfXmlReader<R> {
                     base_iri.resolve(&relative_iri)
                 }
                 .map_err(|error| {
-                    SyntaxError(SyntaxErrorKind::InvalidIri {
+                    RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri {
                         iri: relative_iri,
                         error,
                     })
@@ -1180,13 +1190,13 @@ impl<R> RdfXmlReader<R> {
         }
     }
 
-    fn parse_iri(&self, relative_iri: String) -> Result<NamedNode, SyntaxError> {
+    fn parse_iri(&self, relative_iri: String) -> Result<NamedNode, RdfXmlSyntaxError> {
         Ok(NamedNode::new_unchecked(if self.unchecked {
             relative_iri
         } else {
             Iri::parse(relative_iri.clone())
                 .map_err(|error| {
-                    SyntaxError(SyntaxErrorKind::InvalidIri {
+                    RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri {
                         iri: relative_iri,
                         error,
                     })

@@ -4,9 +4,9 @@ use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3T
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
-    FromReadIterator, Lexer, Parser, RuleRecognizer, RuleRecognizerError, SyntaxError,
+    FromReadIterator, Lexer, Parser, RuleRecognizer, RuleRecognizerError, TurtleSyntaxError,
 };
-use crate::{ParseError, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
+use crate::{TurtleParseError, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "rdf-star")]
@@ -291,7 +291,7 @@ impl N3Parser {
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -461,7 +461,7 @@ impl<R: Read> FromReadN3Reader<R> {
 }
 
 impl<R: Read> Iterator for FromReadN3Reader<R> {
-    type Item = Result<N3Quad, ParseError>;
+    type Item = Result<N3Quad, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -477,7 +477,7 @@ impl<R: Read> Iterator for FromReadN3Reader<R> {
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxttl::ParseError> {
+/// # async fn main() -> Result<(), oxttl::TurtleParseError> {
 /// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
@@ -508,7 +508,7 @@ pub struct FromTokioAsyncReadN3Reader<R: AsyncRead + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     /// Reads the next triple or returns `None` if the file is finished.
-    pub async fn next(&mut self) -> Option<Result<N3Quad, ParseError>> {
+    pub async fn next(&mut self) -> Option<Result<N3Quad, TurtleParseError>> {
         Some(self.inner.next().await?.map(Into::into))
     }
 
@@ -522,7 +522,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     /// use oxttl::N3Parser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -551,7 +551,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     /// use oxttl::N3Parser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -641,7 +641,7 @@ impl LowLevelN3Reader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<N3Quad, SyntaxError>> {
+    pub fn read_next(&mut self) -> Option<Result<N3Quad, TurtleSyntaxError>> {
         self.parser.read_next()
     }
 

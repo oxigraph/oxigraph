@@ -5,44 +5,44 @@ use std::sync::Arc;
 
 /// Error returned during SPARQL result formats format parsing.
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError {
+pub enum QueryResultsParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
     Io(#[from] io::Error),
     /// An error in the file syntax.
     #[error(transparent)]
-    Syntax(#[from] SyntaxError),
+    Syntax(#[from] QueryResultsSyntaxError),
 }
 
-impl From<ParseError> for io::Error {
+impl From<QueryResultsParseError> for io::Error {
     #[inline]
-    fn from(error: ParseError) -> Self {
+    fn from(error: QueryResultsParseError) -> Self {
         match error {
-            ParseError::Io(error) => error,
-            ParseError::Syntax(error) => error.into(),
+            QueryResultsParseError::Io(error) => error,
+            QueryResultsParseError::Syntax(error) => error.into(),
         }
     }
 }
 
-impl From<json_event_parser::ParseError> for ParseError {
+impl From<json_event_parser::ParseError> for QueryResultsParseError {
     fn from(error: json_event_parser::ParseError) -> Self {
         match error {
-            json_event_parser::ParseError::Syntax(error) => SyntaxError::from(error).into(),
+            json_event_parser::ParseError::Syntax(error) => {
+                QueryResultsSyntaxError::from(error).into()
+            }
             json_event_parser::ParseError::Io(error) => error.into(),
         }
     }
 }
 
-impl From<quick_xml::Error> for ParseError {
+impl From<quick_xml::Error> for QueryResultsParseError {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
         match error {
             quick_xml::Error::Io(error) => {
                 Self::Io(Arc::try_unwrap(error).unwrap_or_else(|e| io::Error::new(e.kind(), e)))
             }
-            _ => Self::Syntax(SyntaxError {
-                inner: SyntaxErrorKind::Xml(error),
-            }),
+            _ => Self::Syntax(QueryResultsSyntaxError(SyntaxErrorKind::Xml(error))),
         }
     }
 }
@@ -50,10 +50,7 @@ impl From<quick_xml::Error> for ParseError {
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct SyntaxError {
-    #[from]
-    pub(crate) inner: SyntaxErrorKind,
-}
+pub struct QueryResultsSyntaxError(#[from] pub(crate) SyntaxErrorKind);
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum SyntaxErrorKind {
@@ -75,33 +72,29 @@ pub(crate) enum SyntaxErrorKind {
     },
 }
 
-impl SyntaxError {
+impl QueryResultsSyntaxError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self {
-            inner: SyntaxErrorKind::Msg {
-                msg: msg.into(),
-                location: None,
-            },
-        }
+        Self(SyntaxErrorKind::Msg {
+            msg: msg.into(),
+            location: None,
+        })
     }
 
     /// Builds an error from a printable error message and a location
     #[inline]
     pub(crate) fn located_message(msg: impl Into<String>, location: Range<TextPosition>) -> Self {
-        Self {
-            inner: SyntaxErrorKind::Msg {
-                msg: msg.into(),
-                location: Some(location),
-            },
-        }
+        Self(SyntaxErrorKind::Msg {
+            msg: msg.into(),
+            location: Some(location),
+        })
     }
 
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
-        match &self.inner {
+        match &self.0 {
             SyntaxErrorKind::Json(e) => {
                 let location = e.location();
                 Some(
@@ -123,10 +116,10 @@ impl SyntaxError {
     }
 }
 
-impl From<SyntaxError> for io::Error {
+impl From<QueryResultsSyntaxError> for io::Error {
     #[inline]
-    fn from(error: SyntaxError) -> Self {
-        match error.inner {
+    fn from(error: QueryResultsSyntaxError) -> Self {
+        match error.0 {
             SyntaxErrorKind::Json(error) => Self::new(io::ErrorKind::InvalidData, error),
             SyntaxErrorKind::Xml(error) => match error {
                 quick_xml::Error::Io(error) => {
@@ -143,11 +136,9 @@ impl From<SyntaxError> for io::Error {
     }
 }
 
-impl From<json_event_parser::SyntaxError> for SyntaxError {
+impl From<json_event_parser::SyntaxError> for QueryResultsSyntaxError {
     fn from(error: json_event_parser::SyntaxError) -> Self {
-        Self {
-            inner: SyntaxErrorKind::Json(error),
-        }
+        Self(SyntaxErrorKind::Json(error))
     }
 }
 
