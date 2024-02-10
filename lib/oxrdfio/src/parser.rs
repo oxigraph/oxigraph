@@ -1,6 +1,6 @@
 //! Utilities to read RDF graphs and datasets.
 
-pub use crate::error::ParseError;
+pub use crate::error::RdfParseError;
 use crate::format::RdfFormat;
 use oxrdf::{BlankNode, GraphName, IriParseError, Quad, Subject, Term, Triple};
 #[cfg(feature = "async-tokio")]
@@ -310,7 +310,7 @@ impl RdfParser {
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxrdfio::ParseError> {
+    /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
     /// let parser = RdfParser::from_format(RdfFormat::NTriples);
@@ -396,7 +396,7 @@ enum FromReadQuadReaderKind<R: Read> {
 }
 
 impl<R: Read> Iterator for FromReadQuadReader<R> {
-    type Item = Result<Quad, ParseError>;
+    type Item = Result<Quad, RdfParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(match &mut self.parser {
@@ -507,7 +507,7 @@ impl<R: Read> FromReadQuadReader<R> {
 /// use oxrdfio::{RdfFormat, RdfParser};
 ///
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxrdfio::ParseError> {
+/// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = RdfParser::from_format(RdfFormat::NTriples);
@@ -537,7 +537,7 @@ enum FromTokioAsyncReadQuadReaderKind<R: AsyncRead + Unpin> {
 
 #[cfg(feature = "async-tokio")]
 impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
-    pub async fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+    pub async fn next(&mut self) -> Option<Result<Quad, RdfParseError>> {
         Some(match &mut self.parser {
             FromTokioAsyncReadQuadReaderKind::N3(parser) => match parser.next().await? {
                 Ok(quad) => self.mapper.map_n3_quad(quad),
@@ -578,7 +578,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -618,7 +618,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -728,18 +728,18 @@ impl QuadMapper {
         }
     }
 
-    fn map_graph_name(&mut self, graph_name: GraphName) -> Result<GraphName, ParseError> {
+    fn map_graph_name(&mut self, graph_name: GraphName) -> Result<GraphName, RdfParseError> {
         match graph_name {
             GraphName::NamedNode(node) => {
                 if self.without_named_graphs {
-                    Err(ParseError::msg("Named graphs are not allowed"))
+                    Err(RdfParseError::msg("Named graphs are not allowed"))
                 } else {
                     Ok(node.into())
                 }
             }
             GraphName::BlankNode(node) => {
                 if self.without_named_graphs {
-                    Err(ParseError::msg("Named graphs are not allowed"))
+                    Err(RdfParseError::msg("Named graphs are not allowed"))
                 } else {
                     Ok(self.map_blank_node(node).into())
                 }
@@ -748,7 +748,7 @@ impl QuadMapper {
         }
     }
 
-    fn map_quad(&mut self, quad: Quad) -> Result<Quad, ParseError> {
+    fn map_quad(&mut self, quad: Quad) -> Result<Quad, RdfParseError> {
         Ok(Quad {
             subject: self.map_subject(quad.subject),
             predicate: quad.predicate,
@@ -761,33 +761,33 @@ impl QuadMapper {
         self.map_triple(triple).in_graph(self.default_graph.clone())
     }
 
-    fn map_n3_quad(&mut self, quad: N3Quad) -> Result<Quad, ParseError> {
+    fn map_n3_quad(&mut self, quad: N3Quad) -> Result<Quad, RdfParseError> {
         Ok(Quad {
             subject: match quad.subject {
                 N3Term::NamedNode(s) => Ok(s.into()),
                 N3Term::BlankNode(s) => Ok(self.map_blank_node(s).into()),
-                N3Term::Literal(_) => Err(ParseError::msg(
+                N3Term::Literal(_) => Err(RdfParseError::msg(
                     "literals are not allowed in regular RDF subjects",
                 )),
                 #[cfg(feature = "rdf-star")]
                 N3Term::Triple(s) => Ok(self.map_triple(*s).into()),
-                N3Term::Variable(_) => Err(ParseError::msg(
+                N3Term::Variable(_) => Err(RdfParseError::msg(
                     "variables are not allowed in regular RDF subjects",
                 )),
             }?,
             predicate: match quad.predicate {
                 N3Term::NamedNode(p) => Ok(p),
-                N3Term::BlankNode(_) => Err(ParseError::msg(
+                N3Term::BlankNode(_) => Err(RdfParseError::msg(
                     "blank nodes are not allowed in regular RDF predicates",
                 )),
-                N3Term::Literal(_) => Err(ParseError::msg(
+                N3Term::Literal(_) => Err(RdfParseError::msg(
                     "literals are not allowed in regular RDF predicates",
                 )),
                 #[cfg(feature = "rdf-star")]
-                N3Term::Triple(_) => Err(ParseError::msg(
+                N3Term::Triple(_) => Err(RdfParseError::msg(
                     "quoted triples are not allowed in regular RDF predicates",
                 )),
-                N3Term::Variable(_) => Err(ParseError::msg(
+                N3Term::Variable(_) => Err(RdfParseError::msg(
                     "variables are not allowed in regular RDF predicates",
                 )),
             }?,
@@ -797,7 +797,7 @@ impl QuadMapper {
                 N3Term::Literal(o) => Ok(o.into()),
                 #[cfg(feature = "rdf-star")]
                 N3Term::Triple(o) => Ok(self.map_triple(*o).into()),
-                N3Term::Variable(_) => Err(ParseError::msg(
+                N3Term::Variable(_) => Err(RdfParseError::msg(
                     "variables are not allowed in regular RDF objects",
                 )),
             }?,

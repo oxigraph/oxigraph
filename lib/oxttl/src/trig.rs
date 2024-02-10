@@ -5,7 +5,7 @@ use crate::lexer::N3Lexer;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{FromReadIterator, ParseError, Parser, SyntaxError};
+use crate::toolkit::{FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
@@ -140,7 +140,7 @@ impl TriGParser {
     /// use oxttl::TriGParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -314,7 +314,7 @@ impl<R: Read> FromReadTriGReader<R> {
 }
 
 impl<R: Read> Iterator for FromReadTriGReader<R> {
-    type Item = Result<Quad, ParseError>;
+    type Item = Result<Quad, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -330,7 +330,7 @@ impl<R: Read> Iterator for FromReadTriGReader<R> {
 /// use oxttl::TriGParser;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxttl::ParseError> {
+/// # async fn main() -> Result<(), oxttl::TurtleParseError> {
 /// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
@@ -360,7 +360,7 @@ pub struct FromTokioAsyncReadTriGReader<R: AsyncRead + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
     /// Reads the next triple or returns `None` if the file is finished.
-    pub async fn next(&mut self) -> Option<Result<Quad, ParseError>> {
+    pub async fn next(&mut self) -> Option<Result<Quad, TurtleParseError>> {
         Some(self.inner.next().await?.map(Into::into))
     }
 
@@ -374,7 +374,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
     /// use oxttl::TriGParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -403,7 +403,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
     /// use oxttl::TriGParser;
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::ParseError> {
+    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -492,7 +492,7 @@ impl LowLevelTriGReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Quad, SyntaxError>> {
+    pub fn read_next(&mut self) -> Option<Result<Quad, TurtleSyntaxError>> {
         self.parser.read_next()
     }
 

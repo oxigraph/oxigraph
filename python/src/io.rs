@@ -1,7 +1,7 @@
 #![allow(clippy::needless_option_as_deref)]
 
 use crate::model::{hash, PyQuad, PyTriple};
-use oxigraph::io::{FromReadQuadReader, ParseError, RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::io::{FromReadQuadReader, RdfFormat, RdfParseError, RdfParser, RdfSerializer};
 use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
 use pyo3::intern;
@@ -556,9 +556,9 @@ pub enum PyRdfFormatInput {
     MediaType(String),
 }
 
-pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
+pub fn map_parse_error(error: RdfParseError, file_path: Option<PathBuf>) -> PyErr {
     match error {
-        ParseError::Syntax(error) => {
+        RdfParseError::Syntax(error) => {
             // Python 3.9 does not support end line and end column
             if python_version() >= (3, 10) {
                 let params = if let Some(location) = error.location() {
@@ -588,7 +588,7 @@ pub fn map_parse_error(error: ParseError, file_path: Option<PathBuf>) -> PyErr {
                 PySyntaxError::new_err((error.to_string(), params))
             }
         }
-        ParseError::Io(error) => error.into(),
+        RdfParseError::Io(error) => error.into(),
     }
 }
 

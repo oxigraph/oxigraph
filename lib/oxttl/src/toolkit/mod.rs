@@ -6,7 +6,7 @@ mod error;
 mod lexer;
 mod parser;
 
-pub use self::error::{ParseError, SyntaxError, TextPosition};
+pub use self::error::{TextPosition, TurtleParseError, TurtleSyntaxError};
 pub use self::lexer::{Lexer, TokenRecognizer, TokenRecognizerError};
 #[cfg(feature = "async-tokio")]
 pub use self::parser::FromTokioAsyncReadIterator;

@@ -1,5 +1,5 @@
 use crate::algebra::*;
-use crate::parser::{parse_query, ParseError};
+use crate::parser::{parse_query, SparqlSyntaxError};
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -17,7 +17,7 @@ use std::str::FromStr;
 ///     query.to_sse(),
 ///     "(project (?s ?p ?o) (bgp (triple ?s ?p ?o)))"
 /// );
-/// # Ok::<_, spargebra::ParseError>(())
+/// # Ok::<_, spargebra::SparqlSyntaxError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Query {
@@ -63,7 +63,7 @@ pub enum Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
+    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
         parse_query(query, base_iri)
     }
 
@@ -276,7 +276,7 @@ impl fmt::Display for Query {
 }
 
 impl FromStr for Query {
-    type Err = ParseError;
+    type Err = SparqlSyntaxError;
 
     fn from_str(query: &str) -> Result<Self, Self::Err> {
         Self::parse(query, None)
@@ -284,7 +284,7 @@ impl FromStr for Query {
 }
 
 impl<'a> TryFrom<&'a str> for Query {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
     fn try_from(query: &str) -> Result<Self, Self::Error> {
         Self::from_str(query)
@@ -292,7 +292,7 @@ impl<'a> TryFrom<&'a str> for Query {
 }
 
 impl<'a> TryFrom<&'a String> for Query {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
     fn try_from(query: &String) -> Result<Self, Self::Error> {
         Self::from_str(query)

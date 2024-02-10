@@ -9,7 +9,7 @@ mod parser;
 mod serializer;
 mod utils;
 
-pub use error::{ParseError, SyntaxError};
+pub use error::{RdfXmlParseError, RdfXmlSyntaxError};
 #[cfg(feature = "async-tokio")]
 pub use parser::FromTokioAsyncReadRdfXmlReader;
 pub use parser::{FromReadRdfXmlReader, RdfXmlParser};

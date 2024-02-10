@@ -5,33 +5,33 @@ use std::sync::Arc;
 
 /// Error returned during RDF/XML parsing.
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError {
+pub enum RdfXmlParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
     Io(#[from] io::Error),
     /// An error in the file syntax.
     #[error(transparent)]
-    Syntax(#[from] SyntaxError),
+    Syntax(#[from] RdfXmlSyntaxError),
 }
 
-impl From<ParseError> for io::Error {
+impl From<RdfXmlParseError> for io::Error {
     #[inline]
-    fn from(error: ParseError) -> Self {
+    fn from(error: RdfXmlParseError) -> Self {
         match error {
-            ParseError::Io(error) => error,
-            ParseError::Syntax(error) => error.into(),
+            RdfXmlParseError::Io(error) => error,
+            RdfXmlParseError::Syntax(error) => error.into(),
         }
     }
 }
 
-impl From<quick_xml::Error> for ParseError {
+impl From<quick_xml::Error> for RdfXmlParseError {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
         match error {
             quick_xml::Error::Io(error) => {
                 Self::Io(Arc::try_unwrap(error).unwrap_or_else(|e| io::Error::new(e.kind(), e)))
             }
-            _ => Self::Syntax(SyntaxError(SyntaxErrorKind::Xml(error))),
+            _ => Self::Syntax(RdfXmlSyntaxError(SyntaxErrorKind::Xml(error))),
         }
     }
 }
@@ -39,7 +39,7 @@ impl From<quick_xml::Error> for ParseError {
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct SyntaxError(#[from] pub(crate) SyntaxErrorKind);
+pub struct RdfXmlSyntaxError(#[from] pub(crate) SyntaxErrorKind);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyntaxErrorKind {
@@ -61,7 +61,7 @@ pub enum SyntaxErrorKind {
     Msg(String),
 }
 
-impl SyntaxError {
+impl RdfXmlSyntaxError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
@@ -69,9 +69,9 @@ impl SyntaxError {
     }
 }
 
-impl From<SyntaxError> for io::Error {
+impl From<RdfXmlSyntaxError> for io::Error {
     #[inline]
-    fn from(error: SyntaxError) -> Self {
+    fn from(error: RdfXmlSyntaxError) -> Self {
         match error.0 {
             SyntaxErrorKind::Xml(error) => match error {
                 quick_xml::Error::Io(error) => {

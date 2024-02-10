@@ -2,8 +2,8 @@ use crate::io::{RdfFormat, RdfSerializer};
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::results::{
-    FromReadQueryResultsReader, FromReadSolutionsReader, ParseError, QueryResultsFormat,
-    QueryResultsParser, QueryResultsSerializer,
+    FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsFormat,
+    QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
 };
 use oxrdf::{Variable, VariableRef};
 pub use sparesults::QuerySolution;
@@ -22,7 +22,10 @@ pub enum QueryResults {
 
 impl QueryResults {
     /// Reads a SPARQL query results serialization.
-    pub fn read(read: impl Read + 'static, format: QueryResultsFormat) -> Result<Self, ParseError> {
+    pub fn read(
+        read: impl Read + 'static,
+        format: QueryResultsFormat,
+    ) -> Result<Self, QueryResultsParseError> {
         Ok(QueryResultsParser::from_format(format)
             .parse_read(read)?
             .into())

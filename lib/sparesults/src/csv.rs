@@ -1,6 +1,8 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
-use crate::error::{ParseError, SyntaxError, SyntaxErrorKind, TextPosition};
+use crate::error::{
+    QueryResultsParseError, QueryResultsSyntaxError, SyntaxErrorKind, TextPosition,
+};
 use memchr::memchr;
 use oxrdf::vocab::xsd;
 use oxrdf::*;
@@ -432,7 +434,7 @@ pub enum TsvQueryResultsReader<R: Read> {
 }
 
 impl<R: Read> TsvQueryResultsReader<R> {
-    pub fn read(mut read: R) -> Result<Self, ParseError> {
+    pub fn read(mut read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = LineReader::new();
         let mut buffer = Vec::new();
 
@@ -451,13 +453,13 @@ impl<R: Read> TsvQueryResultsReader<R> {
             for v in line.split('\t') {
                 let v = v.trim();
                 if v.is_empty() {
-                    return Err(SyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar").into());
+                    return Err(QueryResultsSyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar").into());
                 }
                 let variable = Variable::from_str(v).map_err(|e| {
-                    SyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
+                    QueryResultsSyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
                 })?;
                 if variables.contains(&variable) {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(QueryResultsSyntaxError::msg(format!(
                         "The variable {variable} is declared twice"
                     ))
                     .into());
@@ -487,7 +489,7 @@ pub struct TsvSolutionsReader<R: Read> {
 
 impl<R: Read> TsvSolutionsReader<R> {
     #[allow(clippy::unwrap_in_result)]
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         let line = self.reader.next_line(&mut self.buffer, &mut self.read)?;
         if line.is_empty() {
             return Ok(None); // EOF
@@ -508,35 +510,33 @@ impl<R: Read> TsvSolutionsReader<R> {
                             .sum::<usize>();
                         let start_position_bytes =
                             line.split('\t').take(i).map(|c| c.len() + 1).sum::<usize>();
-                        SyntaxError {
-                            inner: SyntaxErrorKind::Term {
-                                error: e,
-                                term: v.into(),
-                                location: TextPosition {
-                                    line: self.reader.line_count - 1,
-                                    column: start_position_char.try_into().unwrap(),
-                                    offset: self.reader.last_line_start
-                                        + u64::try_from(start_position_bytes).unwrap(),
-                                }..TextPosition {
-                                    line: self.reader.line_count - 1,
-                                    column: (start_position_char + v.chars().count())
-                                        .try_into()
-                                        .unwrap(),
-                                    offset: self.reader.last_line_start
-                                        + u64::try_from(start_position_bytes + v.len()).unwrap(),
-                                },
+                        QueryResultsSyntaxError(SyntaxErrorKind::Term {
+                            error: e,
+                            term: v.into(),
+                            location: TextPosition {
+                                line: self.reader.line_count - 1,
+                                column: start_position_char.try_into().unwrap(),
+                                offset: self.reader.last_line_start
+                                    + u64::try_from(start_position_bytes).unwrap(),
+                            }..TextPosition {
+                                line: self.reader.line_count - 1,
+                                column: (start_position_char + v.chars().count())
+                                    .try_into()
+                                    .unwrap(),
+                                offset: self.reader.last_line_start
+                                    + u64::try_from(start_position_bytes + v.len()).unwrap(),
                             },
-                        }
+                        })
                     })?))
                 }
             })
-            .collect::<Result<Vec<_>, ParseError>>()?;
+            .collect::<Result<Vec<_>, QueryResultsParseError>>()?;
         if elements.len() == self.column_len {
             Ok(Some(elements))
         } else if self.column_len == 0 && elements == [None] {
             Ok(Some(Vec::new())) // Zero columns case
         } else {
-            Err(SyntaxError::located_message(
+            Err(QueryResultsSyntaxError::located_message(
                 format!(
                     "This TSV files has {} columns but we found a row on line {} with {} columns: {}",
                     self.column_len,

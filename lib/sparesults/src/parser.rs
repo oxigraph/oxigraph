@@ -1,5 +1,5 @@
 use crate::csv::{TsvQueryResultsReader, TsvSolutionsReader};
-use crate::error::{ParseError, SyntaxError};
+use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use crate::format::QueryResultsFormat;
 use crate::json::{JsonQueryResultsReader, JsonSolutionsReader};
 use crate::solution::QuerySolution;
@@ -32,7 +32,7 @@ use std::sync::Arc;
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::ParseError>::Ok(())
+/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
 pub struct QueryResultsParser {
     format: QueryResultsFormat,
@@ -68,12 +68,12 @@ impl QueryResultsParser {
     ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
     ///     }
     /// }
-    /// # Result::<(),sparesults::ParseError>::Ok(())
+    /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(
         &self,
         reader: R,
-    ) -> Result<FromReadQueryResultsReader<R>, ParseError> {
+    ) -> Result<FromReadQueryResultsReader<R>, QueryResultsParseError> {
         Ok(match self.format {
             QueryResultsFormat::Xml => match XmlQueryResultsReader::read(reader)? {
                 XmlQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
@@ -95,7 +95,7 @@ impl QueryResultsParser {
                     solutions: SolutionsReaderKind::Json(solutions),
                 }),
             },
-            QueryResultsFormat::Csv => return Err(SyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation").into()),
+            QueryResultsFormat::Csv => return Err(QueryResultsSyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation").into()),
             QueryResultsFormat::Tsv => match TsvQueryResultsReader::read(reader)? {
                 TsvQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
                 TsvQueryResultsReader::Solutions {
@@ -113,7 +113,7 @@ impl QueryResultsParser {
     pub fn read_results<R: Read>(
         &self,
         reader: R,
-    ) -> Result<FromReadQueryResultsReader<R>, ParseError> {
+    ) -> Result<FromReadQueryResultsReader<R>, QueryResultsParseError> {
         self.parse_read(reader)
     }
 }
@@ -161,7 +161,7 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 ///         );
 ///     }
 /// }
-/// # Result::<(),sparesults::ParseError>::Ok(())
+/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
 pub enum FromReadQueryResultsReader<R: Read> {
     Solutions(FromReadSolutionsReader<R>),
@@ -184,7 +184,7 @@ pub enum FromReadQueryResultsReader<R: Read> {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::ParseError>::Ok(())
+/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
 pub struct FromReadSolutionsReader<R: Read> {
     variables: Arc<[Variable]>,
@@ -217,7 +217,7 @@ impl<R: Read> FromReadSolutionsReader<R> {
     ///         ]
     ///     );
     /// }
-    /// # Result::<(),sparesults::ParseError>::Ok(())
+    /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
@@ -226,7 +226,7 @@ impl<R: Read> FromReadSolutionsReader<R> {
 }
 
 impl<R: Read> Iterator for FromReadSolutionsReader<R> {
-    type Item = Result<QuerySolution, ParseError>;
+    type Item = Result<QuerySolution, QueryResultsParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(

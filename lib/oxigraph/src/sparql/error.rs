@@ -1,7 +1,7 @@
-use crate::io::ParseError as RdfParseError;
+use crate::io::RdfParseError;
 use crate::model::NamedNode;
-use crate::sparql::results::ParseError as ResultsParseError;
-use crate::sparql::ParseError;
+use crate::sparql::results::QueryResultsParseError as ResultsParseError;
+use crate::sparql::SparqlSyntaxError;
 use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error::Error;
@@ -13,7 +13,7 @@ use std::io;
 pub enum EvaluationError {
     /// An error in SPARQL parsing.
     #[error(transparent)]
-    Parsing(#[from] ParseError),
+    Parsing(#[from] SparqlSyntaxError),
     /// An error from the storage.
     #[error(transparent)]
     Storage(#[from] StorageError),

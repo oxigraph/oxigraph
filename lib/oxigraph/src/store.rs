@@ -26,7 +26,7 @@
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
 #[cfg(not(target_family = "wasm"))]
-use crate::io::ParseError;
+use crate::io::RdfParseError;
 use crate::io::{RdfFormat, RdfParser, RdfSerializer};
 use crate::model::*;
 use crate::sparql::{
@@ -1592,7 +1592,7 @@ impl Iterator for GraphNameIter {
 #[must_use]
 pub struct BulkLoader {
     storage: StorageBulkLoader,
-    on_parse_error: Option<Box<dyn Fn(ParseError) -> Result<(), ParseError>>>,
+    on_parse_error: Option<Box<dyn Fn(RdfParseError) -> Result<(), RdfParseError>>>,
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -1647,7 +1647,7 @@ impl BulkLoader {
     /// By default the parsing fails.
     pub fn on_parse_error(
         mut self,
-        callback: impl Fn(ParseError) -> Result<(), ParseError> + 'static,
+        callback: impl Fn(RdfParseError) -> Result<(), RdfParseError> + 'static,
     ) -> Self {
         self.on_parse_error = Some(Box::new(callback));
         self

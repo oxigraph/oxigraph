@@ -15,16 +15,16 @@ use std::mem::take;
 use std::str::FromStr;
 
 /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
+pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, SparqlSyntaxError> {
     let mut state = ParserState::from_base_iri(base_iri)?;
-    parser::QueryUnit(query, &mut state).map_err(|e| ParseError(ParseErrorKind::Parser(e)))
+    parser::QueryUnit(query, &mut state).map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))
 }
 
 /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, ParseError> {
+pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, SparqlSyntaxError> {
     let mut state = ParserState::from_base_iri(base_iri)?;
     let operations = parser::UpdateInit(update, &mut state)
-        .map_err(|e| ParseError(ParseErrorKind::Parser(e)))?;
+        .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
     Ok(Update {
         operations,
         base_iri: state.base_iri,
@@ -34,14 +34,14 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
 /// Error returned during SPARQL parsing.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ParseError(#[from] ParseErrorKind);
+pub struct SparqlSyntaxError(#[from] ParseErrorKind);
 
 #[derive(Debug, thiserror::Error)]
 enum ParseErrorKind {
     #[error("Invalid SPARQL base IRI provided: {0}")]
     InvalidBaseIri(#[from] IriParseError),
     #[error(transparent)]
-    Parser(#[from] peg::error::ParseError<LineCol>),
+    Syntax(#[from] peg::error::ParseError<LineCol>),
 }
 
 struct AnnotatedTerm {
@@ -669,12 +669,12 @@ pub struct ParserState {
 }
 
 impl ParserState {
-    pub(crate) fn from_base_iri(base_iri: Option<&str>) -> Result<Self, ParseError> {
+    pub(crate) fn from_base_iri(base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
         Ok(Self {
             base_iri: if let Some(base_iri) = base_iri {
                 Some(
                     Iri::parse(base_iri.to_owned())
-                        .map_err(|e| ParseError(ParseErrorKind::InvalidBaseIri(e)))?,
+                        .map_err(|e| SparqlSyntaxError(ParseErrorKind::InvalidBaseIri(e)))?,
                 )
             } else {
                 None

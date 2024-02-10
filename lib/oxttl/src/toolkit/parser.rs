@@ -1,4 +1,4 @@
-use crate::toolkit::error::{ParseError, SyntaxError};
+use crate::toolkit::error::{TurtleParseError, TurtleSyntaxError};
 use crate::toolkit::lexer::{Lexer, TokenRecognizer};
 use std::io::Read;
 #[cfg(feature = "async-tokio")]
@@ -77,10 +77,10 @@ impl<RR: RuleRecognizer> Parser<RR> {
         self.state.is_none() && self.results.is_empty() && self.errors.is_empty()
     }
 
-    pub fn read_next(&mut self) -> Option<Result<RR::Output, SyntaxError>> {
+    pub fn read_next(&mut self) -> Option<Result<RR::Output, TurtleSyntaxError>> {
         loop {
             if let Some(error) = self.errors.pop() {
-                return Some(Err(SyntaxError {
+                return Some(Err(TurtleSyntaxError {
                     location: self.lexer.last_token_location(),
                     message: error
                         .message
@@ -141,12 +141,12 @@ pub struct FromReadIterator<R: Read, RR: RuleRecognizer> {
 }
 
 impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
-    type Item = Result<RR::Output, ParseError>;
+    type Item = Result<RR::Output, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.parser.is_end() {
             if let Some(result) = self.parser.read_next() {
-                return Some(result.map_err(ParseError::Syntax));
+                return Some(result.map_err(TurtleParseError::Syntax));
             }
             if let Err(e) = self.parser.lexer.extend_from_read(&mut self.read) {
                 return Some(Err(e.into()));
@@ -164,10 +164,10 @@ pub struct FromTokioAsyncReadIterator<R: AsyncRead + Unpin, RR: RuleRecognizer> 
 
 #[cfg(feature = "async-tokio")]
 impl<R: AsyncRead + Unpin, RR: RuleRecognizer> FromTokioAsyncReadIterator<R, RR> {
-    pub async fn next(&mut self) -> Option<Result<RR::Output, ParseError>> {
+    pub async fn next(&mut self) -> Option<Result<RR::Output, TurtleParseError>> {
         while !self.parser.is_end() {
             if let Some(result) = self.parser.read_next() {
-                return Some(result.map_err(ParseError::Syntax));
+                return Some(result.map_err(TurtleParseError::Syntax));
             }
             if let Err(e) = self
                 .parser

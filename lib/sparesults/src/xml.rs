@@ -1,6 +1,6 @@
 //! Implementation of [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/)
 
-use crate::error::{ParseError, SyntaxError};
+use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::rdf;
 use oxrdf::*;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
@@ -227,7 +227,7 @@ pub enum XmlQueryResultsReader<R: Read> {
 }
 
 impl<R: Read> XmlQueryResultsReader<R> {
-    pub fn read(source: R) -> Result<Self, ParseError> {
+    pub fn read(source: R) -> Result<Self, QueryResultsParseError> {
         enum State {
             Start,
             Sparql,
@@ -254,14 +254,14 @@ impl<R: Read> XmlQueryResultsReader<R> {
                         if event.local_name().as_ref() == b"sparql" {
                             state = State::Sparql;
                         } else {
-                            return Err(SyntaxError::msg(format!("Expecting <sparql> tag, found <{}>", decode(&reader, &event.name())?)).into());
+                            return Err(QueryResultsSyntaxError::msg(format!("Expecting <sparql> tag, found <{}>", decode(&reader, &event.name())?)).into());
                         }
                     }
                     State::Sparql => {
                         if event.local_name().as_ref() == b"head" {
                             state = State::Head;
                         } else {
-                            return Err(SyntaxError::msg(format!("Expecting <head> tag, found <{}>",decode(&reader, &event.name())?)).into());
+                            return Err(QueryResultsSyntaxError::msg(format!("Expecting <head> tag, found <{}>", decode(&reader, &event.name())?)).into());
                         }
                     }
                     State::Head => {
@@ -269,11 +269,11 @@ impl<R: Read> XmlQueryResultsReader<R> {
                             let name = event.attributes()
                                 .filter_map(Result::ok)
                                 .find(|attr| attr.key.local_name().as_ref() == b"name")
-                                .ok_or_else(|| SyntaxError::msg("No name attribute found for the <variable> tag"))?
+                                .ok_or_else(|| QueryResultsSyntaxError::msg("No name attribute found for the <variable> tag"))?
                                 .decode_and_unescape_value(&reader)?;
-                            let variable = Variable::new(name).map_err(|e| SyntaxError::msg(format!("Invalid variable name: {e}")))?;
+                            let variable = Variable::new(name).map_err(|e| QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}")))?;
                             if variables.contains(&variable) {
-                                return Err(SyntaxError::msg(format!(
+                                return Err(QueryResultsSyntaxError::msg(format!(
                                     "The variable {variable} is declared twice"
                                 ))
                                     .into());
@@ -282,7 +282,7 @@ impl<R: Read> XmlQueryResultsReader<R> {
                         } else if event.local_name().as_ref() == b"link" {
                             // no op
                         } else {
-                            return Err(SyntaxError::msg(format!("Expecting <variable> or <link> tag, found <{}>", decode(&reader, &event.name())?)).into());
+                            return Err(QueryResultsSyntaxError::msg(format!("Expecting <variable> or <link> tag, found <{}>", decode(&reader, &event.name())?)).into());
                         }
                     }
                     State::AfterHead => {
@@ -304,10 +304,10 @@ impl<R: Read> XmlQueryResultsReader<R> {
                                     object_stack: Vec::new(),
                                 }});
                         } else if event.local_name().as_ref() != b"link" && event.local_name().as_ref() != b"results" && event.local_name().as_ref() != b"boolean" {
-                            return Err(SyntaxError::msg(format!("Expecting sparql tag, found <{}>", decode(&reader, &event.name())?)).into());
+                            return Err(QueryResultsSyntaxError::msg(format!("Expecting sparql tag, found <{}>", decode(&reader, &event.name())?)).into());
                         }
                     }
-                    State::Boolean => return Err(SyntaxError::msg(format!("Unexpected tag inside of <boolean> tag: <{}>", decode(&reader, &event.name())?)).into())
+                    State::Boolean => return Err(QueryResultsSyntaxError::msg(format!("Unexpected tag inside of <boolean> tag: <{}>", decode(&reader, &event.name())?)).into())
                 },
                 Event::Text(event) => {
                     let value = event.unescape()?;
@@ -318,10 +318,10 @@ impl<R: Read> XmlQueryResultsReader<R> {
                             } else if value == "false" {
                                 Ok(Self::Boolean(false))
                             } else {
-                                Err(SyntaxError::msg(format!("Unexpected boolean value. Found '{value}'")).into())
+                                Err(QueryResultsSyntaxError::msg(format!("Unexpected boolean value. Found '{value}'")).into())
                             };
                         }
-                        _ => Err(SyntaxError::msg(format!("Unexpected textual value found: '{value}'")).into())
+                        _ => Err(QueryResultsSyntaxError::msg(format!("Unexpected textual value found: '{value}'")).into())
                     };
                 },
                 Event::End(event) => {
@@ -330,10 +330,10 @@ impl<R: Read> XmlQueryResultsReader<R> {
                             state = State::AfterHead
                         }
                     } else {
-                        return Err(SyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into());
+                        return Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into());
                     }
                 },
-                Event::Eof => return Err(SyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
+                Event::Eof => return Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
                 _ => (),
             }
         }
@@ -365,7 +365,7 @@ pub struct XmlSolutionsReader<R: Read> {
 }
 
 impl<R: Read> XmlSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         let mut state = State::Start;
 
         let mut new_bindings = vec![None; self.mapping.len()];
@@ -383,7 +383,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                         if event.local_name().as_ref() == b"result" {
                             state = State::Result;
                         } else {
-                            return Err(SyntaxError::msg(format!(
+                            return Err(QueryResultsSyntaxError::msg(format!(
                                 "Expecting <result>, found <{}>",
                                 decode(&self.reader, &event.name())?
                             ))
@@ -403,7 +403,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                                     )
                                 }
                                 None => {
-                                    return Err(SyntaxError::msg(
+                                    return Err(QueryResultsSyntaxError::msg(
                                         "No name attribute found for the <binding> tag",
                                     )
                                     .into());
@@ -411,7 +411,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                             }
                             state = State::Binding;
                         } else {
-                            return Err(SyntaxError::msg(format!(
+                            return Err(QueryResultsSyntaxError::msg(format!(
                                 "Expecting <binding>, found <{}>",
                                 decode(&self.reader, &event.name())?
                             ))
@@ -420,7 +420,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                     }
                     State::Binding | State::Subject | State::Predicate | State::Object => {
                         if term.is_some() {
-                            return Err(SyntaxError::msg(
+                            return Err(QueryResultsSyntaxError::msg(
                                 "There is already a value for the current binding",
                             )
                             .into());
@@ -441,7 +441,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                                     let iri = attr.decode_and_unescape_value(&self.reader)?;
                                     datatype =
                                         Some(NamedNode::new(iri.to_string()).map_err(|e| {
-                                            SyntaxError::msg(format!(
+                                            QueryResultsSyntaxError::msg(format!(
                                                 "Invalid datatype IRI '{iri}': {e}"
                                             ))
                                         })?);
@@ -451,7 +451,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                         } else if event.local_name().as_ref() == b"triple" {
                             state = State::Triple;
                         } else {
-                            return Err(SyntaxError::msg(format!(
+                            return Err(QueryResultsSyntaxError::msg(format!(
                                 "Expecting <uri>, <bnode> or <literal> found <{}>",
                                 decode(&self.reader, &event.name())?
                             ))
@@ -466,7 +466,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                         } else if event.local_name().as_ref() == b"object" {
                             state = State::Object
                         } else {
-                            return Err(SyntaxError::msg(format!(
+                            return Err(QueryResultsSyntaxError::msg(format!(
                                 "Expecting <subject>, <predicate> or <object> found <{}>",
                                 decode(&self.reader, &event.name())?
                             ))
@@ -482,7 +482,9 @@ impl<R: Read> XmlSolutionsReader<R> {
                             term = Some(
                                 NamedNode::new(data.to_string())
                                     .map_err(|e| {
-                                        SyntaxError::msg(format!("Invalid IRI value '{data}': {e}"))
+                                        QueryResultsSyntaxError::msg(format!(
+                                            "Invalid IRI value '{data}': {e}"
+                                        ))
                                     })?
                                     .into(),
                             )
@@ -491,7 +493,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                             term = Some(
                                 BlankNode::new(data.to_string())
                                     .map_err(|e| {
-                                        SyntaxError::msg(format!(
+                                        QueryResultsSyntaxError::msg(format!(
                                             "Invalid blank node value '{data}': {e}"
                                         ))
                                     })?
@@ -502,7 +504,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                             term = Some(build_literal(data, lang.take(), datatype.take())?.into());
                         }
                         _ => {
-                            return Err(SyntaxError::msg(format!(
+                            return Err(QueryResultsSyntaxError::msg(format!(
                                 "Unexpected textual value found: {data}"
                             ))
                             .into());
@@ -518,11 +520,14 @@ impl<R: Read> XmlSolutionsReader<R> {
                                 new_bindings[*var] = term.take()
                             } else {
                                 return Err(
-                                    SyntaxError::msg(format!("The variable '{var}' is used in a binding but not declared in the variables list")).into()
+                                    QueryResultsSyntaxError::msg(format!("The variable '{var}' is used in a binding but not declared in the variables list")).into()
                                 );
                             }
                         } else {
-                            return Err(SyntaxError::msg("No name found for <binding> tag").into());
+                            return Err(QueryResultsSyntaxError::msg(
+                                "No name found for <binding> tag",
+                            )
+                            .into());
                         }
                         state = State::Result;
                     }
@@ -548,7 +553,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                         state = self
                             .stack
                             .pop()
-                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?
+                            .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?
                     }
                     State::BNode => {
                         if term.is_none() {
@@ -558,7 +563,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                         state = self
                             .stack
                             .pop()
-                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?
+                            .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?
                     }
                     State::Literal => {
                         if term.is_none() {
@@ -568,7 +573,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                         state = self
                             .stack
                             .pop()
-                            .ok_or_else(|| SyntaxError::msg("Empty stack"))?;
+                            .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?;
                     }
                     State::Triple => {
                         #[cfg(feature = "rdf-star")]
@@ -584,7 +589,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                                         Term::BlankNode(subject) => subject.into(),
                                         Term::Triple(subject) => Subject::Triple(subject),
                                         Term::Literal(_) => {
-                                            return Err(SyntaxError::msg(
+                                            return Err(QueryResultsSyntaxError::msg(
                                                 "The <subject> value should not be a <literal>",
                                             )
                                             .into())
@@ -593,7 +598,7 @@ impl<R: Read> XmlSolutionsReader<R> {
                                     match predicate {
                                         Term::NamedNode(predicate) => predicate,
                                         _ => {
-                                            return Err(SyntaxError::msg(
+                                            return Err(QueryResultsSyntaxError::msg(
                                                 "The <predicate> value should be an <uri>",
                                             )
                                             .into())
@@ -606,15 +611,15 @@ impl<R: Read> XmlSolutionsReader<R> {
                             state = self
                                 .stack
                                 .pop()
-                                .ok_or_else(|| SyntaxError::msg("Empty stack"))?;
+                                .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?;
                         } else {
                             return Err(
-                                SyntaxError::msg("A <triple> should contain a <subject>, a <predicate> and an <object>").into()
+                                QueryResultsSyntaxError::msg("A <triple> should contain a <subject>, a <predicate> and an <object>").into()
                             );
                         }
                         #[cfg(not(feature = "rdf-star"))]
                         {
-                            return Err(SyntaxError::msg(
+                            return Err(QueryResultsSyntaxError::msg(
                                 "The <triple> tag is only supported with RDF-star",
                             )
                             .into());
@@ -633,19 +638,19 @@ fn build_literal(
     value: impl Into<String>,
     lang: Option<String>,
     datatype: Option<NamedNode>,
-) -> Result<Literal, ParseError> {
+) -> Result<Literal, QueryResultsParseError> {
     match lang {
         Some(lang) => {
             if let Some(datatype) = datatype {
                 if datatype.as_ref() != rdf::LANG_STRING {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(QueryResultsSyntaxError::msg(format!(
                         "xml:lang value '{lang}' provided with the datatype {datatype}"
                     ))
                     .into());
                 }
             }
             Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
-                SyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}")).into()
+                QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}")).into()
             })
         }
         None => Ok(if let Some(datatype) = datatype {
@@ -659,7 +664,7 @@ fn build_literal(
 fn decode<'a, T>(
     reader: &Reader<T>,
     data: &'a impl AsRef<[u8]>,
-) -> Result<Cow<'a, str>, ParseError> {
+) -> Result<Cow<'a, str>, QueryResultsParseError> {
     Ok(reader.decoder().decode(data.as_ref())?)
 }
 

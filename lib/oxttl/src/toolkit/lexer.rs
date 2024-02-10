@@ -1,4 +1,4 @@
-use crate::toolkit::error::{SyntaxError, TextPosition};
+use crate::toolkit::error::{TextPosition, TurtleSyntaxError};
 use memchr::{memchr2, memchr2_iter};
 use std::borrow::Cow;
 use std::cmp::min;
@@ -163,7 +163,10 @@ impl<R: TokenRecognizer> Lexer<R> {
     }
 
     #[allow(clippy::unwrap_in_result)]
-    pub fn read_next(&mut self, options: &R::Options) -> Option<Result<R::Token<'_>, SyntaxError>> {
+    pub fn read_next(
+        &mut self,
+        options: &R::Options,
+    ) -> Option<Result<R::Token<'_>, TurtleSyntaxError>> {
         self.skip_whitespaces_and_comments()?;
         self.previous_position = self.position;
         let Some((consumed, result)) = self.parser.recognize_next_token(
@@ -194,7 +197,7 @@ impl<R: TokenRecognizer> Lexer<R> {
                         ),
                         offset: self.position.global_offset,
                     };
-                    let error = SyntaxError {
+                    let error = TurtleSyntaxError {
                         location: new_position..new_position,
                         message: "Unexpected end of file".into(),
                     };
@@ -224,7 +227,7 @@ impl<R: TokenRecognizer> Lexer<R> {
         self.position.buffer_offset += consumed;
         self.position.global_offset += u64::try_from(consumed).unwrap();
         self.position.global_line += new_line_jumps;
-        Some(result.map_err(|e| SyntaxError {
+        Some(result.map_err(|e| TurtleSyntaxError {
             location: self.location_from_buffer_offset_range(e.location),
             message: e.message,
         }))

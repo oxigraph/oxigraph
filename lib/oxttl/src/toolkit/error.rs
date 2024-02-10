@@ -13,12 +13,12 @@ pub struct TextPosition {
 ///
 /// It is composed of a message and a byte range in the input.
 #[derive(Debug, thiserror::Error)]
-pub struct SyntaxError {
+pub struct TurtleSyntaxError {
     pub(super) location: Range<TextPosition>,
     pub(super) message: String,
 }
 
-impl SyntaxError {
+impl TurtleSyntaxError {
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Range<TextPosition> {
@@ -32,7 +32,7 @@ impl SyntaxError {
     }
 }
 
-impl fmt::Display for SyntaxError {
+impl fmt::Display for TurtleSyntaxError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.location.start.offset + 1 >= self.location.end.offset {
@@ -66,32 +66,32 @@ impl fmt::Display for SyntaxError {
     }
 }
 
-impl From<SyntaxError> for io::Error {
+impl From<TurtleSyntaxError> for io::Error {
     #[inline]
-    fn from(error: SyntaxError) -> Self {
+    fn from(error: TurtleSyntaxError) -> Self {
         Self::new(io::ErrorKind::InvalidData, error)
     }
 }
 
 /// A parsing error.
 ///
-/// It is the union of [`SyntaxError`] and [`io::Error`].
+/// It is the union of [`TurtleSyntaxError`] and [`io::Error`].
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError {
+pub enum TurtleParseError {
     /// I/O error during parsing (file not found...).
     #[error(transparent)]
     Io(#[from] io::Error),
     /// An error in the file syntax.
     #[error(transparent)]
-    Syntax(#[from] SyntaxError),
+    Syntax(#[from] TurtleSyntaxError),
 }
 
-impl From<ParseError> for io::Error {
+impl From<TurtleParseError> for io::Error {
     #[inline]
-    fn from(error: ParseError) -> Self {
+    fn from(error: TurtleParseError) -> Self {
         match error {
-            ParseError::Syntax(e) => e.into(),
-            ParseError::Io(e) => e,
+            TurtleParseError::Syntax(e) => e.into(),
+            TurtleParseError::Io(e) => e,
         }
     }
 }
