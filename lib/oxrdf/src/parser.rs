@@ -29,9 +29,9 @@ impl FromStr for NamedNode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_named_node(s)?;
         if !left.is_empty() {
-            return Err(Self::Err::msg(
+            return Err(TermParseErrorKind::msg(
                 "Named node serialization should end with a >",
-            ));
+            ))?;
         }
         Ok(term)
     }
@@ -54,9 +54,9 @@ impl FromStr for BlankNode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_blank_node(s)?;
         if !left.is_empty() {
-            return Err(Self::Err::msg(
+            return Err(TermParseErrorKind::msg(
                 "Blank node serialization should not contain whitespaces",
-            ));
+            ))?;
         }
         Ok(term)
     }
@@ -107,7 +107,7 @@ impl FromStr for Literal {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_literal(s)?;
         if !left.is_empty() {
-            return Err(Self::Err::msg("Invalid literal serialization"));
+            return Err(TermParseErrorKind::msg("Invalid literal serialization"))?;
         }
         Ok(term)
     }
@@ -139,7 +139,7 @@ impl FromStr for Term {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_term(s, 0)?;
         if !left.is_empty() {
-            return Err(Self::Err::msg("Invalid term serialization"));
+            return Err(TermParseErrorKind::msg("Invalid term serialization"))?;
         }
         Ok(term)
     }
@@ -161,38 +161,40 @@ impl FromStr for Variable {
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with('?') && !s.starts_with('$') {
-            return Err(Self::Err::msg(
+            return Err(TermParseErrorKind::msg(
                 "Variable serialization should start with ? or $",
-            ));
+            ))?;
         }
-        Self::new(&s[1..]).map_err(|error| Self::Err::Variable {
-            value: s.to_owned(),
-            error,
-        })
+        Ok(
+            Self::new(&s[1..]).map_err(|error| TermParseErrorKind::Variable {
+                value: s.to_owned(),
+                error,
+            })?,
+        )
     }
 }
 
-fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
+fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseErrorKind> {
     let s = s.trim();
     if let Some(remain) = s.strip_prefix('<') {
-        let end = remain
-            .find('>')
-            .ok_or_else(|| TermParseError::msg("Named node serialization should end with a >"))?;
+        let end = remain.find('>').ok_or_else(|| {
+            TermParseErrorKind::msg("Named node serialization should end with a >")
+        })?;
         let (value, remain) = remain.split_at(end);
         let remain = &remain[1..];
-        let term = NamedNode::new(value).map_err(|error| TermParseError::Iri {
+        let term = NamedNode::new(value).map_err(|error| TermParseErrorKind::Iri {
             value: value.to_owned(),
             error,
         })?;
         Ok((term, remain))
     } else {
-        Err(TermParseError::msg(
+        Err(TermParseErrorKind::msg(
             "Named node serialization should start with a <",
         ))
     }
 }
 
-fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
+fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseErrorKind> {
     let s = s.trim();
     if let Some(remain) = s.strip_prefix("_:") {
         let end = remain
@@ -202,19 +204,19 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
             })
             .unwrap_or(remain.len());
         let (value, remain) = remain.split_at(end);
-        let term = BlankNode::new(value).map_err(|error| TermParseError::BlankNode {
+        let term = BlankNode::new(value).map_err(|error| TermParseErrorKind::BlankNode {
             value: value.to_owned(),
             error,
         })?;
         Ok((term, remain))
     } else {
-        Err(TermParseError::msg(
+        Err(TermParseErrorKind::msg(
             "Blank node serialization should start with '_:'",
-        ))
+        ))?
     }
 }
 
-fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
+fn read_literal(s: &str) -> Result<(Literal, &str), TermParseErrorKind> {
     let s = s.trim();
     if let Some(s) = s.strip_prefix('"') {
         let mut value = String::with_capacity(s.len());
@@ -230,7 +232,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         let (language, remain) = remain.split_at(end);
                         Ok((
                             Literal::new_language_tagged_literal(value, language).map_err(
-                                |error| TermParseError::LanguageTag {
+                                |error| TermParseErrorKind::LanguageTag {
                                     value: language.to_owned(),
                                     error,
                                 },
@@ -257,16 +259,16 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                             '\\' => '\\',
                             'u' => read_hexa_char(&mut chars, 4)?,
                             'U' => read_hexa_char(&mut chars, 8)?,
-                            _ => return Err(TermParseError::msg("Unexpected escaped char")),
+                            _ => return Err(TermParseErrorKind::msg("Unexpected escaped char"))?,
                         })
                     } else {
-                        return Err(TermParseError::msg("Unexpected literal end"));
+                        return Err(TermParseErrorKind::msg("Unexpected literal end"));
                     }
                 }
                 _ => value.push(c),
             }
         }
-        Err(TermParseError::msg("Unexpected literal end"))
+        Err(TermParseErrorKind::msg("Unexpected literal end"))
     } else if let Some(remain) = s.strip_prefix("true") {
         Ok((Literal::new_typed_literal("true", xsd::BOOLEAN), remain))
     } else if let Some(remain) = s.strip_prefix("false") {
@@ -274,7 +276,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
     } else {
         let input = s.as_bytes();
         if input.is_empty() {
-            return Err(TermParseError::msg("Empty term serialization"));
+            return Err(TermParseErrorKind::msg("Empty term serialization"));
         }
 
         let mut cursor = match input.first() {
@@ -313,7 +315,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             if count_exponent > 0 {
                 Ok((Literal::new_typed_literal(s, xsd::DOUBLE), &s[cursor..]))
             } else {
-                Err(TermParseError::msg(
+                Err(TermParseErrorKind::msg(
                     "Double serialization with an invalid exponent",
                 ))
             }
@@ -321,21 +323,24 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
             if count_after > 0 {
                 Ok((Literal::new_typed_literal(s, xsd::DECIMAL), &s[cursor..]))
             } else {
-                Err(TermParseError::msg(
+                Err(TermParseErrorKind::msg(
                     "Decimal serialization without floating part",
                 ))
             }
         } else if count_before > 0 {
             Ok((Literal::new_typed_literal(s, xsd::INTEGER), &s[cursor..]))
         } else {
-            Err(TermParseError::msg("Empty integer serialization"))
+            Err(TermParseErrorKind::msg("Empty integer serialization"))
         }
     }
 }
 
-fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), TermParseError> {
+fn read_term(
+    s: &str,
+    number_of_recursive_calls: usize,
+) -> Result<(Term, &str), TermParseErrorKind> {
     if number_of_recursive_calls == MAX_NUMBER_OF_NESTED_TRIPLES {
-        return Err(TermParseError::msg(
+        return Err(TermParseErrorKind::msg(
             "Too many nested triples. The parser fails here to avoid a stack overflow.",
         ));
     }
@@ -355,7 +360,7 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
                             Term::NamedNode(s) => s.into(),
                             Term::BlankNode(s) => s.into(),
                             Term::Literal(_) => {
-                                return Err(TermParseError::msg(
+                                return Err(TermParseErrorKind::msg(
                                     "Literals are not allowed in subject position",
                                 ))
                             }
@@ -368,14 +373,14 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
                     remain,
                 ))
             } else {
-                Err(TermParseError::msg(
+                Err(TermParseErrorKind::msg(
                     "Nested triple serialization should be enclosed between << and >>",
                 ))
             }
         }
         #[cfg(not(feature = "rdf-star"))]
         {
-            Err(TermParseError::msg("RDF-star is not supported"))
+            Err(TermParseErrorKind::msg("RDF-star is not supported"))
         }
     } else if s.starts_with('<') {
         let (term, remain) = read_named_node(s)?;
@@ -389,7 +394,7 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
     }
 }
 
-fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseError> {
+fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseErrorKind> {
     let mut value = 0;
     for _ in 0..len {
         if let Some(c) = input.next() {
@@ -399,21 +404,27 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
                     'a'..='f' => u32::from(c) - u32::from('a') + 10,
                     'A'..='F' => u32::from(c) - u32::from('A') + 10,
                     _ => {
-                        return Err(TermParseError::msg(
+                        return Err(TermParseErrorKind::msg(
                             "Unexpected character in a unicode escape",
                         ))
                     }
                 }
         } else {
-            return Err(TermParseError::msg("Unexpected literal string end"));
+            return Err(TermParseErrorKind::msg("Unexpected literal string end"));
         }
     }
-    char::from_u32(value).ok_or_else(|| TermParseError::msg("Invalid encoded unicode code point"))
+    char::from_u32(value)
+        .ok_or_else(|| TermParseErrorKind::msg("Invalid encoded unicode code point"))
 }
 
 /// An error raised during term serialization parsing using the [`FromStr`] trait.
 #[derive(Debug, thiserror::Error)]
-pub enum TermParseError {
+#[error(transparent)]
+pub struct TermParseError(#[from] TermParseErrorKind);
+
+/// An internal error raised during term serialization parsing using the [`FromStr`] trait.
+#[derive(Debug, thiserror::Error)]
+enum TermParseErrorKind {
     #[error("Error while parsing the named node '{value}': {error}")]
     Iri { error: IriParseError, value: String },
     #[error("Error while parsing the blank node '{value}': {error}")]
@@ -435,8 +446,8 @@ pub enum TermParseError {
     Msg { msg: &'static str },
 }
 
-impl TermParseError {
+impl TermParseErrorKind {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self::Msg { msg }
+        TermParseErrorKind::Msg { msg }
     }
 }
