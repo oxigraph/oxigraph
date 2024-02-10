@@ -14,24 +14,16 @@ pub enum ParseError {
 
 impl ParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self::Syntax(SyntaxErrorKind::Msg { msg }.into())
+        Self::Syntax(SyntaxError(SyntaxErrorKind::Msg { msg }))
     }
 }
 
-// impl From<oxttl::SyntaxError> for SyntaxError {
-//     #[inline]
-//     fn from(error: oxttl::SyntaxError) -> Self {
-//         Self(SyntaxErrorKind::Turtle(error))
-//     }
-// }
-//
-// impl From<oxrdfxml::SyntaxError> for SyntaxError {
-//     #[inline]
-//     fn from(error: oxrdfxml::SyntaxError) -> Self {
-//         Self(SyntaxErrorKind::RdfXml(error))
-//     }
-// }
-//
+impl From<oxttl::SyntaxError> for SyntaxError {
+    #[inline]
+    fn from(error: oxttl::SyntaxError) -> Self {
+        Self(SyntaxErrorKind::Turtle(error))
+    }
+}
 
 impl From<oxttl::ParseError> for ParseError {
     #[inline]
@@ -40,6 +32,13 @@ impl From<oxttl::ParseError> for ParseError {
             oxttl::ParseError::Syntax(e) => Self::Syntax(e.into()),
             oxttl::ParseError::Io(e) => Self::Io(e),
         }
+    }
+}
+
+impl From<oxrdfxml::SyntaxError> for SyntaxError {
+    #[inline]
+    fn from(error: oxrdfxml::SyntaxError) -> Self {
+        Self(SyntaxErrorKind::RdfXml(error))
     }
 }
 
@@ -83,7 +82,7 @@ impl SyntaxError {
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
-        match self {
+        match &self.0 {
             SyntaxErrorKind::Turtle(e) => {
                 let location = e.location();
                 Some(
@@ -106,7 +105,7 @@ impl SyntaxError {
 impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
-        match error {
+        match error.0 {
             SyntaxErrorKind::Turtle(error) => error.into(),
             SyntaxErrorKind::RdfXml(error) => error.into(),
             SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),

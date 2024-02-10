@@ -31,14 +31,23 @@ impl From<quick_xml::Error> for ParseError {
             quick_xml::Error::Io(error) => {
                 Self::Io(Arc::try_unwrap(error).unwrap_or_else(|e| io::Error::new(e.kind(), e)))
             }
-            _ => Self::Syntax(SyntaxError::Xml(error)),
+            _ => Self::Syntax(SyntaxError {
+                inner: SyntaxErrorKind::Xml(error),
+            }),
         }
     }
 }
 
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
-pub enum SyntaxError {
+#[error(transparent)]
+pub struct SyntaxError {
+    #[from]
+    pub(crate) inner: SyntaxErrorKind,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SyntaxErrorKind {
     #[error(transparent)]
     Xml(#[from] quick_xml::Error),
     #[error("error while parsing IRI '{iri}': {error}")]
@@ -61,15 +70,17 @@ impl SyntaxError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self::Msg { msg: msg.into() }
+        Self {
+            inner: SyntaxErrorKind::Msg { msg: msg.into() },
+        }
     }
 }
 
 impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
-        match error {
-            SyntaxError::Xml(error) => match error {
+        match error.inner {
+            SyntaxErrorKind::Xml(error) => match error {
                 quick_xml::Error::Io(error) => {
                     Arc::try_unwrap(error).unwrap_or_else(|e| Self::new(e.kind(), e))
                 }
@@ -78,7 +89,7 @@ impl From<SyntaxError> for io::Error {
                 }
                 _ => Self::new(io::ErrorKind::InvalidData, error),
             },
-            SyntaxError::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
+            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
             _ => Self::new(io::ErrorKind::InvalidData, error),
         }
     }

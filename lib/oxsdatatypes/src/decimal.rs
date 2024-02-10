@@ -465,7 +465,7 @@ impl FromStr for Decimal {
         // (\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)
         let input = input.as_bytes();
         if input.is_empty() {
-            return Err(ParseDecimalError::UnexpectedEnd);
+            return Err(PARSE_UNEXPECTED_END);
         }
 
         let (sign, mut input) = match input.first() {
@@ -480,9 +480,9 @@ impl FromStr for Decimal {
             if c.is_ascii_digit() {
                 value = value
                     .checked_mul(10)
-                    .ok_or(ParseDecimalError::Overflow)?
+                    .ok_or(PARSE_OVERFLOW)?
                     .checked_add(sign * i128::from(*c - b'0'))
-                    .ok_or(ParseDecimalError::Overflow)?;
+                    .ok_or(PARSE_OVERFLOW)?;
                 input = &input[1..];
             } else {
                 break;
@@ -492,12 +492,12 @@ impl FromStr for Decimal {
         let mut exp = DECIMAL_PART_POW;
         if let Some(c) = input.first() {
             if *c != b'.' {
-                return Err(ParseDecimalError::UnexpectedChar);
+                return Err(PARSE_UNEXPECTED_CHAR);
             }
             input = &input[1..];
             if input.is_empty() && !with_before_dot {
                 // We only have a dot
-                return Err(ParseDecimalError::UnexpectedEnd);
+                return Err(PARSE_UNEXPECTED_END);
             }
             while input.last() == Some(&b'0') {
                 // Hack to avoid underflows
@@ -508,25 +508,25 @@ impl FromStr for Decimal {
                     exp /= 10;
                     value = value
                         .checked_mul(10)
-                        .ok_or(ParseDecimalError::Overflow)?
+                        .ok_or(PARSE_OVERFLOW)?
                         .checked_add(sign * i128::from(*c - b'0'))
-                        .ok_or(ParseDecimalError::Overflow)?;
+                        .ok_or(PARSE_OVERFLOW)?;
                     input = &input[1..];
                 } else {
-                    return Err(ParseDecimalError::UnexpectedChar);
+                    return Err(PARSE_UNEXPECTED_CHAR);
                 }
             }
             if exp == 0 {
                 // Underflow
-                return Err(ParseDecimalError::Underflow);
+                return Err(PARSE_UNDERFLOW);
             }
         } else if !with_before_dot {
             // It's empty
-            return Err(ParseDecimalError::UnexpectedEnd);
+            return Err(PARSE_UNEXPECTED_END);
         }
 
         Ok(Self {
-            value: value.checked_mul(exp).ok_or(ParseDecimalError::Overflow)?,
+            value: value.checked_mul(exp).ok_or(PARSE_OVERFLOW)?,
         })
     }
 }
@@ -608,8 +608,12 @@ impl fmt::Display for Decimal {
 }
 
 /// An error when parsing a [`Decimal`].
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseDecimalError(#[from] DecimalParseErrorKind);
+
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum ParseDecimalError {
+enum DecimalParseErrorKind {
     #[error("Value overflow")]
     Overflow,
     #[error("Value underflow")]
@@ -620,9 +624,16 @@ pub enum ParseDecimalError {
     UnexpectedEnd,
 }
 
+const PARSE_OVERFLOW: ParseDecimalError = ParseDecimalError(DecimalParseErrorKind::Overflow);
+const PARSE_UNDERFLOW: ParseDecimalError = ParseDecimalError(DecimalParseErrorKind::Underflow);
+const PARSE_UNEXPECTED_CHAR: ParseDecimalError =
+    ParseDecimalError(DecimalParseErrorKind::UnexpectedChar);
+const PARSE_UNEXPECTED_END: ParseDecimalError =
+    ParseDecimalError(DecimalParseErrorKind::UnexpectedEnd);
+
 impl From<TooLargeForDecimalError> for ParseDecimalError {
     fn from(_: TooLargeForDecimalError) -> Self {
-        Self::Overflow
+        Self(DecimalParseErrorKind::Overflow)
     }
 }
 

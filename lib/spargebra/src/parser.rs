@@ -17,13 +17,14 @@ use std::str::FromStr;
 /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
     let mut state = ParserState::from_base_iri(base_iri)?;
-    parser::QueryUnit(query, &mut state).map_err(ParseError::Parser)
+    parser::QueryUnit(query, &mut state).map_err(|e| ParseError(ParseErrorKind::Parser(e)))
 }
 
 /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, ParseError> {
     let mut state = ParserState::from_base_iri(base_iri)?;
-    let operations = parser::UpdateInit(update, &mut state).map_err(ParseError::Parser)?;
+    let operations = parser::UpdateInit(update, &mut state)
+        .map_err(|e| ParseError(ParseErrorKind::Parser(e)))?;
     Ok(Update {
         operations,
         base_iri: state.base_iri,
@@ -32,7 +33,11 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
 
 /// Error returned during SPARQL parsing.
 #[derive(Debug, thiserror::Error)]
-pub enum ParseError {
+#[error(transparent)]
+pub struct ParseError(#[from] ParseErrorKind);
+
+#[derive(Debug, thiserror::Error)]
+enum ParseErrorKind {
     #[error("Invalid SPARQL base IRI provided: {0}")]
     InvalidBaseIri(#[from] IriParseError),
     #[error(transparent)]
@@ -667,7 +672,10 @@ impl ParserState {
     pub(crate) fn from_base_iri(base_iri: Option<&str>) -> Result<Self, ParseError> {
         Ok(Self {
             base_iri: if let Some(base_iri) = base_iri {
-                Some(Iri::parse(base_iri.to_owned()).map_err(ParseError::InvalidBaseIri)?)
+                Some(
+                    Iri::parse(base_iri.to_owned())
+                        .map_err(|e| ParseError(ParseErrorKind::InvalidBaseIri(e)))?,
+                )
             } else {
                 None
             },

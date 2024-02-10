@@ -49,7 +49,7 @@ impl CorruptionError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn new(error: impl Into<Box<dyn Error + Send + Sync + 'static>>) -> Self {
-        CorruptionErrorKind::Other(error.into()).into()
+        Self(CorruptionErrorKind::Other(error.into()))
     }
 
     #[inline]
@@ -67,7 +67,7 @@ impl CorruptionError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        CorruptionErrorKind::Msg(msg.into()).into()
+        Self(CorruptionErrorKind::Msg(msg.into()))
     }
 }
 

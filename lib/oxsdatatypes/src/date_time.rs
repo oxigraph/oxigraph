@@ -2038,8 +2038,12 @@ fn time_on_timeline(props: &DateTimeSevenPropertyModel) -> Option<Decimal> {
 }
 
 /// A parsing error
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseDateTimeError(#[from] ParseDateTimeErrorKind);
+
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum ParseDateTimeError {
+enum ParseDateTimeErrorKind {
     #[error("{day} is not a valid day of {month}")]
     InvalidDayOfMonth { day: u8, month: u8 },
     #[error(transparent)]
@@ -2052,7 +2056,7 @@ pub enum ParseDateTimeError {
 
 impl ParseDateTimeError {
     const fn msg(message: &'static str) -> Self {
-        Self::Message(message)
+        Self(ParseDateTimeErrorKind::Message(message))
     }
 }
 
@@ -2308,7 +2312,7 @@ fn timezone_frag(input: &str) -> Result<(TimezoneOffset, &str), ParseDateTimeErr
 
     Ok((
         TimezoneOffset::new(sign * (hours * 60 + i16::from(minutes)))
-            .map_err(ParseDateTimeError::InvalidTimezone)?,
+            .map_err(|e| ParseDateTimeError(ParseDateTimeErrorKind::InvalidTimezone(e)))?,
         input,
     ))
 }
@@ -2378,7 +2382,9 @@ fn optional_end<T>(
 fn validate_day_of_month(year: Option<i64>, month: u8, day: u8) -> Result<(), ParseDateTimeError> {
     // Constraint: Day-of-month Values
     if day > days_in_month(year, month) {
-        return Err(ParseDateTimeError::InvalidDayOfMonth { day, month });
+        return Err(ParseDateTimeError(
+            ParseDateTimeErrorKind::InvalidDayOfMonth { day, month },
+        ));
     }
     Ok(())
 }
@@ -2389,6 +2395,12 @@ fn validate_day_of_month(year: Option<i64>, month: u8, day: u8) -> Result<(), Pa
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 #[error("overflow during xsd:dateTime computation")]
 pub struct DateTimeOverflowError;
+
+impl From<DateTimeOverflowError> for ParseDateTimeError {
+    fn from(error: DateTimeOverflowError) -> Self {
+        Self(ParseDateTimeErrorKind::Overflow(error))
+    }
+}
 
 /// The value provided as timezone is not valid.
 ///
