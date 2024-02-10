@@ -138,7 +138,7 @@ impl From<EvaluationError> for io::Error {
             EvaluationError::Storage(error) => error.into(),
             EvaluationError::Service(error) => match error.downcast() {
                 Ok(error) => *error,
-                Err(error) => Self::new(io::ErrorKind::Other, error),
+                Err(error) => Self::other(error),
             },
             EvaluationError::GraphAlreadyExists(_)
             | EvaluationError::GraphDoesNotExist(_)

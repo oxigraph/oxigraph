@@ -50,7 +50,7 @@ impl From<StorageError> for io::Error {
         match error {
             StorageError::Io(error) => error,
             StorageError::Corruption(error) => error.into(),
-            StorageError::Other(error) => Self::new(io::ErrorKind::Other, error),
+            StorageError::Other(error) => Self::other(error),
         }
     }
 }
