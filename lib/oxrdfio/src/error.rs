@@ -14,7 +14,7 @@ pub enum ParseError {
 
 impl ParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self::Syntax(SyntaxError(SyntaxErrorKind::Msg { msg }))
+        Self::Syntax(SyntaxError(SyntaxErrorKind::Msg(msg)))
     }
 }
 
@@ -74,8 +74,8 @@ enum SyntaxErrorKind {
     Turtle(#[from] oxttl::SyntaxError),
     #[error(transparent)]
     RdfXml(#[from] oxrdfxml::SyntaxError),
-    #[error("{msg}")]
-    Msg { msg: &'static str },
+    #[error("{0}")]
+    Msg(&'static str),
 }
 
 impl SyntaxError {
@@ -97,7 +97,7 @@ impl SyntaxError {
                     },
                 )
             }
-            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg { .. } => None,
+            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg(_) => None,
         }
     }
 }
@@ -108,7 +108,7 @@ impl From<SyntaxError> for io::Error {
         match error.0 {
             SyntaxErrorKind::Turtle(error) => error.into(),
             SyntaxErrorKind::RdfXml(error) => error.into(),
-            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
+            SyntaxErrorKind::Msg(msg) => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }

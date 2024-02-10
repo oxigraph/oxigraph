@@ -444,12 +444,12 @@ enum TermParseErrorKind {
         error: VariableNameParseError,
         value: String,
     },
-    #[error("{msg}")]
-    Msg { msg: &'static str },
+    #[error("{0}")]
+    Msg(&'static str),
 }
 
 impl TermParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self(TermParseErrorKind::Msg { msg })
+        Self(TermParseErrorKind::Msg(msg))
     }
 }

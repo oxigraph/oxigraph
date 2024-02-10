@@ -62,8 +62,8 @@ pub enum SyntaxErrorKind {
         #[source]
         error: LanguageTagParseError,
     },
-    #[error("{msg}")]
-    Msg { msg: String },
+    #[error("{0}")]
+    Msg(String),
 }
 
 impl SyntaxError {
@@ -71,7 +71,7 @@ impl SyntaxError {
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
         Self {
-            inner: SyntaxErrorKind::Msg { msg: msg.into() },
+            inner: SyntaxErrorKind::Msg(msg.into()),
         }
     }
 }
@@ -89,7 +89,7 @@ impl From<SyntaxError> for io::Error {
                 }
                 _ => Self::new(io::ErrorKind::InvalidData, error),
             },
-            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
+            SyntaxErrorKind::Msg(msg) => Self::new(io::ErrorKind::InvalidData, msg),
             _ => Self::new(io::ErrorKind::InvalidData, error),
         }
     }
