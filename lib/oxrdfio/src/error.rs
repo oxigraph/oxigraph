@@ -14,7 +14,7 @@ pub enum ParseError {
 
 impl ParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self::Syntax(SyntaxError::Msg { msg })
+        Self::Syntax(SyntaxErrorKind::Msg { msg }.into())
     }
 }
 
@@ -50,7 +50,12 @@ impl From<ParseError> for io::Error {
 
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
-pub enum SyntaxError {
+#[error(transparent)]
+pub struct SyntaxError(#[from] SyntaxErrorKind);
+
+/// An error in the syntax of the parsed file.
+#[derive(Debug, thiserror::Error)]
+enum SyntaxErrorKind {
     #[error(transparent)]
     Turtle(#[from] oxttl::SyntaxError),
     #[error(transparent)]
@@ -64,7 +69,7 @@ impl SyntaxError {
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
         match self {
-            Self::Turtle(e) => {
+            SyntaxErrorKind::Turtle(e) => {
                 let location = e.location();
                 Some(
                     TextPosition {
@@ -78,7 +83,7 @@ impl SyntaxError {
                     },
                 )
             }
-            Self::RdfXml(_) | Self::Msg { .. } => None,
+            SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg { .. } => None,
         }
     }
 }
@@ -87,9 +92,9 @@ impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
         match error {
-            SyntaxError::Turtle(error) => error.into(),
-            SyntaxError::RdfXml(error) => error.into(),
-            SyntaxError::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
+            SyntaxErrorKind::Turtle(error) => error.into(),
+            SyntaxErrorKind::RdfXml(error) => error.into(),
+            SyntaxErrorKind::Msg { msg } => Self::new(io::ErrorKind::InvalidData, msg),
         }
     }
 }
