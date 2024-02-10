@@ -622,11 +622,11 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
             '\u{08}' => f.write_str("\\b"),
             '\t' => f.write_str("\\t"),
             '\n' => f.write_str("\\n"),
-            '\u{0c}' => f.write_str("\\f"),
+            '\u{0C}' => f.write_str("\\f"),
             '\r' => f.write_str("\\r"),
             '"' => f.write_str("\\\""),
             '\\' => f.write_str("\\\\"),
-            '\0'..='\u{1f}' | '\u{7f}' => write!(f, "\\u{:04X}", u32::from(c)),
+            '\0'..='\u{1F}' | '\u{7F}' => write!(f, "\\u{:04X}", u32::from(c)),
             _ => f.write_char(c),
         }?;
     }

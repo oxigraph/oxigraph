@@ -256,10 +256,10 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                     if let Some(c) = chars.next() {
                         value.push(match c {
                             't' => '\t',
-                            'b' => '\u{8}',
+                            'b' => '\u{08}',
                             'n' => '\n',
                             'r' => '\r',
-                            'f' => '\u{C}',
+                            'f' => '\u{0C}',
                             '"' => '"',
                             '\'' => '\'',
                             '\\' => '\\',

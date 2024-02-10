@@ -187,7 +187,7 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
         match c {
             '0'..='9'
             | '\u{00B7}'
-            | '\u{00300}'..='\u{036F}'
+            | '\u{0300}'..='\u{036F}'
             | '\u{203F}'..='\u{2040}'
             | '_'
             | 'A'..='Z'

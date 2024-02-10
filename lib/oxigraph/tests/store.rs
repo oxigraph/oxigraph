@@ -78,7 +78,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
         QuadRef::new(
             paris,
             name,
-            LiteralRef::new_language_tagged_literal_unchecked("la ville lumi\u{e8}re", "fr"),
+            LiteralRef::new_language_tagged_literal_unchecked("la ville lumi\u{E8}re", "fr"),
             graph_name,
         ),
         QuadRef::new(paris, country, france, graph_name),
