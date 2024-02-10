@@ -36,7 +36,7 @@ impl Db {
         if self.0.read().unwrap().contains_key(&column_family) {
             Ok(column_family)
         } else {
-            Err(CorruptionError::msg(format!("Column family {name} does not exist")).into())
+            Err(CorruptionError::from_missing_column_family_name(name).into())
         }
     }
 

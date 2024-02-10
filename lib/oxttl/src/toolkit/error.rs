@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::ops::Range;
 use std::{fmt, io};
 
@@ -13,7 +12,7 @@ pub struct TextPosition {
 /// An error in the syntax of the parsed file.
 ///
 /// It is composed of a message and a byte range in the input.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub struct SyntaxError {
     pub(super) location: Range<TextPosition>,
     pub(super) message: String,
@@ -67,8 +66,6 @@ impl fmt::Display for SyntaxError {
     }
 }
 
-impl Error for SyntaxError {}
-
 impl From<SyntaxError> for io::Error {
     #[inline]
     fn from(error: SyntaxError) -> Self {
@@ -79,46 +76,14 @@ impl From<SyntaxError> for io::Error {
 /// A parsing error.
 ///
 /// It is the union of [`SyntaxError`] and [`io::Error`].
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).
-    Io(io::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     /// An error in the file syntax.
-    Syntax(SyntaxError),
-}
-
-impl fmt::Display for ParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => e.fmt(f),
-            Self::Syntax(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for ParseError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(match self {
-            Self::Io(e) => e,
-            Self::Syntax(e) => e,
-        })
-    }
-}
-
-impl From<SyntaxError> for ParseError {
-    #[inline]
-    fn from(error: SyntaxError) -> Self {
-        Self::Syntax(error)
-    }
-}
-
-impl From<io::Error> for ParseError {
-    #[inline]
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
+    #[error(transparent)]
+    Syntax(#[from] SyntaxError),
 }
 
 impl From<ParseError> for io::Error {

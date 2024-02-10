@@ -1,48 +1,23 @@
 use crate::io::{ParseError, RdfFormat};
+use crate::storage::numeric_encoder::EncodedTerm;
 use oxiri::IriParseError;
+use oxrdf::TermRef;
 use std::error::Error;
-use std::{fmt, io};
-use thiserror::Error;
+use std::io;
 
 /// An error related to storage operations (reads, writes...).
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum StorageError {
     /// Error from the OS I/O layer.
-    Io(io::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     /// Error related to data corruption.
-    Corruption(CorruptionError),
+    #[error(transparent)]
+    Corruption(#[from] CorruptionError),
     #[doc(hidden)]
-    Other(Box<dyn Error + Send + Sync + 'static>),
-}
-
-impl fmt::Display for StorageError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => e.fmt(f),
-            Self::Corruption(e) => e.fmt(f),
-            Self::Other(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for StorageError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Corruption(e) => Some(e),
-            Self::Other(e) => Some(e.as_ref()),
-        }
-    }
-}
-
-impl From<io::Error> for StorageError {
-    #[inline]
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
+    #[error("{0}")]
+    Other(#[source] Box<dyn Error + Send + Sync + 'static>),
 }
 
 impl From<StorageError> for io::Error {
@@ -57,59 +32,42 @@ impl From<StorageError> for io::Error {
 }
 
 /// An error return if some content in the database is corrupted.
-#[derive(Debug)]
-pub struct CorruptionError {
-    inner: CorruptionErrorKind,
-}
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct CorruptionError(#[from] CorruptionErrorKind);
 
-#[derive(Debug)]
+/// An error return if some content in the database is corrupted.
+#[derive(Debug, thiserror::Error)]
 enum CorruptionErrorKind {
+    #[error("{0}")]
     Msg(String),
-    Other(Box<dyn Error + Send + Sync + 'static>),
+    #[error("{0}")]
+    Other(#[source] Box<dyn Error + Send + Sync + 'static>),
 }
 
 impl CorruptionError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn new(error: impl Into<Box<dyn Error + Send + Sync + 'static>>) -> Self {
-        Self {
-            inner: CorruptionErrorKind::Other(error.into()),
-        }
+        Self(CorruptionErrorKind::Other(error.into()))
+    }
+
+    #[inline]
+    pub(crate) fn from_encoded_term(encoded: &EncodedTerm, term: &TermRef<'_>) -> Self {
+        // TODO: eventually use a dedicated error enum value
+        Self::msg(format!("Invalid term encoding {encoded:?} for {term}"))
+    }
+
+    #[inline]
+    pub(crate) fn from_missing_column_family_name(name: &'static str) -> Self {
+        // TODO: eventually use a dedicated error enum value
+        Self::msg(format!("Column family {name} does not exist"))
     }
 
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self {
-            inner: CorruptionErrorKind::Msg(msg.into()),
-        }
-    }
-}
-
-impl fmt::Display for CorruptionError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.inner {
-            CorruptionErrorKind::Msg(e) => e.fmt(f),
-            CorruptionErrorKind::Other(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for CorruptionError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.inner {
-            CorruptionErrorKind::Msg(_) => None,
-            CorruptionErrorKind::Other(e) => Some(e.as_ref()),
-        }
-    }
-}
-
-impl From<CorruptionError> for StorageError {
-    #[inline]
-    fn from(error: CorruptionError) -> Self {
-        Self::Corruption(error)
+        Self(CorruptionErrorKind::Msg(msg.into()))
     }
 }
 
@@ -121,55 +79,23 @@ impl From<CorruptionError> for io::Error {
 }
 
 /// An error raised while loading a file into a [`Store`](crate::store::Store).
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LoaderError {
     /// An error raised while reading the file.
-    Parsing(ParseError),
+    #[error(transparent)]
+    Parsing(#[from] ParseError),
     /// An error raised during the insertion in the store.
-    Storage(StorageError),
+    #[error(transparent)]
+    Storage(#[from] StorageError),
     /// The base IRI is invalid.
+    #[error("Invalid base IRI '{iri}': {error}")]
     InvalidBaseIri {
         /// The IRI itself.
         iri: String,
         /// The parsing error.
+        #[source]
         error: IriParseError,
     },
-}
-
-impl fmt::Display for LoaderError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Parsing(e) => e.fmt(f),
-            Self::Storage(e) => e.fmt(f),
-            Self::InvalidBaseIri { iri, error } => write!(f, "Invalid base IRI '{iri}': {error}"),
-        }
-    }
-}
-
-impl Error for LoaderError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Parsing(e) => Some(e),
-            Self::Storage(e) => Some(e),
-            Self::InvalidBaseIri { error, .. } => Some(error),
-        }
-    }
-}
-
-impl From<ParseError> for LoaderError {
-    #[inline]
-    fn from(error: ParseError) -> Self {
-        Self::Parsing(error)
-    }
-}
-
-impl From<StorageError> for LoaderError {
-    #[inline]
-    fn from(error: StorageError) -> Self {
-        Self::Storage(error)
-    }
 }
 
 impl From<LoaderError> for io::Error {
@@ -186,7 +112,7 @@ impl From<LoaderError> for io::Error {
 }
 
 /// An error raised while writing a file from a [`Store`](crate::store::Store).
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SerializerError {
     /// An error raised while writing the content.
     #[error(transparent)]

@@ -575,8 +575,8 @@ impl<R> RdfXmlReader<R> {
                         tag
                     } else {
                         LanguageTag::parse(tag.to_ascii_lowercase())
-                            .map_err(|error| SyntaxError {
-                                inner: SyntaxErrorKind::InvalidLanguageTag { tag, error },
+                            .map_err(|error| {
+                                SyntaxError(SyntaxErrorKind::InvalidLanguageTag { tag, error })
                             })?
                             .into_inner()
                     });
@@ -588,9 +588,7 @@ impl<R> RdfXmlReader<R> {
                         } else {
                             Iri::parse(iri.clone())
                         }
-                        .map_err(|error| SyntaxError {
-                            inner: SyntaxErrorKind::InvalidIri { iri, error },
-                        })?,
+                        .map_err(|error| SyntaxError(SyntaxErrorKind::InvalidIri { iri, error }))?,
                     )
                 } else {
                     // We ignore other xml attributes
@@ -1169,11 +1167,11 @@ impl<R> RdfXmlReader<R> {
                 } else {
                     base_iri.resolve(&relative_iri)
                 }
-                .map_err(|error| SyntaxError {
-                    inner: SyntaxErrorKind::InvalidIri {
+                .map_err(|error| {
+                    SyntaxError(SyntaxErrorKind::InvalidIri {
                         iri: relative_iri,
                         error,
-                    },
+                    })
                 })?
                 .into_inner(),
             ))
@@ -1187,11 +1185,11 @@ impl<R> RdfXmlReader<R> {
             relative_iri
         } else {
             Iri::parse(relative_iri.clone())
-                .map_err(|error| SyntaxError {
-                    inner: SyntaxErrorKind::InvalidIri {
+                .map_err(|error| {
+                    SyntaxError(SyntaxErrorKind::InvalidIri {
                         iri: relative_iri,
                         error,
-                    },
+                    })
                 })?
                 .into_inner()
         }))

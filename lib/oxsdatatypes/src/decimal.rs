@@ -1,5 +1,4 @@
 use crate::{Boolean, Double, Float, Integer, TooLargeForIntegerError};
-use std::error::Error;
 use std::fmt;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -609,66 +608,41 @@ impl fmt::Display for Decimal {
 }
 
 /// An error when parsing a [`Decimal`].
-#[derive(Debug, Clone)]
-pub struct ParseDecimalError {
-    kind: DecimalParseErrorKind,
-}
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseDecimalError(#[from] DecimalParseErrorKind);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 enum DecimalParseErrorKind {
+    #[error("Value overflow")]
     Overflow,
+    #[error("Value underflow")]
     Underflow,
+    #[error("Unexpected character")]
     UnexpectedChar,
+    #[error("Unexpected end of string")]
     UnexpectedEnd,
 }
 
-const PARSE_OVERFLOW: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::Overflow,
-};
-const PARSE_UNDERFLOW: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::Underflow,
-};
-const PARSE_UNEXPECTED_CHAR: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::UnexpectedChar,
-};
-const PARSE_UNEXPECTED_END: ParseDecimalError = ParseDecimalError {
-    kind: DecimalParseErrorKind::UnexpectedEnd,
-};
-
-impl fmt::Display for ParseDecimalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            DecimalParseErrorKind::Overflow => f.write_str("Value overflow"),
-            DecimalParseErrorKind::Underflow => f.write_str("Value underflow"),
-            DecimalParseErrorKind::UnexpectedChar => f.write_str("Unexpected character"),
-            DecimalParseErrorKind::UnexpectedEnd => f.write_str("Unexpected end of string"),
-        }
-    }
-}
-
-impl Error for ParseDecimalError {}
+const PARSE_OVERFLOW: ParseDecimalError = ParseDecimalError(DecimalParseErrorKind::Overflow);
+const PARSE_UNDERFLOW: ParseDecimalError = ParseDecimalError(DecimalParseErrorKind::Underflow);
+const PARSE_UNEXPECTED_CHAR: ParseDecimalError =
+    ParseDecimalError(DecimalParseErrorKind::UnexpectedChar);
+const PARSE_UNEXPECTED_END: ParseDecimalError =
+    ParseDecimalError(DecimalParseErrorKind::UnexpectedEnd);
 
 impl From<TooLargeForDecimalError> for ParseDecimalError {
     fn from(_: TooLargeForDecimalError) -> Self {
-        Self {
-            kind: DecimalParseErrorKind::Overflow,
-        }
+        Self(DecimalParseErrorKind::Overflow)
     }
 }
 
 /// The input is too large to fit into a [`Decimal`].
 ///
 /// Matches XPath [`FOCA0001` error](https://www.w3.org/TR/xpath-functions-31/#ERRFOCA0001).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("Value too large for xsd:decimal internal representation")]
 pub struct TooLargeForDecimalError;
-
-impl fmt::Display for TooLargeForDecimalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Value too large for xsd:decimal internal representation")
-    }
-}
-
-impl Error for TooLargeForDecimalError {}
 
 #[cfg(test)]
 mod tests {

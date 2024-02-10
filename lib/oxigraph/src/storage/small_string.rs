@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 use std::cmp::Ordering;
-use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::str::{FromStr, Utf8Error};
@@ -169,31 +168,10 @@ impl<'a> TryFrom<&'a str> for SmallString {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum BadSmallStringError {
+    #[error("small strings could only contain at most 15 characters, found {0}")]
     TooLong(usize),
-    BadUtf8(Utf8Error),
-}
-
-impl fmt::Display for BadSmallStringError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooLong(v) => write!(
-                f,
-                "small strings could only contain at most 15 characters, found {v}"
-            ),
-            Self::BadUtf8(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for BadSmallStringError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::TooLong(_) => None,
-            Self::BadUtf8(e) => Some(e),
-        }
-    }
+    #[error(transparent)]
+    BadUtf8(#[from] Utf8Error),
 }

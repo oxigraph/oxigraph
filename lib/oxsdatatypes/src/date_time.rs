@@ -2,7 +2,6 @@
 
 use crate::{DayTimeDuration, Decimal, Duration, YearMonthDuration};
 use std::cmp::{min, Ordering};
-use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -2039,41 +2038,27 @@ fn time_on_timeline(props: &DateTimeSevenPropertyModel) -> Option<Decimal> {
 }
 
 /// A parsing error
-#[derive(Debug, Clone)]
-pub struct ParseDateTimeError {
-    kind: ParseDateTimeErrorKind,
-}
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseDateTimeError(#[from] ParseDateTimeErrorKind);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 enum ParseDateTimeErrorKind {
+    #[error("{day} is not a valid day of {month}")]
     InvalidDayOfMonth { day: u8, month: u8 },
-    Overflow(DateTimeOverflowError),
+    #[error(transparent)]
+    Overflow(#[from] DateTimeOverflowError),
+    #[error(transparent)]
     InvalidTimezone(InvalidTimezoneError),
+    #[error("{0}")]
     Message(&'static str),
-}
-
-impl fmt::Display for ParseDateTimeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            ParseDateTimeErrorKind::InvalidDayOfMonth { day, month } => {
-                write!(f, "{day} is not a valid day of {month}")
-            }
-            ParseDateTimeErrorKind::Overflow(error) => error.fmt(f),
-            ParseDateTimeErrorKind::InvalidTimezone(error) => error.fmt(f),
-            ParseDateTimeErrorKind::Message(msg) => f.write_str(msg),
-        }
-    }
 }
 
 impl ParseDateTimeError {
     const fn msg(message: &'static str) -> Self {
-        Self {
-            kind: ParseDateTimeErrorKind::Message(message),
-        }
+        Self(ParseDateTimeErrorKind::Message(message))
     }
 }
-
-impl Error for ParseDateTimeError {}
 
 // [16]   dateTimeLexicalRep ::= yearFrag '-' monthFrag '-' dayFrag 'T' ((hourFrag ':' minuteFrag ':' secondFrag) | endOfDayFrag) timezoneFrag?
 fn date_time_lexical_rep(input: &str) -> Result<(DateTime, &str), ParseDateTimeError> {
@@ -2326,11 +2311,8 @@ fn timezone_frag(input: &str) -> Result<(TimezoneOffset, &str), ParseDateTimeErr
     }
 
     Ok((
-        TimezoneOffset::new(sign * (hours * 60 + i16::from(minutes))).map_err(|e| {
-            ParseDateTimeError {
-                kind: ParseDateTimeErrorKind::InvalidTimezone(e),
-            }
-        })?,
+        TimezoneOffset::new(sign * (hours * 60 + i16::from(minutes)))
+            .map_err(|e| ParseDateTimeError(ParseDateTimeErrorKind::InvalidTimezone(e)))?,
         input,
     ))
 }
@@ -2400,9 +2382,9 @@ fn optional_end<T>(
 fn validate_day_of_month(year: Option<i64>, month: u8, day: u8) -> Result<(), ParseDateTimeError> {
     // Constraint: Day-of-month Values
     if day > days_in_month(year, month) {
-        return Err(ParseDateTimeError {
-            kind: ParseDateTimeErrorKind::InvalidDayOfMonth { day, month },
-        });
+        return Err(ParseDateTimeError(
+            ParseDateTimeErrorKind::InvalidDayOfMonth { day, month },
+        ));
     }
     Ok(())
 }
@@ -2410,51 +2392,33 @@ fn validate_day_of_month(year: Option<i64>, month: u8, day: u8) -> Result<(), Pa
 /// An overflow during [`DateTime`]-related operations.
 ///
 /// Matches XPath [`FODT0001` error](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0001).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("overflow during xsd:dateTime computation")]
 pub struct DateTimeOverflowError;
-
-impl fmt::Display for DateTimeOverflowError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("overflow during xsd:dateTime computation")
-    }
-}
-
-impl Error for DateTimeOverflowError {}
 
 impl From<DateTimeOverflowError> for ParseDateTimeError {
     fn from(error: DateTimeOverflowError) -> Self {
-        Self {
-            kind: ParseDateTimeErrorKind::Overflow(error),
-        }
+        Self(ParseDateTimeErrorKind::Overflow(error))
     }
 }
 
 /// The value provided as timezone is not valid.
 ///
 /// Matches XPath [`FODT0003` error](https://www.w3.org/TR/xpath-functions-31/#ERRFODT0003).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("invalid timezone offset {}:{}",
+        self.offset_in_minutes / 60,
+        self.offset_in_minutes.abs() % 60)]
 pub struct InvalidTimezoneError {
     offset_in_minutes: i64,
 }
-
-impl fmt::Display for InvalidTimezoneError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid timezone offset {}:{}",
-            self.offset_in_minutes / 60,
-            self.offset_in_minutes.abs() % 60
-        )
-    }
-}
-
-impl Error for InvalidTimezoneError {}
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn from_str() -> Result<(), ParseDateTimeError> {

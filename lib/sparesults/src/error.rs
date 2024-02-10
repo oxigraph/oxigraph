@@ -1,50 +1,17 @@
 use oxrdf::TermParseError;
-use std::error::Error;
+use std::io;
 use std::ops::Range;
 use std::sync::Arc;
-use std::{fmt, io};
 
 /// Error returned during SPARQL result formats format parsing.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     /// I/O error during parsing (file not found...).
-    Io(io::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     /// An error in the file syntax.
-    Syntax(SyntaxError),
-}
-
-impl fmt::Display for ParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => e.fmt(f),
-            Self::Syntax(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for ParseError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Syntax(e) => Some(e),
-        }
-    }
-}
-
-impl From<io::Error> for ParseError {
-    #[inline]
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
-    }
-}
-
-impl From<SyntaxError> for ParseError {
-    #[inline]
-    fn from(error: SyntaxError) -> Self {
-        Self::Syntax(error)
-    }
+    #[error(transparent)]
+    Syntax(#[from] SyntaxError),
 }
 
 impl From<ParseError> for io::Error {
@@ -81,20 +48,27 @@ impl From<quick_xml::Error> for ParseError {
 }
 
 /// An error in the syntax of the parsed file.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
 pub struct SyntaxError {
+    #[from]
     pub(crate) inner: SyntaxErrorKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum SyntaxErrorKind {
-    Json(json_event_parser::SyntaxError),
-    Xml(quick_xml::Error),
+    #[error(transparent)]
+    Json(#[from] json_event_parser::SyntaxError),
+    #[error(transparent)]
+    Xml(#[from] quick_xml::Error),
+    #[error("Error {error} on '{term}' in line {}", location.start.line + 1)]
     Term {
+        #[source]
         error: TermParseError,
         term: String,
         location: Range<TextPosition>,
     },
+    #[error("{msg}")]
     Msg {
         msg: String,
         location: Option<Range<TextPosition>>,
@@ -145,34 +119,6 @@ impl SyntaxError {
             SyntaxErrorKind::Term { location, .. } => Some(location.clone()),
             SyntaxErrorKind::Msg { location, .. } => location.clone(),
             SyntaxErrorKind::Xml(_) => None,
-        }
-    }
-}
-
-impl fmt::Display for SyntaxError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.inner {
-            SyntaxErrorKind::Json(e) => e.fmt(f),
-            SyntaxErrorKind::Xml(e) => e.fmt(f),
-            SyntaxErrorKind::Term {
-                error,
-                term,
-                location,
-            } => write!(f, "{error} on '{term}' in line {}", location.start.line + 1),
-            SyntaxErrorKind::Msg { msg, .. } => f.write_str(msg),
-        }
-    }
-}
-
-impl Error for SyntaxError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.inner {
-            SyntaxErrorKind::Json(e) => Some(e),
-            SyntaxErrorKind::Xml(e) => Some(e),
-            SyntaxErrorKind::Term { error, .. } => Some(error),
-            SyntaxErrorKind::Msg { .. } => None,
         }
     }
 }

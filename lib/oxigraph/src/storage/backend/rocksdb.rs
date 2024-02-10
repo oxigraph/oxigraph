@@ -548,7 +548,7 @@ impl Db {
                 return Ok(ColumnFamily(*cf_handle));
             }
         }
-        Err(CorruptionError::msg(format!("Column family {name} does not exist")).into())
+        Err(CorruptionError::from_missing_column_family_name(name).into())
     }
 
     #[must_use]
@@ -1314,6 +1314,8 @@ impl SstFileWriter {
     }
 }
 
+#[derive(thiserror::Error)]
+#[error("{}", self.message())]
 struct ErrorStatus(rocksdb_status_t);
 
 unsafe impl Send for ErrorStatus {}
@@ -1351,14 +1353,6 @@ impl fmt::Debug for ErrorStatus {
             .finish()
     }
 }
-
-impl fmt::Display for ErrorStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.message())
-    }
-}
-
-impl Error for ErrorStatus {}
 
 impl From<ErrorStatus> for StorageError {
     fn from(status: ErrorStatus) -> Self {

@@ -9,26 +9,22 @@ use oxrdf::vocab::{rdf, xsd};
 use peg::parser;
 use peg::str::LineCol;
 use rand::random;
+use std::char;
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
 use std::mem::take;
 use std::str::FromStr;
-use std::{char, fmt};
 
 /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, ParseError> {
     let mut state = ParserState::from_base_iri(base_iri)?;
-    parser::QueryUnit(query, &mut state).map_err(|e| ParseError {
-        inner: ParseErrorKind::Parser(e),
-    })
+    parser::QueryUnit(query, &mut state).map_err(|e| ParseError(ParseErrorKind::Parser(e)))
 }
 
 /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
 pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, ParseError> {
     let mut state = ParserState::from_base_iri(base_iri)?;
-    let operations = parser::UpdateInit(update, &mut state).map_err(|e| ParseError {
-        inner: ParseErrorKind::Parser(e),
-    })?;
+    let operations = parser::UpdateInit(update, &mut state)
+        .map_err(|e| ParseError(ParseErrorKind::Parser(e)))?;
     Ok(Update {
         operations,
         base_iri: state.base_iri,
@@ -36,37 +32,16 @@ pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, Pars
 }
 
 /// Error returned during SPARQL parsing.
-#[derive(Debug)]
-pub struct ParseError {
-    inner: ParseErrorKind,
-}
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseError(#[from] ParseErrorKind);
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 enum ParseErrorKind {
-    InvalidBaseIri(IriParseError),
-    Parser(peg::error::ParseError<LineCol>),
-}
-
-impl fmt::Display for ParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.inner {
-            ParseErrorKind::InvalidBaseIri(e) => {
-                write!(f, "Invalid SPARQL base IRI provided: {e}")
-            }
-            ParseErrorKind::Parser(e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for ParseError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.inner {
-            ParseErrorKind::InvalidBaseIri(e) => Some(e),
-            ParseErrorKind::Parser(e) => Some(e),
-        }
-    }
+    #[error("Invalid SPARQL base IRI provided: {0}")]
+    InvalidBaseIri(#[from] IriParseError),
+    #[error(transparent)]
+    Parser(#[from] peg::error::ParseError<LineCol>),
 }
 
 struct AnnotatedTerm {
@@ -697,9 +672,10 @@ impl ParserState {
     pub(crate) fn from_base_iri(base_iri: Option<&str>) -> Result<Self, ParseError> {
         Ok(Self {
             base_iri: if let Some(base_iri) = base_iri {
-                Some(Iri::parse(base_iri.to_owned()).map_err(|e| ParseError {
-                    inner: ParseErrorKind::InvalidBaseIri(e),
-                })?)
+                Some(
+                    Iri::parse(base_iri.to_owned())
+                        .map_err(|e| ParseError(ParseErrorKind::InvalidBaseIri(e)))?,
+                )
             } else {
                 None
             },
