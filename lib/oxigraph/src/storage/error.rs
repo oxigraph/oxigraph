@@ -33,7 +33,12 @@ impl From<StorageError> for io::Error {
 
 /// An error return if some content in the database is corrupted.
 #[derive(Debug, thiserror::Error)]
-pub enum CorruptionError {
+#[error(transparent)]
+pub struct CorruptionError(#[from] CorruptionErrorKind);
+
+/// An error return if some content in the database is corrupted.
+#[derive(Debug, thiserror::Error)]
+enum CorruptionErrorKind {
     #[error("{0}")]
     Msg(String),
     #[error("{0}")]
@@ -44,7 +49,7 @@ impl CorruptionError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn new(error: impl Into<Box<dyn Error + Send + Sync + 'static>>) -> Self {
-        Self::Other(error.into())
+        CorruptionErrorKind::Other(error.into()).into()
     }
 
     #[inline]
@@ -62,7 +67,7 @@ impl CorruptionError {
     /// Builds an error from a printable error message.
     #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
-        Self::Msg(msg.into())
+        CorruptionErrorKind::Msg(msg.into()).into()
     }
 }
 
