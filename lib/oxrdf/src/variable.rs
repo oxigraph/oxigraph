@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::error::Error;
 use std::fmt;
 
 /// A [SPARQL query](https://www.w3.org/TR/sparql11-query/) owned variable.
@@ -212,14 +211,6 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
 }
 
 /// An error raised during [`Variable`] name validation.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("The variable name is invalid")]
 pub struct VariableNameParseError;
-
-impl fmt::Display for VariableNameParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("The variable name is invalid")
-    }
-}
-
-impl Error for VariableNameParseError {}

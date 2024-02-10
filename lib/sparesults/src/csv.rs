@@ -1,6 +1,6 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
-use crate::error::{ParseError, SyntaxError, SyntaxErrorKind, TextPosition};
+use crate::error::{ParseError, SyntaxError, TextPosition};
 use memchr::memchr;
 use oxrdf::vocab::xsd;
 use oxrdf::*;
@@ -508,23 +508,21 @@ impl<R: Read> TsvSolutionsReader<R> {
                             .sum::<usize>();
                         let start_position_bytes =
                             line.split('\t').take(i).map(|c| c.len() + 1).sum::<usize>();
-                        SyntaxError {
-                            inner: SyntaxErrorKind::Term {
-                                error: e,
-                                term: v.into(),
-                                location: TextPosition {
-                                    line: self.reader.line_count - 1,
-                                    column: start_position_char.try_into().unwrap(),
-                                    offset: self.reader.last_line_start
-                                        + u64::try_from(start_position_bytes).unwrap(),
-                                }..TextPosition {
-                                    line: self.reader.line_count - 1,
-                                    column: (start_position_char + v.chars().count())
-                                        .try_into()
-                                        .unwrap(),
-                                    offset: self.reader.last_line_start
-                                        + u64::try_from(start_position_bytes + v.len()).unwrap(),
-                                },
+                        SyntaxError::Term {
+                            error: e,
+                            term: v.into(),
+                            location: TextPosition {
+                                line: self.reader.line_count - 1,
+                                column: start_position_char.try_into().unwrap(),
+                                offset: self.reader.last_line_start
+                                    + u64::try_from(start_position_bytes).unwrap(),
+                            }..TextPosition {
+                                line: self.reader.line_count - 1,
+                                column: (start_position_char + v.chars().count())
+                                    .try_into()
+                                    .unwrap(),
+                                offset: self.reader.last_line_start
+                                    + u64::try_from(start_position_bytes + v.len()).unwrap(),
                             },
                         }
                     })?))

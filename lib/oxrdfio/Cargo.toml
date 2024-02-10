@@ -22,6 +22,7 @@ rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
 oxrdf.workspace = true
 oxrdfxml.workspace = true
 oxttl.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }
 
 [dev-dependencies]

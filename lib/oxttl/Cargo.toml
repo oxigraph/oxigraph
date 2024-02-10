@@ -23,6 +23,7 @@ memchr.workspace = true
 oxrdf.workspace = true
 oxiri.workspace = true
 oxilangtag.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }
 
 [dev-dependencies]

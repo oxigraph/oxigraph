@@ -1,5 +1,4 @@
 use rand::random;
-use std::error::Error;
 use std::io::Write;
 use std::{fmt, str};
 
@@ -345,17 +344,9 @@ fn to_integer_id(id: &str) -> Option<u128> {
 }
 
 /// An error raised during [`BlankNode`] IDs validation.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("The blank node identifier is invalid")]
 pub struct BlankNodeIdParseError;
-
-impl fmt::Display for BlankNodeIdParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("The blank node identifier is invalid")
-    }
-}
-
-impl Error for BlankNodeIdParseError {}
 
 #[cfg(test)]
 mod tests {

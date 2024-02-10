@@ -22,6 +22,7 @@ oxilangtag.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
 quick-xml.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }
 
 [dev-dependencies]

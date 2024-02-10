@@ -5,125 +5,57 @@ use crate::sparql::ParseError;
 use crate::storage::StorageError;
 use std::convert::Infallible;
 use std::error::Error;
-use std::{fmt, io};
+use std::io;
 
 /// A SPARQL evaluation error.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum EvaluationError {
     /// An error in SPARQL parsing.
-    Parsing(ParseError),
+    #[error(transparent)]
+    Parsing(#[from] ParseError),
     /// An error from the storage.
-    Storage(StorageError),
+    #[error(transparent)]
+    Storage(#[from] StorageError),
     /// An error while parsing an external RDF file.
-    GraphParsing(RdfParseError),
+    #[error(transparent)]
+    GraphParsing(#[from] RdfParseError),
     /// An error while parsing an external result file (likely from a federated query).
-    ResultsParsing(ResultsParseError),
+    #[error(transparent)]
+    ResultsParsing(#[from] ResultsParseError),
     /// An error returned during results serialization.
-    ResultsSerialization(io::Error),
+    #[error(transparent)]
+    ResultsSerialization(#[from] io::Error),
     /// Error during `SERVICE` evaluation
-    Service(Box<dyn Error + Send + Sync + 'static>),
+    #[error("{0}")]
+    Service(#[source] Box<dyn Error + Send + Sync + 'static>),
     /// Error when `CREATE` tries to create an already existing graph
+    #[error("The graph {0} already exists")]
     GraphAlreadyExists(NamedNode),
     /// Error when `DROP` or `CLEAR` tries to remove a not existing graph
+    #[error("The graph {0} does not exist")]
     GraphDoesNotExist(NamedNode),
     /// The variable storing the `SERVICE` name is unbound
+    #[error("The variable encoding the service name is unbound")]
     UnboundService,
     /// The given `SERVICE` is not supported
+    #[error("The service {0} is not supported")]
     UnsupportedService(NamedNode),
     /// The given content media type returned from an HTTP response is not supported (`SERVICE` and `LOAD`)
+    #[error("The content media type {0} is not supported")]
     UnsupportedContentType(String),
     /// The `SERVICE` call has not returns solutions
+    #[error("The service is not returning solutions but a boolean or a graph")]
     ServiceDoesNotReturnSolutions,
     /// The results are not a RDF graph
+    #[error("The query results are not a RDF graph")]
     NotAGraph,
-}
-
-impl fmt::Display for EvaluationError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Parsing(error) => error.fmt(f),
-            Self::Storage(error) => error.fmt(f),
-            Self::GraphParsing(error) => error.fmt(f),
-            Self::ResultsParsing(error) => error.fmt(f),
-            Self::ResultsSerialization(error) => error.fmt(f),
-            Self::Service(error) => error.fmt(f),
-            Self::GraphAlreadyExists(graph) => write!(f, "The graph {graph} already exists"),
-            Self::GraphDoesNotExist(graph) => write!(f, "The graph {graph} does not exist"),
-            Self::UnboundService => {
-                f.write_str("The variable encoding the service name is unbound")
-            }
-            Self::UnsupportedService(service) => {
-                write!(f, "The service {service} is not supported")
-            }
-            Self::UnsupportedContentType(content_type) => {
-                write!(f, "The content media type {content_type} is not supported")
-            }
-            Self::ServiceDoesNotReturnSolutions => {
-                f.write_str("The service is not returning solutions but a boolean or a graph")
-            }
-            Self::NotAGraph => f.write_str("The query results are not a RDF graph"),
-        }
-    }
-}
-
-impl Error for EvaluationError {
-    #[inline]
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Parsing(e) => Some(e),
-            Self::Storage(e) => Some(e),
-            Self::GraphParsing(e) => Some(e),
-            Self::ResultsParsing(e) => Some(e),
-            Self::ResultsSerialization(e) => Some(e),
-            Self::Service(e) => {
-                let e = Box::as_ref(e);
-                Some(e)
-            }
-            Self::GraphAlreadyExists(_)
-            | Self::GraphDoesNotExist(_)
-            | Self::UnboundService
-            | Self::UnsupportedService(_)
-            | Self::UnsupportedContentType(_)
-            | Self::ServiceDoesNotReturnSolutions
-            | Self::NotAGraph => None,
-        }
-    }
 }
 
 impl From<Infallible> for EvaluationError {
     #[inline]
     fn from(error: Infallible) -> Self {
         match error {}
-    }
-}
-
-impl From<ParseError> for EvaluationError {
-    #[inline]
-    fn from(error: ParseError) -> Self {
-        Self::Parsing(error)
-    }
-}
-
-impl From<StorageError> for EvaluationError {
-    #[inline]
-    fn from(error: StorageError) -> Self {
-        Self::Storage(error)
-    }
-}
-
-impl From<RdfParseError> for EvaluationError {
-    #[inline]
-    fn from(error: RdfParseError) -> Self {
-        Self::GraphParsing(error)
-    }
-}
-
-impl From<ResultsParseError> for EvaluationError {
-    #[inline]
-    fn from(error: ResultsParseError) -> Self {
-        Self::ResultsParsing(error)
     }
 }
 

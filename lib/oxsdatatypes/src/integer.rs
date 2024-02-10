@@ -1,5 +1,4 @@
 use crate::{Boolean, Decimal, Double, Float};
-use std::error::Error;
 use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
@@ -264,16 +263,9 @@ impl TryFrom<Double> for Integer {
 /// The input is too large to fit into an [`Integer`].
 ///
 /// Matches XPath [`FOCA0003` error](https://www.w3.org/TR/xpath-functions-31/#ERRFOCA0003).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("Value too large for xsd:integer internal representation")]
 pub struct TooLargeForIntegerError;
-
-impl fmt::Display for TooLargeForIntegerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Value too large for xsd:integer internal representation")
-    }
-}
-
-impl Error for TooLargeForIntegerError {}
 
 #[cfg(test)]
 mod tests {

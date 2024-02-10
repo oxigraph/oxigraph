@@ -10,6 +10,7 @@ mod decimal;
 mod double;
 mod duration;
 mod float;
+mod geopoint;
 mod integer;
 
 pub use self::boolean::Boolean;
@@ -24,4 +25,5 @@ pub use self::duration::{
     ParseDurationError, YearMonthDuration,
 };
 pub use self::float::Float;
+pub use self::geopoint::{GeoPoint, GeoPointError};
 pub use self::integer::{Integer, TooLargeForIntegerError};
