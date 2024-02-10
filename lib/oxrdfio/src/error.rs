@@ -18,6 +18,21 @@ impl ParseError {
     }
 }
 
+// impl From<oxttl::SyntaxError> for SyntaxError {
+//     #[inline]
+//     fn from(error: oxttl::SyntaxError) -> Self {
+//         Self(SyntaxErrorKind::Turtle(error))
+//     }
+// }
+//
+// impl From<oxrdfxml::SyntaxError> for SyntaxError {
+//     #[inline]
+//     fn from(error: oxrdfxml::SyntaxError) -> Self {
+//         Self(SyntaxErrorKind::RdfXml(error))
+//     }
+// }
+//
+
 impl From<oxttl::ParseError> for ParseError {
     #[inline]
     fn from(error: oxttl::ParseError) -> Self {
