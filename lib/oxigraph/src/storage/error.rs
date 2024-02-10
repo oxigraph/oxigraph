@@ -55,13 +55,13 @@ impl CorruptionError {
     #[inline]
     pub(crate) fn from_encoded_term(encoded: &EncodedTerm, term: &TermRef<'_>) -> Self {
         // TODO: eventually use a dedicated error enum value
-        Self::new(format!("Invalid term encoding {encoded:?} for {term}"))
+        Self::msg(format!("Invalid term encoding {encoded:?} for {term}"))
     }
 
     #[inline]
     pub(crate) fn from_missing_column_family_name(name: &'static str) -> Self {
         // TODO: eventually use a dedicated error enum value
-        Self::new(format!("Column family {name} does not exist"))
+        Self::msg(format!("Column family {name} does not exist"))
     }
 
     /// Builds an error from a printable error message.
