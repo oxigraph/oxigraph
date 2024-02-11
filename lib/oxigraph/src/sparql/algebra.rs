@@ -130,21 +130,7 @@ impl Update {
         update: &str,
         base_iri: Option<&str>,
     ) -> Result<Self, spargebra::SparqlSyntaxError> {
-        let update = spargebra::Update::parse(update, base_iri)?;
-        Ok(Self {
-            using_datasets: update
-                .operations
-                .iter()
-                .map(|operation| {
-                    if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
-                        Some(QueryDataset::from_algebra(using))
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            inner: update,
-        })
+        Ok(spargebra::Update::parse(update, base_iri)?.into())
     }
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
@@ -185,6 +171,25 @@ impl TryFrom<&String> for Update {
 
     fn try_from(update: &String) -> Result<Self, Self::Error> {
         Self::from_str(update)
+    }
+}
+
+impl From<spargebra::Update> for Update {
+    fn from(update: spargebra::Update) -> Self {
+        Self {
+            using_datasets: update
+                .operations
+                .iter()
+                .map(|operation| {
+                    if let GraphUpdateOperation::DeleteInsert { using, .. } = operation {
+                        Some(QueryDataset::from_algebra(using))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            inner: update,
+        }
     }
 }
 
