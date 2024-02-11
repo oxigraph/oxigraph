@@ -30,6 +30,8 @@ Tracker = "https://github.com/oxigraph/oxigraph/issues"
 
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.lint]
 select = [
     "ARG",
     "B",
