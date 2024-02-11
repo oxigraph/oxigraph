@@ -20,9 +20,10 @@ async-tokio = ["dep:tokio"]
 
 [dependencies]
 memchr.workspace = true
-oxrdf.workspace = true
-oxiri.workspace = true
 oxilangtag.workspace = true
+oxiri.workspace = true
+oxrdf.workspace = true
+parse-display.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }
 

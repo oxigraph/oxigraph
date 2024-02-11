@@ -91,6 +91,30 @@ impl fmt::Display for PropertyPathExpression {
     }
 }
 
+/// The `display(with = ...)` will not work until this PR lands:
+///    https://github.com/frozenlib/parse-display/issues/36#issuecomment-1925367731
+///
+#[cfg(skip)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, parse_display::Display)]
+pub enum PropertyPathExpression {
+    #[display("{0}")]
+    NamedNode(NamedNode),
+    #[display("^({0})")]
+    Reverse(Box<Self>),
+    #[display("({0} / {1})")]
+    Sequence(Box<Self>, Box<Self>),
+    #[display("({0} | {1})")]
+    Alternative(Box<Self>, Box<Self>),
+    #[display("({0})*")]
+    ZeroOrMore(Box<Self>),
+    #[display("({0})+")]
+    OneOrMore(Box<Self>),
+    #[display("({0})?")]
+    ZeroOrOne(Box<Self>),
+    #[display("!({0})")]
+    NegatedPropertySet(#[display(with = delimiter(" | "))] Vec<NamedNode>),
+}
+
 impl From<NamedNode> for PropertyPathExpression {
     fn from(p: NamedNode) -> Self {
         Self::NamedNode(p)
@@ -318,7 +342,8 @@ fn write_arg_list(
 }
 
 /// A function name.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, parse_display::Display)]
+#[display(style = "UPPERCASE")]
 pub enum Function {
     Str,
     Lang,
@@ -337,6 +362,7 @@ pub enum Function {
     Replace,
     UCase,
     LCase,
+    #[display("ENCODE_FOR_URI")]
     EncodeForUri,
     Contains,
     StrStarts,
@@ -361,9 +387,13 @@ pub enum Function {
     Sha512,
     StrLang,
     StrDt,
+    #[display("isIRI")]
     IsIri,
+    #[display("isBLANK")]
     IsBlank,
+    #[display("isLITERAL")]
     IsLiteral,
+    #[display("isNUMERIC")]
     IsNumeric,
     Regex,
     #[cfg(feature = "rdf-star")]
@@ -375,9 +405,11 @@ pub enum Function {
     #[cfg(feature = "rdf-star")]
     Object,
     #[cfg(feature = "rdf-star")]
+    #[display("isTRIPLE")]
     IsTriple,
     #[cfg(feature = "sep-0002")]
     Adjust,
+    #[display("{0}")]
     Custom(NamedNode),
 }
 
@@ -448,69 +480,74 @@ impl Function {
     }
 }
 
-impl fmt::Display for Function {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Str => f.write_str("STR"),
-            Self::Lang => f.write_str("LANG"),
-            Self::LangMatches => f.write_str("LANGMATCHES"),
-            Self::Datatype => f.write_str("DATATYPE"),
-            Self::Iri => f.write_str("IRI"),
-            Self::BNode => f.write_str("BNODE"),
-            Self::Rand => f.write_str("RAND"),
-            Self::Abs => f.write_str("ABS"),
-            Self::Ceil => f.write_str("CEIL"),
-            Self::Floor => f.write_str("FLOOR"),
-            Self::Round => f.write_str("ROUND"),
-            Self::Concat => f.write_str("CONCAT"),
-            Self::SubStr => f.write_str("SUBSTR"),
-            Self::StrLen => f.write_str("STRLEN"),
-            Self::Replace => f.write_str("REPLACE"),
-            Self::UCase => f.write_str("UCASE"),
-            Self::LCase => f.write_str("LCASE"),
-            Self::EncodeForUri => f.write_str("ENCODE_FOR_URI"),
-            Self::Contains => f.write_str("CONTAINS"),
-            Self::StrStarts => f.write_str("STRSTARTS"),
-            Self::StrEnds => f.write_str("STRENDS"),
-            Self::StrBefore => f.write_str("STRBEFORE"),
-            Self::StrAfter => f.write_str("STRAFTER"),
-            Self::Year => f.write_str("YEAR"),
-            Self::Month => f.write_str("MONTH"),
-            Self::Day => f.write_str("DAY"),
-            Self::Hours => f.write_str("HOURS"),
-            Self::Minutes => f.write_str("MINUTES"),
-            Self::Seconds => f.write_str("SECONDS"),
-            Self::Timezone => f.write_str("TIMEZONE"),
-            Self::Tz => f.write_str("TZ"),
-            Self::Now => f.write_str("NOW"),
-            Self::Uuid => f.write_str("UUID"),
-            Self::StrUuid => f.write_str("STRUUID"),
-            Self::Md5 => f.write_str("MD5"),
-            Self::Sha1 => f.write_str("SHA1"),
-            Self::Sha256 => f.write_str("SHA256"),
-            Self::Sha384 => f.write_str("SHA384"),
-            Self::Sha512 => f.write_str("SHA512"),
-            Self::StrLang => f.write_str("STRLANG"),
-            Self::StrDt => f.write_str("STRDT"),
-            Self::IsIri => f.write_str("isIRI"),
-            Self::IsBlank => f.write_str("isBLANK"),
-            Self::IsLiteral => f.write_str("isLITERAL"),
-            Self::IsNumeric => f.write_str("isNUMERIC"),
-            Self::Regex => f.write_str("REGEX"),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple => f.write_str("TRIPLE"),
-            #[cfg(feature = "rdf-star")]
-            Self::Subject => f.write_str("SUBJECT"),
-            #[cfg(feature = "rdf-star")]
-            Self::Predicate => f.write_str("PREDICATE"),
-            #[cfg(feature = "rdf-star")]
-            Self::Object => f.write_str("OBJECT"),
-            #[cfg(feature = "rdf-star")]
-            Self::IsTriple => f.write_str("isTRIPLE"),
-            #[cfg(feature = "sep-0002")]
-            Self::Adjust => f.write_str("ADJUST"),
-            Self::Custom(iri) => iri.fmt(f),
-        }
+#[cfg(test)]
+mod test_func {
+    use super::*;
+    #[test]
+    fn display() {
+        // This is a temporary migration test - we can remove most of these before merging
+        assert_eq!(Function::Str.to_string(), "STR");
+        assert_eq!(Function::Lang.to_string(), "LANG");
+        assert_eq!(Function::LangMatches.to_string(), "LANGMATCHES");
+        assert_eq!(Function::Datatype.to_string(), "DATATYPE");
+        assert_eq!(Function::Iri.to_string(), "IRI");
+        assert_eq!(Function::BNode.to_string(), "BNODE");
+        assert_eq!(Function::Rand.to_string(), "RAND");
+        assert_eq!(Function::Abs.to_string(), "ABS");
+        assert_eq!(Function::Ceil.to_string(), "CEIL");
+        assert_eq!(Function::Floor.to_string(), "FLOOR");
+        assert_eq!(Function::Round.to_string(), "ROUND");
+        assert_eq!(Function::Concat.to_string(), "CONCAT");
+        assert_eq!(Function::SubStr.to_string(), "SUBSTR");
+        assert_eq!(Function::StrLen.to_string(), "STRLEN");
+        assert_eq!(Function::Replace.to_string(), "REPLACE");
+        assert_eq!(Function::UCase.to_string(), "UCASE");
+        assert_eq!(Function::LCase.to_string(), "LCASE");
+        assert_eq!(Function::EncodeForUri.to_string(), "ENCODE_FOR_URI");
+        assert_eq!(Function::Contains.to_string(), "CONTAINS");
+        assert_eq!(Function::StrStarts.to_string(), "STRSTARTS");
+        assert_eq!(Function::StrEnds.to_string(), "STRENDS");
+        assert_eq!(Function::StrBefore.to_string(), "STRBEFORE");
+        assert_eq!(Function::StrAfter.to_string(), "STRAFTER");
+        assert_eq!(Function::Year.to_string(), "YEAR");
+        assert_eq!(Function::Month.to_string(), "MONTH");
+        assert_eq!(Function::Day.to_string(), "DAY");
+        assert_eq!(Function::Hours.to_string(), "HOURS");
+        assert_eq!(Function::Minutes.to_string(), "MINUTES");
+        assert_eq!(Function::Seconds.to_string(), "SECONDS");
+        assert_eq!(Function::Timezone.to_string(), "TIMEZONE");
+        assert_eq!(Function::Tz.to_string(), "TZ");
+        assert_eq!(Function::Now.to_string(), "NOW");
+        assert_eq!(Function::Uuid.to_string(), "UUID");
+        assert_eq!(Function::StrUuid.to_string(), "STRUUID");
+        assert_eq!(Function::Md5.to_string(), "MD5");
+        assert_eq!(Function::Sha1.to_string(), "SHA1");
+        assert_eq!(Function::Sha256.to_string(), "SHA256");
+        assert_eq!(Function::Sha384.to_string(), "SHA384");
+        assert_eq!(Function::Sha512.to_string(), "SHA512");
+        assert_eq!(Function::StrLang.to_string(), "STRLANG");
+        assert_eq!(Function::StrDt.to_string(), "STRDT");
+        assert_eq!(Function::IsIri.to_string(), "isIRI");
+        assert_eq!(Function::IsBlank.to_string(), "isBLANK");
+        assert_eq!(Function::IsLiteral.to_string(), "isLITERAL");
+        assert_eq!(Function::IsNumeric.to_string(), "isNUMERIC");
+        assert_eq!(Function::Regex.to_string(), "REGEX");
+        #[cfg(feature = "rdf-star")]
+        assert_eq!(Function::Triple.to_string(), "TRIPLE");
+        #[cfg(feature = "rdf-star")]
+        assert_eq!(Function::Subject.to_string(), "SUBJECT");
+        #[cfg(feature = "rdf-star")]
+        assert_eq!(Function::Predicate.to_string(), "PREDICATE");
+        #[cfg(feature = "rdf-star")]
+        assert_eq!(Function::Object.to_string(), "OBJECT");
+        #[cfg(feature = "rdf-star")]
+        assert_eq!(Function::IsTriple.to_string(), "isTRIPLE");
+        #[cfg(feature = "sep-0002")]
+        assert_eq!(Function::Adjust.to_string(), "ADJUST");
+        assert_eq!(
+            Function::Custom(NamedNode::new("http://example.com/foo").unwrap()).to_string(),
+            "<http://example.com/foo>"
+        );
     }
 }
 
@@ -1217,7 +1254,8 @@ impl fmt::Display for AggregateExpression {
 }
 
 /// An aggregate function name.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, parse_display::Display)]
+#[display(style = "SNAKE_CASE")]
 pub enum AggregateFunction {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
     Count,
@@ -1230,11 +1268,11 @@ pub enum AggregateFunction {
     /// [Max](https://www.w3.org/TR/sparql11-query/#defn_aggMax).
     Max,
     /// [GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat).
-    GroupConcat {
-        separator: Option<String>,
-    },
+    #[display("{}")]
+    GroupConcat { separator: Option<String> },
     /// [Sample](https://www.w3.org/TR/sparql11-query/#defn_aggSample).
     Sample,
+    #[display("{0}")]
     Custom(NamedNode),
 }
 
@@ -1254,23 +1292,36 @@ impl AggregateFunction {
     }
 }
 
-impl fmt::Display for AggregateFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Count => f.write_str("COUNT"),
-            Self::Sum => f.write_str("SUM"),
-            Self::Avg => f.write_str("AVG"),
-            Self::Min => f.write_str("MIN"),
-            Self::Max => f.write_str("MAX"),
-            Self::GroupConcat { .. } => f.write_str("GROUP_CONCAT"),
-            Self::Sample => f.write_str("SAMPLE"),
-            Self::Custom(iri) => iri.fmt(f),
-        }
+#[cfg(test)]
+mod test_agg {
+    use super::*;
+    #[test]
+    fn display() {
+        // This is a temporary migration test - we can remove most of these before merging
+        assert_eq!(AggregateFunction::Count.to_string(), "COUNT");
+        assert_eq!(AggregateFunction::Sum.to_string(), "SUM");
+        assert_eq!(AggregateFunction::Avg.to_string(), "AVG");
+        assert_eq!(AggregateFunction::Min.to_string(), "MIN");
+        assert_eq!(AggregateFunction::Max.to_string(), "MAX");
+        assert_eq!(
+            AggregateFunction::GroupConcat {
+                separator: Some("foo".to_owned())
+            }
+            .to_string(),
+            "GROUP_CONCAT"
+        );
+        assert_eq!(AggregateFunction::Sample.to_string(), "SAMPLE");
+        assert_eq!(
+            AggregateFunction::Custom(NamedNode::new("http://example.com/foo").unwrap())
+                .to_string(),
+            "<http://example.com/foo>"
+        );
     }
 }
 
 /// An ordering comparator used by [`GraphPattern::OrderBy`].
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, parse_display::Display)]
+#[display("{}({0})", style = "UPPERCASE")]
 pub enum OrderExpression {
     /// Ascending order
     Asc(Expression),
@@ -1296,12 +1347,26 @@ impl OrderExpression {
     }
 }
 
-impl fmt::Display for OrderExpression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Asc(e) => write!(f, "ASC({e})"),
-            Self::Desc(e) => write!(f, "DESC({e})"),
-        }
+#[cfg(test)]
+mod test_order_expr {
+    use super::*;
+    #[test]
+    fn display() {
+        // This is a temporary migration test - we can remove most of these before merging
+        assert_eq!(
+            OrderExpression::Asc(Expression::NamedNode(
+                NamedNode::new("http://example.com/foo").unwrap()
+            ))
+            .to_string(),
+            "ASC(<http://example.com/foo>)"
+        );
+        assert_eq!(
+            OrderExpression::Desc(Expression::NamedNode(
+                NamedNode::new("http://example.com/bar").unwrap()
+            ))
+            .to_string(),
+            "DESC(<http://example.com/bar>)"
+        );
     }
 }
 
@@ -1351,11 +1416,15 @@ impl fmt::Display for QueryDataset {
 /// A target RDF graph for update operations.
 ///
 /// Could be a specific graph, all named graphs or the complete dataset.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, parse_display::Display)]
 pub enum GraphTarget {
+    #[display("GRAPH {0}")]
     NamedNode(NamedNode),
+    #[display("DEFAULT")]
     DefaultGraph,
+    #[display("NAMED")]
     NamedGraphs,
+    #[display("ALL")]
     AllGraphs,
 }
 
@@ -1367,17 +1436,6 @@ impl GraphTarget {
             Self::DefaultGraph => f.write_str("default"),
             Self::NamedGraphs => f.write_str("named"),
             Self::AllGraphs => f.write_str("all"),
-        }
-    }
-}
-
-impl fmt::Display for GraphTarget {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => write!(f, "GRAPH {node}"),
-            Self::DefaultGraph => f.write_str("DEFAULT"),
-            Self::NamedGraphs => f.write_str("NAMED"),
-            Self::AllGraphs => f.write_str("ALL"),
         }
     }
 }

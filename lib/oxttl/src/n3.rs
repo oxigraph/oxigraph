@@ -23,7 +23,8 @@ use std::io::Read;
 use tokio::io::AsyncRead;
 
 /// A N3 term i.e. a RDF `Term` or a `Variable`.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, parse_display::Display)]
+#[display("{0}")]
 pub enum N3Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -33,17 +34,45 @@ pub enum N3Term {
     Variable(Variable),
 }
 
-impl fmt::Display for N3Term {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NamedNode(term) => term.fmt(f),
-            Self::BlankNode(term) => term.fmt(f),
-            Self::Literal(term) => term.fmt(f),
-            #[cfg(feature = "rdf-star")]
-            Self::Triple(term) => term.fmt(f),
-            Self::Variable(term) => term.fmt(f),
-        }
+#[cfg(test)]
+mod test_n3term {
+    use super::*;
+    #[test]
+    fn display() {
+        // This is a temporary migration test - we can remove most of these before merging
+        assert_eq!(
+            N3Term::NamedNode(NamedNode::new_unchecked("named")).to_string(),
+            "<named>"
+        );
+        assert_eq!(
+            N3Term::BlankNode(BlankNode::new_unchecked("blank")).to_string(),
+            "_:blank"
+        );
+        assert_eq!(
+            N3Term::Literal(Literal::new_simple_literal("literal")).to_string(),
+            r#""literal""#
+        );
+
+        #[cfg(feature = "rdf-star")]
+        assert_eq!(
+            N3Term::Triple(Box::new(
+                Triple::new(
+                    NamedNode::new_unchecked("http://example.com/s"),
+                    NamedNode::new_unchecked("http://example.com/p"),
+                    Triple::new(
+                        NamedNode::new_unchecked("http://example.com/os"),
+                        NamedNode::new_unchecked("http://example.com/op"),
+                        NamedNode::new_unchecked("http://example.com/oo"),
+                    ),
+                )
+            ))
+            .to_string(),
+            "<http://example.com/s> <http://example.com/p> <<<http://example.com/os> <http://example.com/op> <http://example.com/oo>>>"
+        );
+        assert_eq!(
+            N3Term::Variable(Variable::new_unchecked("var")).to_string(),
+            "?var"
+        );
     }
 }
 
