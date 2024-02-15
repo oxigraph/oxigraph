@@ -258,7 +258,7 @@ impl Storage {
     fn update_version(&self, version: u64) -> Result<(), StorageError> {
         self.db
             .insert(&self.default_cf, b"oxversion", &version.to_be_bytes())?;
-        self.db.flush(&self.default_cf)
+        self.db.flush()
     }
 
     pub fn snapshot(&self) -> StorageReader {
@@ -283,17 +283,7 @@ impl Storage {
 
     #[cfg(not(target_family = "wasm"))]
     pub fn flush(&self) -> Result<(), StorageError> {
-        self.db.flush(&self.default_cf)?;
-        self.db.flush(&self.gspo_cf)?;
-        self.db.flush(&self.gpos_cf)?;
-        self.db.flush(&self.gosp_cf)?;
-        self.db.flush(&self.spog_cf)?;
-        self.db.flush(&self.posg_cf)?;
-        self.db.flush(&self.ospg_cf)?;
-        self.db.flush(&self.dspo_cf)?;
-        self.db.flush(&self.dpos_cf)?;
-        self.db.flush(&self.dosp_cf)?;
-        self.db.flush(&self.id2str_cf)
+        self.db.flush()
     }
 
     #[cfg(not(target_family = "wasm"))]

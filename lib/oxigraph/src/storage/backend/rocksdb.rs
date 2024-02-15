@@ -9,7 +9,7 @@
 )]
 
 use crate::storage::error::{CorruptionError, StorageError};
-use libc::{self, c_void, free};
+use libc::{self, c_void};
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
@@ -625,7 +625,7 @@ impl Db {
                                 ffi_result!(rocksdb_transaction_commit_with_status(transaction));
                             rocksdb_transaction_destroy(transaction);
                             rocksdb_readoptions_destroy(read_options);
-                            free(snapshot as *mut c_void);
+                            rocksdb_free(snapshot as *mut c_void);
                             r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
                         }
                         return Ok(result);
@@ -636,7 +636,7 @@ impl Db {
                                 ffi_result!(rocksdb_transaction_rollback_with_status(transaction));
                             rocksdb_transaction_destroy(transaction);
                             rocksdb_readoptions_destroy(read_options);
-                            free(snapshot as *mut c_void);
+                            rocksdb_free(snapshot as *mut c_void);
                             r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
                         }
                         // We look for the root error
@@ -738,13 +738,14 @@ impl Db {
         }
     }
 
-    pub fn flush(&self, column_family: &ColumnFamily) -> Result<(), StorageError> {
+    pub fn flush(&self) -> Result<(), StorageError> {
         if let DbKind::ReadWrite(db) = &self.inner {
             unsafe {
-                ffi_result!(rocksdb_transactiondb_flush_cf_with_status(
+                ffi_result!(rocksdb_transactiondb_flush_cfs_with_status(
                     db.db,
                     db.flush_options,
-                    column_family.0,
+                    db.cf_handles.as_ptr().cast_mut(),
+                    db.cf_handles.len().try_into().unwrap()
                 ))
             }?;
             Ok(())
@@ -1190,7 +1191,7 @@ pub struct Buffer {
 impl Drop for Buffer {
     fn drop(&mut self) {
         unsafe {
-            free(self.base.cast());
+            rocksdb_free(self.base.cast());
         }
     }
 }
@@ -1325,7 +1326,7 @@ impl Drop for ErrorStatus {
     fn drop(&mut self) {
         if !self.0.string.is_null() {
             unsafe {
-                free(self.0.string as *mut c_void);
+                rocksdb_free(self.0.string as *mut c_void);
             }
         }
     }
