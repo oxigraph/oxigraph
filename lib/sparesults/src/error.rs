@@ -47,6 +47,12 @@ impl From<quick_xml::Error> for QueryResultsParseError {
     }
 }
 
+impl From<quick_xml::escape::EscapeError> for QueryResultsParseError {
+    #[inline]
+    fn from(error: quick_xml::escape::EscapeError) -> Self {
+        quick_xml::Error::from(error).into()
+    }
+}
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
