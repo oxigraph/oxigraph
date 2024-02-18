@@ -3,15 +3,15 @@
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::rdf;
 use oxrdf::*;
+use quick_xml::escape::unescape;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-use quick_xml::{Reader, Writer};
-use std::borrow::Cow;
+use quick_xml::{Decoder, Reader, Writer};
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, Read, Write};
-use std::str;
+use std::mem::take;
 use std::sync::Arc;
 #[cfg(feature = "async-tokio")]
-use tokio::io::AsyncWrite;
+use tokio::io::{AsyncRead, AsyncWrite, BufReader as AsyncBufReader};
 
 pub fn write_boolean_xml_result<W: Write>(write: W, value: bool) -> io::Result<W> {
     let mut writer = Writer::new(write);
@@ -154,7 +154,6 @@ impl InnerXmlSolutionsWriter {
     }
 
     #[allow(clippy::unused_self)]
-
     fn write<'a>(
         &self,
         output: &mut Vec<Event<'a>>,
@@ -218,123 +217,276 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
     }
 }
 
-pub enum XmlQueryResultsReader<R: Read> {
+pub enum FromReadXmlQueryResultsReader<R: Read> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: XmlSolutionsReader<R>,
+        solutions: FromReadXmlSolutionsReader<R>,
     },
     Boolean(bool),
 }
 
-impl<R: Read> XmlQueryResultsReader<R> {
-    pub fn read(source: R) -> Result<Self, QueryResultsParseError> {
-        enum State {
-            Start,
-            Sparql,
-            Head,
-            AfterHead,
-            Boolean,
-        }
-
-        let mut reader = Reader::from_reader(BufReader::new(source));
+impl<R: Read> FromReadXmlQueryResultsReader<R> {
+    pub fn read(read: R) -> Result<Self, QueryResultsParseError> {
+        let mut reader = Reader::from_reader(BufReader::new(read));
         reader.trim_text(true);
         reader.expand_empty_elements(true);
-
-        let mut buffer = Vec::default();
-        let mut variables = Vec::default();
-        let mut state = State::Start;
-
-        // Read header
+        let mut reader_buffer = Vec::new();
+        let mut inner = XmlInnerQueryResultsReader {
+            state: ResultsState::Start,
+            variables: Vec::new(),
+            decoder: reader.decoder(),
+        };
         loop {
-            buffer.clear();
-            let event = reader.read_event_into(&mut buffer)?;
-            match event {
-                Event::Start(event) => match state {
-                    State::Start => {
-                        if event.local_name().as_ref() == b"sparql" {
-                            state = State::Sparql;
-                        } else {
-                            return Err(QueryResultsSyntaxError::msg(format!("Expecting <sparql> tag, found <{}>", decode(&reader, &event.name())?)).into());
-                        }
-                    }
-                    State::Sparql => {
-                        if event.local_name().as_ref() == b"head" {
-                            state = State::Head;
-                        } else {
-                            return Err(QueryResultsSyntaxError::msg(format!("Expecting <head> tag, found <{}>", decode(&reader, &event.name())?)).into());
-                        }
-                    }
-                    State::Head => {
-                        if event.local_name().as_ref() == b"variable" {
-                            let name = event.attributes()
-                                .filter_map(Result::ok)
-                                .find(|attr| attr.key.local_name().as_ref() == b"name")
-                                .ok_or_else(|| QueryResultsSyntaxError::msg("No name attribute found for the <variable> tag"))?
-                                .decode_and_unescape_value(&reader)?;
-                            let variable = Variable::new(name).map_err(|e| QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}")))?;
-                            if variables.contains(&variable) {
-                                return Err(QueryResultsSyntaxError::msg(format!(
-                                    "The variable {variable} is declared twice"
-                                ))
-                                    .into());
-                            }
-                            variables.push(variable);
-                        } else if event.local_name().as_ref() == b"link" {
-                            // no op
-                        } else {
-                            return Err(QueryResultsSyntaxError::msg(format!("Expecting <variable> or <link> tag, found <{}>", decode(&reader, &event.name())?)).into());
-                        }
-                    }
-                    State::AfterHead => {
-                        if event.local_name().as_ref() == b"boolean" {
-                            state = State::Boolean
-                        } else if event.local_name().as_ref() == b"results" {
-                            let mut mapping = BTreeMap::default();
-                            for (i, var) in variables.iter().enumerate() {
-                                mapping.insert(var.clone().into_string(), i);
-                            }
-                            return Ok(Self::Solutions { variables,
-                                solutions: XmlSolutionsReader {
-                                    reader,
-                                    buffer,
-                                    mapping,
-                                    stack: Vec::new(),
-                                    subject_stack: Vec::new(),
-                                    predicate_stack: Vec::new(),
-                                    object_stack: Vec::new(),
-                                }});
-                        } else if event.local_name().as_ref() != b"link" && event.local_name().as_ref() != b"results" && event.local_name().as_ref() != b"boolean" {
-                            return Err(QueryResultsSyntaxError::msg(format!("Expecting sparql tag, found <{}>", decode(&reader, &event.name())?)).into());
-                        }
-                    }
-                    State::Boolean => return Err(QueryResultsSyntaxError::msg(format!("Unexpected tag inside of <boolean> tag: <{}>", decode(&reader, &event.name())?)).into())
-                },
-                Event::Text(event) => {
-                    let value = event.unescape()?;
-                    return match state {
-                        State::Boolean => {
-                            return if value == "true" {
-                                Ok(Self::Boolean(true))
-                            } else if value == "false" {
-                                Ok(Self::Boolean(false))
-                            } else {
-                                Err(QueryResultsSyntaxError::msg(format!("Unexpected boolean value. Found '{value}'")).into())
-                            };
-                        }
-                        _ => Err(QueryResultsSyntaxError::msg(format!("Unexpected textual value found: '{value}'")).into())
-                    };
-                },
-                Event::End(event) => {
-                    if let State::Head = state {
-                        if event.local_name().as_ref() == b"head" {
-                            state = State::AfterHead
-                        }
+            reader_buffer.clear();
+            let event = reader.read_event_into(&mut reader_buffer)?;
+            if let Some(result) = inner.read_event(event)? {
+                return Ok(match result {
+                    XmlInnerQueryResults::Solutions {
+                        variables,
+                        solutions,
+                    } => Self::Solutions {
+                        variables,
+                        solutions: FromReadXmlSolutionsReader {
+                            reader,
+                            inner: solutions,
+                            reader_buffer,
+                        },
+                    },
+                    XmlInnerQueryResults::Boolean(value) => Self::Boolean(value),
+                });
+            }
+        }
+    }
+}
+
+pub struct FromReadXmlSolutionsReader<R: Read> {
+    reader: Reader<BufReader<R>>,
+    inner: XmlInnerSolutionsReader,
+    reader_buffer: Vec<u8>,
+}
+
+impl<R: Read> FromReadXmlSolutionsReader<R> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+        loop {
+            self.reader_buffer.clear();
+            let event = self.reader.read_event_into(&mut self.reader_buffer)?;
+            if event == Event::Eof {
+                return Ok(None);
+            }
+            if let Some(solution) = self.inner.read_event(event)? {
+                return Ok(Some(solution));
+            }
+        }
+    }
+}
+
+#[cfg(feature = "async-tokio")]
+pub enum FromTokioAsyncReadXmlQueryResultsReader<R: AsyncRead + Unpin> {
+    Solutions {
+        variables: Vec<Variable>,
+        solutions: FromTokioAsyncReadXmlSolutionsReader<R>,
+    },
+    Boolean(bool),
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlQueryResultsReader<R> {
+    pub async fn read(read: R) -> Result<Self, QueryResultsParseError> {
+        let mut reader = Reader::from_reader(AsyncBufReader::new(read));
+        reader.trim_text(true);
+        reader.expand_empty_elements(true);
+        let mut reader_buffer = Vec::new();
+        let mut inner = XmlInnerQueryResultsReader {
+            state: ResultsState::Start,
+            variables: Vec::new(),
+            decoder: reader.decoder(),
+        };
+        loop {
+            reader_buffer.clear();
+            let event = reader.read_event_into_async(&mut reader_buffer).await?;
+            if let Some(result) = inner.read_event(event)? {
+                return Ok(match result {
+                    XmlInnerQueryResults::Solutions {
+                        variables,
+                        solutions,
+                    } => Self::Solutions {
+                        variables,
+                        solutions: FromTokioAsyncReadXmlSolutionsReader {
+                            reader,
+                            inner: solutions,
+                            reader_buffer,
+                        },
+                    },
+                    XmlInnerQueryResults::Boolean(value) => Self::Boolean(value),
+                });
+            }
+        }
+    }
+}
+
+#[cfg(feature = "async-tokio")]
+pub struct FromTokioAsyncReadXmlSolutionsReader<R: AsyncRead + Unpin> {
+    reader: Reader<AsyncBufReader<R>>,
+    inner: XmlInnerSolutionsReader,
+    reader_buffer: Vec<u8>,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlSolutionsReader<R> {
+    pub async fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+        loop {
+            self.reader_buffer.clear();
+            let event = self
+                .reader
+                .read_event_into_async(&mut self.reader_buffer)
+                .await?;
+            if event == Event::Eof {
+                return Ok(None);
+            }
+            if let Some(solution) = self.inner.read_event(event)? {
+                return Ok(Some(solution));
+            }
+        }
+    }
+}
+
+enum XmlInnerQueryResults {
+    Solutions {
+        variables: Vec<Variable>,
+        solutions: XmlInnerSolutionsReader,
+    },
+    Boolean(bool),
+}
+
+#[derive(Clone, Copy)]
+enum ResultsState {
+    Start,
+    Sparql,
+    Head,
+    AfterHead,
+    Boolean,
+}
+
+struct XmlInnerQueryResultsReader {
+    state: ResultsState,
+    variables: Vec<Variable>,
+    decoder: Decoder,
+}
+
+impl XmlInnerQueryResultsReader {
+    pub fn read_event(
+        &mut self,
+        event: Event<'_>,
+    ) -> Result<Option<XmlInnerQueryResults>, QueryResultsParseError> {
+        match event {
+            Event::Start(event) => match self.state {
+                ResultsState::Start => {
+                    if event.local_name().as_ref() == b"sparql" {
+                        self.state = ResultsState::Sparql;
+                        Ok(None)
                     } else {
-                        return Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into());
+                        Err(QueryResultsSyntaxError::msg(format!("Expecting <sparql> tag, found <{}>", self.decoder.decode(event.name().as_ref())?)).into())
                     }
-                },
-                Event::Eof => return Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
-                _ => (),
+                }
+                ResultsState::Sparql => {
+                    if event.local_name().as_ref() == b"head" {
+                        self.state = ResultsState::Head;
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(format!("Expecting <head> tag, found <{}>", self.decoder.decode(event.name().as_ref())?)).into())
+                    }
+                }
+                ResultsState::Head => {
+                    if event.local_name().as_ref() == b"variable" {
+                        let name = event.attributes()
+                            .filter_map(Result::ok)
+                            .find(|attr| attr.key.local_name().as_ref() == b"name")
+                            .ok_or_else(|| QueryResultsSyntaxError::msg("No name attribute found for the <variable> tag"))?;
+                        let name = unescape(&self.decoder.decode(&name.value)?)?.into_owned();
+                        let variable = Variable::new(name).map_err(|e| QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}")))?;
+                        if self.variables.contains(&variable) {
+                            return Err(QueryResultsSyntaxError::msg(format!(
+                                "The variable {variable} is declared twice"
+                            ))
+                                .into());
+                        }
+                        self.variables.push(variable);
+                        Ok(None)
+                    } else if event.local_name().as_ref() == b"link" {
+                        // no op
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(format!("Expecting <variable> or <link> tag, found <{}>", self.decoder.decode(event.name().as_ref())?)).into())
+                    }
+                }
+                ResultsState::AfterHead => {
+                    if event.local_name().as_ref() == b"boolean" {
+                        self.state = ResultsState::Boolean;
+                        Ok(None)
+                    } else if event.local_name().as_ref() == b"results" {
+                        let mut mapping = BTreeMap::default();
+                        for (i, var) in self.variables.iter().enumerate() {
+                            mapping.insert(var.clone().into_string(), i);
+                        }
+                        Ok(Some(XmlInnerQueryResults::Solutions {
+                            variables: take(&mut self.variables),
+                            solutions: XmlInnerSolutionsReader {
+                                decoder: self.decoder,
+                                mapping,
+                                state_stack: vec![State::Start, State::Start],
+                                new_bindings: Vec::new(),
+                                current_var: None,
+                                term: None,
+                                lang: None,
+                                datatype: None,
+                                subject_stack: Vec::new(),
+                                predicate_stack: Vec::new(),
+                                object_stack: Vec::new(),
+                            },
+                        }))
+                    } else if event.local_name().as_ref() != b"link" && event.local_name().as_ref() != b"results" && event.local_name().as_ref() != b"boolean" {
+                        Err(QueryResultsSyntaxError::msg(format!("Expecting sparql tag, found <{}>", self.decoder.decode(event.name().as_ref())?)).into())
+                    } else {
+                        Ok(None)
+                    }
+                }
+                ResultsState::Boolean => Err(QueryResultsSyntaxError::msg(format!("Unexpected tag inside of <boolean> tag: <{}>", self.decoder.decode(event.name().as_ref())?)).into())
+            },
+            Event::Text(event) => {
+                let value = event.unescape()?;
+                match self.state {
+                    ResultsState::Boolean => {
+                        if value == "true" {
+                            Ok(Some(XmlInnerQueryResults::Boolean(true)))
+                        } else if value == "false" {
+                            Ok(Some(XmlInnerQueryResults::Boolean(false)))
+                        } else {
+                            Err(QueryResultsSyntaxError::msg(format!("Unexpected boolean value. Found '{value}'")).into())
+                        }
+                    }
+                    _ => Err(QueryResultsSyntaxError::msg(format!("Unexpected textual value found: '{value}'")).into())
+                }
+            }
+            Event::End(event) => {
+                if let ResultsState::Head = self.state {
+                    if event.local_name().as_ref() == b"head" {
+                        self.state = ResultsState::AfterHead
+                    }
+                    Ok(None)
+                } else {
+                    Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into())
+                }
+            }
+            Event::Eof => Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
+            Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {
+                Ok(None)
+            }
+            Event::Empty(_) => unreachable!("Empty events are expended"),
+            Event::CData(_) => {
+                Err(QueryResultsSyntaxError::msg(
+                    "<![CDATA[...]]> are not supported in SPARQL XML results",
+                )
+                    .into())
             }
         }
     }
@@ -351,285 +503,294 @@ enum State {
     Subject,
     Predicate,
     Object,
-    End,
 }
 
-pub struct XmlSolutionsReader<R: Read> {
-    reader: Reader<BufReader<R>>,
-    buffer: Vec<u8>,
+struct XmlInnerSolutionsReader {
+    decoder: Decoder,
     mapping: BTreeMap<String, usize>,
-    stack: Vec<State>,
+    state_stack: Vec<State>,
+    new_bindings: Vec<Option<Term>>,
+    current_var: Option<String>,
+    term: Option<Term>,
+    lang: Option<String>,
+    datatype: Option<NamedNode>,
     subject_stack: Vec<Term>,
     predicate_stack: Vec<Term>,
     object_stack: Vec<Term>,
 }
 
-impl<R: Read> XmlSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
-        let mut state = State::Start;
-
-        let mut new_bindings = vec![None; self.mapping.len()];
-
-        let mut current_var = None;
-        let mut term: Option<Term> = None;
-        let mut lang = None;
-        let mut datatype = None;
-        loop {
-            self.buffer.clear();
-            let event = self.reader.read_event_into(&mut self.buffer)?;
-            match event {
-                Event::Start(event) => match state {
-                    State::Start => {
-                        if event.local_name().as_ref() == b"result" {
-                            state = State::Result;
-                        } else {
-                            return Err(QueryResultsSyntaxError::msg(format!(
-                                "Expecting <result>, found <{}>",
-                                decode(&self.reader, &event.name())?
-                            ))
-                            .into());
-                        }
-                    }
-                    State::Result => {
-                        if event.local_name().as_ref() == b"binding" {
-                            match event
-                                .attributes()
-                                .filter_map(Result::ok)
-                                .find(|attr| attr.key.local_name().as_ref() == b"name")
-                            {
-                                Some(attr) => {
-                                    current_var = Some(
-                                        attr.decode_and_unescape_value(&self.reader)?.to_string(),
-                                    )
-                                }
-                                None => {
-                                    return Err(QueryResultsSyntaxError::msg(
-                                        "No name attribute found for the <binding> tag",
-                                    )
-                                    .into());
-                                }
-                            }
-                            state = State::Binding;
-                        } else {
-                            return Err(QueryResultsSyntaxError::msg(format!(
-                                "Expecting <binding>, found <{}>",
-                                decode(&self.reader, &event.name())?
-                            ))
-                            .into());
-                        }
-                    }
-                    State::Binding | State::Subject | State::Predicate | State::Object => {
-                        if term.is_some() {
-                            return Err(QueryResultsSyntaxError::msg(
-                                "There is already a value for the current binding",
-                            )
-                            .into());
-                        }
-                        self.stack.push(state);
-                        if event.local_name().as_ref() == b"uri" {
-                            state = State::Uri;
-                        } else if event.local_name().as_ref() == b"bnode" {
-                            state = State::BNode;
-                        } else if event.local_name().as_ref() == b"literal" {
-                            for attr in event.attributes() {
-                                let attr = attr.map_err(quick_xml::Error::from)?;
-                                if attr.key.as_ref() == b"xml:lang" {
-                                    lang = Some(
-                                        attr.decode_and_unescape_value(&self.reader)?.to_string(),
-                                    );
-                                } else if attr.key.local_name().as_ref() == b"datatype" {
-                                    let iri = attr.decode_and_unescape_value(&self.reader)?;
-                                    datatype =
-                                        Some(NamedNode::new(iri.to_string()).map_err(|e| {
-                                            QueryResultsSyntaxError::msg(format!(
-                                                "Invalid datatype IRI '{iri}': {e}"
-                                            ))
-                                        })?);
-                                }
-                            }
-                            state = State::Literal;
-                        } else if event.local_name().as_ref() == b"triple" {
-                            state = State::Triple;
-                        } else {
-                            return Err(QueryResultsSyntaxError::msg(format!(
-                                "Expecting <uri>, <bnode> or <literal> found <{}>",
-                                decode(&self.reader, &event.name())?
-                            ))
-                            .into());
-                        }
-                    }
-                    State::Triple => {
-                        if event.local_name().as_ref() == b"subject" {
-                            state = State::Subject
-                        } else if event.local_name().as_ref() == b"predicate" {
-                            state = State::Predicate
-                        } else if event.local_name().as_ref() == b"object" {
-                            state = State::Object
-                        } else {
-                            return Err(QueryResultsSyntaxError::msg(format!(
-                                "Expecting <subject>, <predicate> or <object> found <{}>",
-                                decode(&self.reader, &event.name())?
-                            ))
-                            .into());
-                        }
-                    }
-                    _ => (),
-                },
-                Event::Text(event) => {
-                    let data = event.unescape()?;
-                    match state {
-                        State::Uri => {
-                            term = Some(
-                                NamedNode::new(data.to_string())
-                                    .map_err(|e| {
-                                        QueryResultsSyntaxError::msg(format!(
-                                            "Invalid IRI value '{data}': {e}"
-                                        ))
-                                    })?
-                                    .into(),
-                            )
-                        }
-                        State::BNode => {
-                            term = Some(
-                                BlankNode::new(data.to_string())
-                                    .map_err(|e| {
-                                        QueryResultsSyntaxError::msg(format!(
-                                            "Invalid blank node value '{data}': {e}"
-                                        ))
-                                    })?
-                                    .into(),
-                            )
-                        }
-                        State::Literal => {
-                            term = Some(build_literal(data, lang.take(), datatype.take())?.into());
-                        }
-                        _ => {
-                            return Err(QueryResultsSyntaxError::msg(format!(
-                                "Unexpected textual value found: {data}"
-                            ))
-                            .into());
-                        }
+impl XmlInnerSolutionsReader {
+    #[allow(clippy::unwrap_in_result)]
+    pub fn read_event(
+        &mut self,
+        event: Event<'_>,
+    ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+        match event {
+            Event::Start(event) => match self.state_stack.last().unwrap() {
+                State::Start => {
+                    if event.local_name().as_ref() == b"result" {
+                        self.new_bindings = vec![None; self.mapping.len()];
+                        self.state_stack.push(State::Result);
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting <result>, found <{}>",
+                            self.decoder.decode(event.name().as_ref())?
+                        ))
+                        .into())
                     }
                 }
-                Event::End(_) => match state {
-                    State::Start => state = State::End,
-                    State::Result => return Ok(Some(new_bindings)),
-                    State::Binding => {
-                        if let Some(var) = &current_var {
-                            if let Some(var) = self.mapping.get(var) {
-                                new_bindings[*var] = term.take()
-                            } else {
-                                return Err(
-                                    QueryResultsSyntaxError::msg(format!("The variable '{var}' is used in a binding but not declared in the variables list")).into()
-                                );
-                            }
-                        } else {
+                State::Result => {
+                    if event.local_name().as_ref() == b"binding" {
+                        let Some(attr) = event
+                            .attributes()
+                            .filter_map(Result::ok)
+                            .find(|attr| attr.key.local_name().as_ref() == b"name")
+                        else {
                             return Err(QueryResultsSyntaxError::msg(
-                                "No name found for <binding> tag",
+                                "No name attribute found for the <binding> tag",
                             )
                             .into());
-                        }
-                        state = State::Result;
+                        };
+                        self.current_var =
+                            Some(unescape(&self.decoder.decode(&attr.value)?)?.into_owned());
+                        self.state_stack.push(State::Binding);
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting <binding>, found <{}>",
+                            self.decoder.decode(event.name().as_ref())?
+                        ))
+                        .into())
                     }
-                    State::Subject => {
-                        if let Some(subject) = term.take() {
-                            self.subject_stack.push(subject)
-                        }
-                        state = State::Triple;
+                }
+                State::Binding | State::Subject | State::Predicate | State::Object => {
+                    if self.term.is_some() {
+                        return Err(QueryResultsSyntaxError::msg(
+                            "There is already a value for the current binding",
+                        )
+                        .into());
                     }
-                    State::Predicate => {
-                        if let Some(predicate) = term.take() {
-                            self.predicate_stack.push(predicate)
+                    if event.local_name().as_ref() == b"uri" {
+                        self.state_stack.push(State::Uri);
+                        Ok(None)
+                    } else if event.local_name().as_ref() == b"bnode" {
+                        self.state_stack.push(State::BNode);
+                        Ok(None)
+                    } else if event.local_name().as_ref() == b"literal" {
+                        for attr in event.attributes() {
+                            let attr = attr.map_err(quick_xml::Error::from)?;
+                            if attr.key.as_ref() == b"xml:lang" {
+                                self.lang = Some(
+                                    unescape(&self.decoder.decode(&attr.value)?)?.into_owned(),
+                                );
+                            } else if attr.key.local_name().as_ref() == b"datatype" {
+                                let iri = self.decoder.decode(&attr.value)?;
+                                let iri = unescape(&iri)?;
+                                self.datatype =
+                                    Some(NamedNode::new(iri.as_ref()).map_err(|e| {
+                                        QueryResultsSyntaxError::msg(format!(
+                                            "Invalid datatype IRI '{iri}': {e}"
+                                        ))
+                                    })?);
+                            }
                         }
-                        state = State::Triple;
+                        self.state_stack.push(State::Literal);
+                        Ok(None)
+                    } else if event.local_name().as_ref() == b"triple" {
+                        self.state_stack.push(State::Triple);
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting <uri>, <bnode> or <literal> found <{}>",
+                            self.decoder.decode(event.name().as_ref())?
+                        ))
+                        .into())
                     }
-                    State::Object => {
-                        if let Some(object) = term.take() {
-                            self.object_stack.push(object)
-                        }
-                        state = State::Triple;
+                }
+                State::Triple => {
+                    if event.local_name().as_ref() == b"subject" {
+                        self.state_stack.push(State::Subject);
+                        Ok(None)
+                    } else if event.local_name().as_ref() == b"predicate" {
+                        self.state_stack.push(State::Predicate);
+                        Ok(None)
+                    } else if event.local_name().as_ref() == b"object" {
+                        self.state_stack.push(State::Object);
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(format!(
+                            "Expecting <subject>, <predicate> or <object> found <{}>",
+                            self.decoder.decode(event.name().as_ref())?
+                        ))
+                        .into())
                     }
+                }
+                State::Uri => Err(QueryResultsSyntaxError::msg(format!(
+                    "<uri> must only contain a string, found <{}>",
+                    self.decoder.decode(event.name().as_ref())?
+                ))
+                .into()),
+                State::BNode => Err(QueryResultsSyntaxError::msg(format!(
+                    "<uri> must only contain a string, found <{}>",
+                    self.decoder.decode(event.name().as_ref())?
+                ))
+                .into()),
+                State::Literal => Err(QueryResultsSyntaxError::msg(format!(
+                    "<uri> must only contain a string, found <{}>",
+                    self.decoder.decode(event.name().as_ref())?
+                ))
+                .into()),
+            },
+            Event::Text(event) => {
+                let data = event.unescape()?;
+                match self.state_stack.last().unwrap() {
                     State::Uri => {
-                        state = self
-                            .stack
-                            .pop()
-                            .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?
+                        self.term = Some(
+                            NamedNode::new(data.to_string())
+                                .map_err(|e| {
+                                    QueryResultsSyntaxError::msg(format!(
+                                        "Invalid IRI value '{data}': {e}"
+                                    ))
+                                })?
+                                .into(),
+                        );
+                        Ok(None)
                     }
                     State::BNode => {
-                        if term.is_none() {
-                            // We default to a random bnode
-                            term = Some(BlankNode::default().into())
-                        }
-                        state = self
-                            .stack
-                            .pop()
-                            .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?
+                        self.term = Some(
+                            BlankNode::new(data.to_string())
+                                .map_err(|e| {
+                                    QueryResultsSyntaxError::msg(format!(
+                                        "Invalid blank node value '{data}': {e}"
+                                    ))
+                                })?
+                                .into(),
+                        );
+                        Ok(None)
                     }
                     State::Literal => {
-                        if term.is_none() {
-                            // We default to the empty literal
-                            term = Some(build_literal("", lang.take(), datatype.take())?.into())
-                        }
-                        state = self
-                            .stack
-                            .pop()
-                            .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?;
+                        self.term = Some(
+                            build_literal(data, self.lang.take(), self.datatype.take())?.into(),
+                        );
+                        Ok(None)
                     }
-                    State::Triple => {
-                        #[cfg(feature = "rdf-star")]
-                        if let (Some(subject), Some(predicate), Some(object)) = (
-                            self.subject_stack.pop(),
-                            self.predicate_stack.pop(),
-                            self.object_stack.pop(),
-                        ) {
-                            term = Some(
-                                Triple::new(
-                                    match subject {
-                                        Term::NamedNode(subject) => subject.into(),
-                                        Term::BlankNode(subject) => subject.into(),
-                                        Term::Triple(subject) => Subject::Triple(subject),
-                                        Term::Literal(_) => {
-                                            return Err(QueryResultsSyntaxError::msg(
-                                                "The <subject> value should not be a <literal>",
-                                            )
-                                            .into())
-                                        }
-                                    },
-                                    match predicate {
-                                        Term::NamedNode(predicate) => predicate,
-                                        _ => {
-                                            return Err(QueryResultsSyntaxError::msg(
-                                                "The <predicate> value should be an <uri>",
-                                            )
-                                            .into())
-                                        }
-                                    },
-                                    object,
-                                )
-                                .into(),
-                            );
-                            state = self
-                                .stack
-                                .pop()
-                                .ok_or_else(|| QueryResultsSyntaxError::msg("Empty stack"))?;
+                    _ => Err(QueryResultsSyntaxError::msg(format!(
+                        "Unexpected textual value found: {data}"
+                    ))
+                    .into()),
+                }
+            }
+            Event::End(_) => match self.state_stack.pop().unwrap() {
+                State::Start | State::Uri => Ok(None),
+                State::Result => Ok(Some(take(&mut self.new_bindings))),
+                State::Binding => {
+                    if let Some(var) = &self.current_var {
+                        if let Some(var) = self.mapping.get(var) {
+                            self.new_bindings[*var] = self.term.take()
                         } else {
                             return Err(
-                                QueryResultsSyntaxError::msg("A <triple> should contain a <subject>, a <predicate> and an <object>").into()
+                                QueryResultsSyntaxError::msg(format!("The variable '{var}' is used in a binding but not declared in the variables list")).into()
                             );
                         }
-                        #[cfg(not(feature = "rdf-star"))]
-                        {
-                            return Err(QueryResultsSyntaxError::msg(
-                                "The <triple> tag is only supported with RDF-star",
-                            )
-                            .into());
-                        }
+                    } else {
+                        return Err(QueryResultsSyntaxError::msg(
+                            "No name found for <binding> tag",
+                        )
+                        .into());
                     }
-                    State::End => (),
-                },
-                Event::Eof => return Ok(None),
-                _ => (),
+                    Ok(None)
+                }
+                State::Subject => {
+                    if let Some(subject) = self.term.take() {
+                        self.subject_stack.push(subject)
+                    }
+                    Ok(None)
+                }
+                State::Predicate => {
+                    if let Some(predicate) = self.term.take() {
+                        self.predicate_stack.push(predicate)
+                    }
+                    Ok(None)
+                }
+                State::Object => {
+                    if let Some(object) = self.term.take() {
+                        self.object_stack.push(object)
+                    }
+                    Ok(None)
+                }
+                State::BNode => {
+                    if self.term.is_none() {
+                        // We default to a random bnode
+                        self.term = Some(BlankNode::default().into())
+                    }
+                    Ok(None)
+                }
+                State::Literal => {
+                    if self.term.is_none() {
+                        // We default to the empty literal
+                        self.term =
+                            Some(build_literal("", self.lang.take(), self.datatype.take())?.into())
+                    }
+                    Ok(None)
+                }
+                State::Triple => {
+                    #[cfg(feature = "rdf-star")]
+                    if let (Some(subject), Some(predicate), Some(object)) = (
+                        self.subject_stack.pop(),
+                        self.predicate_stack.pop(),
+                        self.object_stack.pop(),
+                    ) {
+                        self.term = Some(
+                            Triple::new(
+                                match subject {
+                                    Term::NamedNode(subject) => subject.into(),
+                                    Term::BlankNode(subject) => subject.into(),
+                                    Term::Triple(subject) => Subject::Triple(subject),
+                                    Term::Literal(_) => {
+                                        return Err(QueryResultsSyntaxError::msg(
+                                            "The <subject> value should not be a <literal>",
+                                        )
+                                        .into());
+                                    }
+                                },
+                                match predicate {
+                                    Term::NamedNode(predicate) => predicate,
+                                    _ => {
+                                        return Err(QueryResultsSyntaxError::msg(
+                                            "The <predicate> value should be an <uri>",
+                                        )
+                                        .into());
+                                    }
+                                },
+                                object,
+                            )
+                            .into(),
+                        );
+                        Ok(None)
+                    } else {
+                        Err(QueryResultsSyntaxError::msg(
+                            "A <triple> should contain a <subject>, a <predicate> and an <object>",
+                        )
+                        .into())
+                    }
+                    #[cfg(not(feature = "rdf-star"))]
+                    {
+                        Err(QueryResultsSyntaxError::msg(
+                            "The <triple> tag is only supported with RDF-star",
+                        )
+                        .into())
+                    }
+                }
+            },
+            Event::Eof | Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {
+                Ok(None)
             }
+            Event::Empty(_) => unreachable!("Empty events are expended"),
+            Event::CData(_) => Err(QueryResultsSyntaxError::msg(
+                "<![CDATA[...]]> are not supported in SPARQL XML results",
+            )
+            .into()),
         }
     }
 }
@@ -659,13 +820,6 @@ fn build_literal(
             Literal::new_simple_literal(value)
         }),
     }
-}
-
-fn decode<'a, T>(
-    reader: &Reader<T>,
-    data: &'a impl AsRef<[u8]>,
-) -> Result<Cow<'a, str>, QueryResultsParseError> {
-    Ok(reader.decoder().decode(data.as_ref())?)
 }
 
 fn map_xml_error(error: quick_xml::Error) -> io::Error {

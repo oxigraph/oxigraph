@@ -7,7 +7,9 @@ use crate::json::{
     FromTokioAsyncReadJsonQueryResultsReader, FromTokioAsyncReadJsonSolutionsReader,
 };
 use crate::solution::QuerySolution;
-use crate::xml::{XmlQueryResultsReader, XmlSolutionsReader};
+use crate::xml::{FromReadXmlQueryResultsReader, FromReadXmlSolutionsReader};
+#[cfg(feature = "async-tokio")]
+use crate::xml::{FromTokioAsyncReadXmlQueryResultsReader, FromTokioAsyncReadXmlSolutionsReader};
 use oxrdf::Variable;
 use std::io::Read;
 use std::sync::Arc;
@@ -81,9 +83,9 @@ impl QueryResultsParser {
         reader: R,
     ) -> Result<FromReadQueryResultsReader<R>, QueryResultsParseError> {
         Ok(match self.format {
-            QueryResultsFormat::Xml => match XmlQueryResultsReader::read(reader)? {
-                XmlQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
-                XmlQueryResultsReader::Solutions {
+            QueryResultsFormat::Xml => match FromReadXmlQueryResultsReader::read(reader)? {
+                FromReadXmlQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
+                FromReadXmlQueryResultsReader::Solutions {
                     solutions,
                     variables,
                 } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
@@ -128,7 +130,7 @@ impl QueryResultsParser {
     /// Reads are automatically buffered.
     ///
     /// Example in XML (the API is the same for JSON and TSV):
-    /// ```no_run
+    /// ```
     /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromTokioAsyncReadQueryResultsReader};
     /// use oxrdf::{Literal, Variable};
     ///
@@ -157,7 +159,16 @@ impl QueryResultsParser {
         reader: R,
     ) -> Result<FromTokioAsyncReadQueryResultsReader<R>, QueryResultsParseError> {
         Ok(match self.format {
-            QueryResultsFormat::Xml => return Err(QueryResultsSyntaxError::msg("The XML query results parser does not support Tokio AsyncRead yet").into()),
+            QueryResultsFormat::Xml => match FromTokioAsyncReadXmlQueryResultsReader::read(reader).await? {
+                FromTokioAsyncReadXmlQueryResultsReader::Boolean(r) => FromTokioAsyncReadQueryResultsReader::Boolean(r),
+                FromTokioAsyncReadXmlQueryResultsReader::Solutions {
+                    solutions,
+                    variables,
+                } => FromTokioAsyncReadQueryResultsReader::Solutions(FromTokioAsyncReadSolutionsReader {
+                    variables: variables.into(),
+                    solutions: FromTokioAsyncReadSolutionsReaderKind::Xml(solutions),
+                }),
+            },
             QueryResultsFormat::Json => match FromTokioAsyncReadJsonQueryResultsReader::read(reader).await? {
                 FromTokioAsyncReadJsonQueryResultsReader::Boolean(r) => FromTokioAsyncReadQueryResultsReader::Boolean(r),
                 FromTokioAsyncReadJsonQueryResultsReader::Solutions {
@@ -248,7 +259,7 @@ pub struct FromReadSolutionsReader<R: Read> {
 }
 
 enum FromReadSolutionsReaderKind<R: Read> {
-    Xml(XmlSolutionsReader<R>),
+    Xml(FromReadXmlSolutionsReader<R>),
     Json(FromReadJsonSolutionsReader<R>),
     Tsv(TsvSolutionsReader<R>),
 }
@@ -381,6 +392,7 @@ pub struct FromTokioAsyncReadSolutionsReader<R: AsyncRead + Unpin> {
 #[cfg(feature = "async-tokio")]
 enum FromTokioAsyncReadSolutionsReaderKind<R: AsyncRead + Unpin> {
     Json(FromTokioAsyncReadJsonSolutionsReader<R>),
+    Xml(FromTokioAsyncReadXmlSolutionsReader<R>),
 }
 
 #[cfg(feature = "async-tokio")]
@@ -422,6 +434,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
         Some(
             match &mut self.solutions {
                 FromTokioAsyncReadSolutionsReaderKind::Json(reader) => reader.read_next().await,
+                FromTokioAsyncReadSolutionsReaderKind::Xml(reader) => reader.read_next().await,
             }
             .transpose()?
             .map(|values| (Arc::clone(&self.variables), values).into()),
