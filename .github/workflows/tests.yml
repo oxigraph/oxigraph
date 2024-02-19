@@ -175,7 +175,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.70.0
+          version: 1.74.0
       - run: rustup toolchain install nightly
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
       - run: cargo test
@@ -312,7 +312,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.70.0
+          version: 1.74.0
       - run: rustup toolchain install nightly
       - uses: actions/setup-python@v4
         with:

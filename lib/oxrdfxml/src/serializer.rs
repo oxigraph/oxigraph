@@ -421,7 +421,7 @@ fn map_err(error: quick_xml::Error) -> io::Error {
     if let quick_xml::Error::Io(error) = error {
         Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))
     } else {
-        io::Error::new(io::ErrorKind::Other, error)
+        io::Error::other(error)
     }
 }
 

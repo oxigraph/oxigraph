@@ -26,15 +26,10 @@ impl Client {
         let response = self.client.request(request)?;
         let status = response.status();
         if !status.is_successful() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "Error {} returned by {} with payload:\n{}",
-                    status,
-                    url,
-                    response.into_body().to_string()?
-                ),
-            ));
+            return Err(Error::other(format!(
+                "Error {status} returned by {url} with payload:\n{}",
+                response.into_body().to_string()?
+            )));
         }
         let content_type = response
             .header(&HeaderName::CONTENT_TYPE)
@@ -61,15 +56,10 @@ impl Client {
         let response = self.client.request(request)?;
         let status = response.status();
         if !status.is_successful() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "Error {} returned by {} with payload:\n{}",
-                    status,
-                    url,
-                    response.into_body().to_string()?
-                ),
-            ));
+            return Err(Error::other(format!(
+                "Error {status} returned by {url} with payload:\n{}",
+                response.into_body().to_string()?
+            )));
         }
         let content_type = response
             .header(&HeaderName::CONTENT_TYPE)
