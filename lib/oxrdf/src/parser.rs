@@ -126,15 +126,6 @@ impl FromStr for Term {
     ///     Term::from_str("\"ex\"").unwrap(),
     ///     Literal::new_simple_literal("ex").into()
     /// );
-    /// assert_eq!(
-    ///     Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(),
-    ///     Triple::new(
-    ///         BlankNode::new("s").unwrap(),
-    ///         NamedNode::new("http://example.com/p").unwrap(),
-    ///         Literal::new_simple_literal("o")
-    ///     )
-    ///     .into()
-    /// );
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_term(s, 0)?;
@@ -365,7 +356,7 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
                             Term::Literal(_) => {
                                 return Err(TermParseError::msg(
                                     "Literals are not allowed in subject position",
-                                ))
+                                ));
                             }
                             Term::Triple(s) => Subject::Triple(s),
                         },
@@ -409,7 +400,7 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
                     _ => {
                         return Err(TermParseError::msg(
                             "Unexpected character in a unicode escape",
-                        ))
+                        ));
                     }
                 }
         } else {
@@ -451,5 +442,27 @@ enum TermParseErrorKind {
 impl TermParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
         Self(TermParseErrorKind::Msg(msg))
+    }
+}
+
+#[cfg(all(test, feature = "rdf-star"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn triple_term_parsing() {
+        assert_eq!(
+            Term::from_str("\"ex\"").unwrap(),
+            Literal::new_simple_literal("ex").into()
+        );
+        assert_eq!(
+            Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(),
+            Triple::new(
+                BlankNode::new("s").unwrap(),
+                NamedNode::new("http://example.com/p").unwrap(),
+                Literal::new_simple_literal("o"),
+            )
+            .into()
+        );
     }
 }
