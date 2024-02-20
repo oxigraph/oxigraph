@@ -1,0 +1,36 @@
+[package]
+name = "oxrdfio"
+version = "0.1.0-alpha.3-dev"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["RDF"]
+repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
+documentation = "https://docs.rs/oxrdfio"
+description = """
+Parser and serializer for various RDF formats
+"""
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+async-tokio = ["dep:tokio", "oxrdfxml/async-tokio", "oxttl/async-tokio"]
+rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
+
+[dependencies]
+oxrdf.workspace = true
+oxrdfxml.workspace = true
+oxttl.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, optional = true, features = ["io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,5 +1,7 @@
+import gc
+import sys
 import unittest
-from io import BytesIO, UnsupportedOperation
+from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
 from typing import Any
@@ -9,9 +11,12 @@ from pyoxigraph import (
     DefaultGraph,
     NamedNode,
     Quad,
+    QueryBoolean,
+    QueryResultsFormat,
     QuerySolution,
     QuerySolutions,
     QueryTriples,
+    RdfFormat,
     Store,
     Triple,
     Variable,
@@ -22,6 +27,7 @@ bar = NamedNode("http://bar")
 baz = NamedNode("http://baz")
 triple = Triple(foo, foo, foo)
 graph = NamedNode("http://graph")
+is_wasm = sys.platform == "emscripten"
 
 
 class TestStore(unittest.TestCase):
@@ -45,6 +51,7 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(len(store), 2)
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_bulk_extend(self) -> None:
         store = Store()
         store.bulk_extend(
@@ -149,9 +156,7 @@ class TestStore(unittest.TestCase):
         store.add(Quad(foo, bar, baz, graph))
         results: Any = store.query("SELECT ?s WHERE { ?s ?p ?o }")
         self.assertEqual(len(list(results)), 0)
-        results = store.query(
-            "SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True
-        )
+        results = store.query("SELECT ?s WHERE { ?s ?p ?o }", use_default_graph_as_union=True)
         self.assertEqual(len(list(results)), 1)
         results = store.query(
             "SELECT ?s WHERE { ?s ?p ?o }",
@@ -189,6 +194,42 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(len(list(results)), 2)
 
+    def test_select_query_dump(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        results: QuerySolutions = store.query("SELECT ?s WHERE { ?s ?p ?o }")  # type: ignore[assignment]
+        self.assertIsInstance(results, QuerySolutions)
+        output = BytesIO()
+        results.serialize(output, QueryResultsFormat.CSV)
+        self.assertEqual(
+            output.getvalue().decode(),
+            "s\r\nhttp://foo\r\n",
+        )
+
+    def test_ask_query_dump(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        results: QueryBoolean = store.query("ASK { ?s ?p ?o }")  # type: ignore[assignment]
+        self.assertIsInstance(results, QueryBoolean)
+        output = BytesIO()
+        results.serialize(output, QueryResultsFormat.CSV)
+        self.assertEqual(
+            output.getvalue().decode(),
+            "true",
+        )
+
+    def test_construct_query_dump(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        results: QueryTriples = store.query("CONSTRUCT WHERE { ?s ?p ?o }")  # type: ignore[assignment]
+        self.assertIsInstance(results, QueryTriples)
+        output = BytesIO()
+        results.serialize(output, RdfFormat.N_TRIPLES)
+        self.assertEqual(
+            output.getvalue().decode(),
+            "<http://foo> <http://bar> <http://baz> .\n",
+        )
+
     def test_update_insert_data(self) -> None:
         store = Store()
         store.update("INSERT DATA { <http://foo> <http://foo> <http://foo> }")
@@ -206,6 +247,7 @@ class TestStore(unittest.TestCase):
         store.update("DELETE WHERE { ?v ?v ?v }")
         self.assertEqual(len(store), 0)
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_update_load(self) -> None:
         store = Store()
         store.update("LOAD <https://www.w3.org/1999/02/22-rdf-syntax-ns>")
@@ -213,9 +255,7 @@ class TestStore(unittest.TestCase):
 
     def test_update_star(self) -> None:
         store = Store()
-        store.update(
-            "PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }"
-        )
+        store.update("PREFIX : <http://www.example.org/> INSERT DATA { :alice :claims << :bob :age 23 >> }")
         results: Any = store.query(
             "PREFIX : <http://www.example.org/> SELECT ?p ?a WHERE { ?p :claims << :bob :age ?a >> }"
         )
@@ -224,16 +264,16 @@ class TestStore(unittest.TestCase):
     def test_load_ntriples_to_default_graph(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
-            mime_type="application/n-triples",
+            b"<http://foo> <http://bar> <http://baz> .",
+            RdfFormat.N_TRIPLES,
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
 
     def test_load_ntriples_to_named_graph(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://foo> <http://bar> <http://baz> ."),
-            mime_type="application/n-triples",
+            "<http://foo> <http://bar> <http://baz> .",
+            RdfFormat.N_TRIPLES,
             to_graph=graph,
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
@@ -242,7 +282,7 @@ class TestStore(unittest.TestCase):
         store = Store()
         store.load(
             BytesIO(b"<http://foo> <http://bar> <> ."),
-            mime_type="text/turtle",
+            RdfFormat.TURTLE,
             base_iri="http://baz",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, DefaultGraph())})
@@ -250,38 +290,37 @@ class TestStore(unittest.TestCase):
     def test_load_nquads(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://foo> <http://bar> <http://baz> <http://graph>."),
-            mime_type="application/n-quads",
+            StringIO("<http://foo> <http://bar> <http://baz> <http://graph>."),
+            RdfFormat.N_QUADS,
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_trig_with_base_iri(self) -> None:
         store = Store()
         store.load(
-            BytesIO(b"<http://graph> { <http://foo> <http://bar> <> . }"),
-            mime_type="application/trig",
+            "<http://graph> { <http://foo> <http://bar> <> . }",
+            RdfFormat.TRIG,
             base_iri="http://baz",
         )
         self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_file(self) -> None:
-        with NamedTemporaryFile(delete=False) as fp:
-            file_name = Path(fp.name)
+        with NamedTemporaryFile(suffix=".nq") as fp:
             fp.write(b"<http://foo> <http://bar> <http://baz> <http://graph>.")
-        store = Store()
-        store.load(file_name, mime_type="application/n-quads")
-        file_name.unlink()
-        self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
+            fp.flush()
+            store = Store()
+            store.load(path=fp.name)
+            self.assertEqual(set(store), {Quad(foo, bar, baz, graph)})
 
     def test_load_with_io_error(self) -> None:
         with self.assertRaises(UnsupportedOperation) as _, TemporaryFile("wb") as fp:
-            Store().load(fp, mime_type="application/n-triples")
+            Store().load(fp, RdfFormat.N_TRIPLES)
 
     def test_dump_ntriples(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
         output = BytesIO()
-        store.dump(output, "application/n-triples", from_graph=graph)
+        store.dump(output, RdfFormat.N_TRIPLES, from_graph=graph)
         self.assertEqual(
             output.getvalue(),
             b"<http://foo> <http://bar> <http://baz> .\n",
@@ -290,10 +329,8 @@ class TestStore(unittest.TestCase):
     def test_dump_nquads(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz, graph))
-        output = BytesIO()
-        store.dump(output, "application/n-quads")
         self.assertEqual(
-            output.getvalue(),
+            store.dump(format=RdfFormat.N_QUADS),
             b"<http://foo> <http://bar> <http://baz> <http://graph> .\n",
         )
 
@@ -302,26 +339,29 @@ class TestStore(unittest.TestCase):
         store.add(Quad(foo, bar, baz, graph))
         store.add(Quad(foo, bar, baz))
         output = BytesIO()
-        store.dump(output, "application/trig")
+        store.dump(output, RdfFormat.TRIG)
         self.assertEqual(
             output.getvalue(),
-            b"<http://foo> <http://bar> <http://baz> .\n<http://graph> { <http://foo> <http://bar> <http://baz> }\n",
+            b"<http://foo> <http://bar> <http://baz> .\n"
+            b"<http://graph> {\n\t<http://foo> <http://bar> <http://baz> .\n}\n",
         )
 
     def test_dump_file(self) -> None:
         with NamedTemporaryFile(delete=False) as fp:
+            store = Store()
+            store.add(Quad(foo, bar, baz, graph))
             file_name = Path(fp.name)
-        store = Store()
-        store.add(Quad(foo, bar, baz, graph))
-        store.dump(file_name, "application/n-quads")
-        self.assertEqual(
-            file_name.read_text(),
-            "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
-        )
+            store.dump(file_name, RdfFormat.N_QUADS)
+            self.assertEqual(
+                file_name.read_text(),
+                "<http://foo> <http://bar> <http://baz> <http://graph> .\n",
+            )
 
     def test_dump_with_io_error(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, bar))
         with self.assertRaises(OSError) as _, TemporaryFile("rb") as fp:
-            Store().dump(fp, mime_type="application/rdf+xml")
+            store.dump(fp, RdfFormat.TRIG)
 
     def test_write_in_read(self) -> None:
         store = Store()
@@ -345,15 +385,18 @@ class TestStore(unittest.TestCase):
         self.assertEqual(list(store.named_graphs()), [])
         self.assertEqual(list(store), [])
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_read_only(self) -> None:
         quad = Quad(foo, bar, baz, graph)
         with TemporaryDirectory() as dir:
             store = Store(dir)
             store.add(quad)
             del store
+            gc.collect()
             store = Store.read_only(dir)
             self.assertEqual(list(store), [quad])
 
+    @unittest.skipIf(is_wasm, "Not supported with WASM")
     def test_secondary(self) -> None:
         quad = Quad(foo, bar, baz, graph)
         with TemporaryDirectory() as dir:

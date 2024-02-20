@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - next
   schedule:
     - cron: "12 3 * * *"
 
@@ -16,7 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: rustup update && rustup component add rustfmt
+      - uses: ./.github/actions/setup-rust
+        with:
+          component: rustfmt
       - run: cargo fmt -- --check
 
   clippy:
@@ -25,17 +28,38 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update && rustup component add clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy
+      - uses: ./.github/actions/setup-rust
+        with:
+          version: 1.74.1
+          component: clippy
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxsdatatypes
-      - run: cargo clippy
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdf
-      - run: cargo clippy
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/oxrdfxml
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/oxttl
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/oxrdfio
+      - run: cargo clippy --all-targets --features async-tokio -- -D warnings -D clippy::all
+        working-directory: ./lib/oxrdfio
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/sparesults
-      - run: cargo clippy
+      - run: cargo clippy --all-targets --features async-tokio -- -D warnings -D clippy::all
+        working-directory: ./lib/sparesults
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/spargebra
-      - run: cargo clippy --all-targets --all-features
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/sparopt
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/oxigraph
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./python
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./cli
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./testsuite
 
   clippy_msv:
     runs-on: ubuntu-latest
@@ -60,9 +84,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: rustup update
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-deny || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-deny }
       - run: cargo deny check
 
   semver_checks:
@@ -71,36 +94,88 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-semver-checks || true
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph_js --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
+      - uses: ./.github/actions/setup-rust
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-semver-checks }
+      - uses: actions/cache@v3
+        with:
+          path: rocksdb
+          key: ${{ runner.os }}-rocksdb-8.0.0
+      - run: bash .github/workflows/install_rocksdb.sh
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
 
-  test_linux:
+  test_linux_x86_64:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --all-features
-        env:
-          RUST_BACKTRACE: 1
+      - uses: ./.github/actions/setup-rust
+      - run: cargo test
 
-  address_sanitizer:
+  test_linux_i686:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update && rustup override set nightly
-      - run: sudo apt install -y llvm
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph_testsuite --exclude oxigraph_server
+      - uses: ./.github/actions/setup-rust
+        with:
+          target: i686-unknown-linux-gnu
+      - run: sudo apt-get update && sudo apt-get install -y g++-multilib
+      - run: cargo test --target i686-unknown-linux-gnu --no-default-features --features http-client-rustls-native
+        working-directory: ./lib/oxigraph
+
+  test_linux_msv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+        with:
+          version: 1.70.0
+      - run: rustup toolchain install nightly
+      - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
+      - run: cargo test
+
+  test_linux_latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - run: rm Cargo.lock && cargo update
+      - run: cargo test
+
+  test_linux_address_sanitizer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+        with:
+          version: nightly
+      - run: sudo apt-get update && sudo apt-get install -y llvm
+      - run: cargo test --tests --target x86_64-unknown-linux-gnu --workspace --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
         env:
-          RUST_BACKTRACE: 1
           RUSTFLAGS: -Z sanitizer=address
+
+  test_linux_dynamic_linking:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - uses: actions/cache@v3
+        with:
+          path: rocksdb
+          key: ${{ runner.os }}-rocksdb-8.0.0
+      - run: bash .github/workflows/install_rocksdb.sh
+      - run: cargo test --tests --features oxrocksdb-sys/pkg-config
 
   test_windows:
     runs-on: windows-latest
@@ -108,12 +183,9 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup-rust
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: cargo test --all-features
-        env:
-          RUST_BACKTRACE: 1
+      - run: cargo test
 
   rustdoc:
     runs-on: ubuntu-latest
@@ -121,21 +193,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - run: rustup update
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --all-features
-        working-directory: ./lib
-
-  rustdoc_msrv:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+      - uses: ./.github/actions/setup-rust
         with:
-          submodules: true
-      - run: rustup update && rustup override set 1.60.0
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --all-features
-        working-directory: ./lib
+          version: 1.74.1
+      - run: cargo doc
         env:
           RUSTDOCFLAGS: -D warnings
 
@@ -143,24 +204,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install typos-cli || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: typos-cli }
       - run: typos
 
   clang_fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: sudo apt install -y clang-format
+      - run: sudo apt-get update && sudo apt-get install -y clang-format
       - run: clang-format --Werror --dry-run oxrocksdb-sys/api/*
 
   fuzz_changes:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
       - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
@@ -170,7 +228,7 @@ jobs:
       - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 600
+          fuzz-seconds: 900
           mode: code-change
           sanitizer: address
           minimize-crashes: true
@@ -181,9 +239,6 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
       - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
           language: rust
@@ -192,7 +247,7 @@ jobs:
       - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 3600
+          fuzz-seconds: 7200
           mode: batch
           sanitizer: address
           minimize-crashes: true

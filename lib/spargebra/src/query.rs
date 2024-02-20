@@ -1,5 +1,5 @@
 use crate::algebra::*;
-use crate::parser::{parse_query, ParseError};
+use crate::parser::{parse_query, SparqlSyntaxError};
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -13,8 +13,11 @@ use std::str::FromStr;
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
 /// let query = Query::parse(query_str, None)?;
 /// assert_eq!(query.to_string(), query_str);
-/// assert_eq!(query.to_sse(), "(project (?s ?p ?o) (bgp (triple ?s ?p ?o)))");
-/// # Ok::<_, spargebra::ParseError>(())
+/// assert_eq!(
+///     query.to_sse(),
+///     "(project (?s ?p ?o) (bgp (triple ?s ?p ?o)))"
+/// );
+/// # Ok::<_, spargebra::SparqlSyntaxError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Query {
@@ -60,7 +63,7 @@ pub enum Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
+    pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
         parse_query(query, base_iri)
     }
 
@@ -83,16 +86,16 @@ impl Query {
                     write!(f, "(base <{base_iri}> ")?;
                 }
                 if let Some(dataset) = dataset {
-                    write!(f, "(dataset ")?;
+                    f.write_str("(dataset ")?;
                     dataset.fmt_sse(f)?;
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                 }
                 pattern.fmt_sse(f)?;
                 if dataset.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
                 if base_iri.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
                 Ok(())
             }
@@ -105,26 +108,26 @@ impl Query {
                 if let Some(base_iri) = base_iri {
                     write!(f, "(base <{base_iri}> ")?;
                 }
-                write!(f, "(construct (")?;
+                f.write_str("(construct (")?;
                 for (i, t) in template.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        f.write_str(" ")?;
                     }
                     t.fmt_sse(f)?;
                 }
-                write!(f, ") ")?;
+                f.write_str(") ")?;
                 if let Some(dataset) = dataset {
-                    write!(f, "(dataset ")?;
+                    f.write_str("(dataset ")?;
                     dataset.fmt_sse(f)?;
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                 }
                 pattern.fmt_sse(f)?;
                 if dataset.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
-                write!(f, ")")?;
+                f.write_str(")")?;
                 if base_iri.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
                 Ok(())
             }
@@ -136,19 +139,19 @@ impl Query {
                 if let Some(base_iri) = base_iri {
                     write!(f, "(base <{base_iri}> ")?;
                 }
-                write!(f, "(describe ")?;
+                f.write_str("(describe ")?;
                 if let Some(dataset) = dataset {
-                    write!(f, "(dataset ")?;
+                    f.write_str("(dataset ")?;
                     dataset.fmt_sse(f)?;
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                 }
                 pattern.fmt_sse(f)?;
                 if dataset.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
-                write!(f, ")")?;
+                f.write_str(")")?;
                 if base_iri.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
                 Ok(())
             }
@@ -160,19 +163,19 @@ impl Query {
                 if let Some(base_iri) = base_iri {
                     write!(f, "(base <{base_iri}> ")?;
                 }
-                write!(f, "(ask ")?;
+                f.write_str("(ask ")?;
                 if let Some(dataset) = dataset {
-                    write!(f, "(dataset ")?;
+                    f.write_str("(dataset ")?;
                     dataset.fmt_sse(f)?;
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                 }
                 pattern.fmt_sse(f)?;
                 if dataset.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
-                write!(f, ")")?;
+                f.write_str(")")?;
                 if base_iri.is_some() {
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 }
                 Ok(())
             }
@@ -209,11 +212,11 @@ impl fmt::Display for Query {
                 if let Some(base_iri) = base_iri {
                     writeln!(f, "BASE <{base_iri}>")?;
                 }
-                write!(f, "CONSTRUCT {{ ")?;
+                f.write_str("CONSTRUCT { ")?;
                 for triple in template {
                     write!(f, "{triple} . ")?;
                 }
-                write!(f, "}}")?;
+                f.write_str("}")?;
                 if let Some(dataset) = dataset {
                     dataset.fmt(f)?;
                 }
@@ -234,7 +237,7 @@ impl fmt::Display for Query {
                 if let Some(base_iri) = base_iri {
                     writeln!(f, "BASE <{}>", base_iri.as_str())?;
                 }
-                write!(f, "DESCRIBE *")?;
+                f.write_str("DESCRIBE *")?;
                 if let Some(dataset) = dataset {
                     dataset.fmt(f)?;
                 }
@@ -255,7 +258,7 @@ impl fmt::Display for Query {
                 if let Some(base_iri) = base_iri {
                     writeln!(f, "BASE <{base_iri}>")?;
                 }
-                write!(f, "ASK")?;
+                f.write_str("ASK")?;
                 if let Some(dataset) = dataset {
                     dataset.fmt(f)?;
                 }
@@ -273,25 +276,25 @@ impl fmt::Display for Query {
 }
 
 impl FromStr for Query {
-    type Err = ParseError;
+    type Err = SparqlSyntaxError;
 
-    fn from_str(query: &str) -> Result<Self, ParseError> {
+    fn from_str(query: &str) -> Result<Self, Self::Err> {
         Self::parse(query, None)
     }
 }
 
 impl<'a> TryFrom<&'a str> for Query {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
-    fn try_from(query: &str) -> Result<Self, ParseError> {
+    fn try_from(query: &str) -> Result<Self, Self::Error> {
         Self::from_str(query)
     }
 }
 
 impl<'a> TryFrom<&'a String> for Query {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
-    fn try_from(query: &String) -> Result<Self, ParseError> {
+    fn try_from(query: &String) -> Result<Self, Self::Error> {
         Self::from_str(query)
     }
 }

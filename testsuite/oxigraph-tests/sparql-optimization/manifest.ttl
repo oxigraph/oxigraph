@@ -1,0 +1,132 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix :      <https://github.com/oxigraph/oxigraph/tests/sparql-optimization/manifest#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:    <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix ox:    <https://github.com/oxigraph/oxigraph/tests#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Oxigraph SPARQL optimization tests" ;
+    mf:entries
+    (
+    :unbound_filter
+    :unbound_bind
+    :something_or_true
+    :true_or_something
+    :something_or_false
+    :false_or_something
+    :something_and_true
+    :true_and_something
+    :something_and_false
+    :false_and_something
+    :equal_to_same_term
+    :bind_always_true
+    :bind_always_false
+    :if_always_true
+    :if_always_false
+    :exists_always_false
+    :push_filter
+    :push_optional_filter
+    :empty_union
+    :bgp_join_reordering
+    ) .
+
+
+:unbound_filter rdf:type ox:QueryOptimizationTest ;
+    mf:name "unbound variable in filter" ;
+    mf:action <unbound_filter_input.rq> ;
+    mf:result <unbound_filter_output.rq> .
+
+:unbound_bind rdf:type ox:QueryOptimizationTest ;
+    mf:name "unbound variable in bindr" ;
+    mf:action <unbound_bind_input.rq> ;
+    mf:result <unbound_bind_output.rq> .
+
+:something_or_true rdf:type ox:QueryOptimizationTest ;
+    mf:name "something || true" ;
+    mf:action <something_or_true_input.rq> ;
+    mf:result <something_or_true_output.rq> .
+
+:true_or_something rdf:type ox:QueryOptimizationTest ;
+    mf:name "true || something" ;
+    mf:action <true_or_something_input.rq> ;
+    mf:result <true_or_something_output.rq> .
+
+:something_or_false rdf:type ox:QueryOptimizationTest ;
+    mf:name "something || false" ;
+    mf:action <something_or_false_input.rq> ;
+    mf:result <something_or_false_output.rq> .
+
+:false_or_something rdf:type ox:QueryOptimizationTest ;
+    mf:name "false || something" ;
+    mf:action <false_or_something_input.rq> ;
+    mf:result <false_or_something_output.rq> .
+
+:something_and_true rdf:type ox:QueryOptimizationTest ;
+    mf:name "something && true" ;
+    mf:action <something_and_true_input.rq> ;
+    mf:result <something_and_true_output.rq> .
+
+:true_and_something rdf:type ox:QueryOptimizationTest ;
+    mf:name "true && something" ;
+    mf:action <true_and_something_input.rq> ;
+    mf:result <true_and_something_output.rq> .
+
+:something_and_false rdf:type ox:QueryOptimizationTest ;
+    mf:name "something && false" ;
+    mf:action <something_and_false_input.rq> ;
+    mf:result <something_and_false_output.rq> .
+
+:false_and_something rdf:type ox:QueryOptimizationTest ;
+    mf:name "false && something" ;
+    mf:action <false_and_something_input.rq> ;
+    mf:result <false_and_something_output.rq> .
+
+:equal_to_same_term a ox:QueryOptimizationTest ;
+    mf:name "equal to same term" ;
+    mf:action <equal_to_same_term_input.rq> ;
+    mf:result <equal_to_same_term_output.rq> .
+
+:bind_always_true rdf:type ox:QueryOptimizationTest ;
+    mf:name "BIND() always true" ;
+    mf:action <bind_always_true_input.rq> ;
+    mf:result <bind_always_true_output.rq> .
+
+:bind_always_false rdf:type ox:QueryOptimizationTest ;
+    mf:name "BIND() always false" ;
+    mf:action <bind_always_false_input.rq> ;
+    mf:result <bind_always_false_output.rq> .
+
+:if_always_true rdf:type ox:QueryOptimizationTest ;
+    mf:name "IF() always true" ;
+    mf:action <if_always_true_input.rq> ;
+    mf:result <if_always_true_output.rq> .
+
+:if_always_false rdf:type ox:QueryOptimizationTest ;
+    mf:name "IF() always false" ;
+    mf:action <if_always_false_input.rq> ;
+    mf:result <if_always_false_output.rq> .
+
+:exists_always_false rdf:type ox:QueryOptimizationTest ;
+    mf:name "EXISTS {} always false" ;
+    mf:action <exists_always_false_input.rq> ;
+    mf:result <exists_always_false_output.rq> .
+
+:push_filter rdf:type ox:QueryOptimizationTest ;
+    mf:name "push filter down" ;
+    mf:action <push_filter_input.rq> ;
+    mf:result <push_filter_output.rq> .
+
+:push_optional_filter rdf:type ox:QueryOptimizationTest ;
+    mf:name "push OPTIONAL filter down" ;
+    mf:action <push_optional_filter_input.rq> ;
+    mf:result <push_optional_filter_output.rq> .
+
+:empty_union rdf:type ox:QueryOptimizationTest ;
+    mf:name "empty UNION" ;
+    mf:action <empty_union_input.rq> ;
+    mf:result <empty_union_output.rq> .
+
+:bgp_join_reordering rdf:type ox:QueryOptimizationTest ;
+    mf:name "BGP join reordering" ;
+    mf:action <bgp_join_reordering_input.rq> ;
+    mf:result <bgp_join_reordering_output.rq> .

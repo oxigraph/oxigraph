@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!DOCTYPE rdf:RDF [
+	<!ENTITY xsd "http://www.w3.org/2001/XMLSchema#" >
+	<!ENTITY ex "http://example.com/">
+]>
+<rdf:RDF xmlns:ex2="&ex;2/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+	<rdf:Description rdf:about="&ex;foo">
+	    <ex2:test rdf:datatype="&xsd;string">bar</ex2:test>
+	</rdf:Description>
+</rdf:RDF>

@@ -5,7 +5,7 @@ Sparesults
 [![Released API docs](https://docs.rs/sparesults/badge.svg)](https://docs.rs/sparesults)
 [![Crates.io downloads](https://img.shields.io/crates/d/sparesults)](https://crates.io/crates/sparesults)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 Sparesults is a set of parsers and serializers for [SPARQL](https://www.w3.org/TR/sparql11-overview/) query results formats.
 
@@ -15,28 +15,29 @@ Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html
 
 This crate is intended to be a building piece for SPARQL client and server implementations in Rust like [Oxigraph](https://oxigraph.org).
 
-Usage example converting a JSON result file into a TSV result file:
+The entry points of this library are the two [`QueryResultsParser`] and [`QueryResultsSerializer`] structs.
 
+Usage example converting a JSON result file into a TSV result file:
 ```rust
-use sparesults::{QueryResultsFormat, QueryResultsParser, QueryResultsReader, QueryResultsSerializer};
+use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader, QueryResultsSerializer};
 use std::io::Result;
 
 fn convert_json_to_tsv(json_file: &[u8]) -> Result<Vec<u8>> {
     let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
     let tsv_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
     // We start to read the JSON file and see which kind of results it is
-    match json_parser.read_results(json_file)? {
-        QueryResultsReader::Boolean(value) => {
+    match json_parser.parse_read(json_file)? {
+        FromReadQueryResultsReader::Boolean(value) => {
             // it's a boolean result, we copy it in TSV to the output buffer
-            tsv_serializer.write_boolean_result(Vec::new(), value)
+            tsv_serializer.serialize_boolean_to_write(Vec::new(), value)
         },
-        QueryResultsReader::Solutions(solutions_reader) => {
+        FromReadQueryResultsReader::Solutions(solutions_reader) => {
             // it's a set of solutions, we create a writer and we write to it while reading in streaming from the JSON file
-            let mut solutions_writer = tsv_serializer.solutions_writer(Vec::new(), solutions_reader.variables().to_vec())?;
+            let mut serialize_solutions_to_write = tsv_serializer.serialize_solutions_to_write(Vec::new(), solutions_reader.variables().to_vec())?;
             for solution in solutions_reader {
-                solutions_writer.write(&solution?)?;
+                serialize_solutions_to_write.write(&solution?)?;
             }
-            solutions_writer.finish()
+            serialize_solutions_to_write.finish()
         }
     }
 }

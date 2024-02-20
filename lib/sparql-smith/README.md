@@ -5,7 +5,7 @@ SPARQL smith
 [![Released API docs](https://docs.rs/sparql-smith/badge.svg)](https://docs.rs/sparql-smith)
 [![Crates.io downloads](https://img.shields.io/crates/d/sparql-smith)](https://crates.io/crates/sparql-smith)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 sparql-smith is a test case generator for the [SPARQL](https://www.w3.org/TR/sparql11-overview/) language.
 

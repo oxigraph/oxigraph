@@ -1,0 +1,6 @@
+@prefix state: <http://lv2plug.in/ns/ext/state#> .
+
+<urn:zamaudio:ZaMultiComp#preset001>
+    state:state [
+    ] .
+

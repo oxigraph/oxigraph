@@ -1,0 +1,5 @@
+SELECT ?s ?o WHERE {
+    ?s a ?t .
+    OPTIONAL { { ?s ?p ?o } UNION { ?s ?p ?o2 } FILTER(?o = 1) }
+    OPTIONAL { { ?s ?p ?o } UNION { ?s ?p2 ?o2 } FILTER(?o = ?t) }
+}

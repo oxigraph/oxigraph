@@ -5,7 +5,7 @@
 ![PyPI - Implementation](https://img.shields.io/pypi/implementation/pyoxigraph)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyoxigraph)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 Pyoxigraph is a graph database library implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 It is a Python library written on top of [Oxigraph](https://crates.io/crates/oxigraph).
@@ -31,6 +31,9 @@ Pyoxigraph documentation is [available on the Oxigraph website](https://pyoxigra
 
 To build and install the development version of pyoxigraph you need to clone this git repository including submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`)
 and to run `pip install .` in the `python` directory (the one this README is in).
+
+Note that by default the installation will not use [cpython stable ABI](https://docs.python.org/3/c-api/stable.html).
+Use `--features abi3` feature to use cpython stable ABI.
 
 ## Help
 

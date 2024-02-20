@@ -1,17 +1,17 @@
 [package]
 name = "sparql-smith"
-version = "0.1.0-alpha.4"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
+version = "0.1.0-alpha.5"
+authors.workspace = true
+license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparql-smith"
-homepage = "https://oxigraph.org/"
 documentation = "https://docs.rs/sparql-smith"
 description = """
 A SPARQL test cases generator
 """
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []
@@ -19,5 +19,8 @@ limit-offset = ["order"]
 order = []
 sep-0006 = []
 
+[lints]
+workspace = true
+
 [dependencies]
-arbitrary = { version = "1", features = ["derive"] }
+arbitrary = { workspace = true, features = ["derive"] }

@@ -216,3 +216,21 @@ impl PartialOrd<NamedNodeRef<'_>> for NamedNode {
         self.as_ref().partial_cmp(other)
     }
 }
+
+impl From<Iri<String>> for NamedNode {
+    #[inline]
+    fn from(iri: Iri<String>) -> Self {
+        Self {
+            iri: iri.into_inner(),
+        }
+    }
+}
+
+impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
+    #[inline]
+    fn from(iri: Iri<&'a str>) -> Self {
+        Self {
+            iri: iri.into_inner(),
+        }
+    }
+}

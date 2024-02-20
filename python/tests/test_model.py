@@ -138,9 +138,7 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(copy.deepcopy(number), number)
 
     def test_basic_match(self) -> None:
-        match_works(
-            self, 'Literal("foo", language="en")', 'Literal("foo", language="en")'
-        )
+        match_works(self, 'Literal("foo", language="en")', 'Literal("foo", language="en")')
         match_works(
             self,
             'Literal("1", datatype=XSD_INTEGER)',
@@ -149,9 +147,7 @@ class TestLiteral(unittest.TestCase):
 
     def test_wildcard_match(self) -> None:
         match_works(self, 'Literal("foo", language="en")', "Literal(v, language=l)")
-        match_works(
-            self, 'Literal("1", datatype=XSD_INTEGER)', "Literal(v, datatype=d)"
-        )
+        match_works(self, 'Literal("1", datatype=XSD_INTEGER)', "Literal(v, datatype=d)")
 
 
 class TestTriple(unittest.TestCase):

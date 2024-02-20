@@ -9,7 +9,7 @@ use std::str::FromStr;
 ///
 /// Uses internally a [`f64`].
 ///
-/// Beware: serialization is currently buggy and do not follow the canonical mapping yet.
+/// <div class="warning">Serialization does not follow the canonical mapping.</div>
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 #[repr(transparent)]
 pub struct Double {
@@ -17,7 +17,18 @@ pub struct Double {
 }
 
 impl Double {
+    pub const INFINITY: Self = Self {
+        value: f64::INFINITY,
+    };
+    pub const MAX: Self = Self { value: f64::MAX };
+    pub const MIN: Self = Self { value: f64::MIN };
+    pub const NAN: Self = Self { value: f64::NAN };
+    pub const NEG_INFINITY: Self = Self {
+        value: f64::NEG_INFINITY,
+    };
+
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 8]) -> Self {
         Self {
             value: f64::from_be_bytes(bytes),
@@ -25,69 +36,57 @@ impl Double {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 8] {
         self.value.to_be_bytes()
     }
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
     #[inline]
+    #[must_use]
     pub fn abs(self) -> Self {
         self.value.abs().into()
     }
 
     /// [fn:ceiling](https://www.w3.org/TR/xpath-functions-31/#func-ceiling)
     #[inline]
+    #[must_use]
     pub fn ceil(self) -> Self {
         self.value.ceil().into()
     }
 
     /// [fn:floor](https://www.w3.org/TR/xpath-functions-31/#func-floor)
     #[inline]
+    #[must_use]
     pub fn floor(self) -> Self {
         self.value.floor().into()
     }
 
     /// [fn:round](https://www.w3.org/TR/xpath-functions-31/#func-round)
     #[inline]
+    #[must_use]
     pub fn round(self) -> Self {
         self.value.round().into()
     }
 
     #[inline]
+    #[must_use]
     pub fn is_nan(self) -> bool {
         self.value.is_nan()
     }
 
-    #[deprecated(note = "Use .is_nan()")]
     #[inline]
-    pub fn is_naan(self) -> bool {
-        self.value.is_nan()
-    }
-
-    #[inline]
+    #[must_use]
     pub fn is_finite(self) -> bool {
         self.value.is_finite()
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
-        self.value.to_ne_bytes() == other.value.to_ne_bytes()
+    #[must_use]
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self.value.to_bits() == other.value.to_bits()
     }
-
-    pub const MIN: Self = Self { value: f64::MIN };
-
-    pub const MAX: Self = Self { value: f64::MAX };
-
-    pub const INFINITY: Self = Self {
-        value: f64::INFINITY,
-    };
-
-    pub const NEG_INFINITY: Self = Self {
-        value: f64::NEG_INFINITY,
-    };
-
-    pub const NAN: Self = Self { value: f64::NAN };
 }
 
 impl From<Double> for f64 {
@@ -170,7 +169,7 @@ impl From<Float> for Double {
 impl From<Boolean> for Double {
     #[inline]
     fn from(value: Boolean) -> Self {
-        if bool::from(value) { 1. } else { 0. }.into()
+        f64::from(bool::from(value)).into()
     }
 }
 
@@ -186,7 +185,7 @@ impl FromStr for Double {
     type Err = ParseFloatError;
 
     #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseFloatError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(f64::from_str(input)?.into())
     }
 }
@@ -258,6 +257,8 @@ impl Div for Double {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]
@@ -291,9 +292,9 @@ mod tests {
 
     #[test]
     fn is_identical_with() {
-        assert!(Double::from(0.).is_identical_with(&Double::from(0.)));
-        assert!(Double::NAN.is_identical_with(&Double::NAN));
-        assert!(!Double::from(-0.).is_identical_with(&Double::from(0.)));
+        assert!(Double::from(0.).is_identical_with(Double::from(0.)));
+        assert!(Double::NAN.is_identical_with(Double::NAN));
+        assert!(!Double::from(-0.).is_identical_with(Double::from(0.)));
     }
 
     #[test]

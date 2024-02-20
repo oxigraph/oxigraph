@@ -5,11 +5,18 @@
 This is a fork of oxigraph that includes [rs-handlegraph](https://github.com/chfi/rs-handlegraph).
 The purpose is to make pangenomic GFA-files accessible with SPARQL queries.
 
-Oxigraph implements the following specifications:
+Also, some parts of Oxigraph are available as standalone Rust crates:
+* [`oxrdf`](https://crates.io/crates/oxrdf), datastructures encoding RDF basic concepts (the [`oxigraph::model`](crate::model) module).
+* [`oxrdfio`](https://crates.io/crates/oxrdfio), a unified parser and serializer API for RDF formats (the [`oxigraph::io`](crate::io) module). It itself relies on:
+  * [`oxttl`](https://crates.io/crates/oxttl), N-Triple, N-Quad, Turtle, TriG and N3 parsing and serialization.
+  * [`oxrdfxml`](https://crates.io/crates/oxrdfxml), RDF/XML parsing and serialization.
+* [`spargebra`](https://crates.io/crates/spargebra), a SPARQL parser.
+* [`sparesults`](https://crates.io/crates/sparesults), parsers and serializers for SPARQL result formats.
+* [`sparopt`](https://crates.io/crates/sparesults), a SPARQL optimizer.
+* [`oxsdatatypes`](https://crates.io/crates/oxsdatatypes), an implementation of some XML Schema datatypes.
 
-- [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/), and [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
-- [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval using the [Rio library](https://github.com/oxigraph/rio).
-- [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
+The library layers in Oxigraph. The elements above depend on the elements below:
+![Oxigraph libraries architecture diagram](./docs/arch-diagram.svg)
 
 When cloning this codebase, don't forget to clone the submodules using
 `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or

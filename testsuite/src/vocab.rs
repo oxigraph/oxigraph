@@ -43,6 +43,9 @@ pub mod mf {
     pub const ACTION: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action",
     );
+    pub const ASSUMED_TEST_BASE: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
+        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#assumedTestBase",
+    );
     pub const RESULT: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result",
     );

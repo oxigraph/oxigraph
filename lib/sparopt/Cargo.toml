@@ -1,0 +1,32 @@
+[package]
+name = "sparopt"
+version = "0.1.0-alpha.2"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["SPARQL"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparopt"
+documentation = "https://docs.rs/sparopt"
+description = """
+A SPARQL optimizer
+"""
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+rdf-star = ["oxrdf/rdf-star", "spargebra/rdf-star"]
+sep-0002 = ["spargebra/sep-0002"]
+sep-0006 = ["spargebra/sep-0006"]
+
+[dependencies]
+oxrdf.workspace = true
+rand.workspace = true
+spargebra.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

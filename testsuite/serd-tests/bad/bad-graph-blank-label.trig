@@ -1,0 +1,3 @@
+PREFIX : <http://example/>
+
+GRAPH [ :p :o ] { :s :p :o }

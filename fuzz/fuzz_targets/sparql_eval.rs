@@ -1,31 +1,26 @@
 #![no_main]
 
-use lazy_static::lazy_static;
 use libfuzzer_sys::fuzz_target;
-use oxigraph::io::DatasetFormat;
+use oxigraph::io::RdfFormat;
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, QuerySolutionIter};
 use oxigraph::store::Store;
-
-lazy_static! {
-    static ref STORE: Store = {
-        let store = Store::new().unwrap();
-        store
-            .load_dataset(
-                sparql_smith::DATA_TRIG.as_bytes(),
-                DatasetFormat::TriG,
-                None,
-            )
-            .unwrap();
-        store
-    };
-}
+use std::sync::OnceLock;
 
 fuzz_target!(|data: sparql_smith::Query| {
+    static STORE: OnceLock<Store> = OnceLock::new();
+    let store = STORE.get_or_init(|| {
+        let store = Store::new().unwrap();
+        store
+            .load_dataset(sparql_smith::DATA_TRIG.as_bytes(), RdfFormat::TriG, None)
+            .unwrap();
+        store
+    });
+
     let query_str = data.to_string();
     if let Ok(query) = Query::parse(&query_str, None) {
         let options = QueryOptions::default();
-        let with_opt = STORE.query_opt(query.clone(), options.clone()).unwrap();
-        let without_opt = STORE
+        let with_opt = store.query_opt(query.clone(), options.clone()).unwrap();
+        let without_opt = store
             .query_opt(query, options.without_optimizations())
             .unwrap();
         match (with_opt, without_opt) {
@@ -52,7 +47,7 @@ fn query_solutions_key(iter: QuerySolutionIter, is_reduced: bool) -> String {
             let mut b = t
                 .unwrap()
                 .iter()
-                .map(|(var, val)| format!("{}: {}", var, val))
+                .map(|(var, val)| format!("{var}: {val}"))
                 .collect::<Vec<_>>();
             b.sort_unstable();
             b.join(" ")

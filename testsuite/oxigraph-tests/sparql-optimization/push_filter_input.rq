@@ -1,0 +1,11 @@
+PREFIX : <http://example.com/>
+
+SELECT ?o1 ?o2 ?o4 ?o5 WHERE {
+    ?s :p1 ?o1 ; :p4 ?o4 ; :p5 ?o5 .
+    LATERAL { ?s :p2 ?o2 }
+    MINUS { ?s :p3 ?o3 }
+    FILTER(?o1 = 1)
+    FILTER(?o2 = 2)
+    FILTER(?o4 = 4)
+    FILTER(?o1 = ?o5)
+}

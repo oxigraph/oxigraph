@@ -20,26 +20,29 @@
 //! assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
 //!
 //! // Print
-//! assert_eq!(dataset.to_string(), "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n");
+//! assert_eq!(
+//!     dataset.to_string(),
+//!     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
+//! );
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
 //! See also [`Graph`] if you only care about plain triples.
 
 use crate::interning::*;
-use crate::SubjectRef;
 use crate::*;
+use std::cmp::min;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeSet;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
 /// It can accommodate a fairly large number of quads (in the few millions).
-/// Beware: it interns the string and does not do any garbage collection yet:
-/// if you insert and remove a lot of different terms, memory will grow without any reduction.
+///
+/// <div class="warning">It interns the strings and does not do any garbage collection yet:
+/// if you insert and remove a lot of different terms, memory will grow without any reduction.</div>
 ///
 /// Usage example:
 /// ```
@@ -61,7 +64,7 @@ use std::hash::{Hash, Hasher};
 /// assert_eq!(vec![TripleRef::new(ex, ex, ex)], results);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Dataset {
     interner: Interner,
     gspo: BTreeSet<(
@@ -183,6 +186,7 @@ impl Dataset {
             .map(move |q| self.decode_spog(q))
     }
 
+    #[allow(clippy::map_identity)]
     fn interned_quads_for_subject(
         &self,
         subject: &InternedSubject,
@@ -291,6 +295,18 @@ impl Dataset {
                     ),
             )
             .map(|(o, s, p, g)| (s, p, o, g))
+    }
+
+    pub fn quads_for_graph_name<'a, 'b>(
+        &'a self,
+        graph_name: impl Into<GraphNameRef<'b>>,
+    ) -> impl Iterator<Item = QuadRef<'a>> + 'a {
+        let graph_name = self
+            .encoded_graph_name(graph_name)
+            .unwrap_or_else(InternedGraphName::impossible);
+
+        self.interned_quads_for_graph_name(&graph_name)
+            .map(move |q| self.decode_spog(q))
     }
 
     fn interned_quads_for_graph_name(
@@ -525,9 +541,12 @@ impl Dataset {
     /// Warning 3: This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input dataset.
     pub fn canonicalize(&mut self) {
         let bnodes = self.blank_nodes();
-        let (hash, partition) =
-            self.hash_bnodes(bnodes.into_iter().map(|bnode| (bnode, 0)).collect());
-        let new_quads = self.distinguish(&hash, &partition);
+        let quads_per_blank_node = self.quads_per_blank_nodes();
+        let (hash, partition) = self.hash_bnodes(
+            bnodes.into_iter().map(|bnode| (bnode, 0)).collect(),
+            &quads_per_blank_node,
+        );
+        let new_quads = self.distinguish(&hash, &partition, &quads_per_blank_node);
         self.clear();
         for quad in new_quads {
             self.insert_encoded(quad);
@@ -572,107 +591,172 @@ impl Dataset {
         }
     }
 
+    fn quads_per_blank_nodes(&self) -> QuadsPerBlankNode {
+        let mut map: HashMap<_, Vec<_>> = HashMap::new();
+        for quad in &self.spog {
+            if let InternedSubject::BlankNode(bnode) = &quad.0 {
+                map.entry(*bnode).or_default().push(quad.clone());
+            }
+            #[cfg(feature = "rdf-star")]
+            if let InternedSubject::Triple(t) = &quad.0 {
+                Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, &mut map);
+            }
+            if let InternedTerm::BlankNode(bnode) = &quad.2 {
+                map.entry(*bnode).or_default().push(quad.clone());
+            }
+            #[cfg(feature = "rdf-star")]
+            if let InternedTerm::Triple(t) = &quad.2 {
+                Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, &mut map);
+            }
+            if let InternedGraphName::BlankNode(bnode) = &quad.3 {
+                map.entry(*bnode).or_default().push(quad.clone());
+            }
+        }
+        map
+    }
+
+    #[cfg(feature = "rdf-star")]
+    fn add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(
+        quad: &(
+            InternedSubject,
+            InternedNamedNode,
+            InternedTerm,
+            InternedGraphName,
+        ),
+        triple: &InternedTriple,
+        map: &mut QuadsPerBlankNode,
+    ) {
+        if let InternedSubject::BlankNode(bnode) = &triple.subject {
+            map.entry(*bnode).or_default().push(quad.clone());
+        }
+        if let InternedSubject::Triple(t) = &triple.subject {
+            Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, map);
+        }
+        if let InternedTerm::BlankNode(bnode) = &triple.object {
+            map.entry(*bnode).or_default().push(quad.clone());
+        }
+        if let InternedTerm::Triple(t) = &triple.object {
+            Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, map);
+        }
+    }
+
     fn hash_bnodes(
         &self,
         mut hashes: HashMap<InternedBlankNode, u64>,
+        quads_per_blank_node: &QuadsPerBlankNode,
     ) -> (
         HashMap<InternedBlankNode, u64>,
         Vec<(u64, Vec<InternedBlankNode>)>,
     ) {
         let mut to_hash = Vec::new();
-        let mut partition: HashMap<u64, Vec<InternedBlankNode>> = HashMap::new();
-        let mut partition_len = 0;
-        loop {
-            //TODO: improve termination
-            let mut new_hashes = HashMap::new();
-            for (bnode, old_hash) in &hashes {
-                for (_, p, o, g) in
-                    self.interned_quads_for_subject(&InternedSubject::BlankNode(*bnode))
-                {
-                    to_hash.push((
-                        self.hash_named_node(*p),
-                        self.hash_term(o, &hashes),
-                        self.hash_graph_name(g, &hashes),
-                        0,
-                    ));
-                }
-                for (s, p, _, g) in self.interned_quads_for_object(&InternedTerm::BlankNode(*bnode))
-                {
-                    to_hash.push((
-                        self.hash_subject(s, &hashes),
-                        self.hash_named_node(*p),
-                        self.hash_graph_name(g, &hashes),
-                        1,
-                    ));
-                }
-                for (s, p, o, _) in
-                    self.interned_quads_for_graph_name(&InternedGraphName::BlankNode(*bnode))
-                {
-                    to_hash.push((
-                        self.hash_subject(s, &hashes),
-                        self.hash_named_node(*p),
-                        self.hash_term(o, &hashes),
-                        2,
-                    ));
-                }
-                to_hash.sort_unstable();
-                let hash = Self::hash_tuple((old_hash, &to_hash));
-                to_hash.clear();
-                new_hashes.insert(*bnode, hash);
+        let mut to_do = hashes
+            .keys()
+            .map(|bnode| (*bnode, true))
+            .collect::<HashMap<_, _>>();
+        let mut partition = HashMap::<_, Vec<_>>::with_capacity(hashes.len());
+        let mut old_partition_count = usize::MAX;
+        while old_partition_count != partition.len() {
+            old_partition_count = partition.len();
+            partition.clear();
+            let mut new_hashes = hashes.clone();
+            for bnode in hashes.keys() {
+                let hash = if to_do.contains_key(bnode) {
+                    for (s, p, o, g) in &quads_per_blank_node[bnode] {
+                        to_hash.push((
+                            self.hash_subject(s, *bnode, &hashes),
+                            self.hash_named_node(*p),
+                            self.hash_term(o, *bnode, &hashes),
+                            self.hash_graph_name(g, *bnode, &hashes),
+                        ));
+                    }
+                    to_hash.sort_unstable();
+                    let hash = Self::hash_tuple((&to_hash, hashes[bnode]));
+                    to_hash.clear();
+                    if hash == hashes[bnode] {
+                        to_do.insert(*bnode, false);
+                    } else {
+                        new_hashes.insert(*bnode, hash);
+                    }
+                    hash
+                } else {
+                    hashes[bnode]
+                };
                 partition.entry(hash).or_default().push(*bnode);
             }
-            if partition.len() == partition_len {
-                let mut partition: Vec<_> = partition.into_iter().collect();
-                partition.sort_by(|(h1, b1), (h2, b2)| (b1.len(), h1).cmp(&(b2.len(), h2)));
-                return (hashes, partition);
-            }
             hashes = new_hashes;
-            partition_len = partition.len();
-            partition.clear();
         }
+        let mut partition: Vec<_> = partition.into_iter().collect();
+        partition.sort_unstable_by(|(h1, b1), (h2, b2)| (b1.len(), h1).cmp(&(b2.len(), h2)));
+        (hashes, partition)
     }
 
     fn hash_named_node(&self, node: InternedNamedNode) -> u64 {
         Self::hash_tuple(node.decode_from(&self.interner))
     }
 
-    fn hash_subject(
-        &self,
-        node: &InternedSubject,
+    fn hash_blank_node(
+        node: InternedBlankNode,
+        current_blank_node: InternedBlankNode,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
-        #[cfg(feature = "rdf-star")]
-        if let InternedSubject::Triple(triple) = node {
-            return self.hash_triple(triple, bnodes_hash);
-        }
-        if let InternedSubject::BlankNode(bnode) = node {
-            bnodes_hash[bnode]
+        if node == current_blank_node {
+            u64::MAX
         } else {
-            Self::hash_tuple(node.decode_from(&self.interner))
+            bnodes_hash[&node]
         }
     }
 
-    fn hash_term(&self, term: &InternedTerm, bnodes_hash: &HashMap<InternedBlankNode, u64>) -> u64 {
-        #[cfg(feature = "rdf-star")]
-        if let InternedTerm::Triple(triple) = term {
-            return self.hash_triple(triple, bnodes_hash);
+    fn hash_subject(
+        &self,
+        node: &InternedSubject,
+        current_blank_node: InternedBlankNode,
+        bnodes_hash: &HashMap<InternedBlankNode, u64>,
+    ) -> u64 {
+        match node {
+            InternedSubject::NamedNode(node) => Self::hash_tuple(node.decode_from(&self.interner)),
+            InternedSubject::BlankNode(bnode) => {
+                Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
+            }
+            #[cfg(feature = "rdf-star")]
+            InternedSubject::Triple(triple) => {
+                self.hash_triple(triple, current_blank_node, bnodes_hash)
+            }
         }
-        if let InternedTerm::BlankNode(bnode) = term {
-            bnodes_hash[bnode]
-        } else {
-            Self::hash_tuple(term.decode_from(&self.interner))
+    }
+
+    fn hash_term(
+        &self,
+        term: &InternedTerm,
+        current_blank_node: InternedBlankNode,
+        bnodes_hash: &HashMap<InternedBlankNode, u64>,
+    ) -> u64 {
+        match term {
+            InternedTerm::NamedNode(node) => Self::hash_tuple(node.decode_from(&self.interner)),
+            InternedTerm::BlankNode(bnode) => {
+                Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
+            }
+            InternedTerm::Literal(literal) => Self::hash_tuple(literal.decode_from(&self.interner)),
+            #[cfg(feature = "rdf-star")]
+            InternedTerm::Triple(triple) => {
+                self.hash_triple(triple, current_blank_node, bnodes_hash)
+            }
         }
     }
 
     fn hash_graph_name(
         &self,
         graph_name: &InternedGraphName,
+        current_blank_node: InternedBlankNode,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
-        if let InternedGraphName::BlankNode(bnode) = graph_name {
-            bnodes_hash[bnode]
-        } else {
-            Self::hash_tuple(graph_name.decode_from(&self.interner))
+        match graph_name {
+            InternedGraphName::NamedNode(node) => {
+                Self::hash_tuple(node.decode_from(&self.interner))
+            }
+            InternedGraphName::BlankNode(bnode) => {
+                Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
+            }
+            InternedGraphName::DefaultGraph => 0,
         }
     }
 
@@ -680,12 +764,13 @@ impl Dataset {
     fn hash_triple(
         &self,
         triple: &InternedTriple,
+        current_blank_node: InternedBlankNode,
         bnodes_hash: &HashMap<InternedBlankNode, u64>,
     ) -> u64 {
         Self::hash_tuple((
-            self.hash_subject(&triple.subject, bnodes_hash),
+            self.hash_subject(&triple.subject, current_blank_node, bnodes_hash),
             self.hash_named_node(triple.predicate),
-            self.hash_term(&triple.object, bnodes_hash),
+            self.hash_term(&triple.object, current_blank_node, bnodes_hash),
         ))
     }
 
@@ -699,33 +784,25 @@ impl Dataset {
         &mut self,
         hash: &HashMap<InternedBlankNode, u64>,
         partition: &[(u64, Vec<InternedBlankNode>)],
+        quads_per_blank_node: &QuadsPerBlankNode,
     ) -> Vec<(
         InternedSubject,
         InternedNamedNode,
         InternedTerm,
         InternedGraphName,
     )> {
-        let b_prime = partition.iter().find_map(|(_, b)| (b.len() > 1).then(|| b));
+        let b_prime = partition.iter().map(|(_, b)| b).find(|b| b.len() > 1);
         if let Some(b_prime) = b_prime {
             b_prime
                 .iter()
                 .map(|b| {
                     let mut hash_prime = hash.clone();
                     hash_prime.insert(*b, Self::hash_tuple((hash_prime[b], 22)));
-                    let (hash_prime_prime, partition_prime) = self.hash_bnodes(hash_prime);
-                    self.distinguish(&hash_prime_prime, &partition_prime)
+                    let (hash_prime_prime, partition_prime) =
+                        self.hash_bnodes(hash_prime, quads_per_blank_node);
+                    self.distinguish(&hash_prime_prime, &partition_prime, quads_per_blank_node)
                 })
-                .fold(None, |a, b| {
-                    Some(if let Some(a) = a {
-                        if a <= b {
-                            a
-                        } else {
-                            b
-                        }
-                    } else {
-                        b
-                    })
-                })
+                .reduce(min)
                 .unwrap_or_default()
         } else {
             self.label(hash)
@@ -747,54 +824,43 @@ impl Dataset {
             .into_iter()
             .map(|(s, p, o, g)| {
                 (
-                    if let InternedSubject::BlankNode(bnode) = s {
-                        InternedSubject::BlankNode(self.map_bnode(bnode, hashes))
-                    } else {
-                        #[cfg(feature = "rdf-star")]
-                        {
-                            if let InternedSubject::Triple(triple) = s {
-                                InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
-                                    self.label_triple(&triple, hashes).as_ref(),
-                                    &mut self.interner,
-                                )))
-                            } else {
-                                s
-                            }
+                    match s {
+                        InternedSubject::NamedNode(_) => s,
+                        InternedSubject::BlankNode(bnode) => {
+                            InternedSubject::BlankNode(self.map_bnode(bnode, hashes))
                         }
-                        #[cfg(not(feature = "rdf-star"))]
-                        {
-                            s
+                        #[cfg(feature = "rdf-star")]
+                        InternedSubject::Triple(triple) => {
+                            InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
+                                self.label_triple(&triple, hashes).as_ref(),
+                                &mut self.interner,
+                            )))
                         }
                     },
                     p,
-                    if let InternedTerm::BlankNode(bnode) = o {
-                        InternedTerm::BlankNode(self.map_bnode(bnode, hashes))
-                    } else {
-                        #[cfg(feature = "rdf-star")]
-                        {
-                            if let InternedTerm::Triple(triple) = o {
-                                InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
-                                    self.label_triple(&triple, hashes).as_ref(),
-                                    &mut self.interner,
-                                )))
-                            } else {
-                                o
-                            }
+                    match o {
+                        InternedTerm::NamedNode(_) | InternedTerm::Literal(_) => o,
+                        InternedTerm::BlankNode(bnode) => {
+                            InternedTerm::BlankNode(self.map_bnode(bnode, hashes))
                         }
-                        #[cfg(not(feature = "rdf-star"))]
-                        {
-                            o
+                        #[cfg(feature = "rdf-star")]
+                        InternedTerm::Triple(triple) => {
+                            InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
+                                self.label_triple(&triple, hashes).as_ref(),
+                                &mut self.interner,
+                            )))
                         }
                     },
-                    if let InternedGraphName::BlankNode(bnode) = g {
-                        InternedGraphName::BlankNode(self.map_bnode(bnode, hashes))
-                    } else {
-                        g
+                    match g {
+                        InternedGraphName::NamedNode(_) | InternedGraphName::DefaultGraph => g,
+                        InternedGraphName::BlankNode(bnode) => {
+                            InternedGraphName::BlankNode(self.map_bnode(bnode, hashes))
+                        }
                     },
                 )
             })
             .collect();
-        quads.sort();
+        quads.sort_unstable();
         quads
     }
 
@@ -862,7 +928,7 @@ impl<'a> IntoIterator for &'a Dataset {
     type Item = QuadRef<'a>;
     type IntoIter = Iter<'a>;
 
-    fn into_iter(self) -> Iter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1220,7 +1286,7 @@ impl<'a> IntoIterator for GraphView<'a> {
     type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
 
-    fn into_iter(self) -> GraphViewIter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1229,7 +1295,7 @@ impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
     type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
 
-    fn into_iter(self) -> GraphViewIter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1431,7 +1497,7 @@ impl<'a> IntoIterator for &'a GraphViewMut<'a> {
     type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
 
-    fn into_iter(self) -> GraphViewIter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -1462,7 +1528,7 @@ pub struct Iter<'a> {
 impl<'a> Iterator for Iter<'a> {
     type Item = QuadRef<'a>;
 
-    fn next(&mut self) -> Option<QuadRef<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
             .map(|(s, p, o, g)| self.dataset.decode_spog((s, p, o, g)))
@@ -1486,9 +1552,57 @@ pub struct GraphViewIter<'a> {
 impl<'a> Iterator for GraphViewIter<'a> {
     type Item = TripleRef<'a>;
 
-    fn next(&mut self) -> Option<TripleRef<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
             .map(|(_, s, p, o)| self.dataset.decode_spo((s, p, o)))
+    }
+}
+
+type QuadsPerBlankNode = HashMap<
+    InternedBlankNode,
+    Vec<(
+        InternedSubject,
+        InternedNamedNode,
+        InternedTerm,
+        InternedGraphName,
+    )>,
+>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_canon() {
+        let mut dataset = Dataset::new();
+        dataset.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset.canonicalize();
+        let mut dataset2 = Dataset::new();
+        dataset2.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset2.insert(QuadRef::new(
+            BlankNode::default().as_ref(),
+            NamedNodeRef::new_unchecked("http://ex"),
+            BlankNode::default().as_ref(),
+            GraphNameRef::DefaultGraph,
+        ));
+        dataset2.canonicalize();
+        assert_eq!(dataset, dataset2);
     }
 }

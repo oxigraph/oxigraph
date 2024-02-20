@@ -6,8 +6,6 @@ use crate::{
 #[cfg(feature = "rdf-star")]
 use crate::{Subject, Triple};
 use std::char;
-use std::error::Error;
-use std::fmt;
 use std::str::{Chars, FromStr};
 
 /// This limit is set in order to avoid stack overflow error when parsing nested triples due to too many recursive calls.
@@ -23,12 +21,15 @@ impl FromStr for NamedNode {
     /// use oxrdf::NamedNode;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(NamedNode::from_str("<http://example.com>").unwrap(), NamedNode::new("http://example.com").unwrap())
+    /// assert_eq!(
+    ///     NamedNode::from_str("<http://example.com>").unwrap(),
+    ///     NamedNode::new("http://example.com").unwrap()
+    /// )
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_named_node(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Named node serialization should end with a >",
             ));
         }
@@ -45,12 +46,15 @@ impl FromStr for BlankNode {
     /// use oxrdf::BlankNode;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(BlankNode::from_str("_:ex").unwrap(), BlankNode::new("ex").unwrap())
+    /// assert_eq!(
+    ///     BlankNode::from_str("_:ex").unwrap(),
+    ///     BlankNode::new("ex").unwrap()
+    /// )
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_blank_node(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Blank node serialization should not contain whitespaces",
             ));
         }
@@ -64,21 +68,46 @@ impl FromStr for Literal {
     /// Parses a literal from its NTriples or Turtle serialization
     ///
     /// ```
-    /// use oxrdf::{Literal, NamedNode, vocab::xsd};
+    /// use oxrdf::vocab::xsd;
+    /// use oxrdf::{Literal, NamedNode};
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(Literal::from_str("\"ex\\n\"").unwrap(), Literal::new_simple_literal("ex\n"));
-    /// assert_eq!(Literal::from_str("\"ex\"@en").unwrap(), Literal::new_language_tagged_literal("ex", "en").unwrap());
-    /// assert_eq!(Literal::from_str("\"2020\"^^<http://www.w3.org/2001/XMLSchema#gYear>").unwrap(), Literal::new_typed_literal("2020", NamedNode::new("http://www.w3.org/2001/XMLSchema#gYear").unwrap()));
-    /// assert_eq!(Literal::from_str("true").unwrap(), Literal::new_typed_literal("true", xsd::BOOLEAN));
-    /// assert_eq!(Literal::from_str("+122").unwrap(), Literal::new_typed_literal("+122", xsd::INTEGER));
-    /// assert_eq!(Literal::from_str("-122.23").unwrap(), Literal::new_typed_literal("-122.23", xsd::DECIMAL));
-    /// assert_eq!(Literal::from_str("-122e+1").unwrap(), Literal::new_typed_literal("-122e+1", xsd::DOUBLE));
+    /// assert_eq!(
+    ///     Literal::from_str("\"ex\\n\"").unwrap(),
+    ///     Literal::new_simple_literal("ex\n")
+    /// );
+    /// assert_eq!(
+    ///     Literal::from_str("\"ex\"@en").unwrap(),
+    ///     Literal::new_language_tagged_literal("ex", "en").unwrap()
+    /// );
+    /// assert_eq!(
+    ///     Literal::from_str("\"2020\"^^<http://www.w3.org/2001/XMLSchema#gYear>").unwrap(),
+    ///     Literal::new_typed_literal(
+    ///         "2020",
+    ///         NamedNode::new("http://www.w3.org/2001/XMLSchema#gYear").unwrap()
+    ///     )
+    /// );
+    /// assert_eq!(
+    ///     Literal::from_str("true").unwrap(),
+    ///     Literal::new_typed_literal("true", xsd::BOOLEAN)
+    /// );
+    /// assert_eq!(
+    ///     Literal::from_str("+122").unwrap(),
+    ///     Literal::new_typed_literal("+122", xsd::INTEGER)
+    /// );
+    /// assert_eq!(
+    ///     Literal::from_str("-122.23").unwrap(),
+    ///     Literal::new_typed_literal("-122.23", xsd::DECIMAL)
+    /// );
+    /// assert_eq!(
+    ///     Literal::from_str("-122e+1").unwrap(),
+    ///     Literal::new_typed_literal("-122e+1", xsd::DOUBLE)
+    /// );
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_literal(s)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg("Invalid literal serialization"));
+            return Err(Self::Err::msg("Invalid literal serialization"));
         }
         Ok(term)
     }
@@ -93,17 +122,24 @@ impl FromStr for Term {
     /// use oxrdf::*;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(Term::from_str("\"ex\"").unwrap(), Literal::new_simple_literal("ex").into());
-    /// assert_eq!(Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(), Triple::new(
-    ///     BlankNode::new("s").unwrap(),
-    ///     NamedNode::new("http://example.com/p").unwrap(),
-    ///     Literal::new_simple_literal("o")
-    /// ).into());
+    /// assert_eq!(
+    ///     Term::from_str("\"ex\"").unwrap(),
+    ///     Literal::new_simple_literal("ex").into()
+    /// );
+    /// assert_eq!(
+    ///     Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(),
+    ///     Triple::new(
+    ///         BlankNode::new("s").unwrap(),
+    ///         NamedNode::new("http://example.com/p").unwrap(),
+    ///         Literal::new_simple_literal("o")
+    ///     )
+    ///     .into()
+    /// );
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_term(s, 0)?;
         if !left.is_empty() {
-            return Err(TermParseError::msg("Invalid term serialization"));
+            return Err(Self::Err::msg("Invalid term serialization"));
         }
         Ok(term)
     }
@@ -118,19 +154,22 @@ impl FromStr for Variable {
     /// use oxrdf::Variable;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(Variable::from_str("$foo").unwrap(), Variable::new("foo").unwrap())
+    /// assert_eq!(
+    ///     Variable::from_str("$foo").unwrap(),
+    ///     Variable::new("foo").unwrap()
+    /// )
     /// ```
-    fn from_str(s: &str) -> Result<Self, TermParseError> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with('?') && !s.starts_with('$') {
-            return Err(TermParseError::msg(
+            return Err(Self::Err::msg(
                 "Variable serialization should start with ? or $",
             ));
         }
-        Self::new(&s[1..]).map_err(|error| TermParseError {
-            kind: TermParseErrorKind::Variable {
+        Self::new(&s[1..]).map_err(|error| {
+            TermParseError(TermParseErrorKind::Variable {
                 value: s.to_owned(),
                 error,
-            },
+            })
         })
     }
 }
@@ -143,11 +182,11 @@ fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
             .ok_or_else(|| TermParseError::msg("Named node serialization should end with a >"))?;
         let (value, remain) = remain.split_at(end);
         let remain = &remain[1..];
-        let term = NamedNode::new(value).map_err(|error| TermParseError {
-            kind: TermParseErrorKind::Iri {
+        let term = NamedNode::new(value).map_err(|error| {
+            TermParseError(TermParseErrorKind::Iri {
                 value: value.to_owned(),
                 error,
-            },
+            })
         })?;
         Ok((term, remain))
     } else {
@@ -167,11 +206,11 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
             })
             .unwrap_or(remain.len());
         let (value, remain) = remain.split_at(end);
-        let term = BlankNode::new(value).map_err(|error| TermParseError {
-            kind: TermParseErrorKind::BlankNode {
+        let term = BlankNode::new(value).map_err(|error| {
+            TermParseError(TermParseErrorKind::BlankNode {
                 value: value.to_owned(),
                 error,
-            },
+            })
         })?;
         Ok((term, remain))
     } else {
@@ -197,11 +236,11 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         let (language, remain) = remain.split_at(end);
                         Ok((
                             Literal::new_language_tagged_literal(value, language).map_err(
-                                |error| TermParseError {
-                                    kind: TermParseErrorKind::LanguageTag {
+                                |error| {
+                                    TermParseError(TermParseErrorKind::LanguageTag {
                                         value: language.to_owned(),
                                         error,
-                                    },
+                                    })
                                 },
                             )?,
                             remain,
@@ -217,10 +256,10 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                     if let Some(c) = chars.next() {
                         value.push(match c {
                             't' => '\t',
-                            'b' => '\u{8}',
+                            'b' => '\u{08}',
                             'n' => '\n',
                             'r' => '\r',
-                            'f' => '\u{C}',
+                            'f' => '\u{0C}',
                             '"' => '"',
                             '\'' => '\'',
                             '\\' => '\\',
@@ -232,7 +271,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                         return Err(TermParseError::msg("Unexpected literal end"));
                     }
                 }
-                c => value.push(c),
+                _ => value.push(c),
             }
         }
         Err(TermParseError::msg("Unexpected literal end"))
@@ -381,61 +420,36 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
 }
 
 /// An error raised during term serialization parsing using the [`FromStr`] trait.
-#[derive(Debug)]
-pub struct TermParseError {
-    kind: TermParseErrorKind,
-}
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct TermParseError(#[from] TermParseErrorKind);
 
-#[derive(Debug)]
+/// An internal error raised during term serialization parsing using the [`FromStr`] trait.
+#[derive(Debug, thiserror::Error)]
 enum TermParseErrorKind {
-    Iri {
-        error: IriParseError,
-        value: String,
-    },
+    #[error("Error while parsing the named node '{value}': {error}")]
+    Iri { error: IriParseError, value: String },
+    #[error("Error while parsing the blank node '{value}': {error}")]
     BlankNode {
         error: BlankNodeIdParseError,
         value: String,
     },
+    #[error("Error while parsing the language tag '{value}': {error}")]
     LanguageTag {
         error: LanguageTagParseError,
         value: String,
     },
+    #[error("Error while parsing the variable '{value}': {error}")]
     Variable {
         error: VariableNameParseError,
         value: String,
     },
-    Msg {
-        msg: &'static str,
-    },
+    #[error("{0}")]
+    Msg(&'static str),
 }
-
-impl fmt::Display for TermParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            TermParseErrorKind::Iri { error, value } => {
-                write!(f, "Error while parsing the named node '{value}': {error}")
-            }
-            TermParseErrorKind::BlankNode { error, value } => {
-                write!(f, "Error while parsing the blank node '{value}': {error}")
-            }
-            TermParseErrorKind::LanguageTag { error, value } => {
-                write!(f, "Error while parsing the language tag '{value}': {error}")
-            }
-            TermParseErrorKind::Variable { error, value } => {
-                write!(f, "Error while parsing the variable '{value}': {error}")
-            }
-            TermParseErrorKind::Msg { msg } => f.write_str(msg),
-        }
-    }
-}
-
-impl Error for TermParseError {}
 
 impl TermParseError {
     pub(crate) fn msg(msg: &'static str) -> Self {
-        Self {
-            kind: TermParseErrorKind::Msg { msg },
-        }
+        Self(TermParseErrorKind::Msg(msg))
     }
 }

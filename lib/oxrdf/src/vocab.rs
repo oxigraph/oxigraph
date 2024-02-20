@@ -231,3 +231,12 @@ pub mod xsd {
     pub const YEAR_MONTH_DURATION: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#yearMonthDuration");
 }
+
+pub mod geosparql {
+    //! [GeoSpatial](https://opengeospatial.github.io/ogc-geosparql/) vocabulary.
+    use crate::named_node::NamedNodeRef;
+
+    /// Geospatial datatype like `"Point({longitude} {latitude})"^^geo:wktLiteral`
+    pub const WKT_LITERAL: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.opengis.net/ont/geosparql#wktLiteral");
+}

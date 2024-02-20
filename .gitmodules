@@ -13,3 +13,10 @@
 [submodule "oxrocksdb-sys/lz4"]
 	path = oxrocksdb-sys/lz4
 	url = https://github.com/lz4/lz4.git
+[submodule "testsuite/N3"]
+	path = testsuite/N3
+	url = https://github.com/w3c/N3.git
+	branch = master
+[submodule "testsuite/rdf-canon"]
+	path = testsuite/rdf-canon
+	url = https://github.com/w3c/rdf-canon.git

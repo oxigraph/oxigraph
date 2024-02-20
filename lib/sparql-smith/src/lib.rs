@@ -35,8 +35,8 @@ pub struct Query {
 
 #[derive(Arbitrary)]
 struct QueryContent {
-    // [1]  	QueryUnit	  ::=  	Query
-    // [2]  	Query	  ::=  	Prologue ( SelectQuery | ConstructQuery | DescribeQuery | AskQuery ) ValuesClause
+    // [1]  QueryUnit  ::=  Query
+    // [2]  Query      ::=  Prologue ( SelectQuery | ConstructQuery | DescribeQuery | AskQuery ) ValuesClause
     variant: QueryVariant,
     values_clause: ValuesClause,
 }
@@ -44,7 +44,7 @@ struct QueryContent {
 #[derive(Arbitrary)]
 enum QueryVariant {
     Select(SelectQuery),
-    //TODO: Other variants!
+    // TODO: Other variants!
 }
 
 impl<'a> Arbitrary<'a> for Query {
@@ -82,7 +82,7 @@ impl fmt::Debug for Query {
 
 #[derive(Arbitrary)]
 struct SelectQuery {
-    // [7]  	SelectQuery	  ::=  	SelectClause DatasetClause* WhereClause SolutionModifier
+    // [7]   SelectQuery   ::=   SelectClause DatasetClause* WhereClause SolutionModifier
     select_clause: SelectClause,
     where_clause: WhereClause,
     solution_modifier: SolutionModifier,
@@ -100,7 +100,7 @@ impl fmt::Display for SelectQuery {
 
 #[derive(Arbitrary)]
 struct SubSelect {
-    // [8]  	SubSelect	  ::=  	SelectClause WhereClause SolutionModifier ValuesClause
+    // [8]   SubSelect   ::=   SelectClause WhereClause SolutionModifier ValuesClause
     select_clause: SelectClause,
     where_clause: WhereClause,
     solution_modifier: SolutionModifier,
@@ -119,7 +119,7 @@ impl fmt::Display for SubSelect {
 
 #[derive(Arbitrary)]
 struct SelectClause {
-    // [9]  	SelectClause	  ::=  	'SELECT' ( 'DISTINCT' | 'REDUCED' )? ( ( Var | ( '(' Expression 'AS' Var ')' ) )+ | '*' )
+    // [9]   SelectClause   ::=   'SELECT' ( 'DISTINCT' | 'REDUCED' )? ( ( Var | ( '(' Expression 'AS' Var ')' ) )+ | '*' )
     option: Option<SelectOption>,
     values: SelectValues,
 }
@@ -147,15 +147,15 @@ enum SelectProjection {
 
 impl fmt::Display for SelectClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SELECT")?;
+        f.write_str("SELECT")?;
         if let Some(option) = &self.option {
             match option {
-                SelectOption::Distinct => write!(f, " DISTINCT"),
-                SelectOption::Reduced => write!(f, " REDUCED"),
+                SelectOption::Distinct => f.write_str(" DISTINCT"),
+                SelectOption::Reduced => f.write_str(" REDUCED"),
             }?;
         }
         match &self.values {
-            SelectValues::Star => write!(f, " *"),
+            SelectValues::Star => f.write_str(" *"),
             SelectValues::Projection { start, others } => {
                 for e in once(start).chain(others) {
                     match e {
@@ -171,7 +171,7 @@ impl fmt::Display for SelectClause {
 
 #[derive(Arbitrary)]
 struct WhereClause {
-    // [17]  	WhereClause	  ::=  	'WHERE'? GroupGraphPattern
+    // [17]   WhereClause   ::=   'WHERE'? GroupGraphPattern
     with_where: bool,
     group_graph_pattern: GroupGraphPattern,
 }
@@ -179,7 +179,7 @@ struct WhereClause {
 impl fmt::Display for WhereClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.with_where {
-            write!(f, " WHERE ")?;
+            f.write_str(" WHERE ")?;
         }
         write!(f, "{}", self.group_graph_pattern)
     }
@@ -187,7 +187,7 @@ impl fmt::Display for WhereClause {
 
 #[derive(Arbitrary)]
 struct SolutionModifier {
-    // [18]  	SolutionModifier	  ::=  	GroupClause? HavingClause? OrderClause? LimitOffsetClauses?
+    // [18]   SolutionModifier   ::=   GroupClause? HavingClause? OrderClause? LimitOffsetClauses?
     group: Option<GroupClause>,
     having: Option<HavingClause>,
     #[cfg(feature = "order")]
@@ -218,7 +218,7 @@ impl fmt::Display for SolutionModifier {
 
 #[derive(Arbitrary)]
 struct GroupClause {
-    // [19]  	GroupClause	  ::=  	'GROUP' 'BY' GroupCondition+
+    // [19]   GroupClause   ::=   'GROUP' 'BY' GroupCondition+
     start: GroupCondition,
     others: Vec<GroupCondition>,
 }
@@ -235,7 +235,7 @@ impl fmt::Display for GroupClause {
 
 #[derive(Arbitrary)]
 enum GroupCondition {
-    // [20]  	GroupCondition	  ::=  	BuiltInCall | FunctionCall | '(' Expression ( 'AS' Var )? ')' | Var
+    // [20]   GroupCondition   ::=   BuiltInCall | FunctionCall | '(' Expression ( 'AS' Var )? ')' | Var
     BuiltInCall(BuiltInCall),
     // TODO FunctionCall(FunctionCall)
     Projection(Expression, Option<Var>),
@@ -246,7 +246,7 @@ impl fmt::Display for GroupCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            //Self::FunctionCall(c) => write!(f, "{}", c),
+            // Self::FunctionCall(c) => write!(f, "{c}"),
             Self::Projection(e, v) => {
                 if let Some(v) = v {
                     write!(f, "({e} AS {v})")
@@ -261,7 +261,7 @@ impl fmt::Display for GroupCondition {
 
 #[derive(Arbitrary)]
 struct HavingClause {
-    // [21]  	HavingClause	  ::=  	'HAVING' HavingCondition+
+    // [21]   HavingClause   ::=   'HAVING' HavingCondition+
     start: HavingCondition,
     others: Vec<HavingCondition>,
 }
@@ -276,13 +276,13 @@ impl fmt::Display for HavingClause {
     }
 }
 
-// [22]  	HavingCondition	  ::=  	Constraint
+// [22]   HavingCondition   ::=   Constraint
 type HavingCondition = Constraint;
 
 #[cfg(feature = "order")]
 #[derive(Arbitrary)]
 struct OrderClause {
-    // [23]  	OrderClause	  ::=  	'ORDER' 'BY' OrderCondition+
+    // [23]   OrderClause   ::=   'ORDER' 'BY' OrderCondition+
     start: OrderCondition,
     others: Vec<OrderCondition>,
 }
@@ -301,7 +301,7 @@ impl fmt::Display for OrderClause {
 #[cfg(feature = "order")]
 #[derive(Arbitrary)]
 enum OrderCondition {
-    // [24]  	OrderCondition	  ::=  	( ( 'ASC' | 'DESC' ) BrackettedExpression ) | ( Constraint | Var )
+    // [24]   OrderCondition   ::=   ( ( 'ASC' | 'DESC' ) BrackettedExpression ) | ( Constraint | Var )
     BrackettedExpression {
         is_asc: bool,
         inner: BrackettedExpression,
@@ -330,7 +330,7 @@ impl fmt::Display for OrderCondition {
 #[cfg(feature = "limit-offset")]
 #[derive(Arbitrary)]
 enum LimitOffsetClauses {
-    // [25]  	LimitOffsetClauses	  ::=  	LimitClause OffsetClause? | OffsetClause LimitClause?
+    // [25]   LimitOffsetClauses   ::=   LimitClause OffsetClause? | OffsetClause LimitClause?
     LimitOffset(LimitClause, Option<OffsetClause>),
     OffsetLimit(OffsetClause, Option<LimitClause>),
 }
@@ -350,7 +350,7 @@ impl fmt::Display for LimitOffsetClauses {
 #[cfg(feature = "limit-offset")]
 #[derive(Arbitrary)]
 struct LimitClause {
-    // [26]  	LimitClause	  ::=  	'LIMIT' INTEGER
+    // [26]   LimitClause   ::=   'LIMIT' INTEGER
     value: u8,
 }
 
@@ -364,7 +364,7 @@ impl fmt::Display for LimitClause {
 #[cfg(feature = "limit-offset")]
 #[derive(Arbitrary)]
 struct OffsetClause {
-    // [27]  	OffsetClause	  ::=  	'OFFSET' INTEGER
+    // [27]   OffsetClause   ::=   'OFFSET' INTEGER
     value: u8,
 }
 
@@ -377,7 +377,7 @@ impl fmt::Display for OffsetClause {
 
 #[derive(Arbitrary)]
 struct ValuesClause {
-    // [28]  	ValuesClause	  ::=  	( 'VALUES' DataBlock )?
+    // [28]   ValuesClause   ::=   ( 'VALUES' DataBlock )?
     value: Option<DataBlock>,
 }
 
@@ -393,25 +393,25 @@ impl fmt::Display for ValuesClause {
 
 #[derive(Arbitrary)]
 enum GroupGraphPattern {
-    // [53]  	GroupGraphPattern	  ::=  	'{' ( SubSelect | GroupGraphPatternSub ) '}'
+    // [53]   GroupGraphPattern   ::=   '{' ( SubSelect | GroupGraphPatternSub ) '}'
     GroupGraphPatternSub(GroupGraphPatternSub),
     SubSelect(Box<SubSelect>),
 }
 
 impl fmt::Display for GroupGraphPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, " {{ ")?;
+        f.write_str(" { ")?;
         match self {
             Self::GroupGraphPatternSub(p) => write!(f, "{p}"),
             Self::SubSelect(s) => write!(f, "{s}"),
         }?;
-        write!(f, " }} ")
+        f.write_str(" } ")
     }
 }
 
 #[derive(Arbitrary)]
 struct GroupGraphPatternSub {
-    // [54]  	GroupGraphPatternSub	  ::=  	TriplesBlock? ( GraphPatternNotTriples '.'? TriplesBlock? )*
+    // [54]   GroupGraphPatternSub   ::=   TriplesBlock? ( GraphPatternNotTriples '.'? TriplesBlock? )*
     start: Option<TriplesBlock>,
     others: Vec<GroupGraphPatternSubOtherBlock>,
 }
@@ -431,7 +431,7 @@ impl fmt::Display for GroupGraphPatternSub {
         for other in &self.others {
             write!(f, "{}", other.start)?;
             if other.with_dot {
-                write!(f, " . ")?;
+                f.write_str(" . ")?;
             }
             if let Some(end) = &other.end {
                 write!(f, "{end}")?;
@@ -443,7 +443,7 @@ impl fmt::Display for GroupGraphPatternSub {
 
 #[derive(Arbitrary)]
 struct TriplesBlock {
-    // [55]  	TriplesBlock	  ::=  	TriplesSameSubjectPath ( '.' TriplesBlock? )?
+    // [55]   TriplesBlock   ::=   TriplesSameSubjectPath ( '.' TriplesBlock? )?
     start: TriplesSameSubjectPath,
     end: Option<Option<Box<TriplesBlock>>>,
 }
@@ -452,7 +452,7 @@ impl fmt::Display for TriplesBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.start)?;
         if let Some(end) = &self.end {
-            write!(f, " . ")?;
+            f.write_str(" . ")?;
             if let Some(end) = end {
                 write!(f, "{end}")?;
             }
@@ -463,7 +463,7 @@ impl fmt::Display for TriplesBlock {
 
 #[derive(Arbitrary)]
 enum GraphPatternNotTriples {
-    // [56]  	GraphPatternNotTriples	  ::=  	GroupOrUnionGraphPattern | OptionalGraphPattern | MinusGraphPattern | GraphGraphPattern | ServiceGraphPattern | Filter | Bind | InlineData
+    // [56]   GraphPatternNotTriples   ::=   GroupOrUnionGraphPattern | OptionalGraphPattern | MinusGraphPattern | GraphGraphPattern | ServiceGraphPattern | Filter | Bind | InlineData
     GroupOrUnion(GroupOrUnionGraphPattern),
     Optional(OptionalGraphPattern),
     Minus(MinusGraphPattern),
@@ -493,7 +493,7 @@ impl fmt::Display for GraphPatternNotTriples {
 
 #[derive(Arbitrary)]
 struct OptionalGraphPattern {
-    // [57]  	OptionalGraphPattern	  ::=  	'OPTIONAL' GroupGraphPattern
+    // [57]   OptionalGraphPattern   ::=   'OPTIONAL' GroupGraphPattern
     inner: GroupGraphPattern,
 }
 
@@ -505,7 +505,7 @@ impl fmt::Display for OptionalGraphPattern {
 
 #[derive(Arbitrary)]
 struct LateralGraphPattern {
-    // []  	LateralGraphPattern	  ::=  	'LATERAL' GroupGraphPattern
+    // []   LateralGraphPattern   ::=   'LATERAL' GroupGraphPattern
     inner: GroupGraphPattern,
 }
 
@@ -517,7 +517,7 @@ impl fmt::Display for LateralGraphPattern {
 
 #[derive(Arbitrary)]
 struct GraphGraphPattern {
-    // [58]  	GraphGraphPattern	  ::=  	'GRAPH' VarOrIri GroupGraphPattern
+    // [58]   GraphGraphPattern   ::=   'GRAPH' VarOrIri GroupGraphPattern
     graph: VarOrIri,
     inner: GroupGraphPattern,
 }
@@ -530,7 +530,7 @@ impl fmt::Display for GraphGraphPattern {
 
 #[derive(Arbitrary)]
 struct Bind {
-    // [60]  	Bind	  ::=  	'BIND' '(' Expression 'AS' Var ')'
+    // [60]   Bind   ::=   'BIND' '(' Expression 'AS' Var ')'
     expression: Expression,
     var: Var,
 }
@@ -543,19 +543,19 @@ impl fmt::Display for Bind {
 
 #[derive(Arbitrary)]
 struct InlineData {
-    // [61]  	InlineData	  ::=  	'VALUES' DataBlock
+    // [61]   InlineData   ::=   'VALUES' DataBlock
     inner: DataBlock,
 }
 
 impl fmt::Display for InlineData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "VALUES {}", &self.inner)
+        write!(f, "VALUES {}", self.inner)
     }
 }
 
 #[derive(Arbitrary)]
 enum DataBlock {
-    // [62]  	DataBlock	  ::=  	InlineDataOneVar | InlineDataFull
+    // [62]   DataBlock   ::=   InlineDataOneVar | InlineDataFull
     OneVar(InlineDataOneVar),
     Full(InlineDataFull),
 }
@@ -571,7 +571,7 @@ impl fmt::Display for DataBlock {
 
 #[derive(Arbitrary)]
 struct InlineDataOneVar {
-    // [63]  	InlineDataOneVar	  ::=  	Var '{' DataBlockValue* '}'
+    // [63]   InlineDataOneVar   ::=   Var '{' DataBlockValue* '}'
     var: Var,
     values: Vec<DataBlockValue>,
 }
@@ -587,7 +587,7 @@ impl fmt::Display for InlineDataOneVar {
 }
 
 struct InlineDataFull {
-    // [64]  	InlineDataFull	  ::=  	( NIL | '(' Var* ')' ) '{' ( '(' DataBlockValue* ')' | NIL )* '}'
+    // [64]   InlineDataFull   ::=   ( NIL | '(' Var* ')' ) '{' ( '(' DataBlockValue* ')' | NIL )* '}'
     vars: Vec<Var>,
     values: Vec<Vec<DataBlockValue>>,
 }
@@ -617,25 +617,25 @@ impl<'a> Arbitrary<'a> for InlineDataFull {
 
 impl fmt::Display for InlineDataFull {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "( ")?;
+        f.write_str("( ")?;
         for v in &self.vars {
             write!(f, " {v}")?;
         }
-        write!(f, " ) {{")?;
+        f.write_str(" ) {")?;
         for vs in &self.values {
-            write!(f, " (")?;
+            f.write_str(" (")?;
             for v in vs {
                 write!(f, " {v}")?;
             }
-            write!(f, " )")?;
+            f.write_str(" )")?;
         }
-        write!(f, " }}")
+        f.write_str(" }")
     }
 }
 
 #[derive(Arbitrary)]
 enum DataBlockValue {
-    // [65]  	DataBlockValue	  ::=  	iri | RDFLiteral | NumericLiteral | BooleanLiteral | 'UNDEF'
+    // [65]   DataBlockValue   ::=   iri | RDFLiteral | NumericLiteral | BooleanLiteral | 'UNDEF'
     Iri(Iri),
     Literal(Literal),
     Undef,
@@ -646,14 +646,14 @@ impl fmt::Display for DataBlockValue {
         match self {
             Self::Iri(i) => write!(f, "{i}"),
             Self::Literal(l) => write!(f, "{l}"),
-            Self::Undef => write!(f, "UNDEF"),
+            Self::Undef => f.write_str("UNDEF"),
         }
     }
 }
 
 #[derive(Arbitrary)]
 struct MinusGraphPattern {
-    // [66]  	MinusGraphPattern	  ::=  	'MINUS' GroupGraphPattern
+    // [66]   MinusGraphPattern   ::=   'MINUS' GroupGraphPattern
     inner: GroupGraphPattern,
 }
 
@@ -665,7 +665,7 @@ impl fmt::Display for MinusGraphPattern {
 
 #[derive(Arbitrary)]
 struct GroupOrUnionGraphPattern {
-    // [67]  	GroupOrUnionGraphPattern	  ::=  	GroupGraphPattern ( 'UNION' GroupGraphPattern )*
+    // [67]   GroupOrUnionGraphPattern   ::=   GroupGraphPattern ( 'UNION' GroupGraphPattern )*
     start: GroupGraphPattern,
     others: Vec<GroupGraphPattern>,
 }
@@ -682,7 +682,7 @@ impl fmt::Display for GroupOrUnionGraphPattern {
 
 #[derive(Arbitrary)]
 struct Filter {
-    // [68]  	Filter	  ::=  	'FILTER' Constraint
+    // [68]   Filter   ::=   'FILTER' Constraint
     constraint: Constraint,
 }
 
@@ -694,7 +694,7 @@ impl fmt::Display for Filter {
 
 #[derive(Arbitrary)]
 enum Constraint {
-    // [69]  	Constraint	  ::=  	BrackettedExpression | BuiltInCall | FunctionCall
+    // [69]   Constraint   ::=   BrackettedExpression | BuiltInCall | FunctionCall
     BrackettedExpression(BrackettedExpression),
     BuiltInCall(BuiltInCall),
     // TODO FunctionCall(FunctionCall),
@@ -705,14 +705,14 @@ impl fmt::Display for Constraint {
         match self {
             Self::BrackettedExpression(e) => write!(f, "{e}"),
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            //Self::FunctionCall(c) => write!(f, "{}", c),
+            // Self::FunctionCall(c) => write!(f, "{c}"),
         }
     }
 }
 
 #[derive(Arbitrary)]
 struct FunctionCall {
-    // [70]  	FunctionCall	  ::=  	iri ArgList
+    // [70]   FunctionCall   ::=   iri ArgList
     iri: Iri,
     args: ArgList,
 }
@@ -725,7 +725,7 @@ impl fmt::Display for FunctionCall {
 
 #[derive(Arbitrary)]
 enum ArgList {
-    // [71]  	ArgList	  ::=  	NIL | '(' 'DISTINCT'? Expression ( ',' Expression )* ')'
+    // [71]   ArgList   ::=   NIL | '(' 'DISTINCT'? Expression ( ',' Expression )* ')'
     Nil,
     NotNil {
         // TODO: DISTINCT
@@ -736,39 +736,39 @@ enum ArgList {
 
 impl fmt::Display for ArgList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(")?;
+        f.write_str("(")?;
         if let Self::NotNil { start, others } = self {
             write!(f, "{start}")?;
             for e in others {
                 write!(f, ", {e}")?;
             }
         }
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
 #[derive(Arbitrary)]
 struct ExpressionList {
-    // [72]  	ExpressionList	  ::=  	NIL | '(' Expression ( ',' Expression )* ')'
+    // [72]   ExpressionList   ::=   NIL | '(' Expression ( ',' Expression )* ')'
     inner: Vec<Expression>,
 }
 
 impl fmt::Display for ExpressionList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(")?;
+        f.write_str("(")?;
         for (i, e) in self.inner.iter().enumerate() {
             if i > 0 {
-                write!(f, ", ")?;
+                f.write_str(", ")?;
             }
             write!(f, "{e}")?;
         }
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
 #[derive(Arbitrary)]
 struct PropertyListNotEmpty {
-    // [77]  	PropertyListNotEmpty	  ::=  	Verb ObjectList ( ';' ( Verb ObjectList )? )*
+    // [77]   PropertyListNotEmpty   ::=   Verb ObjectList ( ';' ( Verb ObjectList )? )*
     start_predicate: Verb,
     start_object: Box<ObjectList>,
     others: Vec<Option<PropertyListElement>>,
@@ -784,7 +784,7 @@ impl fmt::Display for PropertyListNotEmpty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.start_predicate, self.start_object)?;
         for other in &self.others {
-            write!(f, " ; ")?;
+            f.write_str(" ; ")?;
             if let Some(e) = other {
                 write!(f, "{} {}", e.predicate, e.object)?;
             }
@@ -795,7 +795,7 @@ impl fmt::Display for PropertyListNotEmpty {
 
 #[derive(Arbitrary)]
 enum Verb {
-    // [78]  	Verb	  ::=  	VarOrIri | 'a'
+    // [78]   Verb   ::=   VarOrIri | 'a'
     VarOrIri(VarOrIri),
     A,
 }
@@ -804,14 +804,14 @@ impl fmt::Display for Verb {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::VarOrIri(iri) => write!(f, "{iri}"),
-            Self::A => write!(f, " a "),
+            Self::A => f.write_str(" a "),
         }
     }
 }
 
 #[derive(Arbitrary)]
 struct ObjectList {
-    // [79]  	ObjectList	  ::=  	Object ( ',' Object )*
+    // [79]   ObjectList   ::=   Object ( ',' Object )*
     start: Object,
     others: Vec<Object>,
 }
@@ -820,19 +820,19 @@ impl fmt::Display for ObjectList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.start)?;
         for other in &self.others {
-            write!(f, " , ")?;
+            f.write_str(" , ")?;
             write!(f, "{other}")?;
         }
         Ok(())
     }
 }
 
-// [80]  	Object	  ::=  	GraphNode
+// [80]   Object   ::=   GraphNode
 type Object = GraphNode;
 
 #[derive(Arbitrary)]
 enum TriplesSameSubjectPath {
-    // [81]  	TriplesSameSubjectPath	  ::=  	VarOrTerm PropertyListPathNotEmpty | TriplesNodePath PropertyListPath
+    // [81]   TriplesSameSubjectPath   ::=   VarOrTerm PropertyListPathNotEmpty | TriplesNodePath PropertyListPath
     Atomic {
         subject: VarOrTerm,
         predicate_object: PropertyListPathNotEmpty,
@@ -864,7 +864,7 @@ impl fmt::Display for TriplesSameSubjectPath {
 
 #[derive(Arbitrary)]
 struct PropertyListPath {
-    // [82]  	PropertyListPath	  ::=  	PropertyListPathNotEmpty?
+    // [82]   PropertyListPath   ::=   PropertyListPathNotEmpty?
     inner: Option<PropertyListPathNotEmpty>,
 }
 
@@ -880,7 +880,7 @@ impl fmt::Display for PropertyListPath {
 
 #[derive(Arbitrary)]
 struct PropertyListPathNotEmpty {
-    // [83]  	PropertyListPathNotEmpty	  ::=  	( VerbPath | VerbSimple ) ObjectListPath ( ';' ( ( VerbPath | VerbSimple ) ObjectListPath )? )*
+    // [83]   PropertyListPathNotEmpty   ::=   ( VerbPath | VerbSimple ) ObjectListPath ( ';' ( ( VerbPath | VerbSimple ) ObjectListPath )? )*
     start_predicate: PropertyListPathNotEmptyVerb,
     start_object: Box<ObjectListPath>,
     others: Vec<Option<PropertyListPathElement>>,
@@ -906,7 +906,7 @@ impl fmt::Display for PropertyListPathNotEmpty {
         }?;
         write!(f, "{}", self.start_object)?;
         for other in &self.others {
-            write!(f, " ; ")?;
+            f.write_str(" ; ")?;
             if let Some(e) = other {
                 match &e.predicate {
                     PropertyListPathNotEmptyVerb::VerbPath(p) => write!(f, "{p}"),
@@ -919,15 +919,15 @@ impl fmt::Display for PropertyListPathNotEmpty {
     }
 }
 
-// [84]  	VerbPath	  ::=  	Path
+// [84]   VerbPath   ::=   Path
 type VerbPath = Path;
 
-// [85]  	VerbSimple	  ::=  	Var
+// [85]   VerbSimple   ::=   Var
 type VerbSimple = Var;
 
 #[derive(Arbitrary)]
 struct ObjectListPath {
-    // [86]  	ObjectListPath	  ::=  	ObjectPath ( ',' ObjectPath )*
+    // [86]   ObjectListPath   ::=   ObjectPath ( ',' ObjectPath )*
     start: ObjectPath,
     others: Vec<ObjectPath>,
 }
@@ -942,15 +942,15 @@ impl fmt::Display for ObjectListPath {
     }
 }
 
-// [87]  	ObjectPath	  ::=  	GraphNodePath
+// [87]   ObjectPath   ::=   GraphNodePath
 type ObjectPath = GraphNodePath;
 
-// [88]  	Path	  ::=  	PathAlternative
+// [88]   Path   ::=   PathAlternative
 type Path = PathAlternative;
 
 #[derive(Arbitrary)]
 struct PathAlternative {
-    // [89]  	PathAlternative	  ::=  	PathSequence ( '|' PathSequence )*
+    // [89]   PathAlternative   ::=   PathSequence ( '|' PathSequence )*
     start: PathSequence,
     others: Vec<PathSequence>,
 }
@@ -967,7 +967,7 @@ impl fmt::Display for PathAlternative {
 
 #[derive(Arbitrary)]
 struct PathSequence {
-    // [90]  	PathSequence	  ::=  	PathEltOrInverse ( '/' PathEltOrInverse )*
+    // [90]   PathSequence   ::=   PathEltOrInverse ( '/' PathEltOrInverse )*
     start: PathEltOrInverse,
     others: Vec<PathEltOrInverse>,
 }
@@ -984,7 +984,7 @@ impl fmt::Display for PathSequence {
 
 #[derive(Arbitrary)]
 struct PathElt {
-    // [91]  	PathElt	  ::=  	PathPrimary PathMod?
+    // [91]   PathElt   ::=   PathPrimary PathMod?
     path: PathPrimary,
     mode: Option<PathMod>,
 }
@@ -1001,7 +1001,7 @@ impl fmt::Display for PathElt {
 
 #[derive(Arbitrary)]
 enum PathEltOrInverse {
-    // [92]  	PathEltOrInverse	  ::=  	PathElt | '^' PathElt
+    // [92]   PathEltOrInverse   ::=   PathElt | '^' PathElt
     PathElt(PathElt),
     Inverse(PathElt),
 }
@@ -1017,7 +1017,7 @@ impl fmt::Display for PathEltOrInverse {
 
 #[derive(Arbitrary)]
 enum PathMod {
-    // [93]  	PathMod	  ::=  	'?' | '*' | '+'
+    // [93]   PathMod   ::=   '?' | '*' | '+'
     ZeroOrOne,
     ZeroOrMore,
     OneOrMore,
@@ -1026,16 +1026,16 @@ enum PathMod {
 impl fmt::Display for PathMod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ZeroOrOne => write!(f, " ? "),
-            Self::ZeroOrMore => write!(f, " * "),
-            Self::OneOrMore => write!(f, " + "),
+            Self::ZeroOrOne => f.write_str(" ? "),
+            Self::ZeroOrMore => f.write_str(" * "),
+            Self::OneOrMore => f.write_str(" + "),
         }
     }
 }
 
 #[derive(Arbitrary)]
 enum PathPrimary {
-    // [94]  	PathPrimary	  ::=  	iri | 'a' | '!' PathNegatedPropertySet | '(' Path ')'
+    // [94]   PathPrimary   ::=   iri | 'a' | '!' PathNegatedPropertySet | '(' Path ')'
     Iri(Iri),
     A,
     Negated(PathNegatedPropertySet),
@@ -1046,7 +1046,7 @@ impl fmt::Display for PathPrimary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Iri(iri) => write!(f, "{iri}"),
-            Self::A => write!(f, " a "),
+            Self::A => f.write_str(" a "),
             Self::Negated(n) => write!(f, "!{n}"),
             Self::Child(c) => write!(f, "({c})"),
         }
@@ -1055,7 +1055,7 @@ impl fmt::Display for PathPrimary {
 
 #[derive(Arbitrary)]
 enum PathNegatedPropertySet {
-    // [95]  	PathNegatedPropertySet	  ::=  	PathOneInPropertySet | '(' ( PathOneInPropertySet ( '|' PathOneInPropertySet )* )? ')'
+    // [95]   PathNegatedPropertySet   ::=   PathOneInPropertySet | '(' ( PathOneInPropertySet ( '|' PathOneInPropertySet )* )? ')'
     Single(PathOneInPropertySet),
     Multiple {
         start: PathOneInPropertySet,
@@ -1072,7 +1072,7 @@ impl fmt::Display for PathNegatedPropertySet {
                 for other in others {
                     write!(f, " | {other}")?;
                 }
-                write!(f, " ) ")
+                f.write_str(" ) ")
             }
         }
     }
@@ -1080,7 +1080,7 @@ impl fmt::Display for PathNegatedPropertySet {
 
 #[derive(Arbitrary)]
 enum PathOneInPropertySet {
-    // [96]  	PathOneInPropertySet	  ::=  	iri | 'a' | '^' ( iri | 'a' )
+    // [96]   PathOneInPropertySet   ::=   iri | 'a' | '^' ( iri | 'a' )
     Iri(Iri),
     A,
     NegatedIri(Iri),
@@ -1091,16 +1091,16 @@ impl fmt::Display for PathOneInPropertySet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Iri(iri) => write!(f, "{iri}"),
-            Self::A => write!(f, " a "),
+            Self::A => f.write_str(" a "),
             Self::NegatedIri(iri) => write!(f, "^{iri}"),
-            Self::NegatedA => write!(f, " ^a "),
+            Self::NegatedA => f.write_str(" ^a "),
         }
     }
 }
 
 #[derive(Arbitrary)]
 enum TriplesNode {
-    // [98]  	TriplesNode	  ::=  	Collection | BlankNodePropertyList
+    // [98]   TriplesNode   ::=   Collection | BlankNodePropertyList
     Collection(Collection),
     BlankNodePropertyList(BlankNodePropertyList),
 }
@@ -1116,7 +1116,7 @@ impl fmt::Display for TriplesNode {
 
 #[derive(Arbitrary)]
 struct BlankNodePropertyList {
-    // [99]  	BlankNodePropertyList	  ::=  	'[' PropertyListNotEmpty ']'
+    // [99]   BlankNodePropertyList   ::=   '[' PropertyListNotEmpty ']'
     inner: PropertyListNotEmpty,
 }
 
@@ -1128,7 +1128,7 @@ impl fmt::Display for BlankNodePropertyList {
 
 #[derive(Arbitrary)]
 enum TriplesNodePath {
-    // [100]  	TriplesNodePath	  ::=  	CollectionPath | BlankNodePropertyListPath
+    // [100]   TriplesNodePath   ::=   CollectionPath | BlankNodePropertyListPath
     CollectionPath(CollectionPath),
     BlankNodePropertyListPath(BlankNodePropertyListPath),
 }
@@ -1144,7 +1144,7 @@ impl fmt::Display for TriplesNodePath {
 
 #[derive(Arbitrary)]
 struct BlankNodePropertyListPath {
-    // [101]  	BlankNodePropertyListPath	  ::=  	'[' PropertyListPathNotEmpty ']'
+    // [101]   BlankNodePropertyListPath   ::=   '[' PropertyListPathNotEmpty ']'
     inner: PropertyListPathNotEmpty,
 }
 
@@ -1156,7 +1156,7 @@ impl fmt::Display for BlankNodePropertyListPath {
 
 #[derive(Arbitrary)]
 struct Collection {
-    // [102]  	Collection	  ::=  	'(' GraphNode+ ')'
+    // [102]   Collection   ::=   '(' GraphNode+ ')'
     start: Box<GraphNode>,
     others: Vec<GraphNode>,
 }
@@ -1167,13 +1167,13 @@ impl fmt::Display for Collection {
         for e in &self.others {
             write!(f, " {e}")?;
         }
-        write!(f, " )")
+        f.write_str(" )")
     }
 }
 
 #[derive(Arbitrary)]
 struct CollectionPath {
-    // [103]  	CollectionPath	  ::=  	'(' GraphNodePath+ ')'
+    // [103]   CollectionPath   ::=   '(' GraphNodePath+ ')'
     start: Box<GraphNodePath>,
     others: Vec<GraphNodePath>,
 }
@@ -1184,13 +1184,13 @@ impl fmt::Display for CollectionPath {
         for e in &self.others {
             write!(f, " {e}")?;
         }
-        write!(f, " )")
+        f.write_str(" )")
     }
 }
 
 #[derive(Arbitrary)]
 enum GraphNode {
-    // [104]  	GraphNode	  ::=  	VarOrTerm | TriplesNode
+    // [104]   GraphNode   ::=   VarOrTerm | TriplesNode
     VarOrTerm(VarOrTerm),
     TriplesNode(TriplesNode),
 }
@@ -1206,7 +1206,7 @@ impl fmt::Display for GraphNode {
 
 #[derive(Arbitrary)]
 enum GraphNodePath {
-    // [105]  	GraphNodePath	  ::=  	VarOrTerm | TriplesNodePath
+    // [105]   GraphNodePath   ::=   VarOrTerm | TriplesNodePath
     VarOrTerm(VarOrTerm),
     TriplesNodePath(TriplesNodePath),
 }
@@ -1222,7 +1222,7 @@ impl fmt::Display for GraphNodePath {
 
 #[derive(Arbitrary)]
 enum VarOrTerm {
-    // [106]  	VarOrTerm	  ::=  	Var | GraphTerm
+    // [106]   VarOrTerm   ::=   Var | GraphTerm
     Var(Var),
     GraphTerm(GraphTerm),
 }
@@ -1238,7 +1238,7 @@ impl fmt::Display for VarOrTerm {
 
 #[derive(Arbitrary)]
 enum VarOrIri {
-    // [107]  	VarOrIri	  ::=  	Var | iri
+    // [107]   VarOrIri   ::=   Var | iri
     Var(Var),
     Iri(Iri),
 }
@@ -1253,7 +1253,7 @@ impl fmt::Display for VarOrIri {
 }
 
 struct Var {
-    // [108]  	Var	  ::=  	VAR1 | VAR2
+    // [108]   Var   ::=   VAR1 | VAR2
     value: u8,
 }
 
@@ -1277,7 +1277,7 @@ impl fmt::Display for Var {
 
 #[derive(Arbitrary)]
 enum GraphTerm {
-    // [109]  	GraphTerm	  ::=  	iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | NIL
+    // [109]   GraphTerm   ::=   iri | RDFLiteral | NumericLiteral | BooleanLiteral | BlankNode | NIL
     Iri(Iri),
     Literal(Literal),
     Nil,
@@ -1289,17 +1289,17 @@ impl fmt::Display for GraphTerm {
         match self {
             Self::Iri(iri) => write!(f, "{iri}"),
             Self::Literal(l) => write!(f, "{l}"),
-            Self::Nil => write!(f, " () "),
+            Self::Nil => f.write_str(" () "),
         }
     }
 }
 
-// [110]  	Expression	  ::=  	ConditionalOrExpression
+// [110]   Expression   ::=   ConditionalOrExpression
 type Expression = ConditionalOrExpression;
 
 #[derive(Arbitrary)]
 struct ConditionalOrExpression {
-    // [111]  	ConditionalOrExpression	  ::=  	ConditionalAndExpression ( '||' ConditionalAndExpression )*
+    // [111]   ConditionalOrExpression   ::=   ConditionalAndExpression ( '||' ConditionalAndExpression )*
     start: ConditionalAndExpression,
     others: Vec<ConditionalAndExpression>,
 }
@@ -1316,7 +1316,7 @@ impl fmt::Display for ConditionalOrExpression {
 
 #[derive(Arbitrary)]
 struct ConditionalAndExpression {
-    // [112]  	ConditionalAndExpression	  ::=  	ValueLogical ( '&&' ValueLogical )*
+    // [112]   ConditionalAndExpression   ::=   ValueLogical ( '&&' ValueLogical )*
     start: ValueLogical,
     others: Vec<ValueLogical>,
 }
@@ -1331,12 +1331,12 @@ impl fmt::Display for ConditionalAndExpression {
     }
 }
 
-// [113]  	ValueLogical	  ::=  	RelationalExpression
+// [113]   ValueLogical   ::=   RelationalExpression
 type ValueLogical = RelationalExpression;
 
 #[derive(Arbitrary)]
 enum RelationalExpression {
-    // [114]  	RelationalExpression	  ::=  	NumericExpression ( '=' NumericExpression | '!=' NumericExpression | '<' NumericExpression | '>' NumericExpression | '<=' NumericExpression | '>=' NumericExpression | 'IN' ExpressionList | 'NOT' 'IN' ExpressionList )?
+    // [114]   RelationalExpression   ::=   NumericExpression ( '=' NumericExpression | '!=' NumericExpression | '<' NumericExpression | '>' NumericExpression | '<=' NumericExpression | '>=' NumericExpression | 'IN' ExpressionList | 'NOT' 'IN' ExpressionList )?
     Base(NumericExpression),
     Equal(NumericExpression, NumericExpression),
     NotEqual(NumericExpression, NumericExpression),
@@ -1364,12 +1364,12 @@ impl fmt::Display for RelationalExpression {
     }
 }
 
-// [115]  	NumericExpression	  ::=  	AdditiveExpression
+// [115]   NumericExpression   ::=   AdditiveExpression
 type NumericExpression = AdditiveExpression;
 
 #[derive(Arbitrary)]
 enum AdditiveExpression {
-    // [116]  	AdditiveExpression	  ::=  	MultiplicativeExpression ( '+' MultiplicativeExpression | '-' MultiplicativeExpression | ( NumericLiteralPositive | NumericLiteralNegative ) ( ( '*' UnaryExpression ) | ( '/' UnaryExpression ) )* )*
+    // [116]   AdditiveExpression   ::=   MultiplicativeExpression ( '+' MultiplicativeExpression | '-' MultiplicativeExpression | ( NumericLiteralPositive | NumericLiteralNegative ) ( ( '*' UnaryExpression ) | ( '/' UnaryExpression ) )* )*
     Base(MultiplicativeExpression),
     Plus(MultiplicativeExpression, MultiplicativeExpression),
     Minus(MultiplicativeExpression, MultiplicativeExpression), // TODO: Prefix + and -
@@ -1387,7 +1387,7 @@ impl fmt::Display for AdditiveExpression {
 
 #[derive(Arbitrary)]
 enum MultiplicativeExpression {
-    // [117]  	MultiplicativeExpression	  ::=  	UnaryExpression ( '*' UnaryExpression | '/' UnaryExpression )*
+    // [117]   MultiplicativeExpression   ::=   UnaryExpression ( '*' UnaryExpression | '/' UnaryExpression )*
     Base(UnaryExpression),
     Mul(UnaryExpression, UnaryExpression),
     Div(UnaryExpression, UnaryExpression),
@@ -1405,7 +1405,7 @@ impl fmt::Display for MultiplicativeExpression {
 
 #[derive(Arbitrary)]
 enum UnaryExpression {
-    // [118]  	UnaryExpression	  ::=  	  '!' PrimaryExpression | '+' PrimaryExpression | '-' PrimaryExpression | PrimaryExpression
+    // [118]   UnaryExpression   ::=     '!' PrimaryExpression | '+' PrimaryExpression | '-' PrimaryExpression | PrimaryExpression
     Not(PrimaryExpression),
     Plus(PrimaryExpression),
     Minus(PrimaryExpression),
@@ -1425,7 +1425,7 @@ impl fmt::Display for UnaryExpression {
 
 #[derive(Arbitrary)]
 enum PrimaryExpression {
-    // [119]  	PrimaryExpression	  ::=  	BrackettedExpression | BuiltInCall | iriOrFunction | RDFLiteral | NumericLiteral | BooleanLiteral | Var
+    // [119]   PrimaryExpression   ::=   BrackettedExpression | BuiltInCall | iriOrFunction | RDFLiteral | NumericLiteral | BooleanLiteral | Var
     Bracketted(BrackettedExpression),
     BuiltInCall(BuiltInCall),
     IriOrFunction(IriOrFunction),
@@ -1447,7 +1447,7 @@ impl fmt::Display for PrimaryExpression {
 
 #[derive(Arbitrary)]
 struct BrackettedExpression {
-    // [120]  	BrackettedExpression	  ::=  	'(' Expression ')'
+    // [120]   BrackettedExpression   ::=   '(' Expression ')'
     inner: Box<Expression>,
 }
 
@@ -1459,61 +1459,61 @@ impl fmt::Display for BrackettedExpression {
 
 #[derive(Arbitrary)]
 enum BuiltInCall {
-    // [121]  	BuiltInCall	  ::=  	  Aggregate
-    // | 'STR' '(' Expression ')'
-    // | 'LANG' '(' Expression ')'
-    // | 'LANGMATCHES' '(' Expression ',' Expression ')'
-    // | 'DATATYPE' '(' Expression ')'
-    // | 'BOUND' '(' Var ')'
-    // | 'IRI' '(' Expression ')'
-    // | 'URI' '(' Expression ')'
-    // | 'BNODE' ( '(' Expression ')' | NIL )
-    // | 'RAND' NIL
-    // | 'ABS' '(' Expression ')'
-    // | 'CEIL' '(' Expression ')'
-    // | 'FLOOR' '(' Expression ')'
-    // | 'ROUND' '(' Expression ')'
-    // | 'CONCAT' ExpressionList
-    // | SubstringExpression
-    // | 'STRLEN' '(' Expression ')'
-    // | StrReplaceExpression
-    // | 'UCASE' '(' Expression ')'
-    // | 'LCASE' '(' Expression ')'
-    // | 'ENCODE_FOR_URI' '(' Expression ')'
-    // | 'CONTAINS' '(' Expression ',' Expression ')'
-    // | 'STRSTARTS' '(' Expression ',' Expression ')'
-    // | 'STRENDS' '(' Expression ',' Expression ')'
-    // | 'STRBEFORE' '(' Expression ',' Expression ')'
-    // | 'STRAFTER' '(' Expression ',' Expression ')'
-    // | 'YEAR' '(' Expression ')'
-    // | 'MONTH' '(' Expression ')'
-    // | 'DAY' '(' Expression ')'
-    // | 'HOURS' '(' Expression ')'
-    // | 'MINUTES' '(' Expression ')'
-    // | 'SECONDS' '(' Expression ')'
-    // | 'TIMEZONE' '(' Expression ')'
-    // | 'TZ' '(' Expression ')'
-    // | 'NOW' NIL
-    // | 'UUID' NIL
-    // | 'STRUUID' NIL
-    // | 'MD5' '(' Expression ')'
-    // | 'SHA1' '(' Expression ')'
-    // | 'SHA256' '(' Expression ')'
-    // | 'SHA384' '(' Expression ')'
-    // | 'SHA512' '(' Expression ')'
-    // | 'COALESCE' ExpressionList
-    // | 'IF' '(' Expression ',' Expression ',' Expression ')'
-    // | 'STRLANG' '(' Expression ',' Expression ')'
-    // | 'STRDT' '(' Expression ',' Expression ')'
-    // | 'sameTerm' '(' Expression ',' Expression ')'
-    // | 'isIRI' '(' Expression ')'
-    // | 'isURI' '(' Expression ')'
-    // | 'isBLANK' '(' Expression ')'
-    // | 'isLITERAL' '(' Expression ')'
-    // | 'isNUMERIC' '(' Expression ')'
-    // | RegexExpression
-    // | ExistsFunc
-    // | NotExistsFunc
+    // [121]   BuiltInCall   ::=     Aggregate
+    //   | 'STR' '(' Expression ')'
+    //   | 'LANG' '(' Expression ')'
+    //   | 'LANGMATCHES' '(' Expression ',' Expression ')'
+    //   | 'DATATYPE' '(' Expression ')'
+    //   | 'BOUND' '(' Var ')'
+    //   | 'IRI' '(' Expression ')'
+    //   | 'URI' '(' Expression ')'
+    //   | 'BNODE' ( '(' Expression ')' | NIL )
+    //   | 'RAND' NIL
+    //   | 'ABS' '(' Expression ')'
+    //   | 'CEIL' '(' Expression ')'
+    //   | 'FLOOR' '(' Expression ')'
+    //   | 'ROUND' '(' Expression ')'
+    //   | 'CONCAT' ExpressionList
+    //   | SubstringExpression
+    //   | 'STRLEN' '(' Expression ')'
+    //   | StrReplaceExpression
+    //   | 'UCASE' '(' Expression ')'
+    //   | 'LCASE' '(' Expression ')'
+    //   | 'ENCODE_FOR_URI' '(' Expression ')'
+    //   | 'CONTAINS' '(' Expression ',' Expression ')'
+    //   | 'STRSTARTS' '(' Expression ',' Expression ')'
+    //   | 'STRENDS' '(' Expression ',' Expression ')'
+    //   | 'STRBEFORE' '(' Expression ',' Expression ')'
+    //   | 'STRAFTER' '(' Expression ',' Expression ')'
+    //   | 'YEAR' '(' Expression ')'
+    //   | 'MONTH' '(' Expression ')'
+    //   | 'DAY' '(' Expression ')'
+    //   | 'HOURS' '(' Expression ')'
+    //   | 'MINUTES' '(' Expression ')'
+    //   | 'SECONDS' '(' Expression ')'
+    //   | 'TIMEZONE' '(' Expression ')'
+    //   | 'TZ' '(' Expression ')'
+    //   | 'NOW' NIL
+    //   | 'UUID' NIL
+    //   | 'STRUUID' NIL
+    //   | 'MD5' '(' Expression ')'
+    //   | 'SHA1' '(' Expression ')'
+    //   | 'SHA256' '(' Expression ')'
+    //   | 'SHA384' '(' Expression ')'
+    //   | 'SHA512' '(' Expression ')'
+    //   | 'COALESCE' ExpressionList
+    //   | 'IF' '(' Expression ',' Expression ',' Expression ')'
+    //   | 'STRLANG' '(' Expression ',' Expression ')'
+    //   | 'STRDT' '(' Expression ',' Expression ')'
+    //   | 'sameTerm' '(' Expression ',' Expression ')'
+    //   | 'isIRI' '(' Expression ')'
+    //   | 'isURI' '(' Expression ')'
+    //   | 'isBLANK' '(' Expression ')'
+    //   | 'isLITERAL' '(' Expression ')'
+    //   | 'isNUMERIC' '(' Expression ')'
+    //   | RegexExpression
+    //   | ExistsFunc
+    //   | NotExistsFunc
     Str(Box<Expression>),
     Lang(Box<Expression>),
     Datatype(Box<Expression>),
@@ -1530,7 +1530,7 @@ enum BuiltInCall {
     IsLiteral(Box<Expression>),
     IsNumeric(Box<Expression>),
     Exists(ExistsFunc),
-    NotExists(NotExistsFunc), //TODO: Other functions
+    NotExists(NotExistsFunc), // TODO: Other functions
 }
 
 impl fmt::Display for BuiltInCall {
@@ -1559,7 +1559,7 @@ impl fmt::Display for BuiltInCall {
 
 #[derive(Arbitrary)]
 struct ExistsFunc {
-    // [125]  	ExistsFunc	  ::=  	'EXISTS' GroupGraphPattern
+    // [125]   ExistsFunc   ::=   'EXISTS' GroupGraphPattern
     pattern: GroupGraphPattern,
 }
 
@@ -1571,7 +1571,7 @@ impl fmt::Display for ExistsFunc {
 
 #[derive(Arbitrary)]
 struct NotExistsFunc {
-    // [126]  	NotExistsFunc	  ::=  	'NOT' 'EXISTS' GroupGraphPattern
+    // [126]   NotExistsFunc   ::=   'NOT' 'EXISTS' GroupGraphPattern
     pattern: GroupGraphPattern,
 }
 
@@ -1583,28 +1583,28 @@ impl fmt::Display for NotExistsFunc {
 
 #[derive(Arbitrary)]
 struct IriOrFunction {
-    // [128]  	iriOrFunction	  ::=  	iri ArgList?
+    // [128]   iriOrFunction   ::=   iri ArgList?
     iri: Iri,
-    //TODO args: Option<ArgList>,
+    // TODO args: Option<ArgList>,
 }
 
 impl fmt::Display for IriOrFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.iri)?;
-        /*if let Some(args) = &self.args {
-            write!(f, "{}", args)?;
-        }*/
+        // if let Some(args) = &self.args {
+        // write!(f, "{args}")?;
+        // }
         Ok(())
     }
 }
 
 struct Literal {
-    // [129]  	RDFLiteral	  ::=  	String ( LANGTAG | ( '^^' iri ) )?
-    // [130]  	NumericLiteral	  ::=  	NumericLiteralUnsigned | NumericLiteralPositive | NumericLiteralNegative
-    // [131]  	NumericLiteralUnsigned	  ::=  	INTEGER | DECIMAL | DOUBLE
-    // [132]  	NumericLiteralPositive	  ::=  	INTEGER_POSITIVE | DECIMAL_POSITIVE | DOUBLE_POSITIVE
-    // [133]  	NumericLiteralNegative	  ::=  	INTEGER_NEGATIVE | DECIMAL_NEGATIVE | DOUBLE_NEGATIVE
-    // [134]  	BooleanLiteral	  ::=  	'true' | 'false'
+    // [129]   RDFLiteral               ::=   String ( LANGTAG | ( '^^' iri ) )?
+    // [130]   NumericLiteral           ::=   NumericLiteralUnsigned | NumericLiteralPositive | NumericLiteralNegative
+    // [131]   NumericLiteralUnsigned   ::=   INTEGER | DECIMAL | DOUBLE
+    // [132]   NumericLiteralPositive   ::=   INTEGER_POSITIVE | DECIMAL_POSITIVE | DOUBLE_POSITIVE
+    // [133]   NumericLiteralNegative   ::=   INTEGER_NEGATIVE | DECIMAL_NEGATIVE | DOUBLE_NEGATIVE
+    // [134]   BooleanLiteral           ::=   'true' | 'false'
     value: &'static str,
 }
 
@@ -1627,7 +1627,7 @@ impl fmt::Display for Literal {
 }
 
 struct Iri {
-    // [136]  	iri	  ::=  	IRIREF | PrefixedName
+    // [136]   iri   ::=   IRIREF | PrefixedName
     value: u8,
 }
 

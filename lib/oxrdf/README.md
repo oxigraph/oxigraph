@@ -5,7 +5,7 @@ OxRDF
 [![Released API docs](https://docs.rs/oxrdf/badge.svg)](https://docs.rs/oxrdf)
 [![Crates.io downloads](https://img.shields.io/crates/d/oxrdf)](https://crates.io/crates/oxrdf)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 OxRDF is a simple library providing datastructures encoding [RDF 1.1 concepts](https://www.w3.org/TR/rdf11-concepts/).
 
@@ -14,6 +14,8 @@ This crate is intended to be a basic building block of other crates like [Oxigra
 Support for [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is available behind the `rdf-star` feature.
 
 OxRDF is inspired by [RDF/JS](https://rdf.js.org/data-model-spec/) and [Apache Commons RDF](http://commons.apache.org/proper/commons-rdf/).
+
+Use [`oxrdfio`](https://crates.io/crates/oxrdfio) if you need to read or write RDF files.
 
 Usage example:
 

@@ -1,0 +1,37 @@
+[package]
+name = "oxttl"
+version = "0.1.0-alpha.3-dev"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["N-Triples", "N-Quads", "Turtle", "TriG", "N3"]
+repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxttl"
+description = """
+Parser and serializer for languages related to RDF Turtle (N-Triples, N-Quads, Turtle, TriG and N3)
+"""
+documentation = "https://docs.rs/oxttl"
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+rdf-star = ["oxrdf/rdf-star"]
+async-tokio = ["dep:tokio"]
+
+[dependencies]
+memchr.workspace = true
+oxrdf.workspace = true
+oxiri.workspace = true
+oxilangtag.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, optional = true, features = ["io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -698,7 +698,7 @@ impl<'a> From<TermRef<'a>> for Term {
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
-/// use oxrdf::{Triple, NamedNode};
+/// use oxrdf::{NamedNode, Triple};
 ///
 /// assert_eq!(
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
@@ -706,7 +706,8 @@ impl<'a> From<TermRef<'a>> for Term {
 ///         subject: NamedNode::new("http://example.com/s")?.into(),
 ///         predicate: NamedNode::new("http://example.com/p")?,
 ///         object: NamedNode::new("http://example.com/o")?.into(),
-///     }.to_string()
+///     }
+///     .to_string()
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
@@ -769,7 +770,7 @@ impl fmt::Display for Triple {
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
-/// use oxrdf::{TripleRef, NamedNodeRef};
+/// use oxrdf::{NamedNodeRef, TripleRef};
 ///
 /// assert_eq!(
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
@@ -777,7 +778,8 @@ impl fmt::Display for Triple {
 ///         subject: NamedNodeRef::new("http://example.com/s")?.into(),
 ///         predicate: NamedNodeRef::new("http://example.com/p")?,
 ///         object: NamedNodeRef::new("http://example.com/o")?.into(),
-///     }.to_string()
+///     }
+///     .to_string()
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
@@ -853,10 +855,11 @@ impl<'a> From<TripleRef<'a>> for Triple {
 
 /// A possible owned graph name.
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub enum GraphName {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
+    #[default]
     DefaultGraph,
 }
 
@@ -940,10 +943,11 @@ impl From<NamedOrBlankNodeRef<'_>> for GraphName {
 
 /// A possible borrowed graph name.
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
 pub enum GraphNameRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     BlankNode(BlankNodeRef<'a>),
+    #[default]
     DefaultGraph,
 }
 
@@ -979,7 +983,7 @@ impl fmt::Display for GraphNameRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
         }
     }
 }

@@ -1,23 +1,33 @@
 SPARQL utility objects
-=============================
+======================
+.. py:currentmodule:: pyoxigraph
 
 Oxigraph provides also some utilities related to SPARQL queries:
 
-
 Variable
 """"""""
-.. autoclass:: pyoxigraph.Variable
+.. autoclass:: Variable
     :members:
-
 
 ``SELECT`` solutions
 """"""""""""""""""""
-.. autoclass:: pyoxigraph.QuerySolutions
+.. autoclass:: QuerySolutions
     :members:
-.. autoclass:: pyoxigraph.QuerySolution
+.. autoclass:: QuerySolution
+    :members:
+
+``ASK`` results
+"""""""""""""""
+.. autoclass:: QueryBoolean
     :members:
 
 ``CONSTRUCT`` results
 """""""""""""""""""""
-.. autoclass:: pyoxigraph.QueryTriples
+.. autoclass:: QueryTriples
+    :members:
+
+Query results parsing
+"""""""""""""""""""""
+.. autofunction:: parse_query_results
+.. autoclass:: QueryResultsFormat
     :members:

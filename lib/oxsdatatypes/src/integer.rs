@@ -1,7 +1,6 @@
-use crate::{Boolean, Decimal, DecimalOverflowError, Double, Float};
+use crate::{Boolean, Decimal, Double, Float};
 use std::fmt;
 use std::num::ParseIntError;
-use std::ops::Neg;
 use std::str::FromStr;
 
 /// [XML Schema `integer` datatype](https://www.w3.org/TR/xmlschema11-2/#integer)
@@ -14,7 +13,11 @@ pub struct Integer {
 }
 
 impl Integer {
+    pub const MAX: Self = Self { value: i64::MAX };
+    pub const MIN: Self = Self { value: i64::MIN };
+
     #[inline]
+    #[must_use]
     pub fn from_be_bytes(bytes: [u8; 8]) -> Self {
         Self {
             value: i64::from_be_bytes(bytes),
@@ -22,92 +25,117 @@ impl Integer {
     }
 
     #[inline]
+    #[must_use]
     pub fn to_be_bytes(self) -> [u8; 8] {
         self.value.to_be_bytes()
     }
 
     /// [op:numeric-add](https://www.w3.org/TR/xpath-functions-31/#func-numeric-add)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub fn checked_add(&self, rhs: impl Into<Self>) -> Option<Self> {
+    #[must_use]
+    pub fn checked_add(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_add(rhs.into().value)?,
         })
     }
 
     /// [op:numeric-subtract](https://www.w3.org/TR/xpath-functions-31/#func-numeric-subtract)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub fn checked_sub(&self, rhs: impl Into<Self>) -> Option<Self> {
+    #[must_use]
+    pub fn checked_sub(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_sub(rhs.into().value)?,
         })
     }
 
     /// [op:numeric-multiply](https://www.w3.org/TR/xpath-functions-31/#func-numeric-multiply)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub fn checked_mul(&self, rhs: impl Into<Self>) -> Option<Self> {
+    #[must_use]
+    pub fn checked_mul(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_mul(rhs.into().value)?,
         })
     }
 
-    /// [op:numeric-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-divide)
+    /// [op:numeric-integer-divide](https://www.w3.org/TR/xpath-functions-31/#func-numeric-integer-divide)
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub fn checked_div(&self, rhs: impl Into<Self>) -> Option<Self> {
+    #[must_use]
+    pub fn checked_div(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_div(rhs.into().value)?,
         })
     }
 
     /// [op:numeric-mod](https://www.w3.org/TR/xpath-functions-31/#func-numeric-mod)
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub fn checked_rem(&self, rhs: impl Into<Self>) -> Option<Self> {
+    #[must_use]
+    pub fn checked_rem(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem(rhs.into().value)?,
         })
     }
 
+    /// Euclidean remainder
+    ///
+    /// Returns `None` in case of division by 0 ([FOAR0001](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0001)) or overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub fn checked_rem_euclid(&self, rhs: impl Into<Self>) -> Option<Self> {
+    #[must_use]
+    pub fn checked_rem_euclid(self, rhs: impl Into<Self>) -> Option<Self> {
         Some(Self {
             value: self.value.checked_rem_euclid(rhs.into().value)?,
         })
     }
 
     /// [op:numeric-unary-minus](https://www.w3.org/TR/xpath-functions-31/#func-numeric-unary-minus)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub fn checked_neg(&self) -> Option<Self> {
+    #[must_use]
+    pub fn checked_neg(self) -> Option<Self> {
         Some(Self {
             value: self.value.checked_neg()?,
         })
     }
 
     /// [fn:abs](https://www.w3.org/TR/xpath-functions-31/#func-abs)
+    ///
+    /// Returns `None` in case of overflow ([FOAR0002](https://www.w3.org/TR/xpath-functions-31/#ERRFOAR0002)).
     #[inline]
-    pub const fn abs(&self) -> Self {
-        Self {
-            value: self.value.abs(),
-        }
+    #[must_use]
+    pub fn checked_abs(self) -> Option<Self> {
+        Some(Self {
+            value: self.value.checked_abs()?,
+        })
     }
 
     #[inline]
-    pub const fn is_negative(&self) -> bool {
+    #[must_use]
+    pub const fn is_negative(self) -> bool {
         self.value < 0
     }
 
     #[inline]
-    pub const fn is_positive(&self) -> bool {
+    #[must_use]
+    pub const fn is_positive(self) -> bool {
         self.value > 0
     }
 
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    #[must_use]
+    pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
-
-    pub const MIN: Self = Self { value: i64::MIN };
-
-    pub const MAX: Self = Self { value: i64::MAX };
 }
 
 impl From<bool> for Integer {
@@ -198,7 +226,7 @@ impl FromStr for Integer {
     type Err = ParseIntError;
 
     #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseIntError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(i64::from_str(input)?.into())
     }
 }
@@ -210,35 +238,39 @@ impl fmt::Display for Integer {
     }
 }
 
-impl Neg for Integer {
-    type Output = Self;
-
-    #[inline]
-    fn neg(self) -> Self {
-        (-self.value).into()
-    }
-}
-
 impl TryFrom<Float> for Integer {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Float) -> Result<Self, DecimalOverflowError> {
-        Decimal::try_from(value)?.try_into()
+    fn try_from(value: Float) -> Result<Self, Self::Error> {
+        Decimal::try_from(value)
+            .map_err(|_| TooLargeForIntegerError)?
+            .try_into()
     }
 }
 
 impl TryFrom<Double> for Integer {
-    type Error = DecimalOverflowError;
+    type Error = TooLargeForIntegerError;
 
     #[inline]
-    fn try_from(value: Double) -> Result<Self, DecimalOverflowError> {
-        Decimal::try_from(value)?.try_into()
+    fn try_from(value: Double) -> Result<Self, Self::Error> {
+        Decimal::try_from(value)
+            .map_err(|_| TooLargeForIntegerError)?
+            .try_into()
     }
 }
 
+/// The input is too large to fit into an [`Integer`].
+///
+/// Matches XPath [`FOCA0003` error](https://www.w3.org/TR/xpath-functions-31/#ERRFOCA0003).
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("Value too large for xsd:integer internal representation")]
+pub struct TooLargeForIntegerError;
+
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]
@@ -247,7 +279,7 @@ mod tests {
         assert_eq!(Integer::from_str("-0")?.to_string(), "0");
         assert_eq!(Integer::from_str("123")?.to_string(), "123");
         assert_eq!(Integer::from_str("-123")?.to_string(), "-123");
-        assert!(Integer::from_str("123456789123456789123456789123456789123456789").is_err());
+        Integer::from_str("123456789123456789123456789123456789123456789").unwrap_err();
         Ok(())
     }
 
@@ -265,17 +297,18 @@ mod tests {
             Integer::try_from(Float::from(-123.1)).ok(),
             Some(Integer::from_str("-123")?)
         );
-        assert!(Integer::try_from(Float::from(f32::NAN)).is_err());
-        assert!(Integer::try_from(Float::from(f32::INFINITY)).is_err());
-        assert!(Integer::try_from(Float::from(f32::NEG_INFINITY)).is_err());
-        assert!(Integer::try_from(Float::from(f32::MIN)).is_err());
-        assert!(Integer::try_from(Float::from(f32::MAX)).is_err());
+        Integer::try_from(Float::from(f32::NAN)).unwrap_err();
+        Integer::try_from(Float::from(f32::INFINITY)).unwrap_err();
+        Integer::try_from(Float::from(f32::NEG_INFINITY)).unwrap_err();
+        Integer::try_from(Float::from(f32::MIN)).unwrap_err();
+        Integer::try_from(Float::from(f32::MAX)).unwrap_err();
         assert!(
             Integer::try_from(Float::from(1_672_507_300_000.))
                 .unwrap()
                 .checked_sub(Integer::from_str("1672507300000")?)
                 .unwrap()
-                .abs()
+                .checked_abs()
+                .unwrap()
                 < Integer::from(1_000_000)
         );
         Ok(())
@@ -300,14 +333,15 @@ mod tests {
                 .unwrap()
                 .checked_sub(Integer::from_str("1672507300000").unwrap())
                 .unwrap()
-                .abs()
+                .checked_abs()
+                .unwrap()
                 < Integer::from(10)
         );
-        assert!(Integer::try_from(Double::from(f64::NAN)).is_err());
-        assert!(Integer::try_from(Double::from(f64::INFINITY)).is_err());
-        assert!(Integer::try_from(Double::from(f64::NEG_INFINITY)).is_err());
-        assert!(Integer::try_from(Double::from(f64::MIN)).is_err());
-        assert!(Integer::try_from(Double::from(f64::MAX)).is_err());
+        Integer::try_from(Double::from(f64::NAN)).unwrap_err();
+        Integer::try_from(Double::from(f64::INFINITY)).unwrap_err();
+        Integer::try_from(Double::from(f64::NEG_INFINITY)).unwrap_err();
+        Integer::try_from(Double::from(f64::MIN)).unwrap_err();
+        Integer::try_from(Double::from(f64::MAX)).unwrap_err();
         Ok(())
     }
 
@@ -321,8 +355,8 @@ mod tests {
             Integer::try_from(Decimal::from_str("-123.1").unwrap()).ok(),
             Some(Integer::from_str("-123")?)
         );
-        assert!(Integer::try_from(Decimal::MIN).is_err());
-        assert!(Integer::try_from(Decimal::MAX).is_err());
+        Integer::try_from(Decimal::MIN).unwrap_err();
+        Integer::try_from(Decimal::MAX).unwrap_err();
         Ok(())
     }
 

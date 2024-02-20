@@ -1,0 +1,8 @@
+base <http://example.com/>
+prefix prefix: <prefix/>
+prefix base: <base/>
+prefix true: <true/>
+prefix false: <false/>
+
+prefix:s prefix:p true:o .
+base:s base:p false:o .
