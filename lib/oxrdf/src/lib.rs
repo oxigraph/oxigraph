@@ -5,6 +5,7 @@
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
 mod blank_node;
+mod cast_error;
 pub mod dataset;
 pub mod graph;
 mod interning;
@@ -16,6 +17,7 @@ mod variable;
 pub mod vocab;
 
 pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
+pub use crate::cast_error::{TripleConstructionError, TryFromTermError};
 pub use crate::dataset::Dataset;
 pub use crate::graph::Graph;
 pub use crate::literal::{Literal, LiteralRef};
