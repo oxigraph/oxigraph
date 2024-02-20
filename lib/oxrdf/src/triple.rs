@@ -754,11 +754,14 @@ impl Triple {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
     #[inline]
     pub fn new_maybe(
-        subject: impl Into<Option<Subject>>,
-        predicate: impl Into<Option<NamedNode>>,
-        object: impl Into<Option<Term>>,
+        subject: impl Into<Term>,
+        predicate: impl Into<Term>,
+        object: impl Into<Term>,
     ) -> Option<Self> {
-        match (subject.into(), predicate.into(), object.into()) {
+        match (
+            Into::<Option<Subject>>::into(Into::<Term>::into(subject)),
+            Into::<Option<NamedNode>>::into(Into::<Term>::into(predicate)), 
+            Into::<Option<Term>>::into(Into::<Term>::into(object))) {
             (Some(subject), Some(predicate), Some(object)) => Some(Self {
                 subject,
                 predicate,
@@ -1298,10 +1301,18 @@ mod tests {
 
     #[test]
     fn constructing_triple() {
+        use super::*;
+
         let optional_triple = Triple::new_maybe(
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()), 
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
+
+        let optional_triple_2 = Triple::new_maybe(
+            NamedNode::new("http://example.org/test").unwrap(), 
+            NamedNode::new("http://example.org/test").unwrap(),
+            NamedNode::new("http://example.org/test").unwrap()
         );
 
         let bad_triple = Triple::new_maybe(
@@ -1310,14 +1321,29 @@ mod tests {
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
         );
 
+        let bad_triple_2 = Triple::new_maybe(
+            BlankNode::new("abc123").unwrap(), 
+            NamedNode::new("http://example.org/test").unwrap(),
+            NamedNode::new("http://example.org/test").unwrap()
+        );
+
         let triple: Triple = Triple::new(
             Subject::NamedNode(NamedNode::new("http://example.org/test").unwrap()), 
             NamedNode::new("http://example.org/test").unwrap(),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
         );
 
+        let triple_2: Triple = Triple::new(
+            NamedNode::new("http://example.org/test").unwrap(), 
+            NamedNode::new("http://example.org/test").unwrap(),
+            NamedNode::new("http://example.org/test").unwrap()
+        );
+
         assert_eq!(optional_triple, Some(triple));
+        assert_eq!(optional_triple, Some(triple_2.clone()));
+        assert_eq!(optional_triple_2, Some(triple_2));
         assert_eq!(bad_triple, None);
+        assert_eq!(bad_triple_2, None);
     }
 
     #[test]
