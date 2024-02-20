@@ -1,6 +1,6 @@
 use crate::named_node::NamedNode;
 use crate::vocab::{rdf, xsd};
-use crate::NamedNodeRef;
+use crate::{NamedNodeRef, Term, TryFromTermError};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
@@ -422,6 +422,22 @@ impl From<DayTimeDuration> for Literal {
     }
 }
 
+impl TryFrom<Term> for Literal {
+    type Error = TryFromTermError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::Literal(node) = term {
+            Ok(node)
+        } else {
+            Err(TryFromTermError {
+                term,
+                target: "Literal",
+            })
+        }
+    }
+}
+
 /// A borrowed RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
@@ -638,6 +654,7 @@ mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
     use super::*;
+    use crate::BlankNode;
 
     #[test]
     fn test_simple_literal_equality() {
@@ -656,6 +673,50 @@ mod tests {
         assert_eq!(
             LiteralRef::new_simple_literal("foo"),
             LiteralRef::new_typed_literal("foo", xsd::STRING)
+        );
+    }
+
+    #[test]
+    fn casting() {
+        let literal: Result<Literal, TryFromTermError> =
+            Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        assert_eq!(
+            literal.unwrap(),
+            Literal::new_simple_literal("Hello World!")
+        );
+
+        let bnode: Result<Literal, TryFromTermError> =
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        let bnode_err = bnode.unwrap_err();
+        assert_eq!(
+            bnode_err.term,
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42))
+        );
+        assert_eq!(bnode_err.target, "Literal");
+        assert_eq!(
+            bnode_err.to_string(),
+            "_:42 can not be converted to a Literal"
+        );
+        assert_eq!(
+            Term::from(bnode_err),
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42))
+        );
+
+        let named_node: Result<Literal, TryFromTermError> =
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        let named_node_err = named_node.unwrap_err();
+        assert_eq!(
+            named_node_err.term,
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
+        assert_eq!(named_node_err.target, "Literal");
+        assert_eq!(
+            named_node_err.to_string(),
+            "<http://example.org/test> can not be converted to a Literal"
+        );
+        assert_eq!(
+            Term::from(named_node_err),
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
         );
     }
 

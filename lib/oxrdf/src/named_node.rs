@@ -1,3 +1,4 @@
+use crate::{Term, TryFromTermError};
 use oxiri::{Iri, IriParseError};
 use std::cmp::Ordering;
 use std::fmt;
@@ -232,5 +233,74 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
         Self {
             iri: iri.into_inner(),
         }
+    }
+}
+
+impl TryFrom<Term> for NamedNode {
+    type Error = TryFromTermError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::NamedNode(node) = term {
+            Ok(node)
+        } else {
+            Err(TryFromTermError {
+                term,
+                target: "NamedNode",
+            })
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
+    use crate::{BlankNode, Literal};
+
+    use super::*;
+
+    #[test]
+    fn casting() {
+        let named_node: Result<NamedNode, TryFromTermError> =
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        assert_eq!(
+            named_node.unwrap(),
+            NamedNode::new("http://example.org/test").unwrap()
+        );
+
+        let literal: Result<NamedNode, TryFromTermError> =
+            Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        let literal_err = literal.unwrap_err();
+        assert_eq!(
+            literal_err.term,
+            Term::Literal(Literal::new_simple_literal("Hello World!"))
+        );
+        assert_eq!(literal_err.target, "NamedNode");
+        assert_eq!(
+            literal_err.to_string(),
+            "\"Hello World!\" can not be converted to a NamedNode"
+        );
+        assert_eq!(
+            Term::from(literal_err),
+            Term::Literal(Literal::new_simple_literal("Hello World!"))
+        );
+
+        let bnode: Result<NamedNode, TryFromTermError> =
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        let bnode_err = bnode.unwrap_err();
+        assert_eq!(
+            bnode_err.term,
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42))
+        );
+        assert_eq!(bnode_err.target, "NamedNode");
+        assert_eq!(
+            bnode_err.to_string(),
+            "_:42 can not be converted to a NamedNode"
+        );
+        assert_eq!(
+            Term::from(bnode_err),
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42))
+        );
     }
 }
