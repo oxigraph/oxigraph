@@ -1267,16 +1267,14 @@ impl<'a> From<QuadRef<'a>> for Quad {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 #[cfg(test)]
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
-    use crate::{Literal, BlankNode};
-
     use super::*;
 
     #[test]
-    #[cfg(feature = "rdf-star")]
     fn casting_triple() {
         let triple = Triple {
             subject: NamedNode::new("http://example.org/s").unwrap().into(),
@@ -1299,7 +1297,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rdf-star")]
     fn constructing_triple() {
         let optional_triple = Triple::new_maybe(
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()), 
@@ -1324,7 +1321,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rdf-star")]
     fn casting_subject() {
         let triple = Triple {
             subject: NamedNode::new("http://example.org/s").unwrap().into(),
