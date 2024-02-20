@@ -1,6 +1,6 @@
 use crate::named_node::NamedNode;
 use crate::vocab::{rdf, xsd};
-use crate::{NamedNodeRef, Term};
+use crate::NamedNodeRef;
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
