@@ -1,6 +1,6 @@
 use crate::named_node::NamedNode;
 use crate::vocab::{rdf, xsd};
-use crate::NamedNodeRef;
+use crate::{NamedNodeRef, Term};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
@@ -34,10 +34,10 @@ use std::option::Option;
 /// # Result::<(), LanguageTagParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Literal(LiteralContent);
+pub struct Literal(pub LiteralContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
-pub enum LiteralContent {
+enum LiteralContent {
     String(String),
     LanguageTaggedString { value: String, language: String },
     TypedLiteral { value: String, datatype: NamedNode },
