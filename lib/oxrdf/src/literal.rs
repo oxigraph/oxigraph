@@ -37,7 +37,7 @@ use std::option::Option;
 pub struct Literal(LiteralContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
-enum LiteralContent {
+pub enum LiteralContent {
     String(String),
     LanguageTaggedString { value: String, language: String },
     TypedLiteral { value: String, datatype: NamedNode },
