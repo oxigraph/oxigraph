@@ -2,6 +2,8 @@ use oxiri::{Iri, IriParseError};
 use std::cmp::Ordering;
 use std::fmt;
 
+use crate::Term;
+
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
@@ -217,6 +219,16 @@ impl PartialOrd<NamedNodeRef<'_>> for NamedNode {
     }
 }
 
+impl From<Term> for Option<NamedNode> {
+    #[inline]
+    fn from(term: Term) -> Self {
+        match term {
+            Term::NamedNode(node) => Some(node),
+            _ => None,
+        }
+    }
+}
+
 impl From<Iri<String>> for NamedNode {
     #[inline]
     fn from(iri: Iri<String>) -> Self {
@@ -232,5 +244,26 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
         Self {
             iri: iri.into_inner(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
+    use crate::{Literal, BlankNode};
+
+    use super::*;
+
+    #[test]
+    fn casting() {
+        let named_node: Option<NamedNode> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
+        assert_eq!(named_node, Some(NamedNode::new("http://example.org/test").unwrap()));
+        
+        let literal: Option<NamedNode> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
+        assert_eq!(literal, None);
+
+        let bnode: Option<NamedNode> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
+        assert_eq!(bnode, None);
     }
 }

@@ -1,6 +1,6 @@
 use crate::named_node::NamedNode;
 use crate::vocab::{rdf, xsd};
-use crate::NamedNodeRef;
+use crate::{NamedNodeRef, Term};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
@@ -158,6 +158,16 @@ impl fmt::Display for Literal {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
+    }
+}
+
+impl From<Term> for Option<Literal> {
+    #[inline]
+    fn from(term: Term) -> Self {
+        match term {
+            Term::Literal(literal) => Some(literal),
+            _ => None,
+        }
     }
 }
 
@@ -637,6 +647,8 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
+    use crate::BlankNode;
+
     use super::*;
 
     #[test]
@@ -657,6 +669,19 @@ mod tests {
             LiteralRef::new_simple_literal("foo"),
             LiteralRef::new_typed_literal("foo", xsd::STRING)
         );
+    }
+
+
+    #[test]
+    fn casting() {
+        let literal: Option<Literal> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
+        assert_eq!(literal, Some(Literal::new_simple_literal("Hello World!")));
+
+        let bnode: Option<Literal> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
+        assert_eq!(bnode, None);
+
+        let named_node: Option<Literal> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
+        assert_eq!(named_node, None);
     }
 
     #[test]

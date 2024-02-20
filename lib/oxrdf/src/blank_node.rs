@@ -2,6 +2,8 @@ use rand::random;
 use std::io::Write;
 use std::{fmt, str};
 
+use crate::Term;
+
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
 /// The common way to create a new blank node is to use the [`BlankNode::default()`] function.
@@ -99,6 +101,16 @@ impl fmt::Display for BlankNode {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
+    }
+}
+
+impl From<Term> for Option<BlankNode> {
+    #[inline]
+    fn from(term: Term) -> Self {
+        match term {
+            Term::BlankNode(node) => Some(node),
+            _ => None,
+        }
     }
 }
 
@@ -352,12 +364,26 @@ pub struct BlankNodeIdParseError;
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
+    use crate::{Literal, NamedNode};
+
     use super::*;
 
     #[test]
     fn as_str_partial() {
         let b = BlankNode::new_from_unique_id(0x42);
         assert_eq!(b.as_str(), "42");
+    }
+
+    #[test]
+    fn casting() {
+        let bnode: Option<BlankNode> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
+        assert_eq!(bnode, Some(BlankNode::new_from_unique_id(0x42)));
+
+        let literal: Option<BlankNode> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
+        assert_eq!(literal, None);
+
+        let named_node: Option<BlankNode> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
+        assert_eq!(named_node, None);
     }
 
     #[test]

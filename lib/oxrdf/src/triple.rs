@@ -195,6 +195,19 @@ impl fmt::Display for Subject {
     }
 }
 
+impl From<Term> for Option<Subject> {
+    #[inline]
+    fn from(term: Term) -> Self {
+        match term {
+            Term::NamedNode(node) => Some(Subject::NamedNode(node)),
+            Term::BlankNode(node) => Some(Subject::BlankNode(node)),
+            #[cfg(feature = "rdf-star")]
+            Term::Triple(triple) => Some(Subject::Triple(triple)),
+            Term::Literal(_) => None
+        }
+    }
+}
+
 impl From<NamedNode> for Subject {
     #[inline]
     fn from(node: NamedNode) -> Self {
@@ -738,6 +751,23 @@ impl Triple {
         }
     }
 
+    /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
+    #[inline]
+    pub fn new_maybe(
+        subject: impl Into<Option<Subject>>,
+        predicate: impl Into<Option<NamedNode>>,
+        object: impl Into<Option<Term>>,
+    ) -> Option<Self> {
+        match (subject.into(), predicate.into(), object.into()) {
+            (Some(subject), Some(predicate), Some(object)) => Some(Self {
+                subject,
+                predicate,
+                object,
+            }),
+            _ => None,
+        }
+    }
+
     /// Encodes that this triple is in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn in_graph(self, graph_name: impl Into<GraphName>) -> Quad {
@@ -763,6 +793,18 @@ impl fmt::Display for Triple {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
+    }
+}
+
+#[cfg(feature = "rdf-star")]
+impl From<Term> for Option<Box<Triple>> {
+    #[inline]
+    fn from(term: Term) -> Self {
+        match term {
+            #[cfg(feature = "rdf-star")]
+            Term::Triple(triple) => Some(triple),
+            _ => None,
+        }
     }
 }
 
@@ -1222,5 +1264,85 @@ impl<'a> From<QuadRef<'a>> for Quad {
     #[inline]
     fn from(quad: QuadRef<'a>) -> Self {
         quad.into_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
+    use crate::{Literal, BlankNode};
+
+    use super::*;
+
+    #[test]
+    #[cfg(feature = "rdf-star")]
+    fn casting_triple() {
+        let triple = Triple {
+            subject: NamedNode::new("http://example.org/s").unwrap().into(),
+            predicate: NamedNode::new("http://example.org/p").unwrap(),
+            object: NamedNode::new("http://example.org/o").unwrap().into(),
+        };
+        let triple_box = Box::new(triple);
+
+        let t: Option<Box<Triple>> = Term::Triple(triple_box.clone()).into();
+        assert_eq!(t, Some(triple_box.clone()));
+
+        let literal: Option<Box<Triple>> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
+        assert_eq!(literal, None);
+
+        let bnode: Option<Box<Triple>> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
+        assert_eq!(bnode, None);
+
+        let named_node: Option<Box<Triple>> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
+        assert_eq!(named_node, None);
+    }
+
+    #[test]
+    #[cfg(feature = "rdf-star")]
+    fn constructing_triple() {
+        let optional_triple = Triple::new_maybe(
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()), 
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
+
+        let bad_triple = Triple::new_maybe(
+            Term::BlankNode(BlankNode::new("abc123").unwrap()), 
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
+
+        let triple: Triple = Triple::new(
+            Subject::NamedNode(NamedNode::new("http://example.org/test").unwrap()), 
+            NamedNode::new("http://example.org/test").unwrap(),
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
+
+        assert_eq!(optional_triple, Some(triple));
+        assert_eq!(bad_triple, None);
+    }
+
+    #[test]
+    #[cfg(feature = "rdf-star")]
+    fn casting_subject() {
+        let triple = Triple {
+            subject: NamedNode::new("http://example.org/s").unwrap().into(),
+            predicate: NamedNode::new("http://example.org/p").unwrap(),
+            object: NamedNode::new("http://example.org/o").unwrap().into(),
+        };
+        let triple_box = Box::new(triple);
+
+        let t: Option<Subject> = Term::Triple(triple_box.clone()).into();
+        assert_eq!(t, Some(Subject::Triple(triple_box.clone())));
+
+        let literal: Option<Subject> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
+        assert_eq!(literal, None);
+
+        let bnode: Option<Subject> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
+        assert_eq!(bnode, Some(Subject::BlankNode(BlankNode::new_from_unique_id(0x42))));
+
+        let named_node: Option<Subject> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
+        assert_eq!(named_node, Some(Subject::NamedNode(NamedNode::new("http://example.org/test").unwrap())));
     }
 }
