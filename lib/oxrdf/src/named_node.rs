@@ -1,7 +1,7 @@
+use crate::{Term, TermCastError, TermCastErrorKind};
 use oxiri::{Iri, IriParseError};
 use std::cmp::Ordering;
 use std::fmt;
-use crate::{TermCastErrorKind, Term, TermCastError};
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///
@@ -226,11 +226,10 @@ impl TryFrom<Term> for NamedNode {
         if let Term::NamedNode(node) = term {
             Ok(node)
         } else {
-            Err(TermCastErrorKind::Msg(format!(
-                "Cannot convert term to a named node: {}",
-                term
-            ))
-            .into())
+            Err(
+                TermCastErrorKind::Msg(format!("Cannot convert term to a named node: {}", term))
+                    .into(),
+            )
         }
     }
 }
@@ -257,19 +256,25 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
-    use crate::{Literal, BlankNode};
+    use crate::{BlankNode, Literal};
 
     use super::*;
 
     #[test]
     fn casting() {
-        let named_node: Result<NamedNode, TermCastError> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
-        assert_eq!(named_node.unwrap(), NamedNode::new("http://example.org/test").unwrap());
-        
-        let literal: Result<NamedNode, TermCastError> = Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        let named_node: Result<NamedNode, TermCastError> =
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        assert_eq!(
+            named_node.unwrap(),
+            NamedNode::new("http://example.org/test").unwrap()
+        );
+
+        let literal: Result<NamedNode, TermCastError> =
+            Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
         assert_eq!(literal.is_err(), true);
 
-        let bnode: Result<NamedNode, TermCastError> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        let bnode: Result<NamedNode, TermCastError> =
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
         assert_eq!(bnode.is_err(), true);
     }
 }
