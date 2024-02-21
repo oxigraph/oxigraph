@@ -1,4 +1,5 @@
 use crate::named_node::NamedNode;
+use crate::cast_error::{TermCastError, TermCastErrorKind};
 use crate::vocab::{rdf, xsd};
 use crate::{NamedNodeRef, Term};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
@@ -161,12 +162,19 @@ impl fmt::Display for Literal {
     }
 }
 
-impl From<Term> for Option<Literal> {
+impl TryFrom<Term> for Literal {
+    type Error = TermCastError;
+
     #[inline]
-    fn from(term: Term) -> Self {
-        match term {
-            Term::Literal(literal) => Some(literal),
-            _ => None,
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::Literal(node) = term {
+            Ok(node)
+        } else {
+            Err(TermCastErrorKind::Msg(format!(
+                "Cannot convert term to a literal: {}",
+                term
+            ))
+            .into())
         }
     }
 }
@@ -674,14 +682,14 @@ mod tests {
 
     #[test]
     fn casting() {
-        let literal: Option<Literal> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
-        assert_eq!(literal, Some(Literal::new_simple_literal("Hello World!")));
+        let literal: Result<Literal, TermCastError> = Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        assert_eq!(literal.unwrap(), Literal::new_simple_literal("Hello World!"));
 
-        let bnode: Option<Literal> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
-        assert_eq!(bnode, None);
+        let bnode: Result<Literal, TermCastError> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        assert_eq!(bnode.is_err(), true);
 
-        let named_node: Option<Literal> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
-        assert_eq!(named_node, None);
+        let named_node: Result<Literal, TermCastError> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        assert_eq!(named_node.is_err(), true);
     }
 
     #[test]

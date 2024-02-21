@@ -13,6 +13,7 @@ mod named_node;
 mod parser;
 mod triple;
 mod variable;
+mod cast_error;
 pub mod vocab;
 
 pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
@@ -26,5 +27,6 @@ pub use crate::triple::{
     SubjectRef, Term, TermRef, Triple, TripleRef,
 };
 pub use crate::variable::{Variable, VariableNameParseError, VariableRef};
+pub use crate::cast_error::{TermCastError, TermCastErrorKind};
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;

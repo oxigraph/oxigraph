@@ -1,7 +1,8 @@
 use crate::blank_node::BlankNode;
+use crate::cast_error::TermCastErrorKind;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
-use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
+use crate::{BlankNodeRef, LiteralRef, NamedNodeRef, TermCastError};
 use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -195,15 +196,21 @@ impl fmt::Display for Subject {
     }
 }
 
-impl From<Term> for Option<Subject> {
+impl TryFrom<Term> for Subject {
+    type Error = TermCastError;
+
     #[inline]
-    fn from(term: Term) -> Self {
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
         match term {
-            Term::NamedNode(node) => Some(Subject::NamedNode(node)),
-            Term::BlankNode(node) => Some(Subject::BlankNode(node)),
+            Term::NamedNode(node) => Ok(Subject::NamedNode(node)),
+            Term::BlankNode(node) => Ok(Subject::BlankNode(node)),
             #[cfg(feature = "rdf-star")]
-            Term::Triple(triple) => Some(Subject::Triple(triple)),
-            Term::Literal(_) => None
+            Term::Triple(triple) => Ok(Subject::Triple(triple)),
+            Term::Literal(literal) => Err(TermCastErrorKind::Msg(format!(
+                "Cannot convert a literal to a subject: {}",
+                literal
+            ))
+            .into()),
         }
     }
 }
@@ -753,22 +760,16 @@ impl Triple {
 
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
     #[inline]
-    pub fn new_maybe(
+    pub fn new_from_terms(
         subject: impl Into<Term>,
         predicate: impl Into<Term>,
         object: impl Into<Term>,
-    ) -> Option<Self> {
-        match (
-            Into::<Option<Subject>>::into(Into::<Term>::into(subject)),
-            Into::<Option<NamedNode>>::into(Into::<Term>::into(predicate)), 
-            Into::<Option<Term>>::into(Into::<Term>::into(object))) {
-            (Some(subject), Some(predicate), Some(object)) => Some(Self {
-                subject,
-                predicate,
-                object,
-            }),
-            _ => None,
-        }
+    ) -> Result<Self, TermCastError> {
+        Ok(Self {
+            subject: TryInto::<Subject>::try_into(subject.into())?,
+            predicate: TryInto::<NamedNode>::try_into(predicate.into())?,
+            object: object.into(),
+        })
     }
 
     /// Encodes that this triple is in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
@@ -800,13 +801,19 @@ impl fmt::Display for Triple {
 }
 
 #[cfg(feature = "rdf-star")]
-impl From<Term> for Option<Box<Triple>> {
+impl TryFrom<Term> for Box<Triple> {
+    type Error = TermCastError;
+
     #[inline]
-    fn from(term: Term) -> Self {
-        match term {
-            #[cfg(feature = "rdf-star")]
-            Term::Triple(triple) => Some(triple),
-            _ => None,
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::Triple(node) = term {
+            Ok(node)
+        } else {
+            Err(TermCastErrorKind::Msg(format!(
+                "Cannot convert term to a triple: {}",
+                term
+            ))
+            .into())
         }
     }
 }
@@ -1286,42 +1293,42 @@ mod tests {
         };
         let triple_box = Box::new(triple);
 
-        let t: Option<Box<Triple>> = Term::Triple(triple_box.clone()).into();
-        assert_eq!(t, Some(triple_box.clone()));
+        let t: Result<Box<Triple>, TermCastError> = Term::Triple(triple_box.clone()).try_into();
+        assert_eq!(t.unwrap(), triple_box.clone());
 
-        let literal: Option<Box<Triple>> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
-        assert_eq!(literal, None);
+        let literal: Result<Box<Triple>, TermCastError> = Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        assert_eq!(literal.is_err(), true);
 
-        let bnode: Option<Box<Triple>> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
-        assert_eq!(bnode, None);
+        let bnode: Result<Box<Triple>, TermCastError> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        assert_eq!(bnode.is_err(), true);
 
-        let named_node: Option<Box<Triple>> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
-        assert_eq!(named_node, None);
+        let named_node: Result<Box<Triple>, TermCastError> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        assert_eq!(named_node.is_err(), true);
     }
 
     #[test]
     fn constructing_triple() {
         use super::*;
 
-        let optional_triple = Triple::new_maybe(
+        let optional_triple = Triple::new_from_terms(
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()), 
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
         );
 
-        let optional_triple_2 = Triple::new_maybe(
+        let optional_triple_2 = Triple::new_from_terms(
             NamedNode::new("http://example.org/test").unwrap(), 
             NamedNode::new("http://example.org/test").unwrap(),
             NamedNode::new("http://example.org/test").unwrap()
         );
 
-        let bad_triple = Triple::new_maybe(
+        let bad_triple = Triple::new_from_terms(
             Term::BlankNode(BlankNode::new("abc123").unwrap()), 
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
         );
 
-        let bad_triple_2 = Triple::new_maybe(
+        let bad_triple_2 = Triple::new_from_terms(
             BlankNode::new("abc123").unwrap(), 
             NamedNode::new("http://example.org/test").unwrap(),
             NamedNode::new("http://example.org/test").unwrap()
@@ -1339,11 +1346,13 @@ mod tests {
             NamedNode::new("http://example.org/test").unwrap()
         );
 
-        assert_eq!(optional_triple, Some(triple));
-        assert_eq!(optional_triple, Some(triple_2.clone()));
-        assert_eq!(optional_triple_2, Some(triple_2));
-        assert_eq!(bad_triple, None);
-        assert_eq!(bad_triple_2, None);
+        let unwrapped = optional_triple.unwrap();
+
+        assert_eq!(unwrapped, triple);
+        assert_eq!(unwrapped, triple_2.clone());
+        assert_eq!(optional_triple_2.unwrap(), triple_2);
+        assert_eq!(bad_triple.is_err(), true);
+        assert_eq!(bad_triple_2.is_err(), true);
     }
 
     #[test]
@@ -1355,16 +1364,16 @@ mod tests {
         };
         let triple_box = Box::new(triple);
 
-        let t: Option<Subject> = Term::Triple(triple_box.clone()).into();
-        assert_eq!(t, Some(Subject::Triple(triple_box.clone())));
+        let t: Result<Subject, TermCastError> = Term::Triple(triple_box.clone()).try_into();
+        assert_eq!(t.unwrap(), Subject::Triple(triple_box.clone()));
 
-        let literal: Option<Subject> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
-        assert_eq!(literal, None);
+        let literal: Result<Subject, TermCastError> = Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        assert_eq!(literal.is_err(), true);
 
-        let bnode: Option<Subject> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
-        assert_eq!(bnode, Some(Subject::BlankNode(BlankNode::new_from_unique_id(0x42))));
+        let bnode: Result<Subject, TermCastError> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        assert_eq!(bnode.unwrap(), Subject::BlankNode(BlankNode::new_from_unique_id(0x42)));
 
-        let named_node: Option<Subject> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
-        assert_eq!(named_node, Some(Subject::NamedNode(NamedNode::new("http://example.org/test").unwrap())));
+        let named_node: Result<Subject, TermCastError> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        assert_eq!(named_node.unwrap(), Subject::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
     }
 }

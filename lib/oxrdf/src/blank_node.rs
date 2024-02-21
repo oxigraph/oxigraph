@@ -2,6 +2,7 @@ use rand::random;
 use std::io::Write;
 use std::{fmt, str};
 
+use crate::cast_error::{TermCastError, TermCastErrorKind};
 use crate::Term;
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -104,12 +105,19 @@ impl fmt::Display for BlankNode {
     }
 }
 
-impl From<Term> for Option<BlankNode> {
+impl TryFrom<Term> for BlankNode {
+    type Error = TermCastError;
+
     #[inline]
-    fn from(term: Term) -> Self {
-        match term {
-            Term::BlankNode(node) => Some(node),
-            _ => None,
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::BlankNode(node) = term {
+            Ok(node)
+        } else {
+            Err(TermCastErrorKind::Msg(format!(
+                "Cannot convert a term to a blank node: {}",
+                term
+            ))
+            .into())
         }
     }
 }
@@ -376,14 +384,14 @@ mod tests {
 
     #[test]
     fn casting() {
-        let bnode: Option<BlankNode> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
-        assert_eq!(bnode, Some(BlankNode::new_from_unique_id(0x42)));
+        let bnode: Result<BlankNode, TermCastError> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        assert_eq!(bnode.unwrap(), BlankNode::new_from_unique_id(0x42));
 
-        let literal: Option<BlankNode> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
-        assert_eq!(literal, None);
+        let literal: Result<BlankNode, TermCastError> = Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        assert_eq!(literal.is_err(), true);
 
-        let named_node: Option<BlankNode> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
-        assert_eq!(named_node, None);
+        let named_node: Result<BlankNode, TermCastError> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        assert_eq!(named_node.is_err(), true);
     }
 
     #[test]

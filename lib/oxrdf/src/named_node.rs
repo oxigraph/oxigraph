@@ -2,7 +2,7 @@ use oxiri::{Iri, IriParseError};
 use std::cmp::Ordering;
 use std::fmt;
 
-use crate::Term;
+use crate::{cast_error::TermCastErrorKind, Term, TermCastError};
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///
@@ -219,12 +219,19 @@ impl PartialOrd<NamedNodeRef<'_>> for NamedNode {
     }
 }
 
-impl From<Term> for Option<NamedNode> {
+impl TryFrom<Term> for NamedNode {
+    type Error = TermCastError;
+
     #[inline]
-    fn from(term: Term) -> Self {
-        match term {
-            Term::NamedNode(node) => Some(node),
-            _ => None,
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::NamedNode(node) = term {
+            Ok(node)
+        } else {
+            Err(TermCastErrorKind::Msg(format!(
+                "Cannot convert term to a named node: {}",
+                term
+            ))
+            .into())
         }
     }
 }
@@ -257,13 +264,13 @@ mod tests {
 
     #[test]
     fn casting() {
-        let named_node: Option<NamedNode> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).into();
-        assert_eq!(named_node, Some(NamedNode::new("http://example.org/test").unwrap()));
+        let named_node: Result<NamedNode, TermCastError> = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
+        assert_eq!(named_node.unwrap(), NamedNode::new("http://example.org/test").unwrap());
         
-        let literal: Option<NamedNode> = Term::Literal(Literal::new_simple_literal("Hello World!")).into();
-        assert_eq!(literal, None);
+        let literal: Result<NamedNode, TermCastError> = Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
+        assert_eq!(literal.is_err(), true);
 
-        let bnode: Option<NamedNode> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).into();
-        assert_eq!(bnode, None);
+        let bnode: Result<NamedNode, TermCastError> = Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
+        assert_eq!(bnode.is_err(), true);
     }
 }
