@@ -1,7 +1,6 @@
 use crate::named_node::NamedNode;
-use crate::cast_error::{TermCastError, TermCastErrorKind};
 use crate::vocab::{rdf, xsd};
-use crate::{NamedNodeRef, Term};
+use crate::{NamedNodeRef, Term, TermCastError, TermCastErrorKind};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
@@ -655,9 +654,8 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
-    use crate::BlankNode;
-
     use super::*;
+    use crate::BlankNode;
 
     #[test]
     fn test_simple_literal_equality() {

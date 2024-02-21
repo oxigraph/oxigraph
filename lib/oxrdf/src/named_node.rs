@@ -1,8 +1,7 @@
 use oxiri::{Iri, IriParseError};
 use std::cmp::Ordering;
 use std::fmt;
-
-use crate::{cast_error::TermCastErrorKind, Term, TermCastError};
+use crate::{TermCastErrorKind, Term, TermCastError};
 
 /// An owned RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri).
 ///

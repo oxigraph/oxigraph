@@ -1,9 +1,7 @@
 use rand::random;
 use std::io::Write;
 use std::{fmt, str};
-
-use crate::cast_error::{TermCastError, TermCastErrorKind};
-use crate::Term;
+use crate::{TermCastError, TermCastErrorKind, Term};
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
