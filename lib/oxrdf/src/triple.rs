@@ -1321,14 +1321,14 @@ mod tests {
             NamedNode::new("http://example.org/test").unwrap(),
         );
 
-        let bad_triple = Triple::new_from_terms(
-            Term::BlankNode(BlankNode::new("abc123").unwrap()),
+        let bad_triple: Result<Triple, TermCastError> = Triple::new_from_terms(
+            Term::Literal(Literal::new_simple_literal("abc123")),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
         );
 
         let bad_triple_2 = Triple::new_from_terms(
-            BlankNode::new("abc123").unwrap(),
+            Term::Literal(Literal::new_simple_literal("abc123")),
             NamedNode::new("http://example.org/test").unwrap(),
             NamedNode::new("http://example.org/test").unwrap(),
         );
