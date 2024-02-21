@@ -114,7 +114,7 @@ impl TryFrom<Term> for BlankNode {
             Ok(node)
         } else {
             Err(TermCastErrorKind::Msg(format!(
-                "Cannot convert a term to a blank node: {}",
+                "Cannot convert term to a blank node: {}",
                 term
             ))
             .into())
