@@ -196,25 +196,6 @@ impl fmt::Display for Subject {
     }
 }
 
-impl TryFrom<Term> for Subject {
-    type Error = TermCastError;
-
-    #[inline]
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
-        match term {
-            Term::NamedNode(node) => Ok(Subject::NamedNode(node)),
-            Term::BlankNode(node) => Ok(Subject::BlankNode(node)),
-            #[cfg(feature = "rdf-star")]
-            Term::Triple(triple) => Ok(Subject::Triple(triple)),
-            Term::Literal(literal) => Err(TermCastErrorKind::Msg(format!(
-                "Cannot convert a literal to a subject: {}",
-                literal
-            ))
-            .into()),
-        }
-    }
-}
-
 impl From<NamedNode> for Subject {
     #[inline]
     fn from(node: NamedNode) -> Self {
@@ -240,6 +221,25 @@ impl From<BlankNodeRef<'_>> for Subject {
     #[inline]
     fn from(node: BlankNodeRef<'_>) -> Self {
         node.into_owned().into()
+    }
+}
+
+impl TryFrom<Term> for Subject {
+    type Error = TermCastError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NamedNode(node) => Ok(Subject::NamedNode(node)),
+            Term::BlankNode(node) => Ok(Subject::BlankNode(node)),
+            #[cfg(feature = "rdf-star")]
+            Term::Triple(triple) => Ok(Subject::Triple(triple)),
+            Term::Literal(literal) => Err(TermCastErrorKind::Msg(format!(
+                "Cannot convert a literal to a subject: {}",
+                literal
+            ))
+            .into()),
+        }
     }
 }
 

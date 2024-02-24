@@ -103,22 +103,6 @@ impl fmt::Display for BlankNode {
     }
 }
 
-impl TryFrom<Term> for BlankNode {
-    type Error = TermCastError;
-
-    #[inline]
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
-        if let Term::BlankNode(node) = term {
-            Ok(node)
-        } else {
-            Err(
-                TermCastErrorKind::Msg(format!("Cannot convert term to a blank node: {}", term))
-                    .into(),
-            )
-        }
-    }
-}
-
 impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id.
     #[inline]
@@ -246,6 +230,22 @@ impl<'a> From<BlankNodeRef<'a>> for BlankNode {
     #[inline]
     fn from(node: BlankNodeRef<'a>) -> Self {
         node.into_owned()
+    }
+}
+
+impl TryFrom<Term> for BlankNode {
+    type Error = TermCastError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::BlankNode(node) = term {
+            Ok(node)
+        } else {
+            Err(
+                TermCastErrorKind::Msg(format!("Cannot convert term to a blank node: {}", term))
+                    .into(),
+            )
+        }
     }
 }
 

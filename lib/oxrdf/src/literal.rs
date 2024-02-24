@@ -161,22 +161,6 @@ impl fmt::Display for Literal {
     }
 }
 
-impl TryFrom<Term> for Literal {
-    type Error = TermCastError;
-
-    #[inline]
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
-        if let Term::Literal(node) = term {
-            Ok(node)
-        } else {
-            Err(
-                TermCastErrorKind::Msg(format!("Cannot convert term to a literal: {}", term))
-                    .into(),
-            )
-        }
-    }
-}
-
 impl<'a> From<&'a str> for Literal {
     #[inline]
     fn from(value: &'a str) -> Self {
@@ -435,6 +419,22 @@ impl From<DayTimeDuration> for Literal {
     #[inline]
     fn from(value: DayTimeDuration) -> Self {
         Self::new_typed_literal(value.to_string(), xsd::DAY_TIME_DURATION)
+    }
+}
+
+impl TryFrom<Term> for Literal {
+    type Error = TermCastError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::Literal(node) = term {
+            Ok(node)
+        } else {
+            Err(
+                TermCastErrorKind::Msg(format!("Cannot convert term to a literal: {}", term))
+                    .into(),
+            )
+        }
     }
 }
 

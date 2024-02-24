@@ -218,22 +218,6 @@ impl PartialOrd<NamedNodeRef<'_>> for NamedNode {
     }
 }
 
-impl TryFrom<Term> for NamedNode {
-    type Error = TermCastError;
-
-    #[inline]
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
-        if let Term::NamedNode(node) = term {
-            Ok(node)
-        } else {
-            Err(
-                TermCastErrorKind::Msg(format!("Cannot convert term to a named node: {}", term))
-                    .into(),
-            )
-        }
-    }
-}
-
 impl From<Iri<String>> for NamedNode {
     #[inline]
     fn from(iri: Iri<String>) -> Self {
@@ -248,6 +232,22 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
     fn from(iri: Iri<&'a str>) -> Self {
         Self {
             iri: iri.into_inner(),
+        }
+    }
+}
+
+impl TryFrom<Term> for NamedNode {
+    type Error = TermCastError;
+
+    #[inline]
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        if let Term::NamedNode(node) = term {
+            Ok(node)
+        } else {
+            Err(
+                TermCastErrorKind::Msg(format!("Cannot convert term to a named node: {}", term))
+                    .into(),
+            )
         }
     }
 }
