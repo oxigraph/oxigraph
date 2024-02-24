@@ -22,6 +22,7 @@ impl From<TryFromTermError> for Term {
 pub struct TripleConstructionError {
     pub(crate) subject: Result<Subject, TryFromTermError>,
     pub(crate) predicate: Result<NamedNode, TryFromTermError>,
+    #[allow(dead_code)]
     pub(crate) object: Term,
 }
 
@@ -31,7 +32,7 @@ impl fmt::Display for TripleConstructionError {
             (Some(e), Some(e2)) => write!(f, "subject: [{}], predicate: [{}]", e, e2),
             (Some(e), _) => write!(f, "subject: [{}]", e),
             (_, Some(e)) => write!(f, "predicate: [{}]", e),
-            _ => write!(f, "object: {}", self.object),
+            _ => write!(f, "No Errors"),
         }
     }
 }
