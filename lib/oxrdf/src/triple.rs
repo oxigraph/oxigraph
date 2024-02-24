@@ -764,10 +764,8 @@ impl Triple {
         predicate: impl Into<Term>,
         object: impl Into<Term>,
     ) -> Result<Self, TripleConstructionError> {
-        let subject: Result<Subject, TryFromTermError> =
-            TryInto::<Subject>::try_into(subject.into());
-        let predicate: Result<NamedNode, TryFromTermError> =
-            TryInto::<NamedNode>::try_into(predicate.into());
+        let subject: Result<Subject, TryFromTermError> = subject.into().try_into();
+        let predicate: Result<NamedNode, TryFromTermError> = predicate.into().try_into();
         if let (Ok(subject), Ok(predicate)) = (subject.clone(), predicate.clone()) {
             Ok(Self {
                 subject,
