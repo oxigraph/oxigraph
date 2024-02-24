@@ -17,7 +17,7 @@ mod variable;
 pub mod vocab;
 
 pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
-pub use crate::cast_error::{TermCastError, TermCastErrorKind};
+pub use crate::cast_error::TryFromTermError;
 pub use crate::dataset::Dataset;
 pub use crate::graph::Graph;
 pub use crate::literal::{Literal, LiteralRef};

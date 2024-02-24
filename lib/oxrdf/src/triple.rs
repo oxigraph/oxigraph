@@ -1,8 +1,8 @@
 use crate::blank_node::BlankNode;
-use crate::cast_error::TermCastErrorKind;
+use crate::cast_error::TripleConstructionError;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
-use crate::{BlankNodeRef, LiteralRef, NamedNodeRef, TermCastError};
+use crate::{BlankNodeRef, LiteralRef, NamedNodeRef, TryFromTermError};
 use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -225,7 +225,7 @@ impl From<BlankNodeRef<'_>> for Subject {
 }
 
 impl TryFrom<Term> for Subject {
-    type Error = TermCastError;
+    type Error = TryFromTermError;
 
     #[inline]
     fn try_from(term: Term) -> Result<Self, Self::Error> {
@@ -234,11 +234,7 @@ impl TryFrom<Term> for Subject {
             Term::BlankNode(node) => Ok(Subject::BlankNode(node)),
             #[cfg(feature = "rdf-star")]
             Term::Triple(triple) => Ok(Subject::Triple(triple)),
-            Term::Literal(literal) => Err(TermCastErrorKind::Msg(format!(
-                "Cannot convert a literal to a subject: {}",
-                literal
-            ))
-            .into()),
+            Term::Literal(_) => Err(TryFromTermError { term, target: "Subject" }),
         }
     }
 }
@@ -764,12 +760,14 @@ impl Triple {
         subject: impl Into<Term>,
         predicate: impl Into<Term>,
         object: impl Into<Term>,
-    ) -> Result<Self, TermCastError> {
-        Ok(Self {
-            subject: TryInto::<Subject>::try_into(subject.into())?,
-            predicate: TryInto::<NamedNode>::try_into(predicate.into())?,
-            object: object.into(),
-        })
+    ) -> Result<Self, TripleConstructionError> {
+        let subject: Result<Subject, TryFromTermError> = TryInto::<Subject>::try_into(subject.into());
+        let predicate: Result<NamedNode, TryFromTermError> = TryInto::<NamedNode>::try_into(predicate.into());
+        if let (Ok (subject), Ok (predicate)) = (subject.clone(), predicate.clone()) {
+            Ok(Self { subject, predicate, object: object.into() })
+        } else {
+            Err(TripleConstructionError { subject, predicate, object: object.into() })
+        }
     }
 
     /// Encodes that this triple is in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
@@ -802,14 +800,14 @@ impl fmt::Display for Triple {
 
 #[cfg(feature = "rdf-star")]
 impl TryFrom<Term> for Box<Triple> {
-    type Error = TermCastError;
+    type Error = TryFromTermError;
 
     #[inline]
     fn try_from(term: Term) -> Result<Self, Self::Error> {
         if let Term::Triple(node) = term {
             Ok(node)
         } else {
-            Err(TermCastErrorKind::Msg(format!("Cannot convert term to a triple: {}", term)).into())
+            Err(TryFromTermError { term, target: "Box<Triple>" })
         }
     }
 }
@@ -1289,20 +1287,32 @@ mod tests {
         };
         let triple_box = Box::new(triple);
 
-        let t: Result<Box<Triple>, TermCastError> = Term::Triple(triple_box.clone()).try_into();
+        let t: Result<Box<Triple>, TryFromTermError> = Term::Triple(triple_box.clone()).try_into();
         assert_eq!(t.unwrap(), triple_box.clone());
 
-        let literal: Result<Box<Triple>, TermCastError> =
+        let literal: Result<Box<Triple>, TryFromTermError> =
             Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
-        assert_eq!(literal.is_err(), true);
-
-        let bnode: Result<Box<Triple>, TermCastError> =
+        let literal_err = literal.unwrap_err();
+        assert_eq!(literal_err.term, Term::Literal(Literal::new_simple_literal("Hello World!")));
+        assert_eq!(literal_err.target, "Box<Triple>");
+        assert_eq!(literal_err.to_string(), "\"Hello World!\" can not be converted to a Box<Triple>");
+        assert_eq!(Term::from(literal_err), Term::Literal(Literal::new_simple_literal("Hello World!")));
+ 
+        let bnode: Result<Box<Triple>, TryFromTermError> =
             Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
-        assert_eq!(bnode.is_err(), true);
+        let bnode_err = bnode.unwrap_err();
+        assert_eq!(bnode_err.term, Term::BlankNode(BlankNode::new_from_unique_id(0x42)));
+        assert_eq!(bnode_err.target, "Box<Triple>");
+        assert_eq!(bnode_err.to_string(), "_:42 can not be converted to a Box<Triple>");
+        assert_eq!(Term::from(bnode_err), Term::BlankNode(BlankNode::new_from_unique_id(0x42)));
 
-        let named_node: Result<Box<Triple>, TermCastError> =
+        let named_node: Result<Box<Triple>, TryFromTermError> =
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
-        assert_eq!(named_node.is_err(), true);
+        let named_node_err = named_node.unwrap_err();
+        assert_eq!(named_node_err.term, Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
+        assert_eq!(named_node_err.target, "Box<Triple>");
+        assert_eq!(named_node_err.to_string(), "<http://example.org/test> can not be converted to a Box<Triple>");
+        assert_eq!(Term::from(named_node_err), Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
     }
 
     #[test]
@@ -1321,7 +1331,7 @@ mod tests {
             NamedNode::new("http://example.org/test").unwrap(),
         );
 
-        let bad_triple: Result<Triple, TermCastError> = Triple::new_from_terms(
+        let bad_triple: Result<Triple, TripleConstructionError> = Triple::new_from_terms(
             Term::Literal(Literal::new_simple_literal("abc123")),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
@@ -1330,6 +1340,12 @@ mod tests {
         let bad_triple_2 = Triple::new_from_terms(
             Term::Literal(Literal::new_simple_literal("abc123")),
             NamedNode::new("http://example.org/test").unwrap(),
+            NamedNode::new("http://example.org/test").unwrap(),
+        );
+
+        let bad_triple_3 = Triple::new_from_terms(
+            Term::Literal(Literal::new_simple_literal("abc123")),
+            BlankNode::new_from_unique_id(0x42),
             NamedNode::new("http://example.org/test").unwrap(),
         );
 
@@ -1350,8 +1366,30 @@ mod tests {
         assert_eq!(unwrapped, triple);
         assert_eq!(unwrapped, triple_2.clone());
         assert_eq!(optional_triple_2.unwrap(), triple_2);
-        assert_eq!(bad_triple.is_err(), true);
+        let bad_triple_err = bad_triple.unwrap_err();
+        assert_eq!(bad_triple_err.to_string(), "subject: [\"abc123\" can not be converted to a Subject]");
+        assert_eq!(bad_triple_err.subject.clone().unwrap_err().clone().term, Term::Literal(Literal::new_simple_literal("abc123")));
+        assert_eq!(bad_triple_err.subject.clone().unwrap_err().clone().target, "Subject");
+        assert_eq!(bad_triple_err.subject.unwrap_err().clone().to_string(), "\"abc123\" can not be converted to a Subject");
+
         assert_eq!(bad_triple_2.is_err(), true);
+        let bad_triple_2_err = bad_triple_2.unwrap_err();
+        assert_eq!(bad_triple_2_err.to_string(), "subject: [\"abc123\" can not be converted to a Subject]");
+        assert_eq!(bad_triple_2_err.subject.clone().unwrap_err().clone().term, Term::Literal(Literal::new_simple_literal("abc123")));
+        assert_eq!(bad_triple_2_err.subject.clone().unwrap_err().clone().target, "Subject");
+        assert_eq!(bad_triple_2_err.subject.unwrap_err().clone().to_string(), "\"abc123\" can not be converted to a Subject");
+        assert_eq!(bad_triple_2_err.predicate.unwrap(), NamedNode::new("http://example.org/test").unwrap());
+        assert_eq!(bad_triple_2_err.object, Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
+
+        assert_eq!(bad_triple_3.is_err(), true);
+        let bad_triple_3_err = bad_triple_3.unwrap_err();
+        assert_eq!(bad_triple_3_err.to_string(), "subject: [\"abc123\" can not be converted to a Subject], predicate: [_:42 can not be converted to a NamedNode]");
+        assert_eq!(bad_triple_3_err.subject.clone().unwrap_err().clone().term, Term::Literal(Literal::new_simple_literal("abc123")));
+        assert_eq!(bad_triple_3_err.subject.clone().unwrap_err().clone().target, "Subject");
+        assert_eq!(bad_triple_3_err.subject.unwrap_err().clone().to_string(), "\"abc123\" can not be converted to a Subject");
+        assert_eq!(bad_triple_3_err.predicate.clone().unwrap_err().clone().term, Term::BlankNode(BlankNode::new_from_unique_id(0x42)));
+        assert_eq!(bad_triple_3_err.predicate.clone().unwrap_err().clone().target, "NamedNode");
+        assert_eq!(bad_triple_3_err.predicate.unwrap_err().clone().to_string(), "_:42 can not be converted to a NamedNode");
     }
 
     #[test]
@@ -1363,21 +1401,22 @@ mod tests {
         };
         let triple_box = Box::new(triple);
 
-        let t: Result<Subject, TermCastError> = Term::Triple(triple_box.clone()).try_into();
+        let t: Result<Subject, TryFromTermError> = Term::Triple(triple_box.clone()).try_into();
         assert_eq!(t.unwrap(), Subject::Triple(triple_box.clone()));
 
-        let literal: Result<Subject, TermCastError> =
+        let literal: Result<Subject, TryFromTermError> =
             Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
         assert_eq!(literal.is_err(), true);
+        assert_eq!(literal.is_err(), true);
 
-        let bnode: Result<Subject, TermCastError> =
+        let bnode: Result<Subject, TryFromTermError> =
             Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
         assert_eq!(
             bnode.unwrap(),
             Subject::BlankNode(BlankNode::new_from_unique_id(0x42))
         );
 
-        let named_node: Result<Subject, TermCastError> =
+        let named_node: Result<Subject, TryFromTermError> =
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
         assert_eq!(
             named_node.unwrap(),
