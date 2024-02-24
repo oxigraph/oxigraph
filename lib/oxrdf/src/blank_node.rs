@@ -241,7 +241,10 @@ impl TryFrom<Term> for BlankNode {
         if let Term::BlankNode(node) = term {
             Ok(node)
         } else {
-            Err(TryFromTermError { term, target: "BlankNode" })
+            Err(TryFromTermError {
+                term,
+                target: "BlankNode",
+            })
         }
     }
 }
@@ -386,15 +389,27 @@ mod tests {
             Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
         assert_eq!(literal.is_err(), true);
         let err = literal.unwrap_err();
-        assert_eq!(err.to_string(), "\"Hello World!\" can not be converted to a BlankNode");
-        assert_eq!(Term::from(err), Term::Literal(Literal::new_simple_literal("Hello World!")));
+        assert_eq!(
+            err.to_string(),
+            "\"Hello World!\" can not be converted to a BlankNode"
+        );
+        assert_eq!(
+            Term::from(err),
+            Term::Literal(Literal::new_simple_literal("Hello World!"))
+        );
 
         let named_node: Result<BlankNode, TryFromTermError> =
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
         assert_eq!(named_node.is_err(), true);
         let named_node_error = named_node.unwrap_err();
-        assert_eq!(named_node_error.to_string(), "<http://example.org/test> can not be converted to a BlankNode");
-        assert_eq!(Term::from(named_node_error), Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
+        assert_eq!(
+            named_node_error.to_string(),
+            "<http://example.org/test> can not be converted to a BlankNode"
+        );
+        assert_eq!(
+            Term::from(named_node_error),
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
     }
 
     #[test]

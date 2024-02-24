@@ -1,6 +1,5 @@
 use std::{fmt, str};
 
-
 use crate::{NamedNode, Subject, Term};
 
 // An error return if trying to cast a term as something it cannot be converted to.
@@ -8,7 +7,7 @@ use crate::{NamedNode, Subject, Term};
 #[error("{term} can not be converted to a {target}")]
 pub struct TryFromTermError {
     pub(crate) term: Term,
-    pub(crate) target: &'static str
+    pub(crate) target: &'static str,
 }
 
 impl From<TryFromTermError> for Term {
@@ -32,7 +31,7 @@ impl fmt::Display for TripleConstructionError {
             (Some(e), Some(e2)) => write!(f, "subject: [{}], predicate: [{}]", e, e2),
             (Some(e), _) => write!(f, "subject: [{}]", e),
             (_, Some(e)) => write!(f, "predicate: [{}]", e),
-            _ => write!(f, "object: {}", self.object)
+            _ => write!(f, "object: {}", self.object),
         }
     }
 }

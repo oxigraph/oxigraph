@@ -430,7 +430,10 @@ impl TryFrom<Term> for Literal {
         if let Term::Literal(node) = term {
             Ok(node)
         } else {
-            Err(TryFromTermError { term, target: "Literal" })
+            Err(TryFromTermError {
+                term,
+                target: "Literal",
+            })
         }
     }
 }
@@ -685,18 +688,36 @@ mod tests {
         let bnode: Result<Literal, TryFromTermError> =
             Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
         let bnode_err = bnode.unwrap_err();
-        assert_eq!(bnode_err.term, Term::BlankNode(BlankNode::new_from_unique_id(0x42)));
+        assert_eq!(
+            bnode_err.term,
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42))
+        );
         assert_eq!(bnode_err.target, "Literal");
-        assert_eq!(bnode_err.to_string(), "_:42 can not be converted to a Literal");
-        assert_eq!(Term::from(bnode_err), Term::BlankNode(BlankNode::new_from_unique_id(0x42)));
+        assert_eq!(
+            bnode_err.to_string(),
+            "_:42 can not be converted to a Literal"
+        );
+        assert_eq!(
+            Term::from(bnode_err),
+            Term::BlankNode(BlankNode::new_from_unique_id(0x42))
+        );
 
         let named_node: Result<Literal, TryFromTermError> =
             Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
         let named_node_err = named_node.unwrap_err();
-        assert_eq!(named_node_err.term, Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
+        assert_eq!(
+            named_node_err.term,
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
         assert_eq!(named_node_err.target, "Literal");
-        assert_eq!(named_node_err.to_string(), "<http://example.org/test> can not be converted to a Literal");
-        assert_eq!(Term::from(named_node_err), Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
+        assert_eq!(
+            named_node_err.to_string(),
+            "<http://example.org/test> can not be converted to a Literal"
+        );
+        assert_eq!(
+            Term::from(named_node_err),
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
+        );
     }
 
     #[test]
