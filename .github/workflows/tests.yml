@@ -173,9 +173,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
+      - name: Read MSRV from Cargo.toml
+        id: metadata
+        run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.70.0
+          version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions && cargo update -p bumpalo@3.15.3 --precise 3.14.0
       - run: cargo test
@@ -310,9 +313,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
+      - name: Read MSRV from Cargo.toml
+        id: metadata
+        run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.70.0
+          version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - uses: actions/setup-python@v4
         with:
