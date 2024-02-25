@@ -4,7 +4,7 @@ from urllib.request import urlopen
 
 import tomlkit
 
-MSRV = "1.74.0"
+MSRV = "1.76.0"
 LINT_BLACKLIST = {
     "absolute_paths",  # TODO: might be nice
     "alloc_instead_of_core",
@@ -24,6 +24,7 @@ LINT_BLACKLIST = {
     "implicit_return",
     "indexing_slicing",
     "integer_division",
+    "iter_over_hash_type",
     "little_endian_bytes",
     "map_err_ignore",
     "min_ident_chars",

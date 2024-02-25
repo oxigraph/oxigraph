@@ -445,7 +445,8 @@ impl TermParseError {
     }
 }
 
-#[cfg(all(test, feature = "rdf-star"))]
+#[cfg(test)]
+#[cfg(feature = "rdf-star")]
 mod tests {
     use super::*;
 
