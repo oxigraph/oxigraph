@@ -90,6 +90,22 @@ describe("Store", () => {
             const results = store.query("SELECT (RAND() AS ?y) WHERE {}");
             assert.strictEqual(1, results.length);
         });
+
+        it("SELECT with base IRI", () => {
+            const store = new Store();
+            const results = store.query("SELECT * WHERE { BIND(<t> AS ?t) }", {
+                base_iri: "http://example.com/",
+            });
+            assert.strictEqual(1, results.length);
+        });
+
+        it("SELECT with union graph", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
+            const results = store.query("SELECT * WHERE { ?s ?p ?o }", {
+                use_default_graph_as_union: true,
+            });
+            assert.strictEqual(1, results.length);
+        });
     });
 
     describe("#update()", () => {
