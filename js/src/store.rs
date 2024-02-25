@@ -1,10 +1,10 @@
 use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
-use js_sys::{Array, Map};
+use js_sys::{Array, Map, Reflect};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
-use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
 use wasm_bindgen::prelude::*;
 
@@ -102,7 +102,21 @@ impl JsStore {
             .into_boxed_slice())
     }
 
-    pub fn query(&self, query: &str) -> Result<JsValue, JsValue> {
+    pub fn query(&self, query: &str, options: &JsValue) -> Result<JsValue, JsValue> {
+        // Parsing options
+        let mut base_iri = None;
+        let mut use_default_graph_as_union = false;
+        if !options.is_undefined() {
+            base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?.as_string();
+            use_default_graph_as_union =
+                Reflect::get(options, &JsValue::from_str("use_default_graph_as_union"))?
+                    .is_truthy();
+        }
+
+        let mut query = Query::parse(query, base_iri.as_deref()).map_err(to_err)?;
+        if use_default_graph_as_union {
+            query.dataset_mut().set_default_graph_as_union();
+        }
         let results = self.store.query(query).map_err(to_err)?;
         let output = match results {
             QueryResults::Solutions(solutions) => {
@@ -135,7 +149,14 @@ impl JsStore {
         Ok(output)
     }
 
-    pub fn update(&self, update: &str) -> Result<(), JsValue> {
+    pub fn update(&self, update: &str, options: &JsValue) -> Result<(), JsValue> {
+        // Parsing options
+        let mut base_iri = None;
+        if !options.is_undefined() {
+            base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?.as_string();
+        }
+
+        let update = Update::parse(update, base_iri.as_deref()).map_err(to_err)?;
         self.store.update(update).map_err(to_err)
     }
 

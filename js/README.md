@@ -188,6 +188,18 @@ if (store.query("ASK { ?s ?s ?s }")) {
 }
 ```
 
+It is also possible to provide some options in an object given as second argument:
+
+```js
+if (store.query("ASK { <s> ?p ?o }", {
+  base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
+  use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
+
+})) {
+  console.log("there is a triple with same subject, predicate and object");
+}
+```
+
 #### `Store.prototype.update(String query)`
 Executes a [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
 The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not supported yet.
@@ -195,6 +207,14 @@ The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not suppo
 Example of update:
 ```js
 store.update("DELETE WHERE { <http://example.com/s> ?p ?o }")
+```
+
+It is also possible to provide some options in an object given as second argument:
+
+```js
+store.update("DELETE WHERE { <s> ?p ?o }", {
+  base_iri: "http://example.com/" // base IRI to resolve relative IRIs in the update
+})
 ```
 
 #### `Store.prototype.load(String data, String format, NamedNode|String? baseIRI, NamedNode|BlankNode|DefaultGraph? toNamedGraph)`
