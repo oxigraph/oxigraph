@@ -688,7 +688,7 @@ impl Store {
             return Err(SerializerError::DatasetFormatExpected(serializer.format()));
         }
         let mut writer = serializer.serialize_to_write(write);
-        for quad in self.iter() {
+        for quad in self {
             writer.write_quad(&quad?)?;
         }
         Ok(writer.finish()?)
@@ -1007,10 +1007,20 @@ impl Store {
 
 impl fmt::Display for Store {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for t in self.iter() {
+        for t in self {
             writeln!(f, "{} .", t.map_err(|_| fmt::Error)?)?;
         }
         Ok(())
+    }
+}
+
+impl IntoIterator for &Store {
+    type IntoIter = QuadIter;
+    type Item = Result<Quad, StorageError>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -1511,6 +1521,16 @@ impl<'a> Transaction<'a> {
     /// ```
     pub fn clear(&mut self) -> Result<(), StorageError> {
         self.writer.clear()
+    }
+}
+
+impl IntoIterator for &Transaction<'_> {
+    type IntoIter = QuadIter;
+    type Item = Result<Quad, StorageError>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

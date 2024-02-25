@@ -614,7 +614,7 @@ impl Db {
                     (options, snapshot)
                 };
                 let result = f(Transaction {
-                    transaction: Rc::new(transaction),
+                    inner: Rc::new(transaction),
                     read_options,
                     _lifetime: PhantomData,
                 });
@@ -1033,7 +1033,7 @@ impl Reader {
             }
             let is_currently_valid = rocksdb_iter_valid(iter) != 0;
             Ok(Iter {
-                iter,
+                inner: iter,
                 options,
                 _upper_bound: upper_bound,
                 _reader: self.clone(),
@@ -1061,7 +1061,7 @@ impl Reader {
 }
 
 pub struct Transaction<'a> {
-    transaction: Rc<*mut rocksdb_transaction_t>,
+    inner: Rc<*mut rocksdb_transaction_t>,
     read_options: *mut rocksdb_readoptions_t,
     _lifetime: PhantomData<&'a ()>,
 }
@@ -1069,7 +1069,7 @@ pub struct Transaction<'a> {
 impl Transaction<'_> {
     pub fn reader(&self) -> Reader {
         Reader {
-            inner: InnerReader::Transaction(Rc::downgrade(&self.transaction)),
+            inner: InnerReader::Transaction(Rc::downgrade(&self.inner)),
             options: unsafe { rocksdb_readoptions_create_copy(self.read_options) },
         }
     }
@@ -1081,7 +1081,7 @@ impl Transaction<'_> {
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
             let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf_with_status(
-                *self.transaction,
+                *self.inner,
                 self.read_options,
                 column_family.0,
                 key.as_ptr().cast(),
@@ -1111,7 +1111,7 @@ impl Transaction<'_> {
     ) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_transaction_put_cf_with_status(
-                *self.transaction,
+                *self.inner,
                 column_family.0,
                 key.as_ptr().cast(),
                 key.len(),
@@ -1133,7 +1133,7 @@ impl Transaction<'_> {
     pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_transaction_delete_cf_with_status(
-                *self.transaction,
+                *self.inner,
                 column_family.0,
                 key.as_ptr().cast(),
                 key.len(),
@@ -1223,7 +1223,7 @@ impl From<Buffer> for Vec<u8> {
 }
 
 pub struct Iter {
-    iter: *mut rocksdb_iterator_t,
+    inner: *mut rocksdb_iterator_t,
     is_currently_valid: bool,
     _upper_bound: Option<Vec<u8>>,
     _reader: Reader, // needed to ensure that DB still lives while iter is used
@@ -1233,7 +1233,7 @@ pub struct Iter {
 impl Drop for Iter {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_iter_destroy(self.iter);
+            rocksdb_iter_destroy(self.inner);
             rocksdb_readoptions_destroy(self.options);
         }
     }
@@ -1251,15 +1251,15 @@ impl Iter {
 
     pub fn status(&self) -> Result<(), StorageError> {
         unsafe {
-            ffi_result!(rocksdb_iter_get_status(self.iter))?;
+            ffi_result!(rocksdb_iter_get_status(self.inner))?;
         }
         Ok(())
     }
 
     pub fn next(&mut self) {
         unsafe {
-            rocksdb_iter_next(self.iter);
-            self.is_currently_valid = rocksdb_iter_valid(self.iter) != 0;
+            rocksdb_iter_next(self.inner);
+            self.is_currently_valid = rocksdb_iter_valid(self.inner) != 0;
         }
     }
 
@@ -1267,7 +1267,7 @@ impl Iter {
         if self.is_valid() {
             unsafe {
                 let mut len = 0;
-                let val = rocksdb_iter_key(self.iter, &mut len);
+                let val = rocksdb_iter_key(self.inner, &mut len);
                 Some(slice::from_raw_parts(val.cast(), len))
             }
         } else {
