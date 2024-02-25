@@ -1,4 +1,6 @@
-use crate::csv::{TsvQueryResultsReader, TsvSolutionsReader};
+use crate::csv::{FromReadTsvQueryResultsReader, FromReadTsvSolutionsReader};
+#[cfg(feature = "async-tokio")]
+use crate::csv::{FromTokioAsyncReadTsvQueryResultsReader, FromTokioAsyncReadTsvSolutionsReader};
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use crate::format::QueryResultsFormat;
 use crate::json::{FromReadJsonQueryResultsReader, FromReadJsonSolutionsReader};
@@ -104,9 +106,9 @@ impl QueryResultsParser {
                 }),
             },
             QueryResultsFormat::Csv => return Err(QueryResultsSyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation").into()),
-            QueryResultsFormat::Tsv => match TsvQueryResultsReader::read(reader)? {
-                TsvQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
-                TsvQueryResultsReader::Solutions {
+            QueryResultsFormat::Tsv => match FromReadTsvQueryResultsReader::read(reader)? {
+                FromReadTsvQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
+                FromReadTsvQueryResultsReader::Solutions {
                     solutions,
                     variables,
                 } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
@@ -180,7 +182,16 @@ impl QueryResultsParser {
                 }),
             },
             QueryResultsFormat::Csv => return Err(QueryResultsSyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation").into()),
-            QueryResultsFormat::Tsv => return Err(QueryResultsSyntaxError::msg("The TSV query results parser does not support Tokio AsyncRead yet").into()),
+            QueryResultsFormat::Tsv => match FromTokioAsyncReadTsvQueryResultsReader::read(reader).await? {
+                FromTokioAsyncReadTsvQueryResultsReader::Boolean(r) => FromTokioAsyncReadQueryResultsReader::Boolean(r),
+                FromTokioAsyncReadTsvQueryResultsReader::Solutions {
+                    solutions,
+                    variables,
+                } => FromTokioAsyncReadQueryResultsReader::Solutions(FromTokioAsyncReadSolutionsReader {
+                    variables: variables.into(),
+                    solutions: FromTokioAsyncReadSolutionsReaderKind::Tsv(solutions),
+                }),
+            },
         })
     }
 }
@@ -261,7 +272,7 @@ pub struct FromReadSolutionsReader<R: Read> {
 enum FromReadSolutionsReaderKind<R: Read> {
     Xml(FromReadXmlSolutionsReader<R>),
     Json(FromReadJsonSolutionsReader<R>),
-    Tsv(TsvSolutionsReader<R>),
+    Tsv(FromReadTsvSolutionsReader<R>),
 }
 
 impl<R: Read> FromReadSolutionsReader<R> {
@@ -313,7 +324,7 @@ impl<R: Read> Iterator for FromReadSolutionsReader<R> {
 /// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`FromReadSolutionsReader`]).
 ///
 /// Example in TSV (the API is the same for JSON and XML):
-/// ```no_run
+/// ```
 /// use oxrdf::{Literal, Variable};
 /// use sparesults::{
 ///     FromTokioAsyncReadQueryResultsReader, QueryResultsFormat, QueryResultsParser,
@@ -393,6 +404,7 @@ pub struct FromTokioAsyncReadSolutionsReader<R: AsyncRead + Unpin> {
 enum FromTokioAsyncReadSolutionsReaderKind<R: AsyncRead + Unpin> {
     Json(FromTokioAsyncReadJsonSolutionsReader<R>),
     Xml(FromTokioAsyncReadXmlSolutionsReader<R>),
+    Tsv(FromTokioAsyncReadTsvSolutionsReader<R>),
 }
 
 #[cfg(feature = "async-tokio")]
@@ -400,7 +412,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
     /// Ordered list of the declared variables at the beginning of the results.
     ///
     /// Example in TSV (the API is the same for JSON and XML):
-    /// ```no_run
+    /// ```
     /// use oxrdf::Variable;
     /// use sparesults::{
     ///     FromTokioAsyncReadQueryResultsReader, QueryResultsFormat, QueryResultsParser,
@@ -435,6 +447,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
             match &mut self.solutions {
                 FromTokioAsyncReadSolutionsReaderKind::Json(reader) => reader.read_next().await,
                 FromTokioAsyncReadSolutionsReaderKind::Xml(reader) => reader.read_next().await,
+                FromTokioAsyncReadSolutionsReaderKind::Tsv(reader) => reader.read_next().await,
             }
             .transpose()?
             .map(|values| (Arc::clone(&self.variables), values).into()),
