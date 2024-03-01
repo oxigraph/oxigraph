@@ -1,4 +1,3 @@
-use crate::{Term, TryFromTermError};
 use rand::random;
 use std::io::Write;
 use std::{fmt, str};
@@ -233,22 +232,6 @@ impl<'a> From<BlankNodeRef<'a>> for BlankNode {
     }
 }
 
-impl TryFrom<Term> for BlankNode {
-    type Error = TryFromTermError;
-
-    #[inline]
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
-        if let Term::BlankNode(node) = term {
-            Ok(node)
-        } else {
-            Err(TryFromTermError {
-                term,
-                target: "BlankNode",
-            })
-        }
-    }
-}
-
 impl PartialEq<BlankNode> for BlankNodeRef<'_> {
     #[inline]
     fn eq(&self, other: &BlankNode) -> bool {
@@ -369,47 +352,12 @@ pub struct BlankNodeIdParseError;
 mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
-    use crate::{Literal, NamedNode};
-
     use super::*;
 
     #[test]
     fn as_str_partial() {
         let b = BlankNode::new_from_unique_id(0x42);
         assert_eq!(b.as_str(), "42");
-    }
-
-    #[test]
-    fn casting() {
-        let bnode: Result<BlankNode, TryFromTermError> =
-            Term::BlankNode(BlankNode::new_from_unique_id(0x42)).try_into();
-        assert_eq!(bnode.unwrap(), BlankNode::new_from_unique_id(0x42));
-
-        let literal: Result<BlankNode, TryFromTermError> =
-            Term::Literal(Literal::new_simple_literal("Hello World!")).try_into();
-        assert_eq!(literal.is_err(), true);
-        let err = literal.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "\"Hello World!\" can not be converted to a BlankNode"
-        );
-        assert_eq!(
-            Term::from(err),
-            Term::Literal(Literal::new_simple_literal("Hello World!"))
-        );
-
-        let named_node: Result<BlankNode, TryFromTermError> =
-            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()).try_into();
-        assert_eq!(named_node.is_err(), true);
-        let named_node_error = named_node.unwrap_err();
-        assert_eq!(
-            named_node_error.to_string(),
-            "<http://example.org/test> can not be converted to a BlankNode"
-        );
-        assert_eq!(
-            Term::from(named_node_error),
-            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())
-        );
     }
 
     #[test]
