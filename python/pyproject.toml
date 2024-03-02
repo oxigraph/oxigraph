@@ -28,6 +28,9 @@ Homepage = "https://pyoxigraph.readthedocs.io/"
 Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
 
+[tool.maturin]
+strip = true
+
 [tool.ruff]
 line-length = 120
 
