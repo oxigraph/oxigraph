@@ -52,6 +52,8 @@ jobs:
         working-directory: ./lib/spargebra
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/sparopt
+      - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
+        working-directory: ./lib/oxigraph
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxigraph
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
