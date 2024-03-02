@@ -45,7 +45,7 @@ json-event-parser = "0.2.0-alpha.2"
 libc = "0.2.147"
 md-5 = "0.10"
 memchr = "2.5"
-oxhttp = "0.2.0-alpha.3"
+oxhttp = "0.2.0-alpha.4"
 oxilangtag = "0.1"
 oxiri = "0.2.3-alpha.1"
 peg = "0.8"
@@ -69,15 +69,15 @@ zstd = ">=0.12, <0.14"
 
 # Internal dependencies
 oxigraph = { version = "0.4.0-alpha.3-dev", path = "lib/oxigraph" }
-oxrdf = { version = "0.2.0-alpha.2", path = "lib/oxrdf" }
+oxrdf = { version = "0.2.0-alpha.3-dev", path = "lib/oxrdf" }
 oxrdfio = { version = "0.1.0-alpha.3-dev", path = "lib/oxrdfio" }
 oxrdfxml = { version = "0.1.0-alpha.3-dev", path = "lib/oxrdfxml" }
 oxrocksdb-sys = { version = "0.4.0-alpha.3-dev", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "0.2.0-alpha.1", path = "lib/oxsdatatypes" }
 oxttl = { version = "0.1.0-alpha.3-dev", path = "lib/oxttl" }
-sparesults = { version = "0.2.0-alpha.2", path = "lib/sparesults" }
-spargebra = { version = "0.3.0-alpha.2", path = "lib/spargebra" }
-sparopt = { version = "0.1.0-alpha.2", path = "lib/sparopt" }
+sparesults = { version = "0.2.0-alpha.3-dev", path = "lib/sparesults" }
+spargebra = { version = "0.2.0-alpha.3-dev", path = "lib/spargebra" }
+sparopt = { version = "0.1.0-alpha.3-dev", path = "lib/sparopt" }
 sparql-smith = { version = "0.1.0-alpha.5", path = "lib/sparql-smith" }
 
 [workspace.lints.rust]

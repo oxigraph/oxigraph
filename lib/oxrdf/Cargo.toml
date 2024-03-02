@@ -1,6 +1,6 @@
 [package]
 name = "oxrdf"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3-dev"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
