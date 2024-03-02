@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 anyhow = "1.0.72"
 libfuzzer-sys = "0.4"
-oxigraph = { path = "../lib/oxigraph" }
+oxigraph = { path = "../lib/oxigraph", default-features = false }
 oxrdf = { path = "../lib/oxrdf", features = ["rdf-star"] }
 oxrdfxml = { path = "../lib/oxrdfxml" }
 oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
