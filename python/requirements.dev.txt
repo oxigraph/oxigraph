@@ -1,6 +1,6 @@
 furo
 maturin~=1.0
 mypy~=1.0
-ruff~=0.2.0
+ruff~=0.3.0
 sphinx~=7.0
 sphinx-lint~=0.9.1
