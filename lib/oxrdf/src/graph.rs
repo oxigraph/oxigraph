@@ -25,6 +25,7 @@
 //!
 //! See also [`Dataset`] if you want to get support of multiple RDF graphs at the same time.
 
+pub use crate::dataset::CanonicalizationAlgorithm;
 use crate::dataset::*;
 use crate::*;
 use std::fmt;
@@ -188,6 +189,7 @@ impl Graph {
     ///
     /// Usage example ([Graph isomorphism](https://www.w3.org/TR/rdf11-concepts/#dfn-graph-isomorphism)):
     /// ```
+    /// use oxrdf::graph::CanonicalizationAlgorithm;
     /// use oxrdf::*;
     ///
     /// let iri = NamedNodeRef::new("http://example.com")?;
@@ -203,20 +205,18 @@ impl Graph {
     /// graph2.insert(TripleRef::new(&bnode2, iri, iri));
     ///
     /// assert_ne!(graph1, graph2);
-    /// graph1.canonicalize();
-    /// graph2.canonicalize();
+    /// graph1.canonicalize(CanonicalizationAlgorithm::Unstable);
+    /// graph2.canonicalize(CanonicalizationAlgorithm::Unstable);
     /// assert_eq!(graph1, graph2);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
-    /// Warning 1: Blank node ids depends on the current shape of the graph. Adding a new triple might change the ids of a lot of blank nodes.
-    /// Hence, this canonization might not be suitable for diffs.
+    /// <div class="warning">Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
+    /// Hence, this canonization might not be suitable for diffs.</div>
     ///
-    /// Warning 2: The canonicalization algorithm is not stable and canonical blank node Ids might change between Oxigraph version.
-    ///
-    /// Warning 3: This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input graph.
-    pub fn canonicalize(&mut self) {
-        self.dataset.canonicalize()
+    /// <div class="warning">This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input dataset.</div>
+    pub fn canonicalize(&mut self, algorithm: CanonicalizationAlgorithm) {
+        self.dataset.canonicalize(algorithm)
     }
 }
 

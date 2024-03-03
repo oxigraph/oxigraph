@@ -4,6 +4,7 @@ use crate::manifest::Test;
 use crate::report::{dataset_diff, format_diff};
 use anyhow::{bail, ensure, Context, Result};
 use oxigraph::io::RdfFormat;
+use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{BlankNode, Dataset, Quad};
 use oxttl::n3::{N3Quad, N3Term};
 
@@ -138,11 +139,11 @@ fn evaluate_eval_test(test: &Test, format: RdfFormat, ignore_errors: bool) -> Re
     let action = test.action.as_deref().context("No action found")?;
     let mut actual_dataset = load_dataset(action, format, ignore_errors)
         .with_context(|| format!("Parse error on file {action}"))?;
-    actual_dataset.canonicalize();
+    actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     let results = test.result.as_ref().context("No tests result found")?;
     let mut expected_dataset = load_dataset(results, guess_rdf_format(results)?, false)
         .with_context(|| format!("Parse error on file {results}"))?;
-    expected_dataset.canonicalize();
+    expected_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     ensure!(
         expected_dataset == actual_dataset,
         "The two files are not isomorphic. Diff:\n{}",
@@ -156,12 +157,12 @@ fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
     let mut actual_dataset = n3_to_dataset(
         load_n3(action, ignore_errors).with_context(|| format!("Parse error on file {action}"))?,
     );
-    actual_dataset.canonicalize();
+    actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     let results = test.result.as_ref().context("No tests result found")?;
     let mut expected_dataset = n3_to_dataset(
         load_n3(results, false).with_context(|| format!("Parse error on file {results}"))?,
     );
-    expected_dataset.canonicalize();
+    expected_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     ensure!(
         expected_dataset == actual_dataset,
         "The two files are not isomorphic. Diff:\n{}",

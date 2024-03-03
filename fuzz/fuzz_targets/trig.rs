@@ -1,6 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use oxrdf::graph::CanonicalizationAlgorithm;
 use oxrdf::{Dataset, GraphName, Quad, Subject, Term, Triple};
 use oxttl::{TriGParser, TriGSerializer};
 
@@ -120,8 +121,8 @@ fuzz_target!(|data: &[u8]| {
     } else if bnodes_count <= 4 {
         let mut dataset_with_split = quads.iter().collect::<Dataset>();
         let mut dataset_without_split = quads_without_split.iter().collect::<Dataset>();
-        dataset_with_split.canonicalize();
-        dataset_without_split.canonicalize();
+        dataset_with_split.canonicalize(CanonicalizationAlgorithm::Unstable);
+        dataset_without_split.canonicalize(CanonicalizationAlgorithm::Unstable);
         assert_eq!(
             dataset_with_split,
             dataset_without_split,
@@ -131,7 +132,7 @@ fuzz_target!(|data: &[u8]| {
         );
         if errors.is_empty() {
             let mut dataset_unchecked = quads_unchecked.iter().collect::<Dataset>();
-            dataset_unchecked.canonicalize();
+            dataset_unchecked.canonicalize(CanonicalizationAlgorithm::Unstable);
             assert_eq!(
                 dataset_with_split,
                 dataset_unchecked,

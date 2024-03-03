@@ -5,6 +5,7 @@ use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
 use anyhow::{bail, ensure, Context, Error, Result};
 use oxigraph::io::RdfParser;
+use oxigraph::model::dataset::CanonicalizationAlgorithm;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
@@ -235,9 +236,9 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
 
     store.update(update).context("Failure to execute update")?;
     let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
-    store_dataset.canonicalize();
+    store_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     let mut result_store_dataset: Dataset = result_store.iter().collect::<Result<_, _>>()?;
-    result_store_dataset.canonicalize();
+    result_store_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     ensure!(
         store_dataset == result_store_dataset,
         "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
@@ -533,7 +534,7 @@ impl StaticQueryResults {
                 })
             }
         } else {
-            graph.canonicalize();
+            graph.canonicalize(CanonicalizationAlgorithm::Unstable);
             Ok(Self::Graph(graph))
         }
     }
