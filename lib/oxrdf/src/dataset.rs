@@ -31,7 +31,6 @@
 
 use crate::interning::*;
 use crate::*;
-use std::cmp::min;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
@@ -510,6 +509,7 @@ impl Dataset {
     ///
     /// Usage example ([Dataset isomorphism](https://www.w3.org/TR/rdf11-concepts/#dfn-dataset-isomorphism)):
     /// ```
+    /// use oxrdf::dataset::CanonicalizationAlgorithm;
     /// use oxrdf::*;
     ///
     /// let iri = NamedNodeRef::new("http://example.com")?;
@@ -527,29 +527,56 @@ impl Dataset {
     /// graph2.insert(QuadRef::new(&bnode2, iri, iri, &g2));
     ///
     /// assert_ne!(graph1, graph2);
-    /// graph1.canonicalize();
-    /// graph2.canonicalize();
+    /// graph1.canonicalize(CanonicalizationAlgorithm::Unstable);
+    /// graph2.canonicalize(CanonicalizationAlgorithm::Unstable);
     /// assert_eq!(graph1, graph2);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
-    /// Warning 1: Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
-    /// Hence, this canonization might not be suitable for diffs.
+    /// <div class="warning">Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.
+    /// Hence, this canonization might not be suitable for diffs.</div>
     ///
-    /// Warning 2: The canonicalization algorithm is not stable and canonical blank node ids might change between Oxigraph version.
-    ///
-    /// Warning 3: This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input dataset.
-    pub fn canonicalize(&mut self) {
-        let bnodes = self.blank_nodes();
-        let quads_per_blank_node = self.quads_per_blank_nodes();
-        let (hash, partition) = self.hash_bnodes(
-            bnodes.into_iter().map(|bnode| (bnode, 0)).collect(),
-            &quads_per_blank_node,
-        );
-        let new_quads = self.distinguish(&hash, &partition, &quads_per_blank_node);
+    /// <div class="warning">This implementation worst-case complexity is in *O(b!)* with *b* the number of blank nodes in the input dataset.</div>
+    pub fn canonicalize(&mut self, algorithm: CanonicalizationAlgorithm) {
+        let bnode_mapping = self.canonicalize_interned_blank_nodes(algorithm);
+        let new_quads = self.map_blank_nodes(&bnode_mapping);
         self.clear();
         for quad in new_quads {
             self.insert_encoded(quad);
+        }
+    }
+
+    /// Returns a map between the current dataset blank node and the canonicalized blank node
+    /// to create a canonical dataset.
+    ///
+    /// See also [`canonicalize`](Self::canonicalize).
+    pub fn canonicalize_blank_nodes(
+        &self,
+        algorithm: CanonicalizationAlgorithm,
+    ) -> HashMap<BlankNodeRef<'_>, BlankNode> {
+        self.canonicalize_interned_blank_nodes(algorithm)
+            .into_iter()
+            .map(|(from, to)| (from.decode_from(&self.interner), to))
+            .collect()
+    }
+
+    fn canonicalize_interned_blank_nodes(
+        &self,
+        algorithm: CanonicalizationAlgorithm,
+    ) -> HashMap<InternedBlankNode, BlankNode> {
+        match algorithm {
+            CanonicalizationAlgorithm::Unstable => {
+                let bnodes = self.blank_nodes();
+                let quads_per_blank_node = self.quads_per_blank_nodes();
+                let (hash, partition) = self.hash_bnodes(
+                    bnodes.into_iter().map(|bnode| (bnode, 0)).collect(),
+                    &quads_per_blank_node,
+                );
+                self.distinguish(hash, &partition, &quads_per_blank_node)
+                    .into_iter()
+                    .map(|(from, to)| (from, BlankNode::new_from_unique_id(to.into())))
+                    .collect()
+            }
         }
     }
 
@@ -781,16 +808,11 @@ impl Dataset {
     }
 
     fn distinguish(
-        &mut self,
-        hash: &HashMap<InternedBlankNode, u64>,
+        &self,
+        hash: HashMap<InternedBlankNode, u64>,
         partition: &[(u64, Vec<InternedBlankNode>)],
         quads_per_blank_node: &QuadsPerBlankNode,
-    ) -> Vec<(
-        InternedSubject,
-        InternedNamedNode,
-        InternedTerm,
-        InternedGraphName,
-    )> {
+    ) -> HashMap<InternedBlankNode, u64> {
         let b_prime = partition.iter().map(|(_, b)| b).find(|b| b.len() > 1);
         if let Some(b_prime) = b_prime {
             b_prime
@@ -800,19 +822,29 @@ impl Dataset {
                     hash_prime.insert(*b, Self::hash_tuple((hash_prime[b], 22)));
                     let (hash_prime_prime, partition_prime) =
                         self.hash_bnodes(hash_prime, quads_per_blank_node);
-                    self.distinguish(&hash_prime_prime, &partition_prime, quads_per_blank_node)
+                    self.distinguish(hash_prime_prime, &partition_prime, quads_per_blank_node)
                 })
-                .reduce(min)
+                .reduce(|a, b| {
+                    let mut a_hashes = a.values().collect::<Vec<_>>();
+                    a_hashes.sort();
+                    let mut b_hashes = a.values().collect::<Vec<_>>();
+                    b_hashes.sort();
+                    if a_hashes <= b_hashes {
+                        a
+                    } else {
+                        b
+                    }
+                })
                 .unwrap_or_default()
         } else {
-            self.label(hash)
+            hash
         }
     }
 
     #[allow(clippy::needless_collect)]
-    fn label(
+    fn map_blank_nodes(
         &mut self,
-        hashes: &HashMap<InternedBlankNode, u64>,
+        bnode_mapping: &HashMap<InternedBlankNode, BlankNode>,
     ) -> Vec<(
         InternedSubject,
         InternedNamedNode,
@@ -820,19 +852,22 @@ impl Dataset {
         InternedGraphName,
     )> {
         let old_quads: Vec<_> = self.spog.iter().cloned().collect();
-        let mut quads: Vec<_> = old_quads
+        old_quads
             .into_iter()
             .map(|(s, p, o, g)| {
                 (
                     match s {
                         InternedSubject::NamedNode(_) => s,
                         InternedSubject::BlankNode(bnode) => {
-                            InternedSubject::BlankNode(self.map_bnode(bnode, hashes))
+                            InternedSubject::BlankNode(InternedBlankNode::encoded_into(
+                                bnode_mapping[&bnode].as_ref(),
+                                &mut self.interner,
+                            ))
                         }
                         #[cfg(feature = "rdf-star")]
                         InternedSubject::Triple(triple) => {
                             InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
-                                self.label_triple(&triple, hashes).as_ref(),
+                                self.map_triple_blank_nodes(&triple, bnode_mapping).as_ref(),
                                 &mut self.interner,
                             )))
                         }
@@ -841,12 +876,15 @@ impl Dataset {
                     match o {
                         InternedTerm::NamedNode(_) | InternedTerm::Literal(_) => o,
                         InternedTerm::BlankNode(bnode) => {
-                            InternedTerm::BlankNode(self.map_bnode(bnode, hashes))
+                            InternedTerm::BlankNode(InternedBlankNode::encoded_into(
+                                bnode_mapping[&bnode].as_ref(),
+                                &mut self.interner,
+                            ))
                         }
                         #[cfg(feature = "rdf-star")]
                         InternedTerm::Triple(triple) => {
                             InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
-                                self.label_triple(&triple, hashes).as_ref(),
+                                self.map_triple_blank_nodes(&triple, bnode_mapping).as_ref(),
                                 &mut self.interner,
                             )))
                         }
@@ -854,57 +892,40 @@ impl Dataset {
                     match g {
                         InternedGraphName::NamedNode(_) | InternedGraphName::DefaultGraph => g,
                         InternedGraphName::BlankNode(bnode) => {
-                            InternedGraphName::BlankNode(self.map_bnode(bnode, hashes))
+                            InternedGraphName::BlankNode(InternedBlankNode::encoded_into(
+                                bnode_mapping[&bnode].as_ref(),
+                                &mut self.interner,
+                            ))
                         }
                     },
                 )
             })
-            .collect();
-        quads.sort_unstable();
-        quads
+            .collect()
     }
 
     #[cfg(feature = "rdf-star")]
-    fn label_triple(
+    fn map_triple_blank_nodes(
         &mut self,
         triple: &InternedTriple,
-        hashes: &HashMap<InternedBlankNode, u64>,
+        bnode_mapping: &HashMap<InternedBlankNode, BlankNode>,
     ) -> Triple {
         Triple {
             subject: if let InternedSubject::BlankNode(bnode) = &triple.subject {
-                Self::gen_bnode(*bnode, hashes).into()
+                bnode_mapping[bnode].clone().into()
             } else if let InternedSubject::Triple(t) = &triple.subject {
-                self.label_triple(t, hashes).into()
+                self.map_triple_blank_nodes(t, bnode_mapping).into()
             } else {
                 triple.subject.decode_from(&self.interner).into_owned()
             },
             predicate: triple.predicate.decode_from(&self.interner).into_owned(),
             object: if let InternedTerm::BlankNode(bnode) = &triple.object {
-                Self::gen_bnode(*bnode, hashes).into()
+                bnode_mapping[bnode].clone().into()
             } else if let InternedTerm::Triple(t) = &triple.object {
-                self.label_triple(t, hashes).into()
+                self.map_triple_blank_nodes(t, bnode_mapping).into()
             } else {
                 triple.object.decode_from(&self.interner).into_owned()
             },
         }
-    }
-
-    fn map_bnode(
-        &mut self,
-        old_bnode: InternedBlankNode,
-        hashes: &HashMap<InternedBlankNode, u64>,
-    ) -> InternedBlankNode {
-        InternedBlankNode::encoded_into(
-            Self::gen_bnode(old_bnode, hashes).as_ref(),
-            &mut self.interner,
-        )
-    }
-
-    fn gen_bnode(
-        old_bnode: InternedBlankNode,
-        hashes: &HashMap<InternedBlankNode, u64>,
-    ) -> BlankNode {
-        BlankNode::new_from_unique_id(hashes[&old_bnode].into())
     }
 }
 
@@ -1569,6 +1590,19 @@ type QuadsPerBlankNode = HashMap<
     )>,
 >;
 
+/// An algorithm used to canonicalize graph and datasets.
+///
+/// See [`Graph::canonicalize`] and [`Dataset::canonicalize`].
+#[derive(Default, Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[non_exhaustive]
+pub enum CanonicalizationAlgorithm {
+    /// The algorithm preferred by OxRDF.
+    ///
+    /// <div class="warning">The canonicalization algorithm is not stable and canonical blank node ids might change between Oxigraph version.</div>
+    #[default]
+    Unstable,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1588,7 +1622,7 @@ mod tests {
             BlankNode::default().as_ref(),
             GraphNameRef::DefaultGraph,
         ));
-        dataset.canonicalize();
+        dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
         let mut dataset2 = Dataset::new();
         dataset2.insert(QuadRef::new(
             BlankNode::default().as_ref(),
@@ -1602,7 +1636,7 @@ mod tests {
             BlankNode::default().as_ref(),
             GraphNameRef::DefaultGraph,
         ));
-        dataset2.canonicalize();
+        dataset2.canonicalize(CanonicalizationAlgorithm::Unstable);
         assert_eq!(dataset, dataset2);
     }
 }
