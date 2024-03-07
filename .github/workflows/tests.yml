@@ -182,7 +182,7 @@ jobs:
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
-      - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions && cargo update -p bumpalo@3.15.3 --precise 3.14.0
+      - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions && cargo update -p bumpalo --precise 3.14.0
       - run: cargo test
 
   test_linux_latest:

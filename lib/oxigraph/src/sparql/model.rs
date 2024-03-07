@@ -5,7 +5,6 @@ use crate::sparql::results::{
     FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsFormat,
     QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
 };
-use oxrdf::{Variable, VariableRef};
 pub use sparesults::QuerySolution;
 use std::io::{Read, Write};
 use std::sync::Arc;

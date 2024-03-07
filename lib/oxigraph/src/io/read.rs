@@ -4,7 +4,6 @@
 
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use oxiri::IriParseError;
 use oxrdfio::{FromReadQuadReader, RdfParseError, RdfParser};
 use std::io::Read;
 
