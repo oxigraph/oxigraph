@@ -63,7 +63,7 @@ It is possible to disable the RocksDB storage backend to only use the in-memory 
 ```toml
 oxigraph = { version = "*", default-features = false }
 ```
-This is the default behavior when compiling RocksDB to WASM.
+This is the default behavior when compiling Oxigraph to WASM.
 
 ## License
 

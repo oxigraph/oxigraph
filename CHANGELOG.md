@@ -1,3 +1,25 @@
+## [0.4.0-alpha.4] - 2024-03-07
+
+### Added
+- Rust: `From<spargebra::Update` on `Update`.
+- `sparesults`: Tokio Async readers for SPARQL query results (XML, JSON and TSV).
+- `oxrdf`: `Term::from_terms` constructor.
+- JS: options to set query and update base IRI and query union default graph.
+
+## Changed
+- Uses RocksDB atomic multi-columns flush.
+- Rust: RocksDB is optional but enabled by default.
+- Upgrades RocksDB to 8.11.3.
+- Rust: `oxigraph` crate has been moved to `lib/oxigraph`.
+- Rust: `QueryResults::write` returns the `Write` impl and not `()`.
+- Rust: use `thierror` for errors.
+- Rust: rename `oxrdfio::{Parse,Syntax}Error` to `oxrdfio::Rdf{Parse,Syntax}Error`,
+  `oxrdfxml::{Parse,Syntax}Error` to `oxrdfxml::RdfXml{Parse,Syntax}Error`,
+  `oxttl::{Parse,Syntax}Error` to `oxttl::Turtle{Parse,Syntax}Error`,
+  `sparesults::{Parse,Syntax}Error` to `sparesults::QueryResults{Parse,Syntax}Error` and
+  `spargebra::SyntaxError` to `spargebra::SparqlSyntaxError`.
+
+
 ## [0.4.0-alpha.3] - 2024-01-25
 
 ### Added
