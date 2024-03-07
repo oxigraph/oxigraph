@@ -6,7 +6,6 @@ use oxsdatatypes::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
-use std::option::Option;
 
 /// An owned RDF [literal](https://www.w3.org/TR/rdf11-concepts/#dfn-literal).
 ///

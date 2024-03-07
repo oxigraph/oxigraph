@@ -9,7 +9,7 @@
 )]
 
 use crate::storage::error::{CorruptionError, StorageError};
-use libc::{self, c_void};
+use libc::c_void;
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;

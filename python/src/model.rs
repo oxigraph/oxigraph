@@ -1,5 +1,4 @@
 use oxigraph::model::*;
-use oxigraph::sparql::Variable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyTypeError, PyValueError};
 use pyo3::prelude::*;

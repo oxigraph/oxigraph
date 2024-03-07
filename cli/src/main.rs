@@ -1856,7 +1856,6 @@ mod tests {
     use assert_fs::{NamedTempFile, TempDir};
     use flate2::write::GzEncoder;
     use flate2::Compression;
-    use oxhttp::model::Method;
     use predicates::prelude::*;
     use std::fs::remove_dir_all;
     use std::io::read_to_string;

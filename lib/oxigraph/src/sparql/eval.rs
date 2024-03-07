@@ -33,7 +33,7 @@ use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::iter::{empty, once, Iterator};
+use std::iter::{empty, once};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{fmt, io, str};

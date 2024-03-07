@@ -1194,8 +1194,7 @@ mod tests {
     #![allow(clippy::panic_in_result_fn)]
 
     use super::*;
-    use oxrdf::vocab::xsd;
-    use oxrdf::{BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef};
+    use oxrdf::BlankNodeRef;
 
     #[test]
     fn test_write() -> io::Result<()> {

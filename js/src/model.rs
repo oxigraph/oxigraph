@@ -4,7 +4,6 @@ use crate::format_err;
 use crate::utils::to_err;
 use js_sys::{Reflect, UriError};
 use oxigraph::model::*;
-use oxigraph::sparql::Variable;
 use wasm_bindgen::prelude::*;
 
 thread_local! {
