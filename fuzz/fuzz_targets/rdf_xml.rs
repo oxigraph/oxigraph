@@ -5,12 +5,10 @@ use oxrdfxml::{RdfXmlParser, RdfXmlSerializer};
 
 fuzz_target!(|data: &[u8]| {
     // We parse
-    let mut triples = Vec::new();
-    for triple in RdfXmlParser::new().parse_read(data) {
-        if let Ok(triple) = triple {
-            triples.push(triple);
-        }
-    }
+    let triples = RdfXmlParser::new()
+        .parse_read(data)
+        .flatten()
+        .collect::<Vec<_>>();
 
     // We serialize
     let mut writer = RdfXmlSerializer::new().serialize_to_write(Vec::new());
