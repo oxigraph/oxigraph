@@ -5,7 +5,7 @@ use oxrdf::vocab::rdf;
 use oxrdf::*;
 use quick_xml::escape::unescape;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-use quick_xml::{Decoder, Reader, Writer};
+use quick_xml::{Decoder, Error, Reader, Writer};
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, Read, Write};
 use std::mem::take;
@@ -579,7 +579,7 @@ impl XmlInnerSolutionsReader {
                         Ok(None)
                     } else if event.local_name().as_ref() == b"literal" {
                         for attr in event.attributes() {
-                            let attr = attr.map_err(quick_xml::Error::from)?;
+                            let attr = attr.map_err(Error::from)?;
                             if attr.key.as_ref() == b"xml:lang" {
                                 self.lang = Some(
                                     unescape(&self.decoder.decode(&attr.value)?)?.into_owned(),
@@ -822,12 +822,12 @@ fn build_literal(
     }
 }
 
-fn map_xml_error(error: quick_xml::Error) -> io::Error {
+fn map_xml_error(error: Error) -> io::Error {
     match error {
-        quick_xml::Error::Io(error) => {
+        Error::Io(error) => {
             Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))
         }
-        quick_xml::Error::UnexpectedEof(_) => io::Error::new(io::ErrorKind::UnexpectedEof, error),
+        Error::UnexpectedEof(_) => io::Error::new(io::ErrorKind::UnexpectedEof, error),
         _ => io::Error::new(io::ErrorKind::InvalidData, error),
     }
 }

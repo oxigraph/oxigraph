@@ -130,17 +130,15 @@ fuzz_target!(|data: &[u8]| {
             String::from_utf8_lossy(&serialize_quads(&quads_without_split, Vec::new()))
         );
         if errors.is_empty() {
-            if errors.is_empty() {
-                let mut dataset_unchecked = quads_unchecked.iter().collect::<Dataset>();
-                dataset_unchecked.canonicalize();
-                assert_eq!(
-                    dataset_with_split,
-                    dataset_unchecked,
-                    "Validating:\n{}\nUnchecked:\n{}",
-                    String::from_utf8_lossy(&serialize_quads(&quads, Vec::new())),
-                    String::from_utf8_lossy(&serialize_quads(&quads_unchecked, Vec::new()))
-                );
-            }
+            let mut dataset_unchecked = quads_unchecked.iter().collect::<Dataset>();
+            dataset_unchecked.canonicalize();
+            assert_eq!(
+                dataset_with_split,
+                dataset_unchecked,
+                "Validating:\n{}\nUnchecked:\n{}",
+                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new())),
+                String::from_utf8_lossy(&serialize_quads(&quads_unchecked, Vec::new()))
+            );
         }
     }
     assert_eq!(errors, errors_without_split);

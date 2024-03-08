@@ -41,13 +41,9 @@ def fetch_debian_package_desc(debian_name):
             with urlopen(url) as response:
                 return json.loads(response.read().decode())
         except HTTPError as e:
-            if e.code / 100 == 5:
-                wait = 2**i
-                print(f"Error {e} from {url}, retrying after {wait}s")
-                sleep(wait)
-            else:
-                print(f"Failed to fetch debian name {debian_name} from {url}: {e}")
-                raise e
+            wait = 2**i
+            print(f"Error {e} from {url}, retrying after {wait}s")
+            sleep(wait)
     raise Exception(f"Failed to fetch {url}")
 
 

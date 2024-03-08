@@ -21,7 +21,7 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
                 .serialize_solutions_to_write(
                     Vec::new(),
                     solutions
-                        .get(0)
+                        .first()
                         .map_or_else(Vec::new, |s| s.variables().to_vec()),
                 )
                 .unwrap();

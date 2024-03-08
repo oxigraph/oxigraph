@@ -499,8 +499,8 @@ impl<R> RdfXmlReader<R> {
                 })?;
 
                 // Resolves custom entities within the current entity definition.
-                let entity_value = unescape_with(entity_value, |e| self.resolve_entity(e))
-                    .map_err(quick_xml::Error::from)?;
+                let entity_value =
+                    unescape_with(entity_value, |e| self.resolve_entity(e)).map_err(Error::from)?;
                 self.custom_entities
                     .insert(entity_name.to_owned(), entity_value.to_string());
             }
@@ -921,7 +921,7 @@ impl<R> RdfXmlReader<R> {
                 Ok(unescape_with(&self.reader.decoder().decode(&value)?, |e| {
                     self.resolve_entity(e)
                 })
-                .map_err(quick_xml::Error::from)?
+                .map_err(Error::from)?
                 .to_string())
             }
             ResolveResult::Unbound => {
