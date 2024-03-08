@@ -376,7 +376,7 @@ jobs:
         working-directory: ./lib/sparql-smith
         continue-on-error: true
       - run: cargo publish
-        working-directory: ./lib
+        working-directory: ./lib/oxigraph
         continue-on-error: true
       - run: cargo publish
         working-directory: ./cli
