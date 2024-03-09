@@ -452,7 +452,7 @@ impl PyStore {
     /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
     /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
     /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
-    /// :type format: str or None, optional
+    /// :type format: RdfFormat or None, optional
     /// :param path: The file path to read from. Replaces the ``input`` parameter.
     /// :type path: str or os.PathLike[str] or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
