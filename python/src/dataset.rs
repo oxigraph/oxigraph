@@ -30,7 +30,7 @@ pub struct PyDataset {
 impl PyDataset {
     #[new]
     #[pyo3(signature = (quads = None))]
-    fn new(quads: Option<&PyAny>) -> PyResult<Self> {
+    fn new(quads: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let mut inner = Dataset::new();
         if let Some(quads) = quads {
             for quad in quads.iter()? {
@@ -50,15 +50,16 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_subject(NamedNode('http://example.com')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    pub fn quads_for_subject(&self, subject: &PyAny) -> PyResult<QuadIter> {
-        Ok(QuadIter {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn quads_for_subject(&self, subject: PySubjectRef<'_>) -> QuadIter {
+        QuadIter {
             inner: self
                 .inner
-                .quads_for_subject(&PySubjectRef::try_from(subject)?)
+                .quads_for_subject(&subject)
                 .map(QuadRef::into_owned)
                 .collect::<Vec<_>>()
                 .into_iter(),
-        })
+        }
     }
 
     /// Looks for the quads with the given predicate.
@@ -71,15 +72,16 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_predicate(NamedNode('http://example.com/p')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    pub fn quads_for_predicate(&self, predicate: &PyAny) -> PyResult<QuadIter> {
-        Ok(QuadIter {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn quads_for_predicate(&self, predicate: PyNamedNodeRef<'_>) -> QuadIter {
+        QuadIter {
             inner: self
                 .inner
-                .quads_for_predicate(&PyNamedNodeRef::try_from(predicate)?)
+                .quads_for_predicate(&predicate)
                 .map(QuadRef::into_owned)
                 .collect::<Vec<_>>()
                 .into_iter(),
-        })
+        }
     }
 
     /// Looks for the quads with the given object.
@@ -92,15 +94,16 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_object(Literal('1')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    pub fn quads_for_object(&self, object: &PyAny) -> PyResult<QuadIter> {
-        Ok(QuadIter {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn quads_for_object(&self, object: PyTermRef<'_>) -> QuadIter {
+        QuadIter {
             inner: self
                 .inner
-                .quads_for_object(&PyTermRef::try_from(object)?)
+                .quads_for_object(&object)
                 .map(QuadRef::into_owned)
                 .collect::<Vec<_>>()
                 .into_iter(),
-        })
+        }
     }
 
     /// Looks for the quads with the given graph name.
@@ -113,15 +116,16 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_graph_name(NamedNode('http://example.com/g')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    pub fn quads_for_graph_name(&self, graph_name: &PyAny) -> PyResult<QuadIter> {
-        Ok(QuadIter {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn quads_for_graph_name(&self, graph_name: PyGraphNameRef<'_>) -> QuadIter {
+        QuadIter {
             inner: self
                 .inner
-                .quads_for_graph_name(&PyGraphNameRef::try_from(graph_name)?)
+                .quads_for_graph_name(&graph_name)
                 .map(QuadRef::into_owned)
                 .collect::<Vec<_>>()
                 .into_iter(),
-        })
+        }
     }
 
     /// Adds a quad to the dataset.
@@ -317,7 +321,7 @@ impl PyCanonicalizationAlgorithm {
     /// :type memo: typing.Any
     /// :rtype: CanonicalizationAlgorithm
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 }

@@ -93,12 +93,12 @@ impl PyNamedNode {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             Ok(op.matches(self.cmp(&other)))
-        } else if PyBlankNode::is_type_of(other)
-            || PyLiteral::is_type_of(other)
-            || PyDefaultGraph::is_type_of(other)
+        } else if PyBlankNode::is_type_of_bound(other)
+            || PyLiteral::is_type_of_bound(other)
+            || PyDefaultGraph::is_type_of_bound(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -121,7 +121,7 @@ impl PyNamedNode {
     /// :type memo: typing.Any
     /// :rtype: NamedNode
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 
@@ -220,12 +220,12 @@ impl PyBlankNode {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             eq_compare(self, &other, op)
-        } else if PyNamedNode::is_type_of(other)
-            || PyLiteral::is_type_of(other)
-            || PyDefaultGraph::is_type_of(other)
+        } else if PyNamedNode::is_type_of_bound(other)
+            || PyLiteral::is_type_of_bound(other)
+            || PyDefaultGraph::is_type_of_bound(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -248,7 +248,7 @@ impl PyBlankNode {
     /// :type memo: typing.Any
     /// :rtype: BlankNode
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 
@@ -376,12 +376,12 @@ impl PyLiteral {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             eq_compare(self, &other, op)
-        } else if PyNamedNode::is_type_of(other)
-            || PyBlankNode::is_type_of(other)
-            || PyDefaultGraph::is_type_of(other)
+        } else if PyNamedNode::is_type_of_bound(other)
+            || PyBlankNode::is_type_of_bound(other)
+            || PyDefaultGraph::is_type_of_bound(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -392,8 +392,11 @@ impl PyLiteral {
     }
 
     /// :rtype: typing.Any
-    fn __getnewargs_ex__<'a>(&'a self, py: Python<'a>) -> PyResult<((&'a str,), &'a PyDict)> {
-        let kwargs = PyDict::new(py);
+    fn __getnewargs_ex__<'a, 'py>(
+        &'a self,
+        py: Python<'py>,
+    ) -> PyResult<((&'a str,), Bound<'py, PyDict>)> {
+        let kwargs = PyDict::new_bound(py);
         if let Some(language) = self.language() {
             kwargs.set_item("language", language)?;
         } else {
@@ -410,7 +413,7 @@ impl PyLiteral {
     /// :type memo: typing.Any
     /// :rtype: Literal
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 
@@ -450,12 +453,12 @@ impl PyDefaultGraph {
         0
     }
 
-    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             eq_compare(self, &other, op)
-        } else if PyNamedNode::is_type_of(other)
-            || PyBlankNode::is_type_of(other)
-            || PyLiteral::is_type_of(other)
+        } else if PyNamedNode::is_type_of_bound(other)
+            || PyBlankNode::is_type_of_bound(other)
+            || PyLiteral::is_type_of_bound(other)
         {
             eq_compare_other_type(op)
         } else {
@@ -466,8 +469,8 @@ impl PyDefaultGraph {
     }
 
     /// :rtype: typing.Any
-    fn __getnewargs__<'a>(&self, py: Python<'a>) -> &'a PyTuple {
-        PyTuple::empty(py)
+    fn __getnewargs__<'py>(&self, py: Python<'py>) -> Bound<'py, PyTuple> {
+        PyTuple::empty_bound(py)
     }
 
     /// :rtype: DefaultGraph
@@ -478,7 +481,7 @@ impl PyDefaultGraph {
     /// :type memo: typing.Any
     /// :rtype: DefaultGraph
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 }
@@ -739,7 +742,7 @@ impl PyTriple {
     /// :type memo: typing.Any
     /// :rtype: Triple
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 
@@ -976,7 +979,7 @@ impl PyQuad {
     /// :type memo: typing.Any
     /// :rtype: Quad
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 
@@ -1068,7 +1071,7 @@ impl PyVariable {
     /// :type memo: typing.Any
     /// :rtype: Variable
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 
@@ -1078,6 +1081,7 @@ impl PyVariable {
     }
 }
 
+#[derive(FromPyObject)]
 pub struct PyNamedNodeRef<'a>(PyRef<'a, PyNamedNode>);
 
 impl<'a> From<&'a PyNamedNodeRef<'a>> for NamedNodeRef<'a> {
@@ -1086,21 +1090,7 @@ impl<'a> From<&'a PyNamedNodeRef<'a>> for NamedNodeRef<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a PyAny> for PyNamedNodeRef<'a> {
-    type Error = PyErr;
-
-    fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
-            Ok(Self(node))
-        } else {
-            Err(PyTypeError::new_err(format!(
-                "{} is not an RDF named node",
-                value.get_type().name()?,
-            )))
-        }
-    }
-}
-
+#[derive(FromPyObject)]
 pub enum PyNamedOrBlankNodeRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
@@ -1115,23 +1105,7 @@ impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
-    type Error = PyErr;
-
-    fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
-            Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
-            Ok(Self::BlankNode(node))
-        } else {
-            Err(PyTypeError::new_err(format!(
-                "{} is not an RDF named or blank node",
-                value.get_type().name()?,
-            )))
-        }
-    }
-}
-
+#[derive(FromPyObject)]
 pub enum PySubjectRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
@@ -1148,25 +1122,7 @@ impl<'a> From<&'a PySubjectRef<'a>> for SubjectRef<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a PyAny> for PySubjectRef<'a> {
-    type Error = PyErr;
-
-    fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
-            Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
-            Ok(Self::BlankNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<'_, PyTriple>>() {
-            Ok(Self::Triple(node))
-        } else {
-            Err(PyTypeError::new_err(format!(
-                "{} is not an RDF named or blank node",
-                value.get_type().name()?,
-            )))
-        }
-    }
-}
-
+#[derive(FromPyObject)]
 pub enum PyTermRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
@@ -1191,31 +1147,11 @@ impl<'a> From<&'a PyTermRef<'a>> for Term {
     }
 }
 
-impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
-    type Error = PyErr;
-
-    fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
-            Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
-            Ok(Self::BlankNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<'_, PyLiteral>>() {
-            Ok(Self::Literal(node))
-        } else if let Ok(node) = value.extract::<PyRef<'_, PyTriple>>() {
-            Ok(Self::Triple(node))
-        } else {
-            Err(PyTypeError::new_err(format!(
-                "{} is not an RDF term",
-                value.get_type().name()?,
-            )))
-        }
-    }
-}
-
+#[derive(FromPyObject)]
 pub enum PyGraphNameRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
-    DefaultGraph,
+    DefaultGraph(PyRef<'a, PyDefaultGraph>),
 }
 
 impl<'a> From<&'a PyGraphNameRef<'a>> for GraphNameRef<'a> {
@@ -1223,32 +1159,7 @@ impl<'a> From<&'a PyGraphNameRef<'a>> for GraphNameRef<'a> {
         match value {
             PyGraphNameRef::NamedNode(value) => value.inner.as_ref().into(),
             PyGraphNameRef::BlankNode(value) => value.inner.as_ref().into(),
-            PyGraphNameRef::DefaultGraph => Self::DefaultGraph,
-        }
-    }
-}
-
-impl<'a> From<&'a PyGraphNameRef<'a>> for GraphName {
-    fn from(value: &'a PyGraphNameRef<'a>) -> Self {
-        GraphNameRef::from(value).into()
-    }
-}
-
-impl<'a> TryFrom<&'a PyAny> for PyGraphNameRef<'a> {
-    type Error = PyErr;
-
-    fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
-            Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
-            Ok(Self::BlankNode(node))
-        } else if value.extract::<PyRef<'_, PyDefaultGraph>>().is_ok() {
-            Ok(Self::DefaultGraph)
-        } else {
-            Err(PyTypeError::new_err(format!(
-                "{} is not an RDF graph name",
-                value.get_type().name()?,
-            )))
+            PyGraphNameRef::DefaultGraph(_) => Self::DefaultGraph,
         }
     }
 }

@@ -6,7 +6,7 @@ use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyString};
 use std::cmp::max;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -118,12 +118,12 @@ pub fn parse(
 /// b'<http://example.com> <http://example.com/p> "1" .\n'
 #[pyfunction]
 #[pyo3(signature = (input, output = None, format = None))]
-pub fn serialize<'a>(
-    input: &PyAny,
+pub fn serialize<'py>(
+    input: &Bound<'py, PyAny>,
     output: Option<PyWritableOutput>,
     format: Option<PyRdfFormatInput>,
-    py: Python<'a>,
-) -> PyResult<Option<&'a PyBytes>> {
+    py: Python<'py>,
+) -> PyResult<Option<Bound<'py, PyBytes>>> {
     PyWritable::do_write(
         |output, file_path| {
             let format = lookup_rdf_format(format, file_path.as_deref())?;
@@ -355,7 +355,7 @@ impl PyRdfFormat {
     /// :type memo: typing.Any
     /// :rtype: RdfFormat
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 }
@@ -423,7 +423,7 @@ impl PyWritable {
         write: impl FnOnce(BufWriter<Self>, Option<PathBuf>) -> PyResult<BufWriter<Self>>,
         output: Option<PyWritableOutput>,
         py: Python<'_>,
-    ) -> PyResult<Option<&PyBytes>> {
+    ) -> PyResult<Option<Bound<'_, PyBytes>>> {
         let (output, file_path) = match output {
             Some(PyWritableOutput::Path(file_path)) => (
                 Self::File(py.allow_threads(|| File::create(&file_path))?),
@@ -436,9 +436,9 @@ impl PyWritable {
         py.allow_threads(|| writer.into_inner())?.close(py)
     }
 
-    fn close(self, py: Python<'_>) -> PyResult<Option<&PyBytes>> {
+    fn close(self, py: Python<'_>) -> PyResult<Option<Bound<'_, PyBytes>>> {
         match self {
-            Self::Bytes(bytes) => Ok(Some(PyBytes::new(py, &bytes))),
+            Self::Bytes(bytes) => Ok(Some(PyBytes::new_bound(py, &bytes))),
             Self::File(mut file) => {
                 py.allow_threads(|| {
                     file.flush()?;
@@ -489,13 +489,18 @@ impl Read for PyIo {
             let to_read = max(1, buf.len() / 4); // We divide by 4 because TextIO works with number of characters and not with number of bytes
             let read = self
                 .0
-                .as_ref(py)
+                .bind(py)
                 .call_method1(intern!(py, "read"), (to_read,))?;
-            let bytes = read
-                .extract::<&[u8]>()
-                .or_else(|_| read.extract::<&str>().map(str::as_bytes))?;
-            buf[..bytes.len()].copy_from_slice(bytes);
-            Ok(bytes.len())
+            Ok(if let Ok(bytes) = read.extract::<&[u8]>() {
+                buf[..bytes.len()].copy_from_slice(bytes);
+                bytes.len()
+            } else {
+                // TODO: Python 3.10+ use directly .extract<&str>
+                let string = read.extract::<Bound<'_, PyString>>()?;
+                let str = string.to_cow()?;
+                buf[..str.len()].copy_from_slice(str.as_bytes());
+                str.len()
+            })
         })
     }
 }
@@ -505,15 +510,15 @@ impl Write for PyIo {
         Python::with_gil(|py| {
             Ok(self
                 .0
-                .as_ref(py)
-                .call_method1(intern!(py, "write"), (PyBytes::new(py, buf),))?
+                .bind(py)
+                .call_method1(intern!(py, "write"), (PyBytes::new_bound(py, buf),))?
                 .extract::<usize>()?)
         })
     }
 
     fn flush(&mut self) -> io::Result<()> {
         Python::with_gil(|py| {
-            self.0.as_ref(py).call_method0(intern!(py, "flush"))?;
+            self.0.bind(py).call_method0(intern!(py, "flush"))?;
             Ok(())
         })
     }
@@ -629,5 +634,7 @@ pub fn python_version() -> (u8, u8) {
 }
 
 pub fn deprecation_warning(message: &str) -> PyResult<()> {
-    Python::with_gil(|py| PyErr::warn(py, py.get_type::<PyDeprecationWarning>(), message, 0))
+    Python::with_gil(|py| {
+        PyErr::warn_bound(py, &py.get_type_bound::<PyDeprecationWarning>(), message, 0)
+    })
 }

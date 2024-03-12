@@ -19,7 +19,7 @@ use pyo3::prelude::*;
 
 /// Oxigraph Python bindings
 #[pymodule]
-fn pyoxigraph(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
+fn pyoxigraph(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__package__", "pyoxigraph")?;
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add("__author__", env!("CARGO_PKG_AUTHORS").replace(':', "\n"))?;
