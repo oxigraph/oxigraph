@@ -14,7 +14,7 @@ use oxigraph::sparql::{
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyString};
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -24,8 +24,8 @@ pub fn parse_query(
     query: &str,
     base_iri: Option<&str>,
     use_default_graph_as_union: bool,
-    default_graph: Option<&PyAny>,
-    named_graphs: Option<&PyAny>,
+    default_graph: Option<&Bound<'_, PyAny>>,
+    named_graphs: Option<&Bound<'_, PyAny>>,
     py: Python<'_>,
 ) -> PyResult<Query> {
     let mut query = allow_threads_unsafe(py, || Query::parse(query, base_iri))
@@ -133,13 +133,13 @@ impl PyQuerySolution {
         self.inner.len()
     }
 
-    fn __getitem__(&self, key: PySolutionKey<'_>) -> Option<PyTerm> {
-        match key {
+    fn __getitem__(&self, key: PySolutionKey<'_>) -> PyResult<Option<PyTerm>> {
+        Ok(match key {
             PySolutionKey::Usize(key) => self.inner.get(key),
-            PySolutionKey::Str(key) => self.inner.get(key),
+            PySolutionKey::Str(key) => self.inner.get(key.to_cow()?.as_ref()),
             PySolutionKey::Variable(key) => self.inner.get(<&Variable>::from(&*key)),
         }
-        .map(|term| PyTerm::from(term.clone()))
+        .map(|term| PyTerm::from(term.clone())))
     }
 
     #[allow(clippy::unnecessary_to_owned)]
@@ -153,7 +153,7 @@ impl PyQuerySolution {
 #[derive(FromPyObject)]
 pub enum PySolutionKey<'a> {
     Usize(usize),
-    Str(&'a str),
+    Str(Bound<'a, PyString>), // TODO: Python 3.10+: use &str
     Variable(PyRef<'a, PyVariable>),
 }
 
@@ -237,12 +237,12 @@ impl PyQuerySolutions {
     /// >>> results.serialize(format=QueryResultsFormat.JSON)
     /// b'{"head":{"vars":["s","p","o"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"},"p":{"type":"uri","value":"http://example.com/p"},"o":{"type":"literal","value":"1"}}]}}'
     #[pyo3(signature = (output = None, format = None))]
-    fn serialize<'a>(
+    fn serialize<'py>(
         &mut self,
         output: Option<PyWritableOutput>,
         format: Option<PyQueryResultsFormatInput>,
-        py: Python<'a>,
-    ) -> PyResult<Option<&'a PyBytes>> {
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
@@ -337,12 +337,12 @@ impl PyQueryBoolean {
     /// >>> results.serialize(format=QueryResultsFormat.JSON)
     /// b'{"head":{},"boolean":true}'
     #[pyo3(signature = (output = None, format = None))]
-    fn serialize<'a>(
+    fn serialize<'py>(
         &mut self,
         output: Option<PyWritableOutput>,
         format: Option<PyQueryResultsFormatInput>,
-        py: Python<'a>,
-    ) -> PyResult<Option<&'a PyBytes>> {
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
@@ -415,12 +415,12 @@ impl PyQueryTriples {
     /// >>> results.serialize(format=RdfFormat.N_TRIPLES)
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
     #[pyo3(signature = (output = None, format = None))]
-    fn serialize<'a>(
+    fn serialize<'py>(
         &mut self,
         output: Option<PyWritableOutput>,
         format: Option<PyRdfFormatInput>,
-        py: Python<'a>,
-    ) -> PyResult<Option<&'a PyBytes>> {
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_rdf_format(format, file_path.as_deref())?;
@@ -642,7 +642,7 @@ impl PyQueryResultsFormat {
     /// :type memo: typing.Any
     /// :rtype: QueryResultsFormat
     #[allow(unused_variables)]
-    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ PyAny) -> PyRef<'a, Self> {
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
 }
