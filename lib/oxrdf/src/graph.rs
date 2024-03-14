@@ -16,7 +16,10 @@
 //! assert_eq!(vec![triple], results);
 //!
 //! // Print
-//! assert_eq!(graph.to_string(), "<http://example.com> <http://example.com> <http://example.com> .\n");
+//! assert_eq!(
+//!     graph.to_string(),
+//!     "<http://example.com> <http://example.com> <http://example.com> .\n"
+//! );
 //! # Result::<_,Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
@@ -29,8 +32,9 @@ use std::fmt;
 /// An in-memory [RDF graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph).
 ///
 /// It can accommodate a fairly large number of triples (in the few millions).
-/// Beware: it interns the string and does not do any garbage collection yet:
-/// if you insert and remove a lot of different terms, memory will grow without any reduction.
+///
+/// <div class="warning">It interns the string and does not do any garbage collection yet:
+/// if you insert and remove a lot of different terms, memory will grow without any reduction.</div>
 ///
 /// Usage example:
 /// ```
@@ -48,7 +52,7 @@ use std::fmt;
 /// assert_eq!(vec![triple], results);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Graph {
     dataset: Dataset,
 }
@@ -228,7 +232,7 @@ impl<'a> IntoIterator for &'a Graph {
     type Item = TripleRef<'a>;
     type IntoIter = Iter<'a>;
 
-    fn into_iter(self) -> Iter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
@@ -275,7 +279,7 @@ pub struct Iter<'a> {
 impl<'a> Iterator for Iter<'a> {
     type Item = TripleRef<'a>;
 
-    fn next(&mut self) -> Option<TripleRef<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }

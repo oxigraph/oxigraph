@@ -1,4 +1,4 @@
-#![allow(clippy::unused_unit)]
+#![allow(clippy::mem_forget)]
 use wasm_bindgen::prelude::*;
 
 mod model;

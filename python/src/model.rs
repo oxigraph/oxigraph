@@ -6,8 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::PyTypeInfo;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
+use std::hash::{Hash, Hasher};
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
@@ -16,7 +15,7 @@ use std::vec::IntoIter;
 /// :type value: str
 /// :raises ValueError: if the IRI is not valid according to `RFC 3987 <https://tools.ietf.org/rfc/rfc3987>`_.
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(NamedNode('http://example.com'))
 /// '<http://example.com>'
@@ -96,7 +95,7 @@ impl PyNamedNode {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<Self>>() {
+        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             Ok(op.matches(self.cmp(&other)))
         } else if PyBlankNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
@@ -116,7 +115,7 @@ impl PyNamedNode {
     }
 
     /// :rtype: NamedNode
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -135,11 +134,11 @@ impl PyNamedNode {
 
 /// An RDF `blank node <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node>`_.
 ///
-/// :param value: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node ID is automatically generated).
+/// :param value: the `blank node identifier <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_ (if not present, a random blank node identifier is automatically generated).
 /// :type value: str or None, optional
-/// :raises ValueError: if the blank node ID is invalid according to NTriples, Turtle, and SPARQL grammars.
+/// :raises ValueError: if the blank node identifier is invalid according to NTriples, Turtle, and SPARQL grammars.
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
@@ -198,7 +197,7 @@ impl PyBlankNode {
         .into())
     }
 
-    /// :return: the `blank node ID <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_.
+    /// :return: the `blank node identifier <https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node-identifier>`_.
     /// :rtype: str
     ///
     /// >>> BlankNode("ex").value
@@ -223,7 +222,7 @@ impl PyBlankNode {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<Self>>() {
+        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             eq_compare(self, &other, op)
         } else if PyNamedNode::is_type_of(other)
             || PyLiteral::is_type_of(other)
@@ -243,7 +242,7 @@ impl PyBlankNode {
     }
 
     /// :rtype: BlankNode
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -270,7 +269,7 @@ impl PyBlankNode {
 /// :type language: str or None, optional
 /// :raises ValueError: if the language tag is not valid according to `RFC 5646 <https://tools.ietf.org/rfc/rfc5646>`_ (`BCP 47 <https://tools.ietf.org/rfc/bcp/bcp47>`_).
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(Literal('example'))
 /// '"example"'
@@ -345,7 +344,6 @@ impl PyLiteral {
     /// >>> Literal('example', language='en').language
     /// 'en'
     /// >>> Literal('example').language
-    ///
     #[getter]
     fn language(&self) -> Option<&str> {
         self.inner.language()
@@ -380,7 +378,7 @@ impl PyLiteral {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<Self>>() {
+        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             eq_compare(self, &other, op)
         } else if PyNamedNode::is_type_of(other)
             || PyBlankNode::is_type_of(other)
@@ -406,7 +404,7 @@ impl PyLiteral {
     }
 
     /// :rtype: Literal
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -426,7 +424,7 @@ impl PyLiteral {
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
 #[pyclass(frozen, name = "DefaultGraph", module = "pyoxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct PyDefaultGraph {}
+pub struct PyDefaultGraph;
 
 impl From<PyDefaultGraph> for GraphName {
     fn from(_: PyDefaultGraph) -> Self {
@@ -439,13 +437,6 @@ impl PyDefaultGraph {
     #[new]
     fn new() -> Self {
         Self {}
-    }
-
-    /// :return: the empty string.
-    /// :rtype: str
-    #[getter]
-    fn value(&self) -> &str {
-        ""
     }
 
     fn __str__(&self) -> &str {
@@ -461,7 +452,7 @@ impl PyDefaultGraph {
     }
 
     fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<Self>>() {
+        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             eq_compare(self, &other, op)
         } else if PyNamedNode::is_type_of(other)
             || PyBlankNode::is_type_of(other)
@@ -481,7 +472,7 @@ impl PyDefaultGraph {
     }
 
     /// :rtype: DefaultGraph
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -613,7 +604,7 @@ impl IntoPy<PyObject> for PyTerm {
 /// :param object: the triple object.
 /// :type object: NamedNode or BlankNode or Literal or Triple
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// '<http://example.com> <http://example.com/p> "1"'
@@ -621,7 +612,7 @@ impl IntoPy<PyObject> for PyTerm {
 /// A triple could also be easily destructed into its components:
 ///
 /// >>> (s, p, o) = Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))
-#[pyclass(frozen, name = "Triple", module = "pyoxigraph")]
+#[pyclass(frozen, sequence, name = "Triple", module = "pyoxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyTriple {
     inner: Triple,
@@ -742,7 +733,7 @@ impl PyTriple {
     }
 
     /// :rtype: Triple
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -808,7 +799,7 @@ impl IntoPy<PyObject> for PyGraphName {
 /// :param graph_name: the quad graph name. If not present, the default graph is assumed.
 /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
 ///
-/// The :py:func:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with NTriples, Turtle, and SPARQL:
 ///
 /// >>> str(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
 /// '<http://example.com> <http://example.com/p> "1" <http://example.com/g>'
@@ -819,7 +810,7 @@ impl IntoPy<PyObject> for PyGraphName {
 /// A quad could also be easily destructed into its components:
 ///
 /// >>> (s, p, o, g) = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
-#[pyclass(frozen, name = "Quad", module = "pyoxigraph")]
+#[pyclass(frozen, sequence, name = "Quad", module = "pyoxigraph")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyQuad {
     inner: Quad,
@@ -979,7 +970,7 @@ impl PyQuad {
     }
 
     /// :rtype: Quad
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -1002,7 +993,7 @@ impl PyQuad {
 /// :type value: str
 /// :raises ValueError: if the variable name is invalid according to the SPARQL grammar.
 ///
-/// The :py:func:`str` function provides a serialization compatible with SPARQL:
+/// The :py:class:`str` function provides a serialization compatible with SPARQL:
 ///
 /// >>> str(Variable('foo'))
 /// '?foo'
@@ -1071,7 +1062,7 @@ impl PyVariable {
     }
 
     /// :rtype: Variable
-    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -1100,7 +1091,7 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedNodeRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
             Ok(Self(node))
         } else {
             Err(PyTypeError::new_err(format!(
@@ -1129,9 +1120,9 @@ impl<'a> TryFrom<&'a PyAny> for PyNamedOrBlankNodeRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
             Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
             Ok(Self::BlankNode(node))
         } else {
             Err(PyTypeError::new_err(format!(
@@ -1162,11 +1153,11 @@ impl<'a> TryFrom<&'a PyAny> for PySubjectRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
             Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
             Ok(Self::BlankNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<PyTriple>>() {
+        } else if let Ok(node) = value.extract::<PyRef<'_, PyTriple>>() {
             Ok(Self::Triple(node))
         } else {
             Err(PyTypeError::new_err(format!(
@@ -1205,13 +1196,13 @@ impl<'a> TryFrom<&'a PyAny> for PyTermRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
             Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
             Ok(Self::BlankNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<PyLiteral>>() {
+        } else if let Ok(node) = value.extract::<PyRef<'_, PyLiteral>>() {
             Ok(Self::Literal(node))
-        } else if let Ok(node) = value.extract::<PyRef<PyTriple>>() {
+        } else if let Ok(node) = value.extract::<PyRef<'_, PyTriple>>() {
             Ok(Self::Triple(node))
         } else {
             Err(PyTypeError::new_err(format!(
@@ -1248,11 +1239,11 @@ impl<'a> TryFrom<&'a PyAny> for PyGraphNameRef<'a> {
     type Error = PyErr;
 
     fn try_from(value: &'a PyAny) -> PyResult<Self> {
-        if let Ok(node) = value.extract::<PyRef<PyNamedNode>>() {
+        if let Ok(node) = value.extract::<PyRef<'_, PyNamedNode>>() {
             Ok(Self::NamedNode(node))
-        } else if let Ok(node) = value.extract::<PyRef<PyBlankNode>>() {
+        } else if let Ok(node) = value.extract::<PyRef<'_, PyBlankNode>>() {
             Ok(Self::BlankNode(node))
-        } else if value.extract::<PyRef<PyDefaultGraph>>().is_ok() {
+        } else if value.extract::<PyRef<'_, PyDefaultGraph>>().is_ok() {
             Ok(Self::DefaultGraph)
         } else {
             Err(PyTypeError::new_err(format!(
@@ -1283,7 +1274,7 @@ fn eq_compare_other_type(op: CompareOp) -> PyResult<bool> {
     }
 }
 
-fn hash(t: &impl Hash) -> u64 {
+pub(crate) fn hash(t: &impl Hash) -> u64 {
     let mut s = DefaultHasher::new();
     t.hash(&mut s);
     s.finish()
@@ -1348,7 +1339,7 @@ pub struct TripleComponentsIter {
 
 #[pymethods]
 impl TripleComponentsIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -1364,7 +1355,7 @@ pub struct QuadComponentsIter {
 
 #[pymethods]
 impl QuadComponentsIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 

@@ -1,3 +1,10 @@
+force_explicit_abi = true
+format_code_in_doc_comments = true
+format_macro_matchers = true
+imports_granularity = "Module"
 newline_style = "Unix"
+normalize_comments = true
+normalize_doc_attributes = true
+group_imports = "One"
 use_field_init_shorthand = true
 use_try_shorthand = true

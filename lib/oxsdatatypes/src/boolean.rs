@@ -14,7 +14,8 @@ pub struct Boolean {
 impl Boolean {
     /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
     #[inline]
-    pub fn is_identical_with(&self, other: &Self) -> bool {
+    #[must_use]
+    pub fn is_identical_with(self, other: Self) -> bool {
         self == other
     }
 }
@@ -65,7 +66,7 @@ impl FromStr for Boolean {
     type Err = ParseBoolError;
 
     #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseBoolError> {
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
         Ok(match input {
             "true" | "1" => true,
             "false" | "0" => false,
@@ -84,6 +85,8 @@ impl fmt::Display for Boolean {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]

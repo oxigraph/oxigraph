@@ -1,9 +1,4 @@
-#![allow(
-    dead_code,
-    clippy::inherent_to_string,
-    clippy::unused_self,
-    clippy::use_self
-)]
+#![allow(dead_code, clippy::inherent_to_string, clippy::unused_self)]
 
 use crate::format_err;
 use crate::utils::to_err;
@@ -56,7 +51,7 @@ pub fn literal(
 
 #[wasm_bindgen(js_name = defaultGraph)]
 pub fn default_graph() -> JsDefaultGraph {
-    JsDefaultGraph {}
+    JsDefaultGraph
 }
 
 #[wasm_bindgen(js_name = variable)]
@@ -302,7 +297,7 @@ impl From<JsLiteral> for Term {
 
 #[wasm_bindgen(js_name = DefaultGraph)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct JsDefaultGraph {}
+pub struct JsDefaultGraph;
 
 #[wasm_bindgen(js_class = DefaultGraph)]
 impl JsDefaultGraph {
@@ -313,7 +308,7 @@ impl JsDefaultGraph {
 
     #[wasm_bindgen(getter)]
     pub fn value(&self) -> String {
-        "".to_owned()
+        String::new()
     }
 
     #[wasm_bindgen(js_name = toString)]
@@ -393,7 +388,7 @@ impl JsQuad {
 
     #[wasm_bindgen(getter)]
     pub fn value(&self) -> String {
-        "".to_owned()
+        String::new()
     }
 
     #[wasm_bindgen(getter = subject)]
@@ -532,7 +527,7 @@ impl From<GraphName> for JsTerm {
         match name {
             GraphName::NamedNode(node) => node.into(),
             GraphName::BlankNode(node) => node.into(),
-            GraphName::DefaultGraph => Self::DefaultGraph(JsDefaultGraph {}),
+            GraphName::DefaultGraph => Self::DefaultGraph(JsDefaultGraph),
         }
     }
 }
@@ -564,7 +559,7 @@ impl From<Quad> for JsTerm {
 impl TryFrom<JsTerm> for NamedNode {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Err(format_err!(
@@ -588,7 +583,7 @@ impl TryFrom<JsTerm> for NamedNode {
 impl TryFrom<JsTerm> for NamedOrBlankNode {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
@@ -614,7 +609,7 @@ impl TryFrom<JsTerm> for NamedOrBlankNode {
 impl TryFrom<JsTerm> for Subject {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
@@ -637,7 +632,7 @@ impl TryFrom<JsTerm> for Subject {
 impl TryFrom<JsTerm> for Term {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
@@ -657,7 +652,7 @@ impl TryFrom<JsTerm> for Term {
 impl TryFrom<JsTerm> for GraphName {
     type Error = JsValue;
 
-    fn try_from(value: JsTerm) -> Result<Self, JsValue> {
+    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
         match value {
             JsTerm::NamedNode(node) => Ok(node.into()),
             JsTerm::BlankNode(node) => Ok(node.into()),
@@ -744,7 +739,7 @@ impl FromJsConverter {
                         ))
                     }
                 }
-                "DefaultGraph" => Ok(JsTerm::DefaultGraph(JsDefaultGraph {})),
+                "DefaultGraph" => Ok(JsTerm::DefaultGraph(JsDefaultGraph)),
                 "Variable" => Ok(Variable::new(
                     Reflect::get(value, &self.value)?
                         .as_string()
@@ -754,8 +749,7 @@ impl FromJsConverter {
                 .into()),
                 "Quad" => Ok(self.to_quad(value)?.into()),
                 _ => Err(format_err!(
-                    "The termType {} is not supported by Oxigraph",
-                    term_type
+                    "The termType {term_type} is not supported by Oxigraph"
                 )),
             }
         } else if term_type.is_undefined() {

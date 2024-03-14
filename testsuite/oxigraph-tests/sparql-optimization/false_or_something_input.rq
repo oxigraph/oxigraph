@@ -1,0 +1,4 @@
+SELECT ?o1 ?o2 WHERE {
+    ?s ?p ?o1 , ?o2 .
+    FILTER(false || ?o1 = ?o2)
+}

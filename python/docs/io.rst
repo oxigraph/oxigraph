@@ -1,14 +1,21 @@
 RDF Parsing and Serialization
 =============================
+.. py:currentmodule:: pyoxigraph
 
 Oxigraph provides functions to parse and serialize RDF files:
 
 
 Parsing
 """""""
-.. autofunction:: pyoxigraph.parse
+.. autofunction:: parse
 
 
 Serialization
 """""""""""""
-.. autofunction:: pyoxigraph.serialize
+.. autofunction:: serialize
+
+
+Formats
+"""""""
+.. autoclass:: RdfFormat
+    :members:

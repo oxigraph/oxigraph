@@ -1,14 +1,18 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::io::{allow_threads_unsafe, map_io_err, map_parse_error, PyReadable, PyWritable};
+use crate::io::{
+    allow_threads_unsafe, lookup_rdf_format, map_parse_error, PyRdfFormatInput, PyReadable,
+    PyReadableInput, PyWritable, PyWritableOutput,
+};
 use crate::model::*;
 use crate::sparql::*;
-use oxigraph::io::{DatasetFormat, GraphFormat};
+use oxigraph::io::RdfParser;
 use oxigraph::model::{GraphName, GraphNameRef};
 use oxigraph::sparql::Update;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
-use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::path::PathBuf;
 
 /// RDF store.
@@ -27,10 +31,10 @@ use std::path::PathBuf;
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
 ///              In this case, the store data are kept in memory and never written on disk.
-/// :type path: str or pathlib.Path or None, optional
-/// :raises IOError: if the target directory contains invalid data or could not be accessed.
+/// :type path: str or os.PathLike[str] or None, optional
+/// :raises OSError: if the target directory contains invalid data or could not be accessed.
 ///
-/// The :py:func:`str` function provides a serialization of the store in NQuads:
+/// The :py:class:`str` function provides a serialization of the store in NQuads:
 ///
 /// >>> store = Store()
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -44,6 +48,7 @@ pub struct PyStore {
 
 #[pymethods]
 impl PyStore {
+    #[cfg(not(target_family = "wasm"))]
     #[new]
     #[pyo3(signature = (path = None))]
     fn new(path: Option<PathBuf>, py: Python<'_>) -> PyResult<Self> {
@@ -59,6 +64,16 @@ impl PyStore {
         })
     }
 
+    #[cfg(target_family = "wasm")]
+    #[new]
+    fn new(py: Python<'_>) -> PyResult<Self> {
+        py.allow_threads(|| {
+            Ok(Self {
+                inner: Store::new().map_err(map_storage_error)?,
+            })
+        })
+    }
+
     /// Opens a read-only store from disk.
     ///
     /// Opening as read-only while having an other process writing the database is undefined behavior.
@@ -68,7 +83,8 @@ impl PyStore {
     /// :type path: str
     /// :return: the opened store.
     /// :rtype: Store
-    /// :raises IOError: if the target directory contains invalid data or could not be accessed.
+    /// :raises OSError: if the target directory contains invalid data or could not be accessed.
+    #[cfg(not(target_family = "wasm"))]
     #[staticmethod]
     fn read_only(path: &str, py: Python<'_>) -> PyResult<Self> {
         py.allow_threads(|| {
@@ -92,7 +108,8 @@ impl PyStore {
     /// :type secondary_path: str or None, optional
     /// :return: the opened store.
     /// :rtype: Store
-    /// :raises IOError: if the target directories contain invalid data or could not be accessed.
+    /// :raises OSError: if the target directories contain invalid data or could not be accessed.
+    #[cfg(not(target_family = "wasm"))]
     #[staticmethod]
     #[pyo3(signature = (primary_path, secondary_path = None))]
     fn secondary(
@@ -117,7 +134,7 @@ impl PyStore {
     /// :param quad: the quad to add.
     /// :type quad: Quad
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad insertion.
+    /// :raises OSError: if an error happens during the quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -136,9 +153,9 @@ impl PyStore {
     /// The :py:func:`bulk_extend` method is also available for much faster loading of a large number of quads but without transactional guarantees.
     ///
     /// :param quads: the quads to add.
-    /// :type quads: iterable(Quad)
+    /// :type quads: collections.abc.Iterable[Quad]
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad insertion.
+    /// :raises OSError: if an error happens during the quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.extend([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
@@ -161,14 +178,15 @@ impl PyStore {
     /// Only a part of the data might be written to the store.
     ///
     /// :param quads: the quads to add.
-    /// :type quads: iterable(Quad)
+    /// :type quads: collections.abc.Iterable[Quad]
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad insertion.
+    /// :raises OSError: if an error happens during the quad insertion.
     ///
     /// >>> store = Store()
     /// >>> store.bulk_extend([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
+    #[cfg(not(target_family = "wasm"))]
     fn bulk_extend(&self, quads: &PyAny) -> PyResult<()> {
         self.inner
             .bulk_loader()
@@ -183,7 +201,7 @@ impl PyStore {
     /// :param quad: the quad to remove.
     /// :type quad: Quad
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the quad removal.
+    /// :raises OSError: if an error happens during the quad removal.
     ///
     /// >>> store = Store()
     /// >>> quad = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
@@ -209,8 +227,8 @@ impl PyStore {
     /// :param graph_name: the quad graph name. To match only the default graph, use :py:class:`DefaultGraph`. To match everything use :py:const:`None`.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :return: an iterator of the quads matching the pattern.
-    /// :rtype: iterator(Quad)
-    /// :raises IOError: if an I/O error happens during the quads lookup.
+    /// :rtype: collections.abc.Iterator[Quad]
+    /// :raises OSError: if an error happens during the quads lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -245,13 +263,13 @@ impl PyStore {
     /// :param use_default_graph_as_union: if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
     /// :type use_default_graph_as_union: bool, optional
     /// :param default_graph: list of the graphs that should be used as the query default graph. By default, the store default graph is used.
-    /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list(NamedNode or BlankNode or DefaultGraph) or None, optional
+    /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list[NamedNode or BlankNode or DefaultGraph] or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
-    /// :type named_graphs: list(NamedNode or BlankNode) or None, optional
+    /// :type named_graphs: list[NamedNode or BlankNode] or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
-    /// :rtype: QuerySolutions or QueryTriples or bool
+    /// :rtype: QuerySolutions or QueryBoolean or QueryTriples
     /// :raises SyntaxError: if the provided query is invalid.
-    /// :raises IOError: if an I/O error happens while reading the store.
+    /// :raises OSError: if an error happens while reading the store.
     ///
     /// ``SELECT`` query:
     ///
@@ -271,7 +289,7 @@ impl PyStore {
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
-    /// >>> store.query('ASK { ?s ?p ?o }')
+    /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
     #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None))]
     fn query(
@@ -289,9 +307,10 @@ impl PyStore {
             use_default_graph_as_union,
             default_graph,
             named_graphs,
+            py,
         )?;
         let results =
-            allow_threads_unsafe(|| self.inner.query(query)).map_err(map_evaluation_error)?;
+            allow_threads_unsafe(py, || self.inner.query(query)).map_err(map_evaluation_error)?;
         Ok(query_results_to_python(py, results))
     }
 
@@ -305,7 +324,7 @@ impl PyStore {
     /// :type base_iri: str or None, optional
     /// :rtype: None
     /// :raises SyntaxError: if the provided update is invalid.
-    /// :raises IOError: if an I/O error happens while reading the store.
+    /// :raises OSError: if an error happens while reading the store.
     ///
     /// ``INSERT DATA`` update:
     ///
@@ -347,38 +366,42 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
+    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
     ///
-    /// It supports also some MIME type aliases.
+    /// It supports also some media type and extension aliases.
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io(bytes) or io(str) or str or pathlib.Path
-    /// :param mime_type: the MIME type of the RDF serialization.
-    /// :type mime_type: str
+    /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
+    /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: RdfFormat or None, optional
+    /// :param path: The file path to read from. Replaces the ``input`` parameter.
+    /// :type path: str or os.PathLike[str] or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
+    /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
-    /// :raises IOError: if an I/O error happens during a quad insertion.
+    /// :raises OSError: if an error happens during a quad insertion or if a system error happens while reading the file.
     ///
     /// >>> store = Store()
-    /// >>> store.load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> store.load(input='<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
     fn load(
         &self,
-        input: PyObject,
-        mime_type: &str,
+        input: Option<PyReadableInput>,
+        format: Option<PyRdfFormatInput>,
+        path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
@@ -388,35 +411,21 @@ impl PyStore {
         } else {
             None
         };
-        let input = if let Ok(path) = input.extract::<PathBuf>(py) {
-            PyReadable::from_file(&path, py).map_err(map_io_err)?
-        } else {
-            PyReadable::from_data(input, py)
-        };
+        let input = PyReadable::from_args(&path, input, py)?;
+        let format = lookup_rdf_format(format, path.as_deref())?;
         py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-                self.inner
-                    .load_graph(
-                        input,
-                        graph_format,
-                        to_graph_name.as_ref().unwrap_or(&GraphName::DefaultGraph),
-                        base_iri,
-                    )
-                    .map_err(map_loader_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if to_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .load_dataset(input, dataset_format, base_iri)
-                    .map_err(map_loader_error)
-            } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {mime_type}"
-                )))
+            let mut parser = RdfParser::from_format(format);
+            if let Some(base_iri) = base_iri {
+                parser = parser
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
             }
+            if let Some(to_graph_name) = to_graph_name {
+                parser = parser.with_default_graph(to_graph_name);
+            }
+            self.inner
+                .load_from_read(parser, input)
+                .map_err(|e| map_loader_error(e, path))
         })
     }
 
@@ -429,38 +438,42 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
+    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
     ///
-    /// It supports also some MIME type aliases.
+    /// It supports also some media type and extension aliases.
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param input: The binary I/O object or file path to read from. For example, it could be a file path as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
-    /// :type input: io(bytes) or io(str) or str or pathlib.Path
-    /// :param mime_type: the MIME type of the RDF serialization.
-    /// :type mime_type: str
+    /// :param input: The :py:class:`str`, :py:class:`bytes` or I/O object to read from. For example, it could be the file content as a string or a file reader opened in binary mode with ``open('my_file.ttl', 'rb')``.
+    /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
+    /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: str or None, optional
+    /// :param path: The file path to read from. Replaces the ``input`` parameter.
+    /// :type path: str or os.PathLike[str] or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
     /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported or the `to_graph` parameter is given with a quad file.
+    /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
-    /// :raises IOError: if an I/O error happens during a quad insertion.
+    /// :raises OSError: if an error happens during a quad insertion or if a system error happens while reading the file.
     ///
     /// >>> store = Store()
-    /// >>> store.bulk_load(io.BytesIO(b'<foo> <p> "1" .'), "text/turtle", base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
+    /// >>> store.bulk_load(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[pyo3(signature = (input, mime_type, *, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
     fn bulk_load(
         &self,
-        input: PyObject,
-        mime_type: &str,
+        input: Option<PyReadableInput>,
+        format: Option<PyRdfFormatInput>,
+        path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<&PyAny>,
         py: Python<'_>,
@@ -470,37 +483,21 @@ impl PyStore {
         } else {
             None
         };
-        let input = if let Ok(path) = input.extract::<PathBuf>(py) {
-            PyReadable::from_file(&path, py).map_err(map_io_err)?
-        } else {
-            PyReadable::from_data(input, py)
-        };
+        let input = PyReadable::from_args(&path, input, py)?;
+        let format = lookup_rdf_format(format, path.as_deref())?;
         py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-                self.inner
-                    .bulk_loader()
-                    .load_graph(
-                        input,
-                        graph_format,
-                        &to_graph_name.unwrap_or(GraphName::DefaultGraph),
-                        base_iri,
-                    )
-                    .map_err(map_loader_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if to_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .bulk_loader()
-                    .load_dataset(input, dataset_format, base_iri)
-                    .map_err(map_loader_error)
-            } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {mime_type}"
-                )))
+            let mut parser = RdfParser::from_format(format);
+            if let Some(base_iri) = base_iri {
+                parser = parser
+                    .with_base_iri(base_iri)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
             }
+            if let Some(to_graph_name) = to_graph_name {
+                parser = parser.with_default_graph(to_graph_name);
+            }
+            self.inner
+                .load_from_read(parser, input)
+                .map_err(|e| map_loader_error(e, path))
         })
     }
 
@@ -508,81 +505,76 @@ impl PyStore {
     ///
     /// It currently supports the following formats:
     ///
-    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (``application/n-triples``)
-    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (``application/n-quads``)
-    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (``text/turtle``)
-    /// * `TriG <https://www.w3.org/TR/trig/>`_ (``application/trig``)
-    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (``application/rdf+xml``)
+    /// * `N-Triples <https://www.w3.org/TR/n-triples/>`_ (:py:attr:`RdfFormat.N_TRIPLES`)
+    /// * `N-Quads <https://www.w3.org/TR/n-quads/>`_ (:py:attr:`RdfFormat.N_QUADS`)
+    /// * `Turtle <https://www.w3.org/TR/turtle/>`_ (:py:attr:`RdfFormat.TURTLE`)
+    /// * `TriG <https://www.w3.org/TR/trig/>`_ (:py:attr:`RdfFormat.TRIG`)
+    /// * `N3 <https://w3c.github.io/N3/spec/>`_ (:py:attr:`RdfFormat.N3`)
+    /// * `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_ (:py:attr:`RdfFormat.RDF_XML`)
     ///
-    /// It supports also some MIME type aliases.
+    /// It supports also some media type and extension aliases.
     /// For example, ``application/turtle`` could also be used for `Turtle <https://www.w3.org/TR/turtle/>`_
-    /// and ``application/xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
+    /// and ``application/xml`` or ``xml`` for `RDF/XML <https://www.w3.org/TR/rdf-syntax-grammar/>`_.
     ///
-    /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``.
-    /// :type output: io(bytes) or str or pathlib.Path
-    /// :param mime_type: the MIME type of the RDF serialization.
-    /// :type mime_type: str
-    /// :param from_graph: if a triple based format is requested, the store graph from which dump the triples. By default, the default graph is used.
+    /// :param output: The binary I/O object or file path to write to. For example, it could be a file path as a string or a file writer opened in binary mode with ``open('my_file.ttl', 'wb')``. If :py:const:`None`, a :py:class:`bytes` buffer is returned with the serialized content.
+    /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
+    /// :param format: the format of the RDF serialization.  If :py:const:`None`, the format is guessed from the file name extension.
+    /// :type format: RdfFormat or None, optional
+    /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
-    /// :rtype: None
-    /// :raises ValueError: if the MIME type is not supported or the `from_graph` parameter is given with a quad syntax.
-    /// :raises IOError: if an I/O error happens during a quad lookup
+    /// :return: :py:class:`bytes` with the serialization if the ``output`` parameter is :py:const:`None`, :py:const:`None` if ``output`` is set.
+    /// :rtype: bytes or None
+    /// :raises ValueError: if the format is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
+    /// :raises OSError: if an error happens during a quad lookup or file writing.
     ///
+    /// >>> store = Store()
+    /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
+    /// >>> store.dump(format=RdfFormat.TRIG)
+    /// b'<http://example.com> <http://example.com/p> "1" .\n'
+    ///
+    /// >>> import io
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> output = io.BytesIO()
-    /// >>> store.dump(output, "text/turtle", from_graph=NamedNode("http://example.com/g"))
+    /// >>> store.dump(output, RdfFormat.TURTLE, from_graph=NamedNode("http://example.com/g"))
     /// >>> output.getvalue()
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
-    #[pyo3(signature = (output, mime_type, *, from_graph = None))]
-    fn dump(
+    #[pyo3(signature = (output = None, format = None, *, from_graph = None))]
+    fn dump<'a>(
         &self,
-        output: PyObject,
-        mime_type: &str,
+        output: Option<PyWritableOutput>,
+        format: Option<PyRdfFormatInput>,
         from_graph: Option<&PyAny>,
-        py: Python<'_>,
-    ) -> PyResult<()> {
-        let output = if let Ok(path) = output.extract::<PathBuf>(py) {
-            PyWritable::from_file(&path, py).map_err(map_io_err)?
-        } else {
-            PyWritable::from_data(output)
-        };
+        py: Python<'a>,
+    ) -> PyResult<Option<&'a PyBytes>> {
         let from_graph_name = if let Some(graph_name) = from_graph {
             Some(GraphName::from(&PyGraphNameRef::try_from(graph_name)?))
         } else {
             None
         };
-        py.allow_threads(|| {
-            if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-                self.inner
-                    .dump_graph(
-                        output,
-                        graph_format,
-                        &from_graph_name.unwrap_or(GraphName::DefaultGraph),
-                    )
+        PyWritable::do_write(
+            |output, file_path| {
+                py.allow_threads(|| {
+                    let format = lookup_rdf_format(format, file_path.as_deref())?;
+                    if let Some(from_graph_name) = &from_graph_name {
+                        self.inner
+                            .dump_graph_to_write(from_graph_name, format, output)
+                    } else {
+                        self.inner.dump_to_write(format, output)
+                    }
                     .map_err(map_serializer_error)
-            } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-                if from_graph_name.is_some() {
-                    return Err(PyValueError::new_err(
-                        "The target graph name parameter is not available for dataset formats",
-                    ));
-                }
-                self.inner
-                    .dump_dataset(output, dataset_format)
-                    .map_err(map_serializer_error)
-            } else {
-                Err(PyValueError::new_err(format!(
-                    "Not supported MIME type: {mime_type}"
-                )))
-            }
-        })
+                })
+            },
+            output,
+            py,
+        )
     }
 
     /// Returns an iterator over all the store named graphs.
     ///
     /// :return: an iterator of the store graph names.
-    /// :rtype: iterator(NamedNode or BlankNode)
-    /// :raises IOError: if an I/O error happens during the named graphs lookup.
+    /// :rtype: collections.abc.Iterator[NamedNode or BlankNode]
+    /// :raises OSError: if an error happens during the named graphs lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -599,7 +591,7 @@ impl PyStore {
     /// :param graph_name: the name of the named graph.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: bool
-    /// :raises IOError: if an I/O error happens during the named graph lookup.
+    /// :raises OSError: if an error happens during the named graph lookup.
     ///
     /// >>> store = Store()
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
@@ -620,7 +612,7 @@ impl PyStore {
     /// :param graph_name: the name of the name graph to add.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the named graph insertion.
+    /// :raises OSError: if an error happens during the named graph insertion.
     ///
     /// >>> store = Store()
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
@@ -647,7 +639,7 @@ impl PyStore {
     /// :param graph_name: the name of the name graph to clear.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the operation.
+    /// :raises OSError: if an error happens during the operation.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -672,7 +664,7 @@ impl PyStore {
     /// :param graph_name: the name of the name graph to remove.
     /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the named graph removal.
+    /// :raises OSError: if an error happens during the named graph removal.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -698,7 +690,7 @@ impl PyStore {
     /// Clears the store by removing all its contents.
     ///
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the operation.
+    /// :raises OSError: if an error happens during the operation.
     ///
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
@@ -716,7 +708,8 @@ impl PyStore {
     /// Flushes are automatically done using background threads but might lag a little bit.
     ///
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the flush.
+    /// :raises OSError: if an error happens during the flush.
+    #[cfg(not(target_family = "wasm"))]
     fn flush(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.flush().map_err(map_storage_error))
     }
@@ -726,7 +719,8 @@ impl PyStore {
     /// Useful to call after a batch upload or another similar operation.
     ///
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the optimization.
+    /// :raises OSError: if an error happens during the optimization.
+    #[cfg(not(target_family = "wasm"))]
     fn optimize(&self, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| self.inner.optimize().map_err(map_storage_error))
     }
@@ -749,10 +743,11 @@ impl PyStore {
     /// If you want to move your data to another RDF storage system, you should have a look at the :py:func:`dump_dataset` function instead.
     ///
     /// :param target_directory: the directory name to save the database to.
-    /// :type target_directory: str
+    /// :type target_directory: str or os.PathLike[str]
     /// :rtype: None
-    /// :raises IOError: if an I/O error happens during the backup.
-    fn backup(&self, target_directory: &str, py: Python<'_>) -> PyResult<()> {
+    /// :raises OSError: if an error happens during the backup.
+    #[cfg(not(target_family = "wasm"))]
+    fn backup(&self, target_directory: PathBuf, py: Python<'_>) -> PyResult<()> {
         py.allow_threads(|| {
             self.inner
                 .backup(target_directory)
@@ -790,7 +785,7 @@ pub struct QuadIter {
 
 #[pymethods]
 impl QuadIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -809,7 +804,7 @@ pub struct GraphNameIter {
 
 #[pymethods]
 impl GraphNameIter {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<Self> {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -862,22 +857,24 @@ pub fn extract_quads_pattern<'a>(
 
 pub fn map_storage_error(error: StorageError) -> PyErr {
     match error {
-        StorageError::Io(error) => PyIOError::new_err(error.to_string()),
+        StorageError::Io(error) => error.into(),
         _ => PyRuntimeError::new_err(error.to_string()),
     }
 }
 
-pub fn map_loader_error(error: LoaderError) -> PyErr {
+pub fn map_loader_error(error: LoaderError, file_path: Option<PathBuf>) -> PyErr {
     match error {
         LoaderError::Storage(error) => map_storage_error(error),
-        LoaderError::Parsing(error) => map_parse_error(error),
+        LoaderError::Parsing(error) => map_parse_error(error, file_path),
+        LoaderError::InvalidBaseIri { .. } => PyValueError::new_err(error.to_string()),
     }
 }
 
 pub fn map_serializer_error(error: SerializerError) -> PyErr {
     match error {
         SerializerError::Storage(error) => map_storage_error(error),
-        SerializerError::Io(error) => PyIOError::new_err(error.to_string()),
+        SerializerError::Io(error) => error.into(),
+        SerializerError::DatasetFormatExpected(_) => PyValueError::new_err(error.to_string()),
     }
 }
 

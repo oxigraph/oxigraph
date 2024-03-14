@@ -1,0 +1,1 @@
+<http://example.com/foo> <http://example.com/2/test> "bar"^^<http://www.w3.org/2001/XMLSchema#string> .

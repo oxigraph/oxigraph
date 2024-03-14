@@ -1,14 +1,11 @@
-#![allow(clippy::use_self)]
-
 use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
 use js_sys::{Array, Map};
-use oxigraph::io::{DatasetFormat, GraphFormat};
+use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::Store;
-use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(js_name = Store)]
@@ -27,7 +24,7 @@ impl JsStore {
             store: Store::new().map_err(to_err)?,
         };
         if let Some(quads) = quads {
-            for quad in quads.iter() {
+            for quad in &*quads {
                 store.add(quad)?;
             }
         }
@@ -145,10 +142,11 @@ impl JsStore {
     pub fn load(
         &self,
         data: &str,
-        mime_type: &str,
+        format: &str,
         base_iri: &JsValue,
         to_graph_name: &JsValue,
     ) -> Result<(), JsValue> {
+        let format = rdf_format(format)?;
         let base_iri = if base_iri.is_null() || base_iri.is_undefined() {
             None
         } else if base_iri.is_string() {
@@ -161,65 +159,41 @@ impl JsStore {
             ));
         };
 
-        let to_graph_name =
-            if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
-                Some(graph_name.try_into()?)
-            } else {
-                None
-            };
-
-        if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-            self.store
-                .load_graph(
-                    Cursor::new(data),
-                    graph_format,
-                    &to_graph_name.unwrap_or(GraphName::DefaultGraph),
-                    base_iri.as_deref(),
-                )
-                .map_err(to_err)
-        } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-            if to_graph_name.is_some() {
-                return Err(format_err!(
-                    "The target graph name parameter is not available for dataset formats"
-                ));
-            }
-            self.store
-                .load_dataset(Cursor::new(data), dataset_format, base_iri.as_deref())
-                .map_err(to_err)
-        } else {
-            Err(format_err!("Not supported MIME type: {}", mime_type))
+        let mut parser = RdfParser::from_format(format);
+        if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
+            parser = parser.with_default_graph(GraphName::try_from(to_graph_name)?);
         }
+        if let Some(base_iri) = base_iri {
+            parser = parser.with_base_iri(base_iri).map_err(to_err)?;
+        }
+        self.store
+            .load_from_read(parser, data.as_bytes())
+            .map_err(to_err)
     }
 
-    pub fn dump(&self, mime_type: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
-        let from_graph_name =
-            if let Some(graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-                Some(graph_name.try_into()?)
-            } else {
-                None
-            };
-
-        let mut buffer = Vec::new();
-        if let Some(graph_format) = GraphFormat::from_media_type(mime_type) {
-            self.store
-                .dump_graph(
-                    &mut buffer,
-                    graph_format,
-                    &from_graph_name.unwrap_or(GraphName::DefaultGraph),
+    pub fn dump(&self, format: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
+        let format = rdf_format(format)?;
+        let buffer =
+            if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
+                self.store.dump_graph_to_write(
+                    &GraphName::try_from(from_graph_name)?,
+                    format,
+                    Vec::new(),
                 )
-                .map_err(to_err)?;
-        } else if let Some(dataset_format) = DatasetFormat::from_media_type(mime_type) {
-            if from_graph_name.is_some() {
-                return Err(format_err!(
-                    "The target graph name parameter is not available for dataset formats"
-                ));
+            } else {
+                self.store.dump_to_write(format, Vec::new())
             }
-            self.store
-                .dump_dataset(&mut buffer, dataset_format)
-                .map_err(to_err)?;
-        } else {
-            return Err(format_err!("Not supported MIME type: {}", mime_type));
-        }
+            .map_err(to_err)?;
         String::from_utf8(buffer).map_err(to_err)
+    }
+}
+
+fn rdf_format(format: &str) -> Result<RdfFormat, JsValue> {
+    if format.contains('/') {
+        RdfFormat::from_media_type(format)
+            .ok_or_else(|| format_err!("Not supported RDF format media type: {format}"))
+    } else {
+        RdfFormat::from_extension(format)
+            .ok_or_else(|| format_err!("Not supported RDF format extension: {format}"))
     }
 }

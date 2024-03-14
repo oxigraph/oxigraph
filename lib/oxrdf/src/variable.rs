@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::error::Error;
 use std::fmt;
 
 /// A [SPARQL query](https://www.w3.org/TR/sparql11-query/) owned variable.
@@ -8,10 +7,7 @@ use std::fmt;
 /// ```
 /// use oxrdf::{Variable, VariableNameParseError};
 ///
-/// assert_eq!(
-///     "?foo",
-///     Variable::new("foo")?.to_string()
-/// );
+/// assert_eq!("?foo", Variable::new("foo")?.to_string());
 /// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -67,12 +63,9 @@ impl fmt::Display for Variable {
 ///
 /// The default string formatter is returning a SPARQL compatible representation:
 /// ```
-/// use oxrdf::{VariableRef, VariableNameParseError};
+/// use oxrdf::{VariableNameParseError, VariableRef};
 ///
-/// assert_eq!(
-///     "?foo",
-///     VariableRef::new("foo")?.to_string()
-/// );
+/// assert_eq!("?foo", VariableRef::new("foo")?.to_string());
 /// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
@@ -96,12 +89,12 @@ impl<'a> VariableRef<'a> {
     ///
     /// [`Variable::new()`] is a safe version of this constructor and should be used for untrusted data.
     #[inline]
-    pub fn new_unchecked(name: &'a str) -> Self {
+    pub const fn new_unchecked(name: &'a str) -> Self {
         Self { name }
     }
 
     #[inline]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(self) -> &'a str {
         self.name
     }
 
@@ -169,7 +162,7 @@ impl PartialOrd<VariableRef<'_>> for Variable {
 
 fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> {
     let mut chars = id.chars();
-    let front = chars.next().ok_or(VariableNameParseError {})?;
+    let front = chars.next().ok_or(VariableNameParseError)?;
     match front {
         '0'..='9'
         | '_'
@@ -188,13 +181,13 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
         | '\u{F900}'..='\u{FDCF}'
         | '\u{FDF0}'..='\u{FFFD}'
         | '\u{10000}'..='\u{EFFFF}' => (),
-        _ => return Err(VariableNameParseError {}),
+        _ => return Err(VariableNameParseError),
     }
     for c in chars {
         match c {
             '0'..='9'
             | '\u{00B7}'
-            | '\u{00300}'..='\u{036F}'
+            | '\u{0300}'..='\u{036F}'
             | '\u{203F}'..='\u{2040}'
             | '_'
             | 'A'..='Z'
@@ -211,21 +204,13 @@ fn validate_variable_identifier(id: &str) -> Result<(), VariableNameParseError> 
             | '\u{F900}'..='\u{FDCF}'
             | '\u{FDF0}'..='\u{FFFD}'
             | '\u{10000}'..='\u{EFFFF}' => (),
-            _ => return Err(VariableNameParseError {}),
+            _ => return Err(VariableNameParseError),
         }
     }
     Ok(())
 }
 
 /// An error raised during [`Variable`] name validation.
-#[derive(Debug)]
-pub struct VariableNameParseError {}
-
-impl fmt::Display for VariableNameParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "The variable name is invalid")
-    }
-}
-
-impl Error for VariableNameParseError {}
+#[derive(Debug, thiserror::Error)]
+#[error("The variable name is invalid")]
+pub struct VariableNameParseError;

@@ -1,22 +1,31 @@
 [package]
-name = "oxigraph_testsuite"
+name = "oxigraph-testsuite"
 version = "0.0.0"
-authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-license = "MIT OR Apache-2.0"
-readme = "../README.md"
-repository = "https://github.com/oxigraph/oxigraph"
+authors.workspace = true
+license.workspace = true
 description = """
 Implementation of W3C testsuites for Oxigraph
 """
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 publish = false
 
 [dependencies]
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
-time = { version = "0.3", features = ["formatting"] }
-oxigraph = { path = "../lib" }
-text-diff = "0.4"
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+oxigraph.workspace = true
+oxttl.workspace = true
+spargebra.workspace = true
+sparopt.workspace = true
+text-diff.workspace = true
+time = { workspace = true, features = ["formatting"] }
 
 [dev-dependencies]
-criterion = "0.4"
+codspeed-criterion-compat.workspace = true
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "parser"
+harness = false

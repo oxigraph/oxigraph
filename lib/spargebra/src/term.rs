@@ -48,7 +48,7 @@ impl TryFrom<Subject> for GroundSubject {
     type Error = ();
 
     #[inline]
-    fn try_from(subject: Subject) -> Result<Self, ()> {
+    fn try_from(subject: Subject) -> Result<Self, Self::Error> {
         match subject {
             Subject::NamedNode(t) => Ok(t.into()),
             Subject::BlankNode(_) => Err(()),
@@ -62,7 +62,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
     type Error = ();
 
     #[inline]
-    fn try_from(term: GroundTerm) -> Result<Self, ()> {
+    fn try_from(term: GroundTerm) -> Result<Self, Self::Error> {
         match term {
             GroundTerm::NamedNode(t) => Ok(t.into()),
             GroundTerm::Literal(_) => Err(()),
@@ -125,7 +125,7 @@ impl TryFrom<Term> for GroundTerm {
     type Error = ();
 
     #[inline]
-    fn try_from(term: Term) -> Result<Self, ()> {
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
         match term {
             Term::NamedNode(t) => Ok(t.into()),
             Term::BlankNode(_) => Err(()),
@@ -141,7 +141,7 @@ impl TryFrom<Term> for GroundTerm {
 /// The default string formatter is returning a N-Quads representation.
 ///
 /// ```
-/// use spargebra::term::{NamedNode, GroundTriple};
+/// use spargebra::term::{GroundTriple, NamedNode};
 ///
 /// assert_eq!(
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
@@ -149,7 +149,8 @@ impl TryFrom<Term> for GroundTerm {
 ///         subject: NamedNode::new("http://example.com/s")?.into(),
 ///         predicate: NamedNode::new("http://example.com/p")?,
 ///         object: NamedNode::new("http://example.com/o")?.into(),
-///     }.to_string()
+///     }
+///     .to_string()
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
@@ -171,7 +172,7 @@ impl TryFrom<Triple> for GroundTriple {
     type Error = ();
 
     #[inline]
-    fn try_from(triple: Triple) -> Result<Self, ()> {
+    fn try_from(triple: Triple) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: triple.subject.try_into()?,
             predicate: triple.predicate,
@@ -183,9 +184,10 @@ impl TryFrom<Triple> for GroundTriple {
 /// A possible graph name.
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub enum GraphName {
     NamedNode(NamedNode),
+    #[default]
     DefaultGraph,
 }
 
@@ -194,7 +196,7 @@ impl GraphName {
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
             Self::NamedNode(node) => write!(f, "{node}"),
-            Self::DefaultGraph => write!(f, "default"),
+            Self::DefaultGraph => f.write_str("default"),
         }
     }
 }
@@ -204,7 +206,7 @@ impl fmt::Display for GraphName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
         }
     }
 }
@@ -220,7 +222,7 @@ impl TryFrom<GraphNamePattern> for GraphName {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: GraphNamePattern) -> Result<Self, ()> {
+    fn try_from(pattern: GraphNamePattern) -> Result<Self, Self::Error> {
         match pattern {
             GraphNamePattern::NamedNode(t) => Ok(t.into()),
             GraphNamePattern::DefaultGraph => Ok(Self::DefaultGraph),
@@ -259,9 +261,9 @@ impl Quad {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
         write!(
             f,
@@ -269,7 +271,7 @@ impl Quad {
             self.subject, self.predicate, self.object
         )?;
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }
@@ -294,7 +296,7 @@ impl TryFrom<QuadPattern> for Quad {
     type Error = ();
 
     #[inline]
-    fn try_from(quad: QuadPattern) -> Result<Self, ()> {
+    fn try_from(quad: QuadPattern) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: quad.subject.try_into()?,
             predicate: quad.predicate.try_into()?,
@@ -334,9 +336,9 @@ impl GroundQuad {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
         write!(
             f,
@@ -344,7 +346,7 @@ impl GroundQuad {
             self.subject, self.predicate, self.object
         )?;
         if self.graph_name != GraphName::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }
@@ -369,7 +371,7 @@ impl TryFrom<Quad> for GroundQuad {
     type Error = ();
 
     #[inline]
-    fn try_from(quad: Quad) -> Result<Self, ()> {
+    fn try_from(quad: Quad) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: quad.subject.try_into()?,
             predicate: quad.predicate,
@@ -424,7 +426,7 @@ impl TryFrom<NamedNodePattern> for NamedNode {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: NamedNodePattern) -> Result<Self, ()> {
+    fn try_from(pattern: NamedNodePattern) -> Result<Self, Self::Error> {
         match pattern {
             NamedNodePattern::NamedNode(t) => Ok(t),
             NamedNodePattern::Variable(_) => Err(()),
@@ -541,11 +543,24 @@ impl From<NamedNodePattern> for TermPattern {
     }
 }
 
+impl From<GroundTermPattern> for TermPattern {
+    #[inline]
+    fn from(element: GroundTermPattern) -> Self {
+        match element {
+            GroundTermPattern::NamedNode(node) => node.into(),
+            GroundTermPattern::Literal(literal) => literal.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundTermPattern::Triple(t) => TriplePattern::from(*t).into(),
+            GroundTermPattern::Variable(variable) => variable.into(),
+        }
+    }
+}
+
 impl TryFrom<TermPattern> for Subject {
     type Error = ();
 
     #[inline]
-    fn try_from(term: TermPattern) -> Result<Self, ()> {
+    fn try_from(term: TermPattern) -> Result<Self, Self::Error> {
         match term {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
@@ -560,7 +575,7 @@ impl TryFrom<TermPattern> for Term {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
+    fn try_from(pattern: TermPattern) -> Result<Self, Self::Error> {
         match pattern {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
@@ -672,7 +687,7 @@ impl TryFrom<TermPattern> for GroundTermPattern {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: TermPattern) -> Result<Self, ()> {
+    fn try_from(pattern: TermPattern) -> Result<Self, Self::Error> {
         Ok(match pattern {
             TermPattern::NamedNode(named_node) => named_node.into(),
             TermPattern::BlankNode(_) => return Err(()),
@@ -697,7 +712,7 @@ impl GraphNamePattern {
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         match self {
             Self::NamedNode(node) => write!(f, "{node}"),
-            Self::DefaultGraph => write!(f, "default"),
+            Self::DefaultGraph => f.write_str("default"),
             Self::Variable(var) => write!(f, "{var}"),
         }
     }
@@ -708,7 +723,7 @@ impl fmt::Display for GraphNamePattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
-            Self::DefaultGraph => write!(f, "DEFAULT"),
+            Self::DefaultGraph => f.write_str("DEFAULT"),
             Self::Variable(var) => var.fmt(f),
         }
     }
@@ -771,13 +786,13 @@ impl TriplePattern {
 
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -799,11 +814,22 @@ impl From<Triple> for TriplePattern {
     }
 }
 
+impl From<GroundTriplePattern> for TriplePattern {
+    #[inline]
+    fn from(triple: GroundTriplePattern) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate,
+            object: triple.object.into(),
+        }
+    }
+}
+
 impl TryFrom<TriplePattern> for Triple {
     type Error = ();
 
     #[inline]
-    fn try_from(triple: TriplePattern) -> Result<Self, ()> {
+    fn try_from(triple: TriplePattern) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: triple.subject.try_into()?,
             predicate: triple.predicate.try_into()?,
@@ -824,13 +850,13 @@ impl GroundTriplePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     #[allow(dead_code)]
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")
+        f.write_str(")")
     }
 }
 
@@ -892,19 +918,19 @@ impl QuadPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")?;
+        f.write_str(")")?;
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }
@@ -938,19 +964,19 @@ impl GroundQuadPattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "(graph ")?;
+            f.write_str("(graph ")?;
             self.graph_name.fmt_sse(f)?;
-            write!(f, " (")?;
+            f.write_str(" (")?;
         }
-        write!(f, "(triple ")?;
+        f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.predicate.fmt_sse(f)?;
-        write!(f, " ")?;
+        f.write_str(" ")?;
         self.object.fmt_sse(f)?;
-        write!(f, ")")?;
+        f.write_str(")")?;
         if self.graph_name != GraphNamePattern::DefaultGraph {
-            write!(f, "))")?;
+            f.write_str("))")?;
         }
         Ok(())
     }
@@ -975,7 +1001,7 @@ impl TryFrom<QuadPattern> for GroundQuadPattern {
     type Error = ();
 
     #[inline]
-    fn try_from(pattern: QuadPattern) -> Result<Self, ()> {
+    fn try_from(pattern: QuadPattern) -> Result<Self, Self::Error> {
         Ok(Self {
             subject: pattern.subject.try_into()?,
             predicate: pattern.predicate,

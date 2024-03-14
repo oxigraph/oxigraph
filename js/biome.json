@@ -1,0 +1,14 @@
+{
+    "$schema": "https://biomejs.dev/schemas/1.0.0/schema.json",
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 100
+    },
+    "linter": {
+        "ignore": ["pkg"]
+    },
+    "organizeImports": {
+        "enabled": true
+    }
+}

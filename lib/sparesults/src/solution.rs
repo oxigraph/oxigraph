@@ -4,7 +4,7 @@ use oxrdf::{Term, Variable, VariableRef};
 use std::fmt;
 use std::iter::Zip;
 use std::ops::Index;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Tuple associating variables and terms that are the result of a SPARQL query.
 ///
@@ -18,9 +18,8 @@ use std::rc::Rc;
 /// assert_eq!(solution.get("foo"), Some(&Literal::from(1).into())); // Get the value of the variable ?foo if it exists (here yes).
 /// assert_eq!(solution.get(1), None); // Get the value of the second column if it exists (here no).
 /// ```
-#[allow(clippy::rc_buffer)]
 pub struct QuerySolution {
-    variables: Rc<Vec<Variable>>,
+    variables: Arc<[Variable]>,
     values: Vec<Option<Term>>,
 }
 
@@ -45,10 +44,16 @@ impl QuerySolution {
     /// It is also the number of columns in the solutions table.
     ///
     /// ```
+    /// use oxrdf::{Literal, Variable};
     /// use sparesults::QuerySolution;
-    /// use oxrdf::{Variable, Literal};
     ///
-    /// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
+    /// let solution = QuerySolution::from((
+    ///     vec![
+    ///         Variable::new_unchecked("foo"),
+    ///         Variable::new_unchecked("bar"),
+    ///     ],
+    ///     vec![Some(Literal::from(1).into()), None],
+    /// ));
     /// assert_eq!(solution.len(), 2);
     /// ```
     #[inline]
@@ -59,13 +64,25 @@ impl QuerySolution {
     /// Is there any variable bound in the table?
     ///
     /// ```
+    /// use oxrdf::{Literal, Variable};
     /// use sparesults::QuerySolution;
-    /// use oxrdf::{Variable, Literal};
     ///
-    /// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
+    /// let solution = QuerySolution::from((
+    ///     vec![
+    ///         Variable::new_unchecked("foo"),
+    ///         Variable::new_unchecked("bar"),
+    ///     ],
+    ///     vec![Some(Literal::from(1).into()), None],
+    /// ));
     /// assert!(!solution.is_empty());
     ///
-    /// let empty_solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![None, None]));
+    /// let empty_solution = QuerySolution::from((
+    ///     vec![
+    ///         Variable::new_unchecked("foo"),
+    ///         Variable::new_unchecked("bar"),
+    ///     ],
+    ///     vec![None, None],
+    /// ));
     /// assert!(empty_solution.is_empty());
     /// ```
     #[inline]
@@ -76,11 +93,20 @@ impl QuerySolution {
     /// Returns an iterator over bound variables.
     ///
     /// ```
+    /// use oxrdf::{Literal, Variable};
     /// use sparesults::QuerySolution;
-    /// use oxrdf::{Variable, Literal};
     ///
-    /// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
-    /// assert_eq!(solution.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from(1).into())]);
+    /// let solution = QuerySolution::from((
+    ///     vec![
+    ///         Variable::new_unchecked("foo"),
+    ///         Variable::new_unchecked("bar"),
+    ///     ],
+    ///     vec![Some(Literal::from(1).into()), None],
+    /// ));
+    /// assert_eq!(
+    ///     solution.iter().collect::<Vec<_>>(),
+    ///     vec![(&Variable::new_unchecked("foo"), &Literal::from(1).into())]
+    /// );
     /// ```
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (&Variable, &Term)> {
@@ -90,10 +116,16 @@ impl QuerySolution {
     /// Returns the ordered slice of variable values.
     ///
     /// ```
+    /// use oxrdf::{Literal, Variable};
     /// use sparesults::QuerySolution;
-    /// use oxrdf::{Variable, Literal};
     ///
-    /// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
+    /// let solution = QuerySolution::from((
+    ///     vec![
+    ///         Variable::new_unchecked("foo"),
+    ///         Variable::new_unchecked("bar"),
+    ///     ],
+    ///     vec![Some(Literal::from(1).into()), None],
+    /// ));
     /// assert_eq!(solution.values(), &[Some(Literal::from(1).into()), None]);
     /// ```
     #[inline]
@@ -104,11 +136,23 @@ impl QuerySolution {
     /// Returns the ordered slice of the solution variables, bound or not.
     ///
     /// ```
+    /// use oxrdf::{Literal, Variable};
     /// use sparesults::QuerySolution;
-    /// use oxrdf::{Variable, Literal};
     ///
-    /// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
-    /// assert_eq!(solution.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+    /// let solution = QuerySolution::from((
+    ///     vec![
+    ///         Variable::new_unchecked("foo"),
+    ///         Variable::new_unchecked("bar"),
+    ///     ],
+    ///     vec![Some(Literal::from(1).into()), None],
+    /// ));
+    /// assert_eq!(
+    ///     solution.variables(),
+    ///     &[
+    ///         Variable::new_unchecked("foo"),
+    ///         Variable::new_unchecked("bar")
+    ///     ]
+    /// );
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
@@ -116,7 +160,7 @@ impl QuerySolution {
     }
 }
 
-impl<V: Into<Rc<Vec<Variable>>>, S: Into<Vec<Option<Term>>>> From<(V, S)> for QuerySolution {
+impl<V: Into<Arc<[Variable]>>, S: Into<Vec<Option<Term>>>> From<(V, S)> for QuerySolution {
     #[inline]
     fn from((v, s): (V, S)) -> Self {
         Self {
@@ -131,7 +175,7 @@ impl<'a> IntoIterator for &'a QuerySolution {
     type IntoIter = Iter<'a>;
 
     #[inline]
-    fn into_iter(self) -> Iter<'a> {
+    fn into_iter(self) -> Self::IntoIter {
         Iter {
             inner: self.variables.iter().zip(&self.values),
         }
@@ -141,8 +185,9 @@ impl<'a> IntoIterator for &'a QuerySolution {
 impl Index<usize> for QuerySolution {
     type Output = Term;
 
+    #[allow(clippy::panic)]
     #[inline]
-    fn index(&self, index: usize) -> &Term {
+    fn index(&self, index: usize) -> &Self::Output {
         self.get(index)
             .unwrap_or_else(|| panic!("The column {index} is not set in this solution"))
     }
@@ -151,8 +196,9 @@ impl Index<usize> for QuerySolution {
 impl Index<&str> for QuerySolution {
     type Output = Term;
 
+    #[allow(clippy::panic)]
     #[inline]
-    fn index(&self, index: &str) -> &Term {
+    fn index(&self, index: &str) -> &Self::Output {
         self.get(index)
             .unwrap_or_else(|| panic!("The variable ?{index} is not set in this solution"))
     }
@@ -161,8 +207,9 @@ impl Index<&str> for QuerySolution {
 impl Index<VariableRef<'_>> for QuerySolution {
     type Output = Term;
 
+    #[allow(clippy::panic)]
     #[inline]
-    fn index(&self, index: VariableRef<'_>) -> &Term {
+    fn index(&self, index: VariableRef<'_>) -> &Self::Output {
         self.get(index)
             .unwrap_or_else(|| panic!("The variable {index} is not set in this solution"))
     }
@@ -171,7 +218,7 @@ impl Index<Variable> for QuerySolution {
     type Output = Term;
 
     #[inline]
-    fn index(&self, index: Variable) -> &Term {
+    fn index(&self, index: Variable) -> &Self::Output {
         self.index(index.as_ref())
     }
 }
@@ -180,7 +227,7 @@ impl Index<&Variable> for QuerySolution {
     type Output = Term;
 
     #[inline]
-    fn index(&self, index: &Variable) -> &Term {
+    fn index(&self, index: &Variable) -> &Self::Output {
         self.index(index.as_ref())
     }
 }
@@ -212,11 +259,20 @@ impl fmt::Debug for QuerySolution {
 /// An iterator over [`QuerySolution`] bound variables.
 ///
 /// ```
+/// use oxrdf::{Literal, Variable};
 /// use sparesults::QuerySolution;
-/// use oxrdf::{Variable, Literal};
 ///
-/// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
-/// assert_eq!(solution.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from(1).into())]);
+/// let solution = QuerySolution::from((
+///     vec![
+///         Variable::new_unchecked("foo"),
+///         Variable::new_unchecked("bar"),
+///     ],
+///     vec![Some(Literal::from(1).into()), None],
+/// ));
+/// assert_eq!(
+///     solution.iter().collect::<Vec<_>>(),
+///     vec![(&Variable::new_unchecked("foo"), &Literal::from(1).into())]
+/// );
 /// ```
 pub struct Iter<'a> {
     inner: Zip<std::slice::Iter<'a, Variable>, std::slice::Iter<'a, Option<Term>>>,
@@ -226,7 +282,7 @@ impl<'a> Iterator for Iter<'a> {
     type Item = (&'a Variable, &'a Term);
 
     #[inline]
-    fn next(&mut self) -> Option<(&'a Variable, &'a Term)> {
+    fn next(&mut self) -> Option<Self::Item> {
         for (variable, value) in &mut self.inner {
             if let Some(value) = value {
                 return Some((variable, value));

@@ -1,0 +1,3 @@
+SELECT ?o WHERE {
+    { ?s ?p ?o } UNION { VALUES () {} }
+}

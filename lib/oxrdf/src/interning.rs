@@ -4,10 +4,11 @@ use crate::*;
 use std::collections::hash_map::{Entry, HashMap, RandomState};
 use std::hash::{BuildHasher, Hasher};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Interner {
     hasher: RandomState,
     string_for_hash: HashMap<u64, String, IdentityHasherBuilder>,
+    string_for_blank_node_id: HashMap<u128, String>,
     #[cfg(feature = "rdf-star")]
     triples: HashMap<InternedTriple, Triple>,
 }
@@ -100,7 +101,7 @@ impl InternedNamedNode {
         })
     }
 
-    pub fn decode_from(self, interner: &Interner) -> NamedNodeRef {
+    pub fn decode_from(self, interner: &Interner) -> NamedNodeRef<'_> {
         NamedNodeRef::new_unchecked(interner.resolve(self.id))
     }
 
@@ -120,29 +121,53 @@ impl InternedNamedNode {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
-pub struct InternedBlankNode {
-    id: Key,
+pub enum InternedBlankNode {
+    Number { id: u128 },
+    Other { id: Key },
 }
 
 impl InternedBlankNode {
     pub fn encoded_into(blank_node: BlankNodeRef<'_>, interner: &mut Interner) -> Self {
-        Self {
-            id: interner.get_or_intern(blank_node.as_str()),
+        if let Some(id) = blank_node.unique_id() {
+            interner
+                .string_for_blank_node_id
+                .entry(id)
+                .or_insert_with(|| blank_node.as_str().into());
+            Self::Number { id }
+        } else {
+            Self::Other {
+                id: interner.get_or_intern(blank_node.as_str()),
+            }
         }
     }
 
     pub fn encoded_from(blank_node: BlankNodeRef<'_>, interner: &Interner) -> Option<Self> {
-        Some(Self {
-            id: interner.get(blank_node.as_str())?,
+        if let Some(id) = blank_node.unique_id() {
+            interner
+                .string_for_blank_node_id
+                .contains_key(&id)
+                .then_some(Self::Number { id })
+        } else {
+            Some(Self::Other {
+                id: interner.get(blank_node.as_str())?,
+            })
+        }
+    }
+
+    pub fn decode_from(self, interner: &Interner) -> BlankNodeRef<'_> {
+        BlankNodeRef::new_unchecked(match self {
+            Self::Number { id } => &interner.string_for_blank_node_id[&id],
+            Self::Other { id } => interner.resolve(id),
         })
     }
 
-    pub fn decode_from(self, interner: &Interner) -> BlankNodeRef {
-        BlankNodeRef::new_unchecked(interner.resolve(self.id))
-    }
-
     pub fn next(self) -> Self {
-        Self { id: self.id.next() }
+        match self {
+            Self::Number { id } => Self::Number {
+                id: id.saturating_add(1),
+            },
+            Self::Other { id } => Self::Other { id: id.next() },
+        }
     }
 }
 
@@ -467,7 +492,7 @@ impl InternedTriple {
         interner
             .triples
             .contains_key(&interned_triple)
-            .then(|| interned_triple)
+            .then_some(interned_triple)
     }
 
     pub fn next(&self) -> Self {
@@ -479,14 +504,14 @@ impl InternedTriple {
     }
 }
 
-#[derive(Default)]
-struct IdentityHasherBuilder {}
+#[derive(Default, Clone)]
+struct IdentityHasherBuilder;
 
 impl BuildHasher for IdentityHasherBuilder {
     type Hasher = IdentityHasher;
 
-    fn build_hasher(&self) -> IdentityHasher {
-        IdentityHasher::default()
+    fn build_hasher(&self) -> Self::Hasher {
+        Self::Hasher::default()
     }
 }
 

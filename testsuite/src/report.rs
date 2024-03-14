@@ -1,5 +1,5 @@
 use anyhow::Result;
-use oxigraph::model::{Dataset, Graph, NamedNode};
+use oxigraph::model::{Dataset, NamedNode};
 use std::fmt::Write;
 use text_diff::{diff, Difference};
 use time::format_description::well_known::Rfc3339;
@@ -24,20 +24,6 @@ fn normalize_dataset_text(store: &Dataset) -> String {
     let mut quads: Vec<_> = store.iter().map(|q| q.to_string()).collect();
     quads.sort();
     quads.join("\n")
-}
-
-pub(super) fn graph_diff(expected: &Graph, actual: &Graph) -> String {
-    format_diff(
-        &normalize_graph_text(expected),
-        &normalize_graph_text(actual),
-        "triples",
-    )
-}
-
-fn normalize_graph_text(store: &Graph) -> String {
-    let mut triples: Vec<_> = store.iter().map(|q| q.to_string()).collect();
-    triples.sort();
-    triples.join("\n")
 }
 
 pub(super) fn format_diff(expected: &str, actual: &str, kind: &str) -> String {

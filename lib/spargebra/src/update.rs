@@ -1,5 +1,5 @@
 use crate::algebra::*;
-use crate::parser::{parse_update, ParseError};
+use crate::parser::{parse_update, SparqlSyntaxError};
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -14,7 +14,7 @@ use std::str::FromStr;
 /// let update = Update::parse(update_str, None)?;
 /// assert_eq!(update.to_string().trim(), update_str);
 /// assert_eq!(update.to_sse(), "(update (clear all))");
-/// # Ok::<_, spargebra::ParseError>(())
+/// # Ok::<_, spargebra::SparqlSyntaxError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
@@ -26,7 +26,7 @@ pub struct Update {
 
 impl Update {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, ParseError> {
+    pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
         parse_update(update, base_iri)
     }
 
@@ -42,14 +42,14 @@ impl Update {
         if let Some(base_iri) = &self.base_iri {
             write!(f, "(base <{base_iri}> ")?;
         }
-        write!(f, "(update")?;
+        f.write_str("(update")?;
         for op in &self.operations {
-            write!(f, " ")?;
+            f.write_str(" ")?;
             op.fmt_sse(f)?;
         }
-        write!(f, ")")?;
+        f.write_str(")")?;
         if self.base_iri.is_some() {
-            write!(f, ")")?;
+            f.write_str(")")?;
         }
         Ok(())
     }
@@ -68,25 +68,25 @@ impl fmt::Display for Update {
 }
 
 impl FromStr for Update {
-    type Err = ParseError;
+    type Err = SparqlSyntaxError;
 
-    fn from_str(update: &str) -> Result<Self, ParseError> {
+    fn from_str(update: &str) -> Result<Self, Self::Err> {
         Self::parse(update, None)
     }
 }
 
 impl<'a> TryFrom<&'a str> for Update {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
-    fn try_from(update: &str) -> Result<Self, ParseError> {
+    fn try_from(update: &str) -> Result<Self, Self::Error> {
         Self::from_str(update)
     }
 }
 
 impl<'a> TryFrom<&'a String> for Update {
-    type Error = ParseError;
+    type Error = SparqlSyntaxError;
 
-    fn try_from(update: &String) -> Result<Self, ParseError> {
+    fn try_from(update: &String) -> Result<Self, Self::Error> {
         Self::from_str(update)
     }
 }
@@ -124,24 +124,24 @@ impl GraphUpdateOperation {
     fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
             Self::InsertData { data } => {
-                write!(f, "(insertData (")?;
+                f.write_str("(insertData (")?;
                 for (i, t) in data.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        f.write_str(" ")?;
                     }
                     t.fmt_sse(f)?;
                 }
-                write!(f, "))")
+                f.write_str("))")
             }
             Self::DeleteData { data } => {
-                write!(f, "(deleteData (")?;
+                f.write_str("(deleteData (")?;
                 for (i, t) in data.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " ")?;
+                        f.write_str(" ")?;
                     }
                     t.fmt_sse(f)?;
                 }
-                write!(f, "))")
+                f.write_str("))")
             }
             Self::DeleteInsert {
                 delete,
@@ -149,73 +149,73 @@ impl GraphUpdateOperation {
                 using,
                 pattern,
             } => {
-                write!(f, "(modify ")?;
+                f.write_str("(modify ")?;
                 if let Some(using) = using {
-                    write!(f, " (using ")?;
+                    f.write_str(" (using ")?;
                     using.fmt_sse(f)?;
-                    write!(f, " ")?;
+                    f.write_str(" ")?;
                     pattern.fmt_sse(f)?;
-                    write!(f, ")")?;
+                    f.write_str(")")?;
                 } else {
                     pattern.fmt_sse(f)?;
                 }
                 if !delete.is_empty() {
-                    write!(f, " (delete (")?;
+                    f.write_str(" (delete (")?;
                     for (i, t) in delete.iter().enumerate() {
                         if i > 0 {
-                            write!(f, " ")?;
+                            f.write_str(" ")?;
                         }
                         t.fmt_sse(f)?;
                     }
-                    write!(f, "))")?;
+                    f.write_str("))")?;
                 }
                 if !insert.is_empty() {
-                    write!(f, " (insert (")?;
+                    f.write_str(" (insert (")?;
                     for (i, t) in insert.iter().enumerate() {
                         if i > 0 {
-                            write!(f, " ")?;
+                            f.write_str(" ")?;
                         }
                         t.fmt_sse(f)?;
                     }
-                    write!(f, "))")?;
+                    f.write_str("))")?;
                 }
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Load {
                 silent,
                 source,
                 destination,
             } => {
-                write!(f, "(load ")?;
+                f.write_str("(load ")?;
                 if *silent {
-                    write!(f, "silent ")?;
+                    f.write_str("silent ")?;
                 }
                 write!(f, "{source} ")?;
                 destination.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Clear { silent, graph } => {
-                write!(f, "(clear ")?;
+                f.write_str("(clear ")?;
                 if *silent {
-                    write!(f, "silent ")?;
+                    f.write_str("silent ")?;
                 }
                 graph.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
             Self::Create { silent, graph } => {
-                write!(f, "(create ")?;
+                f.write_str("(create ")?;
                 if *silent {
-                    write!(f, "silent ")?;
+                    f.write_str("silent ")?;
                 }
                 write!(f, "{graph})")
             }
             Self::Drop { silent, graph } => {
-                write!(f, "(drop ")?;
+                f.write_str("(drop ")?;
                 if *silent {
-                    write!(f, "silent ")?;
+                    f.write_str("silent ")?;
                 }
                 graph.fmt_sse(f)?;
-                write!(f, ")")
+                f.write_str(")")
             }
         }
     }
@@ -227,12 +227,12 @@ impl fmt::Display for GraphUpdateOperation {
             Self::InsertData { data } => {
                 writeln!(f, "INSERT DATA {{")?;
                 write_quads(data, f)?;
-                write!(f, "}}")
+                f.write_str("}")
             }
             Self::DeleteData { data } => {
                 writeln!(f, "DELETE DATA {{")?;
                 write_ground_quads(data, f)?;
-                write!(f, "}}")
+                f.write_str("}")
             }
             Self::DeleteInsert {
                 delete,
@@ -278,9 +278,9 @@ impl fmt::Display for GraphUpdateOperation {
                 source,
                 destination,
             } => {
-                write!(f, "LOAD ")?;
+                f.write_str("LOAD ")?;
                 if *silent {
-                    write!(f, "SILENT ")?;
+                    f.write_str("SILENT ")?;
                 }
                 write!(f, "{source}")?;
                 if destination != &GraphName::DefaultGraph {
@@ -289,23 +289,23 @@ impl fmt::Display for GraphUpdateOperation {
                 Ok(())
             }
             Self::Clear { silent, graph } => {
-                write!(f, "CLEAR ")?;
+                f.write_str("CLEAR ")?;
                 if *silent {
-                    write!(f, "SILENT ")?;
+                    f.write_str("SILENT ")?;
                 }
                 write!(f, "{graph}")
             }
             Self::Create { silent, graph } => {
-                write!(f, "CREATE ")?;
+                f.write_str("CREATE ")?;
                 if *silent {
-                    write!(f, "SILENT ")?;
+                    f.write_str("SILENT ")?;
                 }
                 write!(f, "GRAPH {graph}")
             }
             Self::Drop { silent, graph } => {
-                write!(f, "DROP ")?;
+                f.write_str("DROP ")?;
                 if *silent {
-                    write!(f, "SILENT ")?;
+                    f.write_str("SILENT ")?;
                 }
                 write!(f, "{graph}")
             }

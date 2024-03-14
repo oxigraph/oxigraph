@@ -5,7 +5,7 @@ oxsdatatypes
 [![Released API docs](https://docs.rs/oxsdatatypes/badge.svg)](https://docs.rs/oxsdatatypes)
 [![Crates.io downloads](https://img.shields.io/crates/d/oxsdatatypes)](https://crates.io/crates/oxsdatatypes)
 [![actions status](https://github.com/oxigraph/oxigraph/workflows/build/badge.svg)](https://github.com/oxigraph/oxigraph/actions)
-[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 oxsdatatypes is an implementation of some [XML Schema Definition Language Datatypes](https://www.w3.org/TR/xmlschema11-2/).
 Its main aim is to ease the implementation of SPARQL and XPath.
@@ -31,6 +31,22 @@ Each datatype provides:
 * Various methods implementing [XPath functions](https://www.w3.org/TR/xpath-functions-31/).
 * `from_be_bytes` and `to_be_bytes` methods for serialization.
 
+
+### `DateTime::now` behavior
+
+The `DateTime::now()` function needs special OS support.
+Currently:
+- If the `custom-now` feature is enabled, a function computing `now` must be set:
+  ```rust
+  use oxsdatatypes::Duration;
+  
+  #[no_mangle]
+  fn custom_ox_now() -> Duration {
+    unimplemented!("now implementation")
+  }
+  ```
+- For `wasm32-unknown-unknown` if the `js` feature is enabled the `Date.now()` ECMAScript API is used.
+- For all other targets `SystemTime::now()` is used.
 
 ## License
 

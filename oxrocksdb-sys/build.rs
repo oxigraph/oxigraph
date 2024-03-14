@@ -1,9 +1,14 @@
 // Code from https://github.com/rust-rocksdb/rust-rocksdb/blob/eb2d302682418b361a80ad8f4dcf335ade60dcf5/librocksdb-sys/build.rs
 // License: https://github.com/rust-rocksdb/rust-rocksdb/blob/master/LICENSE
 
-use std::env::{remove_var, set_var, var};
+use std::env::var;
+#[cfg(not(feature = "pkg-config"))]
+use std::env::{remove_var, set_var};
+#[cfg(not(feature = "pkg-config"))]
+use std::path::Path;
 use std::path::PathBuf;
 
+#[cfg(not(feature = "pkg-config"))]
 fn link(name: &str, bundled: bool) {
     let target = var("TARGET").unwrap();
     let target: Vec<_> = target.split('-').collect();
@@ -16,8 +21,14 @@ fn link(name: &str, bundled: bool) {
     }
 }
 
-fn bindgen_rocksdb() {
-    bindgen::Builder::default()
+fn bindgen_rocksdb_api(includes: &[PathBuf]) {
+    println!("cargo:rerun-if-changed=api/");
+
+    let mut builder = bindgen::Builder::default();
+    for include in includes {
+        builder = builder.clang_arg(format!("-I{}", include.display()));
+    }
+    builder
         .header("api/c.h")
         .ctypes_prefix("libc")
         .size_t_is_usize(true)
@@ -30,6 +41,22 @@ fn bindgen_rocksdb() {
         .unwrap();
 }
 
+fn build_rocksdb_api(includes: &[PathBuf]) {
+    let target = var("TARGET").unwrap();
+    let mut config = cc::Build::new();
+    for include in includes {
+        config.include(include);
+    }
+    if target.contains("msvc") {
+        config.flag("-EHsc").flag("-std:c++17");
+    } else {
+        config.flag("-std=c++17");
+    }
+    config.cpp(true).file("api/c.cc").compile("oxrocksdb_api");
+}
+
+#[cfg(not(feature = "pkg-config"))]
+
 fn build_rocksdb() {
     let target = var("TARGET").unwrap();
 
@@ -38,7 +65,6 @@ fn build_rocksdb() {
         .cpp(true)
         .include("rocksdb/include/")
         .include("rocksdb/")
-        .file("api/c.cc")
         .file("api/build_version.cc")
         .define("NDEBUG", Some("1"))
         .define("LZ4", Some("1"))
@@ -127,7 +153,7 @@ fn build_rocksdb() {
         config.define("NOMINMAX", None);
         config.define("ROCKSDB_WINDOWS_UTF8_FILENAMES", None);
 
-        if target == "x86_64-pc-windows-gnu" {
+        if target.contains("pc-windows-gnu") {
             // Tell MinGW to create localtime_r wrapper of localtime_s function.
             config.define("_POSIX_C_SOURCE", Some("1"));
             // Tell MinGW to use at least Windows Vista headers instead of the ones of Windows XP.
@@ -167,22 +193,22 @@ fn build_rocksdb() {
     if target.contains("msvc") {
         config.flag("-EHsc").flag("-std:c++17");
     } else {
-        config
-            .flag("-std=c++17")
-            .flag("-Wno-invalid-offsetof")
-            .define("HAVE_UINT128_EXTENSION", Some("1"));
+        config.flag("-std=c++17").flag("-Wno-invalid-offsetof");
+        if target.contains("x86_64") || target.contains("aarch64") {
+            config.define("HAVE_UINT128_EXTENSION", Some("1"));
+        }
     }
 
     for file in lib_sources {
-        if file == "db/c.cc" || file == "util/build_version.cc" {
-            continue;
+        if file != "util/build_version.cc" {
+            config.file(&format!("rocksdb/{file}"));
         }
-        config.file(&format!("rocksdb/{file}"));
     }
 
     config.compile("rocksdb");
 }
 
+#[cfg(not(feature = "pkg-config"))]
 fn build_lz4() {
     let mut config = cc::Build::new();
     config
@@ -196,9 +222,21 @@ fn build_lz4() {
     config.compile("lz4");
 }
 
+#[cfg(not(feature = "pkg-config"))]
 fn main() {
-    println!("cargo:rerun-if-changed=api/");
-    bindgen_rocksdb();
+    let includes = [Path::new("rocksdb/include").to_path_buf()];
     build_lz4();
     build_rocksdb();
+    build_rocksdb_api(&includes);
+    bindgen_rocksdb_api(&includes);
+}
+
+#[cfg(feature = "pkg-config")]
+fn main() {
+    let library = pkg_config::Config::new()
+        .atleast_version("8.0.0")
+        .probe("rocksdb")
+        .unwrap();
+    build_rocksdb_api(&library.include_paths);
+    bindgen_rocksdb_api(&library.include_paths);
 }

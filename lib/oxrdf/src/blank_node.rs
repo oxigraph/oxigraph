@@ -1,8 +1,6 @@
 use rand::random;
-use std::error::Error;
-use std::fmt;
 use std::io::Write;
-use std::str;
+use std::{fmt, str};
 
 /// An owned RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 ///
@@ -15,10 +13,7 @@ use std::str;
 /// ```
 /// use oxrdf::BlankNode;
 ///
-/// assert_eq!(
-///     "_:a122",
-///     BlankNode::new("a122")?.to_string()
-/// );
+/// assert_eq!("_:a122", BlankNode::new("a122")?.to_string());
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -36,7 +31,7 @@ impl BlankNode {
     /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.
     ///
     /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`]
-    ///that creates a random ID that could be easily inlined by Oxigraph stores.
+    /// that creates a random ID that could be easily inlined by Oxigraph stores.
     pub fn new(id: impl Into<String>) -> Result<Self, BlankNodeIdParseError> {
         let id = id.into();
         validate_blank_node_identifier(&id)?;
@@ -111,7 +106,14 @@ impl Default for BlankNode {
     /// Builds a new RDF [blank node](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) with a unique id.
     #[inline]
     fn default() -> Self {
-        Self::new_from_unique_id(random::<u128>())
+        // We ensure the ID does not start with a number to be also valid with RDF/XML
+        loop {
+            let id = random();
+            let str = IdStr::new(id);
+            if matches!(str.as_str().as_bytes().first(), Some(b'a'..=b'f')) {
+                return Self(BlankNodeContent::Anonymous { id, str });
+            }
+        }
     }
 }
 
@@ -126,10 +128,7 @@ impl Default for BlankNode {
 /// ```
 /// use oxrdf::BlankNodeRef;
 ///
-/// assert_eq!(
-///     "_:a122",
-///     BlankNodeRef::new("a122")?.to_string()
-/// );
+/// assert_eq!("_:a122", BlankNodeRef::new("a122")?.to_string());
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
@@ -173,7 +172,7 @@ impl<'a> BlankNodeRef<'a> {
 
     /// Returns the underlying ID of this blank node.
     #[inline]
-    pub fn as_str(self) -> &'a str {
+    pub const fn as_str(self) -> &'a str {
         match self.0 {
             BlankNodeRefContent::Named(id) => id,
             BlankNodeRefContent::Anonymous { str, .. } => str,
@@ -185,12 +184,15 @@ impl<'a> BlankNodeRef<'a> {
     /// ```
     /// use oxrdf::BlankNode;
     ///
-    /// assert_eq!(BlankNode::new_from_unique_id(128).as_ref().unique_id(), Some(128));
+    /// assert_eq!(
+    ///     BlankNode::new_from_unique_id(128).as_ref().unique_id(),
+    ///     Some(128)
+    /// );
     /// assert_eq!(BlankNode::new("foo")?.as_ref().unique_id(), None);
     /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
     /// ```
     #[inline]
-    pub fn unique_id(&self) -> Option<u128> {
+    pub const fn unique_id(&self) -> Option<u128> {
         match self.0 {
             BlankNodeRefContent::Named(_) => None,
             BlankNodeRefContent::Anonymous { id, .. } => Some(id),
@@ -264,7 +266,7 @@ impl IdStr {
 
 fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError> {
     let mut chars = id.chars();
-    let front = chars.next().ok_or(BlankNodeIdParseError {})?;
+    let front = chars.next().ok_or(BlankNodeIdParseError)?;
     match front {
         '0'..='9'
         | '_'
@@ -283,7 +285,7 @@ fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError>
         | '\u{F900}'..='\u{FDCF}'
         | '\u{FDF0}'..='\u{FFFD}'
         | '\u{10000}'..='\u{EFFFF}' => (),
-        _ => return Err(BlankNodeIdParseError {}),
+        _ => return Err(BlankNodeIdParseError),
     }
     for c in chars {
         match c {
@@ -309,13 +311,13 @@ fn validate_blank_node_identifier(id: &str) -> Result<(), BlankNodeIdParseError>
             | '\u{F900}'..='\u{FDCF}'
             | '\u{FDF0}'..='\u{FFFD}'
             | '\u{10000}'..='\u{EFFFF}' => (),
-            _ => return Err(BlankNodeIdParseError {}),
+            _ => return Err(BlankNodeIdParseError),
         }
     }
 
     // Could not end with a dot
     if id.ends_with('.') {
-        Err(BlankNodeIdParseError {})
+        Err(BlankNodeIdParseError)
     } else {
         Ok(())
     }
@@ -342,20 +344,14 @@ fn to_integer_id(id: &str) -> Option<u128> {
 }
 
 /// An error raised during [`BlankNode`] IDs validation.
-#[derive(Debug)]
-pub struct BlankNodeIdParseError {}
-
-impl fmt::Display for BlankNodeIdParseError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "The blank node identifier is invalid")
-    }
-}
-
-impl Error for BlankNodeIdParseError {}
+#[derive(Debug, thiserror::Error)]
+#[error("The blank node identifier is invalid")]
+pub struct BlankNodeIdParseError;
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
 
     #[test]
@@ -372,13 +368,13 @@ mod tests {
 
     #[test]
     fn new_validation() {
-        assert!(BlankNode::new("").is_err());
-        assert!(BlankNode::new("a").is_ok());
-        assert!(BlankNode::new("-").is_err());
-        assert!(BlankNode::new("a-").is_ok());
-        assert!(BlankNode::new(".").is_err());
-        assert!(BlankNode::new("a.").is_err());
-        assert!(BlankNode::new("a.a").is_ok());
+        BlankNode::new("").unwrap_err();
+        BlankNode::new("a").unwrap();
+        BlankNode::new("-").unwrap_err();
+        BlankNode::new("a-").unwrap();
+        BlankNode::new(".").unwrap_err();
+        BlankNode::new("a.").unwrap_err();
+        BlankNode::new("a.a").unwrap();
     }
 
     #[test]

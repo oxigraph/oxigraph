@@ -1,6 +1,19 @@
 Migration Guide
 ===============
 
+From 0.3 to 0.4
+"""""""""""""""
+
+* Python 3.7 and ``musllinux_1_1`` support have been removed.
+* :py:class:`OSError` is now raised instead of :py:class:`IOError` on OS errors.
+* The ``mime_type`` parameter have been renamed to ``format`` in I/O functions.
+  Using :py:class:`RdfFormat` is recommended to describe formats.
+* Boolean SPARQL results are now encoded with the :py:class:`QueryBoolean` class and not a simple :py:class:`bool`.
+* A `path` parameter has been added to all I/O method to read from a file.
+  The existing ``input`` parameter now consider :py:class:`str` values to be a serialization to parse.
+  For example, ``parse(path="foo.ttl")`` will parse the file ``foo.ttl`` whereas ``parse("foo", format=RdfFormat.N_TRIPLES)`` will parse a N-Triples file which content is ``foo``.
+
+
 From 0.2 to 0.3
 """""""""""""""
 

@@ -1,40 +1,128 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
-use crate::error::{ParseError, SyntaxError, SyntaxErrorKind};
-use oxrdf::Variable;
-use oxrdf::{vocab::xsd, *};
-use std::io::{self, BufRead, Write};
-use std::str::FromStr;
+use crate::error::{
+    QueryResultsParseError, QueryResultsSyntaxError, SyntaxErrorKind, TextPosition,
+};
+use memchr::memchr;
+use oxrdf::vocab::xsd;
+use oxrdf::*;
+use std::io::{self, Read, Write};
+use std::str::{self, FromStr};
+#[cfg(feature = "async-tokio")]
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-pub fn write_boolean_csv_result<W: Write>(mut sink: W, value: bool) -> io::Result<W> {
-    sink.write_all(if value { b"true" } else { b"false" })?;
-    Ok(sink)
+const MAX_BUFFER_SIZE: usize = 4096 * 4096;
+
+pub fn write_boolean_csv_result<W: Write>(mut write: W, value: bool) -> io::Result<W> {
+    write.write_all(if value { b"true" } else { b"false" })?;
+    Ok(write)
 }
 
-pub struct CsvSolutionsWriter<W: Write> {
-    sink: W,
-    variables: Vec<Variable>,
+#[cfg(feature = "async-tokio")]
+pub async fn tokio_async_write_boolean_csv_result<W: AsyncWrite + Unpin>(
+    mut write: W,
+    value: bool,
+) -> io::Result<W> {
+    write
+        .write_all(if value { b"true" } else { b"false" })
+        .await?;
+    Ok(write)
 }
 
-impl<W: Write> CsvSolutionsWriter<W> {
-    pub fn start(mut sink: W, variables: Vec<Variable>) -> io::Result<Self> {
-        let mut start_vars = true;
-        for variable in &variables {
-            if start_vars {
-                start_vars = false;
-            } else {
-                sink.write_all(b",")?;
-            }
-            sink.write_all(variable.as_str().as_bytes())?;
-        }
-        sink.write_all(b"\r\n")?;
-        Ok(Self { sink, variables })
+pub struct ToWriteCsvSolutionsWriter<W: Write> {
+    inner: InnerCsvSolutionsWriter,
+    write: W,
+    buffer: String,
+}
+
+impl<W: Write> ToWriteCsvSolutionsWriter<W> {
+    pub fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+        let mut buffer = String::new();
+        let inner = InnerCsvSolutionsWriter::start(&mut buffer, variables);
+        write.write_all(buffer.as_bytes())?;
+        buffer.clear();
+        Ok(Self {
+            inner,
+            write,
+            buffer,
+        })
     }
 
     pub fn write<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
+        self.inner.write(&mut self.buffer, solution);
+        self.write.write_all(self.buffer.as_bytes())?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    pub fn finish(self) -> W {
+        self.write
+    }
+}
+
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteCsvSolutionsWriter<W: AsyncWrite + Unpin> {
+    inner: InnerCsvSolutionsWriter,
+    write: W,
+    buffer: String,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteCsvSolutionsWriter<W> {
+    pub async fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+        let mut buffer = String::new();
+        let inner = InnerCsvSolutionsWriter::start(&mut buffer, variables);
+        write.write_all(buffer.as_bytes()).await?;
+        buffer.clear();
+        Ok(Self {
+            inner,
+            write,
+            buffer,
+        })
+    }
+
+    pub async fn write<'a>(
+        &mut self,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) -> io::Result<()> {
+        self.inner.write(&mut self.buffer, solution);
+        self.write.write_all(self.buffer.as_bytes()).await?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    pub fn finish(self) -> W {
+        self.write
+    }
+}
+
+struct InnerCsvSolutionsWriter {
+    variables: Vec<Variable>,
+}
+
+impl InnerCsvSolutionsWriter {
+    fn start(output: &mut String, variables: Vec<Variable>) -> Self {
+        let mut start_vars = true;
+        for variable in &variables {
+            if start_vars {
+                start_vars = false;
+            } else {
+                output.push(',');
+            }
+            output.push_str(variable.as_str());
+        }
+        output.push_str("\r\n");
+        Self { variables }
+    }
+
+    fn write<'a>(
+        &self,
+        output: &mut String,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) {
         let mut values = vec![None; self.variables.len()];
         for (variable, value) in solution {
             if let Some(position) = self.variables.iter().position(|v| *v == variable) {
@@ -46,86 +134,147 @@ impl<W: Write> CsvSolutionsWriter<W> {
             if start_binding {
                 start_binding = false;
             } else {
-                self.sink.write_all(b",")?;
+                output.push(',');
             }
             if let Some(value) = value {
-                write_csv_term(value, &mut self.sink)?;
+                write_csv_term(output, value);
             }
         }
-        self.sink.write_all(b"\r\n")
-    }
-
-    pub fn finish(mut self) -> io::Result<W> {
-        self.sink.flush()?;
-        Ok(self.sink)
+        output.push_str("\r\n");
     }
 }
 
-fn write_csv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io::Result<()> {
+fn write_csv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
     match term.into() {
-        TermRef::NamedNode(uri) => sink.write_all(uri.as_str().as_bytes()),
+        TermRef::NamedNode(uri) => output.push_str(uri.as_str()),
         TermRef::BlankNode(bnode) => {
-            sink.write_all(b"_:")?;
-            sink.write_all(bnode.as_str().as_bytes())
+            output.push_str("_:");
+            output.push_str(bnode.as_str())
         }
-        TermRef::Literal(literal) => write_escaped_csv_string(literal.value(), sink),
+        TermRef::Literal(literal) => write_escaped_csv_string(output, literal.value()),
         #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
-            write_csv_term(&triple.subject, sink)?;
-            sink.write_all(b" ")?;
-            write_csv_term(&triple.predicate, sink)?;
-            sink.write_all(b" ")?;
-            write_csv_term(&triple.object, sink)
+            write_csv_term(output, &triple.subject);
+            output.push(' ');
+            write_csv_term(output, &triple.predicate);
+            output.push(' ');
+            write_csv_term(output, &triple.object)
         }
     }
 }
 
-fn write_escaped_csv_string(s: &str, sink: &mut impl Write) -> io::Result<()> {
+fn write_escaped_csv_string(output: &mut String, s: &str) {
     if s.bytes().any(|c| matches!(c, b'"' | b',' | b'\n' | b'\r')) {
-        sink.write_all(b"\"")?;
-        for c in s.bytes() {
-            if c == b'\"' {
-                sink.write_all(b"\"\"")
+        output.push('"');
+        for c in s.chars() {
+            if c == '"' {
+                output.push('"');
+                output.push('"');
             } else {
-                sink.write_all(&[c])
-            }?;
+                output.push(c)
+            };
         }
-        sink.write_all(b"\"")
+        output.push('"');
     } else {
-        sink.write_all(s.as_bytes())
+        output.push_str(s)
     }
 }
 
-pub fn write_boolean_tsv_result<W: Write>(mut sink: W, value: bool) -> io::Result<W> {
-    sink.write_all(if value { b"true" } else { b"false" })?;
-    Ok(sink)
+pub struct ToWriteTsvSolutionsWriter<W: Write> {
+    inner: InnerTsvSolutionsWriter,
+    write: W,
+    buffer: String,
 }
 
-pub struct TsvSolutionsWriter<W: Write> {
-    sink: W,
-    variables: Vec<Variable>,
-}
-
-impl<W: Write> TsvSolutionsWriter<W> {
-    pub fn start(mut sink: W, variables: Vec<Variable>) -> io::Result<Self> {
-        let mut start_vars = true;
-        for variable in &variables {
-            if start_vars {
-                start_vars = false;
-            } else {
-                sink.write_all(b"\t")?;
-            }
-            sink.write_all(b"?")?;
-            sink.write_all(variable.as_str().as_bytes())?;
-        }
-        sink.write_all(b"\n")?;
-        Ok(Self { sink, variables })
+impl<W: Write> ToWriteTsvSolutionsWriter<W> {
+    pub fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+        let mut buffer = String::new();
+        let inner = InnerTsvSolutionsWriter::start(&mut buffer, variables);
+        write.write_all(buffer.as_bytes())?;
+        buffer.clear();
+        Ok(Self {
+            inner,
+            write,
+            buffer,
+        })
     }
 
     pub fn write<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
+        self.inner.write(&mut self.buffer, solution);
+        self.write.write_all(self.buffer.as_bytes())?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    pub fn finish(self) -> W {
+        self.write
+    }
+}
+
+#[cfg(feature = "async-tokio")]
+pub struct ToTokioAsyncWriteTsvSolutionsWriter<W: AsyncWrite + Unpin> {
+    inner: InnerTsvSolutionsWriter,
+    write: W,
+    buffer: String,
+}
+
+#[cfg(feature = "async-tokio")]
+impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTsvSolutionsWriter<W> {
+    pub async fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+        let mut buffer = String::new();
+        let inner = InnerTsvSolutionsWriter::start(&mut buffer, variables);
+        write.write_all(buffer.as_bytes()).await?;
+        buffer.clear();
+        Ok(Self {
+            inner,
+            write,
+            buffer,
+        })
+    }
+
+    pub async fn write<'a>(
+        &mut self,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) -> io::Result<()> {
+        self.inner.write(&mut self.buffer, solution);
+        self.write.write_all(self.buffer.as_bytes()).await?;
+        self.buffer.clear();
+        Ok(())
+    }
+
+    pub fn finish(self) -> W {
+        self.write
+    }
+}
+
+struct InnerTsvSolutionsWriter {
+    variables: Vec<Variable>,
+}
+
+impl InnerTsvSolutionsWriter {
+    fn start(output: &mut String, variables: Vec<Variable>) -> Self {
+        let mut start_vars = true;
+        for variable in &variables {
+            if start_vars {
+                start_vars = false;
+            } else {
+                output.push('\t');
+            }
+            output.push('?');
+            output.push_str(variable.as_str());
+        }
+        output.push('\n');
+        Self { variables }
+    }
+
+    fn write<'a>(
+        &self,
+        output: &mut String,
+        solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
+    ) {
         let mut values = vec![None; self.variables.len()];
         for (variable, value) in solution {
             if let Some(position) = self.variables.iter().position(|v| *v == variable) {
@@ -137,71 +286,74 @@ impl<W: Write> TsvSolutionsWriter<W> {
             if start_binding {
                 start_binding = false;
             } else {
-                self.sink.write_all(b"\t")?;
+                output.push('\t');
             }
             if let Some(value) = value {
-                write_tsv_term(value, &mut self.sink)?;
+                write_tsv_term(output, value);
             }
         }
-        self.sink.write_all(b"\n")
-    }
-
-    pub fn finish(mut self) -> io::Result<W> {
-        self.sink.flush()?;
-        Ok(self.sink)
+        output.push('\n');
     }
 }
 
-fn write_tsv_term<'a>(term: impl Into<TermRef<'a>>, sink: &mut impl Write) -> io::Result<()> {
+fn write_tsv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
     match term.into() {
-        TermRef::NamedNode(node) => write!(sink, "<{}>", node.as_str()),
-        TermRef::BlankNode(node) => write!(sink, "_:{}", node.as_str()),
+        TermRef::NamedNode(node) => {
+            output.push('<');
+            output.push_str(node.as_str());
+            output.push('>');
+        }
+        TermRef::BlankNode(node) => {
+            output.push_str("_:");
+            output.push_str(node.as_str());
+        }
         TermRef::Literal(literal) => {
             let value = literal.value();
             if let Some(language) = literal.language() {
-                write_tsv_quoted_str(value, sink)?;
-                write!(sink, "@{language}")
+                write_tsv_quoted_str(output, value);
+                output.push('@');
+                output.push_str(language);
             } else {
                 match literal.datatype() {
-                    xsd::BOOLEAN if is_turtle_boolean(value) => sink.write_all(value.as_bytes()),
-                    xsd::INTEGER if is_turtle_integer(value) => sink.write_all(value.as_bytes()),
-                    xsd::DECIMAL if is_turtle_decimal(value) => sink.write_all(value.as_bytes()),
-                    xsd::DOUBLE if is_turtle_double(value) => sink.write_all(value.as_bytes()),
-                    xsd::STRING => write_tsv_quoted_str(value, sink),
+                    xsd::BOOLEAN if is_turtle_boolean(value) => output.push_str(value),
+                    xsd::INTEGER if is_turtle_integer(value) => output.push_str(value),
+                    xsd::DECIMAL if is_turtle_decimal(value) => output.push_str(value),
+                    xsd::DOUBLE if is_turtle_double(value) => output.push_str(value),
+                    xsd::STRING => write_tsv_quoted_str(output, value),
                     datatype => {
-                        write_tsv_quoted_str(value, sink)?;
-                        write!(sink, "^^<{}>", datatype.as_str())
+                        write_tsv_quoted_str(output, value);
+                        output.push_str("^^");
+                        write_tsv_term(output, datatype);
                     }
                 }
             }
         }
         #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
-            sink.write_all(b"<< ")?;
-            write_tsv_term(&triple.subject, sink)?;
-            sink.write_all(b" ")?;
-            write_tsv_term(&triple.predicate, sink)?;
-            sink.write_all(b" ")?;
-            write_tsv_term(&triple.object, sink)?;
-            sink.write_all(b" >>")?;
-            Ok(())
+            output.push_str("<< ");
+            write_tsv_term(output, &triple.subject);
+            output.push(' ');
+            write_tsv_term(output, &triple.predicate);
+            output.push(' ');
+            write_tsv_term(output, &triple.object);
+            output.push_str(" >>");
         }
     }
 }
 
-fn write_tsv_quoted_str(string: &str, f: &mut impl Write) -> io::Result<()> {
-    f.write_all(b"\"")?;
-    for c in string.bytes() {
+fn write_tsv_quoted_str(output: &mut String, string: &str) {
+    output.push('"');
+    for c in string.chars() {
         match c {
-            b'\t' => f.write_all(b"\\t"),
-            b'\n' => f.write_all(b"\\n"),
-            b'\r' => f.write_all(b"\\r"),
-            b'"' => f.write_all(b"\\\""),
-            b'\\' => f.write_all(b"\\\\"),
-            c => f.write_all(&[c]),
-        }?;
+            '\t' => output.push_str("\\t"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            _ => output.push(c),
+        };
     }
-    f.write_all(b"\"")
+    output.push('"');
 }
 
 fn is_turtle_boolean(value: &str) -> bool {
@@ -209,7 +361,7 @@ fn is_turtle_boolean(value: &str) -> bool {
 }
 
 fn is_turtle_integer(value: &str) -> bool {
-    // [19] 	INTEGER 	::= 	[+-]? [0-9]+
+    // [19]  INTEGER  ::=  [+-]? [0-9]+
     let mut value = value.as_bytes();
     if let Some(v) = value.strip_prefix(b"+") {
         value = v;
@@ -220,7 +372,7 @@ fn is_turtle_integer(value: &str) -> bool {
 }
 
 fn is_turtle_decimal(value: &str) -> bool {
-    // [20] 	DECIMAL 	::= 	[+-]? [0-9]* '.' [0-9]+
+    // [20]  DECIMAL  ::=  [+-]? [0-9]* '.' [0-9]+
     let mut value = value.as_bytes();
     if let Some(v) = value.strip_prefix(b"+") {
         value = v;
@@ -230,17 +382,15 @@ fn is_turtle_decimal(value: &str) -> bool {
     while value.first().map_or(false, u8::is_ascii_digit) {
         value = &value[1..];
     }
-    if let Some(v) = value.strip_prefix(b".") {
-        value = v;
-    } else {
+    let Some(value) = value.strip_prefix(b".") else {
         return false;
-    }
+    };
     !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
 fn is_turtle_double(value: &str) -> bool {
-    // [21] 	DOUBLE 	::= 	[+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
-    // [154s] 	EXPONENT 	::= 	[eE] [+-]? [0-9]+
+    // [21]    DOUBLE    ::=  [+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
+    // [154s]  EXPONENT  ::=  [eE] [+-]? [0-9]+
     let mut value = value.as_bytes();
     if let Some(v) = value.strip_prefix(b"+") {
         value = v;
@@ -275,7 +425,7 @@ fn is_turtle_double(value: &str) -> bool {
     (with_before || with_after) && !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
-pub enum TsvQueryResultsReader<R: BufRead> {
+pub enum TsvQueryResultsReader<R: Read> {
     Solutions {
         variables: Vec<Variable>,
         solutions: TsvSolutionsReader<R>,
@@ -283,14 +433,14 @@ pub enum TsvQueryResultsReader<R: BufRead> {
     Boolean(bool),
 }
 
-impl<R: BufRead> TsvQueryResultsReader<R> {
-    pub fn read(mut source: R) -> Result<Self, ParseError> {
-        let mut buffer = String::new();
+impl<R: Read> TsvQueryResultsReader<R> {
+    pub fn read(mut read: R) -> Result<Self, QueryResultsParseError> {
+        let mut reader = LineReader::new();
+        let mut buffer = Vec::new();
 
         // We read the header
-        source.read_line(&mut buffer)?;
-        let line = buffer
-            .as_str()
+        let line = reader
+            .next_line(&mut buffer, &mut read)?
             .trim_matches(|c| matches!(c, ' ' | '\r' | '\n'));
         if line.eq_ignore_ascii_case("true") {
             return Ok(Self::Boolean(true));
@@ -303,13 +453,13 @@ impl<R: BufRead> TsvQueryResultsReader<R> {
             for v in line.split('\t') {
                 let v = v.trim();
                 if v.is_empty() {
-                    return Err(SyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar").into());
+                    return Err(QueryResultsSyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar").into());
                 }
                 let variable = Variable::from_str(v).map_err(|e| {
-                    SyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
+                    QueryResultsSyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
                 })?;
                 if variables.contains(&variable) {
-                    return Err(SyntaxError::msg(format!(
+                    return Err(QueryResultsSyntaxError::msg(format!(
                         "The variable {variable} is declared twice"
                     ))
                     .into());
@@ -321,63 +471,163 @@ impl<R: BufRead> TsvQueryResultsReader<R> {
         Ok(Self::Solutions {
             variables,
             solutions: TsvSolutionsReader {
-                source,
+                read,
                 buffer,
+                reader,
                 column_len,
             },
         })
     }
 }
 
-pub struct TsvSolutionsReader<R: BufRead> {
-    source: R,
-    buffer: String,
+pub struct TsvSolutionsReader<R: Read> {
+    read: R,
+    buffer: Vec<u8>,
+    reader: LineReader,
     column_len: usize,
 }
 
-impl<R: BufRead> TsvSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, ParseError> {
-        self.buffer.clear();
-        if self.source.read_line(&mut self.buffer)? == 0 {
-            return Ok(None);
+impl<R: Read> TsvSolutionsReader<R> {
+    #[allow(clippy::unwrap_in_result)]
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+        let line = self.reader.next_line(&mut self.buffer, &mut self.read)?;
+        if line.is_empty() {
+            return Ok(None); // EOF
         }
-        let elements = self
-            .buffer
+        let elements = line
             .split('\t')
-            .map(|v| {
+            .enumerate()
+            .map(|(i, v)| {
                 let v = v.trim();
                 if v.is_empty() {
                     Ok(None)
                 } else {
-                    Ok(Some(Term::from_str(v).map_err(|e| SyntaxError {
-                        inner: SyntaxErrorKind::Term(e),
+                    Ok(Some(Term::from_str(v).map_err(|e| {
+                        let start_position_char = line
+                            .split('\t')
+                            .take(i)
+                            .map(|c| c.chars().count() + 1)
+                            .sum::<usize>();
+                        let start_position_bytes =
+                            line.split('\t').take(i).map(|c| c.len() + 1).sum::<usize>();
+                        QueryResultsSyntaxError(SyntaxErrorKind::Term {
+                            error: e,
+                            term: v.into(),
+                            location: TextPosition {
+                                line: self.reader.line_count - 1,
+                                column: start_position_char.try_into().unwrap(),
+                                offset: self.reader.last_line_start
+                                    + u64::try_from(start_position_bytes).unwrap(),
+                            }..TextPosition {
+                                line: self.reader.line_count - 1,
+                                column: (start_position_char + v.chars().count())
+                                    .try_into()
+                                    .unwrap(),
+                                offset: self.reader.last_line_start
+                                    + u64::try_from(start_position_bytes + v.len()).unwrap(),
+                            },
+                        })
                     })?))
                 }
             })
-            .collect::<Result<Vec<_>, ParseError>>()?;
+            .collect::<Result<Vec<_>, QueryResultsParseError>>()?;
         if elements.len() == self.column_len {
             Ok(Some(elements))
         } else if self.column_len == 0 && elements == [None] {
             Ok(Some(Vec::new())) // Zero columns case
         } else {
-            Err(SyntaxError::msg(format!(
-                "This TSV files has {} columns but we found a row with {} columns: {:?}",
-                self.column_len,
-                elements.len(),
-                self.buffer
-            ))
+            Err(QueryResultsSyntaxError::located_message(
+                format!(
+                    "This TSV files has {} columns but we found a row on line {} with {} columns: {}",
+                    self.column_len,
+                    self.reader.line_count - 1,
+                    elements.len(),
+                    line
+                ),
+                TextPosition {
+                    line: self.reader.line_count - 1,
+                    column: 0,
+                    offset: self.reader.last_line_start,
+                }..TextPosition {
+                    line: self.reader.line_count - 1,
+                    column: line.chars().count().try_into().unwrap(),
+                    offset: self.reader.last_line_end,
+                },
+            )
             .into())
         }
     }
 }
 
+struct LineReader {
+    buffer_start: usize,
+    buffer_end: usize,
+    line_count: u64,
+    last_line_start: u64,
+    last_line_end: u64,
+}
+
+impl LineReader {
+    fn new() -> Self {
+        Self {
+            buffer_start: 0,
+            buffer_end: 0,
+            line_count: 0,
+            last_line_start: 0,
+            last_line_end: 0,
+        }
+    }
+
+    #[allow(clippy::unwrap_in_result)]
+    fn next_line<'a>(
+        &mut self,
+        buffer: &'a mut Vec<u8>,
+        read: &mut impl Read,
+    ) -> io::Result<&'a str> {
+        let line_end = loop {
+            if let Some(eol) = memchr(b'\n', &buffer[self.buffer_start..self.buffer_end]) {
+                break self.buffer_start + eol + 1;
+            }
+            if self.buffer_start > 0 {
+                buffer.copy_within(self.buffer_start..self.buffer_end, 0);
+                self.buffer_end -= self.buffer_start;
+                self.buffer_start = 0;
+            }
+            if self.buffer_end + 1024 > buffer.len() {
+                if self.buffer_end + 1024 > MAX_BUFFER_SIZE {
+                    return Err(io::Error::new(
+                        io::ErrorKind::OutOfMemory,
+                        format!("Reached the buffer maximal size of {MAX_BUFFER_SIZE}"),
+                    ));
+                }
+                buffer.resize(self.buffer_end + 1024, b'\0');
+            }
+            let read = read.read(&mut buffer[self.buffer_end..])?;
+            if read == 0 {
+                break self.buffer_end;
+            }
+            self.buffer_end += read;
+        };
+        let result = str::from_utf8(&buffer[self.buffer_start..line_end]).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid UTF-8 in the TSV file: {e}"),
+            )
+        });
+        self.line_count += 1;
+        self.last_line_start = self.last_line_end;
+        self.last_line_end += u64::try_from(line_end - self.buffer_start).unwrap();
+        self.buffer_start = line_end;
+        result
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
     use std::error::Error;
-    use std::io::Cursor;
-    use std::rc::Rc;
-    use std::str;
 
     fn build_example() -> (Vec<Variable>, Vec<Vec<Option<Term>>>) {
         (
@@ -427,21 +677,20 @@ mod tests {
     }
 
     #[test]
-    fn test_csv_serialization() -> io::Result<()> {
+    fn test_csv_serialization() {
         let (variables, solutions) = build_example();
-        let mut writer = CsvSolutionsWriter::start(Vec::new(), variables.clone())?;
-        let variables = Rc::new(variables);
+        let mut buffer = String::new();
+        let writer = InnerCsvSolutionsWriter::start(&mut buffer, variables.clone());
         for solution in solutions {
             writer.write(
+                &mut buffer,
                 variables
                     .iter()
                     .zip(&solution)
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
-            )?;
+            );
         }
-        let result = writer.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"\r\n");
-        Ok(())
+        assert_eq!(buffer, "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"\r\n");
     }
 
     #[test]
@@ -449,24 +698,24 @@ mod tests {
         let (variables, solutions) = build_example();
 
         // Write
-        let mut writer = TsvSolutionsWriter::start(Vec::new(), variables.clone())?;
-        let variables = Rc::new(variables);
+        let mut buffer = String::new();
+        let writer = InnerTsvSolutionsWriter::start(&mut buffer, variables.clone());
         for solution in &solutions {
             writer.write(
+                &mut buffer,
                 variables
                     .iter()
                     .zip(solution)
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
-            )?;
+            );
         }
-        let result = writer.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n");
+        assert_eq!(buffer, "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n");
 
         // Read
         if let TsvQueryResultsReader::Solutions {
             solutions: mut solutions_iter,
             variables: actual_variables,
-        } = TsvQueryResultsReader::read(Cursor::new(result))?
+        } = TsvQueryResultsReader::read(buffer.as_bytes())?
         {
             assert_eq!(actual_variables.as_slice(), variables.as_slice());
             let mut rows = Vec::new();
@@ -499,7 +748,7 @@ mod tests {
         bad_tsvs.push(&a_lot_of_strings);
         for bad_tsv in bad_tsvs {
             if let Ok(TsvQueryResultsReader::Solutions { mut solutions, .. }) =
-                TsvQueryResultsReader::read(Cursor::new(bad_tsv))
+                TsvQueryResultsReader::read(bad_tsv.as_bytes())
             {
                 while let Ok(Some(_)) = solutions.read_next() {}
             }
@@ -507,21 +756,19 @@ mod tests {
     }
 
     #[test]
-    fn test_no_columns_csv_serialization() -> io::Result<()> {
-        let mut writer = CsvSolutionsWriter::start(Vec::new(), Vec::new())?;
-        writer.write([])?;
-        let result = writer.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "\r\n\r\n");
-        Ok(())
+    fn test_no_columns_csv_serialization() {
+        let mut buffer = String::new();
+        let writer = InnerCsvSolutionsWriter::start(&mut buffer, Vec::new());
+        writer.write(&mut buffer, []);
+        assert_eq!(buffer, "\r\n\r\n");
     }
 
     #[test]
-    fn test_no_columns_tsv_serialization() -> io::Result<()> {
-        let mut writer = TsvSolutionsWriter::start(Vec::new(), Vec::new())?;
-        writer.write([])?;
-        let result = writer.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "\n\n");
-        Ok(())
+    fn test_no_columns_tsv_serialization() {
+        let mut buffer = String::new();
+        let writer = InnerTsvSolutionsWriter::start(&mut buffer, Vec::new());
+        writer.write(&mut buffer, []);
+        assert_eq!(buffer, "\n\n");
     }
 
     #[test]
@@ -541,19 +788,17 @@ mod tests {
     }
 
     #[test]
-    fn test_no_results_csv_serialization() -> io::Result<()> {
-        let result =
-            CsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "a\r\n");
-        Ok(())
+    fn test_no_results_csv_serialization() {
+        let mut buffer = String::new();
+        InnerCsvSolutionsWriter::start(&mut buffer, vec![Variable::new_unchecked("a")]);
+        assert_eq!(buffer, "a\r\n");
     }
 
     #[test]
-    fn test_no_results_tsv_serialization() -> io::Result<()> {
-        let result =
-            TsvSolutionsWriter::start(Vec::new(), vec![Variable::new_unchecked("a")])?.finish()?;
-        assert_eq!(str::from_utf8(&result).unwrap(), "?a\n");
-        Ok(())
+    fn test_no_results_tsv_serialization() {
+        let mut buffer = String::new();
+        InnerTsvSolutionsWriter::start(&mut buffer, vec![Variable::new_unchecked("a")]);
+        assert_eq!(buffer, "?a\n");
     }
 
     #[test]

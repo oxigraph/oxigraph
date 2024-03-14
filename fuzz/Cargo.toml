@@ -1,7 +1,6 @@
 [package]
 name = "oxigraph-fuzz"
 version = "0.0.0"
-authors = ["Automatically generated"]
 publish = false
 edition = "2021"
 
@@ -9,19 +8,33 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-anyhow = "1"
-lazy_static = "1"
+anyhow = "1.0.72"
 libfuzzer-sys = "0.4"
-spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
+oxigraph = { path = "../lib/oxigraph" }
+oxrdf = { path = "../lib/oxrdf", features = ["rdf-star"] }
+oxrdfxml = { path = "../lib/oxrdfxml" }
+oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
 sparesults = { path = "../lib/sparesults", features = ["rdf-star"] }
+spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
 sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
-oxigraph = { path = "../lib" }
 
 [profile.release]
 codegen-units = 1
 debug = true
 
 [workspace]
+
+[[bin]]
+name = "nquads"
+path = "fuzz_targets/nquads.rs"
+
+[[bin]]
+name = "n3"
+path = "fuzz_targets/n3.rs"
+
+[[bin]]
+name = "rdf_xml"
+path = "fuzz_targets/rdf_xml.rs"
 
 [[bin]]
 name = "sparql_eval"
@@ -46,3 +59,7 @@ path = "fuzz_targets/sparql_results_xml.rs"
 [[bin]]
 name = "sparql_results_tsv"
 path = "fuzz_targets/sparql_results_tsv.rs"
+
+[[bin]]
+name = "trig"
+path = "fuzz_targets/trig.rs"
