@@ -176,7 +176,10 @@ enum Command {
         format: Option<String>,
         /// Name of the graph to dump.
         ///
+        /// Use "default" to dump the default graph.
+        ///
         /// By default all graphs are dumped if the output format supports datasets.
+        /// If the format does not support named graph, then this parameter must be set.
         #[arg(long, value_hint = ValueHint::Url)]
         graph: Option<String>,
     },
@@ -815,7 +818,10 @@ fn dump<W: Write>(
     format: RdfFormat,
     from_graph_name: Option<GraphNameRef<'_>>,
 ) -> anyhow::Result<W> {
-    ensure!(format.supports_datasets() || from_graph_name.is_some(), "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML");
+    ensure!(
+        format.supports_datasets() || from_graph_name.is_some(),
+        "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML. Use --graph \"default\" to dump only the default graph."
+    );
     Ok(if let Some(from_graph_name) = from_graph_name {
         store.dump_graph_to_write(from_graph_name, format, write)
     } else {
