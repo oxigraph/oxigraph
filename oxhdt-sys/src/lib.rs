@@ -11,7 +11,7 @@ use std::rc::Rc;
 #[allow(dead_code)]
 fn hdt_query(hdt_path: &str, sparql_query: &str) -> Result<QueryResults, EvaluationError> {
     // Open the HDT file.
-    let dataset = Rc::new(HDTDatasetView::new(hdt_path));
+    let dataset = Rc::new(HDTDatasetView::new(vec![hdt_path.to_string()]));
     let sparql_query = sparql_query;
 
     // SPARQL query
@@ -34,7 +34,7 @@ fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool
     let query = Query::parse(&rq, None).expect("Failed to parse the test query string");
 
     // The test data in HDT format
-    let data = Rc::new(HDTDatasetView::new(&data_path));
+    let data = Rc::new(HDTDatasetView::new(vec![data_path.to_string()]));
 
     // The expected results in XML format
     // let f = File::open(result_path).expect("Failed to open the expected results from file");

@@ -90,13 +90,18 @@ macro_rules! my_impl_for {(
 )}
 use my_impl_for;
 
-/// Boundry over a Header-Dictionary-Triplies (HDT) storage layer.
-pub struct HDTDatasetView {
+pub struct HDTDataset {
     /// Path to the HDT file.
     path: String,
 
     /// HDT interface.
     hdt: Hdt,
+}
+
+/// Boundry over a Header-Dictionary-Triplies (HDT) storage layer.
+pub struct HDTDatasetView {
+    // collection of HDT files in the dataset
+    hdts: Vec<HDTDataset>,
 
     /// In-memory string hashs.
     extra: RefCell<HashMap<StrHash, String>>,
@@ -105,25 +110,38 @@ pub struct HDTDatasetView {
 /// Cloning opens the same file again.
 impl Clone for HDTDatasetView {
     fn clone(&self) -> HDTDatasetView {
-        let file = std::fs::File::open(&self.path).expect("error opening file");
-        let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
+        let mut hdts: Vec<HDTDataset> = Vec::new();
+        for dataset in self.hdts.iter() {
+            let file = std::fs::File::open(&dataset.path).expect("error opening file");
+            let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
+            hdts.push(HDTDataset {
+                path: dataset.path.clone(),
+                hdt,
+            })
+        }
 
         Self {
-            path: String::from(&self.path),
-            hdt,
+            hdts,
             extra: self.extra.clone(),
         }
     }
 }
 
 impl HDTDatasetView {
-    pub fn new(path: &str) -> Self {
-        let file = std::fs::File::open(path).expect("error opening HDT file");
-        let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
+    pub fn new(paths: Vec<String>) -> Self {
+        let mut hdts: Vec<HDTDataset> = Vec::new();
+        for path in paths.iter() {
+            // TODO catch error and proceed to next file?
+            let file = std::fs::File::open(path.as_str()).expect("error opening HDT file");
+            let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
+            hdts.push(HDTDataset {
+                path: path.to_string(),
+                hdt,
+            })
+        }
 
         Self {
-            path: String::from(path),
-            hdt,
+            hdts,
             extra: RefCell::new(HashMap::default()),
         }
     }
@@ -230,28 +248,30 @@ impl DatasetView for HDTDatasetView {
         let p = self.encodedterm_to_hdt_bgp_str(predicate);
         let o = self.encodedterm_to_hdt_bgp_str(object);
 
-        // Query HDT for BGP by string values.
-        let results = self
-            .hdt
-            .triples_with_pattern(s.as_deref(), p.as_deref(), o.as_deref());
-
         // Create a vector to hold the results.
         let mut v: Vec<Result<EncodedQuad, EvaluationError>> = Vec::new();
 
-        // For each result
-        for result in results {
-            // Create OxRDF terms for the HDT result.
-            let ex_s = self.auto_term(&(*result.0)).unwrap();
-            let ex_p = self.auto_term(&(*result.1)).unwrap();
-            let ex_o = self.auto_term(&(*result.2)).unwrap();
+        for data in self.hdts.iter() {
+            // Query HDT for BGP by string values.
+            let results = data
+                .hdt
+                .triples_with_pattern(s.as_deref(), p.as_deref(), o.as_deref());
 
-            // Add the result to the vector.
-            v.push(Ok(EncodedQuad::new(
-                ex_s,
-                ex_p,
-                ex_o,
-                EncodedTerm::DefaultGraph,
-            )));
+            // For each result
+            for result in results {
+                // Create OxRDF terms for the HDT result.
+                let ex_s = self.auto_term(&(*result.0)).unwrap();
+                let ex_p = self.auto_term(&(*result.1)).unwrap();
+                let ex_o = self.auto_term(&(*result.2)).unwrap();
+
+                // Add the result to the vector.
+                v.push(Ok(EncodedQuad::new(
+                    ex_s,
+                    ex_p,
+                    ex_o,
+                    EncodedTerm::DefaultGraph,
+                )));
+            }
         }
 
         return Box::new(v.into_iter());
