@@ -4,11 +4,13 @@
     unused_qualifications
 )]
 
+mod dataset;
 mod io;
 mod model;
 mod sparql;
 mod store;
 
+use crate::dataset::*;
 use crate::io::*;
 use crate::model::*;
 use crate::sparql::*;
@@ -28,6 +30,7 @@ fn pyoxigraph(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<PyDefaultGraph>()?;
     module.add_class::<PyTriple>()?;
     module.add_class::<PyQuad>()?;
+    module.add_class::<PyDataset>()?;
     module.add_class::<PyStore>()?;
     module.add_class::<PyVariable>()?;
     module.add_class::<PyQuerySolutions>()?;
@@ -36,6 +39,7 @@ fn pyoxigraph(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<PyQueryTriples>()?;
     module.add_class::<PyRdfFormat>()?;
     module.add_class::<PyQueryResultsFormat>()?;
+    module.add_class::<PyCanonicalizationAlgorithm>()?;
     module.add_wrapped(wrap_pyfunction!(parse))?;
     module.add_wrapped(wrap_pyfunction!(parse_query_results))?;
     module.add_wrapped(wrap_pyfunction!(serialize))?;
