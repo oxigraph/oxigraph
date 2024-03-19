@@ -36,3 +36,12 @@ Quads (`triples <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple>`_ in a `R
 
 .. autoclass:: DefaultGraph
     :members:
+
+
+`Datasets <https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset>`_
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+.. autoclass:: Dataset
+    :members:
+
+.. autoclass:: CanonicalizationAlgorithm
+    :members:
