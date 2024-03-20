@@ -246,9 +246,8 @@ impl Div for Float {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
 mod tests {
-    #![allow(clippy::panic_in_result_fn)]
-
     use super::*;
 
     #[test]
