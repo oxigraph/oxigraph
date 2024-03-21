@@ -23,6 +23,7 @@ sep-0006 = []
 oxilangtag.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
+parse-display.workspace = true
 peg.workspace = true
 rand.workspace = true
 thiserror.workspace = true
