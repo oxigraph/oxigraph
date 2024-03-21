@@ -32,6 +32,7 @@ A preliminary benchmark [is provided](../bench/README.md).
 
 Note that Oxigraph CLI was previously named Oxigraph Server before version 0.4. Older versions are available under [this name](https://crates.io/crates/oxigraph_server).
 
+[![Packaging status](https://repology.org/badge/vertical-allrepos/oxigraph.svg)](https://repology.org/project/oxigraph/versions)
 
 ## Installation
 
