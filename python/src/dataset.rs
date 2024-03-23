@@ -14,7 +14,7 @@ use pyo3::prelude::*;
 /// if you insert and remove a lot of different terms, memory will grow without any reduction.
 ///
 /// :param quads: some quads to initialize the dataset with.
-/// :type quads: collections.abc.Iterable[Quad]
+/// :type quads: collections.abc.Iterable[Quad] or None, optional
 ///
 /// The :py:class:`str` function provides an N-Quads serialization:
 ///
