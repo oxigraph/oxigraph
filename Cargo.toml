@@ -19,7 +19,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0-alpha.5-dev"
+version = "0.4.0-alpha.5"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
@@ -69,15 +69,15 @@ zstd = ">=0.12, <0.14"
 
 # Internal dependencies
 oxigraph = { version = "0.4.0-alpha.4", path = "lib/oxigraph" }
-oxrdf = { version = "0.2.0-alpha.4-dev", path = "lib/oxrdf" }
-oxrdfio = { version = "0.1.0-alpha.4-dev", path = "lib/oxrdfio" }
-oxrdfxml = { version = "0.1.0-alpha.4-dev", path = "lib/oxrdfxml" }
+oxrdf = { version = "0.2.0-alpha.4", path = "lib/oxrdf" }
+oxrdfio = { version = "0.1.0-alpha.4", path = "lib/oxrdfio" }
+oxrdfxml = { version = "0.1.0-alpha.4", path = "lib/oxrdfxml" }
 oxrocksdb-sys = { version = "0.4.0-alpha.3", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "0.2.0-alpha.1", path = "lib/oxsdatatypes" }
-oxttl = { version = "0.1.0-alpha.4-dev", path = "lib/oxttl" }
-sparesults = { version = "0.2.0-alpha.4-dev", path = "lib/sparesults" }
-spargebra = { version = "0.3.0-alpha.4-dev", path = "lib/spargebra" }
-sparopt = { version = "0.1.0-alpha.4-dev", path = "lib/sparopt" }
+oxttl = { version = "0.1.0-alpha.4", path = "lib/oxttl" }
+sparesults = { version = "0.2.0-alpha.4", path = "lib/sparesults" }
+spargebra = { version = "0.3.0-alpha.4", path = "lib/spargebra" }
+sparopt = { version = "0.1.0-alpha.4", path = "lib/sparopt" }
 sparql-smith = { version = "0.1.0-alpha.5", path = "lib/sparql-smith" }
 
 [workspace.lints.rust]

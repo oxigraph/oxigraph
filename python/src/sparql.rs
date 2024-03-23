@@ -503,6 +503,7 @@ pub fn parse_query_results(
 /// `SPARQL query <https://www.w3.org/TR/sparql11-query/>`_ results serialization formats.
 ///
 /// The following formats are supported:
+///
 /// * `XML <https://www.w3.org/TR/rdf-sparql-XMLres/>`_ (:py:attr:`QueryResultsFormat.XML`)
 /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
 /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.CSV`)

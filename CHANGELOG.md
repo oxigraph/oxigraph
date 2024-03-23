@@ -1,3 +1,14 @@
+## [0.4.0-alpha.5] - 2024-03-23
+
+### Added
+- Python: `Dataset` class
+
+### Changed
+- Rust: `Dataset::canonicalize` and `Graph::canonicalize` takes for input a `CanonicalizationAlgorithm` to set which algorithm to use.
+- Upgrades RocksDB to 9.0.0
+- JS: Drops NodeJS 12-16 and older web browsers (Edge before Chromium...) support.
+
+
 ## [0.4.0-alpha.4] - 2024-03-07
 
 ### Added

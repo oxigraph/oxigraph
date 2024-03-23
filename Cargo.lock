@@ -1049,7 +1049,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.4.0-alpha.5-dev"
+version = "0.4.0-alpha.5"
 dependencies = [
  "codspeed-criterion-compat",
  "digest",
@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.4.0-alpha.5-dev"
+version = "0.4.0-alpha.5"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1099,7 +1099,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.4.0-alpha.5-dev"
+version = "0.4.0-alpha.5"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1139,7 +1139,7 @@ checksum = "b225dad32cfaa43a960b93f01fa7f87528ac07e794b80f6d9a0153e0222557e2"
 
 [[package]]
 name = "oxrdf"
-version = "0.2.0-alpha.4-dev"
+version = "0.2.0-alpha.4"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1150,7 +1150,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfio"
-version = "0.1.0-alpha.4-dev"
+version = "0.1.0-alpha.4"
 dependencies = [
  "oxrdf",
  "oxrdfxml",
@@ -1161,7 +1161,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfxml"
-version = "0.1.0-alpha.4-dev"
+version = "0.1.0-alpha.4"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1173,7 +1173,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.4.0-alpha.5-dev"
+version = "0.4.0-alpha.5"
 dependencies = [
  "bindgen",
  "cc",
@@ -1191,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "oxttl"
-version = "0.1.0-alpha.4-dev"
+version = "0.1.0-alpha.4"
 dependencies = [
  "memchr",
  "oxilangtag",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.4.0-alpha.5-dev"
+version = "0.4.0-alpha.5"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1762,7 +1762,7 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "sparesults"
-version = "0.2.0-alpha.4-dev"
+version = "0.2.0-alpha.4"
 dependencies = [
  "json-event-parser",
  "memchr",
@@ -1774,7 +1774,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.3.0-alpha.4-dev"
+version = "0.3.0-alpha.4"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1786,7 +1786,7 @@ dependencies = [
 
 [[package]]
 name = "sparopt"
-version = "0.1.0-alpha.4-dev"
+version = "0.1.0-alpha.4"
 dependencies = [
  "oxrdf",
  "rand",
