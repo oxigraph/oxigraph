@@ -269,6 +269,7 @@ impl QuadIter {
 /// RDF canonicalization algorithms.
 ///
 /// The following algorithms are supported:
+///
 /// * :py:attr:`CanonicalizationAlgorithm.UNSTABLE`: an unstable algorithm preferred by PyOxigraph.
 #[pyclass(name = "CanonicalizationAlgorithm", module = "pyoxigraph")]
 #[derive(Clone)]
