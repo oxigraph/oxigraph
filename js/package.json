@@ -9,8 +9,8 @@
   },
   "scripts": {
     "fmt": "biome format . --write && biome check . --apply-unsafe && biome format . --write",
-    "test": "biome ci . && wasm-pack build --debug --target nodejs && mocha",
-    "build": "wasm-pack build --release --target web --out-name web && wasm-pack build --release --target nodejs --out-name node && node build_package.js",
+    "test": "biome ci . && wasm-pack build --debug --target nodejs --weak-refs --reference-types && mocha",
+    "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.js",
     "release": "npm run build && npm publish ./pkg",
     "pack": "npm run build && npm pack ./pkg"
   },

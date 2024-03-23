@@ -13,7 +13,7 @@ Oxigraph for JavaScript is a work in progress and currently offers a simple in-m
 
 The store is also able to load RDF serialized in [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/).
 
-It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with Node.JS 12+ and modern web browsers compatible with WebAssembly.
+It is distributed using a [a NPM package](https://www.npmjs.com/package/oxigraph) that should work with Node.JS 18+ and [modern web browsers compatible with WebAssembly reference types and JavaScript `WeakRef`](https://caniuse.com/wasm-reference-types,mdn-javascript_builtins_weakref).
 
 To install:
 ```bash
