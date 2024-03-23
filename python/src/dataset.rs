@@ -106,7 +106,7 @@ impl PyDataset {
     /// Looks for the quads with the given graph name.
     ///
     /// :param graph_name: the quad graph name.
-    /// :type graph_name: NamedNode or BlankNode or Literal or Triple
+    /// :type graph_name: NamedNode or BlankNode or DefaultGraph
     /// :return: an iterator of the quads.
     /// :rtype: collections.abc.Iterator[Quad]
     ///
