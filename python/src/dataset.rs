@@ -64,7 +64,7 @@ impl PyDataset {
     /// Looks for the quads with the given predicate.
     ///
     /// :param predicate: the quad predicate.
-    /// :type subject: NamedNode
+    /// :type predicate: NamedNode
     /// :return: an iterator of the quads.
     /// :rtype: collections.abc.Iterator[Quad]
     ///

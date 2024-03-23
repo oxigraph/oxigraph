@@ -1,6 +1,6 @@
 /* global describe, it */
 
-import assert from "assert";
+import assert from "node:assert";
 import runTests from "../node_modules/@rdfjs/data-model/test/index.js";
 import oxigraph from "../pkg/oxigraph.js";
 

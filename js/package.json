@@ -1,22 +1,20 @@
 {
-  "name": "oxigraph_tests",
-  "description": "Oxigraph JS build and tests",
-  "private": true,
-  "devDependencies": {
-    "@biomejs/biome": "^1.0.0",
-    "@rdfjs/data-model": "^2.0.1",
-    "mocha": "^10.0.0"
-  },
-  "scripts": {
-    "fmt": "biome format . --write && biome check . --apply-unsafe && biome format . --write",
-    "test": "biome ci . && wasm-pack build --debug --target nodejs --weak-refs --reference-types && mocha",
-    "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.js",
-    "release": "npm run build && npm publish ./pkg",
-    "pack": "npm run build && npm pack ./pkg"
-  },
-  "standard": {
-    "ignore": [
-      "pkg*"
-    ]
-  }
+    "name": "oxigraph_tests",
+    "description": "Oxigraph JS build and tests",
+    "private": true,
+    "devDependencies": {
+        "@biomejs/biome": "^1.0.0",
+        "@rdfjs/data-model": "^2.0.1",
+        "mocha": "^10.0.0"
+    },
+    "scripts": {
+        "fmt": "biome format . --write && biome check . --apply-unsafe && biome format . --write",
+        "test": "biome ci . && wasm-pack build --debug --target nodejs --weak-refs --reference-types && mocha",
+        "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.js",
+        "release": "npm run build && npm publish ./pkg",
+        "pack": "npm run build && npm pack ./pkg"
+    },
+    "standard": {
+        "ignore": ["pkg*"]
+    }
 }
