@@ -517,3 +517,19 @@ jobs:
         with:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
+
+  codecov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-llvm-cov }
+      - run: cargo llvm-cov --codecov --output-path codecov.json
+      - uses: codecov/codecov-action@v3
+        with:
+          files: codecov.json
+          flags: rust
+          fail_ci_if_error: true
