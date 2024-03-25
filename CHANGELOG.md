@@ -1,3 +1,9 @@
+## [0.4.0-alpha.6] - 2024-03-25
+
+### Changed
+- Fixes compatibility with OxIRI 0.2.3.
+
+
 ## [0.4.0-alpha.5] - 2024-03-23
 
 ### Added
