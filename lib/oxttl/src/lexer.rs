@@ -219,9 +219,10 @@ impl N3Lexer {
                 if self.unchecked {
                     base_iri.resolve_unchecked(&iri)
                 } else {
-                    base_iri.resolve(&iri)
+                    base_iri
+                        .resolve(&iri)
+                        .map_err(|e| (position, e.to_string()))?
                 }
-                .map_err(|e| (position, e.to_string()))?
                 .into_inner()
             } else if self.unchecked {
                 iri
