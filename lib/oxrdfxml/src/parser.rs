@@ -586,16 +586,13 @@ impl<R> RdfXmlReader<R> {
                     });
                 } else if attribute.key.as_ref() == b"xml:base" {
                     let iri = self.convert_attribute(&attribute)?;
-                    base_iri = Some(
-                        if self.unchecked {
-                            Iri::parse_unchecked(iri.clone())
-                        } else {
-                            Iri::parse(iri.clone())
-                        }
-                        .map_err(|error| {
+                    base_iri = Some(if self.unchecked {
+                        Iri::parse_unchecked(iri.clone())
+                    } else {
+                        Iri::parse(iri.clone()).map_err(|error| {
                             RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri { iri, error })
-                        })?,
-                    )
+                        })?
+                    })
                 } else {
                     // We ignore other xml attributes
                 }
@@ -1175,14 +1172,13 @@ impl<R> RdfXmlReader<R> {
                 if self.unchecked {
                     base_iri.resolve_unchecked(&relative_iri)
                 } else {
-                    base_iri.resolve(&relative_iri)
+                    base_iri.resolve(&relative_iri).map_err(|error| {
+                        RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri {
+                            iri: relative_iri,
+                            error,
+                        })
+                    })?
                 }
-                .map_err(|error| {
-                    RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri {
-                        iri: relative_iri,
-                        error,
-                    })
-                })?
                 .into_inner(),
             ))
         } else {

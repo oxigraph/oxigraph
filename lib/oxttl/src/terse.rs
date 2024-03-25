@@ -86,88 +86,99 @@ impl RuleRecognizer for TriGRecognizer {
                             self.stack.push(TriGState::BaseExpectIri);
                             self
                         }
-                        N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("graph") && context.with_graph_name => {
+                        N3Token::PlainKeyword(k)
+                            if k.eq_ignore_ascii_case("graph") && context.with_graph_name =>
+                        {
                             self.stack.push(TriGState::WrappedGraph);
                             self.stack.push(TriGState::GraphName);
                             self
                         }
                         N3Token::Punctuation("{") if context.with_graph_name => {
                             self.stack.push(TriGState::WrappedGraph);
-                            self.recognize_next(token, context,results, errors)
+                            self.recognize_next(token, context, results, errors)
                         }
                         _ => {
                             self.stack.push(TriGState::TriplesOrGraph);
-                            self.recognize_next(token, context,results, errors)
+                            self.recognize_next(token, context, results, errors)
                         }
                     }
-                },
+                }
                 TriGState::ExpectDot => {
                     self.cur_subject.pop();
                     if token == N3Token::Punctuation(".") {
                         self
-                    } else  {
+                    } else {
                         errors.push("A dot is expected at the end of statements".into());
-                        self.recognize_next(token, context,results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
-                },
-                TriGState::BaseExpectIri => match token {
-                    N3Token::IriRef(iri) => {
-                        match Iri::parse_unchecked(iri) {
-                            Ok(iri) => {
-                                context.lexer_options.base_iri = Some(iri);
-                                self
-                            }
-                            Err(e) => self.error(errors, format!("Invalid base IRI: {e}"))
-                        }
+                }
+                TriGState::BaseExpectIri => {
+                    if let N3Token::IriRef(iri) = token {
+                        context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
+                        self
+                    } else {
+                        self.error(errors, "The BASE keyword should be followed by an IRI")
                     }
-                    _ => self.error(errors, "The BASE keyword should be followed by an IRI"),
-                },
+                }
                 TriGState::PrefixExpectPrefix => match token {
                     N3Token::PrefixedName { prefix, local, .. } if local.is_empty() => {
-                        self.stack.push(TriGState::PrefixExpectIri { name: prefix.to_owned() });
+                        self.stack.push(TriGState::PrefixExpectIri {
+                            name: prefix.to_owned(),
+                        });
                         self
                     }
-                    _ => {
-                        self.error(errors, "The PREFIX keyword should be followed by a prefix like 'ex:'")
+                    _ => self.error(
+                        errors,
+                        "The PREFIX keyword should be followed by a prefix like 'ex:'",
+                    ),
+                },
+                TriGState::PrefixExpectIri { name } => {
+                    if let N3Token::IriRef(iri) = token {
+                        context.prefixes.insert(name, Iri::parse_unchecked(iri));
+                        self
+                    } else {
+                        self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
                     }
-                },
-                TriGState::PrefixExpectIri { name } => match token {
-                    N3Token::IriRef(iri) => {
-                        match Iri::parse_unchecked(iri) {
-                            Ok(iri) => {
-                                context.prefixes.insert(name, iri);
-                                self
-                            }
-                            Err(e) => self.error(errors, format!("Invalid prefix IRI: {e}"))
-                        }                    }
-                    _ => self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI"),
-                },
+                }
                 // [3g]  triplesOrGraph  ::=  labelOrSubject ( wrappedGraph | predicateObjectList '.' ) | quotedTriple predicateObjectList '.'
                 // [4g]  triples2        ::=  blankNodePropertyList predicateObjectList? '.' | collection predicateObjectList '.'
                 TriGState::TriplesOrGraph => match token {
                     N3Token::IriRef(iri) => {
-                        self.stack.push(TriGState::WrappedGraphOrPredicateObjectList {
-                            term: NamedNode::new_unchecked(iri).into()
-                        });
+                        self.stack
+                            .push(TriGState::WrappedGraphOrPredicateObjectList {
+                                term: NamedNode::new_unchecked(iri).into(),
+                            });
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
                         Ok(t) => {
-                            self.stack.push(TriGState::WrappedGraphOrPredicateObjectList {
-                                term: t.into()
-                            });
+                            self.stack
+                                .push(TriGState::WrappedGraphOrPredicateObjectList {
+                                    term: t.into(),
+                                });
                             self
-                        },
-                        Err(e) => self.error(errors, e)
-                    }
+                        }
+                        Err(e) => self.error(errors, e),
+                    },
                     N3Token::BlankNodeLabel(label) => {
-                        self.stack.push(TriGState::WrappedGraphOrPredicateObjectList {
-                            term: BlankNode::new_unchecked(label).into()
-                        });
+                        self.stack
+                            .push(TriGState::WrappedGraphOrPredicateObjectList {
+                                term: BlankNode::new_unchecked(label).into(),
+                            });
                         self
                     }
                     N3Token::Punctuation("[") => {
-                        self.stack.push(TriGState::WrappedGraphBlankNodePropertyListCurrent);
+                        self.stack
+                            .push(TriGState::WrappedGraphBlankNodePropertyListCurrent);
                         self
                     }
                     N3Token::Punctuation("(") => {
@@ -186,10 +197,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::QuotedSubject);
                         self
                     }
-                    _ => {
-                        self.error(errors, "TOKEN is not a valid subject or graph name")
-                    }
-                }
+                    _ => self.error(errors, "TOKEN is not a valid subject or graph name"),
+                },
                 TriGState::WrappedGraphOrPredicateObjectList { term } => {
                     if token == N3Token::Punctuation("{") && context.with_graph_name {
                         self.cur_graph = term.into();
@@ -199,33 +208,42 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::ExpectDot);
                         self.stack.push(TriGState::PredicateObjectList);
                     }
-                    self.recognize_next(token, context,results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
-                TriGState::WrappedGraphBlankNodePropertyListCurrent => if token == N3Token::Punctuation("]") {
-                    self.stack.push(TriGState::WrappedGraphOrPredicateObjectList {
-                        term: BlankNode::default().into()
-                    });
-                    self
-                } else {
-                    self.cur_subject.push(BlankNode::default().into());
-                    self.stack.push(TriGState::ExpectDot);
-                    self.stack.push(TriGState::SubjectBlankNodePropertyListEnd);
-                    self.stack.push(TriGState::PredicateObjectList);
-                    self.recognize_next(token, context,results, errors)
+                TriGState::WrappedGraphBlankNodePropertyListCurrent => {
+                    if token == N3Token::Punctuation("]") {
+                        self.stack
+                            .push(TriGState::WrappedGraphOrPredicateObjectList {
+                                term: BlankNode::default().into(),
+                            });
+                        self
+                    } else {
+                        self.cur_subject.push(BlankNode::default().into());
+                        self.stack.push(TriGState::ExpectDot);
+                        self.stack.push(TriGState::SubjectBlankNodePropertyListEnd);
+                        self.stack.push(TriGState::PredicateObjectList);
+                        self.recognize_next(token, context, results, errors)
+                    }
                 }
-                TriGState::SubjectBlankNodePropertyListEnd => if token == N3Token::Punctuation("]") {
-                    self.stack.push(TriGState::SubjectBlankNodePropertyListAfter  );
-                    self
-                } else {
-                    errors.push("blank node property lists should end with a ']'".into());
-                    self.stack.push(TriGState::SubjectBlankNodePropertyListAfter );
-                    self.recognize_next(token, context,results, errors)
+                TriGState::SubjectBlankNodePropertyListEnd => {
+                    if token == N3Token::Punctuation("]") {
+                        self.stack
+                            .push(TriGState::SubjectBlankNodePropertyListAfter);
+                        self
+                    } else {
+                        errors.push("blank node property lists should end with a ']'".into());
+                        self.stack
+                            .push(TriGState::SubjectBlankNodePropertyListAfter);
+                        self.recognize_next(token, context, results, errors)
+                    }
                 }
-                TriGState::SubjectBlankNodePropertyListAfter => if matches!(token, N3Token::Punctuation("." | "}")) {
-                    self.recognize_next(token, context,results, errors)
-                } else {
-                    self.stack.push(TriGState::PredicateObjectList);
-                    self.recognize_next(token, context,results, errors)
+                TriGState::SubjectBlankNodePropertyListAfter => {
+                    if matches!(token, N3Token::Punctuation("." | "}")) {
+                        self.recognize_next(token, context, results, errors)
+                    } else {
+                        self.stack.push(TriGState::PredicateObjectList);
+                        self.recognize_next(token, context, results, errors)
+                    }
                 }
                 TriGState::SubjectCollectionBeginning => {
                     if let N3Token::Punctuation(")") = token {
@@ -238,20 +256,15 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_predicate.push(rdf::FIRST.into());
                         self.stack.push(TriGState::SubjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
-                        self.recognize_next(token, context,results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
-                },
+                }
                 TriGState::SubjectCollectionPossibleEnd => {
                     let old = self.cur_subject.pop().unwrap();
                     self.cur_object.pop();
                     if let N3Token::Punctuation(")") = token {
                         self.cur_predicate.pop();
-                        results.push(Quad::new(
-                            old,
-                            rdf::REST,
-                            rdf::NIL,
-                            self.cur_graph.clone()
-                        ));
+                        results.push(Quad::new(old, rdf::REST, rdf::NIL, self.cur_graph.clone()));
                         self
                     } else {
                         let new = BlankNode::default();
@@ -259,37 +272,39 @@ impl RuleRecognizer for TriGRecognizer {
                             old,
                             rdf::REST,
                             new.clone(),
-                            self.cur_graph.clone()
+                            self.cur_graph.clone(),
                         ));
                         self.cur_subject.push(new.into());
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
-                        self.recognize_next(token, context,results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 }
                 // [5g]  wrappedGraph  ::=  '{' triplesBlock? '}'
                 // [6g]  triplesBlock  ::=  triples ('.' triplesBlock?)?
-                TriGState::WrappedGraph => if token == N3Token::Punctuation("{") {
-                    self.stack.push(TriGState::WrappedGraphPossibleEnd);
-                    self.stack.push(TriGState::Triples);
-                    self
-                } else {
-                    self.error(errors, "The GRAPH keyword should be followed by a graph name and a value in '{'")
-                },
+                TriGState::WrappedGraph => {
+                    if token == N3Token::Punctuation("{") {
+                        self.stack.push(TriGState::WrappedGraphPossibleEnd);
+                        self.stack.push(TriGState::Triples);
+                        self
+                    } else {
+                        self.error(errors, "The GRAPH keyword should be followed by a graph name and a value in '{'")
+                    }
+                }
                 TriGState::WrappedGraphPossibleEnd => {
                     self.cur_subject.pop();
                     match token {
-                        N3Token::Punctuation("}") => {
-                            self
-                        }
+                        N3Token::Punctuation("}") => self,
                         N3Token::Punctuation(".") => {
                             self.stack.push(TriGState::WrappedGraphPossibleEnd);
                             self.stack.push(TriGState::Triples);
                             self
                         }
-                       _ => {
-                            errors.push("A '}' or a '.' is expected at the end of a graph block".into());
-                            self.recognize_next(token, context,results, errors)
+                        _ => {
+                            errors.push(
+                                "A '}' or a '.' is expected at the end of a graph block".into(),
+                            );
+                            self.recognize_next(token, context, results, errors)
                         }
                     }
                 }
@@ -297,11 +312,12 @@ impl RuleRecognizer for TriGRecognizer {
                 // [10]  subject  ::=  iri | BlankNode | collection | quotedTriple
                 TriGState::Triples => match token {
                     N3Token::Punctuation("}") => {
-                        self.recognize_next(token, context,results, errors) // Early end
-                    },
+                        self.recognize_next(token, context, results, errors) // Early end
+                    }
                     N3Token::Punctuation("[") => {
                         self.cur_subject.push(BlankNode::default().into());
-                        self.stack.push(TriGState::TriplesBlankNodePropertyListCurrent);
+                        self.stack
+                            .push(TriGState::TriplesBlankNodePropertyListCurrent);
                         self
                     }
                     N3Token::IriRef(iri) => {
@@ -309,16 +325,26 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::PredicateObjectList);
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
                         Ok(t) => {
                             self.cur_subject.push(t.into());
                             self.stack.push(TriGState::PredicateObjectList);
                             self
-                        },
-                        Err(e) => self.error(errors, e)
-                    }
+                        }
+                        Err(e) => self.error(errors, e),
+                    },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_subject.push(BlankNode::new_unchecked(label).into());
+                        self.cur_subject
+                            .push(BlankNode::new_unchecked(label).into());
                         self.stack.push(TriGState::PredicateObjectList);
                         self
                     }
@@ -336,17 +362,17 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::QuotedSubject);
                         self
                     }
-                   _ => {
-                        self.error(errors, "TOKEN is not a valid RDF subject")
-                    }
+                    _ => self.error(errors, "TOKEN is not a valid RDF subject"),
                 },
-                TriGState::TriplesBlankNodePropertyListCurrent => if token == N3Token::Punctuation("]") {
-                    self.stack.push(TriGState::PredicateObjectList);
-                    self
-                } else {
-                    self.stack.push(TriGState::SubjectBlankNodePropertyListEnd);
-                    self.stack.push(TriGState::PredicateObjectList);
-                    self.recognize_next(token, context,results, errors)
+                TriGState::TriplesBlankNodePropertyListCurrent => {
+                    if token == N3Token::Punctuation("]") {
+                        self.stack.push(TriGState::PredicateObjectList);
+                        self
+                    } else {
+                        self.stack.push(TriGState::SubjectBlankNodePropertyListEnd);
+                        self.stack.push(TriGState::PredicateObjectList);
+                        self.recognize_next(token, context, results, errors)
+                    }
                 }
                 // [7g]  labelOrSubject  ::=  iri | BlankNode
                 TriGState::GraphName => match token {
@@ -354,13 +380,22 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_graph = NamedNode::new_unchecked(iri).into();
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
                         Ok(t) => {
                             self.cur_graph = t.into();
                             self
-                        },
-                        Err(e) => self.error(errors, e)
-                    }
+                        }
+                        Err(e) => self.error(errors, e),
+                    },
                     N3Token::BlankNodeLabel(label) => {
                         self.cur_graph = BlankNode::new_unchecked(label).into();
                         self
@@ -369,74 +404,76 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::GraphNameAnonEnd);
                         self
                     }
-                   _ => {
-                        self.error(errors, "TOKEN is not a valid graph name")
+                    _ => self.error(errors, "TOKEN is not a valid graph name"),
+                },
+                TriGState::GraphNameAnonEnd => {
+                    if token == N3Token::Punctuation("]") {
+                        self.cur_graph = BlankNode::default().into();
+                        self
+                    } else {
+                        self.error(errors, "Anonymous blank node with a property list are not allowed as graph name")
                     }
-                }
-                TriGState::GraphNameAnonEnd => if token == N3Token::Punctuation("]") {
-                    self.cur_graph = BlankNode::default().into();
-                    self
-                } else {
-                    self.error(errors, "Anonymous blank node with a property list are not allowed as graph name")
                 }
                 // [7]  predicateObjectList  ::=  verb objectList (';' (verb objectList)?)*
                 TriGState::PredicateObjectList => {
                     self.stack.push(TriGState::PredicateObjectListEnd);
                     self.stack.push(TriGState::ObjectsList);
                     self.stack.push(TriGState::Verb);
-                    self.recognize_next(token, context,results, errors)
-                },
+                    self.recognize_next(token, context, results, errors)
+                }
                 TriGState::PredicateObjectListEnd => {
                     self.cur_predicate.pop();
                     if token == N3Token::Punctuation(";") {
-                        self.stack.push(TriGState::PredicateObjectListPossibleContinuation);
+                        self.stack
+                            .push(TriGState::PredicateObjectListPossibleContinuation);
                         self
                     } else {
-                        self.recognize_next(token, context,results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
-                },
-                TriGState::PredicateObjectListPossibleContinuation => if token == N3Token::Punctuation(";") {
-                    self.stack.push(TriGState::PredicateObjectListPossibleContinuation);
-                    self
-                } else if matches!(token, N3Token::Punctuation("." | "}" | "]")) {
-                    self.recognize_next(token, context,results, errors)
-                } else {
-                    self.stack.push(TriGState::PredicateObjectListEnd);
-                    self.stack.push(TriGState::ObjectsList);
-                    self.stack.push(TriGState::Verb);
-                    self.recognize_next(token, context,results, errors)
-                },
+                }
+                TriGState::PredicateObjectListPossibleContinuation => {
+                    if token == N3Token::Punctuation(";") {
+                        self.stack
+                            .push(TriGState::PredicateObjectListPossibleContinuation);
+                        self
+                    } else if matches!(token, N3Token::Punctuation("." | "}" | "]")) {
+                        self.recognize_next(token, context, results, errors)
+                    } else {
+                        self.stack.push(TriGState::PredicateObjectListEnd);
+                        self.stack.push(TriGState::ObjectsList);
+                        self.stack.push(TriGState::Verb);
+                        self.recognize_next(token, context, results, errors)
+                    }
+                }
                 // [8]   objectList  ::=  object annotation? ( ',' object annotation? )*
                 // [30t] annotation  ::=  '{|' predicateObjectList '|}'
                 TriGState::ObjectsList => {
                     self.stack.push(TriGState::ObjectsListEnd);
                     self.stack.push(TriGState::Object);
-                    self.recognize_next(token, context,results, errors)
+                    self.recognize_next(token, context, results, errors)
                 }
-                TriGState::ObjectsListEnd => {
-                    match token {
-                        N3Token::Punctuation(",") => {
-                            self.cur_object.pop();
-                            self.stack.push(TriGState::ObjectsListEnd);
-                            self.stack.push(TriGState::Object);
-                            self
-                        },
-                        #[cfg(feature = "rdf-star")]
-                        N3Token::Punctuation("{|") => {
-                            let triple = Triple::new(
-                                self.cur_subject.last().unwrap().clone(),
-                                self.cur_predicate.last().unwrap().clone(),
-                                self.cur_object.pop().unwrap()
-                            );
-                            self.cur_subject.push(triple.into());
-                            self.stack.push(TriGState::AnnotationEnd);
-                            self.stack.push(TriGState::PredicateObjectList);
-                            self
-                        }
-                       _ => {
-                            self.cur_object.pop();
-                            self.recognize_next(token, context,results, errors)
-                        }
+                TriGState::ObjectsListEnd => match token {
+                    N3Token::Punctuation(",") => {
+                        self.cur_object.pop();
+                        self.stack.push(TriGState::ObjectsListEnd);
+                        self.stack.push(TriGState::Object);
+                        self
+                    }
+                    #[cfg(feature = "rdf-star")]
+                    N3Token::Punctuation("{|") => {
+                        let triple = Triple::new(
+                            self.cur_subject.last().unwrap().clone(),
+                            self.cur_predicate.last().unwrap().clone(),
+                            self.cur_object.pop().unwrap(),
+                        );
+                        self.cur_subject.push(triple.into());
+                        self.stack.push(TriGState::AnnotationEnd);
+                        self.stack.push(TriGState::PredicateObjectList);
+                        self
+                    }
+                    _ => {
+                        self.cur_object.pop();
+                        self.recognize_next(token, context, results, errors)
                     }
                 },
                 #[cfg(feature = "rdf-star")]
@@ -448,15 +485,17 @@ impl RuleRecognizer for TriGRecognizer {
                     } else {
                         self.error(errors, "Annotations should end with '|}'")
                     }
-                },
+                }
                 #[cfg(feature = "rdf-star")]
-                TriGState::ObjectsListAfterAnnotation => if token == N3Token::Punctuation(",") {
-                    self.stack.push(TriGState::ObjectsListEnd);
-                    self.stack.push(TriGState::Object);
-                    self
-                } else {
-                    self.recognize_next(token, context,results, errors)
-                },
+                TriGState::ObjectsListAfterAnnotation => {
+                    if token == N3Token::Punctuation(",") {
+                        self.stack.push(TriGState::ObjectsListEnd);
+                        self.stack.push(TriGState::Object);
+                        self
+                    } else {
+                        self.recognize_next(token, context, results, errors)
+                    }
+                }
                 // [9]   verb       ::=  predicate | 'a'
                 // [11]  predicate  ::=  iri
                 TriGState::Verb => match token {
@@ -468,17 +507,24 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_predicate.push(NamedNode::new_unchecked(iri));
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
                         Ok(t) => {
                             self.cur_predicate.push(t);
                             self
-                        },
-                        Err(e) => self.error(errors, e)
-                    }
-                   _ => {
-                        self.error(errors, "TOKEN is not a valid predicate")
-                    }
-                }
+                        }
+                        Err(e) => self.error(errors, e),
+                    },
+                    _ => self.error(errors, "TOKEN is not a valid predicate"),
+                },
                 // [12]    object                 ::=  iri | BlankNode | collection | blankNodePropertyList | literal | quotedTriple
                 // [13]    literal                ::=  RDFLiteral | NumericLiteral | BooleanLiteral
                 // [14]    blank                  ::=  BlankNode | collection
@@ -497,21 +543,31 @@ impl RuleRecognizer for TriGRecognizer {
                         self.emit_quad(results);
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
                         Ok(t) => {
                             self.cur_object.push(t.into());
                             self.emit_quad(results);
                             self
-                        },
-                        Err(e) => self.error(errors, e)
-                    }
+                        }
+                        Err(e) => self.error(errors, e),
+                    },
                     N3Token::BlankNodeLabel(label) => {
                         self.cur_object.push(BlankNode::new_unchecked(label).into());
                         self.emit_quad(results);
                         self
                     }
                     N3Token::Punctuation("[") => {
-                        self.stack.push(TriGState::ObjectBlankNodePropertyListCurrent);
+                        self.stack
+                            .push(TriGState::ObjectBlankNodePropertyListCurrent);
                         self
                     }
                     N3Token::Punctuation("(") => {
@@ -519,161 +575,188 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     }
                     N3Token::String(value) => {
-                        self.stack.push(TriGState::LiteralPossibleSuffix { value, emit: true });
+                        self.stack
+                            .push(TriGState::LiteralPossibleSuffix { value, emit: true });
                         self
                     }
                     N3Token::Integer(v) => {
-                        self.cur_object.push(Literal::new_typed_literal(v, xsd::INTEGER).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal(v, xsd::INTEGER).into());
                         self.emit_quad(results);
                         self
                     }
                     N3Token::Decimal(v) => {
-                        self.cur_object.push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
                         self.emit_quad(results);
                         self
                     }
                     N3Token::Double(v) => {
-                        self.cur_object.push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
                         self.emit_quad(results);
                         self
                     }
                     N3Token::PlainKeyword("true") => {
-                        self.cur_object.push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
                         self.emit_quad(results);
                         self
                     }
                     N3Token::PlainKeyword("false") => {
-                        self.cur_object.push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
                         self.emit_quad(results);
                         self
                     }
                     #[cfg(feature = "rdf-star")]
                     N3Token::Punctuation("<<") if context.with_quoted_triples => {
-                        self.stack.push(TriGState::ObjectQuotedTripleEnd { emit: true });
+                        self.stack
+                            .push(TriGState::ObjectQuotedTripleEnd { emit: true });
                         self.stack.push(TriGState::QuotedObject);
                         self.stack.push(TriGState::Verb);
                         self.stack.push(TriGState::QuotedSubject);
                         self
                     }
-                   _ => {
-                        self.error(errors, "TOKEN is not a valid RDF object")
-                    }
-
-                }
-                TriGState::ObjectBlankNodePropertyListCurrent => if token == N3Token::Punctuation("]") {
-                    self.cur_object.push(BlankNode::default().into());
-                    self.emit_quad(results);
-                    self
-                } else {
-                    self.cur_subject.push(BlankNode::default().into());
-                    self.stack.push(TriGState::ObjectBlankNodePropertyListEnd);
-                    self.stack.push(TriGState::PredicateObjectList);
-                    self.recognize_next(token, context,results, errors)
-                }
-                TriGState::ObjectBlankNodePropertyListEnd => if token == N3Token::Punctuation("]") {
-                    self.cur_object.push(self.cur_subject.pop().unwrap().into());
-                    self.emit_quad(results);
-                    self
-                } else {
-                    self.error(errors, "blank node property lists should end with a ']'")
-                }
-                TriGState::ObjectCollectionBeginning => if let  N3Token::Punctuation(")") = token {
-                    self.cur_object.push(rdf::NIL.into());
-                    self.emit_quad(results);
-                    self
-                } else {
-                    let root = BlankNode::default();
-                    self.cur_object.push(root.clone().into());
-                    self.emit_quad(results);
-                    self.cur_subject.push(root.into());
-                    self.cur_predicate.push(rdf::FIRST.into());
-                    self.stack.push(TriGState::ObjectCollectionPossibleEnd);
-                    self.stack.push(TriGState::Object);
-                    self.recognize_next(token, context,results, errors)
+                    _ => self.error(errors, "TOKEN is not a valid RDF object"),
                 },
+                TriGState::ObjectBlankNodePropertyListCurrent => {
+                    if token == N3Token::Punctuation("]") {
+                        self.cur_object.push(BlankNode::default().into());
+                        self.emit_quad(results);
+                        self
+                    } else {
+                        self.cur_subject.push(BlankNode::default().into());
+                        self.stack.push(TriGState::ObjectBlankNodePropertyListEnd);
+                        self.stack.push(TriGState::PredicateObjectList);
+                        self.recognize_next(token, context, results, errors)
+                    }
+                }
+                TriGState::ObjectBlankNodePropertyListEnd => {
+                    if token == N3Token::Punctuation("]") {
+                        self.cur_object.push(self.cur_subject.pop().unwrap().into());
+                        self.emit_quad(results);
+                        self
+                    } else {
+                        self.error(errors, "blank node property lists should end with a ']'")
+                    }
+                }
+                TriGState::ObjectCollectionBeginning => {
+                    if let N3Token::Punctuation(")") = token {
+                        self.cur_object.push(rdf::NIL.into());
+                        self.emit_quad(results);
+                        self
+                    } else {
+                        let root = BlankNode::default();
+                        self.cur_object.push(root.clone().into());
+                        self.emit_quad(results);
+                        self.cur_subject.push(root.into());
+                        self.cur_predicate.push(rdf::FIRST.into());
+                        self.stack.push(TriGState::ObjectCollectionPossibleEnd);
+                        self.stack.push(TriGState::Object);
+                        self.recognize_next(token, context, results, errors)
+                    }
+                }
                 TriGState::ObjectCollectionPossibleEnd => {
                     let old = self.cur_subject.pop().unwrap();
                     self.cur_object.pop();
                     if let N3Token::Punctuation(")") = token {
                         self.cur_predicate.pop();
-                        results.push(Quad::new(old,
-                                               rdf::REST,
-                                               rdf::NIL,
-                                               self.cur_graph.clone()
-                        ));
+                        results.push(Quad::new(old, rdf::REST, rdf::NIL, self.cur_graph.clone()));
                         self
-                    }else {
+                    } else {
                         let new = BlankNode::default();
-                        results.push(Quad::new(old,
-                                               rdf::REST,
-                                               new.clone(),
-                                               self.cur_graph.clone()
+                        results.push(Quad::new(
+                            old,
+                            rdf::REST,
+                            new.clone(),
+                            self.cur_graph.clone(),
                         ));
                         self.cur_subject.push(new.into());
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
-                        self.recognize_next(token, context,results, errors)
+                        self.recognize_next(token, context, results, errors)
                     }
                 }
-                TriGState::LiteralPossibleSuffix { value, emit } => {
-                    match token {
-                        N3Token::LangTag(lang) => {
-                            self.cur_object.push(Literal::new_language_tagged_literal_unchecked(value, lang.to_ascii_lowercase()).into());
+                TriGState::LiteralPossibleSuffix { value, emit } => match token {
+                    N3Token::LangTag(lang) => {
+                        self.cur_object.push(
+                            Literal::new_language_tagged_literal_unchecked(
+                                value,
+                                lang.to_ascii_lowercase(),
+                            )
+                            .into(),
+                        );
+                        if emit {
+                            self.emit_quad(results);
+                        }
+                        self
+                    }
+                    N3Token::Punctuation("^^") => {
+                        self.stack
+                            .push(TriGState::LiteralExpectDatatype { value, emit });
+                        self
+                    }
+                    _ => {
+                        self.cur_object
+                            .push(Literal::new_simple_literal(value).into());
+                        if emit {
+                            self.emit_quad(results);
+                        }
+                        self.recognize_next(token, context, results, errors)
+                    }
+                },
+                TriGState::LiteralExpectDatatype { value, emit } => match token {
+                    N3Token::IriRef(datatype) => {
+                        self.cur_object.push(
+                            Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype))
+                                .into(),
+                        );
+                        if emit {
+                            self.emit_quad(results);
+                        }
+                        self
+                    }
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
+                        Ok(t) => {
+                            self.cur_object
+                                .push(Literal::new_typed_literal(value, t).into());
                             if emit {
                                 self.emit_quad(results);
                             }
                             self
-                        },
-                        N3Token::Punctuation("^^") => {
-                            self.stack.push(TriGState::LiteralExpectDatatype { value, emit });
-                            self
                         }
-                        _ => {
-                            self.cur_object.push(Literal::new_simple_literal(value).into());
-                            if emit {
-                                self.emit_quad(results);
-                            }
-                            self.recognize_next(token, context,results, errors)
-                        }
-                    }
-                }
-                TriGState::LiteralExpectDatatype { value, emit } => {
-                    match token {
-                        N3Token::IriRef(datatype) => {
-                            self.cur_object.push(Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype)).into());
-                            if emit {
-                                self.emit_quad(results);
-                            }
-                            self
-                        },
-                        N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
-                            Ok(t) => {
-                                self.cur_object.push(Literal::new_typed_literal(value, t).into());
-                                if emit {
-                                    self.emit_quad(results);
-                                }
-                                self
-                            },
-                            Err(e) => self.error(errors, e)
-                        }
-                        _ => {
-                            self.error(errors, "Expecting a datatype IRI after ^^, found TOKEN").recognize_next(token, context, results, errors)
-                        }
-                    }
-                }
+                        Err(e) => self.error(errors, e),
+                    },
+                    _ => self
+                        .error(errors, "Expecting a datatype IRI after ^^, found TOKEN")
+                        .recognize_next(token, context, results, errors),
+                },
                 // [27t]  quotedTriple  ::=  '<<' qtSubject verb qtObject '>>'
                 #[cfg(feature = "rdf-star")]
                 TriGState::SubjectQuotedTripleEnd => {
                     let triple = Triple::new(
                         self.cur_subject.pop().unwrap(),
                         self.cur_predicate.pop().unwrap(),
-                        self.cur_object.pop().unwrap()
+                        self.cur_object.pop().unwrap(),
                     );
                     self.cur_subject.push(triple.into());
                     if token == N3Token::Punctuation(">>") {
                         self
                     } else {
-                        self.error(errors, "Expecting '>>' to close a quoted triple, found TOKEN")
+                        self.error(
+                            errors,
+                            "Expecting '>>' to close a quoted triple, found TOKEN",
+                        )
                     }
                 }
                 #[cfg(feature = "rdf-star")]
@@ -681,7 +764,7 @@ impl RuleRecognizer for TriGRecognizer {
                     let triple = Triple::new(
                         self.cur_subject.pop().unwrap(),
                         self.cur_predicate.pop().unwrap(),
-                        self.cur_object.pop().unwrap()
+                        self.cur_object.pop().unwrap(),
                     );
                     self.cur_object.push(triple.into());
                     if emit {
@@ -690,7 +773,10 @@ impl RuleRecognizer for TriGRecognizer {
                     if token == N3Token::Punctuation(">>") {
                         self
                     } else {
-                        self.error(errors, "Expecting '>>' to close a quoted triple, found TOKEN")
+                        self.error(
+                            errors,
+                            "Expecting '>>' to close a quoted triple, found TOKEN",
+                        )
                     }
                 }
                 // [28t]  qtSubject  ::=  iri | BlankNode | quotedTriple
@@ -705,15 +791,25 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_subject.push(NamedNode::new_unchecked(iri).into());
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
                         Ok(t) => {
                             self.cur_subject.push(t.into());
                             self
-                        },
-                        Err(e) => self.error(errors, e)
-                    }
+                        }
+                        Err(e) => self.error(errors, e),
+                    },
                     N3Token::BlankNodeLabel(label) => {
-                        self.cur_subject.push(BlankNode::new_unchecked(label).into());
+                        self.cur_subject
+                            .push(BlankNode::new_unchecked(label).into());
                         self
                     }
                     N3Token::Punctuation("<<") => {
@@ -723,8 +819,11 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::QuotedSubject);
                         self
                     }
-                    _ => self.error(errors, "TOKEN is not a valid RDF quoted triple subject: TOKEN")
-                }
+                    _ => self.error(
+                        errors,
+                        "TOKEN is not a valid RDF quoted triple subject: TOKEN",
+                    ),
+                },
                 // [29t]  qtObject  ::=  iri | BlankNode | literal | quotedTriple
                 #[cfg(feature = "rdf-star")]
                 TriGState::QuotedObject => match token {
@@ -737,55 +836,73 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_object.push(NamedNode::new_unchecked(iri).into());
                         self
                     }
-                    N3Token::PrefixedName { prefix, local, might_be_invalid_iri } => match resolve_local_name(prefix, &local, might_be_invalid_iri, &context.prefixes) {
+                    N3Token::PrefixedName {
+                        prefix,
+                        local,
+                        might_be_invalid_iri,
+                    } => match resolve_local_name(
+                        prefix,
+                        &local,
+                        might_be_invalid_iri,
+                        &context.prefixes,
+                    ) {
                         Ok(t) => {
                             self.cur_object.push(t.into());
                             self
-                        },
-                        Err(e) => self.error(errors, e)
-                    }
+                        }
+                        Err(e) => self.error(errors, e),
+                    },
                     N3Token::BlankNodeLabel(label) => {
                         self.cur_object.push(BlankNode::new_unchecked(label).into());
                         self
                     }
                     N3Token::String(value) => {
-                        self.stack.push(TriGState::LiteralPossibleSuffix { value, emit: false });
+                        self.stack
+                            .push(TriGState::LiteralPossibleSuffix { value, emit: false });
                         self
                     }
                     N3Token::Integer(v) => {
-                        self.cur_object.push(Literal::new_typed_literal(v, xsd::INTEGER).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal(v, xsd::INTEGER).into());
                         self
                     }
                     N3Token::Decimal(v) => {
-                        self.cur_object.push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal(v, xsd::DECIMAL).into());
                         self
                     }
                     N3Token::Double(v) => {
-                        self.cur_object.push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal(v, xsd::DOUBLE).into());
                         self
                     }
                     N3Token::PlainKeyword("true") => {
-                        self.cur_object.push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal("true", xsd::BOOLEAN).into());
                         self
                     }
                     N3Token::PlainKeyword("false") => {
-                        self.cur_object.push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
+                        self.cur_object
+                            .push(Literal::new_typed_literal("false", xsd::BOOLEAN).into());
                         self
                     }
                     N3Token::Punctuation("<<") => {
-                        self.stack.push(TriGState::ObjectQuotedTripleEnd { emit: false });
+                        self.stack
+                            .push(TriGState::ObjectQuotedTripleEnd { emit: false });
                         self.stack.push(TriGState::QuotedObject);
                         self.stack.push(TriGState::Verb);
                         self.stack.push(TriGState::QuotedSubject);
                         self
                     }
-                    _ => self.error(errors, "TOKEN is not a valid RDF quoted triple object")
-                }
+                    _ => self.error(errors, "TOKEN is not a valid RDF quoted triple object"),
+                },
                 #[cfg(feature = "rdf-star")]
-                TriGState::QuotedAnonEnd => if token == N3Token::Punctuation("]") {
-                    self
-                } else {
-                    self.error(errors, "Anonymous blank node with a property list are not allowed in quoted triples")
+                TriGState::QuotedAnonEnd => {
+                    if token == N3Token::Punctuation("]") {
+                        self
+                    } else {
+                        self.error(errors, "Anonymous blank node with a property list are not allowed in quoted triples")
+                    }
                 }
             }
         } else if token == N3Token::Punctuation(".") || token == N3Token::Punctuation("}") {

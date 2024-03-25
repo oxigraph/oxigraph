@@ -559,9 +559,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.0.1"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
+checksum = "658bd65b1cf4c852a3cc96f18a8ce7b5640f6b703f905c7d74532294c2a63984"
 
 [[package]]
 name = "flate2"
@@ -810,9 +810,9 @@ dependencies = [
 
 [[package]]
 name = "json-event-parser"
-version = "0.2.0-alpha.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b5ddd02379e99769e117ab30d21ad42dcec8ad3c12be77f9a34779e62d46346"
+checksum = "f850fafca79ebacd70eab9d80cb75a33aeda38bde8f3dd784c1837cdf0bde631"
 dependencies = [
  "tokio",
 ]
@@ -1033,9 +1033,9 @@ dependencies = [
 
 [[package]]
 name = "oxhttp"
-version = "0.2.0-alpha.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bc77c20aeeab248232d09bf748d9cf59548190c128efe4edc271a1e4db2ae95"
+checksum = "f3cc8fa85d054762930759faa582ba6b6dd0e115156229cdb8cca02b0e0451ae"
 dependencies = [
  "flate2",
  "httparse",
@@ -1049,7 +1049,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.4.0-alpha.5"
+version = "0.4.0-alpha.6-dev"
 dependencies = [
  "codspeed-criterion-compat",
  "digest",
@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.4.0-alpha.5"
+version = "0.4.0-alpha.6-dev"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1099,7 +1099,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.4.0-alpha.5"
+version = "0.4.0-alpha.6-dev"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1133,9 +1133,9 @@ dependencies = [
 
 [[package]]
 name = "oxiri"
-version = "0.2.3-alpha.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b225dad32cfaa43a960b93f01fa7f87528ac07e794b80f6d9a0153e0222557e2"
+checksum = "d05417ee46e2eb40dd9d590b4d67fc2408208b3a48a6b7f71d2bc1d7ce12a3e0"
 
 [[package]]
 name = "oxrdf"
@@ -1150,7 +1150,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfio"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5-dev"
 dependencies = [
  "oxrdf",
  "oxrdfxml",
@@ -1161,7 +1161,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfxml"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5-dev"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1173,7 +1173,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.4.0-alpha.5"
+version = "0.4.0-alpha.6-dev"
 dependencies = [
  "bindgen",
  "cc",
@@ -1191,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "oxttl"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5-dev"
 dependencies = [
  "memchr",
  "oxilangtag",
@@ -1347,9 +1347,9 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.2.16"
+version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a41cf62165e97c7f814d2221421dbb9afcbcdb0a88068e5ea206e19951c2cbb5"
+checksum = "8d3928fb5db768cb86f891ff014f0144589297e3c6a1aba6ed7cecfdace270c7"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.4.0-alpha.5"
+version = "0.4.0-alpha.6-dev"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1486,9 +1486,9 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4963ed1bc86e4f3ee217022bd855b297cef07fb9eac5dfa1f788b220b49b3bd"
+checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
 dependencies = [
  "either",
  "rayon-core",
@@ -1820,9 +1820,9 @@ checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
 
 [[package]]
 name = "syn"
-version = "2.0.53"
+version = "2.0.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7383cd0e49fff4b6b90ca5670bfd3e9d6a733b3f90c686605aa7eec8c4996032"
+checksum = "002a1b3dbf967edfafc32655d0f377ab0bb7b994aa1d32c8cc7e9b8bf3ebb8f0"
 dependencies = [
  "proc-macro2",
  "quote",

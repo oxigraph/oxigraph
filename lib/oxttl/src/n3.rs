@@ -785,17 +785,11 @@ impl RuleRecognizer for N3Recognizer {
                     }
                     errors.push("A dot is expected at the end of N3 statements".into());
                 }
-                N3State::BaseExpectIri => return match token {
-                    N3Token::IriRef(iri) => {
-                        match Iri::parse_unchecked(iri) {
-                            Ok(iri) => {
-                                context.lexer_options.base_iri = Some(iri);
+                N3State::BaseExpectIri => return if let N3Token::IriRef(iri) = token {
+                                context.lexer_options.base_iri = Some(Iri::parse_unchecked(iri));
                                 self
-                            }
-                            Err(e) => self.error(errors, format!("Invalid base IRI: {e}"))
-                        }
-                    }
-                    _ => self.error(errors, "The BASE keyword should be followed by an IRI"),
+                    } else {
+                    self.error(errors, "The BASE keyword should be followed by an IRI")
                 },
                 N3State::PrefixExpectPrefix => return match token {
                     N3Token::PrefixedName { prefix, local, .. } if local.is_empty() => {
@@ -806,17 +800,10 @@ impl RuleRecognizer for N3Recognizer {
                         self.error(errors, "The PREFIX keyword should be followed by a prefix like 'ex:'")
                     }
                 },
-                N3State::PrefixExpectIri { name } => return match token {
-                    N3Token::IriRef(iri) => {
-                        match Iri::parse_unchecked(iri) {
-                            Ok(iri) => {
-                                context.prefixes.insert(name, iri);
-                                self
-                            }
-                            Err(e) => self.error(errors, format!("Invalid prefix IRI: {e}"))
-                        }
-                    }
-                    _ => self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI"),
+                N3State::PrefixExpectIri { name } => return if let N3Token::IriRef(iri) = token {
+                    context.prefixes.insert(name, Iri::parse_unchecked(iri));
+                    self
+                } else { self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
                 },
                 // [9]  triples  ::=  subject predicateObjectList?
                 N3State::Triples => {
