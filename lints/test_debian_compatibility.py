@@ -8,7 +8,6 @@ TARGET_DEBIAN_VERSIONS = ["sid"]
 IGNORE_PACKAGES = {"oxigraph-js", "oxigraph-testsuite", "pyoxigraph", "sparql-smith"}
 ALLOWED_MISSING_PACKAGES = {
     "codspeed-criterion-compat",
-    "escargot",
     "json-event-parser",
     "oxhttp",
     "oxiri",

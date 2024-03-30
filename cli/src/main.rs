@@ -1865,19 +1865,15 @@ mod tests {
     use std::fs::remove_dir_all;
     use std::io::read_to_string;
 
-    fn cli_command() -> Result<Command> {
-        Ok(Command::from_std(
-            escargot::CargoBuild::new()
-                .bin("oxigraph")
-                .manifest_path(format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
-                .run()?
-                .command(),
-        ))
+    fn cli_command() -> Command {
+        let mut command = Command::new(env!("CARGO"));
+        command.arg("run").arg("--bin").arg("oxigraph").arg("--");
+        command
     }
 
     fn initialized_cli_store(data: &'static str) -> Result<TempDir> {
         let store_dir = TempDir::new()?;
-        cli_command()?
+        cli_command()
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
@@ -1889,8 +1885,8 @@ mod tests {
         Ok(store_dir)
     }
 
-    fn assert_cli_state(store_dir: &TempDir, data: &'static str) -> Result<()> {
-        cli_command()?
+    fn assert_cli_state(store_dir: &TempDir, data: &'static str) {
+        cli_command()
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
@@ -1899,17 +1895,15 @@ mod tests {
             .assert()
             .stdout(data)
             .success();
-        Ok(())
     }
 
     #[test]
-    fn cli_help() -> Result<()> {
-        cli_command()?
+    fn cli_help() {
+        cli_command()
             .assert()
             .failure()
             .stdout("")
-            .stderr(predicate::str::starts_with("Oxigraph"));
-        Ok(())
+            .stderr(predicate::str::contains("Oxigraph"));
     }
 
     #[test]
@@ -1917,7 +1911,7 @@ mod tests {
         let store_dir = TempDir::new()?;
         let input_file = NamedTempFile::new("input.ttl")?;
         input_file.write_str("<s> <http://example.com/p> <http://example.com/o> .")?;
-        cli_command()?
+        cli_command()
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
@@ -1928,7 +1922,7 @@ mod tests {
             .assert()
             .success();
 
-        cli_command()?
+        cli_command()
             .arg("optimize")
             .arg("--location")
             .arg(store_dir.path())
@@ -1936,7 +1930,7 @@ mod tests {
             .success();
 
         let output_file = NamedTempFile::new("output.nt")?;
-        cli_command()?
+        cli_command()
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
@@ -1957,7 +1951,7 @@ mod tests {
         let input_file = NamedTempFile::new("input.nq")?;
         input_file
             .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .")?;
-        cli_command()?
+        cli_command()
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
@@ -1967,7 +1961,7 @@ mod tests {
             .success();
 
         let output_file = NamedTempFile::new("output.nq")?;
-        cli_command()?
+        cli_command()
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
@@ -1988,7 +1982,7 @@ mod tests {
         encoder
             .write_all(b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
         file.write_binary(&encoder.finish()?)?;
-        cli_command()?
+        cli_command()
             .arg("load")
             .arg("-l")
             .arg(store_dir.path())
@@ -1997,7 +1991,7 @@ mod tests {
             .assert()
             .success();
 
-        cli_command()?
+        cli_command()
             .arg("dump")
             .arg("-l")
             .arg(store_dir.path())
@@ -2016,7 +2010,7 @@ mod tests {
         input_file.write_str(
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
         )?;
-        cli_command()?
+        cli_command()
             .arg("load")
             .arg("-l")
             .arg(store_dir.path())
@@ -2028,7 +2022,7 @@ mod tests {
             .success();
 
         let output_file = NamedTempFile::new("output.nt")?;
-        cli_command()?
+        cli_command()
             .arg("dump")
             .arg("-l")
             .arg(store_dir.path())
@@ -2049,7 +2043,7 @@ mod tests {
         let input_file = NamedTempFile::new("input")?;
         input_file
             .write_str("<http://example.com/s> <http://example.com/p> <http://example.com/o> .")?;
-        cli_command()?
+        cli_command()
             .arg("load")
             .arg("-l")
             .arg(store_dir.path())
@@ -2061,7 +2055,7 @@ mod tests {
             .success();
 
         let output_file = NamedTempFile::new("output")?;
-        cli_command()?
+        cli_command()
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
@@ -2081,7 +2075,7 @@ mod tests {
     #[test]
     fn cli_load_from_stdin_and_dump_to_stdout() -> Result<()> {
         let store_dir = TempDir::new()?;
-        cli_command()?
+        cli_command()
             .arg("load")
             .arg("--location")
             .arg(store_dir.path())
@@ -2091,7 +2085,7 @@ mod tests {
             .assert()
             .success();
 
-        cli_command()?
+        cli_command()
             .arg("dump")
             .arg("--location")
             .arg(store_dir.path())
@@ -2111,7 +2105,7 @@ mod tests {
 
         let backup_dir = TempDir::new()?;
         remove_dir_all(backup_dir.path())?; // The directory should not exist yet
-        cli_command()?
+        cli_command()
             .arg("backup")
             .arg("--location")
             .arg(store_dir.path())
@@ -2123,7 +2117,8 @@ mod tests {
         assert_cli_state(
             &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
-        )
+        );
+        Ok(())
     }
 
     #[test]
@@ -2131,7 +2126,7 @@ mod tests {
         let store_dir = initialized_cli_store(
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
         )?;
-        cli_command()?
+        cli_command()
             .arg("query")
             .arg("--location")
             .arg(store_dir.path())
@@ -2152,7 +2147,7 @@ mod tests {
         let store_dir = initialized_cli_store(
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .",
         )?;
-        cli_command()?
+        cli_command()
             .arg("query")
             .arg("--location")
             .arg(store_dir.path())
@@ -2175,7 +2170,7 @@ mod tests {
         let input_file = NamedTempFile::new("input.rq")?;
         input_file.write_str("SELECT ?s WHERE { ?s ?p ?o }")?;
         let output_file = NamedTempFile::new("output.tsv")?;
-        cli_command()?
+        cli_command()
             .arg("query")
             .arg("--location")
             .arg(store_dir.path())
@@ -2192,7 +2187,7 @@ mod tests {
     #[test]
     fn cli_ask_update_inline() -> Result<()> {
         let store_dir = TempDir::new()?;
-        cli_command()?
+        cli_command()
             .arg("update")
             .arg("--location")
             .arg(store_dir.path())
@@ -2205,13 +2200,14 @@ mod tests {
         assert_cli_state(
             &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
-        )
+        );
+        Ok(())
     }
 
     #[test]
     fn cli_construct_update_stdin() -> Result<()> {
         let store_dir = TempDir::new()?;
-        cli_command()?
+        cli_command()
             .arg("update")
             .arg("--location")
             .arg(store_dir.path())
@@ -2223,7 +2219,8 @@ mod tests {
         assert_cli_state(
             &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
-        )
+        );
+        Ok(())
     }
 
     #[test]
@@ -2233,7 +2230,7 @@ mod tests {
         input_file.write_str(
             "INSERT DATA { <http://example.com/s> <http://example.com/p> <http://example.com/o> }",
         )?;
-        cli_command()?
+        cli_command()
             .arg("update")
             .arg("--location")
             .arg(store_dir.path())
@@ -2244,7 +2241,8 @@ mod tests {
         assert_cli_state(
             &store_dir,
             "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n",
-        )
+        );
+        Ok(())
     }
 
     #[test]
@@ -2252,7 +2250,7 @@ mod tests {
         let input_file = NamedTempFile::new("input.ttl")?;
         input_file.write_str("@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person ;\n\tschema:name \"Foo Bar\"@en .\n")?;
         let output_file = NamedTempFile::new("output.rdf")?;
-        cli_command()?
+        cli_command()
             .arg("convert")
             .arg("--from-file")
             .arg(input_file.path())
@@ -2268,8 +2266,8 @@ mod tests {
     }
 
     #[test]
-    fn cli_convert_from_default_graph_to_named_graph() -> Result<()> {
-        cli_command()?
+    fn cli_convert_from_default_graph_to_named_graph() {
+        cli_command()
             .arg("convert")
             .arg("--from-format")
             .arg("trig")
@@ -2282,12 +2280,11 @@ mod tests {
             .assert()
             .stdout("<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/t> .\n")
             .success();
-        Ok(())
     }
 
     #[test]
-    fn cli_convert_from_named_graph() -> Result<()> {
-        cli_command()?
+    fn cli_convert_from_named_graph() {
+        cli_command()
             .arg("convert")
             .arg("--from-format")
             .arg("trig")
@@ -2298,7 +2295,6 @@ mod tests {
             .write_stdin("@base <http://example.com/> . <s> <p> <o> . <g> { <sg> <pg> <og> . }")
             .assert()
             .stdout("<http://example.com/sg> <http://example.com/pg> <http://example.com/og> .\n");
-        Ok(())
     }
 
     #[test]
