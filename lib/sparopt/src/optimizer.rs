@@ -712,11 +712,10 @@ impl Optimizer {
             GraphPattern::OrderBy { inner, expression } => {
                 GraphPattern::order_by(Self::reorder_joins(*inner, input_types), expression)
             }
-            GraphPattern::Service {
-                inner,
-                name,
-                silent,
-            } => GraphPattern::service(Self::reorder_joins(*inner, input_types), name, silent),
+            service @ GraphPattern::Service { .. } => {
+                // We don't do join reordering inside of SERVICE calls, we don't know about cardinalities
+                service
+            }
             GraphPattern::Group {
                 inner,
                 variables,
