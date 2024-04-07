@@ -441,7 +441,7 @@
 
 ### Added
 - [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) support. `Triple` is now a possible `Term`. Serialization formats and SPARQL support have been updated to match the [latest version of the specification draft](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html).
-- Fast data bulk load with the `Store` `bulk_load_dataset` and `bulk_load_graph` methods and a special command line option of the server.
+- Fast data bulk load with the `Store` `bulk_load_dataset` and `bulk_load_graph` methods and a special command-line option of the server.
 - It is now possible to quickly backup the database using the `backup` method.
 - Rust: `*Syntax::from_extension` to easy guess a graph/dataset/sparql result format from a file extension.
 - Rust: Custom SPARQL functions are now supported using `QueryOptions::with_custom_function`.
@@ -457,7 +457,7 @@
 - SPARQL: The parser now validates more carefully the inputs following the SPARQL specification and test suite.
 - SPARQL: Variable scoping was buggy with "FILTER EXISTS". It is now fixed.
 - Rust: RDF model, SPARQL parser and SPARQL result parsers have been moved to stand-alone reusable libraries.
-- Rust: HTTPS is not supported by default with the `http_client` option. You need to enable the `native-tls` or the `rustls` feature of the `oxhttp` crate to enable a TSL layer.
+- Rust: HTTPS is not supported by default with the `http_client` option. You need to enable the `native-tls` or the `rustls` feature of the `oxhttp` crate to enable a TLS layer.
 - Rust: The error types have been cleaned.
   Most of the `Store` methods now return a `StorageError` that is more descriptive than the previous `std::io::Error`.
   The new error type all implements `Into<std::io::Error>` for easy conversion.
@@ -465,7 +465,7 @@
   It is The used type of the `subject` field of the `Triple` and `Quad` structs.
 - Rust: The SPARQL algebra is not anymore publicly exposed in the `oxigraph` crate. The new `oxalgebra` crate exposes it.
 - Rust: `UpdateOptions` API have been rewritten. It can now be built using `From<QueryOptions>` or `Default`.
-- Server: The command line API has been redesign. See the [server README](server/README.md) for more information.
+- Server: The command-line API has been redesign. See the [server README](server/README.md) for more information.
 - Server: The HTTP implementation is now provided by [`oxhttp`](https://github.com/oxigraph/oxhttp).
 - Server: The HTTP response bodies are now generated on the fly instead of being buffered.
 - Python: The `SledStore` and `MemoryStore` classes have been removed in favor of the `Store` class.

@@ -8,7 +8,7 @@ Oxigraph CLI
 [![Gitter](https://badges.gitter.im/oxigraph/community.svg)](https://gitter.im/oxigraph/community)
 
 Oxigraph CLI is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
-It is packaged as a command line tool allowing to manipulate an RDF files, query them using SPARQL...
+It is packaged as a command-line tool allowing to manipulate RDF files, query them using SPARQL...
 It also allows to spawn a HTTP server on top of the database.
 
 Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
@@ -24,7 +24,7 @@ It is also usable as [a Rust library](https://crates.io/crates/oxigraph) and as 
 
 Oxigraph implements the following specifications:
 * [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/), [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/), and [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/).
-* [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval using the [Rio library](https://github.com/oxigraph/rio).
+* [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/), and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) RDF serialization formats for both data ingestion and retrieval.
 * [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/), [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/) and [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/).
 * [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#query-operation) and [SPARQL 1.1 Graph Store HTTP Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/).
 
@@ -41,7 +41,7 @@ You need to have [a recent stable version of Rust and Cargo installed](https://w
 To download, build and install the latest released version run `cargo install oxigraph-cli`.
 There is no need to clone the git repository.
 
-To compile the command line tool from source, clone this git repository including its submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`), and execute `cargo build --release` in the `cli` directory to compile the full binary after having downloaded its dependencies.
+To compile the command-line tool from source, clone this git repository including its submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`), and execute `cargo build --release` in the `cli` directory to compile the full binary after having downloaded its dependencies.
 It will create a fat binary in `target/release/oxigraph`.
 
 Some build options (cargo features) are available:
@@ -64,7 +64,7 @@ It provides the following REST actions:
   curl -X POST -H 'Content-Type:application/sparql-query' \
     --data 'SELECT * WHERE { ?s ?p ?o } LIMIT 10' http://localhost:7878/query
   ```
-  This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
+  This action supports content negotiation and could return [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/) and [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/).
 * `/update` allows to execute SPARQL updates against the server repository following the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/#update-operation).
   For example:
   ```sh
@@ -78,7 +78,7 @@ It provides the following REST actions:
     -T MY_FILE.nt "http://localhost:7878/store?graph=http://example.com/g"
   ```
   will add the N-Triples file `MY_FILE.nt` to the server dataset inside of the `http://example.com/g` named graph.
-  [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/) and [RDF XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
+  [Turtle](https://www.w3.org/TR/turtle/), [N-Triples](https://www.w3.org/TR/n-triples/) and [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) are supported.
   It is also possible to `POST`, `PUT` and `GET` the complete RDF dataset on the server using RDF dataset formats ([TriG](https://www.w3.org/TR/trig/) and [N-Quads](https://www.w3.org/TR/n-quads/)) against the `/store` endpoint.
   For example:
   ```sh
