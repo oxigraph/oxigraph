@@ -13,4 +13,4 @@ A clear and concise description of what the bug is.
 **To Reproduce**
 Steps to reproduce the behavior:
 1. Which version of Oxigraph are you using? On which platform?
-2. A command line or a code snippet that triggers the bug.
+2. A command-line or a code snippet that triggers the bug.

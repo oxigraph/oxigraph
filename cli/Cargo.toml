@@ -9,7 +9,7 @@ categories = ["command-line-utilities", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/cli"
 homepage = "https://oxigraph.org/cli/"
 description = """
-Oxigraph command line toolkit and SPARQL HTTP server
+Oxigraph CLI tool and SPARQL HTTP server
 """
 edition.workspace = true
 rust-version.workspace = true

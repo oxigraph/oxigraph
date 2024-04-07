@@ -4904,7 +4904,7 @@ impl Iterator for ConsecutiveDeduplication {
     type Item = Result<EncodedTuple, EvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Basic idea. We buffer the previous result and we only emit it when we kow the next one or it's the end
+        // Basic idea. We buffer the previous result and we only emit it when we know the next one or it's the end
         loop {
             if let Some(next) = self.inner.next() {
                 match next {
