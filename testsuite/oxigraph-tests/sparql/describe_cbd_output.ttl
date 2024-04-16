@@ -1,0 +1,14 @@
+PREFIX schema: <http://schema.org/>
+
+<http://example.com/foo> a schema:Person ;
+    schema:name "foo" ;
+    schema:parent _:bar .
+
+_:bar a schema:Person ;
+    schema:name "bar" ;
+    schema:parent _:baz .
+
+_:baz a schema:Person ;
+    schema:name "baz" ;
+    schema:parent <http://example.com/bat> ;
+    schema:child _:bar .

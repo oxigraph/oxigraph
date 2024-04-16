@@ -231,7 +231,9 @@ impl SimpleEvaluator {
             QueryResults::Graph(QueryTripleIter {
                 iter: Box::new(DescribeIterator {
                     eval: self.clone(),
-                    iter: eval(from),
+                    tuples_to_describe: eval(from),
+                    nodes_described: HashSet::new(),
+                    nodes_to_describe: Vec::new(),
                     quads: Box::new(empty()),
                 }),
             }),
@@ -5039,7 +5041,9 @@ fn decode_triple<D: Decoder>(
 
 struct DescribeIterator {
     eval: SimpleEvaluator,
-    iter: EncodedTuplesIterator,
+    tuples_to_describe: EncodedTuplesIterator,
+    nodes_described: HashSet<EncodedTerm>,
+    nodes_to_describe: Vec<EncodedTerm>,
     quads: Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>,
 }
 
@@ -5049,34 +5053,42 @@ impl Iterator for DescribeIterator {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(quad) = self.quads.next() {
-                return Some(match quad {
-                    Ok(quad) => self
-                        .eval
+                let quad = match quad {
+                    Ok(quad) => quad,
+                    Err(error) => return Some(Err(error)),
+                };
+                // If there is a blank node object, we need to describe it too
+                if quad.object.is_blank_node() && self.nodes_described.insert(quad.object.clone()) {
+                    self.nodes_to_describe.push(quad.object.clone());
+                }
+                // We yield the triple
+                return Some(
+                    self.eval
                         .dataset
                         .decode_quad(&quad)
                         .map(Into::into)
                         .map_err(Into::into),
-                    Err(error) => Err(error),
-                });
+                );
             }
-            let tuple = match self.iter.next()? {
-                Ok(tuple) => tuple,
-                Err(error) => return Some(Err(error)),
-            };
-            let eval = self.eval.clone();
-            self.quads = Box::new(tuple.into_iter().flatten().flat_map(move |subject| {
-                eval.dataset
-                    .encoded_quads_for_pattern(
-                        Some(&subject),
-                        None,
-                        None,
-                        Some(&EncodedTerm::DefaultGraph),
-                    )
-                    .chain(
-                        eval.dataset
-                            .encoded_quads_for_pattern(Some(&subject), None, None, None),
-                    )
-            }));
+            if let Some(node_to_describe) = self.nodes_to_describe.pop() {
+                // We have a new node to describe
+                self.quads = self.eval.dataset.encoded_quads_for_pattern(
+                    Some(&node_to_describe),
+                    None,
+                    None,
+                    Some(&EncodedTerm::DefaultGraph),
+                );
+            } else {
+                let tuple = match self.tuples_to_describe.next()? {
+                    Ok(tuple) => tuple,
+                    Err(error) => return Some(Err(error)),
+                };
+                for node in tuple.into_iter().flatten() {
+                    if self.nodes_described.insert(node.clone()) {
+                        self.nodes_to_describe.push(node);
+                    }
+                }
+            }
         }
     }
 }

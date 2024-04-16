@@ -14,8 +14,9 @@
     :long_unicode_escape_with_multibytes_char
     :small_unicode_escape_with_multibytes_char_update
     :long_unicode_escape_with_multibytes_char_update
-    :describe
+    :describe_multiple
     :describe_where
+    :describe_cbd
     :ask_with_from
     :group_concat_with_null
     :single_not_exists
@@ -51,19 +52,26 @@
     mf:name "Multibytes character at the end of a unicode escape sequence" ;
     mf:action <long_unicode_escape_with_multibytes_char.ru> .
 
-:describe rdf:type mf:QueryEvaluationTest ;
-    mf:name "Simple DESCRIBE request" ;
+:describe_multiple rdf:type mf:QueryEvaluationTest ;
+    mf:name "DESCRIBE request with multiple target including one that does not exist" ;
     mf:action
-         [ qt:query  <describe.rq> ;
+         [ qt:query  <describe_multiple.rq> ;
            qt:data   <describe_input.ttl> ] ;
     mf:result  <describe_output.ttl> .
 
 :describe_where rdf:type mf:QueryEvaluationTest ;
-    mf:name "Simple DESCRIBE request" ;
+    mf:name "DESCRIBE request with WHERE clause" ;
     mf:action
          [ qt:query  <describe_where.rq> ;
            qt:data   <describe_input.ttl> ] ;
     mf:result  <describe_output.ttl> .
+
+:describe_cbd rdf:type mf:QueryEvaluationTest ;
+    mf:name "DESCRIBE request with blank nodes to check Concise Bounded Description" ;
+    mf:action
+         [ qt:query  <describe_cbd.rq> ;
+           qt:data   <describe_cbd_input.ttl> ] ;
+    mf:result  <describe_cbd_output.ttl> .
 
 :ask_with_from rdf:type mf:PositiveSyntaxTest ;
     mf:name "ASK with FROM" ;
