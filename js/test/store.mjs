@@ -106,6 +106,17 @@ describe("Store", () => {
             });
             assert.strictEqual(1, results.length);
         });
+
+        it("SELECT with results format", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            const results = store.query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }", {
+                results_format: "json",
+            });
+            assert.strictEqual(
+                '{"head":{"vars":["s","p","o"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"},"p":{"type":"uri","value":"http://example.com"},"o":{"type":"uri","value":"http://example.com"}}]}}',
+                results,
+            );
+        });
     });
 
     describe("#update()", () => {
