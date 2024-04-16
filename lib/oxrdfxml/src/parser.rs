@@ -658,13 +658,15 @@ impl<R> RdfXmlReader<R> {
         let id_attr = match id_attr {
             Some(iri) => {
                 let iri = self.resolve_iri(&base_iri, iri)?;
-                if self.known_rdf_id.contains(iri.as_str()) {
-                    return Err(RdfXmlSyntaxError::msg(format!(
-                        "{iri} has already been used as rdf:ID value"
-                    ))
-                    .into());
+                if !self.unchecked {
+                    if self.known_rdf_id.contains(iri.as_str()) {
+                        return Err(RdfXmlSyntaxError::msg(format!(
+                            "{iri} has already been used as rdf:ID value"
+                        ))
+                        .into());
+                    }
+                    self.known_rdf_id.insert(iri.as_str().into());
                 }
-                self.known_rdf_id.insert(iri.as_str().into());
                 Some(iri)
             }
             None => None,
