@@ -4,6 +4,7 @@ use crate::utils::to_err;
 use js_sys::{Array, Map, Reflect};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
+use oxigraph::sparql::results::QueryResultsFormat;
 use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
 use wasm_bindgen::prelude::*;
@@ -106,11 +107,27 @@ impl JsStore {
         // Parsing options
         let mut base_iri = None;
         let mut use_default_graph_as_union = false;
+        let mut results_format = None;
         if !options.is_undefined() {
-            base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?.as_string();
+            let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
+            if !js_base_iri.is_undefined() && !js_base_iri.is_null() {
+                base_iri = Some(
+                    js_base_iri
+                        .as_string()
+                        .ok_or_else(|| to_err("base_iri option must be a string"))?,
+                );
+            }
             use_default_graph_as_union =
                 Reflect::get(options, &JsValue::from_str("use_default_graph_as_union"))?
                     .is_truthy();
+            let js_results_format = Reflect::get(options, &JsValue::from_str("results_format"))?;
+            if !js_results_format.is_undefined() && !js_results_format.is_null() {
+                results_format = Some(query_results_format(
+                    &js_results_format
+                        .as_string()
+                        .ok_or_else(|| to_err("results_format option must be a string"))?,
+                )?);
+            }
         }
 
         let mut query = Query::parse(query, base_iri.as_deref()).map_err(to_err)?;
@@ -118,42 +135,56 @@ impl JsStore {
             query.dataset_mut().set_default_graph_as_union();
         }
         let results = self.store.query(query).map_err(to_err)?;
-        let output = match results {
-            QueryResults::Solutions(solutions) => {
-                let results = Array::new();
-                for solution in solutions {
-                    let solution = solution.map_err(to_err)?;
-                    let result = Map::new();
-                    for (variable, value) in solution.iter() {
-                        result.set(
-                            &variable.as_str().into(),
-                            &JsTerm::from(value.clone()).into(),
+
+        Ok(if let Some(results_format) = results_format {
+            JsValue::from_str(
+                &String::from_utf8(results.write(Vec::new(), results_format).map_err(to_err)?)
+                    .map_err(to_err)?,
+            )
+        } else {
+            match results {
+                QueryResults::Solutions(solutions) => {
+                    let results = Array::new();
+                    for solution in solutions {
+                        let solution = solution.map_err(to_err)?;
+                        let result = Map::new();
+                        for (variable, value) in solution.iter() {
+                            result.set(
+                                &variable.as_str().into(),
+                                &JsTerm::from(value.clone()).into(),
+                            );
+                        }
+                        results.push(&result.into());
+                    }
+                    results.into()
+                }
+                QueryResults::Graph(quads) => {
+                    let results = Array::new();
+                    for quad in quads {
+                        results.push(
+                            &JsQuad::from(quad.map_err(to_err)?.in_graph(GraphName::DefaultGraph))
+                                .into(),
                         );
                     }
-                    results.push(&result.into());
+                    results.into()
                 }
-                results.into()
+                QueryResults::Boolean(b) => b.into(),
             }
-            QueryResults::Graph(quads) => {
-                let results = Array::new();
-                for quad in quads {
-                    results.push(
-                        &JsQuad::from(quad.map_err(to_err)?.in_graph(GraphName::DefaultGraph))
-                            .into(),
-                    );
-                }
-                results.into()
-            }
-            QueryResults::Boolean(b) => b.into(),
-        };
-        Ok(output)
+        })
     }
 
     pub fn update(&self, update: &str, options: &JsValue) -> Result<(), JsValue> {
         // Parsing options
         let mut base_iri = None;
         if !options.is_undefined() {
-            base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?.as_string();
+            let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
+            if !js_base_iri.is_undefined() && !js_base_iri.is_null() {
+                base_iri = Some(
+                    js_base_iri
+                        .as_string()
+                        .ok_or_else(|| to_err("base_iri option must be a string"))?,
+                );
+            }
         }
 
         let update = Update::parse(update, base_iri.as_deref()).map_err(to_err)?;
@@ -216,5 +247,17 @@ fn rdf_format(format: &str) -> Result<RdfFormat, JsValue> {
     } else {
         RdfFormat::from_extension(format)
             .ok_or_else(|| format_err!("Not supported RDF format extension: {format}"))
+    }
+}
+
+fn query_results_format(format: &str) -> Result<QueryResultsFormat, JsValue> {
+    if format.contains('/') {
+        QueryResultsFormat::from_media_type(format).ok_or_else(|| {
+            format_err!("Not supported SPARQL query results format media type: {format}")
+        })
+    } else {
+        QueryResultsFormat::from_extension(format).ok_or_else(|| {
+            format_err!("Not supported SPARQL query results format extension: {format}")
+        })
     }
 }
