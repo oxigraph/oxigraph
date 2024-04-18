@@ -122,11 +122,11 @@ impl JsStore {
                     .is_truthy();
             let js_results_format = Reflect::get(options, &JsValue::from_str("results_format"))?;
             if !js_results_format.is_undefined() && !js_results_format.is_null() {
-                results_format = Some(query_results_format(
-                    &js_results_format
+                results_format = Some(
+                    js_results_format
                         .as_string()
                         .ok_or_else(|| to_err("results_format option must be a string"))?,
-                )?);
+                );
             }
         }
 
@@ -136,14 +136,19 @@ impl JsStore {
         }
         let results = self.store.query(query).map_err(to_err)?;
 
-        Ok(if let Some(results_format) = results_format {
-            JsValue::from_str(
-                &String::from_utf8(results.write(Vec::new(), results_format).map_err(to_err)?)
-                    .map_err(to_err)?,
-            )
-        } else {
-            match results {
-                QueryResults::Solutions(solutions) => {
+        Ok(match results {
+            QueryResults::Solutions(solutions) => {
+                if let Some(results_format) = results_format {
+                    let results_format = query_results_format(&results_format)?;
+                    JsValue::from_str(
+                        &String::from_utf8(
+                            QueryResults::Solutions(solutions)
+                                .write(Vec::new(), results_format)
+                                .map_err(to_err)?,
+                        )
+                        .map_err(to_err)?,
+                    )
+                } else {
                     let results = Array::new();
                     for solution in solutions {
                         let solution = solution.map_err(to_err)?;
@@ -158,7 +163,19 @@ impl JsStore {
                     }
                     results.into()
                 }
-                QueryResults::Graph(quads) => {
+            }
+            QueryResults::Graph(quads) => {
+                if let Some(results_format) = results_format {
+                    let rdf_format = rdf_format(&results_format)?;
+                    JsValue::from_str(
+                        &String::from_utf8(
+                            QueryResults::Graph(quads)
+                                .write_graph(Vec::new(), rdf_format)
+                                .map_err(to_err)?,
+                        )
+                        .map_err(to_err)?,
+                    )
+                } else {
                     let results = Array::new();
                     for quad in quads {
                         results.push(
@@ -168,7 +185,21 @@ impl JsStore {
                     }
                     results.into()
                 }
-                QueryResults::Boolean(b) => b.into(),
+            }
+            QueryResults::Boolean(b) => {
+                if let Some(results_format) = results_format {
+                    let results_format = query_results_format(&results_format)?;
+                    JsValue::from_str(
+                        &String::from_utf8(
+                            QueryResults::Boolean(b)
+                                .write(Vec::new(), results_format)
+                                .map_err(to_err)?,
+                        )
+                        .map_err(to_err)?,
+                    )
+                } else {
+                    b.into()
+                }
             }
         })
     }

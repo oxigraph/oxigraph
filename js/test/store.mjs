@@ -117,6 +117,25 @@ describe("Store", () => {
                 results,
             );
         });
+
+        it("CONSTRUCT with results format", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            const results = store.query("CONSTRUCT WHERE { ?s ?p ?o }", {
+                results_format: "text/turtle",
+            });
+            assert.strictEqual(
+                "<http://example.com> <http://example.com> <http://example.com> .\n",
+                results,
+            );
+        });
+
+        it("ASK with results format", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex)]);
+            const results = store.query("ASK { ?s ?p ?o }", {
+                results_format: "csv",
+            });
+            assert.strictEqual("true", results);
+        });
     });
 
     describe("#update()", () => {
