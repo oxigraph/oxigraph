@@ -25,21 +25,18 @@
 //! };
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use crate::io::RdfParseError;
-use crate::io::{RdfFormat, RdfParser, RdfSerializer};
+use crate::io::{RdfFormat, RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
 use crate::sparql::{
     evaluate_query, evaluate_update, EvaluationError, Query, QueryExplanation, QueryOptions,
     QueryResults, Update, UpdateOptions,
 };
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use crate::storage::StorageBulkLoader;
-use crate::storage::{
-    ChainedDecodingQuadIterator, DecodingGraphIterator, Storage, StorageReader, StorageWriter,
-};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
+use crate::storage::{
+    DecodingGraphIterator, DecodingQuadIterator, Storage, StorageBulkLoader, StorageReader,
+    StorageWriter,
+};
 use std::error::Error;
 use std::io::{Read, Write};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -990,10 +987,9 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn bulk_loader(&self) -> BulkLoader {
         BulkLoader {
-            storage: StorageBulkLoader::new(self.storage.clone()),
+            storage: self.storage.bulk_loader(),
             on_parse_error: None,
         }
     }
@@ -1536,7 +1532,7 @@ impl IntoIterator for &Transaction<'_> {
 
 /// An iterator returning the quads contained in a [`Store`].
 pub struct QuadIter {
-    iter: ChainedDecodingQuadIterator,
+    iter: DecodingQuadIterator,
     reader: StorageReader,
 }
 
@@ -1608,14 +1604,12 @@ impl Iterator for GraphNameIter {
 /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 #[must_use]
 pub struct BulkLoader {
     storage: StorageBulkLoader,
     on_parse_error: Option<Box<dyn Fn(RdfParseError) -> Result<(), RdfParseError>>>,
 }
 
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 impl BulkLoader {
     /// Sets the maximal number of threads to be used by the bulk loader per operation.
     ///

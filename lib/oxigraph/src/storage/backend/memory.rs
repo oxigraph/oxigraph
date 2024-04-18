@@ -11,9 +11,6 @@ use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
 pub struct ColumnFamilyDefinition {
     pub name: &'static str,
-    pub use_iter: bool,
-    pub min_prefix_size: usize,
-    pub unordered_writes: bool,
 }
 
 #[derive(Clone)]
@@ -230,7 +227,7 @@ pub struct Transaction<'a>(
 );
 
 impl Transaction<'_> {
-    #[allow(unsafe_code, clippy::useless_transmute)]
+    #[allow(unsafe_code)]
     pub fn reader(&self) -> Reader {
         // SAFETY: This transmute is safe because we take a weak reference and the only Rc reference used is guarded by the lifetime.
         Reader(InnerReader::Transaction(Rc::downgrade(unsafe {

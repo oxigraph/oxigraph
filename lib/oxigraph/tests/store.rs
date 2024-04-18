@@ -14,7 +14,6 @@ use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::io::Write;
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::iter::empty;
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::iter::once;
@@ -122,6 +121,18 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::default();
+    let store = Store::open(&dir.0)?;
+    store.load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
+    for q in quads(GraphNameRef::DefaultGraph) {
+        assert!(store.contains(q)?);
+    }
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
 fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
@@ -136,6 +147,20 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
+    let dir = TempDir::default();
+    let store = Store::open(&dir.0)?;
+    store
+        .bulk_loader()
+        .load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
+    for q in quads(GraphNameRef::DefaultGraph) {
+        assert!(store.contains(q)?);
+    }
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().on_parse_error(|_| Ok(())).load_from_read(
@@ -154,7 +179,6 @@ fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_bulk_load_empty() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store.bulk_loader().load_quads(empty::<Quad>())?;
@@ -177,7 +201,6 @@ fn test_load_dataset() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
@@ -259,6 +282,27 @@ fn test_snapshot_isolation_iterator() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_snapshot_isolation_iterator_on_disk() -> Result<(), Box<dyn Error>> {
+    let quad = QuadRef::new(
+        NamedNodeRef::new("http://example.com/s")?,
+        NamedNodeRef::new("http://example.com/p")?,
+        NamedNodeRef::new("http://example.com/o")?,
+        NamedNodeRef::new("http://www.wikidata.org/wiki/Special:EntityData/Q90")?,
+    );
+    let dir = TempDir::default();
+    let store = Store::open(&dir.0)?;
+    store.insert(quad)?;
+    let iter = store.iter();
+    store.remove(quad)?;
+    assert_eq!(
+        iter.collect::<Result<Vec<_>, _>>()?,
+        vec![quad.into_owned()]
+    );
+    store.validate()?;
+    Ok(())
+}
+
+#[test]
 fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dyn Error>> {
     let quad = QuadRef::new(
         NamedNodeRef::new_unchecked("http://example.com/s"),
@@ -267,6 +311,23 @@ fn test_bulk_load_on_existing_delete_overrides_the_delete() -> Result<(), Box<dy
         NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
     );
     let store = Store::new()?;
+    store.remove(quad)?;
+    store.bulk_loader().load_quads([quad.into_owned()])?;
+    assert_eq!(store.len()?, 1);
+    Ok(())
+}
+
+#[test]
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn test_bulk_load_on_existing_delete_overrides_the_delete_on_disk() -> Result<(), Box<dyn Error>> {
+    let quad = QuadRef::new(
+        NamedNodeRef::new_unchecked("http://example.com/s"),
+        NamedNodeRef::new_unchecked("http://example.com/p"),
+        NamedNodeRef::new_unchecked("http://example.com/o"),
+        NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90"),
+    );
+    let dir = TempDir::default();
+    let store = Store::open(&dir.0)?;
     store.remove(quad)?;
     store.bulk_loader().load_quads([quad.into_owned()])?;
     assert_eq!(store.len()?, 1);

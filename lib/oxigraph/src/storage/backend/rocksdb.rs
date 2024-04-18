@@ -148,10 +148,6 @@ impl Drop for RoDbHandler {
 }
 
 impl Db {
-    pub fn new(column_families: Vec<ColumnFamilyDefinition>) -> Result<Self, StorageError> {
-        Self::open_read_write(None, column_families)
-    }
-
     pub fn open_read_write(
         path: Option<&Path>,
         column_families: Vec<ColumnFamilyDefinition>,
@@ -592,81 +588,76 @@ impl Db {
         &'b self,
         f: impl Fn(Transaction<'a>) -> Result<T, E>,
     ) -> Result<T, E> {
-        if let DbKind::ReadWrite(db) = &self.inner {
-            loop {
-                let transaction = unsafe {
-                    let transaction = rocksdb_transaction_begin(
-                        db.db,
-                        db.write_options,
-                        db.transaction_options,
-                        ptr::null_mut(),
-                    );
-                    assert!(
-                        !transaction.is_null(),
-                        "rocksdb_transaction_begin returned null"
-                    );
-                    transaction
-                };
-                let (read_options, snapshot) = unsafe {
-                    let options = rocksdb_readoptions_create_copy(db.read_options);
-                    let snapshot = rocksdb_transaction_get_snapshot(transaction);
-                    rocksdb_readoptions_set_snapshot(options, snapshot);
-                    (options, snapshot)
-                };
-                let result = f(Transaction {
-                    inner: Rc::new(transaction),
-                    read_options,
-                    _lifetime: PhantomData,
-                });
-                match result {
-                    Ok(result) => {
-                        unsafe {
-                            let r =
-                                ffi_result!(rocksdb_transaction_commit_with_status(transaction));
-                            rocksdb_transaction_destroy(transaction);
-                            rocksdb_readoptions_destroy(read_options);
-                            rocksdb_free(snapshot as *mut c_void);
-                            r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
-                        }
-                        return Ok(result);
+        let DbKind::ReadWrite(db) = &self.inner else {
+            return Err(StorageError::Other(
+                "Transaction are only possible on read-write instances".into(),
+            )
+            .into());
+        };
+        loop {
+            let transaction = unsafe {
+                let transaction = rocksdb_transaction_begin(
+                    db.db,
+                    db.write_options,
+                    db.transaction_options,
+                    ptr::null_mut(),
+                );
+                assert!(
+                    !transaction.is_null(),
+                    "rocksdb_transaction_begin returned null"
+                );
+                transaction
+            };
+            let (read_options, snapshot) = unsafe {
+                let options = rocksdb_readoptions_create_copy(db.read_options);
+                let snapshot = rocksdb_transaction_get_snapshot(transaction);
+                rocksdb_readoptions_set_snapshot(options, snapshot);
+                (options, snapshot)
+            };
+            let result = f(Transaction {
+                inner: Rc::new(transaction),
+                read_options,
+                _lifetime: PhantomData,
+            });
+            match result {
+                Ok(result) => {
+                    unsafe {
+                        let r = ffi_result!(rocksdb_transaction_commit_with_status(transaction));
+                        rocksdb_transaction_destroy(transaction);
+                        rocksdb_readoptions_destroy(read_options);
+                        rocksdb_free(snapshot as *mut c_void);
+                        r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
                     }
-                    Err(e) => {
-                        unsafe {
-                            let r =
-                                ffi_result!(rocksdb_transaction_rollback_with_status(transaction));
-                            rocksdb_transaction_destroy(transaction);
-                            rocksdb_readoptions_destroy(read_options);
-                            rocksdb_free(snapshot as *mut c_void);
-                            r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
-                        }
-                        // We look for the root error
-                        let mut error: &(dyn Error + 'static) = &e;
-                        while let Some(e) = error.source() {
-                            error = e;
-                        }
-                        let is_conflict_error =
-                            error.downcast_ref::<ErrorStatus>().map_or(false, |e| {
-                                e.0.code == rocksdb_status_code_t_rocksdb_status_code_busy
-                                    || e.0.code
-                                        == rocksdb_status_code_t_rocksdb_status_code_timed_out
-                                    || e.0.code
-                                        == rocksdb_status_code_t_rocksdb_status_code_try_again
-                            });
-                        if is_conflict_error {
-                            // We give a chance to the OS to do something else before retrying in order to help avoiding another conflict
-                            yield_now();
-                        } else {
-                            // We raise the error
-                            return Err(e);
-                        }
+                    return Ok(result);
+                }
+                Err(e) => {
+                    unsafe {
+                        let r = ffi_result!(rocksdb_transaction_rollback_with_status(transaction));
+                        rocksdb_transaction_destroy(transaction);
+                        rocksdb_readoptions_destroy(read_options);
+                        rocksdb_free(snapshot as *mut c_void);
+                        r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
+                    }
+                    // We look for the root error
+                    let mut error: &(dyn Error + 'static) = &e;
+                    while let Some(e) = error.source() {
+                        error = e;
+                    }
+                    let is_conflict_error =
+                        error.downcast_ref::<ErrorStatus>().map_or(false, |e| {
+                            e.0.code == rocksdb_status_code_t_rocksdb_status_code_busy
+                                || e.0.code == rocksdb_status_code_t_rocksdb_status_code_timed_out
+                                || e.0.code == rocksdb_status_code_t_rocksdb_status_code_try_again
+                        });
+                    if is_conflict_error {
+                        // We give a chance to the OS to do something else before retrying in order to help avoiding another conflict
+                        yield_now();
+                    } else {
+                        // We raise the error
+                        return Err(e);
                     }
                 }
             }
-        } else {
-            Err(
-                StorageError::Other("Transaction are only possible on read-write instances".into())
-                    .into(),
-            )
         }
     }
 
@@ -718,84 +709,80 @@ impl Db {
         key: &[u8],
         value: &[u8],
     ) -> Result<(), StorageError> {
-        if let DbKind::ReadWrite(db) = &self.inner {
-            unsafe {
-                ffi_result!(rocksdb_transactiondb_put_cf_with_status(
-                    db.db,
-                    db.write_options,
-                    column_family.0,
-                    key.as_ptr().cast(),
-                    key.len(),
-                    value.as_ptr().cast(),
-                    value.len(),
-                ))
-            }?;
-            Ok(())
-        } else {
-            Err(StorageError::Other(
+        let DbKind::ReadWrite(db) = &self.inner else {
+            return Err(StorageError::Other(
                 "Inserts are only possible on read-write instances".into(),
+            ));
+        };
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_put_cf_with_status(
+                db.db,
+                db.write_options,
+                column_family.0,
+                key.as_ptr().cast(),
+                key.len(),
+                value.as_ptr().cast(),
+                value.len(),
             ))
-        }
+        }?;
+        Ok(())
     }
 
     pub fn flush(&self) -> Result<(), StorageError> {
-        if let DbKind::ReadWrite(db) = &self.inner {
-            unsafe {
-                ffi_result!(rocksdb_transactiondb_flush_cfs_with_status(
-                    db.db,
-                    db.flush_options,
-                    db.cf_handles.as_ptr().cast_mut(),
-                    db.cf_handles.len().try_into().unwrap()
-                ))
-            }?;
-            Ok(())
-        } else {
-            Err(StorageError::Other(
+        let DbKind::ReadWrite(db) = &self.inner else {
+            return Err(StorageError::Other(
                 "Flush is only possible on read-write instances".into(),
+            ));
+        };
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_flush_cfs_with_status(
+                db.db,
+                db.flush_options,
+                db.cf_handles.as_ptr().cast_mut(),
+                db.cf_handles.len().try_into().unwrap()
             ))
-        }
+        }?;
+        Ok(())
     }
 
     pub fn compact(&self, column_family: &ColumnFamily) -> Result<(), StorageError> {
-        if let DbKind::ReadWrite(db) = &self.inner {
-            unsafe {
-                ffi_result!(rocksdb_transactiondb_compact_range_cf_opt_with_status(
-                    db.db,
-                    column_family.0,
-                    db.compaction_options,
-                    ptr::null(),
-                    0,
-                    ptr::null(),
-                    0,
-                ))
-            }?;
-            Ok(())
-        } else {
-            Err(StorageError::Other(
-                "Compaction is only possible on read-write instances".into(),
+        let DbKind::ReadWrite(db) = &self.inner else {
+            return Err(StorageError::Other(
+                "Compact are only possible on read-write instances".into(),
+            ));
+        };
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_compact_range_cf_opt_with_status(
+                db.db,
+                column_family.0,
+                db.compaction_options,
+                ptr::null(),
+                0,
+                ptr::null(),
+                0,
             ))
-        }
+        }?;
+        Ok(())
     }
 
     pub fn new_sst_file(&self) -> Result<SstFileWriter, StorageError> {
-        if let DbKind::ReadWrite(db) = &self.inner {
-            let path = db.path.join(random::<u128>().to_string());
-            unsafe {
-                let writer = rocksdb_sstfilewriter_create(db.env_options, db.options);
-                ffi_result!(rocksdb_sstfilewriter_open_with_status(
-                    writer,
-                    path_to_cstring(&path)?.as_ptr()
-                ))
-                .map_err(|e| {
-                    rocksdb_sstfilewriter_destroy(writer);
-                    e
-                })?;
-                Ok(SstFileWriter { writer, path })
-            }
-        } else {
-            Err(StorageError::Other(
+        let DbKind::ReadWrite(db) = &self.inner else {
+            return Err(StorageError::Other(
                 "SST creation is only possible on read-write instances".into(),
+            ));
+        };
+        let path = db.path.join(random::<u128>().to_string());
+        unsafe {
+            let writer = rocksdb_sstfilewriter_create(db.env_options, db.options);
+            ffi_result!(rocksdb_sstfilewriter_open_with_status(
+                writer,
+                path_to_cstring(&path)?.as_ptr()
             ))
+            .map_err(|e| {
+                rocksdb_sstfilewriter_destroy(writer);
+                e
+            })?;
+            Ok(SstFileWriter { writer, path })
         }
     }
 
@@ -803,43 +790,42 @@ impl Db {
         &self,
         ssts_for_cf: &[(&ColumnFamily, PathBuf)],
     ) -> Result<(), StorageError> {
+        let DbKind::ReadWrite(db) = &self.inner else {
+            return Err(StorageError::Other(
+                "SST ingestion is only possible on read-write instances".into(),
+            ));
+        };
         if ssts_for_cf.is_empty() {
             return Ok(()); // Rocksdb does not support empty lists
         }
-        if let DbKind::ReadWrite(db) = &self.inner {
-            let mut paths_by_cf = HashMap::<_, Vec<_>>::new();
-            for (cf, path) in ssts_for_cf {
-                paths_by_cf
-                    .entry(*cf)
-                    .or_default()
-                    .push(path_to_cstring(path)?);
-            }
-            let cpaths_by_cf = paths_by_cf
-                .iter()
-                .map(|(cf, paths)| (*cf, paths.iter().map(|p| p.as_ptr()).collect::<Vec<_>>()))
-                .collect::<Vec<_>>();
-            let args = cpaths_by_cf
-                .iter()
-                .map(|(cf, p)| rocksdb_ingestexternalfilearg_t {
-                    column_family: cf.0,
-                    external_files: p.as_ptr(),
-                    external_files_len: p.len(),
-                    options: db.ingest_external_file_options,
-                })
-                .collect::<Vec<_>>();
-            unsafe {
-                ffi_result!(rocksdb_transactiondb_ingest_external_files_with_status(
-                    db.db,
-                    args.as_ptr(),
-                    args.len()
-                ))?;
-            }
-            Ok(())
-        } else {
-            Err(StorageError::Other(
-                "SST ingestion is only possible on read-write instances".into(),
-            ))
+        let mut paths_by_cf = HashMap::<_, Vec<_>>::new();
+        for (cf, path) in ssts_for_cf {
+            paths_by_cf
+                .entry(*cf)
+                .or_default()
+                .push(path_to_cstring(path)?);
         }
+        let cpaths_by_cf = paths_by_cf
+            .iter()
+            .map(|(cf, paths)| (*cf, paths.iter().map(|p| p.as_ptr()).collect::<Vec<_>>()))
+            .collect::<Vec<_>>();
+        let args = cpaths_by_cf
+            .iter()
+            .map(|(cf, p)| rocksdb_ingestexternalfilearg_t {
+                column_family: cf.0,
+                external_files: p.as_ptr(),
+                external_files_len: p.len(),
+                options: db.ingest_external_file_options,
+            })
+            .collect::<Vec<_>>();
+        unsafe {
+            ffi_result!(rocksdb_transactiondb_ingest_external_files_with_status(
+                db.db,
+                args.as_ptr(),
+                args.len()
+            ))?;
+        }
+        Ok(())
     }
 
     pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
