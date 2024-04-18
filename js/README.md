@@ -191,13 +191,11 @@ if (store.query("ASK { ?s ?s ?s }")) {
 It is also possible to provide some options in an object given as second argument:
 
 ```js
-if (store.query("ASK { <s> ?p ?o }", {
+console.log(store.query("ASK { <s> ?p ?o }", {
   base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
   use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
-
-})) {
-  console.log("there is a triple with same subject, predicate and object");
-}
+  results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
+}));
 ```
 
 #### `Store.prototype.update(String query)`
