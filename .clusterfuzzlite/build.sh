@@ -17,7 +17,7 @@ cd "$SRC"/oxigraph
 git submodule init
 git submodule update
 cargo fuzz build -O --debug-assertions
-for TARGET in sparql_eval sparql_results_json sparql_results_tsv sparql_results_xml n3 nquads trig rdf_xml
+for TARGET in sparql_query_eval sparql_update_eval sparql_results_json sparql_results_tsv sparql_results_xml n3 nquads trig rdf_xml
 do
   cp fuzz/target/x86_64-unknown-linux-gnu/release/$TARGET "$OUT"/
 done
