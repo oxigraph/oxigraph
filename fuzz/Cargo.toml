@@ -37,16 +37,20 @@ name = "rdf_xml"
 path = "fuzz_targets/rdf_xml.rs"
 
 [[bin]]
-name = "sparql_eval"
-path = "fuzz_targets/sparql_eval.rs"
-
-[[bin]]
 name = "sparql_query"
 path = "fuzz_targets/sparql_query.rs"
 
 [[bin]]
+name = "sparql_query_eval"
+path = "fuzz_targets/sparql_query_eval.rs"
+
+[[bin]]
 name = "sparql_update"
 path = "fuzz_targets/sparql_update.rs"
+
+[[bin]]
+name = "sparql_update_eval"
+path = "fuzz_targets/sparql_update_eval.rs"
 
 [[bin]]
 name = "sparql_results_json"

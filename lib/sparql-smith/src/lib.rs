@@ -391,6 +391,374 @@ impl fmt::Display for ValuesClause {
     }
 }
 
+pub struct Update {
+    inner: UpdateContent,
+}
+
+#[derive(Arbitrary)]
+struct UpdateContent {
+    // [3]  UpdateUnit	  ::=  	Update
+    // [29] Update	  ::=  	Prologue ( Update1 ( ';' Update )? )?
+    variants: Vec<UpdateVariant>,
+}
+
+impl<'a> Arbitrary<'a> for Update {
+    fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
+        Ok(Self {
+            inner: UpdateContent::arbitrary(u)?,
+        })
+    }
+
+    fn arbitrary_take_rest(u: Unstructured<'a>) -> Result<Self> {
+        Ok(Self {
+            inner: UpdateContent::arbitrary_take_rest(u)?,
+        })
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        (20, None) // TODO: is it good?
+    }
+}
+
+impl fmt::Display for Update {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for variant in &self.inner.variants {
+            write!(f, "{variant} ; ")?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Update {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+#[derive(Arbitrary)]
+enum UpdateVariant {
+    // [30]  	Update1	  ::=  	Load | Clear | Drop | Add | Move | Copy | Create | InsertData | DeleteData | DeleteWhere | Modify
+    Load(Clear),
+    Drop(Drop),
+    Add(Add),
+    Move(Move),
+    Copy(Copy),
+    Crate(Create),
+    InsertData(InsertData),
+    DeleteData(DeleteData),
+    DeleteWhere(DeleteWhere),
+    Modify(Modify),
+    // TODO: Other variants!
+}
+
+impl fmt::Display for UpdateVariant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UpdateVariant::Load(a) => a.fmt(f),
+            UpdateVariant::Drop(a) => a.fmt(f),
+            UpdateVariant::Add(a) => a.fmt(f),
+            UpdateVariant::Move(a) => a.fmt(f),
+            UpdateVariant::Copy(a) => a.fmt(f),
+            UpdateVariant::Crate(a) => a.fmt(f),
+            UpdateVariant::InsertData(a) => a.fmt(f),
+            UpdateVariant::DeleteData(a) => a.fmt(f),
+            UpdateVariant::DeleteWhere(a) => a.fmt(f),
+            UpdateVariant::Modify(a) => a.fmt(f),
+        }
+    }
+}
+
+#[derive(Arbitrary)]
+struct Clear {
+    // [32]  	Clear	  ::=  	'CLEAR' 'SILENT'? GraphRefAll
+    silent: bool,
+    target: GraphRefAll,
+}
+
+impl fmt::Display for Clear {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CLEAR ")?;
+        if self.silent {
+            write!(f, "SILENT ")?;
+        }
+        write!(f, "{}", self.target)
+    }
+}
+
+#[derive(Arbitrary)]
+struct Drop {
+    // [33]  	Drop	  ::=  	'DROP' 'SILENT'? GraphRefAll
+    silent: bool,
+    target: GraphRefAll,
+}
+
+impl fmt::Display for Drop {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DROP ")?;
+        if self.silent {
+            write!(f, "SILENT ")?;
+        }
+        write!(f, "{}", self.target)
+    }
+}
+
+#[derive(Arbitrary)]
+struct Create {
+    // [34]  	Create	  ::=  	'CREATE' 'SILENT'? GraphRef
+    silent: bool,
+    target: GraphRef,
+}
+
+impl fmt::Display for Create {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CREATE ")?;
+        if self.silent {
+            write!(f, "SILENT ")?;
+        }
+        write!(f, "{}", self.target)
+    }
+}
+
+#[derive(Arbitrary)]
+struct Add {
+    // [35]  	Add	  ::=  	'ADD' 'SILENT'? GraphOrDefault 'TO' GraphOrDefault
+    silent: bool,
+    from: GraphOrDefault,
+    to: GraphOrDefault,
+}
+
+impl fmt::Display for Add {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ADD ")?;
+        if self.silent {
+            write!(f, "SILENT ")?;
+        }
+        write!(f, "{} TO {}", self.from, self.to)
+    }
+}
+
+#[derive(Arbitrary)]
+struct Move {
+    // [36]  	Move	  ::=  	'MOVE' 'SILENT'? GraphOrDefault 'TO' GraphOrDefault
+    silent: bool,
+    from: GraphOrDefault,
+    to: GraphOrDefault,
+}
+
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MOVE ")?;
+        if self.silent {
+            write!(f, "SILENT ")?;
+        }
+        write!(f, "{} TO {}", self.from, self.to)
+    }
+}
+
+#[derive(Arbitrary)]
+struct Copy {
+    // [37]  	Copy	  ::=  	'COPY' 'SILENT'? GraphOrDefault 'TO' GraphOrDefault
+    silent: bool,
+    from: GraphOrDefault,
+    to: GraphOrDefault,
+}
+
+impl fmt::Display for Copy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MOVE ")?;
+        if self.silent {
+            write!(f, "SILENT ")?;
+        }
+        write!(f, "{} TO {}", self.from, self.to)
+    }
+}
+
+#[derive(Arbitrary)]
+struct InsertData {
+    // [38]  	InsertData	  ::=  	'INSERT DATA' QuadData
+    data: QuadData,
+}
+
+impl fmt::Display for InsertData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "INSERT DATA {}", self.data)
+    }
+}
+
+#[derive(Arbitrary)]
+struct DeleteData {
+    // [39]  	DeleteData	  ::=  	'DELETE DATA' QuadData
+    data: QuadData,
+}
+
+impl fmt::Display for DeleteData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DELETE DATA {}", self.data)
+    }
+}
+
+#[derive(Arbitrary)]
+struct DeleteWhere {
+    // [40]  	DeleteWhere	  ::=  	'DELETE WHERE' QuadPattern
+    data: QuadPattern,
+}
+
+impl fmt::Display for DeleteWhere {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DELETE WHERE {}", self.data)
+    }
+}
+
+#[derive(Arbitrary)]
+struct Modify {
+    // [41]  	Modify	  ::=  	( 'WITH' iri )? ( DeleteClause InsertClause? | InsertClause ) UsingClause* 'WHERE' GroupGraphPattern
+    // [42]  	DeleteClause	  ::=  	'DELETE' QuadPattern
+    // [43]  	InsertClause	  ::=  	'INSERT' QuadPattern
+    with: Option<Iri>,
+    delete: QuadPattern,
+    insert: QuadPattern,
+    where_: GroupGraphPattern,
+}
+
+impl fmt::Display for Modify {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(with) = &self.with {
+            write!(f, "WITH {with} ")?;
+        }
+        write!(
+            f,
+            "DELETE {} INSERT {} WHERE {}",
+            self.delete, self.insert, self.where_
+        )
+    }
+}
+
+#[derive(Arbitrary)]
+enum GraphOrDefault {
+    // [45]  	GraphOrDefault	  ::=  	'DEFAULT' | 'GRAPH'? iri
+    Default,
+    Graph(Iri),
+    Iri(Iri),
+}
+
+impl fmt::Display for GraphOrDefault {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GraphOrDefault::Default => write!(f, "DEFAULT"),
+            GraphOrDefault::Graph(g) => write!(f, "GRAPH {g}"),
+            GraphOrDefault::Iri(g) => g.fmt(f),
+        }
+    }
+}
+
+#[derive(Arbitrary)]
+struct GraphRef {
+    // [46]  	GraphRef	  ::=  	'GRAPH' iri
+    iri: Iri,
+}
+
+impl fmt::Display for GraphRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "GRAPH {}", self.iri)
+    }
+}
+
+#[derive(Arbitrary)]
+enum GraphRefAll {
+    // [47]  	GraphRefAll	  ::=  	GraphRef | 'DEFAULT' | 'NAMED' | 'ALL'
+    GraphRef(GraphRef),
+    Default,
+    Named,
+    All,
+}
+
+impl fmt::Display for GraphRefAll {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GraphRefAll::GraphRef(g) => g.fmt(f),
+            GraphRefAll::Default => write!(f, "DEFAULT"),
+            GraphRefAll::Named => write!(f, "NAMED"),
+            GraphRefAll::All => write!(f, "ALL"),
+        }
+    }
+}
+
+#[derive(Arbitrary)]
+struct QuadPattern {
+    // [48]  	QuadPattern	  ::=  	'{' Quads '}'
+    // [50]  	Quads	  ::=  	TriplesTemplate? ( QuadsNotTriples '.'? TriplesTemplate? )*
+    // TODO: more syntax variations
+    quads: Vec<(VarOrIri, Verb, VarOrIriOrLiteral, Option<VarOrIri>)>,
+}
+
+#[derive(Arbitrary)]
+enum VarOrIriOrLiteral {
+    Iri(Iri),
+    Literal(Literal),
+    Var(Var),
+}
+
+impl fmt::Display for QuadPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(" { ")?;
+        for (s, p, o, g) in &self.quads {
+            if let Some(g) = g {
+                write!(f, "GRAPH {g} {{ {s} {p} {o} }} ")?;
+            } else {
+                write!(f, "{s} {p} {o} . ")?;
+            }
+        }
+        f.write_str("}")
+    }
+}
+
+impl fmt::Display for VarOrIriOrLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VarOrIriOrLiteral::Iri(i) => i.fmt(f),
+            VarOrIriOrLiteral::Literal(l) => l.fmt(f),
+            VarOrIriOrLiteral::Var(v) => v.fmt(f),
+        }
+    }
+}
+
+#[derive(Arbitrary)]
+struct QuadData {
+    // [49]  	QuadData	  ::=  	'{' Quads '}'
+    // [50]  	Quads	  ::=  	TriplesTemplate? ( QuadsNotTriples '.'? TriplesTemplate? )*
+    // TODO: more syntax variations
+    quads: Vec<(Iri, Iri, IriOrLiteral, Option<Iri>)>,
+}
+
+#[derive(Arbitrary)]
+enum IriOrLiteral {
+    Iri(Iri),
+    Literal(Literal),
+}
+
+impl fmt::Display for QuadData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(" { ")?;
+        for (s, p, o, g) in &self.quads {
+            if let Some(g) = g {
+                write!(f, "GRAPH {g} {{ {s} {p} {o} }} ")?;
+            } else {
+                write!(f, "{s} {p} {o} . ")?;
+            }
+        }
+        f.write_str("}")
+    }
+}
+
+impl fmt::Display for IriOrLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IriOrLiteral::Iri(i) => i.fmt(f),
+            IriOrLiteral::Literal(l) => l.fmt(f),
+        }
+    }
+}
+
 #[derive(Arbitrary)]
 enum GroupGraphPattern {
     // [53]   GroupGraphPattern   ::=   '{' ( SubSelect | GroupGraphPatternSub ) '}'
