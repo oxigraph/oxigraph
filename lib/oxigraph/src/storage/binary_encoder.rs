@@ -77,6 +77,7 @@ impl QuadEncoding {
     }
 }
 
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 pub fn decode_term(mut buffer: &[u8]) -> Result<EncodedTerm, StorageError> {
     buffer.read_term()
 }
