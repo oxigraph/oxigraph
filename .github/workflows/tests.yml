@@ -511,11 +511,20 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-codspeed }
+      - uses: taiki-e/install-action@v2
+        with: { tool: wasm-pack }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: "js/package.json"
+      - run: npm install
+        working-directory: ./js
       - run: cargo codspeed build -p oxigraph --features http-client-native-tls
       - run: cargo codspeed build -p oxigraph-testsuite
       - uses: CodSpeedHQ/action@v2
         with:
-          run: cargo codspeed run
+          run: cargo codspeed run && npm run --prefix js bench
           token: ${{ secrets.CODSPEED_TOKEN }}
 
   codecov:
