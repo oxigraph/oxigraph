@@ -5,10 +5,10 @@
         "indentWidth": 4,
         "lineWidth": 100
     },
-    "linter": {
-        "ignore": ["pkg"]
-    },
     "organizeImports": {
         "enabled": true
+    },
+    "files": {
+        "ignore": ["node_modules/*", "package-lock.json", "pkg/*"]
     }
 }
