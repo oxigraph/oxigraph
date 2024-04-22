@@ -22,10 +22,10 @@ const BULK_LOAD_BATCH_SIZE: u64 = 100_000;
 #[derive(Clone)]
 pub struct MemoryStorage {
     content: Arc<RwLock<Content>>,
+    id2str: Arc<RwLock<HashMap<StrHash, String>>>,
 }
 
 struct Content {
-    id2str: HashMap<StrHash, String>,
     spog: BTreeSet<Vec<u8>>,
     posg: BTreeSet<Vec<u8>>,
     ospg: BTreeSet<Vec<u8>>,
@@ -42,7 +42,6 @@ impl MemoryStorage {
     pub fn new() -> Self {
         Self {
             content: Arc::new(RwLock::new(Content {
-                id2str: HashMap::new(),
                 spog: BTreeSet::new(),
                 posg: BTreeSet::new(),
                 ospg: BTreeSet::new(),
@@ -54,12 +53,14 @@ impl MemoryStorage {
                 dosp: BTreeSet::new(),
                 graphs: HashSet::new(),
             })),
+            id2str: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     pub fn snapshot(&self) -> MemoryStorageReader {
         MemoryStorageReader {
             content: MemoryStorageReaderContent::Simple(Arc::clone(&self.content)),
+            id2str: Arc::clone(&self.id2str),
         }
     }
 
@@ -71,6 +72,7 @@ impl MemoryStorage {
             content: Rc::new(RefCell::new(
                 self.content.write().map_err(poison_corruption_error)?,
             )),
+            id2str: Arc::clone(&self.id2str),
         })
     }
 
@@ -84,6 +86,7 @@ impl MemoryStorage {
 
 pub struct MemoryStorageReader {
     content: MemoryStorageReaderContent,
+    id2str: Arc<RwLock<HashMap<StrHash, String>>>,
 }
 
 enum MemoryStorageReaderContent {
@@ -369,7 +372,11 @@ impl MemoryStorageReader {
     }
 
     pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-        Ok(self.content()?.id2str.contains_key(key))
+        Ok(self
+            .id2str
+            .read()
+            .map_err(poison_corruption_error)?
+            .contains_key(key))
     }
 
     /// Validates that all the storage invariants held in the data
@@ -379,7 +386,6 @@ impl MemoryStorageReader {
     }
 
     #[allow(unsafe_code)]
-
     fn content<'a>(&'a self) -> Result<ContentRef<'a>, StorageError> {
         Ok(match &self.content {
             MemoryStorageReaderContent::Simple(reader) => {
@@ -405,7 +411,12 @@ impl MemoryStorageReader {
 
 impl StrLookup for MemoryStorageReader {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
-        Ok(self.content()?.id2str.get(key).cloned())
+        Ok(self
+            .id2str
+            .read()
+            .map_err(poison_corruption_error)?
+            .get(key)
+            .cloned())
     }
 }
 
@@ -490,6 +501,7 @@ impl Iterator for MemoryDecodingGraphIterator {
 
 pub struct MemoryStorageWriter<'a> {
     content: Rc<RefCell<RwLockWriteGuard<'a, Content>>>,
+    id2str: Arc<RwLock<HashMap<StrHash, String>>>,
 }
 
 impl<'a> MemoryStorageWriter<'a> {
@@ -499,6 +511,7 @@ impl<'a> MemoryStorageWriter<'a> {
         let content = unsafe { transmute(&self.content) };
         MemoryStorageReader {
             content: MemoryStorageReaderContent::Transaction(Rc::downgrade(content)),
+            id2str: Arc::clone(&self.id2str),
         }
     }
 
@@ -605,9 +618,9 @@ impl<'a> MemoryStorageWriter<'a> {
 
     fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
         if self
-            .content
-            .borrow_mut()
             .id2str
+            .write()
+            .map_err(poison_corruption_error)?
             .entry(*key)
             .or_insert_with(|| value.into())
             == value
@@ -751,18 +764,23 @@ impl<'a> MemoryStorageWriter<'a> {
     }
 
     pub fn clear(&mut self) -> Result<(), StorageError> {
-        let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
-        content.dspo.clear();
-        content.dpos.clear();
-        content.dosp.clear();
-        content.gspo.clear();
-        content.gpos.clear();
-        content.gosp.clear();
-        content.spog.clear();
-        content.posg.clear();
-        content.ospg.clear();
-        content.graphs.clear();
-        content.id2str.clear();
+        {
+            let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
+            content.dspo.clear();
+            content.dpos.clear();
+            content.dosp.clear();
+            content.gspo.clear();
+            content.gpos.clear();
+            content.gosp.clear();
+            content.spog.clear();
+            content.posg.clear();
+            content.ospg.clear();
+            content.graphs.clear();
+        }
+        self.id2str
+            .write()
+            .map_err(poison_corruption_error)?
+            .clear();
         Ok(())
     }
 }
