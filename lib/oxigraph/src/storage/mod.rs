@@ -15,13 +15,14 @@ use std::error::Error;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 
-mod backend;
 mod binary_encoder;
 mod error;
 mod memory;
 pub mod numeric_encoder;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod rocksdb;
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+mod rocksdb_wrapper;
 pub mod small_string;
 
 /// Low level storage primitives
@@ -46,13 +47,14 @@ impl Storage {
     }
 
     #[cfg(any(target_family = "wasm", not(feature = "rocksdb")))]
+    #[allow(clippy::unnecessary_wraps)]
     pub fn new() -> Result<Self, StorageError> {
         Self::new_in_memory()
     }
 
     pub fn new_in_memory() -> Result<Self, StorageError> {
         Ok(Self {
-            kind: StorageKind::Memory(MemoryStorage::new()?),
+            kind: StorageKind::Memory(MemoryStorage::new()),
         })
     }
 

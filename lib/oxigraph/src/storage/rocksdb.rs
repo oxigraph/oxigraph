@@ -1,8 +1,5 @@
 use crate::model::Quad;
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
-use crate::storage::backend::rocksdb::{
-    ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
-};
 use crate::storage::binary_encoder::{
     decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
     write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
@@ -12,6 +9,9 @@ use crate::storage::binary_encoder::{
 pub use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{
     insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+};
+use crate::storage::rocksdb_wrapper::{
+    ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
