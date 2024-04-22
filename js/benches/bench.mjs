@@ -29,21 +29,21 @@ const bsbm_1000_operations = (await readData("mix-exploreAndUpdate-1000.tsv.zst"
 
 const bench = withCodSpeed(new Bench());
 bench
-    .add("load BSBM explore 1000", () => {
+    .add("JS: load BSBM explore 1000", () => {
         const store = new Store();
         store.load(explore_1000_nt, "application/n-triples");
     })
-    .add("BSBM explore 1000 query", () => {
+    .add("JS: BSBM explore 1000 query", () => {
         for (const [kind, sparql] of bsbm_1000_operations) {
             if (kind === "query") {
-                explore_1000_store.query(sparql);
+                explore_1000_store.query(sparql, { results_format: "xml" });
             }
         }
     })
-    .add("BSBM explore 1000 query and update", () => {
+    .add("JS: BSBM explore 1000 query and update", () => {
         for (const [kind, sparql] of bsbm_1000_operations) {
             if (kind === "query") {
-                explore_1000_store.query(sparql);
+                explore_1000_store.query(sparql, { results_format: "xml" });
             } else if (kind === "update") {
                 explore_1000_store.update(sparql);
             }
