@@ -47,11 +47,11 @@ impl Storage {
     }
 
     #[cfg(any(target_family = "wasm", not(feature = "rocksdb")))]
-    #[allow(clippy::unnecessary_wraps)]
     pub fn new() -> Result<Self, StorageError> {
         Self::new_in_memory()
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn new_in_memory() -> Result<Self, StorageError> {
         Ok(Self {
             kind: StorageKind::Memory(MemoryStorage::new()),

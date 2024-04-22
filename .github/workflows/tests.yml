@@ -182,7 +182,7 @@ jobs:
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
-      - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions && cargo update -p bumpalo --precise 3.14.0
+      - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions && cargo update -p bumpalo --precise 3.14.0 && cargo update -p zeroize --precise 1.7.0
       - run: cargo test
 
   test_linux_latest:
@@ -328,7 +328,7 @@ jobs:
           cache: pip
           cache-dependency-path: '**/requirements.dev.txt'
       - run: pip install -r python/requirements.dev.txt
-      - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
+      - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions && cargo update -p zeroize --precise 1.7.0
       - run: maturin build -m python/Cargo.toml
       - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
