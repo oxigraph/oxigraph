@@ -274,21 +274,27 @@ impl JsStore {
 fn rdf_format(format: &str) -> Result<RdfFormat, JsValue> {
     if format.contains('/') {
         RdfFormat::from_media_type(format)
-            .ok_or_else(|| format_err!("Not supported RDF format media type: {format}"))
+            .ok_or_else(|| format_err!("Not supported RDF format media type: {}", format))
     } else {
         RdfFormat::from_extension(format)
-            .ok_or_else(|| format_err!("Not supported RDF format extension: {format}"))
+            .ok_or_else(|| format_err!("Not supported RDF format extension: {}", format))
     }
 }
 
 fn query_results_format(format: &str) -> Result<QueryResultsFormat, JsValue> {
     if format.contains('/') {
         QueryResultsFormat::from_media_type(format).ok_or_else(|| {
-            format_err!("Not supported SPARQL query results format media type: {format}")
+            format_err!(
+                "Not supported SPARQL query results format media type: {}",
+                format
+            )
         })
     } else {
         QueryResultsFormat::from_extension(format).ok_or_else(|| {
-            format_err!("Not supported SPARQL query results format extension: {format}")
+            format_err!(
+                "Not supported SPARQL query results format extension: {}",
+                format
+            )
         })
     }
 }
