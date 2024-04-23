@@ -23,6 +23,7 @@ explore_1000_store.load(explore_1000_nt, "application/n-triples");
 
 const bsbm_1000_operations = (await readData("mix-exploreAndUpdate-1000.tsv.zst"))
     .split("\n")
+    .reverse()
     .slice(0, 300)
     .filter((line) => line.trim() !== "")
     .map((line) => line.trim().split("\t"));
