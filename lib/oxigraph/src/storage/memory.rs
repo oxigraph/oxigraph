@@ -1,8 +1,3 @@
-#![cfg_attr(
-    all(not(target_family = "wasm"), feature = "rocksdb"),
-    allow(dead_code)
-)]
-
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
 use crate::storage::backend::memory::{
     ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,

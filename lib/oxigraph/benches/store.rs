@@ -43,7 +43,7 @@ fn store_load(c: &mut Criterion) {
     group.sample_size(10);
     group.bench_function("load BSBM explore 1000 in memory", |b| {
         b.iter(|| {
-            let store = Store::new().unwrap();
+            let store = Store::new_in_memory().unwrap();
             do_load(&store, &data);
         })
     });
@@ -52,6 +52,12 @@ fn store_load(c: &mut Criterion) {
             let path = TempDir::default();
             let store = Store::open(&path).unwrap();
             do_load(&store, &data);
+        })
+    });
+    group.bench_function("load BSBM explore 1000 in memory with bulk load", |b| {
+        b.iter(|| {
+            let store = Store::new_in_memory().unwrap();
+            do_bulk_load(&store, &data);
         })
     });
     group.bench_function("load BSBM explore 1000 in on disk with bulk load", |b| {
@@ -71,7 +77,10 @@ fn do_load(store: &Store, data: &[u8]) {
 fn do_bulk_load(store: &Store, data: &[u8]) {
     store
         .bulk_loader()
-        .load_from_read(RdfFormat::NTriples, data)
+        .load_from_read(
+            RdfParser::from_format(RdfFormat::NTriples).unchecked(),
+            data,
+        )
         .unwrap();
     store.optimize().unwrap();
 }
@@ -96,7 +105,7 @@ fn store_query_and_update(c: &mut Criterion) {
     group.sample_size(10);
 
     {
-        let memory_store = Store::new().unwrap();
+        let memory_store = Store::new_in_memory().unwrap();
         do_bulk_load(&memory_store, &data);
         group.bench_function("BSBM explore 1000 query in memory", |b| {
             b.iter(|| run_operation(&memory_store, &query_operations))

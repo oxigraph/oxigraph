@@ -92,6 +92,14 @@ impl Store {
         })
     }
 
+    /// New in-memory [`Store`] without RocksDB
+    #[doc(hidden)]
+    pub fn new_in_memory() -> Result<Self, StorageError> {
+        Ok(Self {
+            storage: Storage::new_in_memory()?,
+        })
+    }
+
     /// Opens a read-write [`Store`] and creates it if it does not exist yet.
     ///
     /// Only one read-write [`Store`] can exist at the same time.
