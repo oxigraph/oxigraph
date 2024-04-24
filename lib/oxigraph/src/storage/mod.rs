@@ -34,10 +34,6 @@ pub struct Storage {
 enum StorageKind {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbStorage),
-    #[cfg_attr(
-        all(not(target_family = "wasm"), feature = "rocksdb"),
-        allow(dead_code)
-    )]
     Memory(MemoryStorage),
 }
 
@@ -51,6 +47,10 @@ impl Storage {
 
     #[cfg(any(target_family = "wasm", not(feature = "rocksdb")))]
     pub fn new() -> Result<Self, StorageError> {
+        Self::new_in_memory()
+    }
+
+    pub fn new_in_memory() -> Result<Self, StorageError> {
         Ok(Self {
             kind: StorageKind::Memory(MemoryStorage::new()?),
         })
