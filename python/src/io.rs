@@ -6,7 +6,8 @@ use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyString};
+use pyo3::pybacked::{PyBackedBytes, PyBackedStr};
+use pyo3::types::PyBytes;
 use std::cmp::max;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -361,7 +362,8 @@ impl PyRdfFormat {
 }
 
 pub enum PyReadable {
-    Bytes(Cursor<Vec<u8>>),
+    String(Cursor<PyBackedStr>),
+    Bytes(Cursor<PyBackedBytes>),
     Io(PyIo),
     File(File),
 }
@@ -388,6 +390,7 @@ impl PyReadable {
 impl Read for PyReadable {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
+            Self::String(str) => str.read(buf),
             Self::Bytes(bytes) => bytes.read(buf),
             Self::Io(io) => io.read(buf),
             Self::File(file) => file.read(buf),
@@ -397,15 +400,15 @@ impl Read for PyReadable {
 
 #[derive(FromPyObject)]
 pub enum PyReadableInput {
-    String(String),
-    Bytes(Vec<u8>),
+    String(PyBackedStr),
+    Bytes(PyBackedBytes),
     Io(PyObject),
 }
 
 impl From<PyReadableInput> for PyReadable {
     fn from(input: PyReadableInput) -> Self {
         match input {
-            PyReadableInput::String(string) => Self::Bytes(Cursor::new(string.into_bytes())),
+            PyReadableInput::String(string) => Self::String(Cursor::new(string)),
             PyReadableInput::Bytes(bytes) => Self::Bytes(Cursor::new(bytes)),
             PyReadableInput::Io(io) => Self::Io(PyIo(io)),
         }
@@ -495,9 +498,7 @@ impl Read for PyIo {
                 buf[..bytes.len()].copy_from_slice(bytes);
                 bytes.len()
             } else {
-                // TODO: Python 3.10+ use directly .extract<&str>
-                let string = read.extract::<Bound<'_, PyString>>()?;
-                let str = string.to_cow()?;
+                let str = read.extract::<PyBackedStr>()?;
                 buf[..str.len()].copy_from_slice(str.as_bytes());
                 str.len()
             })
