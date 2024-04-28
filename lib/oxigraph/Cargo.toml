@@ -31,6 +31,7 @@ digest.workspace = true
 hex.workspace = true
 json-event-parser.workspace = true
 md-5.workspace = true
+openssl-sys = "0.9.102"
 oxilangtag.workspace = true
 oxiri.workspace = true
 oxrdf = { workspace = true, features = ["rdf-star", "oxsdatatypes"] }

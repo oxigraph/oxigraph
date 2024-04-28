@@ -143,7 +143,14 @@ fn build_rocksdb() {
         config.define("OS_FREEBSD", None);
         config.define("ROCKSDB_PLATFORM_POSIX", None);
         config.define("ROCKSDB_LIB_IO_POSIX", None);
-    } else if target.contains("windows") {
+    } else if target.contains("openbsd") {
+        config.define("OS_OPENBSD", None);
+	// Depends on `pkg_add llvm`
+	config.define("LIBCLANG_PATH", "/usr/local/llvm16/lib/libclang.so.0.0");
+        config.define("ROCKSDB_PLATFORM_POSIX", None);
+        config.define("ROCKSDB_LIB_IO_POSIX", None);
+    }
+    else if target.contains("windows") {
         link("rpcrt4", false);
         link("shlwapi", false);
         config.define("DWIN32", None);
