@@ -24,6 +24,7 @@ impl From<RdfXmlParseError> for io::Error {
     }
 }
 
+#[doc(hidden)]
 impl From<quick_xml::Error> for RdfXmlParseError {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {

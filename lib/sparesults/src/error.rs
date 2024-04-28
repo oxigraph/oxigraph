@@ -24,6 +24,7 @@ impl From<QueryResultsParseError> for io::Error {
     }
 }
 
+#[doc(hidden)]
 impl From<json_event_parser::ParseError> for QueryResultsParseError {
     fn from(error: json_event_parser::ParseError) -> Self {
         match error {
@@ -35,6 +36,7 @@ impl From<json_event_parser::ParseError> for QueryResultsParseError {
     }
 }
 
+#[doc(hidden)]
 impl From<quick_xml::Error> for QueryResultsParseError {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
@@ -47,6 +49,7 @@ impl From<quick_xml::Error> for QueryResultsParseError {
     }
 }
 
+#[doc(hidden)]
 impl From<quick_xml::escape::EscapeError> for QueryResultsParseError {
     #[inline]
     fn from(error: quick_xml::escape::EscapeError) -> Self {
@@ -142,6 +145,7 @@ impl From<QueryResultsSyntaxError> for io::Error {
     }
 }
 
+#[doc(hidden)]
 impl From<json_event_parser::SyntaxError> for QueryResultsSyntaxError {
     fn from(error: json_event_parser::SyntaxError) -> Self {
         Self(SyntaxErrorKind::Json(error))
