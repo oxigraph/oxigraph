@@ -14,7 +14,8 @@ use oxigraph::sparql::{
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyString};
+use pyo3::pybacked::PyBackedStr;
+use pyo3::types::PyBytes;
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -133,13 +134,16 @@ impl PyQuerySolution {
         self.inner.len()
     }
 
-    fn __getitem__(&self, key: PySolutionKey<'_>) -> PyResult<Option<PyTerm>> {
-        Ok(match key {
+    fn __getitem__(&self, key: PySolutionKey<'_>) -> Option<PyTerm> {
+        match key {
             PySolutionKey::Usize(key) => self.inner.get(key),
-            PySolutionKey::Str(key) => self.inner.get(key.to_cow()?.as_ref()),
+            PySolutionKey::Str(key) => {
+                let k: &str = &key;
+                self.inner.get(k)
+            }
             PySolutionKey::Variable(key) => self.inner.get(<&Variable>::from(&*key)),
         }
-        .map(|term| PyTerm::from(term.clone())))
+        .map(|term| PyTerm::from(term.clone()))
     }
 
     #[allow(clippy::unnecessary_to_owned)]
@@ -153,7 +157,7 @@ impl PyQuerySolution {
 #[derive(FromPyObject)]
 pub enum PySolutionKey<'a> {
     Usize(usize),
-    Str(Bound<'a, PyString>), // TODO: Python 3.10+: use &str
+    Str(PyBackedStr),
     Variable(PyRef<'a, PyVariable>),
 }
 
