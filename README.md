@@ -73,9 +73,8 @@ available by default limits in OpenBSD.
 
 ## Help
 
-- Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discussions) or [the Gitter chat](https://gitter.im/oxigraph/community) to ask questions or talk about Oxigraph.
-- [Bug reports](https://github.com/oxigraph/oxigraph/issues) are also very
-welcome.
+Feel free to use [GitHub discussions](https://github.com/oxigraph/oxigraph/discussions) or [the Gitter chat](https://gitter.im/oxigraph/community) to ask questions or talk about Oxigraph.
+[Bug reports](https://github.com/oxigraph/oxigraph/issues) are also very welcome.
 
 If you need advanced support or are willing to pay to get some extra features, feel free to reach out to [Tpt](https://github.com/Tpt/).
 
