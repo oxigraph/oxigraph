@@ -17,8 +17,7 @@ Usage example counting the number of people in a RDF/XML file:
 use oxrdf::{NamedNodeRef, vocab::rdf};
 use oxrdfxml::RdfXmlParser;
 
-fn main() {
-    let file = br#"<?xml version="1.0"?>
+let file = br#"<?xml version="1.0"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
  <rdf:Description rdf:about="http://example.com/foo">
    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -27,16 +26,15 @@ fn main() {
  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
 </rdf:RDF>"#;
 
-    let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
-    let mut count = 0;
-    for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
-        let triple = triple.unwrap();
-        if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-            count += 1;
-        }
+let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
+let mut count = 0;
+for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
+    let triple = triple.unwrap();
+    if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+        count += 1;
     }
-    assert_eq!(2, count);
 }
+assert_eq!(2, count);
 ```
 
 ## License
