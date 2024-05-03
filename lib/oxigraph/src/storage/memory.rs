@@ -386,7 +386,7 @@ impl MemoryStorageReader {
     }
 
     #[allow(unsafe_code)]
-    fn content<'a>(&'a self) -> Result<ContentRef<'a>, StorageError> {
+    fn content(&self) -> Result<ContentRef<'_>, StorageError> {
         Ok(match &self.content {
             MemoryStorageReaderContent::Simple(reader) => {
                 ContentRef::Simple(reader.read().map_err(poison_corruption_error)?)
@@ -399,7 +399,12 @@ impl MemoryStorageReader {
                 };
                 let element: Ref<'_, _> = rc.as_ref().borrow();
                 // SAFETY: ok because we keep the Rc too inside of ContentRef
-                let element = unsafe { transmute::<_, Ref<'a, _>>(element) };
+                let element = unsafe {
+                    transmute::<
+                        Ref<'_, RwLockWriteGuard<'_, Content>>,
+                        Ref<'static, RwLockWriteGuard<'static, Content>>,
+                    >(element)
+                };
                 ContentRef::Transaction {
                     _rc: Rc::clone(&rc),
                     element,
@@ -508,7 +513,12 @@ impl<'a> MemoryStorageWriter<'a> {
     #[allow(unsafe_code)]
     pub fn reader(&self) -> MemoryStorageReader {
         // SAFETY: This transmute is safe because we take a weak reference and the only Rc reference used is guarded by the lifetime.
-        let content = unsafe { transmute(&self.content) };
+        let content = unsafe {
+            transmute::<
+                &Rc<RefCell<RwLockWriteGuard<'_, Content>>>,
+                &Rc<RefCell<RwLockWriteGuard<'static, Content>>>,
+            >(&self.content)
+        };
         MemoryStorageReader {
             content: MemoryStorageReaderContent::Transaction(Rc::downgrade(content)),
             id2str: Arc::clone(&self.id2str),
