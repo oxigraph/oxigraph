@@ -64,20 +64,20 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          target: aarch64-apple-darwin
-      - run: cargo build --release
+          target: x86_64-apple-darwin
+      - run: cargo build --release --target x86_64-apple-darwin
         working-directory: ./cli
       - run: cargo build --release --target aarch64-apple-darwin
         working-directory: ./cli
       - uses: actions/upload-artifact@v4
         with:
           name: oxigraph_x86_64_apple
-          path: target/release/oxigraph
+          path: target/x86_64-apple-darwin/release/oxigraph
       - uses: actions/upload-artifact@v4
         with:
           name: oxigraph_aarch64_apple
           path: target/aarch64-apple-darwin/release/oxigraph
-      - run: mv target/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_x86_64_apple
+      - run: mv target/x86_64-apple-darwin/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_x86_64_apple
         if: github.event_name == 'release'
       - run: mv target/aarch64-apple-darwin/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_aarch64_apple
         if: github.event_name == 'release'
@@ -206,7 +206,7 @@ jobs:
         working-directory: ./python
       - run: maturin build --release --target universal2-apple-darwin --features abi3
         working-directory: ./python
-      - run: maturin build --release --features abi3
+      - run: maturin build --release --target x86_64-apple-darwin --features abi3
         working-directory: ./python
         if: github.event_name == 'release'
       - run: maturin build --release --target aarch64-apple-darwin --features abi3
