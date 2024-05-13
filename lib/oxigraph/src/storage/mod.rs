@@ -1,8 +1,8 @@
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::memory::{
-    MemoryChainedDecodingQuadIterator, MemoryDecodingGraphIterator, MemoryStorage,
-    MemoryStorageBulkLoader, MemoryStorageReader, MemoryStorageWriter,
+    MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
+    MemoryStorageWriter, QuadIterator,
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -15,6 +15,7 @@ use std::error::Error;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod binary_encoder;
 mod error;
 mod memory;
@@ -39,20 +40,8 @@ enum StorageKind {
 }
 
 impl Storage {
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    pub fn new() -> Result<Self, StorageError> {
-        Ok(Self {
-            kind: StorageKind::RocksDb(RocksDbStorage::new()?),
-        })
-    }
-
-    #[cfg(any(target_family = "wasm", not(feature = "rocksdb")))]
-    pub fn new() -> Result<Self, StorageError> {
-        Self::new_in_memory()
-    }
-
     #[allow(clippy::unnecessary_wraps)]
-    pub fn new_in_memory() -> Result<Self, StorageError> {
+    pub fn new() -> Result<Self, StorageError> {
         Ok(Self {
             kind: StorageKind::Memory(MemoryStorage::new()),
         })
@@ -104,9 +93,9 @@ impl Storage {
         }
     }
 
-    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
-        &'b self,
-        f: impl Fn(StorageWriter<'a>) -> Result<T, E>,
+    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
+        &self,
+        f: impl for<'a> Fn(StorageWriter<'a>) -> Result<T, E>,
     ) -> Result<T, E> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -175,12 +164,13 @@ enum StorageReaderKind {
     Memory(MemoryStorageReader),
 }
 
+#[allow(clippy::unnecessary_wraps)]
 impl StorageReader {
     pub fn len(&self) -> Result<usize, StorageError> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.len(),
-            StorageReaderKind::Memory(reader) => reader.len(),
+            StorageReaderKind::Memory(reader) => Ok(reader.len()),
         }
     }
 
@@ -188,7 +178,7 @@ impl StorageReader {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.is_empty(),
-            StorageReaderKind::Memory(reader) => reader.is_empty(),
+            StorageReaderKind::Memory(reader) => Ok(reader.is_empty()),
         }
     }
 
@@ -196,7 +186,7 @@ impl StorageReader {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.contains(quad),
-            StorageReaderKind::Memory(reader) => reader.contains(quad),
+            StorageReaderKind::Memory(reader) => Ok(reader.contains(quad)),
         }
     }
 
@@ -207,347 +197,14 @@ impl StorageReader {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> DecodingQuadIterator {
-        match subject {
-            Some(subject) => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => self.quads_for_subject_predicate_object_graph(
-                            subject, predicate, object, graph_name,
-                        ),
-                        None => self.quads_for_subject_predicate_object(subject, predicate, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)
-                        }
-                        None => self.quads_for_subject_predicate(subject, predicate),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_subject_object_graph(subject, object, graph_name)
-                        }
-                        None => self.quads_for_subject_object(subject, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_subject_graph(subject, graph_name),
-                        None => self.quads_for_subject(subject),
-                    },
-                },
-            },
-            None => match predicate {
-                Some(predicate) => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => {
-                            self.quads_for_predicate_object_graph(predicate, object, graph_name)
-                        }
-                        None => self.quads_for_predicate_object(predicate, object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_predicate_graph(predicate, graph_name),
-                        None => self.quads_for_predicate(predicate),
-                    },
-                },
-                None => match object {
-                    Some(object) => match graph_name {
-                        Some(graph_name) => self.quads_for_object_graph(object, graph_name),
-                        None => self.quads_for_object(object),
-                    },
-                    None => match graph_name {
-                        Some(graph_name) => self.quads_for_graph(graph_name),
-                        None => self.quads(),
-                    },
-                },
-            },
-        }
-    }
-
-    pub fn quads(&self) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(reader.quads()),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(reader.quads()),
-            },
-        }
-    }
-
-    fn quads_for_subject(&self, subject: &EncodedTerm) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(reader.quads_for_subject(subject)),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(reader.quads_for_subject(subject)),
-            },
-        }
-    }
-
-    fn quads_for_subject_predicate(
-        &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_subject_predicate(subject, predicate),
+        DecodingQuadIterator {
+            kind: match &self.kind {
+                #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+                StorageReaderKind::RocksDb(reader) => DecodingQuadIteratorKind::RocksDb(
+                    reader.quads_for_pattern(subject, predicate, object, graph_name),
                 ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_subject_predicate(subject, predicate),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_subject_predicate_object(
-        &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_subject_predicate_object(subject, predicate, object),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_subject_predicate_object(subject, predicate, object),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_subject_object(
-        &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_subject_object(subject, object),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_subject_object(subject, object),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_predicate(&self, predicate: &EncodedTerm) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(reader.quads_for_predicate(predicate)),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(reader.quads_for_predicate(predicate)),
-            },
-        }
-    }
-
-    fn quads_for_predicate_object(
-        &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_predicate_object(predicate, object),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_predicate_object(predicate, object),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_object(&self, object: &EncodedTerm) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(reader.quads_for_object(object)),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(reader.quads_for_object(object)),
-            },
-        }
-    }
-
-    fn quads_for_graph(&self, graph_name: &EncodedTerm) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(reader.quads_for_graph(graph_name)),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(reader.quads_for_graph(graph_name)),
-            },
-        }
-    }
-
-    fn quads_for_subject_graph(
-        &self,
-        subject: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_subject_graph(subject, graph_name),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_subject_graph(subject, graph_name),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_subject_predicate_graph(
-        &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_subject_predicate_graph(subject, predicate, graph_name),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_subject_predicate_graph(subject, predicate, graph_name),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_subject_predicate_object_graph(
-        &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_subject_predicate_object_graph(
-                        subject, predicate, object, graph_name,
-                    ),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_subject_predicate_object_graph(
-                        subject, predicate, object, graph_name,
-                    ),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_subject_object_graph(
-        &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_subject_object_graph(subject, object, graph_name),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_subject_object_graph(subject, object, graph_name),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_predicate_graph(
-        &self,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_predicate_graph(predicate, graph_name),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_predicate_graph(predicate, graph_name),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_predicate_object_graph(
-        &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_predicate_object_graph(predicate, object, graph_name),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_predicate_object_graph(predicate, object, graph_name),
-                ),
-            },
-        }
-    }
-
-    fn quads_for_object_graph(
-        &self,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> DecodingQuadIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::RocksDb(
-                    reader.quads_for_object_graph(object, graph_name),
-                ),
-            },
-            StorageReaderKind::Memory(reader) => DecodingQuadIterator {
-                kind: DecodingQuadIteratorKind::Memory(
-                    reader.quads_for_object_graph(object, graph_name),
+                StorageReaderKind::Memory(reader) => DecodingQuadIteratorKind::Memory(
+                    reader.quads_for_pattern(subject, predicate, object, graph_name),
                 ),
             },
         }
@@ -569,7 +226,7 @@ impl StorageReader {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.contains_named_graph(graph_name),
-            StorageReaderKind::Memory(reader) => reader.contains_named_graph(graph_name),
+            StorageReaderKind::Memory(reader) => Ok(reader.contains_named_graph(graph_name)),
         }
     }
 
@@ -577,7 +234,7 @@ impl StorageReader {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReaderKind::RocksDb(reader) => reader.contains_str(key),
-            StorageReaderKind::Memory(reader) => reader.contains_str(key),
+            StorageReaderKind::Memory(reader) => Ok(reader.contains_str(key)),
         }
     }
 
@@ -598,7 +255,7 @@ pub struct DecodingQuadIterator {
 enum DecodingQuadIteratorKind {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbChainedDecodingQuadIterator),
-    Memory(MemoryChainedDecodingQuadIterator),
+    Memory(QuadIterator),
 }
 
 impl Iterator for DecodingQuadIterator {
@@ -608,7 +265,7 @@ impl Iterator for DecodingQuadIterator {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             DecodingQuadIteratorKind::RocksDb(iter) => iter.next(),
-            DecodingQuadIteratorKind::Memory(iter) => iter.next(),
+            DecodingQuadIteratorKind::Memory(iter) => iter.next().map(Ok),
         }
     }
 }
@@ -630,7 +287,7 @@ impl Iterator for DecodingGraphIterator {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             DecodingGraphIteratorKind::RocksDb(iter) => iter.next(),
-            DecodingGraphIteratorKind::Memory(iter) => iter.next(),
+            DecodingGraphIteratorKind::Memory(iter) => iter.next().map(Ok),
         }
     }
 }
@@ -655,6 +312,7 @@ enum StorageWriterKind<'a> {
     Memory(MemoryStorageWriter<'a>),
 }
 
+#[allow(clippy::unnecessary_wraps)]
 impl<'a> StorageWriter<'a> {
     pub fn reader(&self) -> StorageReader {
         match &self.kind {
@@ -672,7 +330,7 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.insert(quad),
-            StorageWriterKind::Memory(writer) => writer.insert(quad),
+            StorageWriterKind::Memory(writer) => Ok(writer.insert(quad)),
         }
     }
 
@@ -683,7 +341,7 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.insert_named_graph(graph_name),
-            StorageWriterKind::Memory(writer) => writer.insert_named_graph(graph_name),
+            StorageWriterKind::Memory(writer) => Ok(writer.insert_named_graph(graph_name)),
         }
     }
 
@@ -691,7 +349,7 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.remove(quad),
-            StorageWriterKind::Memory(writer) => writer.remove(quad),
+            StorageWriterKind::Memory(writer) => Ok(writer.remove(quad)),
         }
     }
 
@@ -699,7 +357,10 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.clear_graph(graph_name),
-            StorageWriterKind::Memory(writer) => writer.clear_graph(graph_name),
+            StorageWriterKind::Memory(writer) => {
+                writer.clear_graph(graph_name);
+                Ok(())
+            }
         }
     }
 
@@ -707,7 +368,10 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.clear_all_named_graphs(),
-            StorageWriterKind::Memory(writer) => writer.clear_all_named_graphs(),
+            StorageWriterKind::Memory(writer) => {
+                writer.clear_all_named_graphs();
+                Ok(())
+            }
         }
     }
 
@@ -715,7 +379,10 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.clear_all_graphs(),
-            StorageWriterKind::Memory(writer) => writer.clear_all_graphs(),
+            StorageWriterKind::Memory(writer) => {
+                writer.clear_all_graphs();
+                Ok(())
+            }
         }
     }
 
@@ -726,7 +393,7 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.remove_named_graph(graph_name),
-            StorageWriterKind::Memory(writer) => writer.remove_named_graph(graph_name),
+            StorageWriterKind::Memory(writer) => Ok(writer.remove_named_graph(graph_name)),
         }
     }
 
@@ -734,7 +401,10 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.remove_all_named_graphs(),
-            StorageWriterKind::Memory(writer) => writer.remove_all_named_graphs(),
+            StorageWriterKind::Memory(writer) => {
+                writer.remove_all_named_graphs();
+                Ok(())
+            }
         }
     }
 
@@ -742,7 +412,10 @@ impl<'a> StorageWriter<'a> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageWriterKind::RocksDb(writer) => writer.clear(),
-            StorageWriterKind::Memory(writer) => writer.clear(),
+            StorageWriterKind::Memory(writer) => {
+                writer.clear();
+                Ok(())
+            }
         }
     }
 }

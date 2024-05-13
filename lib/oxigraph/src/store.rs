@@ -85,18 +85,10 @@ pub struct Store {
 }
 
 impl Store {
-    /// Creates a temporary [`Store`] that will be deleted after drop.
+    /// New in-memory [`Store`] without RocksDB.
     pub fn new() -> Result<Self, StorageError> {
         Ok(Self {
             storage: Storage::new()?,
-        })
-    }
-
-    /// New in-memory [`Store`] without RocksDB
-    #[doc(hidden)]
-    pub fn new_in_memory() -> Result<Self, StorageError> {
-        Ok(Self {
-            storage: Storage::new_in_memory()?,
         })
     }
 
@@ -404,9 +396,9 @@ impl Store {
     /// })?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
-        &'b self,
-        f: impl Fn(Transaction<'a>) -> Result<T, E>,
+    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
+        &self,
+        f: impl for<'a> Fn(Transaction<'a>) -> Result<T, E>,
     ) -> Result<T, E> {
         self.storage.transaction(|writer| f(Transaction { writer }))
     }
@@ -1941,7 +1933,7 @@ mod tests {
             main_o.clone(),
             main_g.clone(),
         );
-        let default_quads = vec![
+        let mut default_quads = vec![
             Quad::new(
                 main_s.clone(),
                 main_p.clone(),
@@ -1957,20 +1949,20 @@ mod tests {
             ),
         ];
         let all_quads = vec![
-            Quad::new(
-                main_s.clone(),
-                main_p.clone(),
-                Literal::from(0),
-                GraphName::DefaultGraph,
-            ),
-            default_quad.clone(),
+            named_quad.clone(),
             Quad::new(
                 main_s.clone(),
                 main_p.clone(),
                 Literal::from(200_000_000),
                 GraphName::DefaultGraph,
             ),
-            named_quad.clone(),
+            default_quad.clone(),
+            Quad::new(
+                main_s.clone(),
+                main_p.clone(),
+                Literal::from(0),
+                GraphName::DefaultGraph,
+            ),
         ];
 
         let store = Store::new()?;
@@ -1985,6 +1977,7 @@ mod tests {
         assert!(!store.insert(&named_quad)?);
         assert!(store.insert(&default_quad)?);
         assert!(!store.insert(&default_quad)?);
+        store.validate()?;
 
         assert_eq!(store.len()?, 4);
         assert_eq!(store.iter().collect::<Result<Vec<_>, _>>()?, all_quads);
@@ -2009,7 +2002,7 @@ mod tests {
                     None
                 )
                 .collect::<Result<Vec<_>, _>>()?,
-            vec![default_quad.clone(), named_quad.clone()]
+            vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store
@@ -2033,6 +2026,7 @@ mod tests {
                 .collect::<Result<Vec<_>, _>>()?,
             vec![named_quad.clone()]
         );
+        default_quads.reverse();
         assert_eq!(
             store
                 .quads_for_pattern(
@@ -2048,7 +2042,7 @@ mod tests {
             store
                 .quads_for_pattern(Some(main_s.as_ref()), None, Some(main_o.as_ref()), None)
                 .collect::<Result<Vec<_>, _>>()?,
-            vec![default_quad.clone(), named_quad.clone()]
+            vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store
@@ -2093,13 +2087,13 @@ mod tests {
             store
                 .quads_for_pattern(None, Some(main_p.as_ref()), Some(main_o.as_ref()), None)
                 .collect::<Result<Vec<_>, _>>()?,
-            vec![default_quad.clone(), named_quad.clone()]
+            vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store
                 .quads_for_pattern(None, None, Some(main_o.as_ref()), None)
                 .collect::<Result<Vec<_>, _>>()?,
-            vec![default_quad.clone(), named_quad.clone()]
+            vec![named_quad.clone(), default_quad.clone()]
         );
         assert_eq!(
             store

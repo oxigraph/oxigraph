@@ -33,10 +33,7 @@ for package_id in cargo_metadata["workspace_default_members"]:
     if package["name"] in IGNORE_PACKAGES:
         continue
     for dependency in package["dependencies"]:
-        if (
-            "path" in dependency
-            or dependency["name"] in ALLOWED_MISSING_PACKAGES
-        ):
+        if "path" in dependency or dependency["name"] in ALLOWED_MISSING_PACKAGES:
             continue
         candidate_debian_name = f"rust-{dependency['name'].replace('_', '-')}"
         if dependency["name"] not in debian_cache:
