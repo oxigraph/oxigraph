@@ -1,5 +1,4 @@
-use crate::model::Quad;
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
+use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
 use crate::storage::binary_encoder::{
     decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
     write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
@@ -53,12 +52,8 @@ pub struct RocksDbStorage {
 }
 
 impl RocksDbStorage {
-    pub fn new() -> Result<Self, StorageError> {
-        Self::setup(Db::open_read_write(None, Self::column_families())?)
-    }
-
     pub fn open(path: &Path) -> Result<Self, StorageError> {
-        Self::setup(Db::open_read_write(Some(path), Self::column_families())?)
+        Self::setup(Db::open_read_write(path, Self::column_families())?)
     }
 
     pub fn open_secondary(primary_path: &Path) -> Result<Self, StorageError> {
@@ -240,9 +235,9 @@ impl RocksDbStorage {
         }
     }
 
-    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
-        &'b self,
-        f: impl Fn(RocksDbStorageWriter<'a>) -> Result<T, E>,
+    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
+        &self,
+        f: impl for<'a> Fn(RocksDbStorageWriter<'a>) -> Result<T, E>,
     ) -> Result<T, E> {
         self.db.transaction(|transaction| {
             f(RocksDbStorageWriter {
@@ -311,6 +306,69 @@ impl RocksDbStorageReader {
         }
     }
 
+    pub fn quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> RocksDbChainedDecodingQuadIterator {
+        match subject {
+            Some(subject) => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => self.quads_for_subject_predicate_object_graph(
+                            subject, predicate, object, graph_name,
+                        ),
+                        None => self.quads_for_subject_predicate_object(subject, predicate, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_subject_predicate_graph(subject, predicate, graph_name)
+                        }
+                        None => self.quads_for_subject_predicate(subject, predicate),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_subject_object_graph(subject, object, graph_name)
+                        }
+                        None => self.quads_for_subject_object(subject, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_subject_graph(subject, graph_name),
+                        None => self.quads_for_subject(subject),
+                    },
+                },
+            },
+            None => match predicate {
+                Some(predicate) => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => {
+                            self.quads_for_predicate_object_graph(predicate, object, graph_name)
+                        }
+                        None => self.quads_for_predicate_object(predicate, object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_predicate_graph(predicate, graph_name),
+                        None => self.quads_for_predicate(predicate),
+                    },
+                },
+                None => match object {
+                    Some(object) => match graph_name {
+                        Some(graph_name) => self.quads_for_object_graph(object, graph_name),
+                        None => self.quads_for_object(object),
+                    },
+                    None => match graph_name {
+                        Some(graph_name) => self.quads_for_graph(graph_name),
+                        None => self.quads(),
+                    },
+                },
+            },
+        }
+    }
+
     pub fn quads(&self) -> RocksDbChainedDecodingQuadIterator {
         RocksDbChainedDecodingQuadIterator::pair(self.dspo_quads(&[]), self.gspo_quads(&[]))
     }
@@ -319,14 +377,14 @@ impl RocksDbStorageReader {
         self.gspo_quads(&[])
     }
 
-    pub fn quads_for_subject(&self, subject: &EncodedTerm) -> RocksDbChainedDecodingQuadIterator {
+    fn quads_for_subject(&self, subject: &EncodedTerm) -> RocksDbChainedDecodingQuadIterator {
         RocksDbChainedDecodingQuadIterator::pair(
             self.dspo_quads(&encode_term(subject)),
             self.spog_quads(&encode_term(subject)),
         )
     }
 
-    pub fn quads_for_subject_predicate(
+    fn quads_for_subject_predicate(
         &self,
         subject: &EncodedTerm,
         predicate: &EncodedTerm,
@@ -337,7 +395,7 @@ impl RocksDbStorageReader {
         )
     }
 
-    pub fn quads_for_subject_predicate_object(
+    fn quads_for_subject_predicate_object(
         &self,
         subject: &EncodedTerm,
         predicate: &EncodedTerm,
@@ -349,7 +407,7 @@ impl RocksDbStorageReader {
         )
     }
 
-    pub fn quads_for_subject_object(
+    fn quads_for_subject_object(
         &self,
         subject: &EncodedTerm,
         object: &EncodedTerm,
@@ -360,17 +418,14 @@ impl RocksDbStorageReader {
         )
     }
 
-    pub fn quads_for_predicate(
-        &self,
-        predicate: &EncodedTerm,
-    ) -> RocksDbChainedDecodingQuadIterator {
+    fn quads_for_predicate(&self, predicate: &EncodedTerm) -> RocksDbChainedDecodingQuadIterator {
         RocksDbChainedDecodingQuadIterator::pair(
             self.dpos_quads(&encode_term(predicate)),
             self.posg_quads(&encode_term(predicate)),
         )
     }
 
-    pub fn quads_for_predicate_object(
+    fn quads_for_predicate_object(
         &self,
         predicate: &EncodedTerm,
         object: &EncodedTerm,
@@ -381,14 +436,14 @@ impl RocksDbStorageReader {
         )
     }
 
-    pub fn quads_for_object(&self, object: &EncodedTerm) -> RocksDbChainedDecodingQuadIterator {
+    fn quads_for_object(&self, object: &EncodedTerm) -> RocksDbChainedDecodingQuadIterator {
         RocksDbChainedDecodingQuadIterator::pair(
             self.dosp_quads(&encode_term(object)),
             self.ospg_quads(&encode_term(object)),
         )
     }
 
-    pub fn quads_for_graph(&self, graph_name: &EncodedTerm) -> RocksDbChainedDecodingQuadIterator {
+    fn quads_for_graph(&self, graph_name: &EncodedTerm) -> RocksDbChainedDecodingQuadIterator {
         RocksDbChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
             self.dspo_quads(&Vec::default())
         } else {
@@ -396,7 +451,7 @@ impl RocksDbStorageReader {
         })
     }
 
-    pub fn quads_for_subject_graph(
+    fn quads_for_subject_graph(
         &self,
         subject: &EncodedTerm,
         graph_name: &EncodedTerm,
@@ -408,7 +463,7 @@ impl RocksDbStorageReader {
         })
     }
 
-    pub fn quads_for_subject_predicate_graph(
+    fn quads_for_subject_predicate_graph(
         &self,
         subject: &EncodedTerm,
         predicate: &EncodedTerm,
@@ -421,7 +476,7 @@ impl RocksDbStorageReader {
         })
     }
 
-    pub fn quads_for_subject_predicate_object_graph(
+    fn quads_for_subject_predicate_object_graph(
         &self,
         subject: &EncodedTerm,
         predicate: &EncodedTerm,
@@ -435,7 +490,7 @@ impl RocksDbStorageReader {
         })
     }
 
-    pub fn quads_for_subject_object_graph(
+    fn quads_for_subject_object_graph(
         &self,
         subject: &EncodedTerm,
         object: &EncodedTerm,
@@ -448,7 +503,7 @@ impl RocksDbStorageReader {
         })
     }
 
-    pub fn quads_for_predicate_graph(
+    fn quads_for_predicate_graph(
         &self,
         predicate: &EncodedTerm,
         graph_name: &EncodedTerm,
@@ -460,7 +515,7 @@ impl RocksDbStorageReader {
         })
     }
 
-    pub fn quads_for_predicate_object_graph(
+    fn quads_for_predicate_object_graph(
         &self,
         predicate: &EncodedTerm,
         object: &EncodedTerm,
@@ -473,7 +528,7 @@ impl RocksDbStorageReader {
         })
     }
 
-    pub fn quads_for_object_graph(
+    fn quads_for_object_graph(
         &self,
         object: &EncodedTerm,
         graph_name: &EncodedTerm,
@@ -573,7 +628,7 @@ impl RocksDbStorageReader {
                 &self.storage.dosp_cf,
                 &encode_term_triple(&spo.object, &spo.subject, &spo.predicate),
             )? {
-                return Err(CorruptionError::new("Quad in dspo and not in dpos").into());
+                return Err(CorruptionError::new("Quad in dspo and not in dosp").into());
             }
         }
 
@@ -689,7 +744,7 @@ impl Iterator for RocksDbChainedDecodingQuadIterator {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(result) = self.first.next() {
             Some(result)
-        } else if let Some(second) = self.second.as_mut() {
+        } else if let Some(second) = &mut self.second {
             second.next()
         } else {
             None

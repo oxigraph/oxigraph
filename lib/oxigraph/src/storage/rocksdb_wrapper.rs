@@ -78,7 +78,6 @@ struct RwDbHandler {
     column_family_names: Vec<&'static str>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
     cf_options: Vec<*mut rocksdb_options_t>,
-    in_memory: bool,
     path: PathBuf,
 }
 
@@ -106,9 +105,6 @@ impl Drop for RwDbHandler {
             rocksdb_transactiondb_options_destroy(self.transactiondb_options);
             rocksdb_options_destroy(self.options);
             rocksdb_block_based_options_destroy(self.block_based_table_options);
-        }
-        if self.in_memory {
-            drop(remove_dir_all(&self.path));
         }
     }
 }
@@ -149,29 +145,15 @@ impl Drop for RoDbHandler {
 
 impl Db {
     pub fn open_read_write(
-        path: Option<&Path>,
+        path: &Path,
         column_families: Vec<ColumnFamilyDefinition>,
     ) -> Result<Self, StorageError> {
-        let (path, in_memory) = if let Some(path) = path {
-            (path.to_path_buf(), false)
-        } else {
-            (tmp_path(), true)
-        };
-        let c_path = path_to_cstring(&path)?;
+        let c_path = path_to_cstring(path)?;
         unsafe {
-            let options = Self::db_options(true, in_memory)?;
+            let options = Self::db_options(true)?;
             rocksdb_options_set_create_if_missing(options, 1);
             rocksdb_options_set_create_missing_column_families(options, 1);
-            rocksdb_options_set_compression(
-                options,
-                if in_memory {
-                    rocksdb_no_compression
-                } else {
-                    rocksdb_lz4_compression
-                }
-                .try_into()
-                .unwrap(),
-            );
+            rocksdb_options_set_compression(options, rocksdb_lz4_compression.try_into().unwrap());
             let block_based_table_options = rocksdb_block_based_options_create();
             assert!(
                 !block_based_table_options.is_null(),
@@ -243,9 +225,6 @@ impl Db {
                 !write_options.is_null(),
                 "rocksdb_writeoptions_create returned null"
             );
-            if in_memory {
-                rocksdb_writeoptions_disable_WAL(write_options, 1); // No need for WAL
-            }
 
             let transaction_options = rocksdb_transaction_options_create();
             assert!(
@@ -294,8 +273,7 @@ impl Db {
                     column_family_names,
                     cf_handles,
                     cf_options,
-                    in_memory,
-                    path,
+                    path: path.into(),
                 })),
             })
         }
@@ -314,7 +292,7 @@ impl Db {
         };
         let c_secondary_path = path_to_cstring(&secondary_path)?;
         unsafe {
-            let options = Self::db_options(false, false)?;
+            let options = Self::db_options(false)?;
             let (column_family_names, c_column_family_names, cf_options) =
                 Self::column_families_names_and_options(column_families, options);
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
@@ -376,7 +354,7 @@ impl Db {
     ) -> Result<Self, StorageError> {
         unsafe {
             let c_path = path_to_cstring(path)?;
-            let options = Self::db_options(true, false)?;
+            let options = Self::db_options(true)?;
             let (column_family_names, c_column_family_names, cf_options) =
                 Self::column_families_names_and_options(column_families, options);
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
@@ -433,13 +411,8 @@ impl Db {
         }
     }
 
-    fn db_options(
-        limit_max_open_files: bool,
-        in_memory: bool,
-    ) -> Result<*mut rocksdb_options_t, StorageError> {
+    fn db_options(limit_max_open_files: bool) -> Result<*mut rocksdb_options_t, StorageError> {
         static ROCKSDB_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
-        static ROCKSDB_MEM_ENV: OnceLock<UnsafeEnv> = OnceLock::new();
-
         unsafe {
             let options = rocksdb_options_create();
             assert!(!options.is_null(), "rocksdb_options_create returned null");
@@ -475,20 +448,13 @@ impl Db {
             rocksdb_options_set_recycle_log_file_num(options, 10); // We do not keep more than 10 log files
             rocksdb_options_set_env(
                 options,
-                if in_memory {
-                    ROCKSDB_MEM_ENV.get_or_init(|| {
-                        let env = rocksdb_create_mem_env();
-                        assert!(!env.is_null(), "rocksdb_create_mem_env returned null");
-                        UnsafeEnv(env)
-                    })
-                } else {
-                    ROCKSDB_ENV.get_or_init(|| {
+                ROCKSDB_ENV
+                    .get_or_init(|| {
                         let env = rocksdb_create_default_env();
                         assert!(!env.is_null(), "rocksdb_create_default_env returned null");
                         UnsafeEnv(env)
                     })
-                }
-                .0,
+                    .0,
             );
             Ok(options)
         }
@@ -584,9 +550,9 @@ impl Db {
         }
     }
 
-    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
-        &'b self,
-        f: impl Fn(Transaction<'a>) -> Result<T, E>,
+    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
+        &self,
+        f: impl for<'a> Fn(Transaction<'a>) -> Result<T, E>,
     ) -> Result<T, E> {
         let DbKind::ReadWrite(db) = &self.inner else {
             return Err(StorageError::Other(
@@ -837,19 +803,12 @@ impl Db {
                 }
                 ffi_result!(rocksdb_create_checkpoint_with_status(db.db, path.as_ptr()))
             },
-            DbKind::ReadWrite(db) => {
-                if db.in_memory {
-                    return Err(StorageError::Other(
-                        "It is not possible to backup an in-memory database".into(),
-                    ));
-                }
-                unsafe {
-                    ffi_result!(rocksdb_transactiondb_create_checkpoint_with_status(
-                        db.db,
-                        path.as_ptr()
-                    ))
-                }
-            }
+            DbKind::ReadWrite(db) => unsafe {
+                ffi_result!(rocksdb_transactiondb_create_checkpoint_with_status(
+                    db.db,
+                    path.as_ptr()
+                ))
+            },
         }?;
         Ok(())
     }

@@ -27,6 +27,7 @@ rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
 
 [dependencies]
+dashmap.workspace = true
 digest.workspace = true
 hex.workspace = true
 json-event-parser.workspace = true

@@ -1,79 +1,122 @@
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
-use crate::storage::binary_encoder::{
-    encode_term, encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad,
-    write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad, write_pos_quad,
-    write_posg_quad, write_spo_quad, write_spog_quad, QuadEncoding, WRITTEN_TERM_MAX_SIZE,
-};
 pub use crate::storage::error::StorageError;
-use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{
+    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+};
 use crate::storage::CorruptionError;
+use dashmap::iter::Iter;
+use dashmap::mapref::entry::Entry;
+use dashmap::{DashMap, DashSet};
 use oxrdf::Quad;
-use std::cell::{BorrowMutError, Ref, RefCell};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::borrow::Borrow;
 use std::error::Error;
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::mem::transmute;
-use std::ops::Deref;
-use std::rc::{Rc, Weak};
-use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
-const BULK_LOAD_BATCH_SIZE: u64 = 100_000;
-
-/// Low level storage primitives
+/// In-memory storage working with MVCC
+///
+/// Each quad and graph name is annotated by a version range, allowing to read old versions while updates are applied.
+/// To simplify the implementation a single write transaction is currently allowed. This restriction should be lifted in the future.
 #[derive(Clone)]
 pub struct MemoryStorage {
-    content: Arc<RwLock<Content>>,
-    id2str: Arc<RwLock<HashMap<StrHash, String>>>,
+    content: Arc<Content>,
+    id2str: Arc<DashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
+    version_counter: Arc<AtomicU64>,
+    transaction_counter: Arc<Mutex<u64>>,
 }
 
 struct Content {
-    spog: BTreeSet<Vec<u8>>,
-    posg: BTreeSet<Vec<u8>>,
-    ospg: BTreeSet<Vec<u8>>,
-    gspo: BTreeSet<Vec<u8>>,
-    gpos: BTreeSet<Vec<u8>>,
-    gosp: BTreeSet<Vec<u8>>,
-    dspo: BTreeSet<Vec<u8>>,
-    dpos: BTreeSet<Vec<u8>>,
-    dosp: BTreeSet<Vec<u8>>,
-    graphs: HashSet<EncodedTerm>,
+    quad_set: DashSet<Arc<QuadListNode>>,
+    last_quad: RwLock<Option<Arc<QuadListNode>>>,
+    last_quad_by_subject: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
+    last_quad_by_predicate: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
+    last_quad_by_object: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
+    last_quad_by_graph_name: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
+    graphs: DashMap<EncodedTerm, VersionRange>,
 }
 
 impl MemoryStorage {
     pub fn new() -> Self {
         Self {
-            content: Arc::new(RwLock::new(Content {
-                spog: BTreeSet::new(),
-                posg: BTreeSet::new(),
-                ospg: BTreeSet::new(),
-                gspo: BTreeSet::new(),
-                gpos: BTreeSet::new(),
-                gosp: BTreeSet::new(),
-                dspo: BTreeSet::new(),
-                dpos: BTreeSet::new(),
-                dosp: BTreeSet::new(),
-                graphs: HashSet::new(),
-            })),
-            id2str: Arc::new(RwLock::new(HashMap::new())),
+            content: Arc::new(Content {
+                quad_set: DashSet::new(),
+                last_quad: RwLock::new(None),
+                last_quad_by_subject: DashMap::new(),
+                last_quad_by_predicate: DashMap::new(),
+                last_quad_by_object: DashMap::new(),
+                last_quad_by_graph_name: DashMap::new(),
+                graphs: DashMap::new(),
+            }),
+            id2str: Arc::new(DashMap::with_hasher(BuildHasherDefault::default())),
+            version_counter: Arc::new(AtomicU64::new(0)),
+            transaction_counter: Arc::new(Mutex::new(u64::MAX >> 1)),
         }
     }
 
     pub fn snapshot(&self) -> MemoryStorageReader {
         MemoryStorageReader {
-            content: MemoryStorageReaderContent::Simple(Arc::clone(&self.content)),
-            id2str: Arc::clone(&self.id2str),
+            storage: self.clone(),
+            snapshot_id: self.version_counter.load(Ordering::Acquire),
         }
     }
 
-    pub fn transaction<'a, 'b: 'a, T, E: Error + 'static + From<StorageError>>(
-        &'b self,
-        f: impl Fn(MemoryStorageWriter<'a>) -> Result<T, E>,
+    #[allow(clippy::unwrap_in_result)]
+    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
+        &self,
+        f: impl for<'a> Fn(MemoryStorageWriter<'a>) -> Result<T, E>,
     ) -> Result<T, E> {
-        f(MemoryStorageWriter {
-            content: Rc::new(RefCell::new(
-                self.content.write().map_err(poison_corruption_error)?,
-            )),
-            id2str: Arc::clone(&self.id2str),
-        })
+        let mut transaction_mutex = self.transaction_counter.lock().unwrap();
+        *transaction_mutex += 1;
+        let transaction_id = *transaction_mutex;
+        let snapshot_id = self.version_counter.load(Ordering::Acquire);
+        let mut operations = Vec::new();
+        let result = f(MemoryStorageWriter {
+            storage: self,
+            log: &mut operations,
+            transaction_id,
+        });
+        if result.is_ok() {
+            let new_version_id = snapshot_id + 1;
+            for operation in operations {
+                match operation {
+                    LogEntry::QuadNode(node) => {
+                        node.range
+                            .lock()
+                            .unwrap()
+                            .upgrade_transaction(transaction_id, new_version_id);
+                    }
+                    LogEntry::Graph(graph_name) => {
+                        if let Some(mut entry) = self.content.graphs.get_mut(&graph_name) {
+                            entry
+                                .value_mut()
+                                .upgrade_transaction(transaction_id, new_version_id)
+                        }
+                    }
+                }
+            }
+            self.version_counter
+                .store(new_version_id, Ordering::Release);
+        } else {
+            for operation in operations {
+                match operation {
+                    LogEntry::QuadNode(node) => {
+                        node.range
+                            .lock()
+                            .unwrap()
+                            .rollback_transaction(transaction_id);
+                    }
+                    LogEntry::Graph(graph_name) => {
+                        if let Some(mut entry) = self.content.graphs.get_mut(&graph_name) {
+                            entry.value_mut().rollback_transaction(transaction_id)
+                        }
+                    }
+                }
+            }
+        }
+        // TODO: garbage collection
+        result
     }
 
     pub fn bulk_loader(&self) -> MemoryStorageBulkLoader {
@@ -84,714 +127,662 @@ impl MemoryStorage {
     }
 }
 
+#[derive(Clone)]
 pub struct MemoryStorageReader {
-    content: MemoryStorageReaderContent,
-    id2str: Arc<RwLock<HashMap<StrHash, String>>>,
-}
-
-enum MemoryStorageReaderContent {
-    Simple(Arc<RwLock<Content>>),
-    Transaction(Weak<RefCell<RwLockWriteGuard<'static, Content>>>),
+    storage: MemoryStorage,
+    snapshot_id: u64,
 }
 
 impl MemoryStorageReader {
-    pub fn len(&self) -> Result<usize, StorageError> {
-        let content = self.content()?;
-        Ok(content.gspo.len() + content.dspo.len())
+    pub fn len(&self) -> usize {
+        self.storage
+            .content
+            .quad_set
+            .iter()
+            .filter(|e| self.is_node_in_range(e))
+            .count()
     }
 
-    pub fn is_empty(&self) -> Result<bool, StorageError> {
-        let content = self.content()?;
-        Ok(content.gspo.is_empty() && content.dspo.is_empty())
+    pub fn is_empty(&self) -> bool {
+        !self
+            .storage
+            .content
+            .quad_set
+            .iter()
+            .any(|e| self.is_node_in_range(&e))
     }
 
-    pub fn contains(&self, quad: &EncodedQuad) -> Result<bool, StorageError> {
-        let content = self.content()?;
-        let mut buffer = Vec::with_capacity(4 * WRITTEN_TERM_MAX_SIZE);
-        if quad.graph_name.is_default_graph() {
-            write_spo_quad(&mut buffer, quad);
-            Ok(content.dspo.contains(&buffer))
-        } else {
-            write_gspo_quad(&mut buffer, quad);
-            Ok(content.gspo.contains(&buffer))
-        }
+    pub fn contains(&self, quad: &EncodedQuad) -> bool {
+        self.storage
+            .content
+            .quad_set
+            .get(quad)
+            .map_or(false, |node| self.is_node_in_range(&node))
     }
 
-    pub fn quads(&self) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dspo_quads(Vec::new()),
-            self.gspo_quads(Vec::new()),
-        )
-    }
-
-    pub fn quads_for_subject(&self, subject: &EncodedTerm) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dspo_quads(encode_term(subject)),
-            self.spog_quads(encode_term(subject)),
-        )
-    }
-
-    pub fn quads_for_subject_predicate(
+    pub fn quads_for_pattern(
         &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dspo_quads(encode_term_pair(subject, predicate)),
-            self.spog_quads(encode_term_pair(subject, predicate)),
-        )
-    }
-
-    pub fn quads_for_subject_predicate_object(
-        &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dspo_quads(encode_term_triple(subject, predicate, object)),
-            self.spog_quads(encode_term_triple(subject, predicate, object)),
-        )
-    }
-
-    pub fn quads_for_subject_object(
-        &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dosp_quads(encode_term_pair(object, subject)),
-            self.ospg_quads(encode_term_pair(object, subject)),
-        )
-    }
-
-    pub fn quads_for_predicate(
-        &self,
-        predicate: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dpos_quads(encode_term(predicate)),
-            self.posg_quads(encode_term(predicate)),
-        )
-    }
-
-    pub fn quads_for_predicate_object(
-        &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dpos_quads(encode_term_pair(predicate, object)),
-            self.posg_quads(encode_term_pair(predicate, object)),
-        )
-    }
-
-    pub fn quads_for_object(&self, object: &EncodedTerm) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::pair(
-            self.dosp_quads(encode_term(object)),
-            self.ospg_quads(encode_term(object)),
-        )
-    }
-
-    pub fn quads_for_graph(&self, graph_name: &EncodedTerm) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(Vec::new())
-        } else {
-            self.gspo_quads(encode_term(graph_name))
-        })
-    }
-
-    pub fn quads_for_subject_graph(
-        &self,
-        subject: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(encode_term(subject))
-        } else {
-            self.gspo_quads(encode_term_pair(graph_name, subject))
-        })
-    }
-
-    pub fn quads_for_subject_predicate_graph(
-        &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(encode_term_pair(subject, predicate))
-        } else {
-            self.gspo_quads(encode_term_triple(graph_name, subject, predicate))
-        })
-    }
-
-    pub fn quads_for_subject_predicate_object_graph(
-        &self,
-        subject: &EncodedTerm,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dspo_quads(encode_term_triple(subject, predicate, object))
-        } else {
-            self.gspo_quads(encode_term_quad(graph_name, subject, predicate, object))
-        })
-    }
-
-    pub fn quads_for_subject_object_graph(
-        &self,
-        subject: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dosp_quads(encode_term_pair(object, subject))
-        } else {
-            self.gosp_quads(encode_term_triple(graph_name, object, subject))
-        })
-    }
-
-    pub fn quads_for_predicate_graph(
-        &self,
-        predicate: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dpos_quads(encode_term(predicate))
-        } else {
-            self.gpos_quads(encode_term_pair(graph_name, predicate))
-        })
-    }
-
-    pub fn quads_for_predicate_object_graph(
-        &self,
-        predicate: &EncodedTerm,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dpos_quads(encode_term_pair(predicate, object))
-        } else {
-            self.gpos_quads(encode_term_triple(graph_name, predicate, object))
-        })
-    }
-
-    pub fn quads_for_object_graph(
-        &self,
-        object: &EncodedTerm,
-        graph_name: &EncodedTerm,
-    ) -> MemoryChainedDecodingQuadIterator {
-        MemoryChainedDecodingQuadIterator::new(if graph_name.is_default_graph() {
-            self.dosp_quads(encode_term(object))
-        } else {
-            self.gosp_quads(encode_term_pair(graph_name, object))
-        })
-    }
-
-    pub fn named_graphs(&self) -> MemoryDecodingGraphIterator {
-        MemoryDecodingGraphIterator {
-            iter: self
-                .content()
-                .unwrap()
-                .graphs
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>()
-                .into_iter(), // TODO: propagate error?
-        }
-    }
-
-    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
-        Ok(self.content()?.graphs.contains(graph_name))
-    }
-
-    fn spog_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().spog, prefix, QuadEncoding::Spog)
-    }
-
-    fn posg_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().posg, prefix, QuadEncoding::Posg)
-    }
-
-    fn ospg_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().ospg, prefix, QuadEncoding::Ospg)
-    }
-
-    fn gspo_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().gspo, prefix, QuadEncoding::Gspo)
-    }
-
-    fn gpos_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().gpos, prefix, QuadEncoding::Gpos)
-    }
-
-    fn gosp_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().gosp, prefix, QuadEncoding::Gosp)
-    }
-
-    fn dspo_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().dspo, prefix, QuadEncoding::Dspo)
-    }
-
-    fn dpos_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().dpos, prefix, QuadEncoding::Dpos)
-    }
-
-    fn dosp_quads(&self, prefix: Vec<u8>) -> MemoryDecodingQuadIterator {
-        Self::inner_quads(&self.content().unwrap().dosp, prefix, QuadEncoding::Dosp)
-    }
-
-    fn inner_quads(
-        set: &BTreeSet<Vec<u8>>,
-        prefix: Vec<u8>,
-        encoding: QuadEncoding,
-    ) -> MemoryDecodingQuadIterator {
-        let start = prefix.clone();
-
-        // We compute the end
-        let mut end = prefix;
-        let mut i = 1;
-        while i <= end.len() && end[end.len() - i] == u8::MAX {
-            i += 1;
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        graph_name: Option<&EncodedTerm>,
+    ) -> QuadIterator {
+        fn get_start_and_count(
+            map: &DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
+            term: Option<&EncodedTerm>,
+        ) -> (Option<Arc<QuadListNode>>, u64) {
+            let Some(term) = term else {
+                return (None, u64::MAX);
+            };
+            map.view(term, |_, (node, count)| (Some(Arc::clone(node)), *count))
+                .unwrap_or_default()
         }
 
-        let range = if i > end.len() {
-            // No end
-            set.range(start..)
+        let (subject_start, subject_count) =
+            get_start_and_count(&self.storage.content.last_quad_by_subject, subject);
+        let (predicate_start, predicate_count) =
+            get_start_and_count(&self.storage.content.last_quad_by_predicate, predicate);
+        let (object_start, object_count) =
+            get_start_and_count(&self.storage.content.last_quad_by_object, object);
+        let (graph_name_start, graph_name_count) =
+            get_start_and_count(&self.storage.content.last_quad_by_graph_name, graph_name);
+
+        let (start, kind) = if subject.is_some()
+            && subject_count <= predicate_count
+            && subject_count <= object_count
+            && subject_count <= graph_name_count
+        {
+            (subject_start, QuadIteratorKind::Subject)
+        } else if predicate.is_some()
+            && predicate_count <= object_count
+            && predicate_count <= graph_name_count
+        {
+            (predicate_start, QuadIteratorKind::Predicate)
+        } else if object.is_some() && object_count <= graph_name_count {
+            (object_start, QuadIteratorKind::Object)
+        } else if graph_name.is_some() {
+            (graph_name_start, QuadIteratorKind::GraphName)
         } else {
-            let k = end.len() - i;
-            end[k] += 1;
-            set.range(start..end)
+            (
+                self.storage.content.last_quad.read().unwrap().clone(),
+                QuadIteratorKind::All,
+            )
         };
-        MemoryDecodingQuadIterator {
-            iter: range.cloned().collect::<Vec<_>>().into_iter(),
-            encoding,
+        QuadIterator {
+            reader: self.clone(),
+            current: start,
+            kind,
+            expect_subject: if kind == QuadIteratorKind::Subject {
+                None
+            } else {
+                subject.cloned()
+            },
+            expect_predicate: if kind == QuadIteratorKind::Predicate {
+                None
+            } else {
+                predicate.cloned()
+            },
+            expect_object: if kind == QuadIteratorKind::Object {
+                None
+            } else {
+                object.cloned()
+            },
+            expect_graph_name: if kind == QuadIteratorKind::GraphName {
+                None
+            } else {
+                graph_name.cloned()
+            },
         }
-    }
-
-    pub fn contains_str(&self, key: &StrHash) -> Result<bool, StorageError> {
-        Ok(self
-            .id2str
-            .read()
-            .map_err(poison_corruption_error)?
-            .contains_key(key))
-    }
-
-    /// Validates that all the storage invariants held in the data
-    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
-    pub fn validate(&self) -> Result<(), StorageError> {
-        Ok(()) // TODO
     }
 
     #[allow(unsafe_code)]
-    fn content(&self) -> Result<ContentRef<'_>, StorageError> {
-        Ok(match &self.content {
-            MemoryStorageReaderContent::Simple(reader) => {
-                ContentRef::Simple(reader.read().map_err(poison_corruption_error)?)
+    pub fn named_graphs(&self) -> MemoryDecodingGraphIterator {
+        MemoryDecodingGraphIterator {
+            reader: self.clone(),
+            // SAFETY: this is fine, the owning struct also owns the iterated data structure
+            iter: unsafe {
+                transmute::<Iter<'_, _, _>, Iter<'static, _, _>>(self.storage.content.graphs.iter())
+            },
+        }
+    }
+
+    pub fn contains_named_graph(&self, graph_name: &EncodedTerm) -> bool {
+        self.storage
+            .content
+            .graphs
+            .get(graph_name)
+            .map_or(false, |range| self.is_in_range(&range))
+    }
+
+    pub fn contains_str(&self, key: &StrHash) -> bool {
+        self.storage.id2str.contains_key(key)
+    }
+
+    /// Validates that all the storage invariants held in the data
+    #[allow(clippy::unwrap_in_result)]
+    pub fn validate(&self) -> Result<(), StorageError> {
+        // All used named graphs are in graph set
+        let expected_quad_len = self.storage.content.quad_set.len() as u64;
+
+        // last quad chain
+        let mut next = self.storage.content.last_quad.read().unwrap().clone();
+        let mut count_last_quad = 0;
+        while let Some(current) = next.take() {
+            count_last_quad += 1;
+            if !self
+                .storage
+                .content
+                .quad_set
+                .get(&current.quad)
+                .map_or(false, |e| Arc::ptr_eq(&e, &current))
+            {
+                return Err(
+                    CorruptionError::new("Quad in previous chain but not in quad set").into(),
+                );
             }
-            MemoryStorageReaderContent::Transaction(reader) => {
-                let Some(rc) = reader.upgrade() else {
-                    return Err(StorageError::Other(
-                        "The transaction is already ended".into(),
-                    ));
-                };
-                let element: Ref<'_, _> = rc.as_ref().borrow();
-                // SAFETY: ok because we keep the Rc too inside of ContentRef
-                let element = unsafe {
-                    transmute::<
-                        Ref<'_, RwLockWriteGuard<'_, Content>>,
-                        Ref<'static, RwLockWriteGuard<'static, Content>>,
-                    >(element)
-                };
-                ContentRef::Transaction {
-                    _rc: Rc::clone(&rc),
-                    element,
+            self.decode_quad(&current.quad)?;
+            if !current.quad.graph_name.is_default_graph()
+                && !self
+                    .storage
+                    .content
+                    .graphs
+                    .contains_key(&current.quad.graph_name)
+            {
+                return Err(
+                    CorruptionError::new("Quad in named graph that does not exists").into(),
+                );
+            };
+            next.clone_from(&current.previous);
+        }
+        if count_last_quad != expected_quad_len {
+            return Err(CorruptionError::new("Too many quads in quad_set").into());
+        }
+
+        // By subject chain
+        let mut count_last_by_subject = 0;
+        for entry in &self.storage.content.last_quad_by_subject {
+            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut element_count = 0;
+            while let Some(current) = next.take() {
+                element_count += 1;
+                if current.quad.subject != *entry.key() {
+                    return Err(CorruptionError::new("Quad in wrong list").into());
                 }
+                if !self
+                    .storage
+                    .content
+                    .quad_set
+                    .get(&current.quad)
+                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                {
+                    return Err(
+                        CorruptionError::new("Quad in previous chain but not in quad set").into(),
+                    );
+                }
+                next.clone_from(&current.previous_subject);
             }
-        })
+            if element_count != entry.value().1 {
+                return Err(CorruptionError::new("Too many quads in a chain").into());
+            }
+            count_last_by_subject += element_count;
+        }
+        if count_last_by_subject != expected_quad_len {
+            return Err(CorruptionError::new("Too many quads in quad_set").into());
+        }
+
+        // By predicate chains
+        let mut count_last_by_predicate = 0;
+        for entry in &self.storage.content.last_quad_by_predicate {
+            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut element_count = 0;
+            while let Some(current) = next.take() {
+                element_count += 1;
+                if current.quad.predicate != *entry.key() {
+                    return Err(CorruptionError::new("Quad in wrong list").into());
+                }
+                if !self
+                    .storage
+                    .content
+                    .quad_set
+                    .get(&current.quad)
+                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                {
+                    return Err(
+                        CorruptionError::new("Quad in previous chain but not in quad set").into(),
+                    );
+                }
+                next.clone_from(&current.previous_predicate);
+            }
+            if element_count != entry.value().1 {
+                return Err(CorruptionError::new("Too many quads in a chain").into());
+            }
+            count_last_by_predicate += element_count;
+        }
+        if count_last_by_predicate != expected_quad_len {
+            return Err(CorruptionError::new("Too many quads in quad_set").into());
+        }
+
+        // By object chains
+        let mut count_last_by_object = 0;
+        for entry in &self.storage.content.last_quad_by_object {
+            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut element_count = 0;
+            while let Some(current) = next.take() {
+                element_count += 1;
+                if current.quad.object != *entry.key() {
+                    return Err(CorruptionError::new("Quad in wrong list").into());
+                }
+                if !self
+                    .storage
+                    .content
+                    .quad_set
+                    .get(&current.quad)
+                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                {
+                    return Err(
+                        CorruptionError::new("Quad in previous chain but not in quad set").into(),
+                    );
+                }
+                next.clone_from(&current.previous_object);
+            }
+            if element_count != entry.value().1 {
+                return Err(CorruptionError::new("Too many quads in a chain").into());
+            }
+            count_last_by_object += element_count;
+        }
+        if count_last_by_object != expected_quad_len {
+            return Err(CorruptionError::new("Too many quads in quad_set").into());
+        }
+
+        // By graph_name chains
+        let mut count_last_by_graph_name = 0;
+        for entry in &self.storage.content.last_quad_by_graph_name {
+            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut element_count = 0;
+            while let Some(current) = next.take() {
+                element_count += 1;
+                if current.quad.graph_name != *entry.key() {
+                    return Err(CorruptionError::new("Quad in wrong list").into());
+                }
+                if !self
+                    .storage
+                    .content
+                    .quad_set
+                    .get(&current.quad)
+                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                {
+                    return Err(
+                        CorruptionError::new("Quad in previous chain but not in quad set").into(),
+                    );
+                }
+                next.clone_from(&current.previous_graph_name);
+            }
+            if element_count != entry.value().1 {
+                return Err(CorruptionError::new("Too many quads in a chain").into());
+            }
+            count_last_by_graph_name += element_count;
+        }
+        if count_last_by_graph_name != expected_quad_len {
+            return Err(CorruptionError::new("Too many quads in quad_set").into());
+        }
+
+        Ok(())
+    }
+
+    fn is_in_range(&self, range: &VersionRange) -> bool {
+        range.contains(self.snapshot_id)
+    }
+
+    fn is_node_in_range(&self, node: &QuadListNode) -> bool {
+        let range = node.range.lock().unwrap();
+        self.is_in_range(&range)
     }
 }
 
 impl StrLookup for MemoryStorageReader {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
-        Ok(self
-            .id2str
-            .read()
-            .map_err(poison_corruption_error)?
-            .get(key)
-            .cloned())
-    }
-}
-
-enum ContentRef<'a> {
-    Simple(RwLockReadGuard<'a, Content>),
-    Transaction {
-        _rc: Rc<RefCell<RwLockWriteGuard<'static, Content>>>,
-        element: Ref<'a, RwLockWriteGuard<'static, Content>>,
-    },
-}
-
-impl<'a> Deref for ContentRef<'a> {
-    type Target = Content;
-
-    fn deref(&self) -> &Content {
-        match self {
-            ContentRef::Simple(r) => r,
-            ContentRef::Transaction { element, .. } => element,
-        }
-    }
-}
-
-pub struct MemoryChainedDecodingQuadIterator {
-    first: MemoryDecodingQuadIterator,
-    second: Option<MemoryDecodingQuadIterator>,
-}
-
-impl MemoryChainedDecodingQuadIterator {
-    fn new(first: MemoryDecodingQuadIterator) -> Self {
-        Self {
-            first,
-            second: None,
-        }
-    }
-
-    fn pair(first: MemoryDecodingQuadIterator, second: MemoryDecodingQuadIterator) -> Self {
-        Self {
-            first,
-            second: Some(second),
-        }
-    }
-}
-
-impl Iterator for MemoryChainedDecodingQuadIterator {
-    type Item = Result<EncodedQuad, StorageError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(result) = self.first.next() {
-            Some(result)
-        } else if let Some(second) = self.second.as_mut() {
-            second.next()
-        } else {
-            None
-        }
-    }
-}
-
-struct MemoryDecodingQuadIterator {
-    iter: std::vec::IntoIter<Vec<u8>>,
-    encoding: QuadEncoding,
-}
-
-impl Iterator for MemoryDecodingQuadIterator {
-    type Item = Result<EncodedQuad, StorageError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.encoding.decode(&self.iter.next()?))
-    }
-}
-
-pub struct MemoryDecodingGraphIterator {
-    iter: std::vec::IntoIter<EncodedTerm>,
-}
-
-impl Iterator for MemoryDecodingGraphIterator {
-    type Item = Result<EncodedTerm, StorageError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(Ok)
+        Ok(self.storage.id2str.view(key, |_, v| v.clone()))
     }
 }
 
 pub struct MemoryStorageWriter<'a> {
-    content: Rc<RefCell<RwLockWriteGuard<'a, Content>>>,
-    id2str: Arc<RwLock<HashMap<StrHash, String>>>,
+    storage: &'a MemoryStorage,
+    log: &'a mut Vec<LogEntry>,
+    transaction_id: u64,
 }
 
 impl<'a> MemoryStorageWriter<'a> {
-    #[allow(unsafe_code)]
     pub fn reader(&self) -> MemoryStorageReader {
-        // SAFETY: This transmute is safe because we take a weak reference and the only Rc reference used is guarded by the lifetime.
-        let content = unsafe {
-            transmute::<
-                &Rc<RefCell<RwLockWriteGuard<'_, Content>>>,
-                &Rc<RefCell<RwLockWriteGuard<'static, Content>>>,
-            >(&self.content)
-        };
         MemoryStorageReader {
-            content: MemoryStorageReaderContent::Transaction(Rc::downgrade(content)),
-            id2str: Arc::clone(&self.id2str),
+            storage: self.storage.clone(),
+            snapshot_id: self.transaction_id,
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
-        let encoded = quad.into();
-        Ok(if quad.graph_name.is_default_graph() {
-            let mut buffer = Vec::new();
-            write_spo_quad(&mut buffer, &encoded);
-            if self.content.borrow_mut().dspo.insert(buffer) {
-                let mut buffer = Vec::new();
-                write_pos_quad(&mut buffer, &encoded);
-                self.content.borrow_mut().dpos.insert(buffer);
-
-                let mut buffer = Vec::new();
-                write_osp_quad(&mut buffer, &encoded);
-                self.content.borrow_mut().dosp.insert(buffer);
-
-                self.insert_term(quad.subject.into(), &encoded.subject)?;
-                self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-                self.insert_term(quad.object, &encoded.object)?;
-
-                true
-            } else {
-                false
-            }
-        } else {
-            let mut buffer = Vec::new();
-            write_spog_quad(&mut buffer, &encoded);
-            if self.content.borrow_mut().spog.insert(buffer) {
-                let mut buffer = Vec::new();
-                write_posg_quad(&mut buffer, &encoded);
-                self.content.borrow_mut().posg.insert(buffer);
-
-                let mut buffer = Vec::new();
-                write_ospg_quad(&mut buffer, &encoded);
-                self.content.borrow_mut().ospg.insert(buffer);
-
-                let mut buffer = Vec::new();
-                write_gspo_quad(&mut buffer, &encoded);
-                self.content.borrow_mut().gspo.insert(buffer);
-
-                let mut buffer = Vec::new();
-                write_gpos_quad(&mut buffer, &encoded);
-                self.content.borrow_mut().gpos.insert(buffer);
-
-                let mut buffer = Vec::new();
-                write_gosp_quad(&mut buffer, &encoded);
-                self.content.borrow_mut().gosp.insert(buffer);
-
-                self.insert_term(quad.subject.into(), &encoded.subject)?;
-                self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-                self.insert_term(quad.object, &encoded.object)?;
-
-                if self
-                    .content
-                    .borrow_mut()
-                    .graphs
-                    .insert(encoded.graph_name.clone())
+    pub fn insert(&mut self, quad: QuadRef<'_>) -> bool {
+        let encoded: EncodedQuad = quad.into();
+        if let Some(node) = self
+            .storage
+            .content
+            .quad_set
+            .get(&encoded)
+            .map(|node| Arc::clone(&node))
+        {
+            let added = node.range.lock().unwrap().add(self.transaction_id);
+            if added {
+                self.log.push(LogEntry::QuadNode(node));
+                if !quad.graph_name.is_default_graph()
+                    && self
+                        .storage
+                        .content
+                        .graphs
+                        .get_mut(&encoded.graph_name)
+                        .unwrap()
+                        .add(self.transaction_id)
                 {
-                    match quad.graph_name {
-                        GraphNameRef::NamedNode(graph_name) => {
-                            self.insert_term(graph_name.into(), &encoded.graph_name)?;
-                        }
-                        GraphNameRef::BlankNode(graph_name) => {
-                            self.insert_term(graph_name.into(), &encoded.graph_name)?;
-                        }
-                        GraphNameRef::DefaultGraph => (),
-                    }
+                    self.log.push(LogEntry::Graph(encoded.graph_name.clone()));
                 }
-                true
-            } else {
-                false
             }
-        })
+            added
+        } else {
+            let node = Arc::new(QuadListNode {
+                quad: encoded.clone(),
+                range: Mutex::new(VersionRange::Start(self.transaction_id)),
+                previous: self.storage.content.last_quad.read().unwrap().clone(),
+                previous_subject: self
+                    .storage
+                    .content
+                    .last_quad_by_subject
+                    .view(&encoded.subject, |_, (node, _)| Arc::clone(node)),
+                previous_predicate: self
+                    .storage
+                    .content
+                    .last_quad_by_predicate
+                    .view(&encoded.predicate, |_, (node, _)| Arc::clone(node)),
+                previous_object: self
+                    .storage
+                    .content
+                    .last_quad_by_object
+                    .view(&encoded.object, |_, (node, _)| Arc::clone(node)),
+                previous_graph_name: self
+                    .storage
+                    .content
+                    .last_quad_by_graph_name
+                    .view(&encoded.graph_name, |_, (node, _)| Arc::clone(node)),
+            });
+            self.storage.content.quad_set.insert(Arc::clone(&node));
+            *self.storage.content.last_quad.write().unwrap() = Some(Arc::clone(&node));
+            self.storage
+                .content
+                .last_quad_by_subject
+                .entry(encoded.subject.clone())
+                .and_modify(|(e, count)| {
+                    *e = Arc::clone(&node);
+                    *count += 1;
+                })
+                .or_insert_with(|| (Arc::clone(&node), 1));
+            self.storage
+                .content
+                .last_quad_by_predicate
+                .entry(encoded.predicate.clone())
+                .and_modify(|(e, count)| {
+                    *e = Arc::clone(&node);
+                    *count += 1;
+                })
+                .or_insert_with(|| (Arc::clone(&node), 1));
+            self.storage
+                .content
+                .last_quad_by_object
+                .entry(encoded.object.clone())
+                .and_modify(|(e, count)| {
+                    *e = Arc::clone(&node);
+                    *count += 1;
+                })
+                .or_insert_with(|| (Arc::clone(&node), 1));
+            self.storage
+                .content
+                .last_quad_by_graph_name
+                .entry(encoded.graph_name.clone())
+                .and_modify(|(e, count)| {
+                    *e = Arc::clone(&node);
+                    *count += 1;
+                })
+                .or_insert_with(|| (Arc::clone(&node), 1));
+
+            self.insert_term(quad.subject.into(), &encoded.subject);
+            self.insert_term(quad.predicate.into(), &encoded.predicate);
+            self.insert_term(quad.object, &encoded.object);
+
+            match quad.graph_name {
+                GraphNameRef::NamedNode(graph_name) => {
+                    self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.clone());
+                }
+                GraphNameRef::BlankNode(graph_name) => {
+                    self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.clone());
+                }
+                GraphNameRef::DefaultGraph => (),
+            }
+            self.log.push(LogEntry::QuadNode(node));
+            true
+        }
     }
 
-    pub fn insert_named_graph(
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
+        self.insert_encoded_named_graph(graph_name, graph_name.into())
+    }
+
+    fn insert_encoded_named_graph(
         &mut self,
         graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<bool, StorageError> {
-        let encoded_graph_name = EncodedTerm::from(graph_name);
-        Ok(
-            if self
-                .content
-                .borrow_mut()
-                .graphs
-                .insert(encoded_graph_name.clone())
-            {
-                self.insert_term(graph_name.into(), &encoded_graph_name)?;
-                true
-            } else {
-                false
-            },
-        )
-    }
-
-    fn insert_term(
-        &mut self,
-        term: TermRef<'_>,
-        encoded: &EncodedTerm,
-    ) -> Result<(), StorageError> {
-        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
-    }
-
-    fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
-        if self
-            .id2str
-            .write()
-            .map_err(poison_corruption_error)?
-            .entry(*key)
-            .or_insert_with(|| value.into())
-            == value
+        encoded_graph_name: EncodedTerm,
+    ) -> bool {
+        let added = match self
+            .storage
+            .content
+            .graphs
+            .entry(encoded_graph_name.clone())
         {
-            Ok(())
-        } else {
-            Err(StorageError::Other("Hash conflict for two strings".into()))
+            Entry::Occupied(mut entry) => entry.get_mut().add(self.transaction_id),
+            Entry::Vacant(entry) => {
+                entry.insert(VersionRange::Start(self.transaction_id));
+                self.insert_term(graph_name.into(), &encoded_graph_name);
+                true
+            }
+        };
+        if added {
+            self.log.push(LogEntry::Graph(encoded_graph_name));
         }
+        added
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
+    fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
+        insert_term(term, encoded, &mut |key, value| {
+            self.insert_str(key, value);
+            Ok(())
+        })
+        .unwrap()
+    }
+
+    fn insert_str(&self, key: &StrHash, value: &str) {
+        let inserted = self
+            .storage
+            .id2str
+            .entry(*key)
+            .or_insert_with(|| value.into());
+        debug_assert_eq!(*inserted, value, "Hash conflict for two strings");
+    }
+
+    pub fn remove(&mut self, quad: QuadRef<'_>) -> bool {
         self.remove_encoded(&quad.into())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<bool, StorageError> {
-        let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
-        let mut buffer = Vec::new();
-        Ok(if quad.graph_name.is_default_graph() {
-            write_spo_quad(&mut buffer, quad);
-            if content.dspo.remove(&buffer) {
-                buffer.clear();
-                write_pos_quad(&mut buffer, quad);
-                content.dpos.remove(&buffer);
-
-                buffer.clear();
-                write_osp_quad(&mut buffer, quad);
-                content.dosp.remove(&buffer);
-
-                true
-            } else {
-                false
-            }
-        } else {
-            write_spog_quad(&mut buffer, quad);
-            if content.spog.remove(&buffer) {
-                buffer.clear();
-                write_posg_quad(&mut buffer, quad);
-                content.posg.remove(&buffer);
-
-                buffer.clear();
-                write_ospg_quad(&mut buffer, quad);
-                content.ospg.remove(&buffer);
-
-                buffer.clear();
-                write_gspo_quad(&mut buffer, quad);
-                content.gspo.remove(&buffer);
-
-                buffer.clear();
-                write_gpos_quad(&mut buffer, quad);
-                content.gpos.remove(&buffer);
-
-                buffer.clear();
-                write_gosp_quad(&mut buffer, quad);
-                content.gosp.remove(&buffer);
-
-                true
-            } else {
-                false
-            }
-        })
-    }
-
-    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
-        if graph_name.is_default_graph() {
-            let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
-            content.dspo.clear();
-            content.dpos.clear();
-            content.dosp.clear();
-        } else {
-            for quad in self.reader().quads_for_graph(&graph_name.into()) {
-                self.remove_encoded(&quad?)?;
-            }
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> bool {
+        let Some(node) = self
+            .storage
+            .content
+            .quad_set
+            .get(quad)
+            .map(|node| Arc::clone(&node))
+        else {
+            return false;
+        };
+        let removed = node.range.lock().unwrap().remove(self.transaction_id);
+        if removed {
+            self.log.push(LogEntry::QuadNode(node));
         }
-        Ok(())
+        removed
     }
 
-    pub fn clear_all_named_graphs(&mut self) -> Result<(), StorageError> {
-        let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
-        content.gspo.clear();
-        content.gpos.clear();
-        content.gosp.clear();
-        content.spog.clear();
-        content.posg.clear();
-        content.ospg.clear();
-        Ok(())
+    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) {
+        self.clear_encoded_graph(&graph_name.into())
     }
 
-    pub fn clear_all_graphs(&mut self) -> Result<(), StorageError> {
-        let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
-        content.dspo.clear();
-        content.dpos.clear();
-        content.dosp.clear();
-        content.gspo.clear();
-        content.gpos.clear();
-        content.gosp.clear();
-        content.spog.clear();
-        content.posg.clear();
-        content.ospg.clear();
-        Ok(())
+    fn clear_encoded_graph(&mut self, graph_name: &EncodedTerm) {
+        let mut next = self
+            .storage
+            .content
+            .last_quad_by_graph_name
+            .view(graph_name, |_, (node, _)| Arc::clone(node));
+        while let Some(current) = next.take() {
+            if current.range.lock().unwrap().remove(self.transaction_id) {
+                self.log.push(LogEntry::QuadNode(Arc::clone(&current)));
+            }
+            next.clone_from(&current.previous_graph_name);
+        }
     }
 
-    pub fn remove_named_graph(
-        &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<bool, StorageError> {
+    pub fn clear_all_named_graphs(&mut self) {
+        for graph_name in self.reader().named_graphs() {
+            self.clear_encoded_graph(&graph_name)
+        }
+    }
+
+    pub fn clear_all_graphs(&mut self) {
+        self.storage.content.quad_set.iter().for_each(|node| {
+            if node.range.lock().unwrap().remove(self.transaction_id) {
+                self.log.push(LogEntry::QuadNode(Arc::clone(&node)));
+            }
+        });
+    }
+
+    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
         self.remove_encoded_named_graph(&graph_name.into())
     }
 
-    fn remove_encoded_named_graph(
-        &mut self,
-        graph_name: &EncodedTerm,
-    ) -> Result<bool, StorageError> {
-        Ok(
-            if self
-                .content
-                .try_borrow_mut()
-                .map_err(borrow_mut_error)?
-                .graphs
-                .remove(graph_name)
-            {
-                for quad in self.reader().quads_for_graph(graph_name) {
-                    self.remove_encoded(&quad?)?;
-                }
-                true
-            } else {
-                false
-            },
-        )
-    }
-
-    pub fn remove_all_named_graphs(&mut self) -> Result<(), StorageError> {
-        let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
-        content.gspo.clear();
-        content.gpos.clear();
-        content.gosp.clear();
-        content.spog.clear();
-        content.posg.clear();
-        content.ospg.clear();
-        content.graphs.clear();
-        Ok(())
-    }
-
-    pub fn clear(&mut self) -> Result<(), StorageError> {
-        {
-            let mut content = self.content.try_borrow_mut().map_err(borrow_mut_error)?;
-            content.dspo.clear();
-            content.dpos.clear();
-            content.dosp.clear();
-            content.gspo.clear();
-            content.gpos.clear();
-            content.gosp.clear();
-            content.spog.clear();
-            content.posg.clear();
-            content.ospg.clear();
-            content.graphs.clear();
+    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> bool {
+        self.clear_encoded_graph(graph_name);
+        let removed = self
+            .storage
+            .content
+            .graphs
+            .get_mut(graph_name)
+            .map_or(false, |mut entry| {
+                entry.value_mut().remove(self.transaction_id)
+            });
+        if removed {
+            self.log.push(LogEntry::Graph(graph_name.clone()));
         }
-        self.id2str
-            .write()
-            .map_err(poison_corruption_error)?
-            .clear();
-        Ok(())
+        removed
+    }
+
+    pub fn remove_all_named_graphs(&mut self) {
+        self.clear_all_named_graphs();
+        self.do_remove_graphs();
+    }
+
+    fn do_remove_graphs(&mut self) {
+        self.storage
+            .content
+            .graphs
+            .iter_mut()
+            .for_each(|mut entry| {
+                if entry.value_mut().remove(self.transaction_id) {
+                    self.log.push(LogEntry::Graph(entry.key().clone()));
+                }
+            });
+    }
+
+    pub fn clear(&mut self) {
+        self.clear_all_graphs();
+        self.do_remove_graphs();
+    }
+}
+
+pub struct QuadIterator {
+    reader: MemoryStorageReader,
+    current: Option<Arc<QuadListNode>>,
+    kind: QuadIteratorKind,
+    expect_subject: Option<EncodedTerm>,
+    expect_predicate: Option<EncodedTerm>,
+    expect_object: Option<EncodedTerm>,
+    expect_graph_name: Option<EncodedTerm>,
+}
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum QuadIteratorKind {
+    All,
+    Subject,
+    Predicate,
+    Object,
+    GraphName,
+}
+
+impl Iterator for QuadIterator {
+    type Item = EncodedQuad;
+
+    fn next(&mut self) -> Option<EncodedQuad> {
+        loop {
+            let current = self.current.take()?;
+            self.current = match self.kind {
+                QuadIteratorKind::All => current.previous.clone(),
+                QuadIteratorKind::Subject => current.previous_subject.clone(),
+                QuadIteratorKind::Predicate => current.previous_predicate.clone(),
+                QuadIteratorKind::Object => current.previous_object.clone(),
+                QuadIteratorKind::GraphName => current.previous_graph_name.clone(),
+            };
+            if !self.reader.is_node_in_range(&current) {
+                continue;
+            }
+            if let Some(expect_subject) = &self.expect_subject {
+                if current.quad.subject != *expect_subject {
+                    continue;
+                }
+            }
+            if let Some(expect_predicate) = &self.expect_predicate {
+                if current.quad.predicate != *expect_predicate {
+                    continue;
+                }
+            }
+            if let Some(expect_object) = &self.expect_object {
+                if current.quad.object != *expect_object {
+                    continue;
+                }
+            }
+            if let Some(expect_graph_name) = &self.expect_graph_name {
+                if current.quad.graph_name != *expect_graph_name {
+                    continue;
+                }
+            }
+            return Some(current.quad.clone());
+        }
+    }
+}
+
+pub struct MemoryDecodingGraphIterator {
+    reader: MemoryStorageReader, // Needed to make sure the underlying map is not GCed
+    iter: Iter<'static, EncodedTerm, VersionRange>,
+}
+
+impl Iterator for MemoryDecodingGraphIterator {
+    type Item = EncodedTerm;
+
+    fn next(&mut self) -> Option<EncodedTerm> {
+        loop {
+            let entry = self.iter.next()?;
+            if self.reader.is_in_range(entry.value()) {
+                return Some(entry.key().clone());
+            }
+        }
     }
 }
 
@@ -807,31 +798,410 @@ impl MemoryStorageBulkLoader {
         self
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn load<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<Quad, EI>>,
     ) -> Result<(), EO> {
-        // TODO: very naïve
+        // We lock content here to make sure there is not a transaction committing at the same time
+        let _transaction_lock = self.storage.transaction_counter.lock().unwrap();
         let mut done_counter = 0;
+        let version_id = self.storage.version_counter.load(Ordering::Acquire) + 1;
+        let mut log = Vec::new();
         for quad in quads {
-            let quad = quad?;
-            self.storage
-                .transaction(|mut writer| writer.insert(quad.as_ref()))?;
+            MemoryStorageWriter {
+                storage: &self.storage,
+                log: &mut log,
+                transaction_id: version_id,
+            }
+            .insert(quad?.as_ref());
+            log.clear();
             done_counter += 1;
-            if done_counter % BULK_LOAD_BATCH_SIZE == 0 {
+            if done_counter % 1_000_000 == 0 {
                 for hook in &self.hooks {
                     hook(done_counter);
                 }
             }
         }
+        self.storage
+            .version_counter
+            .store(version_id, Ordering::Release);
         Ok(())
     }
 }
 
-fn poison_corruption_error<T>(_: PoisonError<T>) -> StorageError {
-    CorruptionError::msg("Poisoned mutex").into()
+enum LogEntry {
+    QuadNode(Arc<QuadListNode>),
+    Graph(EncodedTerm),
 }
 
-fn borrow_mut_error(_: BorrowMutError) -> StorageError {
-    StorageError::Other("Invalidated lock".into())
+struct QuadListNode {
+    quad: EncodedQuad,
+    range: Mutex<VersionRange>,
+    previous: Option<Arc<Self>>,
+    previous_subject: Option<Arc<Self>>,
+    previous_predicate: Option<Arc<Self>>,
+    previous_object: Option<Arc<Self>>,
+    previous_graph_name: Option<Arc<Self>>,
+}
+
+impl PartialEq for QuadListNode {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.quad == other.quad
+    }
+}
+
+impl Eq for QuadListNode {}
+
+impl Hash for QuadListNode {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.quad.hash(state)
+    }
+}
+
+impl Borrow<EncodedQuad> for Arc<QuadListNode> {
+    fn borrow(&self) -> &EncodedQuad {
+        &self.quad
+    }
+}
+
+// TODO: reduce the size to 128bits
+#[derive(Default, Eq, PartialEq, Clone)]
+enum VersionRange {
+    #[default]
+    Empty,
+    Start(u64),
+    StartEnd(u64, u64),
+    Bigger(Box<[u64]>),
+}
+
+impl VersionRange {
+    fn contains(&self, version: u64) -> bool {
+        match self {
+            VersionRange::Empty => false,
+            VersionRange::Start(start) => *start <= version,
+            VersionRange::StartEnd(start, end) => *start <= version && version < *end,
+            VersionRange::Bigger(range) => {
+                for start_end in range.chunks(2) {
+                    match start_end {
+                        [start, end] => {
+                            if *start <= version && version < *end {
+                                return true;
+                            }
+                        }
+                        [start] => {
+                            if *start <= version {
+                                return true;
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                false
+            }
+        }
+    }
+
+    fn add(&mut self, version: u64) -> bool {
+        match self {
+            VersionRange::Empty => {
+                *self = VersionRange::Start(version);
+                true
+            }
+            VersionRange::Start(_) => false,
+            VersionRange::StartEnd(start, end) => {
+                *self = if version == *end {
+                    VersionRange::Start(*start)
+                } else {
+                    VersionRange::Bigger(Box::new([*start, *end, version]))
+                };
+                true
+            }
+            VersionRange::Bigger(vec) => {
+                if vec.len() % 2 == 0 {
+                    *self = VersionRange::Bigger(if vec.ends_with(&[version]) {
+                        pop_boxed_slice(vec)
+                    } else {
+                        push_boxed_slice(vec, version)
+                    });
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    fn remove(&mut self, version: u64) -> bool {
+        match self {
+            VersionRange::Empty | VersionRange::StartEnd(_, _) => false,
+            VersionRange::Start(start) => {
+                *self = if *start == version {
+                    VersionRange::Empty
+                } else {
+                    VersionRange::StartEnd(*start, version)
+                };
+                true
+            }
+            VersionRange::Bigger(vec) => {
+                if vec.len() % 2 == 0 {
+                    false
+                } else {
+                    *self = if vec.ends_with(&[version]) {
+                        match vec.as_ref() {
+                            [start, end, _] => Self::StartEnd(*start, *end),
+                            _ => Self::Bigger(pop_boxed_slice(vec)),
+                        }
+                    } else {
+                        Self::Bigger(push_boxed_slice(vec, version))
+                    };
+                    true
+                }
+            }
+        }
+    }
+
+    fn upgrade_transaction(&mut self, transaction_id: u64, version_id: u64) {
+        match self {
+            VersionRange::Empty => (),
+            VersionRange::Start(start) => {
+                if *start == transaction_id {
+                    *start = version_id;
+                }
+            }
+            VersionRange::StartEnd(_, end) => {
+                if *end == transaction_id {
+                    *end = version_id
+                }
+            }
+            VersionRange::Bigger(vec) => {
+                if vec.ends_with(&[transaction_id]) {
+                    vec[vec.len() - 1] = version_id
+                }
+            }
+        }
+    }
+
+    fn rollback_transaction(&mut self, transaction_id: u64) {
+        match self {
+            VersionRange::Empty => (),
+            VersionRange::Start(start) => {
+                if *start == transaction_id {
+                    *self = VersionRange::Empty;
+                }
+            }
+            VersionRange::StartEnd(start, end) => {
+                if *end == transaction_id {
+                    *self = VersionRange::Start(*start)
+                }
+            }
+            VersionRange::Bigger(vec) => {
+                if vec.ends_with(&[transaction_id]) {
+                    *self = match vec.as_ref() {
+                        [start, end, _] => Self::StartEnd(*start, *end),
+                        _ => Self::Bigger(pop_boxed_slice(vec)),
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn push_boxed_slice<T: Copy>(slice: &[T], element: T) -> Box<[T]> {
+    let mut out = Vec::with_capacity(slice.len() + 1);
+    out.extend_from_slice(slice);
+    out.push(element);
+    out.into_boxed_slice()
+}
+
+fn pop_boxed_slice<T: Copy>(slice: &[T]) -> Box<[T]> {
+    slice[..slice.len() - 1].into()
+}
+
+#[derive(Default)]
+struct StrHashHasher {
+    value: u64,
+}
+
+impl Hasher for StrHashHasher {
+    fn finish(&self) -> u64 {
+        self.value
+    }
+
+    fn write(&mut self, _: &[u8]) {
+        unreachable!("Must only be used on StrHash")
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn write_u128(&mut self, i: u128) {
+        self.value = i as u64;
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
+mod tests {
+    use super::*;
+    use oxrdf::NamedNodeRef;
+
+    #[test]
+    fn test_range() {
+        let mut range = VersionRange::default();
+
+        assert!(range.add(1));
+        assert!(!range.add(1));
+        assert!(range.contains(1));
+        assert!(!range.contains(0));
+        assert!(range.contains(2));
+
+        assert!(range.remove(1));
+        assert!(!range.remove(1));
+        assert!(!range.contains(1));
+
+        assert!(range.add(1));
+        assert!(range.remove(2));
+        assert!(!range.remove(2));
+        assert!(range.contains(1));
+        assert!(!range.contains(2));
+
+        assert!(range.add(2));
+        assert!(range.contains(3));
+
+        assert!(range.remove(2));
+        assert!(range.add(4));
+        assert!(range.remove(6));
+        assert!(!range.contains(3));
+        assert!(range.contains(4));
+        assert!(!range.contains(6));
+    }
+
+    #[test]
+    fn test_upgrade() {
+        let mut range = VersionRange::default();
+
+        assert!(range.add(1000));
+        range.upgrade_transaction(999, 1);
+        assert!(!range.contains(1));
+        range.upgrade_transaction(1000, 1);
+        assert!(range.contains(1));
+
+        assert!(range.remove(1000));
+        range.upgrade_transaction(999, 2);
+        assert!(range.contains(2));
+        range.upgrade_transaction(1000, 2);
+        assert!(!range.contains(2));
+
+        assert!(range.add(1000));
+        range.upgrade_transaction(999, 3);
+        assert!(!range.contains(3));
+        range.upgrade_transaction(1000, 3);
+        assert!(range.contains(3));
+    }
+
+    #[test]
+    fn test_rollback() {
+        let mut range = VersionRange::default();
+
+        assert!(range.add(1000));
+        range.rollback_transaction(999);
+        assert!(range.contains(1000));
+        range.rollback_transaction(1000);
+        assert!(!range.contains(1));
+    }
+
+    #[test]
+    fn test_transaction() -> Result<(), StorageError> {
+        let example = NamedNodeRef::new_unchecked("http://example.com/1");
+        let example2 = NamedNodeRef::new_unchecked("http://example.com/2");
+        let encoded_example = EncodedTerm::from(example);
+        let encoded_example2 = EncodedTerm::from(example2);
+        let default_quad = QuadRef::new(example, example, example, GraphNameRef::DefaultGraph);
+        let encoded_default_quad = EncodedQuad::from(default_quad);
+        let named_graph_quad = QuadRef::new(example, example, example, example);
+        let encoded_named_graph_quad = EncodedQuad::from(named_graph_quad);
+
+        let storage = MemoryStorage::new();
+
+        // We start with a graph
+        let snapshot = storage.snapshot();
+        storage.transaction(|mut writer| {
+            writer.insert_named_graph(example.into());
+            Ok::<_, StorageError>(())
+        })?;
+        assert!(!snapshot.contains_named_graph(&encoded_example));
+        assert!(storage.snapshot().contains_named_graph(&encoded_example));
+        storage.snapshot().validate()?;
+
+        // We add two quads
+        let snapshot = storage.snapshot();
+        storage.transaction(|mut writer| {
+            writer.insert(default_quad);
+            writer.insert(named_graph_quad);
+            Ok::<_, StorageError>(())
+        })?;
+        assert!(!snapshot.contains(&encoded_default_quad));
+        assert!(!snapshot.contains(&encoded_named_graph_quad));
+        assert!(storage.snapshot().contains(&encoded_default_quad));
+        assert!(storage.snapshot().contains(&encoded_named_graph_quad));
+        storage.snapshot().validate()?;
+
+        // We remove the quads
+        let snapshot = storage.snapshot();
+        storage.transaction(|mut writer| {
+            writer.remove(default_quad);
+            writer.remove_named_graph(example.into());
+            Ok::<_, StorageError>(())
+        })?;
+        assert!(snapshot.contains(&encoded_default_quad));
+        assert!(snapshot.contains(&encoded_named_graph_quad));
+        assert!(snapshot.contains_named_graph(&encoded_example));
+        assert!(!storage.snapshot().contains(&encoded_default_quad));
+        assert!(!storage.snapshot().contains(&encoded_named_graph_quad));
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example));
+        storage.snapshot().validate()?;
+
+        // We add the quads again but rollback
+        let snapshot = storage.snapshot();
+        assert!(storage
+            .transaction(|mut writer| {
+                writer.insert(default_quad);
+                writer.insert(named_graph_quad);
+                writer.insert_named_graph(example2.into());
+                Err::<(), _>(StorageError::Other("foo".into()))
+            })
+            .is_err());
+        assert!(!snapshot.contains(&encoded_default_quad));
+        assert!(!snapshot.contains(&encoded_named_graph_quad));
+        assert!(!snapshot.contains_named_graph(&encoded_example));
+        assert!(!snapshot.contains_named_graph(&encoded_example2));
+        assert!(!storage.snapshot().contains(&encoded_default_quad));
+        assert!(!storage.snapshot().contains(&encoded_named_graph_quad));
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example));
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example2));
+        storage.snapshot().validate()?;
+
+        // We add quads and graph, then clear
+        storage.bulk_loader().load::<StorageError, StorageError>([
+            Ok(default_quad.into_owned()),
+            Ok(named_graph_quad.into_owned()),
+        ])?;
+        storage.transaction(|mut writer| {
+            writer.insert_named_graph(example2.into());
+            Ok::<_, StorageError>(())
+        })?;
+        storage.transaction(|mut writer| {
+            writer.clear();
+            Ok::<_, StorageError>(())
+        })?;
+        assert!(!storage.snapshot().contains(&encoded_default_quad));
+        assert!(!storage.snapshot().contains(&encoded_named_graph_quad));
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example));
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example2));
+        assert!(storage.snapshot().is_empty());
+        storage.snapshot().validate()?;
+
+        Ok(())
+    }
 }
