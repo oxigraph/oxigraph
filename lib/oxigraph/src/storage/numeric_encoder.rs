@@ -10,10 +10,9 @@ use std::hash::{Hash, Hasher};
 use std::str;
 use std::sync::Arc;
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-#[repr(transparent)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub struct StrHash {
-    hash: u128,
+    hash: [u8; 16],
 }
 
 impl StrHash {
@@ -21,20 +20,26 @@ impl StrHash {
         let mut hasher = SipHasher24::new();
         hasher.write(value.as_bytes());
         Self {
-            hash: hasher.finish128().into(),
+            hash: u128::from(hasher.finish128()).to_be_bytes(),
         }
     }
 
     #[inline]
-    pub fn from_be_bytes(bytes: [u8; 16]) -> Self {
-        Self {
-            hash: u128::from_be_bytes(bytes),
-        }
+    pub fn from_be_bytes(hash: [u8; 16]) -> Self {
+        Self { hash }
     }
 
     #[inline]
     pub fn to_be_bytes(self) -> [u8; 16] {
-        self.hash.to_be_bytes()
+        self.hash
+    }
+}
+
+impl Hash for StrHash {
+    #[inline]
+    #[allow(clippy::host_endian_bytes)]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u128(u128::from_ne_bytes(self.hash))
     }
 }
 
@@ -45,7 +50,7 @@ pub enum EncodedTerm {
         iri_id: StrHash,
     },
     NumericalBlankNode {
-        id: u128,
+        id: [u8; 16],
     },
     SmallBlankNode(SmallString),
     BigBlankNode {
@@ -485,7 +490,9 @@ impl From<NamedNodeRef<'_>> for EncodedTerm {
 impl From<BlankNodeRef<'_>> for EncodedTerm {
     fn from(blank_node: BlankNodeRef<'_>) -> Self {
         if let Some(id) = blank_node.unique_id() {
-            Self::NumericalBlankNode { id }
+            Self::NumericalBlankNode {
+                id: id.to_be_bytes(),
+            }
         } else {
             let id = blank_node.as_str();
             if let Ok(id) = id.try_into() {
@@ -950,7 +957,9 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::NamedNode { iri_id } => {
                 Ok(NamedNode::new_unchecked(get_required_str(self, iri_id)?).into())
             }
-            EncodedTerm::NumericalBlankNode { id } => Ok(BlankNode::new_from_unique_id(*id).into()),
+            EncodedTerm::NumericalBlankNode { id } => {
+                Ok(BlankNode::new_from_unique_id(u128::from_be_bytes(*id)).into())
+            }
             EncodedTerm::SmallBlankNode(id) => Ok(BlankNode::new_unchecked(id.as_str()).into()),
             EncodedTerm::BigBlankNode { id_id } => {
                 Ok(BlankNode::new_unchecked(get_required_str(self, id_id)?).into())
@@ -1028,4 +1037,36 @@ fn get_required_str<L: StrLookup>(lookup: &L, id: &StrHash) -> Result<String, St
             "Not able to find the string with id {id:?} in the string store"
         ))
     })?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(not(target_family = "wasm"))]
+    use std::mem::{align_of, size_of};
+
+    #[test]
+    fn str_hash_stability() {
+        const EMPTY_HASH: [u8; 16] = [
+            244, 242, 206, 212, 71, 171, 2, 66, 125, 224, 163, 128, 71, 215, 73, 80,
+        ];
+
+        const FOO_HASH: [u8; 16] = [
+            177, 216, 59, 176, 7, 47, 87, 243, 76, 253, 150, 32, 126, 153, 216, 19,
+        ];
+
+        assert_eq!(StrHash::new("").to_be_bytes(), EMPTY_HASH);
+        assert_eq!(StrHash::from_be_bytes(EMPTY_HASH).to_be_bytes(), EMPTY_HASH);
+
+        assert_eq!(StrHash::new("foo").to_be_bytes(), FOO_HASH);
+        assert_eq!(StrHash::from_be_bytes(FOO_HASH).to_be_bytes(), FOO_HASH);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn test_size_and_alignment() {
+        assert_eq!(size_of::<EncodedTerm>(), 40);
+        assert_eq!(size_of::<EncodedQuad>(), 160);
+        assert_eq!(align_of::<EncodedTerm>(), 8);
+    }
 }

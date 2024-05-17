@@ -1026,6 +1026,7 @@ struct StrHashHasher {
 }
 
 impl Hasher for StrHashHasher {
+    #[inline]
     fn finish(&self) -> u64 {
         self.value
     }
@@ -1034,6 +1035,7 @@ impl Hasher for StrHashHasher {
         unreachable!("Must only be used on StrHash")
     }
 
+    #[inline]
     #[allow(clippy::cast_possible_truncation)]
     fn write_u128(&mut self, i: u128) {
         self.value = i as u64;
