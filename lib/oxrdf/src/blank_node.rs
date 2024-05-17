@@ -1,3 +1,4 @@
+#![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
 use std::io::Write;
 use std::{fmt, str};
@@ -22,7 +23,7 @@ pub struct BlankNode(BlankNodeContent);
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum BlankNodeContent {
     Named(String),
-    Anonymous { id: u128, str: IdStr },
+    Anonymous { id: [u8; 16], str: IdStr },
 }
 
 impl BlankNode {
@@ -60,7 +61,7 @@ impl BlankNode {
     #[inline]
     pub fn new_from_unique_id(id: u128) -> Self {
         Self(BlankNodeContent::Anonymous {
-            id,
+            id: id.to_ne_bytes(),
             str: IdStr::new(id),
         })
     }
@@ -111,7 +112,10 @@ impl Default for BlankNode {
             let id = random();
             let str = IdStr::new(id);
             if matches!(str.as_str().as_bytes().first(), Some(b'a'..=b'f')) {
-                return Self(BlankNodeContent::Anonymous { id, str });
+                return Self(BlankNodeContent::Anonymous {
+                    id: id.to_ne_bytes(),
+                    str,
+                });
             }
         }
     }
@@ -137,7 +141,7 @@ pub struct BlankNodeRef<'a>(BlankNodeRefContent<'a>);
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 enum BlankNodeRefContent<'a> {
     Named(&'a str),
-    Anonymous { id: u128, str: &'a str },
+    Anonymous { id: [u8; 16], str: &'a str },
 }
 
 impl<'a> BlankNodeRef<'a> {
@@ -162,7 +166,7 @@ impl<'a> BlankNodeRef<'a> {
     pub fn new_unchecked(id: &'a str) -> Self {
         if let Some(numerical_id) = to_integer_id(id) {
             Self(BlankNodeRefContent::Anonymous {
-                id: numerical_id,
+                id: numerical_id.to_ne_bytes(),
                 str: id,
             })
         } else {
@@ -195,7 +199,7 @@ impl<'a> BlankNodeRef<'a> {
     pub const fn unique_id(&self) -> Option<u128> {
         match self.0 {
             BlankNodeRefContent::Named(_) => None,
-            BlankNodeRefContent::Anonymous { id, .. } => Some(id),
+            BlankNodeRefContent::Anonymous { id, .. } => Some(u128::from_ne_bytes(id)),
         }
     }
 
@@ -205,7 +209,7 @@ impl<'a> BlankNodeRef<'a> {
             BlankNodeRefContent::Named(id) => BlankNodeContent::Named(id.to_owned()),
             BlankNodeRefContent::Anonymous { id, .. } => BlankNodeContent::Anonymous {
                 id,
-                str: IdStr::new(id),
+                str: IdStr::new(u128::from_ne_bytes(id)),
             },
         })
     }
@@ -352,6 +356,7 @@ pub struct BlankNodeIdParseError;
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
+    use std::mem::{align_of, size_of};
 
     #[test]
     fn as_str_partial() {
@@ -398,5 +403,13 @@ mod tests {
             BlankNode::new("zzz").unwrap(),
             BlankNodeRef::new("zzz").unwrap()
         );
+    }
+
+    #[test]
+    fn test_size_and_alignment() {
+        assert_eq!(size_of::<BlankNode>(), 56);
+        assert_eq!(size_of::<BlankNodeRef<'_>>(), 32);
+        assert_eq!(align_of::<BlankNode>(), 8);
+        assert_eq!(align_of::<BlankNodeRef<'_>>(), 8);
     }
 }
