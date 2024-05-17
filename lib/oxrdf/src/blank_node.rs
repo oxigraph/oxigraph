@@ -356,6 +356,7 @@ pub struct BlankNodeIdParseError;
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
+    #[cfg(not(target_family = "wasm"))]
     use std::mem::{align_of, size_of};
 
     #[test]
@@ -405,6 +406,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_family = "wasm"))]
     #[test]
     fn test_size_and_alignment() {
         assert_eq!(size_of::<BlankNode>(), 56);

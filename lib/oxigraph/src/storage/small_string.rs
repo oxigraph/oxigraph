@@ -7,7 +7,6 @@ use std::{fmt, str};
 
 /// A small inline string
 #[derive(Clone, Copy, Default)]
-#[repr(transparent)]
 pub struct SmallString {
     inner: [u8; 16],
 }

@@ -213,11 +213,9 @@ impl<R: Read> TermReader for R {
                 })
             }
             TYPE_NUMERICAL_BLANK_NODE_ID => {
-                let mut buffer = [0; 16];
-                self.read_exact(&mut buffer)?;
-                Ok(EncodedTerm::NumericalBlankNode {
-                    id: u128::from_be_bytes(buffer),
-                })
+                let mut id = [0; 16];
+                self.read_exact(&mut id)?;
+                Ok(EncodedTerm::NumericalBlankNode { id })
             }
             TYPE_SMALL_BLANK_NODE_ID => {
                 let mut buffer = [0; 16];
@@ -504,7 +502,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
         }
         EncodedTerm::NumericalBlankNode { id } => {
             sink.push(TYPE_NUMERICAL_BLANK_NODE_ID);
-            sink.extend_from_slice(&id.to_be_bytes())
+            sink.extend_from_slice(id)
         }
         EncodedTerm::SmallBlankNode(id) => {
             sink.push(TYPE_SMALL_BLANK_NODE_ID);
@@ -680,6 +678,7 @@ mod tests {
             NamedNode::new_unchecked("http://bar.com").into(),
             NamedNode::new_unchecked("http://foo.com").into(),
             BlankNode::default().into(),
+            BlankNode::new_unchecked("1234567890").into(),
             BlankNode::new_unchecked("bnode").into(),
             BlankNode::new_unchecked("foo-bnode-thisisaverylargeblanknode").into(),
             Literal::new_simple_literal("literal").into(),

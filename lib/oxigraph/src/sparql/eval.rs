@@ -1568,7 +1568,7 @@ impl SimpleEvaluator {
                         }
                         None => Rc::new(|_| {
                             Some(EncodedTerm::NumericalBlankNode {
-                                id: random::<u128>(),
+                                id: random::<[u8; 16]>(),
                             })
                         }),
                     },
@@ -3342,9 +3342,9 @@ fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedT
                 EncodedTerm::BigBlankNode { id_id: b } => {
                     compare_str_str_id(dataset, a, b).unwrap_or(Ordering::Equal)
                 }
-                EncodedTerm::NumericalBlankNode { id: b } => {
-                    a.as_str().cmp(BlankNode::new_from_unique_id(*b).as_str())
-                }
+                EncodedTerm::NumericalBlankNode { id: b } => a
+                    .as_str()
+                    .cmp(BlankNode::new_from_unique_id(u128::from_be_bytes(*b)).as_str()),
                 _ => Ordering::Less,
             },
             EncodedTerm::BigBlankNode { id_id: a } => match b {
@@ -3354,22 +3354,24 @@ fn cmp_terms(dataset: &DatasetView, a: Option<&EncodedTerm>, b: Option<&EncodedT
                 EncodedTerm::BigBlankNode { id_id: b } => {
                     compare_str_ids(dataset, a, b).unwrap_or(Ordering::Equal)
                 }
-                EncodedTerm::NumericalBlankNode { id: b } => {
-                    compare_str_id_str(dataset, a, BlankNode::new_from_unique_id(*b).as_str())
-                        .unwrap_or(Ordering::Equal)
-                }
+                EncodedTerm::NumericalBlankNode { id: b } => compare_str_id_str(
+                    dataset,
+                    a,
+                    BlankNode::new_from_unique_id(u128::from_be_bytes(*b)).as_str(),
+                )
+                .unwrap_or(Ordering::Equal),
                 _ => Ordering::Less,
             },
             EncodedTerm::NumericalBlankNode { id: a } => {
-                let a = BlankNode::new_from_unique_id(*a);
+                let a = BlankNode::new_from_unique_id(u128::from_be_bytes(*a));
                 match b {
                     EncodedTerm::SmallBlankNode(b) => a.as_str().cmp(b),
                     EncodedTerm::BigBlankNode { id_id: b } => {
                         compare_str_str_id(dataset, a.as_str(), b).unwrap_or(Ordering::Equal)
                     }
-                    EncodedTerm::NumericalBlankNode { id: b } => {
-                        a.as_str().cmp(BlankNode::new_from_unique_id(*b).as_str())
-                    }
+                    EncodedTerm::NumericalBlankNode { id: b } => a
+                        .as_str()
+                        .cmp(BlankNode::new_from_unique_id(u128::from_be_bytes(*b)).as_str()),
                     _ => Ordering::Less,
                 }
             }
