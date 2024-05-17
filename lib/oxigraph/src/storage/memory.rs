@@ -1,13 +1,14 @@
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
 pub use crate::storage::error::StorageError;
 use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
 };
 use crate::storage::CorruptionError;
 use dashmap::iter::Iter;
 use dashmap::mapref::entry::Entry;
 use dashmap::{DashMap, DashSet};
 use oxrdf::Quad;
+use rustc_hash::FxHasher;
 use std::borrow::Borrow;
 use std::error::Error;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
@@ -28,12 +29,16 @@ pub struct MemoryStorage {
 }
 
 struct Content {
-    quad_set: DashSet<Arc<QuadListNode>>,
+    quad_set: DashSet<Arc<QuadListNode>, BuildHasherDefault<FxHasher>>,
     last_quad: RwLock<Option<Arc<QuadListNode>>>,
-    last_quad_by_subject: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
-    last_quad_by_predicate: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
-    last_quad_by_object: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
-    last_quad_by_graph_name: DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
+    last_quad_by_subject:
+        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+    last_quad_by_predicate:
+        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+    last_quad_by_object:
+        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+    last_quad_by_graph_name:
+        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
     graphs: DashMap<EncodedTerm, VersionRange>,
 }
 
@@ -41,15 +46,15 @@ impl MemoryStorage {
     pub fn new() -> Self {
         Self {
             content: Arc::new(Content {
-                quad_set: DashSet::new(),
+                quad_set: DashSet::default(),
                 last_quad: RwLock::new(None),
-                last_quad_by_subject: DashMap::new(),
-                last_quad_by_predicate: DashMap::new(),
-                last_quad_by_object: DashMap::new(),
-                last_quad_by_graph_name: DashMap::new(),
-                graphs: DashMap::new(),
+                last_quad_by_subject: DashMap::default(),
+                last_quad_by_predicate: DashMap::default(),
+                last_quad_by_object: DashMap::default(),
+                last_quad_by_graph_name: DashMap::default(),
+                graphs: DashMap::default(),
             }),
-            id2str: Arc::new(DashMap::with_hasher(BuildHasherDefault::default())),
+            id2str: Arc::new(DashMap::default()),
             version_counter: Arc::new(AtomicU64::new(0)),
             transaction_counter: Arc::new(Mutex::new(u64::MAX >> 1)),
         }
@@ -168,7 +173,7 @@ impl MemoryStorageReader {
         graph_name: Option<&EncodedTerm>,
     ) -> QuadIterator {
         fn get_start_and_count(
-            map: &DashMap<EncodedTerm, (Arc<QuadListNode>, u64)>,
+            map: &DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
             term: Option<&EncodedTerm>,
         ) -> (Option<Arc<QuadListNode>>, u64) {
             let Some(term) = term else {
@@ -1018,28 +1023,6 @@ fn push_boxed_slice<T: Copy>(slice: &[T], element: T) -> Box<[T]> {
 
 fn pop_boxed_slice<T: Copy>(slice: &[T]) -> Box<[T]> {
     slice[..slice.len() - 1].into()
-}
-
-#[derive(Default)]
-struct StrHashHasher {
-    value: u64,
-}
-
-impl Hasher for StrHashHasher {
-    #[inline]
-    fn finish(&self) -> u64 {
-        self.value
-    }
-
-    fn write(&mut self, _: &[u8]) {
-        unreachable!("Must only be used on StrHash")
-    }
-
-    #[inline]
-    #[allow(clippy::cast_possible_truncation)]
-    fn write_u128(&mut self, i: u128) {
-        self.value = i as u64;
-    }
 }
 
 #[cfg(test)]

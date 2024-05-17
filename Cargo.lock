@@ -1076,6 +1076,7 @@ dependencies = [
  "oxsdatatypes",
  "rand",
  "regex",
+ "rustc-hash",
  "sha1",
  "sha2",
  "siphasher",
