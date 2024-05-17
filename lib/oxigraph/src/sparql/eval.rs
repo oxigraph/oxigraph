@@ -17,6 +17,7 @@ use oxrdf::{TermRef, Variable};
 use oxsdatatypes::*;
 use rand::random;
 use regex::{Regex, RegexBuilder};
+use rustc_hash::{FxHashMap, FxHashSet};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use spargebra::algebra::{AggregateFunction, Function, PropertyPathExpression};
@@ -31,8 +32,7 @@ use sparopt::algebra::{
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::iter::{empty, once};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -232,8 +232,8 @@ impl SimpleEvaluator {
                 iter: Box::new(DescribeIterator {
                     eval: self.clone(),
                     tuples_to_describe: eval(from),
-                    nodes_described: HashSet::new(),
-                    nodes_to_describe: Vec::new(),
+                    nodes_described: FxHashSet::default(),
+                    nodes_to_describe: Vec::default(),
                     quads: Box::new(empty()),
                 }),
             }),
@@ -994,7 +994,7 @@ impl SimpleEvaluator {
                     let key_variables = Rc::clone(&key_variables);
                     let mut errors = Vec::default();
                     let mut accumulators_for_group =
-                        HashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
+                        FxHashMap::<Vec<Option<EncodedTerm>>, Vec<Box<dyn Accumulator>>>::default();
                     if key_variables.is_empty() {
                         // There is always a single group if there is no GROUP BY
                         accumulators_for_group.insert(
@@ -4706,7 +4706,7 @@ impl PathEvaluator {
     ) -> Box<dyn Iterator<Item = Result<T, EvaluationError>>> {
         match self
             .find_graphs_where_the_node_is_in(term)
-            .collect::<Result<HashSet<_>, _>>()
+            .collect::<Result<FxHashSet<_>, _>>()
         {
             Ok(graph_names) => Box::new(graph_names.into_iter().flat_map(f)),
             Err(error) => Box::new(once(Err(error))),
@@ -5044,7 +5044,7 @@ fn decode_triple<D: Decoder>(
 struct DescribeIterator {
     eval: SimpleEvaluator,
     tuples_to_describe: EncodedTuplesIterator,
-    nodes_described: HashSet<EncodedTerm>,
+    nodes_described: FxHashSet<EncodedTerm>,
     nodes_to_describe: Vec<EncodedTerm>,
     quads: Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>>,
 }
@@ -5134,7 +5134,7 @@ fn transitive_closure<T: Clone + Eq + Hash, NI: Iterator<Item = Result<T, Evalua
             }
         })
         .collect::<Vec<_>>();
-    let mut all = todo.iter().cloned().collect::<HashSet<_>>();
+    let mut all = todo.iter().cloned().collect::<FxHashSet<_>>();
     while let Some(e) = todo.pop() {
         for e in next(e) {
             match e {
@@ -5159,7 +5159,7 @@ fn look_in_transitive_closure<
     target: &T,
 ) -> Result<bool, EvaluationError> {
     let mut todo = start.into_iter().collect::<Result<Vec<_>, _>>()?;
-    let mut all = todo.iter().cloned().collect::<HashSet<_>>();
+    let mut all = todo.iter().cloned().collect::<FxHashSet<_>>();
     while let Some(e) = todo.pop() {
         if e == *target {
             return Ok(true);
@@ -5177,7 +5177,8 @@ fn look_in_transitive_closure<
 fn hash_deduplicate<T: Eq + Hash + Clone>(
     iter: impl Iterator<Item = Result<T, EvaluationError>>,
 ) -> impl Iterator<Item = Result<T, EvaluationError>> {
-    let mut already_seen = HashSet::with_capacity(iter.size_hint().0);
+    let mut already_seen =
+        FxHashSet::with_capacity_and_hasher(iter.size_hint().0, BuildHasherDefault::default());
     iter.filter(move |e| {
         if let Ok(e) = e {
             if already_seen.contains(e) {
@@ -5257,14 +5258,14 @@ trait Accumulator {
 }
 
 struct Deduplicate {
-    seen: HashSet<Option<EncodedTerm>>,
+    seen: FxHashSet<Option<EncodedTerm>>,
     inner: Box<dyn Accumulator>,
 }
 
 impl Deduplicate {
     fn new(inner: Box<dyn Accumulator>) -> Self {
         Self {
-            seen: HashSet::default(),
+            seen: FxHashSet::default(),
             inner,
         }
     }
@@ -5586,7 +5587,7 @@ pub enum ComparatorFunction {
 
 struct EncodedTupleSet {
     key: Vec<usize>,
-    map: HashMap<u64, Vec<EncodedTuple>>,
+    map: FxHashMap<u64, Vec<EncodedTuple>>,
     len: usize,
 }
 
@@ -5594,7 +5595,7 @@ impl EncodedTupleSet {
     fn new(key: Vec<usize>) -> Self {
         Self {
             key,
-            map: HashMap::new(),
+            map: FxHashMap::default(),
             len: 0,
         }
     }

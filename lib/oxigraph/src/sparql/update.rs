@@ -8,6 +8,7 @@ use crate::sparql::{EvaluationError, Update, UpdateOptions};
 use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::StorageWriter;
 use oxiri::Iri;
+use rustc_hash::FxHashMap;
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
     BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundSubject,
@@ -16,7 +17,6 @@ use spargebra::term::{
 };
 use spargebra::GraphUpdateOperation;
 use sparopt::Optimizer;
-use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -98,7 +98,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     }
 
     fn eval_insert_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
-        let mut bnodes = HashMap::new();
+        let mut bnodes = FxHashMap::default();
         for quad in data {
             let quad = Self::convert_quad(quad, &mut bnodes);
             self.transaction.insert(quad.as_ref())?;
@@ -136,7 +136,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             false,
         );
         let mut variables = Vec::new();
-        let mut bnodes = HashMap::new();
+        let mut bnodes = FxHashMap::default();
         let (eval, _) = evaluator.graph_pattern_evaluator(&pattern, &mut variables);
         let tuples =
             eval(EncodedTuple::with_capacity(variables.len())).collect::<Result<Vec<_>, _>>()?; // TODO: would be much better to stream
@@ -239,7 +239,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
-    fn convert_quad(quad: &Quad, bnodes: &mut HashMap<BlankNode, BlankNode>) -> OxQuad {
+    fn convert_quad(quad: &Quad, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> OxQuad {
         OxQuad {
             subject: match &quad.subject {
                 Subject::NamedNode(subject) => subject.clone().into(),
@@ -260,7 +260,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
-    fn convert_triple(triple: &Triple, bnodes: &mut HashMap<BlankNode, BlankNode>) -> Triple {
+    fn convert_triple(triple: &Triple, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> Triple {
         Triple {
             subject: match &triple.subject {
                 Subject::NamedNode(subject) => subject.clone().into(),
@@ -279,7 +279,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
 
     fn convert_blank_node(
         node: &BlankNode,
-        bnodes: &mut HashMap<BlankNode, BlankNode>,
+        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
     ) -> BlankNode {
         bnodes.entry(node.clone()).or_default().clone()
     }
@@ -323,7 +323,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
-        bnodes: &mut HashMap<BlankNode, BlankNode>,
+        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
     ) -> Result<Option<OxQuad>, EvaluationError> {
         Ok(Some(OxQuad {
             subject: match Self::convert_term_or_var(
@@ -367,7 +367,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
-        bnodes: &mut HashMap<BlankNode, BlankNode>,
+        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
     ) -> Result<Option<Term>, EvaluationError> {
         Ok(match term {
             TermPattern::NamedNode(term) => Some(term.clone().into()),
@@ -423,7 +423,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         variables: &[Variable],
         values: &EncodedTuple,
         dataset: &DatasetView,
-        bnodes: &mut HashMap<BlankNode, BlankNode>,
+        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
     ) -> Result<Option<Triple>, EvaluationError> {
         Ok(Some(Triple {
             subject: match Self::convert_term_or_var(

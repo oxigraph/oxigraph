@@ -39,6 +39,7 @@ oxrdfio = { workspace = true, features = ["rdf-star"] }
 oxsdatatypes.workspace = true
 rand.workspace = true
 regex.workspace = true
+rustc-hash.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 siphasher.workspace = true

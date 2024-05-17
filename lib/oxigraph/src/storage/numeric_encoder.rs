@@ -1039,6 +1039,28 @@ fn get_required_str<L: StrLookup>(lookup: &L, id: &StrHash) -> Result<String, St
     })?)
 }
 
+#[derive(Default)]
+pub struct StrHashHasher {
+    value: u64,
+}
+
+impl Hasher for StrHashHasher {
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.value
+    }
+
+    fn write(&mut self, _: &[u8]) {
+        unreachable!("Must only be used on StrHash")
+    }
+
+    #[inline]
+    #[allow(clippy::cast_possible_truncation)]
+    fn write_u128(&mut self, i: u128) {
+        self.value = i as u64;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

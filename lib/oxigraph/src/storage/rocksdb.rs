@@ -7,13 +7,15 @@ use crate::storage::binary_encoder::{
 };
 pub use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrLookup,
+    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
 };
 use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
 };
-use std::collections::{HashMap, HashSet, VecDeque};
+use rustc_hash::FxHashSet;
+use std::collections::{HashMap, VecDeque};
 use std::error::Error;
+use std::hash::BuildHasherDefault;
 use std::mem::{swap, take};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -174,7 +176,7 @@ impl RocksDbStorage {
         let mut version = self.ensure_version()?;
         if version == 0 {
             // We migrate to v1
-            let mut graph_names = HashSet::new();
+            let mut graph_names = FxHashSet::default();
             for quad in self.snapshot().quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
@@ -1242,20 +1244,23 @@ impl RocksDbStorageBulkLoader {
 
 struct FileBulkLoader<'a> {
     storage: &'a RocksDbStorage,
-    id2str: HashMap<StrHash, Box<str>>,
-    quads: HashSet<EncodedQuad>,
-    triples: HashSet<EncodedQuad>,
-    graphs: HashSet<EncodedTerm>,
+    id2str: HashMap<StrHash, Box<str>, BuildHasherDefault<StrHashHasher>>,
+    quads: FxHashSet<EncodedQuad>,
+    triples: FxHashSet<EncodedQuad>,
+    graphs: FxHashSet<EncodedTerm>,
 }
 
 impl<'a> FileBulkLoader<'a> {
     fn new(storage: &'a RocksDbStorage, batch_size: usize) -> Self {
         Self {
             storage,
-            id2str: HashMap::with_capacity(3 * batch_size),
-            quads: HashSet::with_capacity(batch_size),
-            triples: HashSet::with_capacity(batch_size),
-            graphs: HashSet::default(),
+            id2str: HashMap::with_capacity_and_hasher(
+                3 * batch_size,
+                BuildHasherDefault::default(),
+            ),
+            quads: FxHashSet::with_capacity_and_hasher(batch_size, BuildHasherDefault::default()),
+            triples: FxHashSet::with_capacity_and_hasher(batch_size, BuildHasherDefault::default()),
+            graphs: FxHashSet::default(),
         }
     }
 

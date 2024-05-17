@@ -1,16 +1,19 @@
 use crate::model::TermRef;
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::EvaluationError;
-use crate::storage::numeric_encoder::{insert_term, EncodedQuad, EncodedTerm, StrHash, StrLookup};
+use crate::storage::numeric_encoder::{
+    insert_term, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
+};
 use crate::storage::{StorageError, StorageReader};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 use std::iter::empty;
 
 pub struct DatasetView {
     reader: StorageReader,
-    extra: RefCell<HashMap<StrHash, String>>,
+    extra: RefCell<HashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
     dataset: EncodedDatasetSpec,
 }
 
