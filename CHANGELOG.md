@@ -1,3 +1,25 @@
+## [0.4.0-alpha.7] - 2024-05-18
+
+### Added
+- JS: `Store.query` has now a `results_format` option to select the format in which the results should be returned.
+  When enabled the return type will be a string.
+
+### Changed
+- Default in memory storage is now a brand new implementation based on hash sets and linked list. See [description in the wiki](https://github.com/oxigraph/oxigraph/wiki/Architecture#how-is-the-in-memory-storage-working).
+  It provides proper transaction rollbacks and allows concurrent reads while a write transaction is happening.
+  It is now used when a `Store` is created without an underlying storage directory.
+- SPARQL: `DESCRIBE` now implements [Concise Bounded Description](https://www.w3.org/submissions/CBD/).
+- SPARQL: avoids join reordering inside of `SERVICE` calls.
+- SPARQL: fixes parsing of `DESCRIBE` query when there is a space between the IRI after `FROM` and the `WHERE` keyword. 
+- Uses the "fx hash" from Firefox and rustc in the hash maps to make hashing faster.
+- RDF/XML: if `unchecked` is enabled, `rdf:ID` distinctness won't be validated.
+- Python: uses Python 0.21 bindings.
+- JS: The `load` and `dump` method second argument is now an object with options.
+  The old API is kept for backward compatibility and prints warnings.
+- CLI: removes dependencies on escargot.
+- CLI: uses `@zazuko/yasqui` instead of `@triply/yasqui` and vendors the JS and CSS in the built binary.
+
+
 ## [0.4.0-alpha.6] - 2024-03-25
 
 ### Changed

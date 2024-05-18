@@ -31,7 +31,7 @@ for ext in ("md", "rs", "rst"):
                 if base_url not in spec_cache:
                     try:
                         with urlopen(base_url) as response:
-                            spec_cache[base_url] = response.read().decode()
+                            spec_cache[base_url] = response.read().decode(errors='ignore')
                     except HTTPError as e:
                         errors.add(
                             f"Fetching {url} used in {file} return HTTP error: {e}"
