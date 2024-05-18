@@ -1,6 +1,6 @@
-use crate::format_err;
 use crate::model::*;
 use crate::utils::to_err;
+use crate::{console_warn, format_err};
 use js_sys::{Array, Map, Reflect};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
@@ -109,14 +109,7 @@ impl JsStore {
         let mut use_default_graph_as_union = false;
         let mut results_format = None;
         if !options.is_undefined() {
-            let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
-            if !js_base_iri.is_undefined() && !js_base_iri.is_null() {
-                base_iri = Some(
-                    js_base_iri
-                        .as_string()
-                        .ok_or_else(|| to_err("base_iri option must be a string"))?,
-                );
-            }
+            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
             use_default_graph_as_union =
                 Reflect::get(options, &JsValue::from_str("use_default_graph_as_union"))?
                     .is_truthy();
@@ -208,14 +201,7 @@ impl JsStore {
         // Parsing options
         let mut base_iri = None;
         if !options.is_undefined() {
-            let js_base_iri = Reflect::get(options, &JsValue::from_str("base_iri"))?;
-            if !js_base_iri.is_undefined() && !js_base_iri.is_null() {
-                base_iri = Some(
-                    js_base_iri
-                        .as_string()
-                        .ok_or_else(|| to_err("base_iri option must be a string"))?,
-                );
-            }
+            base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
         }
 
         let update = Update::parse(update, base_iri.as_deref()).map_err(to_err)?;
@@ -225,48 +211,99 @@ impl JsStore {
     pub fn load(
         &self,
         data: &str,
-        format: &str,
+        options: &JsValue,
         base_iri: &JsValue,
         to_graph_name: &JsValue,
     ) -> Result<(), JsValue> {
-        let format = rdf_format(format)?;
-        let base_iri = if base_iri.is_null() || base_iri.is_undefined() {
-            None
-        } else if base_iri.is_string() {
-            base_iri.as_string()
-        } else if let JsTerm::NamedNode(base_iri) = FROM_JS.with(|c| c.to_term(base_iri))? {
-            Some(base_iri.value())
-        } else {
-            return Err(format_err!(
-                "If provided, the base IRI should be a NamedNode or a string"
-            ));
-        };
+        // Parsing options
+        let mut format = None;
+        let mut parsed_base_iri = None;
+        let mut parsed_to_graph_name = None;
+        let mut unchecked = false;
+        let mut no_transaction = false;
+        if let Some(format_str) = options.as_string() {
+            // Backward compatibility with format as a string
+            console_warn!("The format should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt'}})");
+            format = Some(rdf_format(&format_str)?);
+        } else if !options.is_undefined() && !options.is_null() {
+            if let Some(format_str) =
+                Reflect::get(options, &JsValue::from_str("format"))?.as_string()
+            {
+                format = Some(rdf_format(&format_str)?);
+            }
+            parsed_base_iri =
+                convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+            let to_graph_name_js = Reflect::get(options, &JsValue::from_str("to_graph_name"))?;
+            parsed_to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
+            unchecked = Reflect::get(options, &JsValue::from_str("unchecked"))?.is_truthy();
+            no_transaction =
+                Reflect::get(options, &JsValue::from_str("no_transaction"))?.is_truthy();
+        }
+        let format = format
+            .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.load(my_content, {format: 'nt'}"))?;
+        if let Some(base_iri) = convert_base_iri(base_iri)? {
+            console_warn!("The base_iri should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', base_iri: 'http//example.com'}})");
+            parsed_base_iri = Some(base_iri);
+        }
+        if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
+            console_warn!("The target graph name should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', to_graph_name: 'http//example.com'}})");
+            parsed_to_graph_name = Some(to_graph_name);
+        }
 
         let mut parser = RdfParser::from_format(format);
-        if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
+        if let Some(to_graph_name) = parsed_to_graph_name {
             parser = parser.with_default_graph(GraphName::try_from(to_graph_name)?);
         }
-        if let Some(base_iri) = base_iri {
+        if let Some(base_iri) = parsed_base_iri {
             parser = parser.with_base_iri(base_iri).map_err(to_err)?;
         }
-        self.store
-            .load_from_read(parser, data.as_bytes())
-            .map_err(to_err)
+        if unchecked {
+            parser = parser.unchecked();
+        }
+        if no_transaction {
+            self.store
+                .bulk_loader()
+                .load_from_read(parser, data.as_bytes())
+        } else {
+            self.store.load_from_read(parser, data.as_bytes())
+        }
+        .map_err(to_err)
     }
 
-    pub fn dump(&self, format: &str, from_graph_name: &JsValue) -> Result<String, JsValue> {
-        let format = rdf_format(format)?;
-        let buffer =
-            if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-                self.store.dump_graph_to_write(
-                    &GraphName::try_from(from_graph_name)?,
-                    format,
-                    Vec::new(),
-                )
-            } else {
-                self.store.dump_to_write(format, Vec::new())
+    pub fn dump(&self, options: &JsValue, from_graph_name: &JsValue) -> Result<String, JsValue> {
+        // Serialization options
+        let mut format = None;
+        let mut parsed_from_graph_name = None;
+        if let Some(format_str) = options.as_string() {
+            // Backward compatibility with format as a string
+            console_warn!("The format should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt'}})");
+            format = Some(rdf_format(&format_str)?);
+        } else if !options.is_undefined() && !options.is_null() {
+            if let Some(format_str) =
+                Reflect::get(options, &JsValue::from_str("format"))?.as_string()
+            {
+                format = Some(rdf_format(&format_str)?);
             }
-            .map_err(to_err)?;
+            let from_graph_name_js = Reflect::get(options, &JsValue::from_str("from_graph_name"))?;
+            parsed_from_graph_name = FROM_JS.with(|c| c.to_optional_term(&from_graph_name_js))?;
+        }
+        let format = format
+            .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({format: 'nt'}"))?;
+        if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
+            console_warn!("The source graph name should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt', from_graph_name: 'http//example.com'}})");
+            parsed_from_graph_name = Some(from_graph_name);
+        }
+
+        let buffer = if let Some(from_graph_name) = parsed_from_graph_name {
+            self.store.dump_graph_to_write(
+                &GraphName::try_from(from_graph_name)?,
+                format,
+                Vec::new(),
+            )
+        } else {
+            self.store.dump_to_write(format, Vec::new())
+        }
+        .map_err(to_err)?;
         String::from_utf8(buffer).map_err(to_err)
     }
 }
@@ -296,5 +333,19 @@ fn query_results_format(format: &str) -> Result<QueryResultsFormat, JsValue> {
                 format
             )
         })
+    }
+}
+
+fn convert_base_iri(value: &JsValue) -> Result<Option<String>, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        Ok(None)
+    } else if let Some(value) = value.as_string() {
+        Ok(Some(value))
+    } else if let JsTerm::NamedNode(value) = FROM_JS.with(|c| c.to_term(value))? {
+        Ok(Some(value.value()))
+    } else {
+        Err(format_err!(
+            "If provided, the base IRI must be a NamedNode or a string"
+        ))
     }
 }
