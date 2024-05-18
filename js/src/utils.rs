@@ -1,5 +1,5 @@
 use js_sys::Error;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::*;
 
 #[macro_export]
 macro_rules! format_err {
@@ -11,7 +11,18 @@ macro_rules! format_err {
     };
 }
 
+#[macro_export]
+macro_rules! console_warn {
+    ($($t:tt)*) => ($crate::utils::warn(&format_args!($($t)*).to_string()))
+}
+
 #[allow(clippy::needless_pass_by_value)]
 pub fn to_err(e: impl ToString) -> JsValue {
     JsValue::from(Error::new(&e.to_string()))
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    pub(crate) fn warn(s: &str);
 }

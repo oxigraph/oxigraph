@@ -19,7 +19,7 @@ async function readData(file) {
 
 const explore_1000_nt = await readData("explore-1000.nt.zst");
 const explore_1000_store = new Store();
-explore_1000_store.load(explore_1000_nt, "application/n-triples");
+explore_1000_store.load(explore_1000_nt, { format: "application/n-triples" });
 
 const bsbm_1000_operations = (await readData("mix-exploreAndUpdate-1000.tsv.zst"))
     .split("\n")
@@ -32,7 +32,15 @@ const bench = withCodSpeed(new Bench());
 bench
     .add("JS: load BSBM explore 1000", () => {
         const store = new Store();
-        store.load(explore_1000_nt, "application/n-triples");
+        store.load(explore_1000_nt, { format: "application/n-triples" });
+    })
+    .add("JS: load BSBM explore 1000 unchecked no_transaction", () => {
+        const store = new Store();
+        store.load(explore_1000_nt, {
+            format: "application/n-triples",
+            unchecked: true,
+            no_transaction: true,
+        });
     })
     .add("JS: BSBM explore 1000 query", () => {
         for (const [kind, sparql] of bsbm_1000_operations) {

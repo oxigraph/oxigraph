@@ -183,6 +183,15 @@ describe("Store", () => {
             assert(store.has(dataModel.quad(ex, ex, ex, ex)));
         });
 
+        it("load NTriples in an other graph with options", () => {
+            const store = new Store();
+            store.load("<http://example.com> <http://example.com> <http://example.com> .", {
+                format: "application/n-triples",
+                to_graph_name: ex,
+            });
+            assert(store.has(dataModel.quad(ex, ex, ex, ex)));
+        });
+
         it("load Turtle with a base IRI", () => {
             const store = new Store();
             store.load(
@@ -211,6 +220,17 @@ describe("Store", () => {
             );
             assert(store.has(dataModel.quad(ex, ex, ex, ex)));
         });
+
+        it("load TriG with options", () => {
+            const store = new Store();
+            store.load("GRAPH <> { <http://example.com> <http://example.com> <> }", {
+                format: "application/trig",
+                base_iri: "http://example.com",
+                unchecked: true,
+                no_transaction: true,
+            });
+            assert(store.has(dataModel.quad(ex, ex, ex, ex)));
+        });
     });
 
     describe("#dump()", () => {
@@ -227,6 +247,14 @@ describe("Store", () => {
             assert.strictEqual(
                 "<http://example.com> <http://example.com> <http://example.com> .\n",
                 store.dump("application/n-triples", ex),
+            );
+        });
+
+        it("dump named graph content with options", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
+            assert.strictEqual(
+                "<http://example.com> <http://example.com> <http://example.com> .\n",
+                store.dump({ format: "application/n-triples", from_graph_name: ex }),
             );
         });
 

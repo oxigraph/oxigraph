@@ -163,7 +163,7 @@ Example to get all quads:
 store.match();
 ```
 
-#### `Store.prototype.query(String query)`
+#### `Store.prototype.query(String query, object options)`
 Executes a [SPARQL 1.1 Query](https://www.w3.org/TR/sparql11-query/).
 For `SELECT` queries the return type is an array of `Map` which keys are the bound variables and values are the values the result is bound to.
 For `CONSTRUCT` and `ÐESCRIBE` queries the return type is an array of `Quad`.
@@ -198,7 +198,7 @@ console.log(store.query("ASK { <s> ?p ?o }", {
 }));
 ```
 
-#### `Store.prototype.update(String query)`
+#### `Store.prototype.update(String query, object options)`
 Executes a [SPARQL 1.1 Update](https://www.w3.org/TR/sparql11-update/).
 The [`LOAD` operation](https://www.w3.org/TR/sparql11-update/#load) is not supported yet.
 
@@ -215,14 +215,17 @@ store.update("DELETE WHERE { <s> ?p ?o }", {
 })
 ```
 
-#### `Store.prototype.load(String data, String format, NamedNode|String? baseIRI, NamedNode|BlankNode|DefaultGraph? toNamedGraph)`
+#### `Store.prototype.load(String data, object options)`
 
 Loads serialized RDF triples or quad into the store.
 The method arguments are:
 1. `data`: the serialized RDF triples or quads.
-2. `format`: the format of the serialization. See below for the supported formats.
-3. `baseIRI`: the base IRI to use to resolve the relative IRIs in the serialization.
-4. `toNamedGraph`: for triple serialization formats, the name of the named graph the triple should be loaded to.
+2. `options`: an object containing various options (all optional except `format`):
+   - `format`: the format of the serialization as a `string`. See below for the supported formats.
+   - `base_iri`: the base IRI to use to resolve the relative IRIs in the serialization as a `string` or a `NamedNode`.
+   - `to_named_graph`: for triple serialization formats, the name of the named graph the triple should be loaded to as a `NamedNode`, `BlankNode` or `DefaultGraph`.
+   - `unchecked`: disables careful data validation like checking if the IRIs or language tags are valid. Also automatically recovers from some small syntax errors.
+   - `no_transaction`: disables transactional guarantees: if the file has a syntax error, the start of it might be loaded into the store even if parsing fails.
 
 The available formats are:
 * [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
@@ -234,15 +237,22 @@ The available formats are:
 
 Example of loading a Turtle file into the named graph `<http://example.com/graph>` with the base IRI `http://example.com`:
 ```js
-store.load("<http://example.com> <http://example.com> <> .", "text/turtle", "http://example.com", oxigraph.namedNode("http://example.com/graph"));
+store.load(
+    "<http://example.com> <http://example.com> <> .",
+    {
+        format: "text/turtle",
+        base_iri: "http://example.com",
+        to_graph_name: oxigraph.namedNode("http://example.com/graph")
+    }
+);
 ```
 
-#### `Store.prototype.dump(String format, NamedNode|BlankNode|DefaultGraph? fromNamedGraph)`
+#### `Store.prototype.dump(object options)`
 
 Returns serialized RDF triples or quad from the store.
-The method arguments are:
-1. `format`: the format type of the serialization. See below for the supported types.
-2. `fromNamedGraph`: for triple serialization formats, the name of the named graph the triple should be loaded from.
+The method argument is a single object, `options`, with the following options (all optional except `format`):
+- `format`: the format type of the serialization as a `string`. See below for the supported types.
+- `from_named_graph`: for triple serialization formats, the name of the named graph the triple should be loaded from as a `NamedNode`, `BlankNode` or `DefaultGraph`..
 
 The available formats are:
 * [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
@@ -254,7 +264,10 @@ The available formats are:
 
 Example of building a Turtle file from the named graph `<http://example.com/graph>`:
 ```js
-store.dump("text/turtle", oxigraph.namedNode("http://example.com/graph"));
+store.dump({
+    format: "text/turtle",
+    from_graph_name: oxigraph.namedNode("http://example.com/graph")
+});
 ```
 
 ## Migration guide
