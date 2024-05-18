@@ -3,7 +3,7 @@
 use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion, Throughput};
 use oxhttp::model::{Method, Request, Status};
 use oxigraph::io::{RdfFormat, RdfParser};
-use oxigraph::sparql::{Query, QueryResults, Update};
+use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
 use oxigraph::store::Store;
 use rand::random;
 use std::env::temp_dir;
@@ -108,11 +108,19 @@ fn store_query_and_update(c: &mut Criterion) {
         let memory_store = Store::new().unwrap();
         do_bulk_load(&memory_store, &data);
         group.bench_function("BSBM explore 1000 query in memory", |b| {
-            b.iter(|| run_operation(&memory_store, &query_operations))
+            b.iter(|| run_operation(&memory_store, &query_operations, true))
         });
+        group.bench_function(
+            "BSBM explore 1000 query in memory without optimizations",
+            |b| b.iter(|| run_operation(&memory_store, &query_operations, false)),
+        );
         group.bench_function("BSBM explore 1000 queryAndUpdate in memory", |b| {
-            b.iter(|| run_operation(&memory_store, &operations))
+            b.iter(|| run_operation(&memory_store, &operations, true))
         });
+        group.bench_function(
+            "BSBM explore 1000 queryAndUpdate in memory without optimizations",
+            |b| b.iter(|| run_operation(&memory_store, &operations, false)),
+        );
     }
 
     {
@@ -120,18 +128,30 @@ fn store_query_and_update(c: &mut Criterion) {
         let disk_store = Store::open(&path).unwrap();
         do_bulk_load(&disk_store, &data);
         group.bench_function("BSBM explore 1000 query on disk", |b| {
-            b.iter(|| run_operation(&disk_store, &query_operations))
+            b.iter(|| run_operation(&disk_store, &query_operations, true))
         });
+        group.bench_function(
+            "BSBM explore 1000 query on disk without optimizations",
+            |b| b.iter(|| run_operation(&disk_store, &query_operations, false)),
+        );
         group.bench_function("BSBM explore 1000 queryAndUpdate on disk", |b| {
-            b.iter(|| run_operation(&disk_store, &operations))
+            b.iter(|| run_operation(&disk_store, &operations, true))
         });
+        group.bench_function(
+            "BSBM explore 1000 queryAndUpdate on disk without optimizations",
+            |b| b.iter(|| run_operation(&disk_store, &operations, false)),
+        );
     }
 }
 
-fn run_operation(store: &Store, operations: &[Operation]) {
+fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
+    let mut options = QueryOptions::default();
+    if !with_opts {
+        options = options.without_optimizations();
+    }
     for operation in operations {
         match operation {
-            Operation::Query(q) => match store.query(q.clone()).unwrap() {
+            Operation::Query(q) => match store.query_opt(q.clone(), options.clone()).unwrap() {
                 QueryResults::Boolean(_) => (),
                 QueryResults::Solutions(s) => {
                     for s in s {
@@ -144,7 +164,7 @@ fn run_operation(store: &Store, operations: &[Operation]) {
                     }
                 }
             },
-            Operation::Update(u) => store.update(u.clone()).unwrap(),
+            Operation::Update(u) => store.update_opt(u.clone(), options.clone()).unwrap(),
         }
     }
 }
