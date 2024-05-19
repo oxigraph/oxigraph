@@ -1,0 +1,4 @@
+ignore:
+  - cli
+  - js
+  - python
