@@ -20,3 +20,6 @@
 [submodule "testsuite/rdf-canon"]
 	path = testsuite/rdf-canon
 	url = https://github.com/w3c/rdf-canon.git
+[submodule "cli/templates/yasgui"]
+	path = cli/templates/yasgui
+	url = https://github.com/oxigraph/yasgui-release.git

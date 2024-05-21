@@ -36,6 +36,9 @@ use url::form_urlencoded;
 const MAX_SPARQL_BODY_SIZE: u64 = 0x0010_0000;
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
+#[allow(clippy::large_include_file)]
+const YASGUI_JS: &str = include_str!("../templates/yasgui/yasgui.min.js");
+const YASGUI_CSS: &str = include_str!("../templates/yasgui/yasgui.min.css");
 const LOGO: &str = include_str!("../logo.svg");
 
 #[derive(Parser)]
@@ -987,13 +990,29 @@ fn handle_request(
 ) -> Result<Response, HttpError> {
     match (request.url().path(), request.method().as_ref()) {
         ("/", "HEAD") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "text_html")
+            .with_header(HeaderName::CONTENT_TYPE, "text/html")
             .unwrap()
             .build()),
         ("/", "GET") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "text_html")
+            .with_header(HeaderName::CONTENT_TYPE, "text/html")
             .unwrap()
             .with_body(HTML_ROOT_PAGE)),
+        ("/yasgui.min.css", "HEAD") => Ok(Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "text/css")
+            .unwrap()
+            .build()),
+        ("/yasgui.min.css", "GET") => Ok(Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "text/css")
+            .unwrap()
+            .with_body(YASGUI_CSS)),
+        ("/yasgui.min.js", "HEAD") => Ok(Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "application/javascript")
+            .unwrap()
+            .build()),
+        ("/yasgui.min.js", "GET") => Ok(Response::builder(Status::OK)
+            .with_header(HeaderName::CONTENT_TYPE, "application/javascript")
+            .unwrap()
+            .with_body(YASGUI_JS)),
         ("/logo.svg", "HEAD") => Ok(Response::builder(Status::OK)
             .with_header(HeaderName::CONTENT_TYPE, "image/svg+xml")
             .unwrap()
