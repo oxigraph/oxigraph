@@ -280,6 +280,7 @@ zero_sized_map_values = "warn"
 lto = true
 codegen-units = 1
 strip = "debuginfo"
+panic = "abort"
 
 [profile.release.package.oxigraph-js]
 codegen-units = 1
