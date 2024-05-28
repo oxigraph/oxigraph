@@ -16,7 +16,7 @@ use sophia_api::term::Term as SoTerm;
 mod adapters;
 use adapters::*;
 
-// mod sparql;
+mod sparql;
 
 #[allow(clippy::use_self)]
 impl Dataset for Store {

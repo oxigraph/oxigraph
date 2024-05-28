@@ -176,6 +176,7 @@ impl Store {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[allow(clippy::same_name_method)] // as in sophia's SparqlDataset
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,

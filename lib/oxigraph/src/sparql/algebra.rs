@@ -38,6 +38,7 @@ pub struct Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
+    #[allow(clippy::same_name_method)] // as in sophia's Query
     pub fn parse(
         query: &str,
         base_iri: Option<&str>,
