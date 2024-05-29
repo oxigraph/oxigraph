@@ -3,7 +3,11 @@ use std::borrow::Borrow;
 use oxrdf::Variable;
 use sophia_api::sparql::{Query as SoQuery, SparqlBindings, SparqlDataset, SparqlResult};
 
-use crate::{model::Term as OxTerm, sparql::{EvaluationError, Query as OxQuery, QueryResults, QuerySolutionIter, QueryTripleIter}, store::Store};
+use crate::{
+    model::Term as OxTerm,
+    sparql::{EvaluationError, Query as OxQuery, QueryResults, QuerySolutionIter, QueryTripleIter},
+    store::Store,
+};
 
 impl SparqlDataset for Store {
     type BindingsTerm = OxTerm;
@@ -20,11 +24,13 @@ impl SparqlDataset for Store {
     where
         Q: sophia_api::sparql::IntoQuery<Self::Query>,
     {
-        Ok(match Store::query(self, query.into_query()?.borrow().clone())? {
-            QueryResults::Solutions(bindings) => SparqlResult::Bindings(OxBindings(bindings)),
-            QueryResults::Boolean(b) => SparqlResult::Boolean(b),
-            QueryResults::Graph(triples) => SparqlResult::Triples(triples),
-        })
+        Ok(
+            match Store::query(self, query.into_query()?.borrow().clone())? {
+                QueryResults::Solutions(bindings) => SparqlResult::Bindings(OxBindings(bindings)),
+                QueryResults::Boolean(b) => SparqlResult::Boolean(b),
+                QueryResults::Graph(triples) => SparqlResult::Triples(triples),
+            },
+        )
     }
 }
 
@@ -45,7 +51,10 @@ impl Iterator for OxBindings {
 
 impl SparqlBindings<Store> for OxBindings {
     fn variables(&self) -> Vec<&str> {
-        QuerySolutionIter::variables(&self.0).iter().map(Variable::as_str).collect()
+        QuerySolutionIter::variables(&self.0)
+            .iter()
+            .map(Variable::as_str)
+            .collect()
     }
 }
 
@@ -53,9 +62,6 @@ impl SoQuery for OxQuery {
     type Error = EvaluationError;
 
     fn parse(query_source: &str) -> Result<Self, Self::Error> {
-        OxQuery::parse(query_source, None)
-            .map_err(Into::into)
+        OxQuery::parse(query_source, None).map_err(Into::into)
     }
 }
-
-
