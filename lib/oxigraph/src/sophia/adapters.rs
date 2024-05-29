@@ -15,7 +15,7 @@ use sophia_api::{
 };
 
 /// This type is a mix of NamedNode and NamedNodeRef,
-/// to accomodate the fact that some Sophia terms can be borrowed from,
+/// to accommodate the fact that some Sophia terms can be borrowed from,
 /// while others give away the ownership of the data.
 pub struct MyNamedNode<'a>(MownStr<'a>);
 
@@ -38,7 +38,7 @@ impl<'a> From<MyNamedNode<'a>> for NamedNode {
 }
 
 /// This type is a mix of (Ox)BlankNode and BlankNodeRef,
-/// to accomodate the fact that some Sophia terms can be borrowed from,
+/// to accommodate the fact that some Sophia terms can be borrowed from,
 /// while others give away the ownership of the data.
 pub struct MyBlankNode<'a>(MownStr<'a>);
 
@@ -58,7 +58,7 @@ impl<'a> From<MyBlankNode<'a>> for OxBlankNode {
 }
 
 /// This type is a mix of Literal and LiteralRef,
-/// to accomodate the fact that some Sophia terms can be borrowed from,
+/// to accommodate the fact that some Sophia terms can be borrowed from,
 /// while others give away the ownership of the data.
 pub enum MyLiteral<'a> {
     Lang(MownStr<'a>, MownStr<'a>),
@@ -86,7 +86,7 @@ impl<'a> From<MyLiteral<'a>> for Literal {
 }
 
 /// This type is a mix of Subject and SubjectRef,
-/// to accomodate the fact that some Sophia terms can be borrowed from,
+/// to accommodate the fact that some Sophia terms can be borrowed from,
 /// while others give away the ownership of the data.
 pub enum MySubject<'a> {
     NamedNode(MyNamedNode<'a>),
@@ -129,7 +129,7 @@ impl<'a> From<MySubject<'a>> for Subject {
 }
 
 /// This type is a mix of Term and TermRef,
-/// to accomodate the fact that some Sophia terms can be borrowed from,
+/// to accommodate the fact that some Sophia terms can be borrowed from,
 /// while others give away the ownership of the data.
 pub enum MyTerm<'a> {
     NamedNode(MyNamedNode<'a>),
@@ -183,7 +183,7 @@ impl<'a> From<MyTerm<'a>> for OxTerm {
 }
 
 /// This type is a mix of GraphName and GraphNameRef,
-/// to accomodate the fact that some Sophia terms can be borrowed from,
+/// to accommodate the fact that some Sophia terms can be borrowed from,
 /// while others give away the ownership of the data.
 pub enum MyGraphName<'a> {
     NamedNode(MyNamedNode<'a>),
