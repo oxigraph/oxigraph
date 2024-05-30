@@ -44,7 +44,7 @@ rustc-hash.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 siphasher.workspace = true
-sophia_api = { version = "0.8.0", features=["test_macro"], optional = true }
+sophia_api = { workspace = true, optional = true }
 sparesults = { workspace = true, features = ["rdf-star"] }
 spargebra = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
 sparopt = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }

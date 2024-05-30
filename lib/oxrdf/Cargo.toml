@@ -24,7 +24,7 @@ oxiri.workspace = true
 oxsdatatypes = { workspace = true, optional = true }
 rand.workspace = true
 thiserror.workspace = true
-sophia_api = { version = "0.8.0", features=["test_macro"], optional = true }
+sophia_api = { workspace = true, optional = true }
 
 [lints]
 workspace = true
