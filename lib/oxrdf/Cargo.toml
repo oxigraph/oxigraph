@@ -16,7 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = []
-sophia = [ "rdf-star", "sophia_api" ]
+sophia = [ "sophia_api" ]
 
 [dependencies]
 oxilangtag.workspace = true

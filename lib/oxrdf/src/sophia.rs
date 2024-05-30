@@ -16,6 +16,7 @@ impl<'a> SoTerm for TermRef<'a> {
             TermRef::NamedNode(_) => TermKind::Iri,
             TermRef::BlankNode(_) => TermKind::BlankNode,
             TermRef::Literal(_) => TermKind::Literal,
+            #[cfg(feature = "rdf-star")]
             TermRef::Triple(_) => TermKind::Triple,
         }
     }
@@ -73,15 +74,15 @@ impl<'a> SoTerm for TermRef<'a> {
     where
         Self: Sized,
     {
+        #[cfg(feature = "rdf-star")]
         if let TermRef::Triple(t) = self {
-            Some([
+            return Some([
                 t.subject.as_ref().into(),
                 t.predicate.as_ref().into(),
                 t.object.as_ref(),
-            ])
-        } else {
-            None
+            ]);
         }
+        None
     }
 }
 
@@ -93,6 +94,7 @@ impl SoTerm for OxTerm {
             OxTerm::NamedNode(_) => TermKind::Iri,
             OxTerm::BlankNode(_) => TermKind::BlankNode,
             OxTerm::Literal(_) => TermKind::Literal,
+            #[cfg(feature = "rdf-star")]
             OxTerm::Triple(_) => TermKind::Triple,
         }
     }
@@ -143,26 +145,26 @@ impl SoTerm for OxTerm {
     }
 
     fn triple(&self) -> Option<[Self::BorrowTerm<'_>; 3]> {
+        #[cfg(feature = "rdf-star")]
         if let OxTerm::Triple(t) = self {
-            Some([
+            return Some([
                 t.subject.as_ref().into(),
                 t.predicate.as_ref().into(),
                 t.object.as_ref(),
-            ])
-        } else {
-            None
+            ]);
         }
+        None
     }
 
     fn to_triple(self) -> Option<[Self; 3]>
     where
         Self: Sized,
     {
+        #[cfg(feature = "rdf-star")]
         if let OxTerm::Triple(t) = self {
-            Some([t.subject.into(), t.predicate.into(), t.object])
-        } else {
-            None
+            return Some([t.subject.into(), t.predicate.into(), t.object]);
         }
+        None
     }
 }
 
@@ -293,6 +295,7 @@ mod test {
         assert_consistent_term_impl(&t.as_ref());
     }
 
+    #[cfg(feature = "rdf-star")]
     #[test]
     fn triple_term() {
         let t = OxTerm::from(OxTriple::new(
