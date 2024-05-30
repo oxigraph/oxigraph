@@ -30,4 +30,4 @@ pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;
 
 #[cfg(feature = "sophia")]
-mod sophia;
+pub mod sophia;

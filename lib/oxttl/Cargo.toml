@@ -17,12 +17,14 @@ rust-version.workspace = true
 default = []
 rdf-star = ["oxrdf/rdf-star"]
 async-tokio = ["dep:tokio"]
+sophia = ["oxrdf/sophia", "dep:sophia_api"]
 
 [dependencies]
 memchr.workspace = true
 oxrdf.workspace = true
 oxiri.workspace = true
 oxilangtag.workspace = true
+sophia_api = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }
 

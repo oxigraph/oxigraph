@@ -2,6 +2,8 @@ use crate::blank_node::BlankNode;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
 use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
+#[cfg(feature = "sophia")]
+use sophia_api::term::{BnodeId, IriRef as SoIriRef, SimpleTerm, Term as SoTerm};
 use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -184,6 +186,28 @@ impl Subject {
             Self::BlankNode(node) => SubjectRef::BlankNode(node.as_ref()),
             #[cfg(feature = "rdf-star")]
             Self::Triple(triple) => SubjectRef::Triple(triple),
+        }
+    }
+
+    #[cfg(feature = "sophia")]
+    /// Borrow as a Sophia [`SimpleTerm`].
+    ///
+    /// This method is only available with the `sophia` feature enabled.
+    ///
+    /// NB: for some reason, Subject can not (easily) implement Sophia's `Term` trait,
+    /// but this method provides easy interoperability with Sophia.
+    pub fn as_simple(&self) -> SimpleTerm<'_> {
+        match self {
+            Subject::NamedNode(n) => SimpleTerm::Iri(SoIriRef::new_unchecked(n.as_str().into())),
+            Subject::BlankNode(b) => {
+                SimpleTerm::BlankNode(BnodeId::new_unchecked(b.as_str().into()))
+            }
+            #[cfg(feature = "rdf-star")]
+            Subject::Triple(t) => SimpleTerm::Triple(Box::new([
+                t.subject.as_simple(),
+                SimpleTerm::Iri(SoIriRef::new_unchecked(t.predicate.as_str().into())),
+                t.object.as_simple(),
+            ])),
         }
     }
 }

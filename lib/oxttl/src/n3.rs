@@ -15,6 +15,10 @@ use oxrdf::{
     BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Subject, Term,
     Variable,
 };
+#[cfg(feature = "sophia")]
+use sophia_api::term::{
+    BnodeId, IriRef as SoIriRef, LanguageTag, SimpleTerm, Term as SoTerm, VarName,
+};
 use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::fmt;
@@ -130,6 +134,40 @@ impl From<Variable> for N3Term {
     #[inline]
     fn from(variable: Variable) -> Self {
         Self::Variable(variable)
+    }
+}
+
+#[cfg(feature = "sophia")]
+impl N3Term {
+    /// Borrow as a Sophia [`SimpleTerm`].
+    ///
+    /// NB: for some reason, N3Term can not (easily) implement Sophia's `Term` trait,
+    /// but this method provides easy interoperability with Sophia.
+    pub fn as_simple(&self) -> SimpleTerm<'_> {
+        match self {
+            N3Term::NamedNode(n) => SimpleTerm::Iri(SoIriRef::new_unchecked(n.as_str().into())),
+            N3Term::BlankNode(b) => {
+                SimpleTerm::BlankNode(BnodeId::new_unchecked(b.as_str().into()))
+            }
+            N3Term::Literal(lit) => match lit.language() {
+                Some(tag) => SimpleTerm::LiteralLanguage(
+                    lit.value().into(),
+                    LanguageTag::new_unchecked(tag.into()),
+                ),
+                None => SimpleTerm::LiteralDatatype(
+                    lit.value().into(),
+                    SoIriRef::new_unchecked(lit.datatype().as_str().into()),
+                ),
+            },
+            #[cfg(feature = "rdf-star")]
+            N3Term::Triple(t) => {
+                let s = t.subject.as_simple();
+                let p = SimpleTerm::Iri(SoIriRef::new_unchecked(t.predicate.as_str().into()));
+                let o = t.object.as_simple();
+                SimpleTerm::Triple(Box::new([s, p, o]))
+            }
+            N3Term::Variable(v) => SimpleTerm::Variable(VarName::new_unchecked(v.as_str().into())),
+        }
     }
 }
 
