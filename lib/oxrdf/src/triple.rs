@@ -2,8 +2,10 @@ use crate::blank_node::BlankNode;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
 use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
+#[cfg(all(feature = "sophia", feature = "rdf-star"))]
+use sophia_api::term::Term as SoTerm;
 #[cfg(feature = "sophia")]
-use sophia_api::term::{BnodeId, IriRef as SoIriRef, SimpleTerm, Term as SoTerm};
+use sophia_api::term::{BnodeId, IriRef as SoIriRef, SimpleTerm};
 use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).

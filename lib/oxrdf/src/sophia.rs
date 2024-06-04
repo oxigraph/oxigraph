@@ -1,6 +1,7 @@
 use crate::{
-    BlankNodeRef, GraphName as OxGraphName, GraphNameRef, LiteralRef, NamedNodeRef, Quad as OxQuad,
-    QuadRef, SubjectRef, Term as OxTerm, TermRef, Triple as OxTriple, TripleRef,
+    BlankNodeRef, GraphName as OxGraphName, GraphNameRef, LiteralRef, NamedNode, NamedNodeRef,
+    Quad as OxQuad, QuadRef, Subject, SubjectRef, Term as OxTerm, TermRef, Triple as OxTriple,
+    TripleRef,
 };
 use sophia_api::{
     quad::Quad as SoQuad,
@@ -251,7 +252,7 @@ pub trait SimpleTermExt: Sized {
     ///
     /// # Precondition
     /// This must only be used on a [normalized](SimpleTermExt::normalize) SimpleTerm.
-    fn as_term_ref(&self) -> Option<TermRef<'_>>;
+    fn as_oxrdf(&self) -> Option<MownOxTerm<'_>>;
 }
 
 impl SimpleTermExt for SimpleTerm<'_> {
@@ -269,66 +270,37 @@ impl SimpleTermExt for SimpleTerm<'_> {
         }
     }
 
-    fn as_term_ref(&self) -> Option<TermRef<'_>> {
+    fn as_oxrdf(&self) -> Option<MownOxTerm<'_>> {
         match self {
-            SimpleTerm::Iri(iri) => Some(TermRef::NamedNode(
+            SimpleTerm::Iri(iri) => Some(MownOxTerm::Ref(
                 // NB: iri could be relative, which is not supported by NamedNodeRef
-                NamedNodeRef::new(iri.as_str()).ok()?,
+                NamedNodeRef::new(iri.as_str()).ok()?.into(),
             )),
-            SimpleTerm::BlankNode(bnid) => Some(TermRef::BlankNode(BlankNodeRef::new_unchecked(
-                bnid.as_str(),
-            ))),
-            SimpleTerm::LiteralDatatype(lex, dt) => Some(TermRef::Literal(
-                LiteralRef::new_typed_literal(lex.as_ref(), NamedNodeRef::new(dt.as_str()).ok()?),
+            SimpleTerm::BlankNode(bnid) => Some(MownOxTerm::Ref(
+                BlankNodeRef::new_unchecked(bnid.as_str()).into(),
+            )),
+            SimpleTerm::LiteralDatatype(lex, dt) => Some(MownOxTerm::Ref(
+                LiteralRef::new_typed_literal(lex.as_ref(), NamedNodeRef::new(dt.as_str()).ok()?)
+                    .into(),
             )),
             SimpleTerm::LiteralLanguage(lex, tag) => {
                 debug_assert!(
                     tag.bytes().all(|b| b.is_ascii_lowercase()),
                     "SimpleTerm must be normalized"
                 );
-                Some(TermRef::Literal(
-                    LiteralRef::new_language_tagged_literal_unchecked(lex.as_ref(), tag.as_str()),
+                Some(MownOxTerm::Ref(
+                    LiteralRef::new_language_tagged_literal_unchecked(lex.as_ref(), tag.as_str())
+                        .into(),
                 ))
             }
-            SimpleTerm::Triple(_triple) => {
-                None
-                // should build a TripleRef here (only if feature rdf-star is enabled).
-                // Unfortunately, TermRef::Triple expects a &Triple :-(
-                // See https://github.com/oxigraph/oxigraph/issues/884
-            }
-            SimpleTerm::Variable(_) => None,
-        }
-    }
-}
-
-/// Extension trait for `[`[`SimpleTerm`]`; 3]`
-pub trait SimpleTermTripleExt {
-    /// Borrow this triple as an OxRDF [`TripleRef`].
-    ///
-    /// # Return
-    /// None if this triple is a generalized RDF triple not supported by OxRdf.
-    ///
-    /// # Precondition
-    /// This must only be used on a [normalized](SimpleTermExt::normalize) SimpleTerms.
-    fn as_triple_ref(&self) -> Option<TripleRef<'_>>;
-}
-
-impl SimpleTermTripleExt for [SimpleTerm<'_>; 3] {
-    fn as_triple_ref(&self) -> Option<TripleRef<'_>> {
-        let s = match self[0].as_term_ref()? {
-            TermRef::NamedNode(n) => SubjectRef::NamedNode(n),
-            TermRef::BlankNode(b) => SubjectRef::BlankNode(b),
             #[cfg(feature = "rdf-star")]
-            TermRef::Triple(t) => SubjectRef::Triple(t),
-            TermRef::Literal(_) => {
-                return None;
-            }
-        };
-        let TermRef::NamedNode(p) = self[1].as_term_ref()? else {
-            return None;
-        };
-        let o = self[2].as_term_ref()?;
-        Some(TripleRef::new(s, p, o))
+            SimpleTerm::Triple(triple) => Some(MownOxTerm::Triple(OxTriple::new(
+                triple[0].as_oxrdf()?.into_subject()?,
+                triple[1].as_oxrdf()?.into_predicate()?,
+                triple[2].as_oxrdf()?.into_owned(),
+            ))),
+            _ => None,
+        }
     }
 }
 
@@ -349,10 +321,28 @@ where
 {
     fn pass_as_triple_ref(self, f: F) -> Option<O> {
         let spo = self.to_spo();
-        // let simple_spo = spo.each_ref().map(|t| t.as_simple().normalized()); // only stable in 1.77
         let simple_spo = [&spo[0], &spo[1], &spo[2]].map(|t| t.as_simple().normalized());
-        let triple_ref = simple_spo.as_triple_ref()?;
-        Some(f(triple_ref))
+        let ox_spo = [
+            simple_spo[0].as_oxrdf()?,
+            simple_spo[1].as_oxrdf()?,
+            simple_spo[2].as_oxrdf()?,
+        ];
+        let ref_spo = [ox_spo[0].as_ref(), ox_spo[1].as_ref(), ox_spo[2].as_ref()];
+
+        let s = match ref_spo[0] {
+            TermRef::NamedNode(n) => SubjectRef::NamedNode(n),
+            TermRef::BlankNode(b) => SubjectRef::BlankNode(b),
+            #[cfg(feature = "rdf-star")]
+            TermRef::Triple(t) => SubjectRef::Triple(t),
+            TermRef::Literal(_) => {
+                return None;
+            }
+        };
+        let TermRef::NamedNode(p) = ref_spo[1] else {
+            return None;
+        };
+        let o = ref_spo[2];
+        Some(f(TripleRef::new(s, p, o)))
     }
 }
 
@@ -377,7 +367,7 @@ where
         let gname_ref = match &simple_g {
             None => GraphNameRef::DefaultGraph,
             Some(gn) => {
-                let term_ref = gn.as_term_ref()?;
+                let term_ref = gn.as_oxrdf()?.unwrap_ref()?;
                 match term_ref {
                     TermRef::NamedNode(n) => GraphNameRef::NamedNode(n),
                     TermRef::BlankNode(b) => GraphNameRef::BlankNode(b),
@@ -392,6 +382,60 @@ where
 
             f(q)
         })
+    }
+}
+
+/// This type is useful for exposing a Sophia [`SimpleTerm`] as an OxRDF [`TermRef`].
+///
+/// Most of the time, we can wrap a reference to the [`SimpleTerm`]'s data directly into the [`TermRef`],
+/// but for RDF-star triple terms, we still need to allocate a [`Triple`].
+#[derive(Clone, Debug)]
+pub enum MownOxTerm<'a> {
+    Ref(TermRef<'a>),
+    #[cfg(feature = "rdf-star")]
+    Triple(OxTriple),
+}
+
+impl<'a> MownOxTerm<'a> {
+    pub fn unwrap_ref(self) -> Option<TermRef<'a>> {
+        match self {
+            MownOxTerm::Ref(term_ref) => Some(term_ref),
+            #[cfg(feature = "rdf-star")]
+            MownOxTerm::Triple(_) => None,
+        }
+    }
+
+    pub fn as_ref(&self) -> TermRef<'_> {
+        match self {
+            MownOxTerm::Ref(term_ref) => *term_ref,
+            #[cfg(feature = "rdf-star")]
+            MownOxTerm::Triple(triple) => TermRef::Triple(triple),
+        }
+    }
+
+    pub fn into_owned(self) -> OxTerm {
+        match self {
+            MownOxTerm::Ref(term_ref) => term_ref.into_owned(),
+            #[cfg(feature = "rdf-star")]
+            MownOxTerm::Triple(triple) => OxTerm::Triple(Box::new(triple)),
+        }
+    }
+
+    pub fn into_subject(self) -> Option<Subject> {
+        match self {
+            MownOxTerm::Ref(TermRef::NamedNode(n)) => Some(Subject::NamedNode(n.into_owned())),
+            MownOxTerm::Ref(TermRef::BlankNode(b)) => Some(Subject::BlankNode(b.into_owned())),
+            #[cfg(feature = "rdf-star")]
+            MownOxTerm::Triple(triple) => Some(Subject::Triple(Box::new(triple))),
+            _ => None,
+        }
+    }
+
+    pub fn into_predicate(self) -> Option<NamedNode> {
+        match self {
+            MownOxTerm::Ref(TermRef::NamedNode(n)) => Some(n.into_owned()),
+            _ => None,
+        }
     }
 }
 
@@ -413,7 +457,7 @@ mod test {
         assert_eq!(t.kind(), TermKind::Iri);
         assert_eq!(&t.iri().unwrap(), value);
 
-        assert_eq!(t.as_simple().as_term_ref().unwrap(), t);
+        assert_eq!(t.as_simple().as_oxrdf().unwrap().as_ref(), t);
     }
 
     #[test]
@@ -428,7 +472,7 @@ mod test {
         assert_eq!(t.kind(), TermKind::BlankNode);
         assert_eq!(&t.bnode_id().unwrap(), bnid);
 
-        assert_eq!(t.as_simple().as_term_ref().unwrap(), t);
+        assert_eq!(t.as_simple().as_oxrdf().unwrap().as_ref(), t);
     }
 
     #[test]
@@ -445,7 +489,7 @@ mod test {
         assert_eq!(t.lexical_form().unwrap(), value);
         assert_eq!(t.datatype(), xsd::string.iri());
 
-        assert_eq!(t.as_simple().as_term_ref().unwrap(), t);
+        assert_eq!(t.as_simple().as_oxrdf().unwrap().as_ref(), t);
     }
 
     #[test]
@@ -465,7 +509,7 @@ mod test {
         assert_eq!(t.lexical_form().unwrap(), value);
         assert_eq!(t.datatype(), xsd::integer.iri());
 
-        assert_eq!(t.as_simple().as_term_ref().unwrap(), t);
+        assert_eq!(t.as_simple().as_oxrdf().unwrap().as_ref(), t);
     }
 
     #[test]
@@ -474,7 +518,7 @@ mod test {
         assert_consistent_term_impl(&t);
         assert_consistent_term_impl(&t.as_ref());
 
-        assert_eq!(t.as_simple().as_term_ref().unwrap(), t.as_ref());
+        assert_eq!(t.as_simple().as_oxrdf().unwrap().as_ref(), t.as_ref());
     }
 
     #[cfg(feature = "rdf-star")]
@@ -497,7 +541,18 @@ mod test {
         assert!(t.triple().unwrap().p().is_iri());
         assert!(t.triple().unwrap().o().is_literal());
 
-        // assert_eq!(t.as_simple().as_term_ref().unwrap(), t); // TODO uncomment when #884 is solved
+        assert_eq!(t.as_simple().as_oxrdf().unwrap().as_ref(), t);
+    }
+
+    #[cfg(not(feature = "rdf-star"))]
+    #[test]
+    fn triple_term() {
+        let t = SimpleTerm::from_triple([
+            IriRef::new_unchecked("tag:s"),
+            IriRef::new_unchecked("tag:p"),
+            IriRef::new_unchecked("tag:o"),
+        ]);
+        assert!(t.as_oxrdf().is_none());
     }
 
     #[test]
