@@ -16,3 +16,6 @@ pub use parser::{FromReadRdfXmlReader, RdfXmlParser};
 #[cfg(feature = "async-tokio")]
 pub use serializer::ToTokioAsyncWriteRdfXmlWriter;
 pub use serializer::{RdfXmlSerializer, ToWriteRdfXmlWriter};
+
+#[cfg(feature = "sophia")]
+pub mod sophia;
