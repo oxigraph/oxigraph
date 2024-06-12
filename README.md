@@ -53,10 +53,23 @@ The library layers in Oxigraph. The elements above depend on the elements below:
 
 A preliminary benchmark [is provided](bench/README.md). There is also [a document describing Oxigraph technical architecture](https://github.com/oxigraph/oxigraph/wiki/Architecture).
 
+## Building
+
 When cloning this codebase, don't forget to clone the submodules using
 `git clone --recursive https://github.com/oxigraph/oxigraph.git` to clone the repository including submodules or
 `git submodule update --init` to add the submodules to the already cloned repository.
 
+When building on OpenBSD, libclang must be available for
+RocksDB. Setting the LIBCLANG_PATH environment variable will ensure it
+is found. For example:
+
+```
+pkg_ad llvm
+export LIBCLANG_PATH="/usr/local/llvm16/lib/libclang.so.0.0"
+```
+
+Running the test suite may require more memory or other resources than
+available by default limits in OpenBSD.
 
 ## Help
 

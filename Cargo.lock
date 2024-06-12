@@ -1069,6 +1069,7 @@ dependencies = [
  "json-event-parser",
  "libc",
  "md-5",
+ "openssl-sys",
  "oxhttp",
  "oxilangtag",
  "oxiri",
