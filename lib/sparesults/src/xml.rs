@@ -5,6 +5,7 @@ use oxrdf::vocab::rdf;
 use oxrdf::*;
 use quick_xml::escape::unescape;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::reader::Config;
 use quick_xml::{Decoder, Error, Reader, Writer};
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, Read, Write};
@@ -228,8 +229,7 @@ pub enum FromReadXmlQueryResultsReader<R: Read> {
 impl<R: Read> FromReadXmlQueryResultsReader<R> {
     pub fn read(read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = Reader::from_reader(BufReader::new(read));
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
+        XmlInnerQueryResultsReader::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
         let mut inner = XmlInnerQueryResultsReader {
             state: ResultsState::Start,
@@ -293,8 +293,7 @@ pub enum FromTokioAsyncReadXmlQueryResultsReader<R: AsyncRead + Unpin> {
 impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlQueryResultsReader<R> {
     pub async fn read(read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = Reader::from_reader(AsyncBufReader::new(read));
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
+        XmlInnerQueryResultsReader::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
         let mut inner = XmlInnerQueryResultsReader {
             state: ResultsState::Start,
@@ -370,8 +369,7 @@ impl<'a> FromSliceXmlQueryResultsReader<'a> {
 
     fn do_read(slice: &'a [u8]) -> Result<Self, QueryResultsParseError> {
         let mut reader = Reader::from_reader(slice);
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
+        XmlInnerQueryResultsReader::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
         let mut inner = XmlInnerQueryResultsReader {
             state: ResultsState::Start,
@@ -455,6 +453,11 @@ struct XmlInnerQueryResultsReader {
 }
 
 impl XmlInnerQueryResultsReader {
+    fn set_options(config: &mut Config) {
+        config.trim_text(true);
+        config.expand_empty_elements = true;
+    }
+
     pub fn read_event(
         &mut self,
         event: Event<'_>,
@@ -908,7 +911,6 @@ fn map_xml_error(error: Error) -> io::Error {
         Error::Io(error) => {
             Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))
         }
-        Error::UnexpectedEof(_) => io::Error::new(io::ErrorKind::UnexpectedEof, error),
         _ => io::Error::new(io::ErrorKind::InvalidData, error),
     }
 }
