@@ -4,11 +4,12 @@ use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term, Triple};
-use quick_xml::escape::unescape_with;
+use quick_xml::escape::{resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
-use quick_xml::name::{LocalName, QName, ResolveResult};
-use quick_xml::{Error, NsReader, Writer};
+use quick_xml::name::{LocalName, PrefixDeclaration, PrefixIter, QName, ResolveResult};
+use quick_xml::{Decoder, Error, NsReader, Writer};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Read};
 use std::str;
@@ -199,7 +200,7 @@ impl RdfXmlParser {
 
     fn parse<T>(&self, reader: T) -> RdfXmlReader<T> {
         let mut reader = NsReader::from_reader(reader);
-        reader.expand_empty_elements(true);
+        reader.config_mut().expand_empty_elements = true;
         RdfXmlReader {
             reader,
             state: vec![RdfXmlState::Doc {
@@ -267,6 +268,67 @@ impl<R: Read> Iterator for FromReadRdfXmlReader<R> {
 }
 
 impl<R: Read> FromReadRdfXmlReader<R> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxrdfxml::RdfXmlParser;
+    ///
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+    ///  <rdf:Description rdf:about="http://example.com/foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
+    ///    <schema:name>Foo</schema:name>
+    ///  </rdf:Description>
+    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+    /// </rdf:RDF>"#;
+    ///
+    /// let mut reader = RdfXmlParser::new().parse_read(file.as_ref());
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [
+    ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+    ///         ("schema", "http://schema.org/")
+    ///     ]
+    /// ); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
+        RdfXmlPrefixesIter {
+            inner: self.reader.reader.prefixes(),
+            decoder: self.reader.reader.decoder(),
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxrdfxml::RdfXmlParser;
+    ///
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
+    ///  <rdf:Description rdf:about="foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
+    ///  </rdf:Description>
+    /// </rdf:RDF>"#;
+    ///
+    /// let mut reader = RdfXmlParser::new().parse_read(file.as_ref());
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        Some(self.reader.state.last()?.base_iri()?.as_str())
+    }
+
     /// The current byte position in the input data.
     pub fn buffer_position(&self) -> usize {
         self.reader.reader.buffer_position()
@@ -336,6 +398,73 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
                 return Some(Err(e));
             }
         }
+    }
+
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxrdfxml::RdfXmlParser;
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+    ///  <rdf:Description rdf:about="http://example.com/foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
+    ///    <schema:name>Foo</schema:name>
+    ///  </rdf:Description>
+    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+    /// </rdf:RDF>"#;
+    ///
+    /// let mut reader = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    ///
+    /// reader.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [
+    ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+    ///         ("schema", "http://schema.org/")
+    ///     ]
+    /// ); // There are now prefixes
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
+        RdfXmlPrefixesIter {
+            inner: self.reader.reader.prefixes(),
+            decoder: self.reader.reader.decoder(),
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxrdfxml::RdfXmlParser;
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
+    ///  <rdf:Description rdf:about="foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
+    ///  </rdf:Description>
+    /// </rdf:RDF>"#;
+    ///
+    /// let mut reader = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        Some(self.reader.state.last()?.base_iri()?.as_str())
     }
 
     /// The current byte position in the input data.
@@ -408,6 +537,67 @@ impl<'a> Iterator for FromSliceRdfXmlReader<'a> {
 }
 
 impl<'a> FromSliceRdfXmlReader<'a> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxrdfxml::RdfXmlParser;
+    ///
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+    ///  <rdf:Description rdf:about="http://example.com/foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
+    ///    <schema:name>Foo</schema:name>
+    ///  </rdf:Description>
+    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+    /// </rdf:RDF>"#;
+    ///
+    /// let mut reader = RdfXmlParser::new().parse_slice(file);
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [
+    ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+    ///         ("schema", "http://schema.org/")
+    ///     ]
+    /// ); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
+        RdfXmlPrefixesIter {
+            inner: self.reader.reader.prefixes(),
+            decoder: self.reader.reader.decoder(),
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxrdfxml::RdfXmlParser;
+    ///
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
+    ///  <rdf:Description rdf:about="foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
+    ///  </rdf:Description>
+    /// </rdf:RDF>"#;
+    ///
+    /// let mut reader = RdfXmlParser::new().parse_slice(file);
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        Some(self.reader.state.last()?.base_iri()?.as_str())
+    }
+
     /// The current byte position in the input data.
     pub fn buffer_position(&self) -> usize {
         self.reader.reader.buffer_position()
@@ -420,6 +610,53 @@ impl<'a> FromSliceRdfXmlReader<'a> {
             .reader
             .read_event_into(&mut self.reader_buffer)?;
         self.reader.parse_event(event, &mut self.results)
+    }
+}
+
+/// Iterator on the file prefixes.
+///
+/// See [`FromReadRdfXmlReader::prefixes`].
+pub struct RdfXmlPrefixesIter<'a> {
+    inner: PrefixIter<'a>,
+    decoder: Decoder,
+}
+
+impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
+    type Item = (&'a str, &'a str);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (key, value) = self.inner.next()?;
+            return Some((
+                match key {
+                    PrefixDeclaration::Default => "",
+                    PrefixDeclaration::Named(name) => {
+                        let Ok(Cow::Borrowed(name)) = self.decoder.decode(name) else {
+                            continue;
+                        };
+                        let Ok(Cow::Borrowed(name)) = unescape_with(name, |_| None) else {
+                            continue;
+                        };
+                        name
+                    }
+                },
+                {
+                    let Ok(Cow::Borrowed(value)) = self.decoder.decode(value.0) else {
+                        continue;
+                    };
+                    let Ok(Cow::Borrowed(value)) = unescape_with(value, |_| None) else {
+                        continue;
+                    };
+                    value
+                },
+            ));
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
 
@@ -1309,7 +1546,7 @@ impl<R> RdfXmlReader<R> {
     }
 
     fn resolve_entity(&self, e: &str) -> Option<&str> {
-        self.custom_entities.get(e).map(String::as_str)
+        resolve_xml_entity(e).or_else(|| self.custom_entities.get(e).map(String::as_str))
     }
 }
 
