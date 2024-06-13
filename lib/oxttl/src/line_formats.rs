@@ -261,14 +261,16 @@ impl RuleRecognizer for NQuadsRecognizer {
 }
 
 impl NQuadsRecognizer {
-    pub fn new_parser(
+    pub fn new_parser<B>(
+        data: B,
         with_graph_name: bool,
         #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
         unchecked: bool,
-    ) -> Parser<Self> {
+    ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
                 N3Lexer::new(N3LexerMode::NTriples, unchecked),
+                data,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,

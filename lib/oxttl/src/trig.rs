@@ -5,7 +5,9 @@ use crate::lexer::N3Lexer;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError};
+use crate::toolkit::{
+    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
+};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
@@ -171,6 +173,47 @@ impl TriGParser {
         }
     }
 
+    /// Parses a TriG file from a byte slice.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxttl::TriGParser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" .
+    /// <bar> a schema:Person ;
+    ///     schema:name "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for quad in TriGParser::new().parse_slice(file) {
+    ///     let quad = quad?;
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn parse_slice(self, slice: &[u8]) -> FromSliceTriGReader<'_> {
+        FromSliceTriGReader {
+            inner: TriGRecognizer::new_parser(
+                slice,
+                false,
+                #[cfg(feature = "rdf-star")]
+                self.with_quoted_triples,
+                self.unchecked,
+                self.base,
+                self.prefixes,
+            )
+            .into_iter(),
+        }
+    }
+
     /// Allows to parse a TriG file by using a low-level API.
     ///
     /// Count the number of people:
@@ -212,6 +255,7 @@ impl TriGParser {
     pub fn parse(self) -> LowLevelTriGReader {
         LowLevelTriGReader {
             parser: TriGRecognizer::new_parser(
+                Vec::new(),
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -428,6 +472,104 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
     }
 }
 
+/// Parses a TriG file from a byte slice. Can be built using [`TriGParser::parse_slice`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
+/// use oxttl::TriGParser;
+///
+/// let file = br#"@base <http://example.com/> .
+/// @prefix schema: <http://schema.org/> .
+/// <foo> a schema:Person ;
+///     schema:name "Foo" .
+/// <bar> a schema:Person ;
+///     schema:name "Bar" ."#;
+///
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let mut count = 0;
+/// for quad in TriGParser::new().parse_slice(file) {
+///     let quad = quad?;
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///         count += 1;
+///     }
+/// }
+/// assert_eq!(2, count);
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
+#[must_use]
+pub struct FromSliceTriGReader<'a> {
+    inner: FromSliceIterator<'a, TriGRecognizer>,
+}
+
+impl<'a> FromSliceTriGReader<'a> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::TriGParser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = TriGParser::new().parse_slice(file);
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
+        TriGPrefixesIter {
+            inner: self.inner.parser.context.prefixes(),
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxttl::TriGParser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = TriGParser::new().parse_slice(file);
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        self.inner
+            .parser
+            .context
+            .lexer_options
+            .base_iri
+            .as_ref()
+            .map(Iri::as_str)
+    }
+}
+
+impl<'a> Iterator for FromSliceTriGReader<'a> {
+    type Item = Result<Quad, TurtleSyntaxError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
 /// Parses a TriG file by using a low-level API. Can be built using [`TriGParser::parse`].
 ///
 /// Count the number of people:
@@ -467,7 +609,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTriGReader<R> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGReader {
-    parser: Parser<TriGRecognizer>,
+    parser: Parser<Vec<u8>, TriGRecognizer>,
 }
 
 impl LowLevelTriGReader {

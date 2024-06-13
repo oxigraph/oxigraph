@@ -951,16 +951,18 @@ impl RuleRecognizer for TriGRecognizer {
 }
 
 impl TriGRecognizer {
-    pub fn new_parser(
+    pub fn new_parser<B>(
+        data: B,
         with_graph_name: bool,
         #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
         unchecked: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
-    ) -> Parser<Self> {
+    ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
                 N3Lexer::new(N3LexerMode::Turtle, unchecked),
+                data,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,

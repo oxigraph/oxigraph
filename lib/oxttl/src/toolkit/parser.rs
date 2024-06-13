@@ -1,6 +1,7 @@
 use crate::toolkit::error::{TurtleParseError, TurtleSyntaxError};
 use crate::toolkit::lexer::{Lexer, TokenRecognizer};
 use std::io::Read;
+use std::ops::Deref;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
 
@@ -44,16 +45,16 @@ impl<S: Into<String>> From<S> for RuleRecognizerError {
 }
 
 #[allow(clippy::partial_pub_fields)]
-pub struct Parser<RR: RuleRecognizer> {
-    lexer: Lexer<RR::TokenRecognizer>,
+pub struct Parser<B, RR: RuleRecognizer> {
+    lexer: Lexer<B, RR::TokenRecognizer>,
     state: Option<RR>,
     pub context: RR::Context,
     results: Vec<RR::Output>,
     errors: Vec<RuleRecognizerError>,
 }
 
-impl<RR: RuleRecognizer> Parser<RR> {
-    pub fn new(lexer: Lexer<RR::TokenRecognizer>, recognizer: RR, context: RR::Context) -> Self {
+impl<B, RR: RuleRecognizer> Parser<B, RR> {
+    pub fn new(lexer: Lexer<B, RR::TokenRecognizer>, recognizer: RR, context: RR::Context) -> Self {
         Self {
             lexer,
             state: Some(recognizer),
@@ -62,16 +63,9 @@ impl<RR: RuleRecognizer> Parser<RR> {
             errors: vec![],
         }
     }
+}
 
-    pub fn extend_from_slice(&mut self, other: &[u8]) {
-        self.lexer.extend_from_slice(other)
-    }
-
-    #[inline]
-    pub fn end(&mut self) {
-        self.lexer.end()
-    }
-
+impl<B: Deref<Target = [u8]>, RR: RuleRecognizer> Parser<B, RR> {
     #[inline]
     pub fn is_end(&self) -> bool {
         self.state.is_none() && self.results.is_empty() && self.errors.is_empty()
@@ -120,6 +114,17 @@ impl<RR: RuleRecognizer> Parser<RR> {
             }
         }
     }
+}
+
+impl<RR: RuleRecognizer> Parser<Vec<u8>, RR> {
+    #[inline]
+    pub fn end(&mut self) {
+        self.lexer.end()
+    }
+
+    pub fn extend_from_slice(&mut self, other: &[u8]) {
+        self.lexer.extend_from_slice(other)
+    }
 
     pub fn parse_read<R: Read>(self, read: R) -> FromReadIterator<R, RR> {
         FromReadIterator { read, parser: self }
@@ -134,10 +139,19 @@ impl<RR: RuleRecognizer> Parser<RR> {
     }
 }
 
+impl<'a, RR: RuleRecognizer> IntoIterator for Parser<&'a [u8], RR> {
+    type Item = Result<RR::Output, TurtleSyntaxError>;
+    type IntoIter = FromSliceIterator<'a, RR>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FromSliceIterator { parser: self }
+    }
+}
+
 #[allow(clippy::partial_pub_fields)]
 pub struct FromReadIterator<R: Read, RR: RuleRecognizer> {
     read: R,
-    pub parser: Parser<RR>,
+    pub parser: Parser<Vec<u8>, RR>,
 }
 
 impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
@@ -159,7 +173,7 @@ impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
 #[cfg(feature = "async-tokio")]
 pub struct FromTokioAsyncReadIterator<R: AsyncRead + Unpin, RR: RuleRecognizer> {
     pub read: R,
-    pub parser: Parser<RR>,
+    pub parser: Parser<Vec<u8>, RR>,
 }
 
 #[cfg(feature = "async-tokio")]
@@ -179,5 +193,17 @@ impl<R: AsyncRead + Unpin, RR: RuleRecognizer> FromTokioAsyncReadIterator<R, RR>
             }
         }
         None
+    }
+}
+
+pub struct FromSliceIterator<'a, RR: RuleRecognizer> {
+    pub parser: Parser<&'a [u8], RR>,
+}
+
+impl<'a, RR: RuleRecognizer> Iterator for FromSliceIterator<'a, RR> {
+    type Item = Result<RR::Output, TurtleSyntaxError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.parser.read_next()
     }
 }

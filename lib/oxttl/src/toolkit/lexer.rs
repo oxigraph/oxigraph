@@ -3,7 +3,7 @@ use memchr::{memchr2, memchr2_iter};
 use std::borrow::Cow;
 use std::cmp::min;
 use std::io::{self, Read};
-use std::ops::{Range, RangeInclusive};
+use std::ops::{Deref, Range, RangeInclusive};
 use std::str;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -49,9 +49,9 @@ impl<S: Into<String>> From<(usize, S)> for TokenRecognizerError {
     }
 }
 
-pub struct Lexer<R: TokenRecognizer> {
+pub struct Lexer<B, R: TokenRecognizer> {
     parser: R,
-    data: Vec<u8>,
+    data: B,
     position: Position,
     previous_position: Position, // Lexer position before the last emitted token
     is_ending: bool,
@@ -69,9 +69,10 @@ struct Position {
     global_line: u64,
 }
 
-impl<R: TokenRecognizer> Lexer<R> {
+impl<B, R: TokenRecognizer> Lexer<B, R> {
     pub fn new(
         parser: R,
+        data: B,
         min_buffer_size: usize,
         max_buffer_size: usize,
         is_line_jump_whitespace: bool,
@@ -79,7 +80,7 @@ impl<R: TokenRecognizer> Lexer<R> {
     ) -> Self {
         Self {
             parser,
-            data: Vec::new(),
+            data,
             position: Position {
                 line_start_buffer_offset: 0,
                 buffer_offset: 0,
@@ -99,7 +100,9 @@ impl<R: TokenRecognizer> Lexer<R> {
             line_comment_start,
         }
     }
+}
 
+impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
     pub fn extend_from_slice(&mut self, other: &[u8]) {
         self.shrink_data();
         self.data.extend_from_slice(other);
@@ -162,6 +165,20 @@ impl<R: TokenRecognizer> Lexer<R> {
         Ok(())
     }
 
+    fn shrink_data(&mut self) {
+        if self.position.line_start_buffer_offset > 0 {
+            self.data
+                .copy_within(self.position.line_start_buffer_offset.., 0);
+            self.data
+                .truncate(self.data.len() - self.position.line_start_buffer_offset);
+            self.position.buffer_offset -= self.position.line_start_buffer_offset;
+            self.position.line_start_buffer_offset = 0;
+            self.previous_position = self.position;
+        }
+    }
+}
+
+impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
     #[allow(clippy::unwrap_in_result)]
     pub fn read_next(
         &mut self,
@@ -383,18 +400,6 @@ impl<R: TokenRecognizer> Lexer<R> {
             }
         }
         Some(())
-    }
-
-    fn shrink_data(&mut self) {
-        if self.position.line_start_buffer_offset > 0 {
-            self.data
-                .copy_within(self.position.line_start_buffer_offset.., 0);
-            self.data
-                .truncate(self.data.len() - self.position.line_start_buffer_offset);
-            self.position.buffer_offset -= self.position.line_start_buffer_offset;
-            self.position.line_start_buffer_offset = 0;
-            self.previous_position = self.position;
-        }
     }
 
     fn find_number_of_line_jumps_and_start_of_last_line(bytes: &[u8]) -> (u64, usize) {

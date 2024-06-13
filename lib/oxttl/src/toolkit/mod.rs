@@ -10,4 +10,6 @@ pub use self::error::{TextPosition, TurtleParseError, TurtleSyntaxError};
 pub use self::lexer::{Lexer, TokenRecognizer, TokenRecognizerError};
 #[cfg(feature = "async-tokio")]
 pub use self::parser::FromTokioAsyncReadIterator;
-pub use self::parser::{FromReadIterator, Parser, RuleRecognizer, RuleRecognizerError};
+pub use self::parser::{
+    FromReadIterator, FromSliceIterator, Parser, RuleRecognizer, RuleRecognizerError,
+};
