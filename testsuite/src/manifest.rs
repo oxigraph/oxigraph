@@ -24,10 +24,10 @@ pub struct Test {
 impl fmt::Display for Test {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.kind)?;
-        for name in &self.name {
+        if let Some(name) = &self.name {
             write!(f, " named \"{name}\"")?;
         }
-        for comment in &self.comment {
+        if let Some(comment) = &self.comment {
             write!(f, " with comment \"{comment}\"")?;
         }
         if let Some(action) = &self.action {
@@ -36,13 +36,13 @@ impl fmt::Display for Test {
         if let Some(query) = &self.query {
             write!(f, " on query {query}")?;
         }
-        for data in &self.data {
+        if let Some(data) = &self.data {
             write!(f, " with data {data}")?;
         }
         for (_, data) in &self.graph_data {
             write!(f, " and graph data {data}")?;
         }
-        for result in &self.result {
+        if let Some(result) = &self.result {
             write!(f, " and expected result {result}")?;
         }
         Ok(())
