@@ -28,18 +28,19 @@ pub enum N3Token<'a> {
     PlainKeyword(&'a str),
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 pub enum N3LexerMode {
     NTriples,
     Turtle,
     N3,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct N3LexerOptions {
     pub base_iri: Option<Iri<String>>,
 }
 
+#[derive(Clone)]
 pub struct N3Lexer {
     mode: N3LexerMode,
     unchecked: bool,

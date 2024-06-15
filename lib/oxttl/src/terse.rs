@@ -11,6 +11,7 @@ use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Su
 use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct TriGRecognizer {
     stack: Vec<TriGState>,
     cur_subject: Vec<Subject>,
@@ -18,7 +19,7 @@ pub struct TriGRecognizer {
     cur_object: Vec<Term>,
     cur_graph: GraphName,
 }
-
+#[derive(Clone)]
 #[allow(clippy::partial_pub_fields)]
 pub struct TriGRecognizerContext {
     pub lexer_options: N3LexerOptions,
@@ -1008,7 +1009,7 @@ impl TriGRecognizer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TriGState {
     TriGDoc,
     ExpectDot,

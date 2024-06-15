@@ -49,6 +49,7 @@ impl<S: Into<String>> From<(usize, S)> for TokenRecognizerError {
     }
 }
 
+#[derive(Clone)]
 pub struct Lexer<R: TokenRecognizer> {
     parser: R,
     data: Vec<u8>,

@@ -35,7 +35,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct NTriplesParser {
     unchecked: bool,
@@ -297,6 +297,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNTriplesReader<R> {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+#[derive(Clone)]
 pub struct LowLevelNTriplesReader {
     parser: Parser<NQuadsRecognizer>,
 }

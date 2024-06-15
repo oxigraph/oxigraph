@@ -4,15 +4,19 @@
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError};
+use crate::toolkit::{
+    get_turtle_file_chunks, FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError,
+};
 #[cfg(feature = "async-tokio")]
 use crate::trig::ToTokioAsyncWriteTriGWriter;
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
+use std::num::NonZero;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -44,7 +48,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct TurtleParser {
     unchecked: bool,
@@ -218,6 +222,98 @@ impl TurtleParser {
                 self.prefixes,
             ),
         }
+    }
+}
+
+pub struct ParallelTurtleParser {
+    parser: TurtleParser,
+}
+
+impl ParallelTurtleParser {
+    pub fn new() -> Self {
+        ParallelTurtleParser {
+            parser:TurtleParser::new()
+        }
+    }
+
+    /// Assumes the file is valid to make parsing faster.
+    ///
+    /// It will skip some validations.
+    ///
+    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    #[inline]
+    #[must_use]
+    pub fn unchecked(mut self) -> Self {
+        self.parser = self.parser.unchecked();
+        self
+    }
+
+
+    #[allow(clippy::unwrap_in_result)]
+    pub fn par_parse_slice(mut self, slice: &[u8]) -> Result<Vec<Vec<Triple>>, TurtleParseError> {
+        const MIN_PAR_SIZE: usize = 10_000;
+        const INCREMENT: usize = 1_000;
+
+        let slice_len = slice.len();
+        if slice_len < MIN_PAR_SIZE {
+            return self.fallback_parse(slice);
+        }
+
+        let threads = std::thread::available_parallelism()
+            .unwrap_or(NonZero::new(1).unwrap())
+            .get();
+        let chunks = get_turtle_file_chunks(slice, threads, self.parser.clone());
+
+        let mut end = INCREMENT;
+        let mut prefix_parser = self.parser.clone().parse();
+        prefix_parser.extend_from_slice(&slice[0..end]);
+        let mut found_first_triple = false;
+        while !found_first_triple && slice_len >= (end + INCREMENT) {
+            if let Some(r) = prefix_parser.read_next() {
+                r?;
+                found_first_triple = true;
+            } else {
+                prefix_parser.extend_from_slice(&slice[end..end + INCREMENT]);
+                end += INCREMENT;
+            }
+        }
+        let prefixes: Vec<_> = prefix_parser.prefixes().collect();
+        for (p, iri) in prefixes {
+            // Already know this is a valid IRI, or, if unchecked should not throw error
+            self.parser = self.parser.with_prefix(p, iri).unwrap();
+        }
+        let all_result_triples: Vec<Result<_, TurtleParseError>> = chunks
+            .into_par_iter()
+            .map(|(start, end)| {
+                let parser = self.parser.clone();
+                let mut triples = Vec::with_capacity((end - start) / 200);
+
+                for t in parser.parse_read(&slice[start..end]) {
+                    triples.push(t?)
+                }
+                Ok(triples)
+            })
+            .collect();
+        let mut all_triples = Vec::with_capacity(all_result_triples.len());
+        for r in all_result_triples {
+            all_triples.push(r?);
+        }
+        Ok(all_triples)
+    }
+
+    fn fallback_parse(self, slice: &[u8]) -> Result<Vec<Vec<Triple>>, TurtleParseError> {
+        let r = self.parser.parse_read(slice);
+        let mut triples = vec![];
+        for t in r {
+            triples.push(t?);
+        }
+        Ok(vec![triples])
+    }
+}
+
+impl Default for ParallelTurtleParser {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -464,6 +560,8 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
+
+#[derive(Clone)]
 pub struct LowLevelTurtleReader {
     parser: Parser<TriGRecognizer>,
 }
