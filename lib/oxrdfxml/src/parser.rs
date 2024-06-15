@@ -161,6 +161,42 @@ impl RdfXmlParser {
         }
     }
 
+    /// Parses a RDF/XML file from a byte slice.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxrdfxml::RdfXmlParser;
+    ///
+    /// let file = br#"<?xml version="1.0"?>
+    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+    ///  <rdf:Description rdf:about="http://example.com/foo">
+    ///    <rdf:type rdf:resource="http://schema.org/Person" />
+    ///    <schema:name>Foo</schema:name>
+    ///  </rdf:Description>
+    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+    /// </rdf:RDF>"#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for triple in RdfXmlParser::new().parse_slice(file) {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn parse_slice(self, slice: &[u8]) -> FromSliceRdfXmlReader<'_> {
+        FromSliceRdfXmlReader {
+            results: Vec::new(),
+            reader: self.parse(slice),
+            reader_buffer: Vec::default(),
+        }
+    }
+
     fn parse<T>(&self, reader: T) -> RdfXmlReader<T> {
         let mut reader = NsReader::from_reader(reader);
         reader.expand_empty_elements(true);
@@ -314,6 +350,75 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
             .reader
             .read_event_into_async(&mut self.reader_buffer)
             .await?;
+        self.reader.parse_event(event, &mut self.results)
+    }
+}
+
+/// Parses a RDF/XML file from a byte slice. Can be built using [`RdfXmlParser::parse_slice`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
+/// use oxrdfxml::RdfXmlParser;
+///
+/// let file = br#"<?xml version="1.0"?>
+/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
+///  <rdf:Description rdf:about="http://example.com/foo">
+///    <rdf:type rdf:resource="http://schema.org/Person" />
+///    <schema:name>Foo</schema:name>
+///  </rdf:Description>
+///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
+/// </rdf:RDF>"#;
+///
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let mut count = 0;
+/// for triple in RdfXmlParser::new().parse_slice(file) {
+///     let triple = triple?;
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///         count += 1;
+///     }
+/// }
+/// assert_eq!(2, count);
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
+#[must_use]
+pub struct FromSliceRdfXmlReader<'a> {
+    results: Vec<Triple>,
+    reader: RdfXmlReader<&'a [u8]>,
+    reader_buffer: Vec<u8>,
+}
+
+impl<'a> Iterator for FromSliceRdfXmlReader<'a> {
+    type Item = Result<Triple, RdfXmlSyntaxError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(triple) = self.results.pop() {
+                return Some(Ok(triple));
+            } else if self.reader.is_end {
+                return None;
+            }
+            if let Err(RdfXmlParseError::Syntax(e)) = self.parse_step() {
+                // I/O errors can't happen
+                return Some(Err(e));
+            }
+        }
+    }
+}
+
+impl<'a> FromSliceRdfXmlReader<'a> {
+    /// The current byte position in the input data.
+    pub fn buffer_position(&self) -> usize {
+        self.reader.reader.buffer_position()
+    }
+
+    fn parse_step(&mut self) -> Result<(), RdfXmlParseError> {
+        self.reader_buffer.clear();
+        let event = self
+            .reader
+            .reader
+            .read_event_into(&mut self.reader_buffer)?;
         self.reader.parse_event(event, &mut self.results)
     }
 }

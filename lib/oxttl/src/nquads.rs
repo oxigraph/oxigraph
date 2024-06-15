@@ -4,7 +4,9 @@
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError};
+use crate::toolkit::{
+    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
+};
 use oxrdf::{Quad, QuadRef};
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
@@ -135,6 +137,42 @@ impl NQuadsParser {
         }
     }
 
+    /// Parses a N-Quads file from a byte slice.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::{NamedNodeRef, vocab::rdf};
+    /// use oxttl::NQuadsParser;
+    ///
+    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/foo> <http://schema.org/name> "Foo" .
+    /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for quad in NQuadsParser::new().parse_slice(file) {
+    ///     let quad = quad?;
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn parse_slice(self, slice: &[u8]) -> FromSliceNQuadsReader<'_> {
+        FromSliceNQuadsReader {
+            inner: NQuadsRecognizer::new_parser(
+                slice,
+                true,
+                #[cfg(feature = "rdf-star")]
+                self.with_quoted_triples,
+                self.unchecked,
+            )
+            .into_iter(),
+        }
+    }
+
     /// Allows to parse a N-Quads file by using a low-level API.
     ///
     /// Count the number of people:
@@ -175,6 +213,7 @@ impl NQuadsParser {
     pub fn parse(self) -> LowLevelNQuadsReader {
         LowLevelNQuadsReader {
             parser: NQuadsRecognizer::new_parser(
+                Vec::new(),
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -261,6 +300,42 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
     }
 }
 
+/// Parses a N-Triples file from a byte slice. Can be built using [`NTriplesParser::parse_slice`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::{NamedNodeRef, vocab::rdf};
+/// use oxttl::NQuadsParser;
+///
+/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/foo> <http://schema.org/name> "Foo" .
+/// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
+///
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let mut count = 0;
+/// for quad in NQuadsParser::new().parse_slice(file) {
+///     let quad = quad?;
+///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///         count += 1;
+///     }
+/// }
+/// assert_eq!(2, count);
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
+#[must_use]
+pub struct FromSliceNQuadsReader<'a> {
+    inner: FromSliceIterator<'a, NQuadsRecognizer>,
+}
+
+impl<'a> Iterator for FromSliceNQuadsReader<'a> {
+    type Item = Result<Quad, TurtleSyntaxError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
 /// Parses a N-Quads file by using a low-level API. Can be built using [`NQuadsParser::parse`].
 ///
 /// Count the number of people:
@@ -298,7 +373,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelNQuadsReader {
-    parser: Parser<NQuadsRecognizer>,
+    parser: Parser<Vec<u8>, NQuadsRecognizer>,
 }
 
 impl LowLevelNQuadsReader {

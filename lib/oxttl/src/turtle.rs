@@ -173,6 +173,47 @@ impl TurtleParser {
         }
     }
 
+    /// Parses Turtle file from a byte slice.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxttl::TurtleParser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" .
+    /// <bar> a schema:Person ;
+    ///     schema:name "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for triple in TurtleParser::new().parse_slice(file) {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn parse_slice(self, slice: &[u8]) -> FromSliceTurtleReader<'_> {
+        FromSliceTurtleReader {
+            inner: TriGRecognizer::new_parser(
+                slice,
+                false,
+                #[cfg(feature = "rdf-star")]
+                self.with_quoted_triples,
+                self.unchecked,
+                self.base,
+                self.prefixes,
+            )
+            .into_iter(),
+        }
+    }
+
     /// Allows to parse a Turtle file by using a low-level API.
     ///
     /// Count the number of people:
@@ -214,6 +255,7 @@ impl TurtleParser {
     pub fn parse(self) -> LowLevelTurtleReader {
         LowLevelTurtleReader {
             parser: TriGRecognizer::new_parser(
+                Vec::new(),
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -527,6 +569,104 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     }
 }
 
+/// Parses a Turtle file from a byte slice. Can be built using [`TurtleParser::parse_slice`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNodeRef;
+/// use oxttl::TurtleParser;
+///
+/// let file = br#"@base <http://example.com/> .
+/// @prefix schema: <http://schema.org/> .
+/// <foo> a schema:Person ;
+///     schema:name "Foo" .
+/// <bar> a schema:Person ;
+///     schema:name "Bar" ."#;
+///
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+/// let mut count = 0;
+/// for triple in TurtleParser::new().parse_slice(file) {
+///     let triple = triple?;
+///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+///         count += 1;
+///     }
+/// }
+/// assert_eq!(2, count);
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
+#[must_use]
+pub struct FromSliceTurtleReader<'a> {
+    inner: FromSliceIterator<'a, TriGRecognizer>,
+}
+
+impl<'a> FromSliceTurtleReader<'a> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::TurtleParser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = TurtleParser::new().parse_slice(file);
+    /// assert!(reader.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
+        TurtlePrefixesIter {
+            inner: self.inner.parser.context.prefixes(),
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxttl::TurtleParser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = TurtleParser::new().parse_slice(file);
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        self.inner
+            .parser
+            .context
+            .lexer_options
+            .base_iri
+            .as_ref()
+            .map(Iri::as_str)
+    }
+}
+
+impl<'a> Iterator for FromSliceTurtleReader<'a> {
+    type Item = Result<Triple, TurtleSyntaxError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.inner.next()?.map(Into::into))
+    }
+}
+
 /// Parses a Turtle file by using a low-level API. Can be built using [`TurtleParser::parse`].
 ///
 /// Count the number of people:
@@ -568,7 +708,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 
 #[derive(Clone)]
 pub struct LowLevelTurtleReader {
-    parser: Parser<TriGRecognizer>,
+    parser: Parser<Vec<u8>, TriGRecognizer>,
 }
 
 impl LowLevelTurtleReader {

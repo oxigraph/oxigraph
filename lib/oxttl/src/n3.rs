@@ -4,7 +4,8 @@ use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3T
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
-    FromReadIterator, Lexer, Parser, RuleRecognizer, RuleRecognizerError, TurtleSyntaxError,
+    FromReadIterator, FromSliceIterator, Lexer, Parser, RuleRecognizer, RuleRecognizerError,
+    TurtleSyntaxError,
 };
 use crate::{TurtleParseError, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::{Iri, IriParseError};
@@ -323,6 +324,40 @@ impl N3Parser {
         }
     }
 
+    /// Parses a N3 file from a byte slice.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::NamedNode;
+    /// use oxttl::n3::{N3Parser, N3Term};
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" .
+    /// <bar> a schema:Person ;
+    ///     schema:name "Bar" ."#;
+    ///
+    /// let rdf_type = N3Term::NamedNode(NamedNode::new(
+    ///     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    /// )?);
+    /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
+    /// let mut count = 0;
+    /// for triple in N3Parser::new().parse_slice(file) {
+    ///     let triple = triple?;
+    ///     if triple.predicate == rdf_type && triple.object == schema_person {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn parse_slice(self, slice: &[u8]) -> FromSliceN3Reader<'_> {
+        FromSliceN3Reader {
+            inner: N3Recognizer::new_parser(slice, false, self.base, self.prefixes).into_iter(),
+        }
+    }
+
     /// Allows to parse a N3 file by using a low-level API.
     ///
     /// Count the number of people:
@@ -364,7 +399,7 @@ impl N3Parser {
     /// ```
     pub fn parse(self) -> LowLevelN3Reader {
         LowLevelN3Reader {
-            parser: N3Recognizer::new_parser(self.unchecked, self.base, self.prefixes),
+            parser: N3Recognizer::new_parser(Vec::new(), self.unchecked, self.base, self.prefixes),
         }
     }
 }
@@ -576,6 +611,105 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
     }
 }
 
+/// Parses a N3 file from a byte slice. Can be built using [`N3Parser::parse_slice`].
+///
+/// Count the number of people:
+/// ```
+/// use oxrdf::vocab::rdf;
+/// use oxrdf::NamedNode;
+/// use oxttl::n3::{N3Parser, N3Term};
+///
+/// let file = br#"@base <http://example.com/> .
+/// @prefix schema: <http://schema.org/> .
+/// <foo> a schema:Person ;
+///     schema:name "Foo" .
+/// <bar> a schema:Person ;
+///     schema:name "Bar" ."#;
+///
+/// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
+/// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
+/// let mut count = 0;
+/// for triple in N3Parser::new().parse_slice(file) {
+///     let triple = triple?;
+///     if triple.predicate == rdf_type && triple.object == schema_person {
+///         count += 1;
+///     }
+/// }
+/// assert_eq!(2, count);
+/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// ```
+#[must_use]
+pub struct FromSliceN3Reader<'a> {
+    inner: FromSliceIterator<'a, N3Recognizer>,
+}
+
+impl<'a> FromSliceN3Reader<'a> {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns (prefix name, prefix value) tuples.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = N3Parser::new().parse_slice(file);
+    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(
+    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     [("schema", "http://schema.org/")]
+    /// ); // There are now prefixes
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn prefixes(&self) -> N3PrefixesIter<'_> {
+        N3PrefixesIter {
+            inner: self.inner.parser.context.prefixes.iter(),
+        }
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// ```
+    /// use oxttl::N3Parser;
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" ."#;
+    ///
+    /// let mut reader = N3Parser::new().parse_slice(file);
+    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    ///
+    /// reader.next().unwrap()?; // We read the first triple
+    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn base_iri(&self) -> Option<&str> {
+        self.inner
+            .parser
+            .context
+            .lexer_options
+            .base_iri
+            .as_ref()
+            .map(Iri::as_str)
+    }
+}
+
+impl<'a> Iterator for FromSliceN3Reader<'a> {
+    type Item = Result<N3Quad, TurtleSyntaxError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
 /// Parses a N3 file by using a low-level API. Can be built using [`N3Parser::parse`].
 ///
 /// Count the number of people:
@@ -616,7 +750,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadN3Reader<R> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelN3Reader {
-    parser: Parser<N3Recognizer>,
+    parser: Parser<Vec<u8>, N3Recognizer>,
 }
 
 impl LowLevelN3Reader {
@@ -1214,14 +1348,16 @@ impl RuleRecognizer for N3Recognizer {
 }
 
 impl N3Recognizer {
-    pub fn new_parser(
+    pub fn new_parser<B>(
+        data: B,
         unchecked: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
-    ) -> Parser<Self> {
+    ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
                 N3Lexer::new(N3LexerMode::N3, unchecked),
+                data,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,
