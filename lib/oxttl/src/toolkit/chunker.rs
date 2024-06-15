@@ -64,7 +64,7 @@ pub fn get_turtle_file_chunks(
 #[allow(clippy::needless_pass_by_value)]
 fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usize> {
     fn accept(parser: TurtleParser, input: &[u8]) -> bool {
-        let mut f = parser.parse_read(input);
+        let mut f = parser.parse_slice(input);
         for _ in 0..3 {
             if let Some(r) = f.next() {
                 if r.is_err() {

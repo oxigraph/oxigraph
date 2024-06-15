@@ -4,9 +4,7 @@
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{
-    get_turtle_file_chunks, FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError,
-};
+use crate::toolkit::{get_turtle_file_chunks, FromReadIterator, Parser, TurtleParseError, TurtleSyntaxError, FromSliceIterator};
 #[cfg(feature = "async-tokio")]
 use crate::trig::ToTokioAsyncWriteTriGWriter;
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
@@ -332,7 +330,7 @@ impl ParallelTurtleParser {
                     let parser = self.parser.clone();
                     let mut triples = Vec::with_capacity((end - start) / 200);
 
-                    for t in parser.parse_read(&slice[start..end]) {
+                    for t in parser.parse_slice(&slice[start..end]) {
                         triples.push(t?)
                     }
                     Ok(triples)
