@@ -206,7 +206,7 @@ impl From<Quad> for N3Quad {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct N3Parser {
     unchecked: bool,

@@ -50,7 +50,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct RdfXmlParser {
     unchecked: bool,
