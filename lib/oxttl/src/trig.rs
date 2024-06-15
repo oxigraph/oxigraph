@@ -204,7 +204,7 @@ impl TriGParser {
             inner: TriGRecognizer::new_parser(
                 slice,
                 true,
-                false,
+                true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
                 self.unchecked,

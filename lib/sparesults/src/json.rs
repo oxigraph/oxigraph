@@ -1,7 +1,7 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
-use json_event_parser::{FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
+use json_event_parser::{FromBufferJsonReader, FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::{FromTokioAsyncReadJsonReader, ToTokioAsyncWriteJsonWriter};
 use oxrdf::vocab::rdf;
@@ -269,7 +269,7 @@ impl<R: Read> FromReadJsonSolutionsReader<R> {
                     return Ok(Some(result));
                 }
             },
-            JsonInnerSolutions::Iterator(iter) => iter.next(),
+            JsonInnerSolutions::Iterator(iter) => Ok(iter.next()?),
         }
     }
 }
@@ -320,6 +320,60 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadJsonSolutionsReader<R> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
                 let event = self.reader.read_next_event().await?;
+                if event == JsonEvent::Eof {
+                    return Ok(None);
+                }
+                if let Some(result) = reader.read_event(event)? {
+                    return Ok(Some(result));
+                }
+            },
+            JsonInnerSolutions::Iterator(iter) => Ok(iter.next()?),
+        }
+    }
+}
+
+pub enum FromSliceJsonQueryResultsReader<'a> {
+    Solutions {
+        variables: Vec<Variable>,
+        solutions: FromSliceJsonSolutionsReader<'a>,
+    },
+    Boolean(bool),
+}
+
+impl<'a> FromSliceJsonQueryResultsReader<'a> {
+    pub fn read(slice: &'a [u8]) -> Result<Self, QueryResultsSyntaxError> {
+        let mut reader = FromBufferJsonReader::new(slice);
+        let mut inner = JsonInnerReader::new();
+        loop {
+            if let Some(result) = inner.read_event(reader.read_next_event()?)? {
+                return match result {
+                    JsonInnerQueryResults::Solutions {
+                        variables,
+                        solutions,
+                    } => Ok(Self::Solutions {
+                        variables,
+                        solutions: FromSliceJsonSolutionsReader {
+                            inner: solutions,
+                            reader,
+                        },
+                    }),
+                    JsonInnerQueryResults::Boolean(value) => Ok(Self::Boolean(value)),
+                };
+            }
+        }
+    }
+}
+
+pub struct FromSliceJsonSolutionsReader<'a> {
+    inner: JsonInnerSolutions,
+    reader: FromBufferJsonReader<'a>,
+}
+
+impl<'a> FromSliceJsonSolutionsReader<'a> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
+        match &mut self.inner {
+            JsonInnerSolutions::Reader(reader) => loop {
+                let event = self.reader.read_next_event()?;
                 if event == JsonEvent::Eof {
                     return Ok(None);
                 }
@@ -1083,7 +1137,7 @@ pub struct JsonBufferedSolutionsIterator {
 }
 
 impl JsonBufferedSolutionsIterator {
-    fn next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+    fn next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         let Some((variables, values)) = self.bindings.next() else {
             return Ok(None);
         };

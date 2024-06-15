@@ -437,7 +437,7 @@ impl<R: Read> FromReadTsvQueryResultsReader<R> {
     pub fn read(mut read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = LineReader::new();
         let mut buffer = Vec::new();
-        let line = reader.next_line(&mut buffer, &mut read)?;
+        let line = reader.next_line_from_read(&mut buffer, &mut read)?;
         Ok(match inner_read_first_line(reader, line)? {
             TsvInnerQueryResults::Solutions {
                 variables,
@@ -466,8 +466,8 @@ impl<R: Read> FromReadTsvSolutionsReader<R> {
         let line = self
             .inner
             .reader
-            .next_line(&mut self.buffer, &mut self.read)?;
-        self.inner.read_next(line)
+            .next_line_from_read(&mut self.buffer, &mut self.read)?;
+        Ok(self.inner.read_next(line)?)
     }
 }
 
@@ -485,7 +485,9 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTsvQueryResultsReader<R> {
     pub async fn read(mut read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = LineReader::new();
         let mut buffer = Vec::new();
-        let line = reader.next_line_tokio_async(&mut buffer, &mut read).await?;
+        let line = reader
+            .next_line_from_tokio_async_read(&mut buffer, &mut read)
+            .await?;
         Ok(match inner_read_first_line(reader, line)? {
             TsvInnerQueryResults::Solutions {
                 variables,
@@ -516,8 +518,48 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTsvSolutionsReader<R> {
         let line = self
             .inner
             .reader
-            .next_line_tokio_async(&mut self.buffer, &mut self.read)
+            .next_line_from_tokio_async_read(&mut self.buffer, &mut self.read)
             .await?;
+        Ok(self.inner.read_next(line)?)
+    }
+}
+
+pub enum FromSliceTsvQueryResultsReader<'a> {
+    Solutions {
+        variables: Vec<Variable>,
+        solutions: FromSliceTsvSolutionsReader<'a>,
+    },
+    Boolean(bool),
+}
+
+impl<'a> FromSliceTsvQueryResultsReader<'a> {
+    pub fn read(slice: &'a [u8]) -> Result<Self, QueryResultsSyntaxError> {
+        let mut reader = LineReader::new();
+        let line = reader.next_line_from_slice(slice)?;
+        Ok(match inner_read_first_line(reader, line)? {
+            TsvInnerQueryResults::Solutions {
+                variables,
+                solutions,
+            } => Self::Solutions {
+                variables,
+                solutions: FromSliceTsvSolutionsReader {
+                    slice,
+                    inner: solutions,
+                },
+            },
+            TsvInnerQueryResults::Boolean(value) => Self::Boolean(value),
+        })
+    }
+}
+
+pub struct FromSliceTsvSolutionsReader<'a> {
+    slice: &'a [u8],
+    inner: TsvInnerSolutionsReader,
+}
+
+impl<'a> FromSliceTsvSolutionsReader<'a> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
+        let line = self.inner.reader.next_line_from_slice(self.slice)?;
         self.inner.read_next(line)
     }
 }
@@ -533,7 +575,7 @@ enum TsvInnerQueryResults {
 fn inner_read_first_line(
     reader: LineReader,
     line: &str,
-) -> Result<TsvInnerQueryResults, QueryResultsParseError> {
+) -> Result<TsvInnerQueryResults, QueryResultsSyntaxError> {
     let line = line.trim_matches(|c| matches!(c, ' ' | '\r' | '\n'));
     if line.eq_ignore_ascii_case("true") {
         return Ok(TsvInnerQueryResults::Boolean(true));
@@ -546,7 +588,7 @@ fn inner_read_first_line(
         for v in line.split('\t') {
             let v = v.trim();
             if v.is_empty() {
-                return Err(QueryResultsSyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar").into());
+                return Err(QueryResultsSyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar"));
             }
             let variable = Variable::from_str(v).map_err(|e| {
                 QueryResultsSyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
@@ -554,8 +596,7 @@ fn inner_read_first_line(
             if variables.contains(&variable) {
                 return Err(QueryResultsSyntaxError::msg(format!(
                     "The variable {variable} is declared twice"
-                ))
-                .into());
+                )));
             }
             variables.push(variable);
         }
@@ -577,7 +618,7 @@ impl TsvInnerSolutionsReader {
     pub fn read_next(
         &self,
         line: &str,
-    ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+    ) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         if line.is_empty() {
             return Ok(None); // EOF
         }
@@ -617,7 +658,7 @@ impl TsvInnerSolutionsReader {
                     })?))
                 }
             })
-            .collect::<Result<Vec<_>, QueryResultsParseError>>()?;
+            .collect::<Result<Vec<_>, QueryResultsSyntaxError>>()?;
         if elements.len() == self.column_len {
             Ok(Some(elements))
         } else if self.column_len == 0 && elements == [None] {
@@ -640,8 +681,7 @@ impl TsvInnerSolutionsReader {
                     column: line.chars().count().try_into().unwrap(),
                     offset: self.reader.last_line_end,
                 },
-            )
-            .into())
+            ))
         }
     }
 }
@@ -666,11 +706,11 @@ impl LineReader {
     }
 
     #[allow(clippy::unwrap_in_result)]
-    fn next_line<'a>(
+    fn next_line_from_read<'a>(
         &mut self,
         buffer: &'a mut Vec<u8>,
         read: &mut impl Read,
-    ) -> io::Result<&'a str> {
+    ) -> Result<&'a str, QueryResultsParseError> {
         let line_end = loop {
             if let Some(eol) = memchr(b'\n', &buffer[self.buffer_start..self.buffer_end]) {
                 break self.buffer_start + eol + 1;
@@ -685,7 +725,8 @@ impl LineReader {
                     return Err(io::Error::new(
                         io::ErrorKind::OutOfMemory,
                         format!("Reached the buffer maximal size of {MAX_BUFFER_SIZE}"),
-                    ));
+                    )
+                    .into());
                 }
                 buffer.resize(self.buffer_end + 1024, b'\0');
             }
@@ -696,10 +737,7 @@ impl LineReader {
             self.buffer_end += read;
         };
         let result = str::from_utf8(&buffer[self.buffer_start..line_end]).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid UTF-8 in the TSV file: {e}"),
-            )
+            QueryResultsSyntaxError::msg(format!("Invalid UTF-8 in the TSV file: {e}")).into()
         });
         self.line_count += 1;
         self.last_line_start = self.last_line_end;
@@ -710,11 +748,11 @@ impl LineReader {
 
     #[cfg(feature = "async-tokio")]
     #[allow(clippy::unwrap_in_result)]
-    async fn next_line_tokio_async<'a>(
+    async fn next_line_from_tokio_async_read<'a>(
         &mut self,
         buffer: &'a mut Vec<u8>,
         read: &mut (impl AsyncRead + Unpin),
-    ) -> io::Result<&'a str> {
+    ) -> Result<&'a str, QueryResultsParseError> {
         let line_end = loop {
             if let Some(eol) = memchr(b'\n', &buffer[self.buffer_start..self.buffer_end]) {
                 break self.buffer_start + eol + 1;
@@ -729,7 +767,8 @@ impl LineReader {
                     return Err(io::Error::new(
                         io::ErrorKind::OutOfMemory,
                         format!("Reached the buffer maximal size of {MAX_BUFFER_SIZE}"),
-                    ));
+                    )
+                    .into());
                 }
                 buffer.resize(self.buffer_end + 1024, b'\0');
             }
@@ -740,10 +779,24 @@ impl LineReader {
             self.buffer_end += read;
         };
         let result = str::from_utf8(&buffer[self.buffer_start..line_end]).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid UTF-8 in the TSV file: {e}"),
-            )
+            QueryResultsSyntaxError::msg(format!("Invalid UTF-8 in the TSV file: {e}")).into()
+        });
+        self.line_count += 1;
+        self.last_line_start = self.last_line_end;
+        self.last_line_end += u64::try_from(line_end - self.buffer_start).unwrap();
+        self.buffer_start = line_end;
+        result
+    }
+
+    #[allow(clippy::unwrap_in_result)]
+    fn next_line_from_slice<'a>(
+        &mut self,
+        slice: &'a [u8],
+    ) -> Result<&'a str, QueryResultsSyntaxError> {
+        let line_end = memchr(b'\n', &slice[self.buffer_start..])
+            .map_or_else(|| slice.len(), |eol| self.buffer_start + eol + 1);
+        let result = str::from_utf8(&slice[self.buffer_start..line_end]).map_err(|e| {
+            QueryResultsSyntaxError::msg(format!("Invalid UTF-8 in the TSV file: {e}"))
         });
         self.line_count += 1;
         self.last_line_start = self.last_line_end;
@@ -842,10 +895,10 @@ mod tests {
         assert_eq!(buffer, "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n");
 
         // Read
-        if let FromReadTsvQueryResultsReader::Solutions {
+        if let FromSliceTsvQueryResultsReader::Solutions {
             solutions: mut solutions_iter,
             variables: actual_variables,
-        } = FromReadTsvQueryResultsReader::read(buffer.as_bytes())?
+        } = FromSliceTsvQueryResultsReader::read(buffer.as_bytes())?
         {
             assert_eq!(actual_variables.as_slice(), variables.as_slice());
             let mut rows = Vec::new();
