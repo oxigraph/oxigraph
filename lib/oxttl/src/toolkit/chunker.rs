@@ -34,7 +34,7 @@ pub fn get_turtle_file_chunks(
     bytes: &[u8],
     n_chunks: usize,
     parser: TurtleParser,
-) -> Vec<(usize, usize)> {
+) -> Option<Vec<(usize, usize)>> {
     let mut last_pos = 0;
     let total_len = bytes.len();
     let chunk_size = total_len / n_chunks;
@@ -49,14 +49,14 @@ pub fn get_turtle_file_chunks(
         let end_pos = match next_terminating_period(parser.clone(), &bytes[search_pos..]) {
             Some(pos) => search_pos + pos,
             None => {
-                break;
+                return None;
             }
         };
         offsets.push((last_pos, end_pos));
         last_pos = end_pos;
     }
     offsets.push((last_pos, total_len));
-    offsets
+    Some(offsets)
 }
 
 // Heuristically, we assume that a period is terminating (a triple) if we can start immediately after it and parse three triples.
@@ -77,14 +77,14 @@ fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usi
         true
     }
 
-    let mut rejected_periods = 0_u8;
+    let mut rejected_periods = 0_u16;
 
     let mut total_pos = 0;
     if input.is_empty() {
         return None;
     }
     loop {
-        if rejected_periods >= 100 {
+        if rejected_periods >= 1_000 {
             return None;
         }
 

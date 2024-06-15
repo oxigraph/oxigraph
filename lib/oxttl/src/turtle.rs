@@ -259,11 +259,7 @@ impl ParallelTurtleParser {
             return self.fallback_parse(slice);
         }
 
-        let threads = std::thread::available_parallelism()
-            .unwrap_or(NonZero::new(1).unwrap())
-            .get();
-        let chunks = get_turtle_file_chunks(slice, threads, self.parser.clone());
-
+        //Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
         let mut end = INCREMENT;
         let mut prefix_parser = self.parser.clone().parse();
         prefix_parser.extend_from_slice(&slice[0..end]);
@@ -282,23 +278,32 @@ impl ParallelTurtleParser {
             // Already know this is a valid IRI, or, if unchecked should not throw error
             self.parser = self.parser.with_prefix(p, iri).unwrap();
         }
-        let all_result_triples: Vec<Result<_, TurtleParseError>> = chunks
-            .into_par_iter()
-            .map(|(start, end)| {
-                let parser = self.parser.clone();
-                let mut triples = Vec::with_capacity((end - start) / 200);
 
-                for t in parser.parse_read(&slice[start..end]) {
-                    triples.push(t?)
-                }
-                Ok(triples)
-            })
-            .collect();
-        let mut all_triples = Vec::with_capacity(all_result_triples.len());
-        for r in all_result_triples {
-            all_triples.push(r?);
+        let threads = std::thread::available_parallelism()
+            .unwrap_or(NonZero::new(1).unwrap())
+            .get();
+        let chunks = get_turtle_file_chunks(slice, threads, self.parser.clone());
+        if let Some(chunks) = chunks {
+            let all_result_triples: Vec<Result<_, TurtleParseError>> = chunks
+                .into_par_iter()
+                .map(|(start, end)| {
+                    let parser = self.parser.clone();
+                    let mut triples = Vec::with_capacity((end - start) / 200);
+
+                    for t in parser.parse_read(&slice[start..end]) {
+                        triples.push(t?)
+                    }
+                    Ok(triples)
+                })
+                .collect();
+            let mut all_triples = Vec::with_capacity(all_result_triples.len());
+            for r in all_result_triples {
+                all_triples.push(r?);
+            }
+            Ok(all_triples) }
+        else {
+            self.fallback_parse(slice)
         }
-        Ok(all_triples)
     }
 
     fn fallback_parse(self, slice: &[u8]) -> Result<Vec<Vec<Triple>>, TurtleParseError> {
