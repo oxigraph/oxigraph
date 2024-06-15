@@ -164,6 +164,7 @@ impl NTriplesParser {
         FromSliceNTriplesReader {
             inner: NQuadsRecognizer::new_parser(
                 slice,
+                true,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -214,6 +215,7 @@ impl NTriplesParser {
         LowLevelNTriplesReader {
             parser: NQuadsRecognizer::new_parser(
                 Vec::new(),
+                false,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,

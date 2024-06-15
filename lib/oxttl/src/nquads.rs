@@ -165,6 +165,7 @@ impl NQuadsParser {
             inner: NQuadsRecognizer::new_parser(
                 slice,
                 true,
+                true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
                 self.unchecked,
@@ -214,6 +215,7 @@ impl NQuadsParser {
         LowLevelNQuadsReader {
             parser: NQuadsRecognizer::new_parser(
                 Vec::new(),
+                false,
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -300,7 +302,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
     }
 }
 
-/// Parses a N-Triples file from a byte slice. Can be built using [`NTriplesParser::parse_slice`].
+/// Parses a N-Quads file from a byte slice. Can be built using [`NQuadsParser::parse_slice`].
 ///
 /// Count the number of people:
 /// ```

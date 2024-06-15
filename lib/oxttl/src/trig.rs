@@ -203,6 +203,7 @@ impl TriGParser {
         FromSliceTriGReader {
             inner: TriGRecognizer::new_parser(
                 slice,
+                true,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -256,6 +257,7 @@ impl TriGParser {
         LowLevelTriGReader {
             parser: TriGRecognizer::new_parser(
                 Vec::new(),
+                false,
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,

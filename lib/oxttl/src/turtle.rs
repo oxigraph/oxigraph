@@ -201,6 +201,7 @@ impl TurtleParser {
         FromSliceTurtleReader {
             inner: TriGRecognizer::new_parser(
                 slice,
+                true,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -254,6 +255,7 @@ impl TurtleParser {
         LowLevelTurtleReader {
             parser: TriGRecognizer::new_parser(
                 Vec::new(),
+                false,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
