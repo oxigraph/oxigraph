@@ -68,7 +68,7 @@ fuzz_target!(|data: &[u8]| {
     // We parse the serialization
     let new_quads = NQuadsParser::new()
         .with_quoted_triples()
-        .parse_read(new_serialization.as_slice())
+        .parse_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             format!(
