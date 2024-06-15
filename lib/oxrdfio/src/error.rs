@@ -12,19 +12,6 @@ pub enum RdfParseError {
     Syntax(#[from] RdfSyntaxError),
 }
 
-impl RdfParseError {
-    pub(crate) fn msg(msg: &'static str) -> Self {
-        Self::Syntax(RdfSyntaxError(SyntaxErrorKind::Msg(msg)))
-    }
-}
-
-impl From<oxttl::TurtleSyntaxError> for RdfSyntaxError {
-    #[inline]
-    fn from(error: oxttl::TurtleSyntaxError) -> Self {
-        Self(SyntaxErrorKind::Turtle(error))
-    }
-}
-
 impl From<oxttl::TurtleParseError> for RdfParseError {
     #[inline]
     fn from(error: oxttl::TurtleParseError) -> Self {
@@ -32,13 +19,6 @@ impl From<oxttl::TurtleParseError> for RdfParseError {
             oxttl::TurtleParseError::Syntax(e) => Self::Syntax(e.into()),
             oxttl::TurtleParseError::Io(e) => Self::Io(e),
         }
-    }
-}
-
-impl From<oxrdfxml::RdfXmlSyntaxError> for RdfSyntaxError {
-    #[inline]
-    fn from(error: oxrdfxml::RdfXmlSyntaxError) -> Self {
-        Self(SyntaxErrorKind::RdfXml(error))
     }
 }
 
@@ -99,6 +79,24 @@ impl RdfSyntaxError {
             }
             SyntaxErrorKind::RdfXml(_) | SyntaxErrorKind::Msg(_) => None,
         }
+    }
+
+    pub(crate) fn msg(msg: &'static str) -> Self {
+        Self(SyntaxErrorKind::Msg(msg))
+    }
+}
+
+impl From<oxttl::TurtleSyntaxError> for RdfSyntaxError {
+    #[inline]
+    fn from(error: oxttl::TurtleSyntaxError) -> Self {
+        Self(SyntaxErrorKind::Turtle(error))
+    }
+}
+
+impl From<oxrdfxml::RdfXmlSyntaxError> for RdfSyntaxError {
+    #[inline]
+    fn from(error: oxrdfxml::RdfXmlSyntaxError) -> Self {
+        Self(SyntaxErrorKind::RdfXml(error))
     }
 }
 
