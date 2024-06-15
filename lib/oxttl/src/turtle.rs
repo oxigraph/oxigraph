@@ -46,7 +46,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct TurtleParser {
     unchecked: bool,
@@ -741,7 +741,7 @@ impl<'a> Iterator for TurtlePrefixesIter<'a> {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct TurtleSerializer {
     inner: TriGSerializer,

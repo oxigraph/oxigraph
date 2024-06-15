@@ -60,6 +60,7 @@ use tokio::io::AsyncRead;
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]
+#[derive(Clone)]
 pub struct RdfParser {
     inner: RdfParserKind,
     default_graph: GraphName,
@@ -67,6 +68,7 @@ pub struct RdfParser {
     rename_blank_nodes: bool,
 }
 
+#[derive(Clone)]
 enum RdfParserKind {
     N3(N3Parser),
     NQuads(NQuadsParser),
@@ -366,9 +368,7 @@ impl RdfParser {
     /// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
     /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-    /// let quads = parser
-    ///     .parse_slice(file)
-    ///     .collect::<Result<Vec<_>, _>>()?;
+    /// let quads = parser.parse_slice(file).collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
@@ -692,9 +692,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
 /// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let quads = parser
-///     .parse_slice(file)
-///     .collect::<Result<Vec<_>, _>>()?;
+/// let quads = parser.parse_slice(file).collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");

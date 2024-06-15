@@ -35,7 +35,7 @@ use tokio::io::AsyncWrite;
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct RdfXmlSerializer {
     prefixes: BTreeMap<String, String>,

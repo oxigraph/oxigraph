@@ -37,7 +37,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct NTriplesParser {
     unchecked: bool,
@@ -425,7 +425,7 @@ impl LowLevelNTriplesReader {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct NTriplesSerializer;
 
