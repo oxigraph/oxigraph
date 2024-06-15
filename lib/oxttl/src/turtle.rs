@@ -8,13 +8,13 @@ use crate::toolkit::{get_turtle_file_chunks, FromReadIterator, Parser, TurtlePar
 #[cfg(feature = "async-tokio")]
 use crate::trig::ToTokioAsyncWriteTriGWriter;
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
+use core::num::NonZero;
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::num::NonZero;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -319,9 +319,7 @@ impl ParallelTurtleParser {
             self.parser = self.parser.with_prefix(p, iri).unwrap();
         }
 
-        let threads = std::thread::available_parallelism()
-            .unwrap_or(NonZero::new(1).unwrap())
-            .get();
+        let threads = std::thread::available_parallelism().unwrap_or(NonZero::new(1).unwrap()).get();
         let chunks = get_turtle_file_chunks(slice, threads, self.parser.clone());
         if let Some(chunks) = chunks {
             let all_result_triples: Vec<Result<_, TurtleParseError>> = chunks
@@ -358,7 +356,7 @@ impl ParallelTurtleParser {
 
 impl Default for ParallelTurtleParser {
     fn default() -> Self {
-        Self::new()
+         Self::new()
     }
 }
 
