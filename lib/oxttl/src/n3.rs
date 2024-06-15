@@ -354,7 +354,8 @@ impl N3Parser {
     /// ```
     pub fn parse_slice(self, slice: &[u8]) -> FromSliceN3Reader<'_> {
         FromSliceN3Reader {
-            inner: N3Recognizer::new_parser(slice, false, self.base, self.prefixes).into_iter(),
+            inner: N3Recognizer::new_parser(slice, true, false, self.base, self.prefixes)
+                .into_iter(),
         }
     }
 
@@ -399,7 +400,13 @@ impl N3Parser {
     /// ```
     pub fn parse(self) -> LowLevelN3Reader {
         LowLevelN3Reader {
-            parser: N3Recognizer::new_parser(Vec::new(), self.unchecked, self.base, self.prefixes),
+            parser: N3Recognizer::new_parser(
+                Vec::new(),
+                false,
+                self.unchecked,
+                self.base,
+                self.prefixes,
+            ),
         }
     }
 }
@@ -1350,6 +1357,7 @@ impl RuleRecognizer for N3Recognizer {
 impl N3Recognizer {
     pub fn new_parser<B>(
         data: B,
+        is_ending: bool,
         unchecked: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
@@ -1358,6 +1366,7 @@ impl N3Recognizer {
             Lexer::new(
                 N3Lexer::new(N3LexerMode::N3, unchecked),
                 data,
+                is_ending,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,
