@@ -41,7 +41,7 @@ use tokio::io::AsyncRead;
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 /// // boolean
-/// if let FromReadQueryResultsReader::Boolean(v) = json_parser.parse_read(br#"{"boolean":true}"#.as_slice())? {
+/// if let FromReadQueryResultsReader::Boolean(v) = json_parser.clone().parse_read(br#"{"boolean":true}"#.as_slice())? {
 ///     assert_eq!(v, true);
 /// }
 /// // solutions
@@ -53,6 +53,8 @@ use tokio::io::AsyncRead;
 /// }
 /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
+#[must_use]
+#[derive(Clone)]
 pub struct QueryResultsParser {
     format: QueryResultsFormat,
 }
@@ -76,7 +78,7 @@ impl QueryResultsParser {
     /// let xml_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let FromReadQueryResultsReader::Boolean(v) = xml_parser.parse_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice())? {
+    /// if let FromReadQueryResultsReader::Boolean(v) = xml_parser.clone().parse_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice())? {
     ///     assert_eq!(v, true);
     /// }
     ///
@@ -90,7 +92,7 @@ impl QueryResultsParser {
     /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
     /// ```
     pub fn parse_read<R: Read>(
-        &self,
+        self,
         reader: R,
     ) -> Result<FromReadQueryResultsReader<R>, QueryResultsParseError> {
         Ok(match self.format {
@@ -133,7 +135,7 @@ impl QueryResultsParser {
         &self,
         reader: R,
     ) -> Result<FromReadQueryResultsReader<R>, QueryResultsParseError> {
-        self.parse_read(reader)
+        self.clone().parse_read(reader)
     }
 
     /// Reads a result file from a Tokio [`AsyncRead`] implementation.
@@ -150,7 +152,7 @@ impl QueryResultsParser {
     /// let xml_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let FromTokioAsyncReadQueryResultsReader::Boolean(v) = xml_parser.parse_tokio_async_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice()).await? {
+    /// if let FromTokioAsyncReadQueryResultsReader::Boolean(v) = xml_parser.clone().parse_tokio_async_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice()).await? {
     ///     assert_eq!(v, true);
     /// }
     ///
@@ -166,7 +168,7 @@ impl QueryResultsParser {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub async fn parse_tokio_async_read<R: AsyncRead + Unpin>(
-        &self,
+        self,
         reader: R,
     ) -> Result<FromTokioAsyncReadQueryResultsReader<R>, QueryResultsParseError> {
         Ok(match self.format {
@@ -216,7 +218,7 @@ impl QueryResultsParser {
     /// let xml_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let FromSliceQueryResultsReader::Boolean(v) = xml_parser.parse_slice(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#)? {
+    /// if let FromSliceQueryResultsReader::Boolean(v) = xml_parser.clone().parse_slice(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#)? {
     ///     assert_eq!(v, true);
     /// }
     ///
@@ -229,10 +231,10 @@ impl QueryResultsParser {
     /// }
     /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
     /// ```
-    pub fn parse_slice<'a>(
-        &self,
-        slice: &'a [u8],
-    ) -> Result<FromSliceQueryResultsReader<'a>, QueryResultsSyntaxError> {
+    pub fn parse_slice(
+        self,
+        slice: &[u8],
+    ) -> Result<FromSliceQueryResultsReader<'_>, QueryResultsSyntaxError> {
         Ok(match self.format {
             QueryResultsFormat::Xml => match FromSliceXmlQueryResultsReader::read(slice)? {
                 FromSliceXmlQueryResultsReader::Boolean(r) => FromSliceQueryResultsReader::Boolean(r),
@@ -287,7 +289,9 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
 /// // boolean
-/// if let FromReadQueryResultsReader::Boolean(v) = tsv_parser.parse_read(b"true".as_slice())? {
+/// if let FromReadQueryResultsReader::Boolean(v) =
+///     tsv_parser.clone().parse_read(b"true".as_slice())?
+/// {
 ///     assert_eq!(v, true);
 /// }
 ///
@@ -409,6 +413,7 @@ impl<R: Read> Iterator for FromReadSolutionsReader<R> {
 ///
 /// // boolean
 /// if let FromTokioAsyncReadQueryResultsReader::Boolean(v) = tsv_parser
+///     .clone()
 ///     .parse_tokio_async_read(b"true".as_slice())
 ///     .await?
 /// {
@@ -540,7 +545,9 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
 /// // boolean
-/// if let FromReadQueryResultsReader::Boolean(v) = tsv_parser.parse_read(b"true".as_slice())? {
+/// if let FromReadQueryResultsReader::Boolean(v) =
+///     tsv_parser.clone().parse_read(b"true".as_slice())?
+/// {
 ///     assert_eq!(v, true);
 /// }
 ///
