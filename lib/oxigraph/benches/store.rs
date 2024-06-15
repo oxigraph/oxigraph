@@ -19,12 +19,29 @@ fn parse_nt(c: &mut Criterion) {
     group.sample_size(50);
     group.bench_function("parse BSBM explore 1000", |b| {
         b.iter(|| {
+            for r in RdfParser::from_format(RdfFormat::NTriples).parse_slice(&data) {
+                r.unwrap();
+            }
+        })
+    });
+    group.bench_function("parse BSBM explore 1000 with Read", |b| {
+        b.iter(|| {
             for r in RdfParser::from_format(RdfFormat::NTriples).parse_read(data.as_slice()) {
                 r.unwrap();
             }
         })
     });
     group.bench_function("parse BSBM explore 1000 unchecked", |b| {
+        b.iter(|| {
+            for r in RdfParser::from_format(RdfFormat::NTriples)
+                .unchecked()
+                .parse_slice(&data)
+            {
+                r.unwrap();
+            }
+        })
+    });
+    group.bench_function("parse BSBM explore 1000 unchecked with Read", |b| {
         b.iter(|| {
             for r in RdfParser::from_format(RdfFormat::NTriples)
                 .unchecked()
