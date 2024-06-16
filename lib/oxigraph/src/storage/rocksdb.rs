@@ -1230,7 +1230,7 @@ impl RocksDbStorageBulkLoader {
     ) -> Result<(), StorageError> {
         let new_counter = *done
             .lock()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Mutex poisoned"))?;
+            .map_err(|_| io::Error::other("Mutex poisoned"))?;
         let display_step = DEFAULT_BULK_LOAD_BATCH_SIZE as u64;
         if new_counter / display_step > *done_and_displayed / display_step {
             for hook in &self.hooks {
@@ -1270,7 +1270,7 @@ impl<'a> FileBulkLoader<'a> {
         self.save()?;
         *counter
             .lock()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Mutex poisoned"))? +=
+            .map_err(|_| io::Error::other("Mutex poisoned"))? +=
             size.try_into().unwrap_or(u64::MAX);
         Ok(())
     }
@@ -1460,13 +1460,10 @@ impl<'a> FileBulkLoader<'a> {
 
 fn map_thread_result<R>(result: thread::Result<R>) -> io::Result<R> {
     result.map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            if let Ok(e) = e.downcast::<&dyn std::fmt::Display>() {
-                format!("A loader processed crashed with {e}")
-            } else {
-                "A loader processed crashed with and unknown error".into()
-            },
-        )
+        io::Error::other(if let Ok(e) = e.downcast::<&dyn std::fmt::Display>() {
+            format!("A loader processed crashed with {e}")
+        } else {
+            "A loader processed crashed with and unknown error".into()
+        })
     })
 }
