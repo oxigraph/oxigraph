@@ -51,9 +51,7 @@ impl Interner {
     }
 
     fn hash(&self, value: &str) -> u64 {
-        let mut hasher = self.hasher.build_hasher();
-        hasher.write(value.as_bytes());
-        let hash = hasher.finish();
+        let hash = self.hasher.hash_one(value);
         if hash == u64::MAX {
             0
         } else {
