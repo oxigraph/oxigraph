@@ -7,7 +7,7 @@ build:
   os: "ubuntu-22.04"
   tools:
     python: "3"
-    rust: "1.70"
+    rust: latest
   apt_packages:
     - clang
 
