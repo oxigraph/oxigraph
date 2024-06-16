@@ -533,9 +533,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-llvm-cov }
+      - uses: ./.github/actions/setup-rust
+        with:
+          version: nightly
       - run: cargo llvm-cov --codecov --output-path codecov.json
       - uses: codecov/codecov-action@v4
         with:
