@@ -176,6 +176,7 @@ impl Store {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[allow(clippy::same_name_method)] // as in sophia's SparqlDataset
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
@@ -327,6 +328,7 @@ impl Store {
     /// assert!(store.contains(quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[allow(clippy::same_name_method)] // as in sophia's Dataset
     pub fn contains<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
         let quad = EncodedQuad::from(quad.into());
         self.storage.snapshot().contains(&quad)
@@ -615,6 +617,7 @@ impl Store {
     /// assert!(store.contains(quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[allow(clippy::same_name_method)] // as in sophia's MutableDataset
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
         let quad = quad.into();
         self.transaction(|mut t| t.insert(quad))
@@ -653,6 +656,7 @@ impl Store {
     /// assert!(!store.contains(quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[allow(clippy::same_name_method)] // as in sophia' Dataset
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
         let quad = quad.into();
         self.transaction(move |mut t| t.remove(quad))
@@ -1365,6 +1369,7 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
+    #[allow(clippy::same_name_method)] // as in sophia's MutableDataset
     pub fn insert<'b>(&mut self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
         self.writer.insert(quad.into())
     }

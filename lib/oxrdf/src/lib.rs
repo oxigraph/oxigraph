@@ -28,3 +28,6 @@ pub use crate::triple::{
 pub use crate::variable::{Variable, VariableNameParseError, VariableRef};
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;
+
+#[cfg(feature = "sophia")]
+pub mod sophia;

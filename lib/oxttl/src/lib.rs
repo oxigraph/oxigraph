@@ -23,3 +23,6 @@ pub use crate::turtle::{TurtleParser, TurtleSerializer};
 
 pub(crate) const MIN_BUFFER_SIZE: usize = 4096;
 pub(crate) const MAX_BUFFER_SIZE: usize = 4096 * 4096;
+
+#[cfg(feature = "sophia")]
+pub mod sophia;
