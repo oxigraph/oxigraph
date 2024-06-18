@@ -23,7 +23,7 @@ version = "0.4.0-alpha.7"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.75"
 
 [workspace.dependencies]
 anyhow = "1.0.72"
@@ -52,7 +52,7 @@ peg = "0.8"
 pkg-config = "0.3.25"
 predicates = ">=2.0, <4.0"
 pyo3 = "0.21.2"
-quick-xml = ">=0.29, <0.32"
+quick-xml = "0.32"
 rand = "0.8"
 rayon-core = "1.11"
 regex = "1.7"

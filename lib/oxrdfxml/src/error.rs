@@ -78,9 +78,6 @@ impl From<RdfXmlSyntaxError> for io::Error {
                 quick_xml::Error::Io(error) => {
                     Arc::try_unwrap(error).unwrap_or_else(|e| Self::new(e.kind(), e))
                 }
-                quick_xml::Error::UnexpectedEof(error) => {
-                    Self::new(io::ErrorKind::UnexpectedEof, error)
-                }
                 _ => Self::new(io::ErrorKind::InvalidData, error),
             },
             SyntaxErrorKind::Msg(msg) => Self::new(io::ErrorKind::InvalidData, msg),

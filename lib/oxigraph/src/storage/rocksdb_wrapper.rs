@@ -425,14 +425,11 @@ impl Db {
                 if let Some(available_fd) = available_file_descriptors()? {
                     if available_fd < 96 {
                         rocksdb_options_destroy(options);
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            format!(
-                                "Oxigraph needs at least 96 file descriptors, \
+                        return Err(io::Error::other(format!(
+                            "Oxigraph needs at least 96 file descriptors, \
                                     only {available_fd} allowed. \
                                     Run e.g. `ulimit -n 512` to allow 512 opened files"
-                            ),
-                        )
+                        ))
                         .into());
                     }
                     rocksdb_options_set_max_open_files(

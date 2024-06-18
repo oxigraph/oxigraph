@@ -34,7 +34,7 @@ use tokio::io::AsyncWrite;
 ///
 /// // boolean
 /// let mut buffer = Vec::new();
-/// json_serializer.serialize_boolean_to_write(&mut buffer, true)?;
+/// json_serializer.clone().serialize_boolean_to_write(&mut buffer, true)?;
 /// assert_eq!(buffer, br#"{"head":{},"boolean":true}"#);
 ///
 /// // solutions
@@ -45,6 +45,8 @@ use tokio::io::AsyncWrite;
 /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
 /// # std::io::Result::Ok(())
 /// ```
+#[must_use]
+#[derive(Clone)]
 pub struct QueryResultsSerializer {
     format: QueryResultsFormat,
 }
@@ -68,7 +70,7 @@ impl QueryResultsSerializer {
     /// assert_eq!(buffer, br#"<?xml version="1.0"?><sparql xmlns="http://www.w3.org/2005/sparql-results#"><head></head><boolean>true</boolean></sparql>"#);
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn serialize_boolean_to_write<W: Write>(&self, write: W, value: bool) -> io::Result<W> {
+    pub fn serialize_boolean_to_write<W: Write>(self, write: W, value: bool) -> io::Result<W> {
         match self.format {
             QueryResultsFormat::Xml => write_boolean_xml_result(write, value),
             QueryResultsFormat::Json => write_boolean_json_result(write, value),
@@ -97,7 +99,7 @@ impl QueryResultsSerializer {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub async fn serialize_boolean_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
         value: bool,
     ) -> io::Result<W> {
@@ -112,7 +114,7 @@ impl QueryResultsSerializer {
 
     #[deprecated(note = "use serialize_boolean_to_write", since = "0.4.0")]
     pub fn write_boolean_result<W: Write>(&self, writer: W, value: bool) -> io::Result<W> {
-        self.serialize_boolean_to_write(writer, value)
+        self.clone().serialize_boolean_to_write(writer, value)
     }
 
     /// Returns a `SolutionsWriter` allowing writing query solutions into the given [`Write`] implementation.
@@ -140,7 +142,7 @@ impl QueryResultsSerializer {
     /// # std::io::Result::Ok(())
     /// ```
     pub fn serialize_solutions_to_write<W: Write>(
-        &self,
+        self,
         write: W,
         variables: Vec<Variable>,
     ) -> io::Result<ToWriteSolutionsWriter<W>> {
@@ -191,7 +193,7 @@ impl QueryResultsSerializer {
     /// ```
     #[cfg(feature = "async-tokio")]
     pub async fn serialize_solutions_to_tokio_async_write<W: AsyncWrite + Unpin>(
-        &self,
+        self,
         write: W,
         variables: Vec<Variable>,
     ) -> io::Result<ToTokioAsyncWriteSolutionsWriter<W>> {
@@ -219,7 +221,10 @@ impl QueryResultsSerializer {
         writer: W,
         variables: Vec<Variable>,
     ) -> io::Result<ToWriteSolutionsWriter<W>> {
-        self.serialize_solutions_to_write(writer, variables)
+        Self {
+            format: self.format,
+        }
+        .serialize_solutions_to_write(writer, variables)
     }
 }
 

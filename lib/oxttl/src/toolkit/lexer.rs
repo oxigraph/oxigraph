@@ -74,6 +74,7 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
     pub fn new(
         parser: R,
         data: B,
+        is_ending: bool,
         min_buffer_size: usize,
         max_buffer_size: usize,
         is_line_jump_whitespace: bool,
@@ -94,7 +95,7 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
                 global_offset: 0,
                 global_line: 0,
             },
-            is_ending: false,
+            is_ending,
             min_buffer_size,
             max_buffer_size,
             is_line_jump_whitespace,

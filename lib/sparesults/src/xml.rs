@@ -5,6 +5,7 @@ use oxrdf::vocab::rdf;
 use oxrdf::*;
 use quick_xml::escape::unescape;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::reader::Config;
 use quick_xml::{Decoder, Error, Reader, Writer};
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, Read, Write};
@@ -228,8 +229,7 @@ pub enum FromReadXmlQueryResultsReader<R: Read> {
 impl<R: Read> FromReadXmlQueryResultsReader<R> {
     pub fn read(read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = Reader::from_reader(BufReader::new(read));
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
+        XmlInnerQueryResultsReader::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
         let mut inner = XmlInnerQueryResultsReader {
             state: ResultsState::Start,
@@ -293,8 +293,7 @@ pub enum FromTokioAsyncReadXmlQueryResultsReader<R: AsyncRead + Unpin> {
 impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlQueryResultsReader<R> {
     pub async fn read(read: R) -> Result<Self, QueryResultsParseError> {
         let mut reader = Reader::from_reader(AsyncBufReader::new(read));
-        reader.trim_text(true);
-        reader.expand_empty_elements(true);
+        XmlInnerQueryResultsReader::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
         let mut inner = XmlInnerQueryResultsReader {
             state: ResultsState::Start,
@@ -350,6 +349,86 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlSolutionsReader<R> {
     }
 }
 
+pub enum FromSliceXmlQueryResultsReader<'a> {
+    Solutions {
+        variables: Vec<Variable>,
+        solutions: FromSliceXmlSolutionsReader<'a>,
+    },
+    Boolean(bool),
+}
+
+impl<'a> FromSliceXmlQueryResultsReader<'a> {
+    pub fn read(slice: &'a [u8]) -> Result<Self, QueryResultsSyntaxError> {
+        Self::do_read(slice).map_err(|e| match e {
+            QueryResultsParseError::Syntax(e) => e,
+            QueryResultsParseError::Io(e) => {
+                unreachable!("I/O error are not possible for slice but found {e}")
+            }
+        })
+    }
+
+    fn do_read(slice: &'a [u8]) -> Result<Self, QueryResultsParseError> {
+        let mut reader = Reader::from_reader(slice);
+        XmlInnerQueryResultsReader::set_options(reader.config_mut());
+        let mut reader_buffer = Vec::new();
+        let mut inner = XmlInnerQueryResultsReader {
+            state: ResultsState::Start,
+            variables: Vec::new(),
+            decoder: reader.decoder(),
+        };
+        loop {
+            reader_buffer.clear();
+            let event = reader.read_event_into(&mut reader_buffer)?;
+            if let Some(result) = inner.read_event(event)? {
+                return Ok(match result {
+                    XmlInnerQueryResults::Solutions {
+                        variables,
+                        solutions,
+                    } => Self::Solutions {
+                        variables,
+                        solutions: FromSliceXmlSolutionsReader {
+                            reader,
+                            inner: solutions,
+                            reader_buffer,
+                        },
+                    },
+                    XmlInnerQueryResults::Boolean(value) => Self::Boolean(value),
+                });
+            }
+        }
+    }
+}
+
+pub struct FromSliceXmlSolutionsReader<'a> {
+    reader: Reader<&'a [u8]>,
+    inner: XmlInnerSolutionsReader,
+    reader_buffer: Vec<u8>,
+}
+
+impl<'a> FromSliceXmlSolutionsReader<'a> {
+    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
+        self.do_read_next().map_err(|e| match e {
+            QueryResultsParseError::Syntax(e) => e,
+            QueryResultsParseError::Io(e) => {
+                unreachable!("I/O error are not possible for slice but found {e}")
+            }
+        })
+    }
+
+    fn do_read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+        loop {
+            self.reader_buffer.clear();
+            let event = self.reader.read_event_into(&mut self.reader_buffer)?;
+            if event == Event::Eof {
+                return Ok(None);
+            }
+            if let Some(solution) = self.inner.read_event(event)? {
+                return Ok(Some(solution));
+            }
+        }
+    }
+}
+
 enum XmlInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -374,6 +453,11 @@ struct XmlInnerQueryResultsReader {
 }
 
 impl XmlInnerQueryResultsReader {
+    fn set_options(config: &mut Config) {
+        config.trim_text(true);
+        config.expand_empty_elements = true;
+    }
+
     pub fn read_event(
         &mut self,
         event: Event<'_>,
@@ -827,7 +911,6 @@ fn map_xml_error(error: Error) -> io::Error {
         Error::Io(error) => {
             Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))
         }
-        Error::UnexpectedEof(_) => io::Error::new(io::ErrorKind::UnexpectedEof, error),
         _ => io::Error::new(io::ErrorKind::InvalidData, error),
     }
 }

@@ -4,7 +4,7 @@ from urllib.request import urlopen
 
 import tomlkit
 
-MSRV = "1.78.0"
+TARGET_VERSION = "1.79.0"
 LINT_BLACKLIST = {
     "absolute_paths",  # TODO: might be nice
     "alloc_instead_of_core",
@@ -24,6 +24,7 @@ LINT_BLACKLIST = {
     "implicit_return",
     "indexing_slicing",
     "integer_division",
+    "integer_division_remainder_used",
     "iter_over_hash_type",
     "little_endian_bytes",
     "map_err_ignore",
@@ -66,7 +67,7 @@ LINT_BLACKLIST = {
 
 lints = set()
 with urlopen(
-    f"https://rust-lang.github.io/rust-clippy/rust-{MSRV}/lints.json"
+    f"https://rust-lang.github.io/rust-clippy/rust-{TARGET_VERSION}/lints.json"
 ) as response:
     for lint in json.load(response):
         if lint["level"] == "allow" and lint["group"] != "nursery":

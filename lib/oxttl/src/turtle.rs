@@ -202,6 +202,7 @@ impl TurtleParser {
         FromSliceTurtleReader {
             inner: TriGRecognizer::new_parser(
                 slice,
+                true,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -256,6 +257,7 @@ impl TurtleParser {
             parser: TriGRecognizer::new_parser(
                 Vec::new(),
                 false,
+                false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
                 self.unchecked,
@@ -307,6 +309,7 @@ impl ParallelTurtleParser {
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
     /// use oxttl::{ParallelTurtleParser, TurtleParser};
+    /// use rayon::iter::IntoParallelIterator;
     ///
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
@@ -316,16 +319,20 @@ impl ParallelTurtleParser {
     ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let mut count = 0;
-    /// for triple in ParallelTurtleParser::new()
-    ///     .par_parse_slice(file.as_ref())
-    ///     .flatten()
-    /// {
-    ///     let triple = triple?;
-    ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-    ///         count += 1;
-    ///     }
-    /// }
+    /// let readers = ParallelTurtleParser::new().parse_slice(file.as_ref());
+    /// let count = readers
+    ///     .into_par_iter()
+    ///     .map(|reader| {
+    ///         let mut count = 0;
+    ///         for triple in reader {
+    ///             let triple = triple?;
+    ///             if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///                 count += 1;
+    ///             }
+    ///         }
+    ///         count
+    ///     })
+    ///     .sum();
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -862,7 +869,7 @@ impl<'a> Iterator for TurtlePrefixesIter<'a> {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct TurtleSerializer {
     inner: TriGSerializer,

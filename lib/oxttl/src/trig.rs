@@ -48,7 +48,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct TriGParser {
     unchecked: bool,
@@ -203,7 +203,8 @@ impl TriGParser {
         FromSliceTriGReader {
             inner: TriGRecognizer::new_parser(
                 slice,
-                false,
+                true,
+                true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
                 self.unchecked,
@@ -256,6 +257,7 @@ impl TriGParser {
         LowLevelTriGReader {
             parser: TriGRecognizer::new_parser(
                 Vec::new(),
+                false,
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -742,7 +744,7 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct TriGSerializer {
     prefixes: BTreeMap<String, String>,

@@ -6,7 +6,7 @@ use crate::RdfSyntaxError;
 use oxrdf::{BlankNode, GraphName, IriParseError, Quad, Subject, Term, Triple};
 #[cfg(feature = "async-tokio")]
 use oxrdfxml::FromTokioAsyncReadRdfXmlReader;
-use oxrdfxml::{FromReadRdfXmlReader, FromSliceRdfXmlReader, RdfXmlParser};
+use oxrdfxml::{FromReadRdfXmlReader, FromSliceRdfXmlReader, RdfXmlParser, RdfXmlPrefixesIter};
 #[cfg(feature = "async-tokio")]
 use oxttl::n3::FromTokioAsyncReadN3Reader;
 use oxttl::n3::{FromReadN3Reader, FromSliceN3Reader, N3Parser, N3PrefixesIter, N3Quad, N3Term};
@@ -22,9 +22,8 @@ use oxttl::trig::{FromReadTriGReader, FromSliceTriGReader, TriGParser, TriGPrefi
 #[cfg(feature = "async-tokio")]
 use oxttl::turtle::FromTokioAsyncReadTurtleReader;
 use oxttl::turtle::{
-    FromReadTurtleReader, FromSliceTurtleReader, TurtleParser, TurtlePrefixesIter,
+    FromReadTurtleReader, FromSliceTurtleReader, TurtleParser, TurtlePrefixesIter, ParallelTurtleParser
 };
-use oxttl::ParallelTurtleParser;
 use std::collections::HashMap;
 use std::io::Read;
 #[cfg(feature = "async-tokio")]
@@ -61,6 +60,7 @@ use tokio::io::AsyncRead;
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]
+#[derive(Clone)]
 pub struct RdfParser {
     inner: RdfParserKind,
     default_graph: GraphName,
@@ -68,6 +68,7 @@ pub struct RdfParser {
     rename_blank_nodes: bool,
 }
 
+#[derive(Clone)]
 enum RdfParserKind {
     N3(N3Parser),
     NQuads(NQuadsParser),
@@ -364,12 +365,10 @@ impl RdfParser {
     /// ```
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+    /// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
     /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-    /// let quads = parser
-    ///     .parse_slice(file.as_bytes())
-    ///     .collect::<Result<Vec<_>, _>>()?;
+    /// let quads = parser.parse_slice(file).collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
@@ -574,9 +573,10 @@ impl<R: Read> FromReadQuadReader<R> {
                 FromReadQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 FromReadQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
                 FromReadQuadReaderKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
-                FromReadQuadReaderKind::NQuads(_)
-                | FromReadQuadReaderKind::NTriples(_)
-                | FromReadQuadReaderKind::RdfXml(_) => PrefixesIterKind::None, /* TODO: implement for RDF/XML */
+                FromReadQuadReaderKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
+                FromReadQuadReaderKind::NQuads(_) | FromReadQuadReaderKind::NTriples(_) => {
+                    PrefixesIterKind::None
+                }
             },
         }
     }
@@ -605,9 +605,8 @@ impl<R: Read> FromReadQuadReader<R> {
             FromReadQuadReaderKind::N3(p) => p.base_iri(),
             FromReadQuadReaderKind::TriG(p) => p.base_iri(),
             FromReadQuadReaderKind::Turtle(p) => p.base_iri(),
-            FromReadQuadReaderKind::NQuads(_)
-            | FromReadQuadReaderKind::NTriples(_)
-            | FromReadQuadReaderKind::RdfXml(_) => None, // TODO: implement for RDF/XML
+            FromReadQuadReaderKind::RdfXml(p) => p.base_iri(),
+            FromReadQuadReaderKind::NQuads(_) | FromReadQuadReaderKind::NTriples(_) => None,
         }
     }
 }
@@ -716,9 +715,11 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
                 FromTokioAsyncReadQuadReaderKind::Turtle(p) => {
                     PrefixesIterKind::Turtle(p.prefixes())
                 }
+                FromTokioAsyncReadQuadReaderKind::RdfXml(p) => {
+                    PrefixesIterKind::RdfXml(p.prefixes())
+                }
                 FromTokioAsyncReadQuadReaderKind::NQuads(_)
-                | FromTokioAsyncReadQuadReaderKind::NTriples(_)
-                | FromTokioAsyncReadQuadReaderKind::RdfXml(_) => PrefixesIterKind::None, /* TODO: implement for RDF/XML */
+                | FromTokioAsyncReadQuadReaderKind::NTriples(_) => PrefixesIterKind::None,
             },
         }
     }
@@ -751,9 +752,9 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
             FromTokioAsyncReadQuadReaderKind::N3(p) => p.base_iri(),
             FromTokioAsyncReadQuadReaderKind::TriG(p) => p.base_iri(),
             FromTokioAsyncReadQuadReaderKind::Turtle(p) => p.base_iri(),
+            FromTokioAsyncReadQuadReaderKind::RdfXml(p) => p.base_iri(),
             FromTokioAsyncReadQuadReaderKind::NQuads(_)
-            | FromTokioAsyncReadQuadReaderKind::NTriples(_)
-            | FromTokioAsyncReadQuadReaderKind::RdfXml(_) => None, // TODO: implement for RDF/XML
+            | FromTokioAsyncReadQuadReaderKind::NTriples(_) => None,
         }
     }
 }
@@ -763,7 +764,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
 /// ```
 /// use oxrdfio::{RdfFormat, RdfParser};
 ///
-/// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+/// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = RdfParser::from_format(RdfFormat::NTriples);
 /// let quads = parser.parse_slice(file).collect::<Result<Vec<_>, _>>()?;
@@ -853,9 +854,10 @@ impl<'a> FromSliceQuadReader<'a> {
                 FromSliceQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 FromSliceQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
                 FromSliceQuadReaderKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
-                FromSliceQuadReaderKind::NQuads(_)
-                | FromSliceQuadReaderKind::NTriples(_)
-                | FromSliceQuadReaderKind::RdfXml(_) => PrefixesIterKind::None, /* TODO: implement for RDF/XML */
+                FromSliceQuadReaderKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
+                FromSliceQuadReaderKind::NQuads(_) | FromSliceQuadReaderKind::NTriples(_) => {
+                    PrefixesIterKind::None
+                }
             },
         }
     }
@@ -884,9 +886,8 @@ impl<'a> FromSliceQuadReader<'a> {
             FromSliceQuadReaderKind::N3(p) => p.base_iri(),
             FromSliceQuadReaderKind::TriG(p) => p.base_iri(),
             FromSliceQuadReaderKind::Turtle(p) => p.base_iri(),
-            FromSliceQuadReaderKind::NQuads(_)
-            | FromSliceQuadReaderKind::NTriples(_)
-            | FromSliceQuadReaderKind::RdfXml(_) => None, // TODO: implement for RDF/XML
+            FromSliceQuadReaderKind::RdfXml(p) => p.base_iri(),
+            FromSliceQuadReaderKind::NQuads(_) | FromSliceQuadReaderKind::NTriples(_) => None,
         }
     }
 }
@@ -902,6 +903,7 @@ enum PrefixesIterKind<'a> {
     Turtle(TurtlePrefixesIter<'a>),
     TriG(TriGPrefixesIter<'a>),
     N3(N3PrefixesIter<'a>),
+    RdfXml(RdfXmlPrefixesIter<'a>),
     None,
 }
 
@@ -914,6 +916,7 @@ impl<'a> Iterator for PrefixesIter<'a> {
             PrefixesIterKind::Turtle(iter) => iter.next(),
             PrefixesIterKind::TriG(iter) => iter.next(),
             PrefixesIterKind::N3(iter) => iter.next(),
+            PrefixesIterKind::RdfXml(iter) => iter.next(),
             PrefixesIterKind::None => None,
         }
     }
@@ -924,6 +927,7 @@ impl<'a> Iterator for PrefixesIter<'a> {
             PrefixesIterKind::Turtle(iter) => iter.size_hint(),
             PrefixesIterKind::TriG(iter) => iter.size_hint(),
             PrefixesIterKind::N3(iter) => iter.size_hint(),
+            PrefixesIterKind::RdfXml(iter) => iter.size_hint(),
             PrefixesIterKind::None => (0, Some(0)),
         }
     }

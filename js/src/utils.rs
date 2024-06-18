@@ -23,6 +23,7 @@ pub fn to_err(e: impl ToString) -> JsValue {
 
 #[wasm_bindgen]
 extern "C" {
+    #[allow(unsafe_code)]
     #[wasm_bindgen(js_namespace = console)]
     pub(crate) fn warn(s: &str);
 }

@@ -164,6 +164,7 @@ impl NTriplesParser {
         FromSliceNTriplesReader {
             inner: NQuadsRecognizer::new_parser(
                 slice,
+                true,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -214,6 +215,7 @@ impl NTriplesParser {
         LowLevelNTriplesReader {
             parser: NQuadsRecognizer::new_parser(
                 Vec::new(),
+                false,
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
@@ -424,7 +426,7 @@ impl LowLevelNTriplesReader {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[must_use]
 pub struct NTriplesSerializer;
 

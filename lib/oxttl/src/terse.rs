@@ -952,8 +952,10 @@ impl RuleRecognizer for TriGRecognizer {
 }
 
 impl TriGRecognizer {
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn new_parser<B>(
         data: B,
+        is_ending: bool,
         with_graph_name: bool,
         #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
         unchecked: bool,
@@ -964,6 +966,7 @@ impl TriGRecognizer {
             Lexer::new(
                 N3Lexer::new(N3LexerMode::Turtle, unchecked),
                 data,
+                is_ending,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
                 true,

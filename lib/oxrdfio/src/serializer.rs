@@ -46,10 +46,12 @@ use tokio::io::AsyncWrite;
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
+#[derive(Clone)]
 pub struct RdfSerializer {
     inner: RdfSerializerKind,
 }
 
+#[derive(Clone)]
 enum RdfSerializerKind {
     NQuads(NQuadsSerializer),
     NTriples(NTriplesSerializer),

@@ -1,23 +1,20 @@
 use anyhow::Context;
 use sparesults::{
-    FromReadQueryResultsReader, QueryResultsFormat, QueryResultsParser, QueryResultsSerializer,
+    FromSliceQueryResultsReader, QueryResultsFormat, QueryResultsParser, QueryResultsSerializer,
 };
 
 pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
-    let parser = QueryResultsParser::from_format(format);
-    let serializer = QueryResultsSerializer::from_format(format);
-
-    let Ok(reader) = parser.parse_read(data) else {
+    let Ok(reader) = QueryResultsParser::from_format(format).parse_slice(data) else {
         return;
     };
     match reader {
-        FromReadQueryResultsReader::Solutions(solutions) => {
+        FromSliceQueryResultsReader::Solutions(solutions) => {
             let Ok(solutions) = solutions.collect::<Result<Vec<_>, _>>() else {
                 return;
             };
 
             // We try to write again
-            let mut writer = serializer
+            let mut writer = QueryResultsSerializer::from_format(format)
                 .serialize_solutions_to_write(
                     Vec::new(),
                     solutions
@@ -28,13 +25,14 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
             for solution in &solutions {
                 writer.write(solution).unwrap();
             }
-            let serialized = String::from_utf8(writer.finish().unwrap()).unwrap();
+            let serialized = writer.finish().unwrap();
 
             // And to parse again
-            if let FromReadQueryResultsReader::Solutions(roundtrip_solutions) = parser
-                .parse_read(serialized.as_bytes())
-                .with_context(|| format!("Parsing {serialized:?}"))
-                .unwrap()
+            if let FromSliceQueryResultsReader::Solutions(roundtrip_solutions) =
+                QueryResultsParser::from_format(format)
+                    .parse_slice(&serialized)
+                    .with_context(|| format!("Parsing {:?}", String::from_utf8_lossy(&serialized)))
+                    .unwrap()
             {
                 assert_eq!(
                     roundtrip_solutions
@@ -45,16 +43,18 @@ pub fn fuzz_result_format(format: QueryResultsFormat, data: &[u8]) {
                 )
             }
         }
-        FromReadQueryResultsReader::Boolean(value) => {
+        FromSliceQueryResultsReader::Boolean(value) => {
             // We try to write again
             let mut serialized = Vec::new();
-            serializer
+            QueryResultsSerializer::from_format(format)
                 .serialize_boolean_to_write(&mut serialized, value)
                 .unwrap();
 
             // And to parse again
-            if let FromReadQueryResultsReader::Boolean(roundtrip_value) =
-                parser.parse_read(serialized.as_slice()).unwrap()
+            if let FromSliceQueryResultsReader::Boolean(roundtrip_value) =
+                QueryResultsParser::from_format(format)
+                    .parse_slice(&serialized)
+                    .unwrap()
             {
                 assert_eq!(roundtrip_value, value)
             }
