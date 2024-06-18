@@ -34,7 +34,7 @@ pub fn get_turtle_file_chunks(
     bytes: &[u8],
     n_chunks: usize,
     parser: TurtleParser,
-) -> Option<Vec<(usize, usize)>> {
+) -> Vec<(usize, usize)> {
     let mut last_pos = 0;
     let total_len = bytes.len();
     let chunk_size = total_len / n_chunks;
@@ -49,18 +49,20 @@ pub fn get_turtle_file_chunks(
         let end_pos = match next_terminating_period(parser.clone(), &bytes[search_pos..]) {
             Some(pos) => search_pos + pos,
             None => {
-                return None;
+                return vec![(0, total_len)];
             }
         };
         offsets.push((last_pos, end_pos));
         last_pos = end_pos;
     }
     offsets.push((last_pos, total_len));
-    Some(offsets)
+    offsets
 }
 
 // Heuristically, we assume that a period is terminating (a triple) if we can start immediately after it and parse three triples.
 // Parser should not be reused, hence it is passed by value.
+// If no such period can be found, looking at 1000 consecutive periods, we give up.
+// Important to keep this number this high, as some TTL files can have a lot of periods.
 #[allow(clippy::needless_pass_by_value)]
 fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usize> {
     fn accept(parser: TurtleParser, input: &[u8]) -> bool {

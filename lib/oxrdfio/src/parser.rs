@@ -24,6 +24,7 @@ use oxttl::turtle::FromTokioAsyncReadTurtleReader;
 use oxttl::turtle::{
     FromReadTurtleReader, FromSliceTurtleReader, TurtleParser, TurtlePrefixesIter,
 };
+use oxttl::ParallelTurtleParser;
 use std::collections::HashMap;
 use std::io::Read;
 #[cfg(feature = "async-tokio")]
@@ -419,6 +420,79 @@ impl From<RdfFormat> for RdfParser {
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
+
+pub enum ParallelRdfParserKind {
+    Turtle(ParallelTurtleParser),
+}
+pub struct ParallelRdfParser {
+    inner: ParallelRdfParserKind,
+    default_graph: GraphName,
+    without_named_graphs: bool,
+    rename_blank_nodes: bool,
+}
+
+impl ParallelRdfParser {
+    fn from_format(format: RdfFormat) -> ParallelRdfParser {
+        Self {
+            inner: match format {
+                RdfFormat::Turtle => ParallelRdfParserKind::Turtle(ParallelTurtleParser::new()),
+                _ => todo!(),
+            },
+            default_graph: GraphName::DefaultGraph,
+            without_named_graphs: false,
+            rename_blank_nodes: false,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn unchecked(mut self) -> Self {
+        self.inner = match self.inner {
+            ParallelRdfParserKind::Turtle(p) => ParallelRdfParserKind::Turtle(p.unchecked()),
+        };
+        self
+    }
+
+    #[inline]
+    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+        self.inner = match self.inner {
+            ParallelRdfParserKind::Turtle(p) => {
+                ParallelRdfParserKind::Turtle(p.with_base_iri(base_iri)?)
+            }
+        };
+        Ok(self)
+    }
+
+    pub fn parse_slice(self, slice: &[u8]) -> Result<Vec<FromSliceQuadReader<'_>>, RdfParseError> {
+        let mut from_kinds = vec![];
+        match self.inner {
+            ParallelRdfParserKind::Turtle(p) => {
+                for r in p.parse_slice(slice)? {
+                    from_kinds.push(FromSliceQuadReaderKind::Turtle(r));
+                }
+            }
+        };
+
+        Ok(from_kinds
+            .into_iter()
+            .map(|fk| FromSliceQuadReader {
+                parser: fk,
+                mapper: QuadMapper {
+                    default_graph: self.default_graph.clone(),
+                    without_named_graphs: self.without_named_graphs,
+                    blank_node_map: self.rename_blank_nodes.then(HashMap::new),
+                },
+            })
+            .collect())
+    }
+}
+
+impl From<RdfFormat> for ParallelRdfParser {
+    fn from(format: RdfFormat) -> Self {
+        Self::from_format(format)
+    }
+}
+
 #[must_use]
 pub struct FromReadQuadReader<R: Read> {
     parser: FromReadQuadReaderKind<R>,
@@ -692,9 +766,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let quads = parser
-///     .parse_slice(file)
-///     .collect::<Result<Vec<_>, _>>()?;
+/// let quads = parser.parse_slice(file).collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
