@@ -308,8 +308,8 @@ impl ParallelTurtleParser {
     /// ```
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
-    /// use oxttl::{ParallelTurtleParser, TurtleParser};
-    /// use rayon::iter::IntoParallelIterator;
+    /// use oxttl::ParallelTurtleParser;
+    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
     ///
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
@@ -319,20 +319,19 @@ impl ParallelTurtleParser {
     ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = ParallelTurtleParser::new().parse_slice(file.as_ref());
+    /// let readers = ParallelTurtleParser::new().parse_slice(file.as_ref())?;
     /// let count = readers
     ///     .into_par_iter()
     ///     .map(|reader| {
     ///         let mut count = 0;
     ///         for triple in reader {
-    ///             let triple = triple?;
+    ///             let triple = triple.unwrap();
     ///             if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///                 count += 1;
     ///             }
     ///         }
     ///         count
-    ///     })
-    ///     .sum();
+    ///     }).sum();
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```

@@ -22,7 +22,8 @@ use oxttl::trig::{FromReadTriGReader, FromSliceTriGReader, TriGParser, TriGPrefi
 #[cfg(feature = "async-tokio")]
 use oxttl::turtle::FromTokioAsyncReadTurtleReader;
 use oxttl::turtle::{
-    FromReadTurtleReader, FromSliceTurtleReader, TurtleParser, TurtlePrefixesIter, ParallelTurtleParser
+    FromReadTurtleReader, FromSliceTurtleReader, ParallelTurtleParser, TurtleParser,
+    TurtlePrefixesIter,
 };
 use std::collections::HashMap;
 use std::io::Read;
