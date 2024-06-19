@@ -49,7 +49,7 @@ pub fn get_turtle_file_chunks(
         let end_pos = match next_terminating_period(parser.clone(), &bytes[search_pos..]) {
             Some(pos) => search_pos + pos,
             None => {
-                //We keep the valid chunks we found, and add (outside the loop) the rest of the bytes as a chunk.
+                // We keep the valid chunks we found, and add (outside the loop) the rest of the bytes as a chunk.
                 break;
             }
         };

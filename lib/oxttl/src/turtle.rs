@@ -1,7 +1,6 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`]
 //! and a serializer implemented by [`TurtleSerializer`].
 
-use std::cmp::max;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
@@ -14,6 +13,7 @@ use crate::trig::ToTokioAsyncWriteTriGWriter;
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
+use std::cmp::{max, min};
 use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
@@ -258,10 +258,9 @@ impl TurtleParser {
         slice: &[u8],
         target_parallelism: usize,
     ) -> Result<Vec<FromSliceTurtleReader<'_>>, TurtleParseError> {
-        let min_par = max(target_parallelism, slice.len() / 16384);
+        let n_chunks = (slice.len() / 16384).clamp(1, target_parallelism);
 
-        let slice_len = slice.len();
-        let n_chunks = if slice_len >= min_par {
+        if n_chunks > 1 {
             // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
             let mut from_slice_reader = self.clone().parse_slice(slice);
             if let Some(r) = from_slice_reader.next() {
@@ -271,10 +270,7 @@ impl TurtleParser {
                     self = self.with_prefix(p, iri).unwrap();
                 }
             }
-            target_parallelism
-        } else {
-            1
-        };
+        }
 
         let chunks = get_turtle_file_chunks(slice, n_chunks, self.clone());
         let from_turtle_slice_readers: Vec<_> = chunks
