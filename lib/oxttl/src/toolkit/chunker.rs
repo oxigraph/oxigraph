@@ -55,7 +55,9 @@ pub fn get_turtle_file_chunks(
         offsets.push((last_pos, end_pos));
         last_pos = end_pos;
     }
-    offsets.push((last_pos, total_len));
+    if last_pos < total_len {
+        offsets.push((last_pos, total_len));
+    }
     offsets
 }
 
@@ -78,9 +80,6 @@ fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usi
         }
         true
     }
-
-    let mut rejected_periods = 0_u16;
-
     let mut total_pos = 0;
     if input.is_empty() {
         return None;
@@ -98,7 +97,6 @@ fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usi
         }
         input = &input[pos + 1..];
         total_pos += pos + 1;
-        rejected_periods += 1;
     }
     None
 }
