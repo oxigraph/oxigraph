@@ -85,11 +85,7 @@ fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usi
     if input.is_empty() {
         return None;
     }
-    loop {
-        if rejected_periods >= 1_000 {
-            return None;
-        }
-
+    for _ in 0..1_000 {
         let pos = memchr::memchr(EOT_CHAR, input)? + 1;
         if input.len() - pos == 0 {
             return None;
@@ -104,4 +100,5 @@ fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usi
         total_pos += pos + 1;
         rejected_periods += 1;
     }
+    None
 }
