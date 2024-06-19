@@ -13,7 +13,6 @@ use crate::trig::ToTokioAsyncWriteTriGWriter;
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
-use std::cmp::{max, min};
 use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
@@ -258,6 +257,7 @@ impl TurtleParser {
         slice: &[u8],
         target_parallelism: usize,
     ) -> Result<Vec<FromSliceTurtleReader<'_>>, TurtleParseError> {
+        #[allow(clippy::decimal_literal_representation)]
         let n_chunks = (slice.len() / 16384).clamp(1, target_parallelism);
 
         if n_chunks > 1 {
