@@ -394,9 +394,50 @@ impl RdfParser {
         }
     }
 
+    /// Creates a vector of parsers from a slice of bytes.
+    /// The caller may use these to parse in parallel.
+    /// Currently only works for Turtle.
+    /// To dynamically specify target_parallelism, use e.g. std::thread::available_parallelism
+    /// Intended to work on large documents.
+    /// Can fail for Turtle if there are prefixes that are not defined at the top of the document.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" .
+    /// <bar> a schema:Person ;
+    ///     schema:name "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let readers =
+    ///     RdfParser::from_format(RdfFormat::Turtle).split_slice_for_parsing(file.as_ref(), 2)?;
+    /// let count = readers
+    ///     .into_par_iter()
+    ///     .map(|reader| {
+    ///         let mut count = 0;
+    ///         for quad in reader {
+    ///             let quad = quad.unwrap();
+    ///             if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///                 count += 1;
+    ///             }
+    ///         }
+    ///         count
+    ///     })
+    ///     .sum();
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn split_slice_for_parsing(
         self,
         slice: &[u8],
+        target_parallelism: usize,
     ) -> Result<Vec<FromSliceQuadReader<'_>>, RdfParseError> {
         let mut from_quad_reader_kinds = vec![];
         match self.inner {
@@ -417,7 +458,7 @@ impl RdfParser {
                 from_quad_reader_kinds.push(FromSliceQuadReaderKind::TriG(p.parse_slice(slice)));
             }
             RdfParserKind::Turtle(p) => {
-                for r in p.split_slice_for_parsing(slice, 1)? {
+                for r in p.split_slice_for_parsing(slice, target_parallelism)? {
                     from_quad_reader_kinds.push(FromSliceQuadReaderKind::Turtle(r));
                 }
             }

@@ -1301,6 +1301,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
+ "rayon",
  "thiserror",
  "tokio",
 ]

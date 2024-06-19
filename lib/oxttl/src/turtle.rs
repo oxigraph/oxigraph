@@ -1,6 +1,7 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`]
 //! and a serializer implemented by [`TurtleSerializer`].
 
+use std::cmp::max;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
@@ -214,7 +215,8 @@ impl TurtleParser {
         }
     }
 
-    /// Parses a Turtle file in parallel from a slice of bytes.
+    /// Creates a vector of iterators that may be used to parse a Turtle document slice in parallel.
+    /// To dynamically specify target_parallelism, use e.g. std::thread::available_parallelism
     /// Intended to work on large documents.
     /// Can fail if there are prefixes that are not defined at the top of the document.
     ///
@@ -222,7 +224,7 @@ impl TurtleParser {
     /// ```
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
-    /// use oxttl::ParallelTurtleParser;
+    /// use oxttl::TurtleParser;
     /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -233,7 +235,7 @@ impl TurtleParser {
     ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = ParallelTurtleParser::new().parse_slice(file.as_ref())?;
+    /// let readers = TurtleParser::new().split_slice_for_parsing(file.as_ref(), 2)?;
     /// let count = readers
     ///     .into_par_iter()
     ///     .map(|reader| {
@@ -256,10 +258,10 @@ impl TurtleParser {
         slice: &[u8],
         target_parallelism: usize,
     ) -> Result<Vec<FromSliceTurtleReader<'_>>, TurtleParseError> {
-        const MIN_PAR_SIZE: usize = 10_000;
+        let min_par = max(target_parallelism, slice.len() / 16384);
 
         let slice_len = slice.len();
-        let n_chunks = if slice_len >= MIN_PAR_SIZE {
+        let n_chunks = if slice_len >= min_par {
             // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
             let mut from_slice_reader = self.clone().parse_slice(slice);
             if let Some(r) = from_slice_reader.next() {
