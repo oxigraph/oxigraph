@@ -22,8 +22,7 @@ use oxttl::trig::{FromReadTriGReader, FromSliceTriGReader, TriGParser, TriGPrefi
 #[cfg(feature = "async-tokio")]
 use oxttl::turtle::FromTokioAsyncReadTurtleReader;
 use oxttl::turtle::{
-    FromReadTurtleReader, FromSliceTurtleReader, TurtleParser,
-    TurtlePrefixesIter,
+    FromReadTurtleReader, FromSliceTurtleReader, TurtleParser, TurtlePrefixesIter,
 };
 use std::collections::HashMap;
 use std::io::Read;
@@ -395,16 +394,28 @@ impl RdfParser {
         }
     }
 
-    pub fn split_slice_for_parsing(self, slice: &[u8]) -> Result<Vec<FromSliceQuadReader>, RdfParseError> {
+    pub fn split_slice_for_parsing(
+        self,
+        slice: &[u8],
+    ) -> Result<Vec<FromSliceQuadReader<'_>>, RdfParseError> {
         let mut from_quad_reader_kinds = vec![];
         match self.inner {
-            RdfParserKind::N3(p) => {from_quad_reader_kinds.push(FromSliceQuadReaderKind::N3(p.parse_slice(slice))); }
-            RdfParserKind::NQuads(p) => {from_quad_reader_kinds.push(FromSliceQuadReaderKind::NQuads(p.parse_slice(slice)));}
-            RdfParserKind::NTriples(p) => {
-                from_quad_reader_kinds.push(FromSliceQuadReaderKind::NTriples(p.parse_slice(slice)));
+            RdfParserKind::N3(p) => {
+                from_quad_reader_kinds.push(FromSliceQuadReaderKind::N3(p.parse_slice(slice)));
             }
-            RdfParserKind::RdfXml(p) => {from_quad_reader_kinds.push(FromSliceQuadReaderKind::RdfXml(p.parse_slice(slice)));}
-            RdfParserKind::TriG(p) => {from_quad_reader_kinds.push(FromSliceQuadReaderKind::TriG(p.parse_slice(slice)));}
+            RdfParserKind::NQuads(p) => {
+                from_quad_reader_kinds.push(FromSliceQuadReaderKind::NQuads(p.parse_slice(slice)));
+            }
+            RdfParserKind::NTriples(p) => {
+                from_quad_reader_kinds
+                    .push(FromSliceQuadReaderKind::NTriples(p.parse_slice(slice)));
+            }
+            RdfParserKind::RdfXml(p) => {
+                from_quad_reader_kinds.push(FromSliceQuadReaderKind::RdfXml(p.parse_slice(slice)));
+            }
+            RdfParserKind::TriG(p) => {
+                from_quad_reader_kinds.push(FromSliceQuadReaderKind::TriG(p.parse_slice(slice)));
+            }
             RdfParserKind::Turtle(p) => {
                 for r in p.split_slice_for_parsing(slice, 1)? {
                     from_quad_reader_kinds.push(FromSliceQuadReaderKind::Turtle(r));

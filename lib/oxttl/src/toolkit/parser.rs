@@ -32,7 +32,6 @@ pub trait RuleRecognizer: Sized {
     ) -> &<Self::TokenRecognizer as TokenRecognizer>::Options;
 }
 
-#[derive(Clone)]
 pub struct RuleRecognizerError {
     pub message: String,
 }
@@ -44,7 +43,7 @@ impl<S: Into<String>> From<S> for RuleRecognizerError {
         }
     }
 }
-#[derive(Clone)]
+
 #[allow(clippy::partial_pub_fields)]
 pub struct Parser<B, RR: RuleRecognizer> {
     lexer: Lexer<B, RR::TokenRecognizer>,

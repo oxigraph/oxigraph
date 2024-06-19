@@ -7,14 +7,13 @@ use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxrdf::Triple;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
 
-#[derive(Clone)]
 pub struct NQuadsRecognizer {
     stack: Vec<NQuadsState>,
     subjects: Vec<Subject>,
     predicates: Vec<NamedNode>,
     objects: Vec<Term>,
 }
-#[derive(Clone)]
+
 pub struct NQuadsRecognizerContext {
     with_graph_name: bool,
     #[cfg(feature = "rdf-star")]
@@ -22,7 +21,6 @@ pub struct NQuadsRecognizerContext {
     lexer_options: N3LexerOptions,
 }
 
-#[derive(Clone)]
 enum NQuadsState {
     ExpectSubject,
     ExpectPredicate,

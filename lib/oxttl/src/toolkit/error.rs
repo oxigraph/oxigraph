@@ -2,7 +2,7 @@ use std::ops::Range;
 use std::{fmt, io};
 
 /// A position in a text i.e. a `line` number starting from 0, a `column` number starting from 0 (in number of code points) and a global file `offset` starting from 0 (in number of bytes).
-#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct TextPosition {
     pub line: u64,
     pub column: u64,

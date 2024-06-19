@@ -374,7 +374,7 @@ impl<'a> Iterator for FromSliceNTriplesReader<'a> {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Clone)]
+
 pub struct LowLevelNTriplesReader {
     parser: Parser<Vec<u8>, NQuadsRecognizer>,
 }

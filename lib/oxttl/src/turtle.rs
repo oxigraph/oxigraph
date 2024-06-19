@@ -259,7 +259,7 @@ impl TurtleParser {
         const MIN_PAR_SIZE: usize = 10_000;
 
         let slice_len = slice.len();
-        let threads = if slice_len >= MIN_PAR_SIZE {
+        let n_chunks = if slice_len >= MIN_PAR_SIZE {
             // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
             let mut from_slice_reader = self.clone().parse_slice(slice);
             if let Some(r) = from_slice_reader.next() {
@@ -269,17 +269,12 @@ impl TurtleParser {
                     self = self.with_prefix(p, iri).unwrap();
                 }
             }
-
-            if let Ok(threads) = std::thread::available_parallelism() {
-                threads.get()
-            } else {
-                1
-            }
+            target_parallelism
         } else {
             1
         };
 
-        let chunks = get_turtle_file_chunks(slice, threads, self.clone());
+        let chunks = get_turtle_file_chunks(slice, n_chunks, self.clone());
         let from_turtle_slice_readers: Vec<_> = chunks
             .into_iter()
             .map(|(start, end)| {
@@ -686,7 +681,6 @@ impl<'a> Iterator for FromSliceTurtleReader<'a> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 
-#[derive(Clone)]
 pub struct LowLevelTurtleReader {
     parser: Parser<Vec<u8>, TriGRecognizer>,
 }
