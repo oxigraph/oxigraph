@@ -214,6 +214,82 @@ impl TurtleParser {
         }
     }
 
+    /// Parses a Turtle file in parallel from a slice of bytes.
+    /// Intended to work on large documents.
+    /// Can fail if there are prefixes that are not defined at the top of the document.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxttl::ParallelTurtleParser;
+    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" .
+    /// <bar> a schema:Person ;
+    ///     schema:name "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let readers = ParallelTurtleParser::new().parse_slice(file.as_ref())?;
+    /// let count = readers
+    ///     .into_par_iter()
+    ///     .map(|reader| {
+    ///         let mut count = 0;
+    ///         for triple in reader {
+    ///             let triple = triple.unwrap();
+    ///             if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///                 count += 1;
+    ///             }
+    ///         }
+    ///         count
+    ///     })
+    ///     .sum();
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[allow(clippy::unwrap_in_result)]
+    pub fn split_slice_for_parsing(
+        mut self,
+        slice: &[u8],
+        target_parallelism: usize,
+    ) -> Result<Vec<FromSliceTurtleReader<'_>>, TurtleParseError> {
+        const MIN_PAR_SIZE: usize = 10_000;
+
+        let slice_len = slice.len();
+        let threads = if slice_len >= MIN_PAR_SIZE {
+            // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
+            let mut from_slice_reader = self.clone().parse_slice(slice);
+            if let Some(r) = from_slice_reader.next() {
+                r?;
+                for (p, iri) in from_slice_reader.prefixes() {
+                    // Already know this is a valid IRI
+                    self = self.with_prefix(p, iri).unwrap();
+                }
+            }
+
+            if let Ok(threads) = std::thread::available_parallelism() {
+                threads.get()
+            } else {
+                1
+            }
+        } else {
+            1
+        };
+
+        let chunks = get_turtle_file_chunks(slice, threads, self.clone());
+        let from_turtle_slice_readers: Vec<_> = chunks
+            .into_iter()
+            .map(|(start, end)| {
+                let parser = self.clone();
+                parser.parse_slice(&slice[start..end])
+            })
+            .collect();
+        Ok(from_turtle_slice_readers)
+    }
+
     /// Allows to parse a Turtle file by using a low-level API.
     ///
     /// Count the number of people:
@@ -265,130 +341,6 @@ impl TurtleParser {
                 self.prefixes,
             ),
         }
-    }
-}
-
-pub struct ParallelTurtleParser {
-    parser: TurtleParser,
-    base: Option<Iri<String>>,
-}
-
-impl ParallelTurtleParser {
-    /// Builds a new [`ParallelTurtleParser`].
-    pub fn new() -> Self {
-        ParallelTurtleParser {
-            parser: TurtleParser::new(),
-            base: None,
-        }
-    }
-
-    /// Assumes the file is valid to make parsing faster.
-    ///
-    /// It will skip some validations.
-    ///
-    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
-    #[inline]
-    #[must_use]
-    pub fn unchecked(mut self) -> Self {
-        self.parser = self.parser.unchecked();
-        self
-    }
-
-    #[inline]
-    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
-        self.base = Some(Iri::parse(base_iri.into())?);
-        Ok(self)
-    }
-
-    /// Parses a Turtle file in parallel from a slice of bytes.
-    /// Intended to work on large documents.
-    /// Can fail if there are prefixes that are not defined at the top of the document.
-    ///
-    /// Count the number of people:
-    /// ```
-    /// use oxrdf::vocab::rdf;
-    /// use oxrdf::NamedNodeRef;
-    /// use oxttl::ParallelTurtleParser;
-    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
-    ///
-    /// let file = br#"@base <http://example.com/> .
-    /// @prefix schema: <http://schema.org/> .
-    /// <foo> a schema:Person ;
-    ///     schema:name "Foo" .
-    /// <bar> a schema:Person ;
-    ///     schema:name "Bar" ."#;
-    ///
-    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = ParallelTurtleParser::new().parse_slice(file.as_ref())?;
-    /// let count = readers
-    ///     .into_par_iter()
-    ///     .map(|reader| {
-    ///         let mut count = 0;
-    ///         for triple in reader {
-    ///             let triple = triple.unwrap();
-    ///             if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
-    ///                 count += 1;
-    ///             }
-    ///         }
-    ///         count
-    ///     }).sum();
-    /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    #[allow(clippy::unwrap_in_result)]
-    pub fn parse_slice(
-        mut self,
-        slice: &[u8],
-    ) -> Result<Vec<FromSliceTurtleReader<'_>>, TurtleParseError> {
-        const MIN_PAR_SIZE: usize = 10_000;
-        const INCREMENT: usize = 1_000;
-
-        let slice_len = slice.len();
-        let threads = if slice_len >= MIN_PAR_SIZE {
-            // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
-            let mut end = INCREMENT;
-            let mut prefix_parser = self.parser.clone().parse();
-            prefix_parser.extend_from_slice(&slice[0..end]);
-            let mut found_first_triple = false;
-            while !found_first_triple && slice_len >= (end + INCREMENT) {
-                if let Some(r) = prefix_parser.read_next() {
-                    r?;
-                    found_first_triple = true;
-                } else {
-                    prefix_parser.extend_from_slice(&slice[end..end + INCREMENT]);
-                    end += INCREMENT;
-                }
-            }
-            let prefixes: Vec<_> = prefix_parser.prefixes().collect();
-            for (p, iri) in prefixes {
-                // Already know this is a valid IRI, or, if unchecked should not throw error
-                self.parser = self.parser.with_prefix(p, iri).unwrap();
-            }
-
-            if let Ok(threads) = std::thread::available_parallelism() {
-                threads.get()
-            } else {
-                1
-            }
-        } else {
-            1
-        };
-
-        let chunks = get_turtle_file_chunks(slice, threads, self.parser.clone());
-        let from_turtle_slice_readers: Vec<_> = chunks
-            .into_iter()
-            .map(|(start, end)| {
-                let parser = self.parser.clone();
-                parser.parse_slice(&slice[start..end])
-            })
-            .collect();
-        Ok(from_turtle_slice_readers)
-    }
-}
-
-impl Default for ParallelTurtleParser {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
