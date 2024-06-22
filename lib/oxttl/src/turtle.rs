@@ -256,15 +256,15 @@ impl TurtleParser {
         mut self,
         slice: &[u8],
         target_parallelism: usize,
-    ) -> Result<Vec<FromSliceTurtleReader<'_>>, TurtleParseError> {
+    ) -> Vec<FromSliceTurtleReader<'_>> {
         #[allow(clippy::decimal_literal_representation)]
         let n_chunks = (slice.len() / 16384).clamp(1, target_parallelism);
 
         if n_chunks > 1 {
             // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
             let mut from_slice_reader = self.clone().parse_slice(slice);
-            if let Some(r) = from_slice_reader.next() {
-                r?;
+            // Possible parsing error will be handled in first chunk.
+            if from_slice_reader.next().is_some() {
                 for (p, iri) in from_slice_reader.prefixes() {
                     // Already know this is a valid IRI
                     self = self.with_prefix(p, iri).unwrap();
@@ -280,7 +280,7 @@ impl TurtleParser {
                 parser.parse_slice(&slice[start..end])
             })
             .collect();
-        Ok(from_turtle_slice_readers)
+        from_turtle_slice_readers
     }
 
     /// Allows to parse a Turtle file by using a low-level API.

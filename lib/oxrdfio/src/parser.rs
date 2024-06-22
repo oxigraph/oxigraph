@@ -438,7 +438,7 @@ impl RdfParser {
         self,
         slice: &[u8],
         target_parallelism: usize,
-    ) -> Result<Vec<FromSliceQuadReader<'_>>, RdfParseError> {
+    ) -> Vec<FromSliceQuadReader<'_>> {
         let mut from_quad_reader_kinds = vec![];
         match self.inner {
             RdfParserKind::N3(p) => {
@@ -458,7 +458,7 @@ impl RdfParser {
                 from_quad_reader_kinds.push(FromSliceQuadReaderKind::TriG(p.parse_slice(slice)));
             }
             RdfParserKind::Turtle(p) => {
-                for r in p.split_slice_for_parallel_parsing(slice, target_parallelism)? {
+                for r in p.split_slice_for_parallel_parsing(slice, target_parallelism) {
                     from_quad_reader_kinds.push(FromSliceQuadReaderKind::Turtle(r));
                 }
             }
@@ -474,7 +474,7 @@ impl RdfParser {
                 },
             });
         }
-        Ok(slice_quad_readers)
+        slice_quad_readers
     }
 }
 
