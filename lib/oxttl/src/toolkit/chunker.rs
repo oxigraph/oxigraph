@@ -82,9 +82,6 @@ fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usi
         true
     }
     let mut total_pos = 0;
-    if input.is_empty() {
-        return None;
-    }
     for _ in 0..1_000 {
         let pos = memchr::memchr(EOT_CHAR, input)? + 1;
         if input.len() - pos == 0 {
