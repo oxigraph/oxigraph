@@ -234,7 +234,7 @@ impl TurtleParser {
     ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = TurtleParser::new().split_slice_for_parsing(file.as_ref(), 2)?;
+    /// let readers = TurtleParser::new().split_slice_for_parallel_parsing(file.as_ref(), 2)?;
     /// let count = readers
     ///     .into_par_iter()
     ///     .map(|reader| {
@@ -252,7 +252,7 @@ impl TurtleParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unwrap_in_result)]
-    pub fn split_slice_for_parsing(
+    pub fn split_slice_for_parallel_parsing(
         mut self,
         slice: &[u8],
         target_parallelism: usize,

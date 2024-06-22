@@ -434,7 +434,7 @@ impl RdfParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn split_slice_for_parsing(
+    pub fn split_slice_for_parallel_parsing(
         self,
         slice: &[u8],
         target_parallelism: usize,
@@ -458,7 +458,7 @@ impl RdfParser {
                 from_quad_reader_kinds.push(FromSliceQuadReaderKind::TriG(p.parse_slice(slice)));
             }
             RdfParserKind::Turtle(p) => {
-                for r in p.split_slice_for_parsing(slice, target_parallelism)? {
+                for r in p.split_slice_for_parallel_parsing(slice, target_parallelism)? {
                     from_quad_reader_kinds.push(FromSliceQuadReaderKind::Turtle(r));
                 }
             }
