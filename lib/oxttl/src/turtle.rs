@@ -678,7 +678,6 @@ impl<'a> Iterator for FromSliceTurtleReader<'a> {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-
 pub struct LowLevelTurtleReader {
     parser: Parser<Vec<u8>, TriGRecognizer>,
 }
