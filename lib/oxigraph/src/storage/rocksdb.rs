@@ -12,7 +12,7 @@ use crate::storage::numeric_encoder::{
 use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
 };
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::hash::BuildHasherDefault;
@@ -1258,8 +1258,8 @@ impl<'a> FileBulkLoader<'a> {
                 3 * batch_size,
                 BuildHasherDefault::default(),
             ),
-            quads: FxHashSet::with_capacity_and_hasher(batch_size, BuildHasherDefault::default()),
-            triples: FxHashSet::with_capacity_and_hasher(batch_size, BuildHasherDefault::default()),
+            quads: FxHashSet::with_capacity_and_hasher(batch_size, FxBuildHasher),
+            triples: FxHashSet::with_capacity_and_hasher(batch_size, FxBuildHasher),
             graphs: FxHashSet::default(),
         }
     }

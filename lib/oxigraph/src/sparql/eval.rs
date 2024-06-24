@@ -17,7 +17,7 @@ use oxrdf::{TermRef, Variable};
 use oxsdatatypes::*;
 use rand::random;
 use regex::{Regex, RegexBuilder};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use spargebra::algebra::{AggregateFunction, Function, PropertyPathExpression};
@@ -32,7 +32,7 @@ use sparopt::algebra::{
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::iter::{empty, once};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -5177,8 +5177,7 @@ fn look_in_transitive_closure<
 fn hash_deduplicate<T: Eq + Hash + Clone>(
     iter: impl Iterator<Item = Result<T, EvaluationError>>,
 ) -> impl Iterator<Item = Result<T, EvaluationError>> {
-    let mut already_seen =
-        FxHashSet::with_capacity_and_hasher(iter.size_hint().0, BuildHasherDefault::default());
+    let mut already_seen = FxHashSet::with_capacity_and_hasher(iter.size_hint().0, FxBuildHasher);
     iter.filter(move |e| {
         if let Ok(e) = e {
             if already_seen.contains(e) {
