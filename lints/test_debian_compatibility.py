@@ -12,6 +12,7 @@ ALLOWED_MISSING_PACKAGES = {
     "oxhttp",
     "oxiri",
     "quick-xml",
+    "rustc-hash",
 }
 
 base_path = Path(__file__).parent.parent
