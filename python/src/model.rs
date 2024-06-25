@@ -3,7 +3,7 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
-use pyo3::PyTypeInfo;
+use pyo3::{PyClass, PyTypeInfo};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::vec::IntoIter;
@@ -96,15 +96,8 @@ impl PyNamedNode {
     fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
         if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
             Ok(op.matches(self.cmp(&other)))
-        } else if PyBlankNode::is_type_of_bound(other)
-            || PyLiteral::is_type_of_bound(other)
-            || PyDefaultGraph::is_type_of_bound(other)
-        {
-            eq_compare_other_type(op)
         } else {
-            Err(PyTypeError::new_err(
-                "NamedNode could only be compared with RDF terms",
-            ))
+            term_equality(self, other, op)
         }
     }
 
@@ -221,18 +214,7 @@ impl PyBlankNode {
     }
 
     fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
-            eq_compare(self, &other, op)
-        } else if PyNamedNode::is_type_of_bound(other)
-            || PyLiteral::is_type_of_bound(other)
-            || PyDefaultGraph::is_type_of_bound(other)
-        {
-            eq_compare_other_type(op)
-        } else {
-            Err(PyTypeError::new_err(
-                "BlankNode could only be compared with RDF terms",
-            ))
-        }
+        term_equality(self, other, op)
     }
 
     /// :rtype: typing.Any
@@ -377,18 +359,7 @@ impl PyLiteral {
     }
 
     fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
-            eq_compare(self, &other, op)
-        } else if PyNamedNode::is_type_of_bound(other)
-            || PyBlankNode::is_type_of_bound(other)
-            || PyDefaultGraph::is_type_of_bound(other)
-        {
-            eq_compare_other_type(op)
-        } else {
-            Err(PyTypeError::new_err(
-                "Literal could only be compared with RDF terms",
-            ))
-        }
+        term_equality(self, other, op)
     }
 
     /// :rtype: typing.Any
@@ -454,18 +425,7 @@ impl PyDefaultGraph {
     }
 
     fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
-            eq_compare(self, &other, op)
-        } else if PyNamedNode::is_type_of_bound(other)
-            || PyBlankNode::is_type_of_bound(other)
-            || PyLiteral::is_type_of_bound(other)
-        {
-            eq_compare_other_type(op)
-        } else {
-            Err(PyTypeError::new_err(
-                "DefaultGraph could only be compared with RDF terms",
-            ))
-        }
+        term_equality(self, other, op)
     }
 
     /// :rtype: typing.Any
@@ -701,8 +661,8 @@ impl PyTriple {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, other, op)
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
+        term_equality(self, other, op)
     }
 
     fn __len__(&self) -> usize {
@@ -927,8 +887,8 @@ impl PyQuad {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, other, op)
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
+        term_equality(self, other, op)
     }
 
     fn __len__(&self) -> usize {
@@ -1054,8 +1014,8 @@ impl PyVariable {
         hash(&self.inner)
     }
 
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        eq_compare(self, other, op)
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
+        term_equality(self, other, op)
     }
 
     /// :rtype: typing.Any
@@ -1164,27 +1124,41 @@ impl<'a> From<&'a PyGraphNameRef<'a>> for GraphNameRef<'a> {
     }
 }
 
-fn eq_compare<T: Eq>(a: &T, b: &T, op: CompareOp) -> PyResult<bool> {
-    match op {
-        CompareOp::Eq => Ok(a == b),
-        CompareOp::Ne => Ok(a != b),
-        _ => Err(PyNotImplementedError::new_err(
-            "Ordering is not implemented",
-        )),
+fn term_equality<T: PyClass + Eq>(
+    this: &T,
+    other: &Bound<'_, PyAny>,
+    op: CompareOp,
+) -> PyResult<bool> {
+    if let Ok(other) = other.extract::<PyRef<'_, T>>() {
+        match op {
+            CompareOp::Eq => Ok(*this == *other),
+            CompareOp::Ne => Ok(*this != *other),
+            _ => Err(PyNotImplementedError::new_err(
+                "Ordering is not implemented",
+            )),
+        }
+    } else if PyNamedNode::is_type_of_bound(other)
+        || PyBlankNode::is_type_of_bound(other)
+        || PyLiteral::is_type_of_bound(other)
+        || PyDefaultGraph::is_type_of_bound(other)
+        || PyTriple::is_type_of_bound(other)
+        || PyQuad::is_type_of_bound(other)
+    {
+        match op {
+            CompareOp::Eq => Ok(false),
+            CompareOp::Ne => Ok(true),
+            _ => Err(PyNotImplementedError::new_err(
+                "Ordering is not implemented",
+            )),
+        }
+    } else {
+        Err(PyTypeError::new_err(
+            "RDf terms could only be compared with RDF terms",
+        ))
     }
 }
 
-fn eq_compare_other_type(op: CompareOp) -> PyResult<bool> {
-    match op {
-        CompareOp::Eq => Ok(false),
-        CompareOp::Ne => Ok(true),
-        _ => Err(PyNotImplementedError::new_err(
-            "Ordering is not implemented",
-        )),
-    }
-}
-
-pub(crate) fn hash(t: &impl Hash) -> u64 {
+fn hash(t: &impl Hash) -> u64 {
     let mut s = DefaultHasher::new();
     t.hash(&mut s);
     s.finish()

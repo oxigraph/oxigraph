@@ -11,7 +11,6 @@ use oxigraph::sparql::{
     EvaluationError, Query, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
     Variable,
 };
-use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
@@ -102,7 +101,8 @@ pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObjec
 /// >>> s, p, o = solution
 /// >>> s
 /// <NamedNode value=http://example.com>
-#[pyclass(frozen, name = "QuerySolution", module = "pyoxigraph")]
+#[pyclass(frozen, name = "QuerySolution", module = "pyoxigraph", eq)]
+#[derive(Eq, PartialEq)]
 pub struct PyQuerySolution {
     inner: QuerySolution,
 }
@@ -120,14 +120,6 @@ impl PyQuerySolution {
         }
         buffer.push('>');
         buffer
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.inner != other.inner
     }
 
     fn __len__(&self) -> usize {
@@ -308,7 +300,8 @@ impl PyQuerySolutions {
 /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
 /// >>> bool(store.query('ASK { ?s ?p ?o }'))
 /// True
-#[pyclass(unsendable, name = "QueryBoolean", module = "pyoxigraph")]
+#[pyclass(frozen, name = "QueryBoolean", module = "pyoxigraph", eq, ord, hash)]
+#[derive(Eq, Ord, PartialOrd, PartialEq, Hash, Clone, Copy)]
 pub struct PyQueryBoolean {
     inner: bool,
 }
@@ -342,7 +335,7 @@ impl PyQueryBoolean {
     /// b'{"head":{},"boolean":true}'
     #[pyo3(signature = (output = None, format = None))]
     fn serialize<'py>(
-        &mut self,
+        &self,
         output: Option<PyWritableOutput>,
         format: Option<PyQueryResultsFormatInput>,
         py: Python<'py>,
@@ -362,14 +355,6 @@ impl PyQueryBoolean {
 
     fn __bool__(&self) -> bool {
         self.inner
-    }
-
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
-        op.matches(self.inner.cmp(&other.inner))
-    }
-
-    fn __hash__(&self) -> u64 {
-        self.inner.into()
     }
 
     fn __repr__(&self) -> String {
@@ -512,8 +497,8 @@ pub fn parse_query_results(
 /// * `JSON <https://www.w3.org/TR/sparql11-results-json/>`_ (:py:attr:`QueryResultsFormat.JSON`)
 /// * `CSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.CSV`)
 /// * `TSV <https://www.w3.org/TR/sparql11-results-csv-tsv/>`_ (:py:attr:`QueryResultsFormat.TSV`)
-#[pyclass(name = "QueryResultsFormat", module = "pyoxigraph")]
-#[derive(Clone)]
+#[pyclass(frozen, name = "QueryResultsFormat", module = "pyoxigraph", eq, hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PyQueryResultsFormat {
     inner: QueryResultsFormat,
 }
@@ -577,7 +562,7 @@ impl PyQueryResultsFormat {
     /// >>> QueryResultsFormat.JSON.name
     /// 'SPARQL Results in JSON'
     #[getter]
-    pub const fn name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         self.inner.name()
     }
 
@@ -626,18 +611,6 @@ impl PyQueryResultsFormat {
         format!("<QueryResultsFormat {}>", self.inner.name())
     }
 
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.inner != other.inner
-    }
-
     /// :rtype: QueryResultsFormat
     fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
@@ -651,7 +624,7 @@ impl PyQueryResultsFormat {
     }
 }
 
-pub fn lookup_query_results_format(
+fn lookup_query_results_format(
     format: Option<PyQueryResultsFormatInput>,
     path: Option<&Path>,
 ) -> PyResult<QueryResultsFormat> {

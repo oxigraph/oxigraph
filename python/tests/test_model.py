@@ -225,6 +225,37 @@ class TestTriple(unittest.TestCase):
             "<http://example.com/s> <http://example.com/p> <http://example.com/o>",
         )
 
+    def test_equals(self) -> None:
+        t = Triple(
+            NamedNode("http://example.com/s"),
+            NamedNode("http://example.com/p"),
+            NamedNode("http://example.com/o"),
+        )
+        self.assertEqual(
+            t,
+            Triple(
+                NamedNode("http://example.com/s"),
+                NamedNode("http://example.com/p"),
+                NamedNode("http://example.com/o"),
+            ),
+        )
+        self.assertNotEqual(
+            t,
+            Triple(
+                NamedNode("http://example.com/s"),
+                NamedNode("http://example.com/p"),
+                NamedNode("http://example.com/s"),
+            ),
+        )
+        self.assertNotEqual(t, NamedNode("http://foo"))
+        self.assertNotEqual(t, BlankNode("foo"))
+        self.assertNotEqual(t, Literal("foo"))
+        self.assertNotEqual(t, DefaultGraph())
+        self.assertNotEqual(NamedNode("http://foo"), t)
+        self.assertNotEqual(BlankNode("foo"), t)
+        self.assertNotEqual(Literal("foo"), t)
+        self.assertNotEqual(DefaultGraph(), t)
+
     def test_pickle(self) -> None:
         triple = Triple(
             NamedNode("http://example.com/s"),

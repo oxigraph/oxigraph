@@ -1,6 +1,6 @@
 #![allow(clippy::needless_option_as_deref)]
 
-use crate::model::{hash, PyQuad, PyTriple};
+use crate::model::{PyQuad, PyTriple};
 use oxigraph::io::{FromReadQuadReader, RdfFormat, RdfParseError, RdfParser, RdfSerializer};
 use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
@@ -188,8 +188,8 @@ impl PyQuadReader {
 ///
 /// >>> RdfFormat.N3.media_type
 /// 'text/n3'
-#[pyclass(name = "RdfFormat", module = "pyoxigraph")]
-#[derive(Clone)]
+#[pyclass(frozen, name = "RdfFormat", module = "pyoxigraph", eq, hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct PyRdfFormat {
     inner: RdfFormat,
 }
@@ -253,7 +253,7 @@ impl PyRdfFormat {
     /// >>> RdfFormat.N_TRIPLES.file_extension
     /// 'nt'
     #[getter]
-    pub fn file_extension(&self) -> &'static str {
+    fn file_extension(&self) -> &'static str {
         self.inner.file_extension()
     }
 
@@ -263,7 +263,7 @@ impl PyRdfFormat {
     /// >>> RdfFormat.N_TRIPLES.name
     /// 'N-Triples'
     #[getter]
-    pub const fn name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         self.inner.name()
     }
 
@@ -275,7 +275,7 @@ impl PyRdfFormat {
     /// >>> RdfFormat.N_QUADS.supports_datasets
     /// True
     #[getter]
-    pub fn supports_datasets(&self) -> bool {
+    fn supports_datasets(&self) -> bool {
         self.inner.supports_datasets()
     }
 
@@ -287,7 +287,7 @@ impl PyRdfFormat {
     /// >>> RdfFormat.RDF_XML.supports_rdf_star
     /// False
     #[getter]
-    pub const fn supports_rdf_star(&self) -> bool {
+    fn supports_rdf_star(&self) -> bool {
         self.inner.supports_rdf_star()
     }
 
@@ -304,7 +304,7 @@ impl PyRdfFormat {
     /// >>> RdfFormat.from_media_type("text/turtle; charset=utf-8")
     /// <RdfFormat Turtle>
     #[staticmethod]
-    pub fn from_media_type(media_type: &str) -> Option<Self> {
+    fn from_media_type(media_type: &str) -> Option<Self> {
         Some(Self {
             inner: RdfFormat::from_media_type(media_type)?,
         })
@@ -322,7 +322,7 @@ impl PyRdfFormat {
     /// >>> RdfFormat.from_extension("nt")
     /// <RdfFormat N-Triples>
     #[staticmethod]
-    pub fn from_extension(extension: &str) -> Option<Self> {
+    fn from_extension(extension: &str) -> Option<Self> {
         Some(Self {
             inner: RdfFormat::from_extension(extension)?,
         })
@@ -334,18 +334,6 @@ impl PyRdfFormat {
 
     fn __repr__(&self) -> String {
         format!("<RdfFormat {}>", self.inner.name())
-    }
-
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.inner != other.inner
     }
 
     /// :rtype: RdfFormat
