@@ -330,7 +330,7 @@ impl<R: Read> FromReadRdfXmlReader<R> {
     }
 
     /// The current byte position in the input data.
-    pub fn buffer_position(&self) -> usize {
+    pub fn buffer_position(&self) -> u64 {
         self.reader.reader.buffer_position()
     }
 
@@ -468,7 +468,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
     }
 
     /// The current byte position in the input data.
-    pub fn buffer_position(&self) -> usize {
+    pub fn buffer_position(&self) -> u64 {
         self.reader.reader.buffer_position()
     }
 
@@ -599,7 +599,7 @@ impl<'a> FromSliceRdfXmlReader<'a> {
     }
 
     /// The current byte position in the input data.
-    pub fn buffer_position(&self) -> usize {
+    pub fn buffer_position(&self) -> u64 {
         self.reader.reader.buffer_position()
     }
 
@@ -1494,7 +1494,7 @@ impl<R> RdfXmlReader<R> {
 
     fn convert_attribute(&self, attribute: &Attribute<'_>) -> Result<String, RdfXmlParseError> {
         Ok(attribute
-            .decode_and_unescape_value_with(&self.reader, |e| self.resolve_entity(e))?
+            .decode_and_unescape_value_with(self.reader.decoder(), |e| self.resolve_entity(e))?
             .into_owned())
     }
 
