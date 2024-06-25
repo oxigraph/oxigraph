@@ -1,4 +1,4 @@
-use crate::model::{hash, PyGraphNameRef, PyNamedNodeRef, PyQuad, PySubjectRef, PyTermRef};
+use crate::model::{PyGraphNameRef, PyNamedNodeRef, PyQuad, PySubjectRef, PyTermRef};
 use oxigraph::model::dataset::{CanonicalizationAlgorithm, Dataset};
 use oxigraph::model::{Quad, QuadRef};
 use pyo3::exceptions::PyKeyError;
@@ -20,7 +20,7 @@ use pyo3::prelude::*;
 ///
 /// >>> str(Dataset([Quad(NamedNode('http://example.com/s'), NamedNode('http://example.com/p'), NamedNode('http://example.com/o'), NamedNode('http://example.com/g'))]))
 /// '<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n'
-#[pyclass(name = "Dataset", module = "pyoxigraph")]
+#[pyclass(name = "Dataset", module = "pyoxigraph", eq)]
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct PyDataset {
     inner: Dataset,
@@ -51,7 +51,7 @@ impl PyDataset {
     /// >>> list(store.quads_for_subject(NamedNode('http://example.com')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn quads_for_subject(&self, subject: PySubjectRef<'_>) -> QuadIter {
+    fn quads_for_subject(&self, subject: PySubjectRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
                 .inner
@@ -73,7 +73,7 @@ impl PyDataset {
     /// >>> list(store.quads_for_predicate(NamedNode('http://example.com/p')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn quads_for_predicate(&self, predicate: PyNamedNodeRef<'_>) -> QuadIter {
+    fn quads_for_predicate(&self, predicate: PyNamedNodeRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
                 .inner
@@ -95,7 +95,7 @@ impl PyDataset {
     /// >>> list(store.quads_for_object(Literal('1')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn quads_for_object(&self, object: PyTermRef<'_>) -> QuadIter {
+    fn quads_for_object(&self, object: PyTermRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
                 .inner
@@ -117,7 +117,7 @@ impl PyDataset {
     /// >>> list(store.quads_for_graph_name(NamedNode('http://example.com/g')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn quads_for_graph_name(&self, graph_name: PyGraphNameRef<'_>) -> QuadIter {
+    fn quads_for_graph_name(&self, graph_name: PyGraphNameRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
                 .inner
@@ -225,14 +225,6 @@ impl PyDataset {
         self.inner.is_empty()
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.inner != other.inner
-    }
-
     fn __len__(&self) -> usize {
         self.inner.len()
     }
@@ -299,18 +291,6 @@ impl PyCanonicalizationAlgorithm {
                 _ => "unknown",
             }
         )
-    }
-
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __eq__(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-
-    fn __ne__(&self, other: &Self) -> bool {
-        self.inner != other.inner
     }
 
     /// :rtype: CanonicalizationAlgorithm

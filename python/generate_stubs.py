@@ -114,7 +114,9 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
             except ValueError as e:
                 if "no signature found" not in str(e):
                     raise ValueError(f"Error while parsing signature of {cls_name}.__init_") from e
-        elif member_value == OBJECT_MEMBERS.get(member_name) or BUILTINS.get(member_name, ()) is None:
+        elif (member_name in OBJECT_MEMBERS and member_value == OBJECT_MEMBERS[member_name]) or BUILTINS.get(
+            member_name, ()
+        ) is None:
             pass
         elif inspect.isdatadescriptor(member_value):
             attributes.extend(data_descriptor_stub(member_name, member_value, current_element_path, types_to_import))
@@ -134,7 +136,7 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
                     target=ast.Name(id=member_name, ctx=ast.Store()),
                     annotation=ast.Subscript(
                         value=path_to_type("tuple"),
-                        slice=ast.Tuple(elts=[path_to_type("str"), ast.Ellipsis()], ctx=ast.Load()),
+                        slice=ast.Tuple(elts=[path_to_type("str"), ast.Constant(...)], ctx=ast.Load()),
                         ctx=ast.Load(),
                     ),
                     value=ast.Constant(member_value),
@@ -148,7 +150,7 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
                     annotation=concatenated_path_to_type(
                         member_value.__class__.__name__, element_path, types_to_import
                     ),
-                    value=ast.Ellipsis(),
+                    value=ast.Constant(...),
                     simple=1,
                 )
             )
@@ -162,7 +164,7 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
         bases=[],
         keywords=[],
         body=(([doc_comment] if doc_comment else []) + attributes + methods + magic_methods + constants)
-        or [ast.Ellipsis()],
+        or [ast.Constant(...)],
         decorator_list=[path_to_type("typing", "final")],
     )
 
@@ -218,7 +220,7 @@ def function_stub(
     return ast.FunctionDef(
         fn_name,
         arguments_stub(fn_name, fn_def, doc or "", element_path, types_to_import),
-        body or [ast.Ellipsis()],
+        body or [ast.Constant(...)],
         decorator_list=decorator_list,
         returns=returns_stub(fn_name, doc, element_path, types_to_import) if doc else None,
         lineno=0,
