@@ -234,7 +234,7 @@ impl TurtleParser {
     ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = TurtleParser::new().split_slice_for_parallel_parsing(file.as_ref(), 2)?;
+    /// let readers = TurtleParser::new().split_slice_for_parallel_parsing(file.as_ref(), 2);
     /// let count = readers
     ///     .into_par_iter()
     ///     .map(|reader| {

@@ -26,7 +26,6 @@ thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["io-util"] }
 
 [dev-dependencies]
-rayon.workspace = true
 tokio = { workspace = true, features = ["rt", "macros"] }
 
 [lints]
