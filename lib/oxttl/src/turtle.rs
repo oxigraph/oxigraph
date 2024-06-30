@@ -215,9 +215,10 @@ impl TurtleParser {
     }
 
     /// Creates a vector of iterators that may be used to parse a Turtle document slice in parallel.
-    /// To dynamically specify target_parallelism, use e.g. std::thread::available_parallelism
+    /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
     /// Intended to work on large documents.
-    /// Can fail if there are prefixes that are not defined at the top of the document.
+    /// Can fail or return wrong results if there are prefixes or base iris that are not defined
+    /// at the top of the document, or valid turtle syntax inside literal values.
     ///
     /// Count the number of people:
     /// ```

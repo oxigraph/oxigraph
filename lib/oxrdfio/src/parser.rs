@@ -419,7 +419,6 @@ impl From<RdfFormat> for RdfParser {
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
-
 #[must_use]
 pub struct FromReadQuadReader<R: Read> {
     parser: FromReadQuadReaderKind<R>,
