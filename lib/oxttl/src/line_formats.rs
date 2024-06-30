@@ -13,6 +13,7 @@ pub struct NQuadsRecognizer {
     predicates: Vec<NamedNode>,
     objects: Vec<Term>,
 }
+
 pub struct NQuadsRecognizerContext {
     with_graph_name: bool,
     #[cfg(feature = "rdf-star")]

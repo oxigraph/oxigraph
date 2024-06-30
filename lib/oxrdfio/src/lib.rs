@@ -13,7 +13,7 @@ pub use error::{RdfParseError, RdfSyntaxError, TextPosition};
 pub use format::RdfFormat;
 #[cfg(feature = "async-tokio")]
 pub use parser::FromTokioAsyncReadQuadReader;
-pub use parser::{FromReadQuadReader, RdfParser};
+pub use parser::{FromReadQuadReader, FromSliceQuadReader, RdfParser};
 #[cfg(feature = "async-tokio")]
 pub use serializer::ToTokioAsyncWriteQuadWriter;
 pub use serializer::{RdfSerializer, ToWriteQuadWriter};

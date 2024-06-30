@@ -28,6 +28,7 @@ tokio = { workspace = true, optional = true, features = ["io-util"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
+rayon.workspace = true
 
 [lints]
 workspace = true
