@@ -5,7 +5,8 @@ use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
-    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
+    get_turtle_file_chunks, FromReadIterator, FromSliceIterator, Parser, TurtleParseError,
+    TurtleSyntaxError,
 };
 #[cfg(feature = "async-tokio")]
 use crate::trig::ToTokioAsyncWriteTriGWriter;
@@ -211,6 +212,76 @@ impl TurtleParser {
             )
             .into_iter(),
         }
+    }
+
+    /// Creates a vector of iterators that may be used to parse a Turtle document slice in parallel.
+    /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
+    /// Intended to work on large documents.
+    /// Can fail or return wrong results if there are prefixes or base iris that are not defined
+    /// at the top of the document, or valid turtle syntax inside literal values.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxttl::TurtleParser;
+    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    ///
+    /// let file = br#"@base <http://example.com/> .
+    /// @prefix schema: <http://schema.org/> .
+    /// <foo> a schema:Person ;
+    ///     schema:name "Foo" .
+    /// <bar> a schema:Person ;
+    ///     schema:name "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let readers = TurtleParser::new().split_slice_for_parallel_parsing(file.as_ref(), 2);
+    /// let count = readers
+    ///     .into_par_iter()
+    ///     .map(|reader| {
+    ///         let mut count = 0;
+    ///         for triple in reader {
+    ///             let triple = triple.unwrap();
+    ///             if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///                 count += 1;
+    ///             }
+    ///         }
+    ///         count
+    ///     })
+    ///     .sum();
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[allow(clippy::unwrap_in_result)]
+    pub fn split_slice_for_parallel_parsing(
+        mut self,
+        slice: &[u8],
+        target_parallelism: usize,
+    ) -> Vec<FromSliceTurtleReader<'_>> {
+        #[allow(clippy::decimal_literal_representation)]
+        let n_chunks = (slice.len() / 16384).clamp(1, target_parallelism);
+
+        if n_chunks > 1 {
+            // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
+            let mut from_slice_reader = self.clone().parse_slice(slice);
+            // Possible parsing error will be handled in first chunk.
+            if from_slice_reader.next().is_some() {
+                for (p, iri) in from_slice_reader.prefixes() {
+                    // Already know this is a valid IRI
+                    self = self.with_prefix(p, iri).unwrap();
+                }
+            }
+        }
+
+        let chunks = get_turtle_file_chunks(slice, n_chunks, self.clone());
+        let from_turtle_slice_readers: Vec<_> = chunks
+            .into_iter()
+            .map(|(start, end)| {
+                let parser = self.clone();
+                parser.parse_slice(&slice[start..end])
+            })
+            .collect();
+        from_turtle_slice_readers
     }
 
     /// Allows to parse a Turtle file by using a low-level API.
