@@ -13,7 +13,7 @@ use std::borrow::Borrow;
 use std::error::Error;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::mem::transmute;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 /// In-memory storage working with MVCC
@@ -24,8 +24,8 @@ use std::sync::{Arc, Mutex, RwLock};
 pub struct MemoryStorage {
     content: Arc<Content>,
     id2str: Arc<DashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
-    version_counter: Arc<AtomicU64>,
-    transaction_counter: Arc<Mutex<u64>>,
+    version_counter: Arc<AtomicUsize>,
+    transaction_counter: Arc<Mutex<usize>>,
 }
 
 struct Content {
@@ -55,8 +55,9 @@ impl MemoryStorage {
                 graphs: DashMap::default(),
             }),
             id2str: Arc::new(DashMap::default()),
-            version_counter: Arc::new(AtomicU64::new(0)),
-            transaction_counter: Arc::new(Mutex::new(u64::MAX >> 1)),
+            version_counter: Arc::new(AtomicUsize::new(0)),
+            #[allow(clippy::mutex_atomic)]
+            transaction_counter: Arc::new(Mutex::new(usize::MAX >> 1)),
         }
     }
 
@@ -135,7 +136,7 @@ impl MemoryStorage {
 #[derive(Clone)]
 pub struct MemoryStorageReader {
     storage: MemoryStorage,
-    snapshot_id: u64,
+    snapshot_id: usize,
 }
 
 impl MemoryStorageReader {
@@ -453,7 +454,7 @@ impl StrLookup for MemoryStorageReader {
 pub struct MemoryStorageWriter<'a> {
     storage: &'a MemoryStorage,
     log: &'a mut Vec<LogEntry>,
-    transaction_id: u64,
+    transaction_id: usize,
 }
 
 impl<'a> MemoryStorageWriter<'a> {
@@ -877,13 +878,13 @@ impl Borrow<EncodedQuad> for Arc<QuadListNode> {
 enum VersionRange {
     #[default]
     Empty,
-    Start(u64),
-    StartEnd(u64, u64),
-    Bigger(Box<[u64]>),
+    Start(usize),
+    StartEnd(usize, usize),
+    Bigger(Box<[usize]>),
 }
 
 impl VersionRange {
-    fn contains(&self, version: u64) -> bool {
+    fn contains(&self, version: usize) -> bool {
         match self {
             VersionRange::Empty => false,
             VersionRange::Start(start) => *start <= version,
@@ -909,7 +910,7 @@ impl VersionRange {
         }
     }
 
-    fn add(&mut self, version: u64) -> bool {
+    fn add(&mut self, version: usize) -> bool {
         match self {
             VersionRange::Empty => {
                 *self = VersionRange::Start(version);
@@ -939,7 +940,7 @@ impl VersionRange {
         }
     }
 
-    fn remove(&mut self, version: u64) -> bool {
+    fn remove(&mut self, version: usize) -> bool {
         match self {
             VersionRange::Empty | VersionRange::StartEnd(_, _) => false,
             VersionRange::Start(start) => {
@@ -968,7 +969,7 @@ impl VersionRange {
         }
     }
 
-    fn upgrade_transaction(&mut self, transaction_id: u64, version_id: u64) {
+    fn upgrade_transaction(&mut self, transaction_id: usize, version_id: usize) {
         match self {
             VersionRange::Empty => (),
             VersionRange::Start(start) => {
@@ -989,7 +990,7 @@ impl VersionRange {
         }
     }
 
-    fn rollback_transaction(&mut self, transaction_id: u64) {
+    fn rollback_transaction(&mut self, transaction_id: usize) {
         match self {
             VersionRange::Empty => (),
             VersionRange::Start(start) => {
