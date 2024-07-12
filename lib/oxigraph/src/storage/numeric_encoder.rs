@@ -1084,7 +1084,7 @@ mod tests {
         assert_eq!(StrHash::from_be_bytes(FOO_HASH).to_be_bytes(), FOO_HASH);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(target_pointer_width = "64")]
     #[test]
     fn test_size_and_alignment() {
         assert_eq!(size_of::<EncodedTerm>(), 40);
