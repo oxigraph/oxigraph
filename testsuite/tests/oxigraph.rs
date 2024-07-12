@@ -44,6 +44,7 @@ fn oxigraph_sparql_results_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(target_pointer_width = "64")] // Hashing is different in 32 bits, leading to different ordering
 #[test]
 fn oxigraph_optimizer_testsuite() -> Result<()> {
     check_testsuite(

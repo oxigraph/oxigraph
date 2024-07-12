@@ -166,8 +166,26 @@ jobs:
         with:
           target: i686-unknown-linux-gnu
       - run: sudo apt-get update && sudo apt-get install -y g++-multilib
-      - run: cargo test --target i686-unknown-linux-gnu --no-default-features --features http-client-rustls-native
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/oxsdatatypes
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/oxrdf
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/oxrdfxml
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/oxttl
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/oxrdfio
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/sparesults
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/spargebra
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/sparopt
+      - run: cargo test --target i686-unknown-linux-gnu --features http-client-rustls-native
         working-directory: ./lib/oxigraph
+      - run: cargo test --target i686-unknown-linux-gnu
+        working-directory: ./testsuite
 
   test_linux_msv:
     runs-on: ubuntu-latest
