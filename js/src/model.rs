@@ -10,6 +10,69 @@ thread_local! {
     pub static FROM_JS: FromJsConverter = FromJsConverter::default();
 }
 
+#[wasm_bindgen(typescript_custom_section)]
+const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
+export class BlankNode {
+  readonly termType: "BlankNode";
+  readonly value: string;
+
+  equals(other: any): boolean;
+  free(): void;
+  toString(): string;
+}
+
+export class DefaultGraph {
+  readonly termType: "DefaultGraph";
+  readonly value: "";
+
+  equals(other: any): boolean;
+  free(): void;
+  toString(): string;
+}
+
+export class Literal {
+  readonly datatype: NamedNode;
+  readonly language: string;
+  readonly termType: "Literal";
+  readonly value: string;
+
+  equals(other: any): boolean;
+  free(): void;
+  toString(): string;
+}
+
+export class NamedNode {
+  readonly termType: "NamedNode";
+  readonly value: string;
+
+  equals(other: any): boolean;
+  free(): void;
+  toString(): string;
+}
+
+export class Quad {
+  readonly graph: BlankNode | DefaultGraph | NamedNode | Variable;
+  readonly object: BlankNode | Literal | NamedNode | Variable;
+  readonly predicate: BlankNode | NamedNode | Variable;
+  readonly subject: BlankNode | NamedNode | Variable;
+  readonly termType: "Quad";
+  readonly value: "";
+
+  equals(other: any): boolean;
+  free(): void;
+  toString(): string;
+}
+
+export class Variable {
+  readonly termType: "Variable";
+  readonly value: string;
+
+  equals(other: any): boolean;
+  free(): void;
+  toString(): string;
+}
+"###;
+
 #[wasm_bindgen(js_name = namedNode)]
 pub fn named_node(value: String) -> Result<JsNamedNode, JsValue> {
     NamedNode::new(value)
@@ -93,7 +156,7 @@ pub fn from_quad(original: &JsValue) -> Result<JsValue, JsValue> {
     })
 }
 
-#[wasm_bindgen(js_name = NamedNode)]
+#[wasm_bindgen(js_name = NamedNode, skip_typescript)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsNamedNode {
     inner: NamedNode,
@@ -163,7 +226,7 @@ impl From<JsNamedNode> for GraphName {
     }
 }
 
-#[wasm_bindgen(js_name = BlankNode)]
+#[wasm_bindgen(js_name = BlankNode, skip_typescript)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsBlankNode {
     inner: BlankNode,
@@ -233,7 +296,7 @@ impl From<JsBlankNode> for GraphName {
     }
 }
 
-#[wasm_bindgen(js_name = Literal)]
+#[wasm_bindgen(js_name = Literal, skip_typescript)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsLiteral {
     inner: Literal,
@@ -294,7 +357,7 @@ impl From<JsLiteral> for Term {
     }
 }
 
-#[wasm_bindgen(js_name = DefaultGraph)]
+#[wasm_bindgen(js_name = DefaultGraph, skip_typescript)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsDefaultGraph;
 
@@ -326,7 +389,7 @@ impl JsDefaultGraph {
     }
 }
 
-#[wasm_bindgen(js_name = Variable)]
+#[wasm_bindgen(js_name = Variable, skip_typescript)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsVariable {
     inner: Variable,
@@ -372,7 +435,7 @@ impl From<JsVariable> for Variable {
     }
 }
 
-#[wasm_bindgen(js_name = Quad)]
+#[wasm_bindgen(js_name = Quad, skip_typescript)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct JsQuad {
     inner: Quad,
