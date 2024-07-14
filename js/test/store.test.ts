@@ -1,6 +1,7 @@
 import { describe, it } from "vitest";
 
 import assert from "node:assert";
+// @ts-expect-error
 import dataModel from "@rdfjs/data-model";
 import { type Quad, Store, type Term } from "../pkg/oxigraph.js";
 

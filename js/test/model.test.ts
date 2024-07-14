@@ -1,4 +1,5 @@
 import assert from "node:assert";
+// @ts-expect-error
 import runTests from "@rdfjs/data-model/test/index.js";
 import { describe, it } from "vitest";
 import oxigraph from "../pkg/oxigraph.js";
