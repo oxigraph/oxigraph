@@ -75,7 +75,7 @@ describe("Store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);
             const results = store.query("SELECT ?s WHERE { ?s ?p ?o }") as Map<string, Term>[];
             assert.strictEqual(1, results.length);
-            assert(ex.equals(results[0].get("s")));
+            assert(ex.equals(results[0]?.get("s")));
         });
 
         it("SELECT with NOW()", () => {

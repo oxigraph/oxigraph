@@ -1,12 +1,4 @@
 {
-    "compilerOptions": {
-        "esModuleInterop": true,
-        "exactOptionalPropertyTypes": false,
-        "experimentalDecorators": true,
-        "forceConsistentCasingInFileNames": true,
-        "noUncheckedIndexedAccess": false,
-        "incremental": true
-    },
     "exclude": ["node_modules"],
     "extends": ["@tsconfig/node18/tsconfig.json", "@tsconfig/strictest/tsconfig.json"],
     "include": ["test/*.test.ts"]
