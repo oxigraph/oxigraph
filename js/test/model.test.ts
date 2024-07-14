@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import runTests from "@rdfjs/data-model/test/index.js";
 import { describe, it } from "vitest";
-import oxigraph from "../pkg/node.js";
+import oxigraph from "../pkg/oxigraph.js";
 
 runTests({ factory: oxigraph });
 

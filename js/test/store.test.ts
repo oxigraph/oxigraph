@@ -2,7 +2,7 @@ import { describe, it } from "vitest";
 
 import assert from "node:assert";
 import dataModel from "@rdfjs/data-model";
-import { type Quad, Store, type Term } from "../pkg/node.js";
+import { type Quad, Store, type Term } from "../pkg/oxigraph.js";
 
 const ex = dataModel.namedNode("http://example.com");
 const triple = dataModel.quad(
