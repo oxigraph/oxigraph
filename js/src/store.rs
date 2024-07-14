@@ -12,18 +12,53 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 export class Store {
-  readonly size: number;
+    readonly size: number;
 
-  constructor(quads?: Quad[]);
+    constructor(quads?: Quad[]);
 
-  add(quad: Quad): void;
-  delete(quad: Quad): void;
-  dump(options: any, from_graph_name: any): string;
-  has(quad: Quad): boolean;
-  load(data: string, options: any, base_iri: any, to_graph_name: any): void;
-  match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
-  query(query: string, options: any): any;
-  update(update: string, options: any): void;
+    add(quad: Quad): void;
+
+    delete(quad: Quad): void;
+
+    dump(
+        options: {
+            format: string;
+            from_graph_name?: BlankNode | DefaultGraph | NamedNode;
+        },
+        from_graph_name?: BlankNode | DefaultGraph | NamedNode
+    ): string;
+
+    has(quad: Quad): boolean;
+
+    load(
+        data: string,
+        options: {
+            base_iri?: NamedNode | string;
+            format: string;
+            no_transaction?: boolean;
+            to_graph_name?: BlankNode | DefaultGraph | NamedNode;
+        },
+        base_iri?: NamedNode | string,
+        to_graph_name?: BlankNode | DefaultGraph | NamedNode
+    ): void;
+
+    match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
+
+    query(
+        query: string,
+        options?: {
+            base_iri?: NamedNode | string;
+            results_format?: string;
+            use_default_graph_as_union?: boolean;
+        }
+    ): boolean | Map<string, Term>[] | Quad[];
+
+    update(
+        update: string,
+        options?: {
+            base_iri?: NamedNode | string;
+        }
+    ): void;
 }
 "###;
 
