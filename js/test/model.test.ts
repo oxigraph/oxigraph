@@ -5,8 +5,9 @@ import { describe, it } from "vitest";
 import oxigraph from "../pkg/oxigraph.js";
 
 // thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
-import { webcrypto } from 'node:crypto'
-(globalThis as any).crypto = webcrypto
+import { webcrypto } from "node:crypto";
+// @ts-expect-error globalThis type
+globalThis.crypto = webcrypto;
 
 runTests({ factory: oxigraph });
 
