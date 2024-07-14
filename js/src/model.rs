@@ -13,63 +13,71 @@ thread_local! {
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 export class BlankNode {
-  readonly termType: "BlankNode";
-  readonly value: string;
+    readonly termType: "BlankNode";
+    readonly value: string;
 
-  equals(other: any): boolean;
-  free(): void;
-  toString(): string;
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
 }
 
 export class DefaultGraph {
-  readonly termType: "DefaultGraph";
-  readonly value: "";
+    readonly termType: "DefaultGraph";
+    readonly value: "";
 
-  equals(other: any): boolean;
-  free(): void;
-  toString(): string;
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
 }
 
 export class Literal {
-  readonly datatype: NamedNode;
-  readonly language: string;
-  readonly termType: "Literal";
-  readonly value: string;
+    readonly datatype: NamedNode;
+    readonly language: string;
+    readonly termType: "Literal";
+    readonly value: string;
 
-  equals(other: any): boolean;
-  free(): void;
-  toString(): string;
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
 }
 
 export class NamedNode {
-  readonly termType: "NamedNode";
-  readonly value: string;
+    readonly termType: "NamedNode";
+    readonly value: string;
 
-  equals(other: any): boolean;
-  free(): void;
-  toString(): string;
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
 }
 
-export class Quad {
-  readonly graph: BlankNode | DefaultGraph | NamedNode | Variable;
-  readonly object: BlankNode | Literal | NamedNode | Variable;
-  readonly predicate: BlankNode | NamedNode | Variable;
-  readonly subject: BlankNode | NamedNode | Variable;
-  readonly termType: "Quad";
-  readonly value: "";
+export interface BaseQuad {
+    readonly graph: Term;
+    readonly object: Term;
+    readonly predicate: Term;
+    readonly subject: Term;
+    readonly termType: "Quad";
+    readonly value: "";
 
-  equals(other: any): boolean;
-  free(): void;
-  toString(): string;
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
 }
+
+export class Quad implements BaseQuad {
+    readonly graph: DefaultGraph | NamedNode | BlankNode | Variable;
+    readonly object: NamedNode | Literal | BlankNode | Quad | Variable;
+    readonly predicate: NamedNode | Variable;
+    readonly subject: NamedNode | BlankNode | Quad | Variable;
+    readonly termType: "Quad";
+    readonly value: "";
+
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
+}
+
+export type Term = NamedNode | BlankNode | Literal | Variable | DefaultGraph | BaseQuad;
 
 export class Variable {
-  readonly termType: "Variable";
-  readonly value: string;
+    readonly termType: "Variable";
+    readonly value: string;
 
-  equals(other: any): boolean;
-  free(): void;
-  toString(): string;
+    equals(other: Term | null | undefined): boolean;
+    toString(): string;
 }
 "###;
 

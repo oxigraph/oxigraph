@@ -9,7 +9,26 @@ use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(js_name = Store)]
+#[wasm_bindgen(typescript_custom_section)]
+const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
+export class Store {
+  readonly size: number;
+
+  constructor(quads?: Quad[]);
+
+  add(quad: Quad): void;
+  delete(quad: Quad): void;
+  dump(options: any, from_graph_name: any): string;
+  has(quad: Quad): boolean;
+  load(data: string, options: any, base_iri: any, to_graph_name: any): void;
+  match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
+  query(query: string, options: any): any;
+  update(update: string, options: any): void;
+}
+"###;
+
+
+#[wasm_bindgen(js_name = Store, skip_typescript)]
 pub struct JsStore {
     store: Store,
 }
