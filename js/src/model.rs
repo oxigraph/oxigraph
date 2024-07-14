@@ -12,6 +12,9 @@ thread_local! {
 
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
+export function literal(value: string | undefined, languageOrDataType?: string | NamedNode): Literal;
+export function quad(subject: Quad_Subject, predicate: Quad_Predicate, object: Quad_Object, graph: Quad_Graph): Quad;
+
 export class BlankNode {
     readonly termType: "BlankNode";
     readonly value: string;
@@ -59,16 +62,21 @@ export interface BaseQuad {
 }
 
 export class Quad implements BaseQuad {
-    readonly graph: DefaultGraph | NamedNode | BlankNode | Variable;
-    readonly object: NamedNode | Literal | BlankNode | Quad | Variable;
-    readonly predicate: NamedNode | Variable;
-    readonly subject: NamedNode | BlankNode | Quad | Variable;
+    readonly graph: Quad_Graph;
+    readonly object: Quad_Object;
+    readonly predicate: Quad_Predicate;
+    readonly subject: Quad_Subject;
     readonly termType: "Quad";
     readonly value: "";
 
     equals(other: Term | null | undefined): boolean;
     toString(): string;
 }
+
+export type Quad_Graph = DefaultGraph | NamedNode | BlankNode | Variable;
+export type Quad_Object = NamedNode | Literal | BlankNode | Quad | Variable;
+export type Quad_Predicate = NamedNode | Variable;
+export type Quad_Subject = NamedNode | BlankNode | Quad | Variable;
 
 export type Term = NamedNode | BlankNode | Literal | Variable | DefaultGraph | BaseQuad;
 
@@ -98,7 +106,7 @@ pub fn blank_node(value: Option<String>) -> Result<JsBlankNode, JsValue> {
     .into())
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(skip_typescript)]
 pub fn literal(
     value: Option<String>,
     language_or_datatype: &JsValue,
@@ -134,7 +142,7 @@ pub fn triple(subject: &JsValue, predicate: &JsValue, object: &JsValue) -> Resul
     quad(subject, predicate, object, &JsValue::UNDEFINED)
 }
 
-#[wasm_bindgen(js_name = quad)]
+#[wasm_bindgen(js_name = quad, skip_typescript)]
 pub fn quad(
     subject: &JsValue,
     predicate: &JsValue,
