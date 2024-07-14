@@ -13,7 +13,7 @@ thread_local! {
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 export function literal(value: string | undefined, languageOrDataType?: string | NamedNode): Literal;
-export function quad(subject: Quad_Subject, predicate: Quad_Predicate, object: Quad_Object, graph: Quad_Graph): Quad;
+export function quad(subject: Quad_Subject, predicate: Quad_Predicate, object: Quad_Object, graph?: Quad_Graph): Quad;
 
 export class BlankNode {
     readonly termType: "BlankNode";

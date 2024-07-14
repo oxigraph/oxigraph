@@ -36,6 +36,7 @@ export class Store {
             format: string;
             no_transaction?: boolean;
             to_graph_name?: BlankNode | DefaultGraph | NamedNode;
+            unchecked?: boolean;
         }
     ): void;
 

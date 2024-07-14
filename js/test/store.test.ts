@@ -1,8 +1,8 @@
-/* global describe, it */
+import { describe, it } from "vitest";
 
 import assert from "node:assert";
 import dataModel from "@rdfjs/data-model";
-import { Store } from "../pkg/oxigraph.js";
+import { type Quad, Store, type Term } from "../pkg/node.js";
 
 const ex = dataModel.namedNode("http://example.com");
 const triple = dataModel.quad(
@@ -65,14 +65,14 @@ describe("Store", () => {
 
         it("CONSTRUCT", () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);
-            const results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
+            const results = store.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }") as Quad[];
             assert.strictEqual(1, results.length);
             assert(dataModel.quad(ex, ex, ex).equals(results[0]));
         });
 
         it("SELECT", () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);
-            const results = store.query("SELECT ?s WHERE { ?s ?p ?o }");
+            const results = store.query("SELECT ?s WHERE { ?s ?p ?o }") as Map<string, Term>[];
             assert.strictEqual(1, results.length);
             assert(ex.equals(results[0].get("s")));
         });
@@ -81,13 +81,13 @@ describe("Store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);
             const results = store.query(
                 "SELECT * WHERE { FILTER(2022 <= YEAR(NOW()) && YEAR(NOW()) <= 2100) }",
-            );
+            ) as Map<string, Term>[];
             assert.strictEqual(1, results.length);
         });
 
         it("SELECT with RAND()", () => {
             const store = new Store([dataModel.quad(ex, ex, ex)]);
-            const results = store.query("SELECT (RAND() AS ?y) WHERE {}");
+            const results = store.query("SELECT (RAND() AS ?y) WHERE {}") as Map<string, Term>[];
             assert.strictEqual(1, results.length);
         });
 
@@ -95,7 +95,7 @@ describe("Store", () => {
             const store = new Store();
             const results = store.query("SELECT * WHERE { BIND(<t> AS ?t) }", {
                 base_iri: "http://example.com/",
-            });
+            }) as Map<string, Term>[];
             assert.strictEqual(1, results.length);
         });
 
@@ -103,7 +103,7 @@ describe("Store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
             const results = store.query("SELECT * WHERE { ?s ?p ?o }", {
                 use_default_graph_as_union: true,
-            });
+            }) as Map<string, Term>[];
             assert.strictEqual(1, results.length);
         });
 
@@ -165,21 +165,18 @@ describe("Store", () => {
     describe("#load()", () => {
         it("load NTriples in the default graph", () => {
             const store = new Store();
-            store.load(
-                "<http://example.com> <http://example.com> <http://example.com> .",
-                "application/n-triples",
-            );
+            store.load("<http://example.com> <http://example.com> <http://example.com> .", {
+                format: "application/n-triples",
+            });
             assert(store.has(dataModel.quad(ex, ex, ex)));
         });
 
         it("load NTriples in an other graph", () => {
             const store = new Store();
-            store.load(
-                "<http://example.com> <http://example.com> <http://example.com> .",
-                "application/n-triples",
-                null,
-                ex,
-            );
+            store.load("<http://example.com> <http://example.com> <http://example.com> .", {
+                format: "application/n-triples",
+                to_graph_name: ex,
+            });
             assert(store.has(dataModel.quad(ex, ex, ex, ex)));
         });
 
@@ -194,11 +191,10 @@ describe("Store", () => {
 
         it("load Turtle with a base IRI", () => {
             const store = new Store();
-            store.load(
-                "<http://example.com> <http://example.com> <> .",
-                "text/turtle",
-                "http://example.com",
-            );
+            store.load("<http://example.com> <http://example.com> <> .", {
+                base_iri: "http://example.com",
+                format: "text/turtle",
+            });
             assert(store.has(dataModel.quad(ex, ex, ex)));
         });
 
@@ -206,18 +202,17 @@ describe("Store", () => {
             const store = new Store();
             store.load(
                 "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .",
-                "application/n-quads",
+                { format: "application/n-quads" },
             );
             assert(store.has(dataModel.quad(ex, ex, ex, ex)));
         });
 
         it("load TriG with a base IRI", () => {
             const store = new Store();
-            store.load(
-                "GRAPH <> { <http://example.com> <http://example.com> <> }",
-                "application/trig",
-                "http://example.com",
-            );
+            store.load("GRAPH <> { <http://example.com> <http://example.com> <> }", {
+                format: "application/trig",
+                base_iri: "http://example.com",
+            });
             assert(store.has(dataModel.quad(ex, ex, ex, ex)));
         });
 
@@ -238,7 +233,7 @@ describe("Store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
             assert.strictEqual(
                 "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n",
-                store.dump("application/n-quads"),
+                store.dump({ format: "application/n-quads" }),
             );
         });
 
@@ -246,7 +241,7 @@ describe("Store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
             assert.strictEqual(
                 "<http://example.com> <http://example.com> <http://example.com> .\n",
-                store.dump("application/n-triples", ex),
+                store.dump({ format: "application/n-triples", from_graph_name: ex }),
             );
         });
 
@@ -260,7 +255,13 @@ describe("Store", () => {
 
         it("dump default graph content", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
-            assert.strictEqual("", store.dump("application/n-triples", dataModel.defaultGraph()));
+            assert.strictEqual(
+                "",
+                store.dump({
+                    format: "application/n-triples",
+                    from_graph_name: dataModel.defaultGraph(),
+                }),
+            );
         });
     });
 });
