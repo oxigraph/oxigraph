@@ -59,7 +59,6 @@ export class Store {
 }
 "###;
 
-
 #[wasm_bindgen(js_name = Store, skip_typescript)]
 pub struct JsStore {
     store: Store,
