@@ -24,8 +24,7 @@ export class Store {
         options: {
             format: string;
             from_graph_name?: BlankNode | DefaultGraph | NamedNode;
-        },
-        from_graph_name?: BlankNode | DefaultGraph | NamedNode
+        }
     ): string;
 
     has(quad: Quad): boolean;
@@ -37,9 +36,7 @@ export class Store {
             format: string;
             no_transaction?: boolean;
             to_graph_name?: BlankNode | DefaultGraph | NamedNode;
-        },
-        base_iri?: NamedNode | string,
-        to_graph_name?: BlankNode | DefaultGraph | NamedNode
+        }
     ): void;
 
     match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
@@ -51,7 +48,7 @@ export class Store {
             results_format?: string;
             use_default_graph_as_union?: boolean;
         }
-    ): boolean | Map<string, Term>[] | Quad[];
+    ): boolean | Map<string, Term>[] | Quad[] | string;
 
     update(
         update: string,
