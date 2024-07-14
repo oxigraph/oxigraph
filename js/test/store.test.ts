@@ -5,6 +5,10 @@ import assert from "node:assert";
 import dataModel from "@rdfjs/data-model";
 import { type Quad, Store, type Term } from "../pkg/oxigraph.js";
 
+// thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
+import { webcrypto } from 'node:crypto'
+(globalThis as any).crypto = webcrypto
+
 const ex = dataModel.namedNode("http://example.com");
 const triple = dataModel.quad(
     dataModel.blankNode("s"),

@@ -4,6 +4,10 @@ import runTests from "@rdfjs/data-model/test/index.js";
 import { describe, it } from "vitest";
 import oxigraph from "../pkg/oxigraph.js";
 
+// thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
+import { webcrypto } from 'node:crypto'
+(globalThis as any).crypto = webcrypto
+
 runTests({ factory: oxigraph });
 
 describe("DataModel", () => {
