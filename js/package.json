@@ -6,14 +6,20 @@
         "@biomejs/biome": "^1.0.0",
         "@codspeed/tinybench-plugin": "^3.1.0",
         "@rdfjs/data-model": "^2.0.1",
+        "@tsconfig/node18": "^18.2.4",
+        "@tsconfig/strictest": "2.0.5",
+        "@types/node": "^18",
+        "@types/rdfjs__data-model": "^2.0.8",
         "fzstd": "^0.1.1",
-        "mocha": "^10.0.0",
-        "tinybench": "^2.8.0"
+        "tinybench": "^2.8.0",
+        "typescript": "~5.5",
+        "vitest": "^2.0.2",
+        "wasm-pack": "^0.13.0"
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
-        "test": "biome ci . && wasm-pack build --debug --target nodejs --weak-refs --reference-types && mocha",
-        "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.js",
+        "test": "biome ci . && wasm-pack build --debug --target nodejs --weak-refs --reference-types && vitest",
+        "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.mjs",
         "release": "npm run build && npm publish ./pkg",
         "pack": "npm run build && npm pack ./pkg",
         "bench": "wasm-pack build --release --target nodejs --weak-refs --reference-types && node benches/bench.mjs"

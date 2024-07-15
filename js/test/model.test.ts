@@ -1,8 +1,12 @@
-/* global describe, it */
-
 import assert from "node:assert";
-import runTests from "../node_modules/@rdfjs/data-model/test/index.js";
+// @ts-expect-error
+import runTests from "@rdfjs/data-model/test/index.js";
+import { describe, it, vi } from "vitest";
 import oxigraph from "../pkg/oxigraph.js";
+
+// thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
+import { webcrypto } from "node:crypto";
+vi.stubGlobal("crypto", webcrypto);
 
 runTests({ factory: oxigraph });
 

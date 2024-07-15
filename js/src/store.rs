@@ -9,7 +9,62 @@ use oxigraph::sparql::{Query, QueryResults, Update};
 use oxigraph::store::Store;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(js_name = Store)]
+// We skip_typescript on specific wasm_bindgen macros and provide custom TypeScript types for parts of this module in order to have narrower types
+// instead of any and improve compatibility with RDF/JS Dataset interfaces (https://rdf.js.org/dataset-spec/).
+//
+// The Store type overlay hides deprecated parameters on methods like dump.
+#[wasm_bindgen(typescript_custom_section)]
+const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
+export class Store {
+    readonly size: number;
+
+    constructor(quads?: Quad[]);
+
+    add(quad: Quad): void;
+
+    delete(quad: Quad): void;
+
+    dump(
+        options: {
+            format: string;
+            from_graph_name?: BlankNode | DefaultGraph | NamedNode;
+        }
+    ): string;
+
+    has(quad: Quad): boolean;
+
+    load(
+        data: string,
+        options: {
+            base_iri?: NamedNode | string;
+            format: string;
+            no_transaction?: boolean;
+            to_graph_name?: BlankNode | DefaultGraph | NamedNode;
+            unchecked?: boolean;
+        }
+    ): void;
+
+    match(subject?: Term | null, predicate?: Term | null, object?: Term | null, graph?: Term | null): Quad[];
+
+    query(
+        query: string,
+        options?: {
+            base_iri?: NamedNode | string;
+            results_format?: string;
+            use_default_graph_as_union?: boolean;
+        }
+    ): boolean | Map<string, Term>[] | Quad[] | string;
+
+    update(
+        update: string,
+        options?: {
+            base_iri?: NamedNode | string;
+        }
+    ): void;
+}
+"###;
+
+#[wasm_bindgen(js_name = Store, skip_typescript)]
 pub struct JsStore {
     store: Store,
 }
