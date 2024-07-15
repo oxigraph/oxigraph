@@ -10,7 +10,7 @@ use oxigraph::store::Store;
 use wasm_bindgen::prelude::*;
 
 // We skip_typescript on specific wasm_bindgen macros and provide custom TypeScript types for parts of this module in order to have narrower types
-// instead of any and improve compatability with RDF/JS Dataset interfaces (https://rdf.js.org/dataset-spec/).
+// instead of any and improve compatibility with RDF/JS Dataset interfaces (https://rdf.js.org/dataset-spec/).
 //
 // The Store type overlay hides deprecated parameters on methods like dump.
 #[wasm_bindgen(typescript_custom_section)]
