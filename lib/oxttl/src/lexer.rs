@@ -769,7 +769,18 @@ impl N3Lexer {
         match *data.get(1)? {
             b'u' => match Self::recognize_hex_char(&data[2..], 4, 'u', position) {
                 Ok(c) => Some((5, Ok(c?))),
-                Err(e) => Some((5, Err(e))),
+                Err(e) => {
+                    let lenient = true;
+                    if lenient {
+                        match Self::recognize_utf16_surrogate_pair(&data[2..], position) {
+                            Ok(None) => Some((5, Err(e))),
+                            Ok(Some(c)) => Some((11, Ok(c))),
+                            Err(e) => Some((5, Err(e))),
+                        }
+                    } else {
+                        Some((5, Err(e)))
+                    }
+                }
             },
             b'U' => match Self::recognize_hex_char(&data[2..], 8, 'u', position) {
                 Ok(c) => Some((9, Ok(c?))),
@@ -821,6 +832,93 @@ impl N3Lexer {
             )
         })?;
         Ok(Some(c))
+    }
+
+    fn recognize_utf16_surrogate_pair(
+        data: &[u8],
+        position: usize,
+    ) -> Result<Option<char>, TokenRecognizerError> {
+        if data.len() < 4 {
+            return Ok(None);
+        }
+
+        let val_high = str_from_utf8(&data[..4], position..position + 6)?;
+        let surrogate_high = u16::from_str_radix(val_high, 16).map_err(|e| {
+            (
+                position..position + 6,
+                format!(
+                    "The escape sequence '\\u{val_high}' is not a valid hexadecimal string: {e}"
+                ),
+            )
+        })?;
+
+        // https://www.unicode.org/glossary/#low_surrogate_code_point
+        if matches!(surrogate_high, 0xDC00..=0xDFFF) {
+            return Err((
+                position..position + 6,
+                format!("UTF-16 low-surrogate escape sequence '\\u{val_high}' must be preceded by a high-surrogate"),
+            )
+                .into());
+        }
+
+        // https://www.unicode.org/glossary/#high_surrogate_code_point
+        if matches!(surrogate_high, 0xD800..=0xDBFF) {
+            if data.len() < 10 || data[4] != b'\\' || data[5] != b'u' {
+                return Err((
+                    position..position + data.len().min(10) + 2,
+                    format!(
+                        "UTF-16 high-surrogate escape sequence '\\u{val_high}' must be followed by a low-surrogate"
+                    ),
+                )
+                    .into());
+            }
+
+            let val_low = str_from_utf8(&data[6..10], position + 6..position + 12)?;
+            let surrogate_low = u16::from_str_radix(val_low, 16).map_err(|e| {
+                (
+                    position + 6..position + 12,
+                    format!(
+                        "The escape sequence '\\u{val_low}' is not a valid hexadecimal string: {e}"
+                    ),
+                )
+            })?;
+
+            let mut chars = char::decode_utf16([surrogate_high, surrogate_low]).map(|r| r.map_err(|_| {
+                (
+                    position..position + 12,
+                    format!(
+                        "UTF-16 high-surrogate escape sequence '\\u{val_high}' cannot be paired with escape sequence '\\u{val_low}' to form a surrogate pair"
+                    ),
+                )
+            }));
+
+            if let Some(c) = chars.next() {
+                let c = c?;
+
+                debug_assert_eq!(
+                    chars.next(),
+                    None,
+                    "Surrogate pair should combine to exactly one character"
+                );
+
+                let mut b = [0; 2];
+                c.encode_utf16(&mut b);
+                debug_assert_eq!(
+                    b,
+                    [surrogate_high, surrogate_low],
+                    "The decoded character should encode to the same surrogate pair"
+                );
+
+                return Ok(Some(c));
+            }
+
+            debug_assert!(
+                false,
+                "The decode_utf16 iterator should have returned at least one character"
+            );
+        }
+
+        Ok(None)
     }
 
     fn recognize_unicode_char(
