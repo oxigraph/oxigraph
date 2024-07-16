@@ -2985,6 +2985,53 @@ mod tests {
         server.test_status(request, Status::NOT_FOUND)
     }
 
+    #[test]
+    fn utf16_surrogate_pair() -> Result<()> {
+        let server = ServerTest::new()?;
+
+        // POST
+        let request = Request::builder(
+            Method::POST,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\" .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com/s> <http://example.com/p> \"👨\" .\n",
+        );
+
+        // PUT
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\\u200D\\uD83D\\uDC69\\u200D\\uD83D\\uDC67\\u200D\\uD83D\\uDC67\" .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com/s> <http://example.com/p> \"👨‍👩‍👧‍👧\" .\n",
+        )
+    }
+
     struct ServerTest {
         store: Store,
     }
