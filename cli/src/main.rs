@@ -1697,6 +1697,9 @@ fn web_load_graph(
     let mut parser = RdfParser::from_format(format)
         .without_named_graphs()
         .with_default_graph(to_graph_name.clone());
+    if url_query_parameter(request, "lenient").is_some() {
+        parser = parser.unchecked();
+    }
     if let Some(base_iri) = base_iri {
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
@@ -2992,7 +2995,7 @@ mod tests {
         // POST
         let request = Request::builder(
             Method::POST,
-            "http://localhost/store?graph=http://example.com".parse()?,
+            "http://localhost/store?lenient&graph=http://example.com".parse()?,
         )
         .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
         .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\" .");
@@ -3008,12 +3011,12 @@ mod tests {
         server.test_body(
             request,
             "<http://example.com/s> <http://example.com/p> \"👨\" .\n",
-        );
+        )?;
 
         // PUT
         let request = Request::builder(
             Method::PUT,
-            "http://localhost/store?graph=http://example.com".parse()?,
+            "http://localhost/store?lenient&graph=http://example.com".parse()?,
         )
         .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
         .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\\u200D\\uD83D\\uDC69\\u200D\\uD83D\\uDC67\\u200D\\uD83D\\uDC67\" .");

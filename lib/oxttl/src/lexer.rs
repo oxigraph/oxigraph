@@ -108,16 +108,16 @@ impl TokenRecognizer for N3Lexer {
                     && *data.get(1)? == b'"'
                     && *data.get(2)? == b'"'
                 {
-                    Self::recognize_long_string(data, b'"')
+                    self.recognize_long_string(data, b'"')
                 } else {
-                    Self::recognize_string(data, b'"')
+                    self.recognize_string(data, b'"')
                 }
             }
             b'\'' if self.mode != N3LexerMode::NTriples => {
                 if *data.get(1)? == b'\'' && *data.get(2)? == b'\'' {
-                    Self::recognize_long_string(data, b'\'')
+                    self.recognize_long_string(data, b'\'')
                 } else {
-                    Self::recognize_string(data, b'\'')
+                    self.recognize_string(data, b'\'')
                 }
             }
             b'@' => self.recognize_lang_tag(data),
@@ -192,7 +192,7 @@ impl N3Lexer {
                     return Some((i + 1, self.parse_iri(string, 0..i + 1, options)));
                 }
                 b'\\' => {
-                    let (additional, c) = Self::recognize_escape(&data[i..], i, false)?;
+                    let (additional, c) = self.recognize_escape(&data[i..], i, false)?;
                     i += additional + 1;
                     match c {
                         Ok(c) => {
@@ -585,6 +585,7 @@ impl N3Lexer {
     }
 
     fn recognize_string(
+        &self,
         data: &[u8],
         delimiter: u8,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
@@ -604,7 +605,7 @@ impl N3Lexer {
                     return Some((i + 1, Ok(N3Token::String(string))));
                 }
                 b'\\' => {
-                    let (additional, c) = Self::recognize_escape(&data[i..], i, true)?;
+                    let (additional, c) = self.recognize_escape(&data[i..], i, true)?;
                     i += additional + 1;
                     match c {
                         Ok(c) => {
@@ -623,6 +624,7 @@ impl N3Lexer {
     }
 
     fn recognize_long_string(
+        &self,
         data: &[u8],
         delimiter: u8,
     ) -> Option<(usize, Result<N3Token<'static>, TokenRecognizerError>)> {
@@ -646,7 +648,7 @@ impl N3Lexer {
                     string.push(char::from(delimiter));
                 }
                 b'\\' => {
-                    let (additional, c) = Self::recognize_escape(&data[i..], i, true)?;
+                    let (additional, c) = self.recognize_escape(&data[i..], i, true)?;
                     i += additional + 1;
                     match c {
                         Ok(c) => {
@@ -760,6 +762,7 @@ impl N3Lexer {
     }
 
     fn recognize_escape(
+        &self,
         data: &[u8],
         position: usize,
         with_echar: bool,
@@ -770,8 +773,7 @@ impl N3Lexer {
             b'u' => match Self::recognize_hex_char(&data[2..], 4, 'u', position) {
                 Ok(c) => Some((5, Ok(c?))),
                 Err(e) => {
-                    let lenient = true;
-                    if lenient {
+                    if self.unchecked {
                         match Self::recognize_utf16_surrogate_pair(&data[2..], position) {
                             Ok(c) => Some((11, Ok(c?))),
                             Err(e) => Some((5, Err(e))),
