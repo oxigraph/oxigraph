@@ -860,7 +860,7 @@ impl N3Lexer {
             };
             if d4 != b'\\' || d5 != b'u' {
                 return Err((
-                    position..position + data.len().min(10) + 2,
+                    position..position + 6,
                     format!(
                         "UTF-16 surrogate escape sequence '\\u{val_high}' must be followed by another surrogate escape sequence"),
                 )
