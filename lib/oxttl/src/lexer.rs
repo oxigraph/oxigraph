@@ -773,8 +773,7 @@ impl N3Lexer {
                     let lenient = true;
                     if lenient {
                         match Self::recognize_utf16_surrogate_pair(&data[2..], position) {
-                            Ok(None) => Some((5, Err(e))),
-                            Ok(Some(c)) => Some((11, Ok(c))),
+                            Ok(c) => Some((11, Ok(c?))),
                             Err(e) => Some((5, Err(e))),
                         }
                     } else {
@@ -852,23 +851,17 @@ impl N3Lexer {
             )
         })?;
 
-        // https://www.unicode.org/glossary/#low_surrogate_code_point
-        if matches!(surrogate_high, 0xDC00..=0xDFFF) {
-            return Err((
-                position..position + 6,
-                format!("UTF-16 low-surrogate escape sequence '\\u{val_high}' must be preceded by a high-surrogate"),
-            )
-                .into());
-        }
+        // TODO: replace with [`u16::is_utf16_surrogate`] when #94919 is stable
+        if matches!(surrogate_high, 0xD800..=0xDFFF) {
+            if data.len() < 10 {
+                return Ok(None);
+            }
 
-        // https://www.unicode.org/glossary/#high_surrogate_code_point
-        if matches!(surrogate_high, 0xD800..=0xDBFF) {
-            if data.len() < 10 || data[4] != b'\\' || data[5] != b'u' {
+            if data[4] != b'\\' || data[5] != b'u' {
                 return Err((
                     position..position + data.len().min(10) + 2,
                     format!(
-                        "UTF-16 high-surrogate escape sequence '\\u{val_high}' must be followed by a low-surrogate"
-                    ),
+                        "UTF-16 surrogate escape sequence '\\u{val_high}' must be followed by another surrogate escape sequence"),
                 )
                     .into());
             }
@@ -887,7 +880,7 @@ impl N3Lexer {
                 (
                     position..position + 12,
                     format!(
-                        "UTF-16 high-surrogate escape sequence '\\u{val_high}' cannot be paired with escape sequence '\\u{val_low}' to form a surrogate pair"
+                        "Escape sequences '\\u{val_high}\\u{val_low}' do not form a valid UTF-16 surrogate pair"
                     ),
                 )
             }));
@@ -901,24 +894,17 @@ impl N3Lexer {
                     "Surrogate pair should combine to exactly one character"
                 );
 
-                let mut b = [0; 2];
-                c.encode_utf16(&mut b);
-                debug_assert_eq!(
-                    b,
-                    [surrogate_high, surrogate_low],
-                    "The decoded character should encode to the same surrogate pair"
-                );
-
-                return Ok(Some(c));
+                Ok(Some(c))
+            } else {
+                unreachable!();
             }
-
-            debug_assert!(
-                false,
-                "The decode_utf16 iterator should have returned at least one character"
-            );
+        } else {
+            Err((
+                position..position + 6,
+                format!("The escape sequence '\\u{val_high}' is not a UTF-16 surrogate",),
+            )
+                .into())
         }
-
-        Ok(None)
     }
 
     fn recognize_unicode_char(
