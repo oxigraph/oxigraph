@@ -837,11 +837,10 @@ impl N3Lexer {
         data: &[u8],
         position: usize,
     ) -> Result<Option<char>, TokenRecognizerError> {
-        if data.len() < 4 {
+        let Some(val_high_slice) = data.get(..4) else {
             return Ok(None);
-        }
-
-        let val_high = str_from_utf8(&data[..4], position..position + 6)?;
+        };
+        let val_high = str_from_utf8(val_high_slice, position..position + 6)?;
         let surrogate_high = u16::from_str_radix(val_high, 16).map_err(|e| {
             (
                 position..position + 6,
@@ -853,11 +852,13 @@ impl N3Lexer {
 
         // TODO: replace with [`u16::is_utf16_surrogate`] when #94919 is stable
         if matches!(surrogate_high, 0xD800..=0xDFFF) {
-            if data.len() < 10 {
+            let Some(&d4) = data.get(4) else {
                 return Ok(None);
-            }
-
-            if data[4] != b'\\' || data[5] != b'u' {
+            };
+            let Some(&d5) = data.get(5) else {
+                return Ok(None);
+            };
+            if d4 != b'\\' || d5 != b'u' {
                 return Err((
                     position..position + data.len().min(10) + 2,
                     format!(
@@ -866,7 +867,10 @@ impl N3Lexer {
                     .into());
             }
 
-            let val_low = str_from_utf8(&data[6..10], position + 6..position + 12)?;
+            let Some(val_low_slice) = data.get(6..10) else {
+                return Ok(None);
+            };
+            let val_low = str_from_utf8(val_low_slice, position + 6..position + 12)?;
             let surrogate_low = u16::from_str_radix(val_low, 16).map_err(|e| {
                 (
                     position + 6..position + 12,
