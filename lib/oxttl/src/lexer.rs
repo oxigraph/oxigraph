@@ -882,17 +882,17 @@ impl N3Lexer {
                 )
             })?;
 
-            let mut chars = char::decode_utf16([surrogate_high, surrogate_low]).map(|r| r.map_err(|_| {
-                (
-                    position..position + 12,
-                    format!(
-                        "Escape sequences '\\u{val_high}\\u{val_low}' do not form a valid UTF-16 surrogate pair"
-                    ),
-                )
-            }));
+            let mut chars = char::decode_utf16([surrogate_high, surrogate_low]);
 
             if let Some(c) = chars.next() {
-                let c = c?;
+                let c = c.map_err(|_| {
+                    (
+                        position..position + 12,
+                        format!(
+                            "Escape sequences '\\u{val_high}\\u{val_low}' do not form a valid UTF-16 surrogate pair"
+                        ),
+                    )
+                })?;
 
                 debug_assert_eq!(
                     chars.next(),
