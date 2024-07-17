@@ -3010,7 +3010,7 @@ mod tests {
         .build();
         server.test_body(
             request,
-            "<http://example.com/s> <http://example.com/p> \"👨\" .\n",
+            "<http://example.com/s> <http://example.com/p> \"\u{1f468}\" .\n",
         )?;
 
         // PUT
@@ -3031,7 +3031,7 @@ mod tests {
         .build();
         server.test_body(
             request,
-            "<http://example.com/s> <http://example.com/p> \"👨‍👩‍👧‍👧\" .\n",
+            "<http://example.com/s> <http://example.com/p> \"\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f467}\" .\n",
         )
     }
 
