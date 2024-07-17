@@ -1697,6 +1697,9 @@ fn web_load_graph(
     let mut parser = RdfParser::from_format(format)
         .without_named_graphs()
         .with_default_graph(to_graph_name.clone());
+    if url_query_parameter(request, "lenient").is_some() {
+        parser = parser.unchecked();
+    }
     if let Some(base_iri) = base_iri {
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
@@ -2983,6 +2986,53 @@ mod tests {
         .with_header(HeaderName::ACCEPT, "text/turtle")?
         .build();
         server.test_status(request, Status::NOT_FOUND)
+    }
+
+    #[test]
+    fn utf16_surrogate_pair() -> Result<()> {
+        let server = ServerTest::new()?;
+
+        // POST
+        let request = Request::builder(
+            Method::POST,
+            "http://localhost/store?lenient&graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\" .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com/s> <http://example.com/p> \"\u{1f468}\" .\n",
+        )?;
+
+        // PUT
+        let request = Request::builder(
+            Method::PUT,
+            "http://localhost/store?lenient&graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
+        .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\\u200D\\uD83D\\uDC69\\u200D\\uD83D\\uDC67\\u200D\\uD83D\\uDC67\" .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(
+            Method::GET,
+            "http://localhost/store?graph=http://example.com".parse()?,
+        )
+        .with_header(HeaderName::ACCEPT, "application/n-triples")?
+        .build();
+        server.test_body(
+            request,
+            "<http://example.com/s> <http://example.com/p> \"\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f467}\" .\n",
+        )
     }
 
     struct ServerTest {
