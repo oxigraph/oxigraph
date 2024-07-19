@@ -1716,10 +1716,14 @@ fn web_load_dataset(
     request: &mut Request,
     format: RdfFormat,
 ) -> Result<(), HttpError> {
+    let mut parser = RdfParser::from_format(format);
+    if url_query_parameter(request, "lenient").is_some() {
+        parser = parser.unchecked();
+    }
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_from_read(format, request.body_mut())
+        web_bulk_loader(store, request).load_from_read(parser, request.body_mut())
     } else {
-        store.load_from_read(format, request.body_mut())
+        store.load_from_read(parser, request.body_mut())
     }
     .map_err(loader_to_http_error)
 }
@@ -2989,7 +2993,7 @@ mod tests {
     }
 
     #[test]
-    fn utf16_surrogate_pair() -> Result<()> {
+    fn lenient_load() -> Result<()> {
         let server = ServerTest::new()?;
 
         // POST
@@ -2998,7 +3002,7 @@ mod tests {
             "http://localhost/store?lenient&graph=http://example.com".parse()?,
         )
         .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-        .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\" .");
+        .with_body("< s> < p> \"\\uD83D\\uDC68\" .");
         server.test_status(request, Status::NO_CONTENT)?;
 
         // GET
@@ -3010,7 +3014,7 @@ mod tests {
         .build();
         server.test_body(
             request,
-            "<http://example.com/s> <http://example.com/p> \"\u{1f468}\" .\n",
+            "<http://example.com/ s> <http://example.com/ p> \"\u{1f468}\" .\n",
         )?;
 
         // PUT
@@ -3019,7 +3023,7 @@ mod tests {
             "http://localhost/store?lenient&graph=http://example.com".parse()?,
         )
         .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-        .with_body("<http://example.com/s> <http://example.com/p> \"\\uD83D\\uDC68\\u200D\\uD83D\\uDC69\\u200D\\uD83D\\uDC67\\u200D\\uD83D\\uDC67\" .");
+        .with_body("< s> < p> \"\\uD83D\\uDC68\\u200D\\uD83D\\uDC69\\u200D\\uD83D\\uDC67\\u200D\\uD83D\\uDC67\" .");
         server.test_status(request, Status::NO_CONTENT)?;
 
         // GET
@@ -3031,8 +3035,20 @@ mod tests {
         .build();
         server.test_body(
             request,
-            "<http://example.com/s> <http://example.com/p> \"\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f467}\" .\n",
-        )
+            "<http://example.com/ s> <http://example.com/ p> \"\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f467}\" .\n",
+        )?;
+
+        // POST dataset
+        let request = Request::builder(Method::POST, "http://localhost/store?lenient".parse()?)
+            .with_header(HeaderName::CONTENT_TYPE, "application/trig")?
+            .with_body("<s> <p> \"\"@abcdefghijklmn .");
+        server.test_status(request, Status::NO_CONTENT)?;
+
+        // GET
+        let request = Request::builder(Method::GET, "http://localhost/store".parse()?)
+            .with_header(HeaderName::ACCEPT, "application/n-quads")?
+            .build();
+        server.test_body(request, "<s> <p> \"\"@abcdefghijklmn .\n<http://example.com/ s> <http://example.com/ p> \"\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f467}\" <http://example.com> .\n")
     }
 
     struct ServerTest {

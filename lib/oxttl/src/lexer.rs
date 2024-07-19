@@ -853,64 +853,61 @@ impl N3Lexer {
         })?;
 
         // TODO: replace with [`u16::is_utf16_surrogate`] when #94919 is stable
-        if matches!(surrogate_high, 0xD800..=0xDFFF) {
-            let Some(&d4) = data.get(4) else {
-                return Ok(None);
-            };
-            let Some(&d5) = data.get(5) else {
-                return Ok(None);
-            };
-            if d4 != b'\\' || d5 != b'u' {
-                return Err((
-                    position..position + 6,
-                    format!(
-                        "UTF-16 surrogate escape sequence '\\u{val_high}' must be followed by another surrogate escape sequence"),
-                )
-                    .into());
-            }
+        if !matches!(surrogate_high, 0xD800..=0xDFFF) {
+            return Err((
+                position..position + 6,
+                format!("The escape sequence '\\u{val_high}' is not a UTF-16 surrogate"),
+            )
+                .into());
+        }
+        let Some(&d4) = data.get(4) else {
+            return Ok(None);
+        };
+        let Some(&d5) = data.get(5) else {
+            return Ok(None);
+        };
+        if d4 != b'\\' || d5 != b'u' {
+            return Err((
+                position..position + 6,
+                format!(
+                    "UTF-16 surrogate escape sequence '\\u{val_high}' must be followed by another surrogate escape sequence"),
+            )
+                .into());
+        }
 
-            let Some(val_low_slice) = data.get(6..10) else {
-                return Ok(None);
-            };
-            let val_low = str_from_utf8(val_low_slice, position + 6..position + 12)?;
-            let surrogate_low = u16::from_str_radix(val_low, 16).map_err(|e| {
+        let Some(val_low_slice) = data.get(6..10) else {
+            return Ok(None);
+        };
+        let val_low = str_from_utf8(val_low_slice, position + 6..position + 12)?;
+        let surrogate_low = u16::from_str_radix(val_low, 16).map_err(|e| {
+            (
+                position + 6..position + 12,
+                format!(
+                    "The escape sequence '\\u{val_low}' is not a valid hexadecimal string: {e}"
+                ),
+            )
+        })?;
+
+        let mut chars = char::decode_utf16([surrogate_high, surrogate_low]);
+
+        let c = chars.next()
+            .and_then(Result::ok)
+            .ok_or_else(|| {
                 (
-                    position + 6..position + 12,
+                    position..position + 12,
                     format!(
-                        "The escape sequence '\\u{val_low}' is not a valid hexadecimal string: {e}"
+                        "Escape sequences '\\u{val_high}\\u{val_low}' do not form a valid UTF-16 surrogate pair"
                     ),
                 )
             })?;
 
-            let mut chars = char::decode_utf16([surrogate_high, surrogate_low]);
+        debug_assert_eq!(
+            chars.next(),
+            None,
+            "Surrogate pair should combine to exactly one character"
+        );
 
-            if let Some(c) = chars.next() {
-                let c = c.map_err(|_| {
-                    (
-                        position..position + 12,
-                        format!(
-                            "Escape sequences '\\u{val_high}\\u{val_low}' do not form a valid UTF-16 surrogate pair"
-                        ),
-                    )
-                })?;
-
-                debug_assert_eq!(
-                    chars.next(),
-                    None,
-                    "Surrogate pair should combine to exactly one character"
-                );
-
-                Ok(Some(c))
-            } else {
-                unreachable!();
-            }
-        } else {
-            Err((
-                position..position + 6,
-                format!("The escape sequence '\\u{val_high}' is not a UTF-16 surrogate",),
-            )
-                .into())
-        }
+        Ok(Some(c))
     }
 
     fn recognize_unicode_char(

@@ -51,13 +51,13 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
         evaluate_negative_n3_syntax_test,
     );
     evaluator.register("http://www.w3.org/ns/rdftest#TestTurtleEval", |t| {
-        evaluate_eval_test(t, RdfFormat::Turtle, false)
+        evaluate_eval_test(t, RdfFormat::Turtle, false, false)
     });
     evaluator.register("http://www.w3.org/ns/rdftest#TestTrigEval", |t| {
-        evaluate_eval_test(t, RdfFormat::TriG, false)
+        evaluate_eval_test(t, RdfFormat::TriG, false, false)
     });
     evaluator.register("http://www.w3.org/ns/rdftest#TestXMLEval", |t| {
-        evaluate_eval_test(t, RdfFormat::RdfXml, false)
+        evaluate_eval_test(t, RdfFormat::RdfXml, false, false)
     });
     evaluator.register("https://w3c.github.io/N3/tests/test.n3#TestN3Eval", |t| {
         evaluate_n3_eval_test(t, false)
@@ -86,21 +86,25 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestNTripleRecovery",
-        |t| evaluate_eval_test(t, RdfFormat::NTriples, true),
+        |t| evaluate_eval_test(t, RdfFormat::NTriples, true, false),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestTurtleRecovery",
-        |t| evaluate_eval_test(t, RdfFormat::Turtle, true),
+        |t| evaluate_eval_test(t, RdfFormat::Turtle, true, false),
     );
     evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestN3Recovery",
         |t| evaluate_n3_eval_test(t, true),
     );
+    evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#TestUncheckedTurtle",
+        |t| evaluate_eval_test(t, RdfFormat::Turtle, true, true),
+    );
 }
 
 fn evaluate_positive_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
-    load_dataset(action, format, false).context("Parse error")?;
+    load_dataset(action, format, false, false).context("Parse error")?;
     Ok(())
 }
 
@@ -112,7 +116,7 @@ fn evaluate_positive_n3_syntax_test(test: &Test) -> Result<()> {
 
 fn evaluate_negative_syntax_test(test: &Test, format: RdfFormat) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
-    let Err(error) = load_dataset(action, format, false) else {
+    let Err(error) = load_dataset(action, format, false, false) else {
         bail!("File parsed without errors even if it should not");
     };
     if let Some(result) = &test.result {
@@ -135,13 +139,18 @@ fn evaluate_negative_n3_syntax_test(test: &Test) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_eval_test(test: &Test, format: RdfFormat, ignore_errors: bool) -> Result<()> {
+fn evaluate_eval_test(
+    test: &Test,
+    format: RdfFormat,
+    ignore_errors: bool,
+    lenient: bool,
+) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
-    let mut actual_dataset = load_dataset(action, format, ignore_errors)
+    let mut actual_dataset = load_dataset(action, format, ignore_errors, lenient)
         .with_context(|| format!("Parse error on file {action}"))?;
     actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     let results = test.result.as_ref().context("No tests result found")?;
-    let mut expected_dataset = load_dataset(results, guess_rdf_format(results)?, false)
+    let mut expected_dataset = load_dataset(results, guess_rdf_format(results)?, false, lenient)
         .with_context(|| format!("Parse error on file {results}"))?;
     expected_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     ensure!(
@@ -173,7 +182,7 @@ fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
 
 fn evaluate_positive_c14n_test(test: &Test, format: RdfFormat) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
-    let actual = load_dataset(action, format, false)
+    let actual = load_dataset(action, format, false, false)
         .with_context(|| format!("Parse error on file {action}"))?
         .to_string();
     let results = test.result.as_ref().context("No tests result found")?;

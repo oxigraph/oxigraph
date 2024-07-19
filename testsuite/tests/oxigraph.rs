@@ -21,6 +21,14 @@ fn oxigraph_parser_recovery_testsuite() -> Result<()> {
 }
 
 #[test]
+fn oxigraph_parser_unchecked_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://github.com/oxigraph/oxigraph/tests/parser-unchecked/manifest.ttl",
+        &[],
+    )
+}
+
+#[test]
 fn oxigraph_parser_error_testsuite() -> Result<()> {
     check_testsuite(
         "https://github.com/oxigraph/oxigraph/tests/parser-error/manifest.ttl",
