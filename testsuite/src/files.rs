@@ -64,8 +64,12 @@ pub fn load_to_dataset(
     dataset: &mut Dataset,
     format: RdfFormat,
     ignore_errors: bool,
+    unchecked: bool,
 ) -> Result<()> {
-    let parser = RdfParser::from_format(format).with_base_iri(url)?;
+    let mut parser = RdfParser::from_format(format).with_base_iri(url)?;
+    if unchecked {
+        parser = parser.unchecked();
+    }
     for q in parser.parse_read(read_file(url)?) {
         match q {
             Ok(q) => {
@@ -81,9 +85,14 @@ pub fn load_to_dataset(
     Ok(())
 }
 
-pub fn load_dataset(url: &str, format: RdfFormat, ignore_errors: bool) -> Result<Dataset> {
+pub fn load_dataset(
+    url: &str,
+    format: RdfFormat,
+    ignore_errors: bool,
+    unchecked: bool,
+) -> Result<Dataset> {
     let mut dataset = Dataset::new();
-    load_to_dataset(url, &mut dataset, format, ignore_errors)?;
+    load_to_dataset(url, &mut dataset, format, ignore_errors, unchecked)?;
     Ok(dataset)
 }
 

@@ -1,0 +1,38 @@
+@prefix mf: <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ox: <https://github.com/oxigraph/oxigraph/tests#> .
+
+<>
+	rdf:type mf:Manifest ;
+	rdfs:comment "Oxigraph parser unchecked test cases" ;
+	mf:entries (
+	    <#iri>
+	    <#langtag>
+	    <#pn_local_escape>
+	    <#utf16_surrogates>
+	) .
+
+<#iri>
+	rdf:type ox:TestUncheckedTurtle ;
+	mf:name "invalid IRI" ;
+	mf:action <iri.nt> ;
+	mf:result <iri.nt> .
+
+<#langtag>
+	rdf:type ox:TestUncheckedTurtle ;
+	mf:name "invalid langtag" ;
+	mf:action <langtag.nt> ;
+	mf:result <langtag.nt> .
+
+<#pn_local_escape>
+	rdf:type ox:TestUncheckedTurtle ;
+	mf:name "invalid pn_local escape" ;
+	mf:action <pn_local_escape.ttl> ;
+	mf:result <pn_local_escape_output.ttl> .
+
+<#utf16_surrogates>
+	rdf:type ox:TestUncheckedTurtle ;
+	mf:name "escaped UTF-16 surrogate pairs" ;
+	mf:action <utf16_surrogates.nt> ;
+	mf:result <utf16_surrogates_output.nt> .
