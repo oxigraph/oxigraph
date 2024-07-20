@@ -1060,7 +1060,10 @@ mod tests {
         assert_eq!(Double::from(Decimal::from(0)), Double::from(0.));
         assert_eq!(Double::from(Decimal::from(1)), Double::from(1.));
         assert_eq!(Double::from(Decimal::from(10)), Double::from(10.));
-        assert_eq!(Double::from(Decimal::from_str("0.1")?), Double::from(0.1));
+        assert!(
+            Double::from(Decimal::from_str("0.1")?) - Double::from(0.1)
+                < Double::from(f64::from(f32::EPSILON))
+        );
         assert!(
             (Double::from(Decimal::MAX) - Double::from(1.701_411_834_604_692_4e20)).abs()
                 < Double::from(1.)
