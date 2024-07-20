@@ -9,15 +9,15 @@ from functools import reduce
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
 
 
-def path_to_type(*elements: str) -> ast.AST:
-    base: ast.AST = ast.Name(id=elements[0], ctx=ast.Load())
+def path_to_type(*elements: str) -> ast.expr:
+    base: ast.expr = ast.Name(id=elements[0], ctx=ast.Load())
     for e in elements[1:]:
         base = ast.Attribute(value=base, attr=e, ctx=ast.Load())
     return base
 
 
 OBJECT_MEMBERS = dict(inspect.getmembers(object))
-BUILTINS: Dict[str, Union[None, Tuple[List[ast.AST], ast.AST]]] = {
+BUILTINS: Dict[str, Union[None, Tuple[List[ast.expr], ast.expr]]] = {
     "__annotations__": None,
     "__bool__": ([], path_to_type("bool")),
     "__bytes__": ([], path_to_type("bytes")),
@@ -65,8 +65,8 @@ BUILTINS: Dict[str, Union[None, Tuple[List[ast.AST], ast.AST]]] = {
 
 def module_stubs(module: Any) -> ast.Module:
     types_to_import = {"typing"}
-    classes = []
-    functions = []
+    classes: List[ast.stmt] = []
+    functions: List[ast.stmt] = []
     for member_name, member_value in inspect.getmembers(module):
         element_path = [module.__name__, member_name]
         if member_name.startswith("__"):
@@ -92,10 +92,10 @@ def module_stubs(module: Any) -> ast.Module:
 
 
 def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_import: Set[str]) -> ast.ClassDef:
-    attributes: List[ast.AST] = []
-    methods: List[ast.AST] = []
-    magic_methods: List[ast.AST] = []
-    constants: List[ast.AST] = []
+    attributes: List[ast.stmt] = []
+    methods: List[ast.stmt] = []
+    magic_methods: List[ast.stmt] = []
+    constants: List[ast.stmt] = []
     for member_name, member_value in inspect.getmembers(cls_def):
         current_element_path = [*element_path, member_name]
         if member_name == "__init__":
@@ -159,13 +159,16 @@ def class_stubs(cls_name: str, cls_def: Any, element_path: List[str], types_to_i
 
     doc = inspect.getdoc(cls_def)
     doc_comment = build_doc_comment(doc) if doc else None
+    body = ([doc_comment] if doc_comment else []) + attributes + methods + magic_methods + constants
+    if not body:
+        body.append(ast.Expr(value=ast.Constant(...)))
     return ast.ClassDef(
         cls_name,
         bases=[],
         keywords=[],
-        body=(([doc_comment] if doc_comment else []) + attributes + methods + magic_methods + constants)
-        or [ast.Constant(...)],
+        body=body,
         decorator_list=[path_to_type("typing", "final")],
+        type_params=[],
     )
 
 
@@ -174,7 +177,7 @@ def data_descriptor_stub(
     data_desc_def: Any,
     element_path: List[str],
     types_to_import: Set[str],
-) -> Union[Tuple[ast.AnnAssign, ast.Expr], Tuple[ast.AnnAssign]]:
+) -> Tuple[ast.stmt, ...]:
     annotation = None
     doc_comment = None
 
@@ -206,23 +209,26 @@ def function_stub(
     *,
     in_class: bool,
 ) -> ast.FunctionDef:
-    body: List[ast.AST] = []
+    body: List[ast.stmt] = []
     doc = inspect.getdoc(fn_def)
     if doc is not None:
         doc_comment = build_doc_comment(doc)
         if doc_comment is not None:
             body.append(doc_comment)
 
-    decorator_list = []
+    decorator_list: List[ast.expr] = []
     if in_class and hasattr(fn_def, "__self__"):
         decorator_list.append(ast.Name("staticmethod"))
+    if not body:
+        body.append(ast.Expr(value=ast.Constant(...)))
 
     return ast.FunctionDef(
         fn_name,
         arguments_stub(fn_name, fn_def, doc or "", element_path, types_to_import),
-        body or [ast.Constant(...)],
+        body,
         decorator_list=decorator_list,
         returns=returns_stub(fn_name, doc, element_path, types_to_import) if doc else None,
+        type_params=[],
         lineno=0,
     )
 
@@ -271,9 +277,9 @@ def arguments_stub(
     args = []
     vararg = None
     kwonlyargs = []
-    kw_defaults = []
+    kw_defaults: List[Optional[ast.expr]] = []
     kwarg = None
-    defaults = []
+    defaults: List[ast.expr] = []
     for param in real_parameters.values():
         if param.name != "self" and param.name not in parsed_param_types:
             raise ValueError(
@@ -282,7 +288,7 @@ def arguments_stub(
             )
         param_ast = ast.arg(arg=param.name, annotation=parsed_param_types.get(param.name))
 
-        default_ast = None
+        default_ast: Optional[ast.expr] = None
         if param.default != param.empty:
             default_ast = ast.Constant(param.default)
             if param.name not in optional_params:
@@ -298,10 +304,12 @@ def arguments_stub(
 
         if param.kind == param.POSITIONAL_ONLY:
             posonlyargs.append(param_ast)
-            defaults.append(default_ast)
+            if default_ast is not None:
+                defaults.append(default_ast)
         elif param.kind == param.POSITIONAL_OR_KEYWORD:
             args.append(param_ast)
-            defaults.append(default_ast)
+            if default_ast is not None:
+                defaults.append(default_ast)
         elif param.kind == param.VAR_POSITIONAL:
             vararg = param_ast
         elif param.kind == param.KEYWORD_ONLY:
@@ -321,7 +329,9 @@ def arguments_stub(
     )
 
 
-def returns_stub(callable_name: str, doc: str, element_path: List[str], types_to_import: Set[str]) -> Optional[ast.AST]:
+def returns_stub(
+    callable_name: str, doc: str, element_path: List[str], types_to_import: Set[str]
+) -> Optional[ast.expr]:
     m = re.findall(r"^ *:rtype: *([^\n]*) *$", doc, re.MULTILINE)
     if len(m) == 0:
         builtin = BUILTINS.get(callable_name)
@@ -336,12 +346,12 @@ def returns_stub(callable_name: str, doc: str, element_path: List[str], types_to
     return convert_type_from_doc(m[0], element_path, types_to_import)
 
 
-def convert_type_from_doc(type_str: str, element_path: List[str], types_to_import: Set[str]) -> ast.AST:
+def convert_type_from_doc(type_str: str, element_path: List[str], types_to_import: Set[str]) -> ast.expr:
     type_str = type_str.strip()
     return parse_type_to_ast(type_str, element_path, types_to_import)
 
 
-def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: Set[str]) -> ast.AST:
+def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: Set[str]) -> ast.expr:
     # let's tokenize
     tokens = []
     current_token = ""
@@ -370,7 +380,7 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
             stack[-1].append(token)
 
     # then it's easy
-    def parse_sequence(sequence: List[Any]) -> ast.AST:
+    def parse_sequence(sequence: List[Any]) -> ast.expr:
         # we split based on "or"
         or_groups: List[List[str]] = [[]]
         for e in sequence:
@@ -381,7 +391,7 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
         if any(not g for g in or_groups):
             raise ValueError(f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}")
 
-        new_elements: List[ast.AST] = []
+        new_elements: List[ast.expr] = []
         for group in or_groups:
             if len(group) == 1 and isinstance(group[0], str):
                 new_elements.append(concatenated_path_to_type(group[0], element_path, types_to_import))
@@ -400,7 +410,7 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
     return parse_sequence(stack[0])
 
 
-def concatenated_path_to_type(path: str, element_path: List[str], types_to_import: Set[str]) -> ast.AST:
+def concatenated_path_to_type(path: str, element_path: List[str], types_to_import: Set[str]) -> ast.expr:
     parts = path.split(".")
     if any(not p for p in parts):
         raise ValueError(f"Not able to parse type '{path}' used by {'.'.join(element_path)}")
