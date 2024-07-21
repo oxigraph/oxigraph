@@ -16,7 +16,7 @@ oxrdfxml.path = "../lib/oxrdfxml"
 oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
 sparesults = { path = "../lib/sparesults", features = ["rdf-star"] }
 spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
-sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
+sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006", "service"] }
 
 [profile.release]
 codegen-units = 1

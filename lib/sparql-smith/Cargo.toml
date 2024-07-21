@@ -17,6 +17,7 @@ rust-version.workspace = true
 default = []
 limit-offset = ["order"]
 order = []
+service = []
 sep-0006 = []
 
 [lints]
