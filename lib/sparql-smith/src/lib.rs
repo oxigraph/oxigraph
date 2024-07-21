@@ -895,7 +895,9 @@ enum GraphPatternNotTriples {
     Graph(GraphGraphPattern),
     Filter(Filter),
     Bind(Bind),
-    InlineData(InlineData), // TODO: ServiceGraphPattern
+    InlineData(InlineData),
+    #[cfg(feature = "service")]
+    ServiceGraphPattern(ServiceGraphPattern),
     #[cfg(feature = "sep-0006")]
     Lateral(LateralGraphPattern),
 }
@@ -910,6 +912,8 @@ impl fmt::Display for GraphPatternNotTriples {
             Self::Filter(p) => write!(f, "{p}"),
             Self::Bind(p) => write!(f, "{p}"),
             Self::InlineData(p) => write!(f, "{p}"),
+            #[cfg(feature = "service")]
+            Self::ServiceGraphPattern(p) => write!(f, "{p}"),
             #[cfg(feature = "sep-0006")]
             Self::Lateral(p) => write!(f, "{p}"),
         }
@@ -950,6 +954,26 @@ struct GraphGraphPattern {
 impl fmt::Display for GraphGraphPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, " GRAPH {} {}", self.graph, self.inner)
+    }
+}
+
+#[cfg(feature = "service")]
+#[derive(Arbitrary)]
+struct ServiceGraphPattern {
+    // [59]  	ServiceGraphPattern	  ::=  	'SERVICE' 'SILENT'? VarOrIri GroupGraphPattern
+    silent: bool,
+    service: VarOrIri,
+    inner: GroupGraphPattern,
+}
+
+#[cfg(feature = "service")]
+impl fmt::Display for ServiceGraphPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, " SERVICE")?;
+        if self.silent {
+            write!(f, " SILENT")?;
+        }
+        write!(f, " {} {}", self.service, self.inner)
     }
 }
 
