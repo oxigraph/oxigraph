@@ -368,16 +368,18 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
         tokens.append(current_token)
 
     # let's first parse nested parenthesis
-    stack: List[List[Any]] = [[]]
+    stack: List[List[Any]] = [[[]]]
     for token in tokens:
         if token == "[":
-            children: List[str] = []
-            stack[-1].append(children)
+            children: List[List[Any]] = [[]]
+            stack[-1][-1].append(children)
             stack.append(children)
+        elif token == ",":
+            stack[-1].append([])
         elif token == "]":
             stack.pop()
         else:
-            stack[-1].append(token)
+            stack[-1][-1].append(token)
 
     # then it's easy
     def parse_sequence(sequence: List[Any]) -> ast.expr:
@@ -394,20 +396,33 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
         new_elements: List[ast.expr] = []
         for group in or_groups:
             if len(group) == 1 and isinstance(group[0], str):
-                new_elements.append(concatenated_path_to_type(group[0], element_path, types_to_import))
+                if group[0] == "...":
+                    new_elements.append(ast.Constant(...))
+                else:
+                    new_elements.append(concatenated_path_to_type(group[0], element_path, types_to_import))
             elif len(group) == 2 and isinstance(group[0], str) and isinstance(group[1], list):
                 new_elements.append(
                     ast.Subscript(
                         value=concatenated_path_to_type(group[0], element_path, types_to_import),
-                        slice=parse_sequence(group[1]),
+                        slice=ast.Tuple([parse_sequence(g) for g in group[1]])
+                        if len(group[1]) > 1
+                        else parse_sequence(group[1][0]),
                         ctx=ast.Load(),
                     )
                 )
+            elif len(group) == 1 and isinstance(group[0], list):
+                if group[0][-1] == ["..."]:
+                    # TODO: hack to convert Callable[[T, ...], R] into Callable[..., R]
+                    new_elements.append(ast.Constant(...))
+                else:
+                    new_elements.append(ast.Expr(value=ast.List([parse_sequence(g) for g in group[0]])))
             else:
                 raise ValueError(f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}")
         return reduce(lambda left, right: ast.BinOp(left=left, op=ast.BitOr(), right=right), new_elements)
 
-    return parse_sequence(stack[0])
+    if len(stack[0]) != 1:
+        raise ValueError(f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}")
+    return parse_sequence(stack[0][0])
 
 
 def concatenated_path_to_type(path: str, element_path: List[str], types_to_import: Set[str]) -> ast.expr:
