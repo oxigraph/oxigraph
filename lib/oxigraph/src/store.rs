@@ -1913,6 +1913,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_send_sync() {
+        fn is_send_sync<T: Send + Sync>() {}
+        is_send_sync::<Store>();
+    }
+
+    #[test]
     fn store() -> Result<(), StorageError> {
         use crate::model::*;
 
