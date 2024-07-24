@@ -13,6 +13,7 @@ use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// RDF store.
@@ -265,6 +266,8 @@ impl PyStore {
     /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list[NamedNode or BlankNode or DefaultGraph] or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
     /// :type named_graphs: list[NamedNode or BlankNode] or None, optional
+    /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions takes for input some :py:class:`Term`s and return a :py:class:`Term` or :py:const:`None`.
+    /// :type custom_functions: dict[NamedNode, typing.Callable[[NamedNode or BlankNode or Literal or Triple, ...], NamedNode or BlankNode or Literal or Triple or None]] or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryBoolean or QueryTriples
     /// :raises SyntaxError: if the provided query is invalid.
@@ -290,7 +293,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
-    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None))]
+    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, custom_functions = None))]
     fn query(
         &self,
         query: &str,
@@ -298,6 +301,7 @@ impl PyStore {
         use_default_graph_as_union: bool,
         default_graph: Option<&Bound<'_, PyAny>>,
         named_graphs: Option<&Bound<'_, PyAny>>,
+        custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
         py: Python<'_>,
     ) -> PyResult<PyObject> {
         pub struct UngilQueryResults(QueryResults);
@@ -314,8 +318,9 @@ impl PyStore {
             named_graphs,
             py,
         )?;
+        let options = query_options_from_python(custom_functions);
         let results = py
-            .allow_threads(|| Ok(UngilQueryResults(self.inner.query(query)?)))
+            .allow_threads(|| Ok(UngilQueryResults(self.inner.query_opt(query, options)?)))
             .map_err(map_evaluation_error)?
             .0;
         Ok(query_results_to_python(py, results))
@@ -329,6 +334,8 @@ impl PyStore {
     /// :type update: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the SPARQL update or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
+    /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions takes for input some :py:class:`Term`s and return a :py:class:`Term` or :py:const:`None`.
+    /// :type custom_functions: dict[NamedNode, typing.Callable[[NamedNode or BlankNode or Literal or Triple, ...], NamedNode or BlankNode or Literal or Triple or None]] or None, optional
     /// :rtype: None
     /// :raises SyntaxError: if the provided update is invalid.
     /// :raises OSError: if an error happens while reading the store.
@@ -355,12 +362,21 @@ impl PyStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[pyo3(signature = (update, *, base_iri = None))]
-    fn update(&self, update: &str, base_iri: Option<&str>, py: Python<'_>) -> PyResult<()> {
+    #[pyo3(signature = (update, *, base_iri = None, custom_functions = None))]
+    fn update(
+        &self,
+        update: &str,
+        base_iri: Option<&str>,
+        custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
         py.allow_threads(|| {
+            let options = query_options_from_python(custom_functions);
             let update =
                 Update::parse(update, base_iri).map_err(|e| map_evaluation_error(e.into()))?;
-            self.inner.update(update).map_err(map_evaluation_error)
+            self.inner
+                .update_opt(update, options)
+                .map_err(map_evaluation_error)
         })
     }
 

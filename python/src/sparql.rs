@@ -8,13 +8,14 @@ use oxigraph::sparql::results::{
     QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
 };
 use oxigraph::sparql::{
-    EvaluationError, Query, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
-    Variable,
+    EvaluationError, Query, QueryOptions, QueryResults, QuerySolution, QuerySolutionIter,
+    QueryTripleIter, Variable,
 };
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyTuple};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -70,6 +71,35 @@ pub fn parse_query(
     }
 
     Ok(query)
+}
+
+pub fn query_options_from_python(
+    custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
+) -> QueryOptions {
+    let mut options = QueryOptions::default();
+    if let Some(custom_functions) = custom_functions {
+        for (name, function) in custom_functions {
+            options = options.with_custom_function(name.into(), move |args| {
+                Python::with_gil(|py| {
+                    Some(
+                        function
+                            .call1(
+                                py,
+                                PyTuple::new_bound(
+                                    py,
+                                    args.iter().map(|t| PyTerm::from(t.clone()).into_py(py)),
+                                ),
+                            )
+                            .ok()?
+                            .extract::<Option<PyTerm>>(py)
+                            .ok()??
+                            .into(),
+                    )
+                })
+            })
+        }
+    }
+    options
 }
 
 pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObject {

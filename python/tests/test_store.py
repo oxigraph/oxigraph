@@ -9,6 +9,7 @@ from typing import Any
 from pyoxigraph import (
     BlankNode,
     DefaultGraph,
+    Literal,
     NamedNode,
     Quad,
     QueryBoolean,
@@ -193,6 +194,22 @@ class TestStore(unittest.TestCase):
             named_graphs=[graph, graph_bnode],
         )
         self.assertEqual(len(list(results)), 2)
+
+    def test_select_query_with_custom_functions(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, foo))
+        results: Any = store.query(
+            "SELECT (<http://example.com/concat>(?s, ?p) AS ?c) (<http://example.com/failing>(?t) AS ?f)"
+            "WHERE { ?s ?p ?o }",
+            custom_functions={
+                NamedNode("http://example.com/concat"): lambda t1, t2: Literal(t1.value + t2.value),
+                NamedNode("http://example.com/failing"): lambda _: None,
+            },
+        )
+        solution = next(results)
+        self.assertIsInstance(solution, QuerySolution)
+        self.assertEqual(solution["c"], Literal("http://foohttp://bar"))
+        self.assertIsNone(solution["f"], None)
 
     def test_select_query_dump(self) -> None:
         store = Store()
