@@ -28,7 +28,8 @@ pub fn parse_query(
     named_graphs: Option<&Bound<'_, PyAny>>,
     py: Python<'_>,
 ) -> PyResult<Query> {
-    let mut query = allow_threads_unsafe(py, || Query::parse(query, base_iri))
+    let mut query = py
+        .allow_threads(|| Query::parse(query, base_iri))
         .map_err(|e| map_evaluation_error(e.into()))?;
 
     if use_default_graph_as_union && default_graph.is_some() {
@@ -74,10 +75,13 @@ pub fn parse_query(
 pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObject {
     match results {
         QueryResults::Solutions(inner) => PyQuerySolutions {
-            inner: PyQuerySolutionsVariant::Query(inner),
+            inner: PyQuerySolutionsVariant::Query(UngilQuerySolutionIter(inner)),
         }
         .into_py(py),
-        QueryResults::Graph(inner) => PyQueryTriples { inner }.into_py(py),
+        QueryResults::Graph(inner) => PyQueryTriples {
+            inner: UngilQueryTripleIter(inner),
+        }
+        .into_py(py),
         QueryResults::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
     }
 }
@@ -180,12 +184,18 @@ pub struct PyQuerySolutions {
     inner: PyQuerySolutionsVariant,
 }
 enum PyQuerySolutionsVariant {
-    Query(QuerySolutionIter),
+    Query(UngilQuerySolutionIter),
     Reader {
         iter: FromReadSolutionsReader<PyReadable>,
         file_path: Option<PathBuf>,
     },
 }
+
+struct UngilQuerySolutionIter(QuerySolutionIter);
+
+#[allow(unsafe_code)]
+// SAFETY: To derive Ungil
+unsafe impl Send for UngilQuerySolutionIter {}
 
 #[pymethods]
 impl PyQuerySolutions {
@@ -198,9 +208,12 @@ impl PyQuerySolutions {
     #[getter]
     fn variables(&self) -> Vec<PyVariable> {
         match &self.inner {
-            PyQuerySolutionsVariant::Query(inner) => {
-                inner.variables().iter().map(|v| v.clone().into()).collect()
-            }
+            PyQuerySolutionsVariant::Query(inner) => inner
+                .0
+                .variables()
+                .iter()
+                .map(|v| v.clone().into())
+                .collect(),
             PyQuerySolutionsVariant::Reader { iter, .. } => {
                 iter.variables().iter().map(|v| v.clone().into()).collect()
             }
@@ -242,32 +255,36 @@ impl PyQuerySolutions {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
-                let mut writer = QueryResultsSerializer::from_format(format)
-                    .serialize_solutions_to_write(
-                        output,
-                        match &self.inner {
-                            PyQuerySolutionsVariant::Query(inner) => inner.variables().to_vec(),
-                            PyQuerySolutionsVariant::Reader { iter, .. } => {
-                                iter.variables().to_vec()
+                py.allow_threads(|| {
+                    let mut writer = QueryResultsSerializer::from_format(format)
+                        .serialize_solutions_to_write(
+                            output,
+                            match &self.inner {
+                                PyQuerySolutionsVariant::Query(inner) => {
+                                    inner.0.variables().to_vec()
+                                }
+                                PyQuerySolutionsVariant::Reader { iter, .. } => {
+                                    iter.variables().to_vec()
+                                }
+                            },
+                        )?;
+                    match &mut self.inner {
+                        PyQuerySolutionsVariant::Query(inner) => {
+                            for solution in &mut inner.0 {
+                                writer.write(&solution.map_err(map_evaluation_error)?)?;
                             }
-                        },
-                    )?;
-                match &mut self.inner {
-                    PyQuerySolutionsVariant::Query(inner) => {
-                        for solution in inner {
-                            writer.write(&solution.map_err(map_evaluation_error)?)?;
+                        }
+                        PyQuerySolutionsVariant::Reader { iter, file_path } => {
+                            for solution in iter {
+                                writer.write(&solution.map_err(|e| {
+                                    map_query_results_parse_error(e, file_path.clone())
+                                })?)?;
+                            }
                         }
                     }
-                    PyQuerySolutionsVariant::Reader { iter, file_path } => {
-                        for solution in iter {
-                            writer.write(&solution.map_err(|e| {
-                                map_query_results_parse_error(e, file_path.clone())
-                            })?)?;
-                        }
-                    }
-                }
 
-                Ok(writer.finish()?)
+                    Ok(writer.finish()?)
+                })
             },
             output,
             py,
@@ -280,11 +297,12 @@ impl PyQuerySolutions {
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyQuerySolution>> {
         Ok(match &mut self.inner {
-            PyQuerySolutionsVariant::Query(inner) => allow_threads_unsafe(py, || {
-                inner.next().transpose().map_err(map_evaluation_error)
-            }),
-            PyQuerySolutionsVariant::Reader { iter, file_path } => iter
-                .next()
+            PyQuerySolutionsVariant::Query(inner) => py
+                .allow_threads(move || inner.0.next())
+                .transpose()
+                .map_err(map_evaluation_error),
+            PyQuerySolutionsVariant::Reader { iter, file_path } => py
+                .allow_threads(|| iter.next())
                 .transpose()
                 .map_err(|e| map_query_results_parse_error(e, file_path.clone())),
         }?
@@ -370,8 +388,14 @@ impl PyQueryBoolean {
 /// [<Triple subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>>>]
 #[pyclass(unsendable, name = "QueryTriples", module = "pyoxigraph")]
 pub struct PyQueryTriples {
-    inner: QueryTripleIter,
+    inner: UngilQueryTripleIter,
 }
+
+struct UngilQueryTripleIter(QueryTripleIter);
+
+#[allow(unsafe_code)]
+// SAFETY: To derive Ungil
+unsafe impl Send for UngilQueryTripleIter {}
 
 #[pymethods]
 impl PyQueryTriples {
@@ -413,11 +437,13 @@ impl PyQueryTriples {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_rdf_format(format, file_path.as_deref())?;
-                let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
-                for triple in &mut self.inner {
-                    writer.write_triple(&triple.map_err(map_evaluation_error)?)?;
-                }
-                Ok(writer.finish()?)
+                py.allow_threads(move || {
+                    let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
+                    for triple in &mut self.inner.0 {
+                        writer.write_triple(&triple.map_err(map_evaluation_error)?)?;
+                    }
+                    Ok(writer.finish()?)
+                })
             },
             output,
             py,
@@ -429,7 +455,8 @@ impl PyQueryTriples {
     }
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyTriple>> {
-        Ok(allow_threads_unsafe(py, || self.inner.next())
+        Ok(py
+            .allow_threads(move || self.inner.0.next())
             .transpose()
             .map_err(map_evaluation_error)?
             .map(Into::into))

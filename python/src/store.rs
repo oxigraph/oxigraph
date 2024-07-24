@@ -1,14 +1,14 @@
 #![allow(clippy::needless_option_as_deref)]
 
 use crate::io::{
-    allow_threads_unsafe, lookup_rdf_format, map_parse_error, PyRdfFormatInput, PyReadable,
-    PyReadableInput, PyWritable, PyWritableOutput,
+    lookup_rdf_format, map_parse_error, PyRdfFormatInput, PyReadable, PyReadableInput, PyWritable,
+    PyWritableOutput,
 };
 use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::RdfParser;
 use oxigraph::model::GraphNameRef;
-use oxigraph::sparql::Update;
+use oxigraph::sparql::{QueryResults, Update};
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -300,6 +300,12 @@ impl PyStore {
         named_graphs: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
     ) -> PyResult<PyObject> {
+        pub struct UngilQueryResults(QueryResults);
+
+        #[allow(unsafe_code)]
+        // SAFETY: To derive Ungil
+        unsafe impl Send for UngilQueryResults {}
+
         let query = parse_query(
             query,
             base_iri,
@@ -308,8 +314,10 @@ impl PyStore {
             named_graphs,
             py,
         )?;
-        let results =
-            allow_threads_unsafe(py, || self.inner.query(query)).map_err(map_evaluation_error)?;
+        let results = py
+            .allow_threads(|| Ok(UngilQueryResults(self.inner.query(query)?)))
+            .map_err(map_evaluation_error)?
+            .0;
         Ok(query_results_to_python(py, results))
     }
 
