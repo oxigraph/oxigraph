@@ -283,6 +283,12 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    fn test_send_sync() {
+        fn is_send_sync<T: Send + Sync>() {}
+        is_send_sync::<QuerySolution>();
+    }
+
+    #[test]
     fn test_serialization_roundtrip() -> Result<(), EvaluationError> {
         use std::str;
 

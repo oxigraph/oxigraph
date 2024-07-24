@@ -309,3 +309,15 @@ impl QueryDataset {
         self.named = Some(named_graphs);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_send_sync() {
+        fn is_send_sync<T: Send + Sync>() {}
+        is_send_sync::<Query>();
+        is_send_sync::<Update>();
+    }
+}
