@@ -587,31 +587,6 @@ pub fn map_parse_error(error: RdfParseError, file_path: Option<PathBuf>) -> PyEr
     }
 }
 
-/// Release the GIL
-/// There should not be ANY use of pyo3 code inside of this method!!!
-///
-/// Code from pyo3: https://github.com/PyO3/pyo3/blob/a67180c8a42a0bc0fdc45b651b62c0644130cf47/src/python.rs#L366
-#[allow(unsafe_code)]
-pub fn allow_threads_unsafe<T>(_py: Python<'_>, f: impl FnOnce() -> T) -> T {
-    struct RestoreGuard {
-        tstate: *mut pyo3::ffi::PyThreadState,
-    }
-
-    impl Drop for RestoreGuard {
-        fn drop(&mut self) {
-            // SAFETY: not cloned so called once
-            unsafe {
-                pyo3::ffi::PyEval_RestoreThread(self.tstate);
-            }
-        }
-    }
-
-    // SAFETY: we have the restore part in Drop to make sure it's properly executed
-    let tstate = unsafe { pyo3::ffi::PyEval_SaveThread() };
-    let _guard = RestoreGuard { tstate };
-    f()
-}
-
 pub fn python_version() -> (u8, u8) {
     static VERSION: OnceLock<(u8, u8)> = OnceLock::new();
     *VERSION.get_or_init(|| {
