@@ -497,6 +497,7 @@ impl PyStore {
                 parser = parser.with_default_graph(to_graph_name);
             }
             self.inner
+                .bulk_loader()
                 .load_from_read(parser, input)
                 .map_err(|e| map_loader_error(e, path))
         })
