@@ -1,0 +1,3 @@
+CONSTRUCT WHERE {
+    ?s ?p ?o ; .
+}

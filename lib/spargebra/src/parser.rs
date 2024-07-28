@@ -1367,14 +1367,20 @@ parser! {
             PropertyListNotEmpty() /
             { FocusedTriplePattern::default() }
 
-        rule PropertyListNotEmpty() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> = l:PropertyListNotEmpty_item() **<1,> (";" _) {
-            l.into_iter().fold(FocusedTriplePattern::<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>>::default(), |mut a, b| {
+        rule PropertyListNotEmpty() -> FocusedTriplePattern<Vec<(NamedNodePattern,Vec<AnnotatedTerm>)>> = hp:Verb() _ ho:ObjectList() _ l:PropertyListNotEmpty_item()* {
+            l.into_iter().flatten().fold(FocusedTriplePattern {
+                focus: vec![(hp, ho.focus)],
+                patterns: ho.patterns
+            }, |mut a, b| {
                 a.focus.push(b.focus);
                 a.patterns.extend(b.patterns);
                 a
             })
         }
-        rule PropertyListNotEmpty_item() -> FocusedTriplePattern<(NamedNodePattern,Vec<AnnotatedTerm>)> = p:Verb() _ o:ObjectList() _ {
+        rule PropertyListNotEmpty_item() -> Option<FocusedTriplePattern<(NamedNodePattern,Vec<AnnotatedTerm>)>> = ";" _ c:PropertyListNotEmpty_item_content()? {
+            c
+        }
+        rule PropertyListNotEmpty_item_content() -> FocusedTriplePattern<(NamedNodePattern,Vec<AnnotatedTerm>)> = p:Verb() _ o:ObjectList() _ {
             FocusedTriplePattern {
                 focus: (p, o.focus),
                 patterns: o.patterns
