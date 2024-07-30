@@ -281,6 +281,8 @@ jobs:
           cache: npm
           cache-dependency-path: "js/package.json"
           registry-url: https://registry.npmjs.org
+      - run: npm install
+        working-directory: ./js
       - run: npm run pack
         working-directory: ./js
       - uses: actions/upload-artifact@v4
