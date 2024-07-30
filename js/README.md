@@ -286,8 +286,7 @@ The [The Rust Wasm Book](https://rustwasm.github.io/docs/book/) is a great tutor
 
 To setup a dev environment:
 - ensure to have a Rust toolchain with `rustup` and `cargo` installed ([possible instructions](https://www.rust-lang.org/tools/install)).
-- install [`wasm-pack`](https://rustwasm.github.io/wasm-pack/): `cargo install wasm-pack` (it is also in some Linux distribution repositories).
-- `npm install` to install pure JS dependencies.
+- `npm install` to install JS dependencies.
 - you are good to go!
 
 Testing and linting:

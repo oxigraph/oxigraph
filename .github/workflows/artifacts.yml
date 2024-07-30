@@ -275,11 +275,9 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@v2
-        with: { tool: wasm-pack }
       - uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: 18
           cache: npm
           cache-dependency-path: "js/package.json"
           registry-url: https://registry.npmjs.org

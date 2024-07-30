@@ -282,8 +282,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@v2
-        with: { tool: wasm-pack }
       - uses: actions/setup-node@v4
         with:
           node-version: 18
@@ -529,8 +527,6 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-codspeed }
-      - uses: taiki-e/install-action@v2
-        with: { tool: wasm-pack }
       - uses: actions/setup-node@v4
         with:
           node-version: 18
