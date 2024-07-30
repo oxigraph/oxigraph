@@ -1,8 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { withCodSpeed } from "@codspeed/tinybench-plugin";
 import * as fzstd from "fzstd";
-import { Bench } from "tinybench";
+import { bench, describe } from "vitest";
 import { Store } from "../pkg/oxigraph.js";
 
 async function readData(file) {
@@ -28,28 +27,30 @@ const bsbm_1000_operations = (await readData("mix-exploreAndUpdate-1000.tsv.zst"
     .filter((line) => line.trim() !== "")
     .map((line) => line.trim().split("\t"));
 
-const bench = withCodSpeed(new Bench());
-bench
-    .add("JS: load BSBM explore 1000", () => {
+describe("Store", () => {
+    bench("JS: load BSBM explore 1000", () => {
         const store = new Store();
         store.load(explore_1000_nt, { format: "application/n-triples" });
-    })
-    .add("JS: load BSBM explore 1000 unchecked no_transaction", () => {
+    });
+
+    bench("JS: load BSBM explore 1000 unchecked no_transaction", () => {
         const store = new Store();
         store.load(explore_1000_nt, {
             format: "application/n-triples",
             unchecked: true,
             no_transaction: true,
         });
-    })
-    .add("JS: BSBM explore 1000 query", () => {
+    });
+
+    bench("JS: BSBM explore 1000 query", () => {
         for (const [kind, sparql] of bsbm_1000_operations) {
             if (kind === "query") {
                 explore_1000_store.query(sparql, { results_format: "xml" });
             }
         }
-    })
-    .add("JS: BSBM explore 1000 query and update", () => {
+    });
+
+    bench("JS: BSBM explore 1000 query and update", () => {
         for (const [kind, sparql] of bsbm_1000_operations) {
             if (kind === "query") {
                 explore_1000_store.query(sparql, { results_format: "xml" });
@@ -58,6 +59,4 @@ bench
             }
         }
     });
-
-await bench.run();
-console.table(bench.table());
+});
