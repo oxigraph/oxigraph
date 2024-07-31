@@ -284,6 +284,4 @@ strip = "debuginfo"
 panic = "abort"
 
 [profile.release.package.oxigraph-js]
-codegen-units = 1
 opt-level = "z"
-strip = "debuginfo"

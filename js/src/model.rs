@@ -1,7 +1,6 @@
-#![allow(dead_code, clippy::inherent_to_string, clippy::unused_self)]
+#![allow(clippy::inherent_to_string, clippy::unused_self)]
 
 use crate::format_err;
-use crate::utils::to_err;
 use js_sys::{Reflect, UriError};
 use oxigraph::model::*;
 use wasm_bindgen::prelude::*;
@@ -134,9 +133,9 @@ pub fn named_node(value: String) -> Result<JsNamedNode, JsValue> {
 }
 
 #[wasm_bindgen(js_name = blankNode)]
-pub fn blank_node(value: Option<String>) -> Result<JsBlankNode, JsValue> {
+pub fn blank_node(value: Option<String>) -> Result<JsBlankNode, JsError> {
     Ok(if let Some(value) = value {
-        BlankNode::new(value).map_err(to_err)?
+        BlankNode::new(value)?
     } else {
         BlankNode::default()
     }
@@ -155,7 +154,7 @@ pub fn literal(
             value.unwrap_or_default(),
             language_or_datatype.as_string().unwrap_or_default(),
         )
-        .map_err(to_err)?
+        .map_err(JsError::from)?
         .into())
     } else if let JsTerm::NamedNode(datatype) = FROM_JS.with(|c| c.to_term(language_or_datatype))? {
         Ok(Literal::new_typed_literal(value.unwrap_or_default(), datatype).into())
@@ -170,8 +169,8 @@ pub fn default_graph() -> JsDefaultGraph {
 }
 
 #[wasm_bindgen(js_name = variable)]
-pub fn variable(value: String) -> Result<JsVariable, JsValue> {
-    Ok(Variable::new(value).map_err(to_err)?.into())
+pub fn variable(value: String) -> Result<JsVariable, JsError> {
+    Ok(Variable::new(value)?.into())
 }
 
 #[wasm_bindgen(js_name = triple)]
@@ -831,7 +830,7 @@ impl FromJsConverter {
                         .as_string()
                         .ok_or_else(|| format_err!("BlankNode should have a string value"))?,
                 )
-                .map_err(to_err)?
+                .map_err(JsError::from)?
                 .into()),
                 "Literal" => {
                     if let JsTerm::NamedNode(datatype) =
@@ -845,7 +844,7 @@ impl FromJsConverter {
                                     "http://www.w3.org/2001/XMLSchema#string" => Literal::new_simple_literal(literal_value),
                                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => Literal::new_language_tagged_literal(literal_value, Reflect::get(value, &self.language)?.as_string().ok_or_else(
                                         || format_err!("Literal with rdf:langString datatype should have a language"),
-                                    )?).map_err(to_err)?,
+                                    )?).map_err(JsError::from)?,
                                     _ => Literal::new_typed_literal(literal_value, datatype)
                                 }.into())
                     } else {
@@ -860,7 +859,7 @@ impl FromJsConverter {
                         .as_string()
                         .ok_or_else(|| format_err!("Variable should have a string value"))?,
                 )
-                .map_err(to_err)?
+                .map_err(JsError::from)?
                 .into()),
                 "Quad" => Ok(self.to_quad(value)?.into()),
                 _ => Err(format_err!(
