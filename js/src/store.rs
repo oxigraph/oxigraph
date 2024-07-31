@@ -1,7 +1,7 @@
 use crate::model::*;
 use crate::utils::to_err;
 use crate::{console_warn, format_err};
-use js_sys::{Array, Map, Reflect};
+use js_sys::{try_iter, Array, Map, Reflect};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
@@ -18,7 +18,7 @@ const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 export class Store {
     readonly size: number;
 
-    constructor(quads?: Quad[]);
+    constructor(quads?: Iterable<Quad>);
 
     add(quad: Quad): void;
 
@@ -73,15 +73,17 @@ pub struct JsStore {
 impl JsStore {
     #[wasm_bindgen(constructor)]
     #[allow(clippy::use_self)]
-    pub fn new(quads: Option<Box<[JsValue]>>) -> Result<JsStore, JsValue> {
+    pub fn new(quads: &JsValue) -> Result<JsStore, JsValue> {
         console_error_panic_hook::set_once();
 
         let store = Self {
             store: Store::new().map_err(to_err)?,
         };
-        if let Some(quads) = quads {
-            for quad in &*quads {
-                store.add(quad)?;
+        if !quads.is_undefined() && !quads.is_null() {
+            if let Some(quads) = try_iter(quads)? {
+                for quad in quads {
+                    store.add(&quad?)?;
+                }
             }
         }
         Ok(store)
