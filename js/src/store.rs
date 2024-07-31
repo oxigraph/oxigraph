@@ -1,5 +1,4 @@
 use crate::model::*;
-use crate::utils::to_err;
 use crate::{console_warn, format_err};
 use js_sys::{try_iter, Array, Map, Reflect};
 use oxigraph::io::{RdfFormat, RdfParser};
@@ -77,7 +76,7 @@ impl JsStore {
         console_error_panic_hook::set_once();
 
         let store = Self {
-            store: Store::new().map_err(to_err)?,
+            store: Store::new().map_err(JsError::from)?,
         };
         if !quads.is_undefined() && !quads.is_null() {
             if let Some(quads) = try_iter(quads)? {
@@ -92,26 +91,27 @@ impl JsStore {
     pub fn add(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
             .insert(&FROM_JS.with(|c| c.to_quad(quad))?)
-            .map_err(to_err)?;
+            .map_err(JsError::from)?;
         Ok(())
     }
 
     pub fn delete(&self, quad: &JsValue) -> Result<(), JsValue> {
         self.store
             .remove(&FROM_JS.with(|c| c.to_quad(quad))?)
-            .map_err(to_err)?;
+            .map_err(JsError::from)?;
         Ok(())
     }
 
     pub fn has(&self, quad: &JsValue) -> Result<bool, JsValue> {
-        self.store
+        Ok(self
+            .store
             .contains(&FROM_JS.with(|c| c.to_quad(quad))?)
-            .map_err(to_err)
+            .map_err(JsError::from)?)
     }
 
     #[wasm_bindgen(getter=size)]
-    pub fn size(&self) -> Result<usize, JsValue> {
-        self.store.len().map_err(to_err)
+    pub fn size(&self) -> Result<usize, JsError> {
+        Ok(self.store.len()?)
     }
 
     #[wasm_bindgen(js_name = match)]
@@ -156,7 +156,7 @@ impl JsStore {
             )
             .map(|v| v.map(|v| JsQuad::from(v).into()))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(to_err)?
+            .map_err(JsError::from)?
             .into_boxed_slice())
     }
 
@@ -175,16 +175,16 @@ impl JsStore {
                 results_format = Some(
                     js_results_format
                         .as_string()
-                        .ok_or_else(|| to_err("results_format option must be a string"))?,
+                        .ok_or_else(|| format_err!("results_format option must be a string"))?,
                 );
             }
         }
 
-        let mut query = Query::parse(query, base_iri.as_deref()).map_err(to_err)?;
+        let mut query = Query::parse(query, base_iri.as_deref()).map_err(JsError::from)?;
         if use_default_graph_as_union {
             query.dataset_mut().set_default_graph_as_union();
         }
-        let results = self.store.query(query).map_err(to_err)?;
+        let results = self.store.query(query).map_err(JsError::from)?;
 
         Ok(match results {
             QueryResults::Solutions(solutions) => {
@@ -194,14 +194,14 @@ impl JsStore {
                         &String::from_utf8(
                             QueryResults::Solutions(solutions)
                                 .write(Vec::new(), results_format)
-                                .map_err(to_err)?,
+                                .map_err(JsError::from)?,
                         )
-                        .map_err(to_err)?,
+                        .map_err(JsError::from)?,
                     )
                 } else {
                     let results = Array::new();
                     for solution in solutions {
-                        let solution = solution.map_err(to_err)?;
+                        let solution = solution.map_err(JsError::from)?;
                         let result = Map::new();
                         for (variable, value) in solution.iter() {
                             result.set(
@@ -221,16 +221,19 @@ impl JsStore {
                         &String::from_utf8(
                             QueryResults::Graph(quads)
                                 .write_graph(Vec::new(), rdf_format)
-                                .map_err(to_err)?,
+                                .map_err(JsError::from)?,
                         )
-                        .map_err(to_err)?,
+                        .map_err(JsError::from)?,
                     )
                 } else {
                     let results = Array::new();
                     for quad in quads {
                         results.push(
-                            &JsQuad::from(quad.map_err(to_err)?.in_graph(GraphName::DefaultGraph))
-                                .into(),
+                            &JsQuad::from(
+                                quad.map_err(JsError::from)?
+                                    .in_graph(GraphName::DefaultGraph),
+                            )
+                            .into(),
                         );
                     }
                     results.into()
@@ -243,9 +246,9 @@ impl JsStore {
                         &String::from_utf8(
                             QueryResults::Boolean(b)
                                 .write(Vec::new(), results_format)
-                                .map_err(to_err)?,
+                                .map_err(JsError::from)?,
                         )
-                        .map_err(to_err)?,
+                        .map_err(JsError::from)?,
                     )
                 } else {
                     b.into()
@@ -261,8 +264,8 @@ impl JsStore {
             base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
         }
 
-        let update = Update::parse(update, base_iri.as_deref()).map_err(to_err)?;
-        self.store.update(update).map_err(to_err)
+        let update = Update::parse(update, base_iri.as_deref()).map_err(JsError::from)?;
+        Ok(self.store.update(update).map_err(JsError::from)?)
     }
 
     pub fn load(
@@ -312,19 +315,19 @@ impl JsStore {
             parser = parser.with_default_graph(GraphName::try_from(to_graph_name)?);
         }
         if let Some(base_iri) = parsed_base_iri {
-            parser = parser.with_base_iri(base_iri).map_err(to_err)?;
+            parser = parser.with_base_iri(base_iri).map_err(JsError::from)?;
         }
         if unchecked {
             parser = parser.unchecked();
         }
-        if no_transaction {
+        Ok(if no_transaction {
             self.store
                 .bulk_loader()
                 .load_from_read(parser, data.as_bytes())
         } else {
             self.store.load_from_read(parser, data.as_bytes())
         }
-        .map_err(to_err)
+        .map_err(JsError::from)?)
     }
 
     pub fn dump(&self, options: &JsValue, from_graph_name: &JsValue) -> Result<String, JsValue> {
@@ -360,8 +363,8 @@ impl JsStore {
         } else {
             self.store.dump_to_write(format, Vec::new())
         }
-        .map_err(to_err)?;
-        String::from_utf8(buffer).map_err(to_err)
+        .map_err(JsError::from)?;
+        Ok(String::from_utf8(buffer).map_err(JsError::from)?)
     }
 }
 
