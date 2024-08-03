@@ -55,26 +55,6 @@ impl Storage {
     }
 
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    pub fn open_secondary(primary_path: &Path) -> Result<Self, StorageError> {
-        Ok(Self {
-            kind: StorageKind::RocksDb(RocksDbStorage::open_secondary(primary_path)?),
-        })
-    }
-
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    pub fn open_persistent_secondary(
-        primary_path: &Path,
-        secondary_path: &Path,
-    ) -> Result<Self, StorageError> {
-        Ok(Self {
-            kind: StorageKind::RocksDb(RocksDbStorage::open_persistent_secondary(
-                primary_path,
-                secondary_path,
-            )?),
-        })
-    }
-
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open_read_only(path: &Path) -> Result<Self, StorageError> {
         Ok(Self {
             kind: StorageKind::RocksDb(RocksDbStorage::open_read_only(path)?),

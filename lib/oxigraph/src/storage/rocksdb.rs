@@ -58,25 +58,6 @@ impl RocksDbStorage {
         Self::setup(Db::open_read_write(path, Self::column_families())?)
     }
 
-    pub fn open_secondary(primary_path: &Path) -> Result<Self, StorageError> {
-        Self::setup(Db::open_secondary(
-            primary_path,
-            None,
-            Self::column_families(),
-        )?)
-    }
-
-    pub fn open_persistent_secondary(
-        primary_path: &Path,
-        secondary_path: &Path,
-    ) -> Result<Self, StorageError> {
-        Self::setup(Db::open_secondary(
-            primary_path,
-            Some(secondary_path),
-            Self::column_families(),
-        )?)
-    }
-
     pub fn open_read_only(path: &Path) -> Result<Self, StorageError> {
         Self::setup(Db::open_read_only(path, Self::column_families())?)
     }

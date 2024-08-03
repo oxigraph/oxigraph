@@ -413,23 +413,6 @@ class TestStore(unittest.TestCase):
             store = Store.read_only(dir)
             self.assertEqual(list(store), [quad])
 
-    @unittest.skipIf(is_wasm, "Not supported with WASM")
-    def test_secondary(self) -> None:
-        quad = Quad(foo, bar, baz, graph)
-        with TemporaryDirectory() as dir:
-            store = Store(dir)
-            store.add(quad)
-            store.flush()
-
-            secondary_store = Store.secondary(dir)
-            self.assertEqual(list(secondary_store), [quad])
-
-            store.remove(quad)
-            store.flush()
-            self.assertEqual(list(secondary_store), [])
-            del secondary_store
-            del store
-
 
 if __name__ == "__main__":
     unittest.main()

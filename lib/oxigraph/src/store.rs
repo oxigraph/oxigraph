@@ -95,8 +95,8 @@ impl Store {
     /// Opens a read-write [`Store`] and creates it if it does not exist yet.
     ///
     /// Only one read-write [`Store`] can exist at the same time.
-    /// If you want to have extra [`Store`] instance opened on a same data
-    /// use [`Store::open_secondary`] or [`Store::open_read_only`].
+    /// If you want to have extra [`Store`] instance opened on the same data
+    /// use [`Store::open_read_only`].
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         Ok(Self {
@@ -104,48 +104,9 @@ impl Store {
         })
     }
 
-    /// Opens a read-only clone of a running read-write [`Store`].
-    ///
-    /// Changes done while this process is running will be replicated after a possible lag.
-    ///
-    /// It should only be used if a primary instance opened with [`Store::open`] is running at the same time.
-    /// `primary_path` must be the path of the primary instance.
-    /// This secondary instance will use temporary storage for the secondary instance cache.
-    /// If you prefer persistent storage use [`Store::open_persistent_secondary`].
-    ///
-    /// If you want to simple read-only [`Store`] use [`Store::open_read_only`].
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    pub fn open_secondary(primary_path: impl AsRef<Path>) -> Result<Self, StorageError> {
-        Ok(Self {
-            storage: Storage::open_secondary(primary_path.as_ref())?,
-        })
-    }
-
-    /// Opens a read-only clone of a running read-write [`Store`] with persistence of the secondary instance cache.
-    ///
-    /// Changes done while this process is running will be replicated after a possible lag.
-    ///
-    /// It should only be used if a primary instance opened with [`Store::open`] is running at the same time.
-    /// `primary_path` must be the path of the primary instance and `secondary_path` an other directory for the secondary instance cache.
-    ///
-    /// If you want to simple read-only [`Store`] use [`Store::open_read_only`].
-    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    pub fn open_persistent_secondary(
-        primary_path: impl AsRef<Path>,
-        secondary_path: impl AsRef<Path>,
-    ) -> Result<Self, StorageError> {
-        Ok(Self {
-            storage: Storage::open_persistent_secondary(
-                primary_path.as_ref(),
-                secondary_path.as_ref(),
-            )?,
-        })
-    }
-
     /// Opens a read-only [`Store`] from disk.
     ///
     /// Opening as read-only while having an other process writing the database is undefined behavior.
-    /// [`Store::open_secondary`] should be used in this case.
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn open_read_only(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         Ok(Self {

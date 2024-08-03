@@ -16,10 +16,8 @@ use std::borrow::Borrow;
 #[cfg(unix)]
 use std::cmp::min;
 use std::collections::HashMap;
-use std::env::temp_dir;
 use std::error::Error;
 use std::ffi::{CStr, CString};
-use std::fs::remove_dir_all;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -116,8 +114,6 @@ struct RoDbHandler {
     column_family_names: Vec<&'static str>,
     cf_handles: Vec<*mut rocksdb_column_family_handle_t>,
     cf_options: Vec<*mut rocksdb_options_t>,
-    is_secondary: bool,
-    path_to_remove: Option<PathBuf>,
 }
 
 unsafe impl Send for RoDbHandler {}
@@ -136,9 +132,6 @@ impl Drop for RoDbHandler {
             }
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_options_destroy(self.options);
-        }
-        if let Some(path) = &self.path_to_remove {
-            drop(remove_dir_all(path));
         }
     }
 }
@@ -279,75 +272,6 @@ impl Db {
         }
     }
 
-    pub fn open_secondary(
-        primary_path: &Path,
-        secondary_path: Option<&Path>,
-        column_families: Vec<ColumnFamilyDefinition>,
-    ) -> Result<Self, StorageError> {
-        let c_primary_path = path_to_cstring(primary_path)?;
-        let (secondary_path, in_memory) = if let Some(path) = secondary_path {
-            (path.to_path_buf(), false)
-        } else {
-            (tmp_path(), true)
-        };
-        let c_secondary_path = path_to_cstring(&secondary_path)?;
-        unsafe {
-            let options = Self::db_options(false)?;
-            let (column_family_names, c_column_family_names, cf_options) =
-                Self::column_families_names_and_options(column_families, options);
-            let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
-                vec![ptr::null_mut(); column_family_names.len()];
-            let c_num_column_families = c_column_family_names.len().try_into().unwrap();
-            let db = ffi_result!(rocksdb_open_as_secondary_column_families_with_status(
-                options,
-                c_primary_path.as_ptr(),
-                c_secondary_path.as_ptr(),
-                c_num_column_families,
-                c_column_family_names
-                    .iter()
-                    .map(|cf| cf.as_ptr())
-                    .collect::<Vec<_>>()
-                    .as_ptr(),
-                cf_options.as_ptr().cast(),
-                cf_handles.as_mut_ptr(),
-            ))
-            .map_err(|e| {
-                for cf_option in &cf_options {
-                    rocksdb_options_destroy(*cf_option);
-                }
-                rocksdb_options_destroy(options);
-                e
-            })?;
-            assert!(
-                !db.is_null(),
-                "rocksdb_open_for_read_only_column_families_with_status returned null"
-            );
-            for handle in &cf_handles {
-                assert!(
-                    !handle.is_null(),
-                    "rocksdb_open_for_read_only_column_families_with_status returned a null column family"
-                );
-            }
-            let read_options = rocksdb_readoptions_create();
-            assert!(
-                !read_options.is_null(),
-                "rocksdb_readoptions_create returned null"
-            );
-            Ok(Self {
-                inner: DbKind::ReadOnly(Arc::new(RoDbHandler {
-                    db,
-                    options,
-                    read_options,
-                    column_family_names,
-                    cf_handles,
-                    cf_options,
-                    is_secondary: true,
-                    path_to_remove: in_memory.then_some(secondary_path),
-                })),
-            })
-        }
-    }
-
     pub fn open_read_only(
         path: &Path,
         column_families: Vec<ColumnFamilyDefinition>,
@@ -404,8 +328,6 @@ impl Db {
                     column_family_names,
                     cf_handles,
                     cf_options,
-                    is_secondary: false,
-                    path_to_remove: None,
                 })),
             })
         }
@@ -515,12 +437,6 @@ impl Db {
         unsafe {
             match &self.inner {
                 DbKind::ReadOnly(db) => {
-                    if db.is_secondary {
-                        // We try to refresh (and ignore the errors)
-                        drop(ffi_result!(rocksdb_try_catch_up_with_primary_with_status(
-                            db.db
-                        )));
-                    }
                     let options = rocksdb_readoptions_create_copy(db.read_options);
                     Reader {
                         inner: InnerReader::PlainDb(Arc::clone(db)),
@@ -795,9 +711,6 @@ impl Db {
         let path = path_to_cstring(target_directory)?;
         match &self.inner {
             DbKind::ReadOnly(db) => unsafe {
-                if db.is_secondary {
-                    ffi_result!(rocksdb_try_catch_up_with_primary_with_status(db.db))?;
-                }
                 ffi_result!(rocksdb_create_checkpoint_with_status(db.db, path.as_ptr()))
             },
             DbKind::ReadWrite(db) => unsafe {
@@ -1361,13 +1274,4 @@ fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
 #[cfg(not(any(unix, windows)))]
 fn available_file_descriptors() -> io::Result<Option<libc::c_int>> {
     Ok(None)
-}
-
-fn tmp_path() -> PathBuf {
-    if cfg!(target_os = "linux") {
-        "/dev/shm/".into()
-    } else {
-        temp_dir()
-    }
-    .join(format!("oxigraph-rocksdb-{}", random::<u128>()))
 }
