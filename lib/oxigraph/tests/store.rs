@@ -376,15 +376,10 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
     let store_dir = TempDir::default();
     let backup_from_rw_dir = TempDir::default();
     let backup_from_ro_dir = TempDir::default();
-    let backup_from_secondary_dir = TempDir::default();
 
     let store = Store::open(&store_dir)?;
     store.insert(quad)?;
-    let secondary_store = Store::open_secondary(&store_dir)?;
-    store.flush()?;
-
     store.backup(&backup_from_rw_dir)?;
-    secondary_store.backup(&backup_from_secondary_dir)?;
     store.remove(quad)?;
     assert!(!store.contains(quad)?);
 
@@ -396,10 +391,6 @@ fn test_backup() -> Result<(), Box<dyn Error>> {
     let backup_from_ro = Store::open_read_only(&backup_from_ro_dir.0)?;
     backup_from_ro.validate()?;
     assert!(backup_from_ro.contains(quad)?);
-
-    let backup_from_secondary = Store::open_read_only(&backup_from_secondary_dir.0)?;
-    backup_from_secondary.validate()?;
-    assert!(backup_from_secondary.contains(quad)?);
 
     Ok(())
 }
@@ -444,61 +435,6 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
         );
     }
     reset_dir("tests/rocksdb_bc_data")?;
-    Ok(())
-}
-
-#[test]
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-fn test_secondary() -> Result<(), Box<dyn Error>> {
-    let quad = QuadRef::new(
-        NamedNodeRef::new_unchecked("http://example.com/s"),
-        NamedNodeRef::new_unchecked("http://example.com/p"),
-        NamedNodeRef::new_unchecked("http://example.com/o"),
-        GraphNameRef::DefaultGraph,
-    );
-    let primary_dir = TempDir::default();
-
-    // We open the store
-    let primary = Store::open(&primary_dir)?;
-    let secondary = Store::open_secondary(&primary_dir)?;
-
-    // We insert a quad
-    primary.insert(quad)?;
-    primary.flush()?;
-
-    // It is readable from both stores
-    for store in &[&primary, &secondary] {
-        assert!(store.contains(quad)?);
-        assert_eq!(
-            store.iter().collect::<Result<Vec<_>, _>>()?,
-            vec![quad.into_owned()]
-        );
-    }
-
-    // We validate the states
-    primary.validate()?;
-    secondary.validate()?;
-
-    // We close the primary store and remove its content
-    drop(primary);
-    remove_dir_all(&primary_dir)?;
-
-    // We secondary store is still readable
-    assert!(secondary.contains(quad)?);
-    secondary.validate()?;
-
-    Ok(())
-}
-
-#[test]
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-fn test_open_secondary_bad_dir() -> Result<(), Box<dyn Error>> {
-    let primary_dir = TempDir::default();
-    create_dir_all(&primary_dir.0)?;
-    {
-        File::create(primary_dir.0.join("CURRENT"))?.write_all(b"foo")?;
-    }
-    assert!(Store::open_secondary(&primary_dir).is_err());
     Ok(())
 }
 

@@ -69,34 +69,10 @@ enum Command {
     ///
     /// It allows to read the database while other processes are also reading it.
     /// Opening as read-only while having an other process writing the database is undefined behavior.
-    /// Please use the serve-secondary command in this case.
     ServeReadOnly {
         /// Directory in which Oxigraph data are persisted.
         #[arg(short, long, value_hint = ValueHint::DirPath)]
         location: PathBuf,
-        /// Host and port to listen to.
-        #[arg(short, long, default_value = "localhost:7878")]
-        bind: String,
-        /// Allows cross-origin requests
-        #[arg(long)]
-        cors: bool,
-    },
-    /// Start Oxigraph HTTP server in secondary mode.
-    ///
-    /// It allows to read the database while an other process is writing it.
-    /// Changes done while this process is running will be replicated after a possible lag.
-    ///
-    /// Beware: RocksDB secondary mode does not support snapshots and transactions.
-    /// Dirty reads might happen.
-    ServeSecondary {
-        /// Directory where the primary Oxigraph instance is writing to.
-        #[arg(long, value_hint = ValueHint::DirPath)]
-        primary_location: PathBuf,
-        /// Directory to which the current secondary instance might write to.
-        ///
-        /// By default, temporary storage is used.
-        #[arg(long, value_hint = ValueHint::DirPath)]
-        secondary_location: Option<PathBuf>,
         /// Host and port to listen to.
         #[arg(short, long, default_value = "localhost:7878")]
         bind: String,
@@ -332,21 +308,6 @@ pub fn main() -> anyhow::Result<()> {
             bind,
             cors,
         } => serve(Store::open_read_only(location)?, &bind, true, cors),
-        Command::ServeSecondary {
-            primary_location,
-            secondary_location,
-            bind,
-            cors,
-        } => serve(
-            if let Some(secondary_location) = secondary_location {
-                Store::open_persistent_secondary(primary_location, secondary_location)
-            } else {
-                Store::open_secondary(primary_location)
-            }?,
-            &bind,
-            true,
-            cors,
-        ),
         Command::Backup {
             location,
             destination,

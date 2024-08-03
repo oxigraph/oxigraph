@@ -26,8 +26,7 @@ use std::path::PathBuf;
 /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
 ///
 /// The :py:class:`Store` constructor opens a read-write instance.
-/// To open a static read-only instance use :py:func:`Store.read_only`
-/// and to open a read-only instance that tracks a read-write instance use :py:func:`Store.secondary`.
+/// To open a static read-only instance use :py:func:`Store.read_only`.
 ///
 /// :param path: the path of the directory in which the store should read and write its data. If the directory does not exist, it is created.
 ///              If no directory is provided a temporary one is created and removed when the Python garbage collector removes the store.
@@ -78,7 +77,6 @@ impl PyStore {
     /// Opens a read-only store from disk.
     ///
     /// Opening as read-only while having an other process writing the database is undefined behavior.
-    /// :py:func:`Store.secondary` should be used in this case.
     ///
     /// :param path: path to the primary read-write instance data.
     /// :type path: str
@@ -91,41 +89,6 @@ impl PyStore {
         py.allow_threads(|| {
             Ok(Self {
                 inner: Store::open_read_only(path).map_err(map_storage_error)?,
-            })
-        })
-    }
-
-    /// Opens a read-only clone of a running read-write store.
-    ///
-    /// Changes done while this process is running will be replicated after a possible lag.
-    ///
-    /// It should only be used if a primary instance opened with :py:func:`Store` is running at the same time.
-    ///
-    /// If you want to simple read-only store use :py:func:`Store.read_only`.
-    ///
-    /// :param primary_path: path to the primary read-write instance data.
-    /// :type primary_path: str
-    /// :param secondary_path: path to an other directory for the secondary instance cache. If not given a temporary directory will be used.
-    /// :type secondary_path: str or None, optional
-    /// :return: the opened store.
-    /// :rtype: Store
-    /// :raises OSError: if the target directories contain invalid data or could not be accessed.
-    #[cfg(not(target_family = "wasm"))]
-    #[staticmethod]
-    #[pyo3(signature = (primary_path, secondary_path = None))]
-    fn secondary(
-        primary_path: &str,
-        secondary_path: Option<&str>,
-        py: Python<'_>,
-    ) -> PyResult<Self> {
-        py.allow_threads(|| {
-            Ok(Self {
-                inner: if let Some(secondary_path) = secondary_path {
-                    Store::open_persistent_secondary(primary_path, secondary_path)
-                } else {
-                    Store::open_secondary(primary_path)
-                }
-                .map_err(map_storage_error)?,
             })
         })
     }
