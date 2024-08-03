@@ -1,9 +1,7 @@
 [advisories]
-version = 2
 ignore = ["RUSTSEC-2018-0015"]
 
 [licenses]
-version = 2
 allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
@@ -11,7 +9,6 @@ allow = [
     "ISC",
     "MIT",
     "OpenSSL",
-    "Unicode-3.0",
     "Unicode-DFS-2016"
 ]
 
