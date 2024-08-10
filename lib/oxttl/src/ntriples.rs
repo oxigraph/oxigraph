@@ -1,13 +1,14 @@
 //! A [N-Triples](https://www.w3.org/TR/n-triples/) streaming parser implemented by [`NTriplesParser`]
 //! and a serializer implemented by [`NTriplesSerializer`].
 
+use crate::chunker::get_ntriples_file_chunks;
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
-    get_ntriples_file_chunks, FromReadIterator, FromSliceIterator, Parser, TurtleParseError,
-    TurtleSyntaxError,
+    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
 };
+use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxrdf::{Triple, TripleRef};
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
@@ -209,23 +210,16 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unwrap_in_result)]
     pub fn split_slice_for_parallel_parsing<'a>(
         &self,
         slice: &'a [u8],
         target_parallelism: usize,
     ) -> Vec<FromSliceNTriplesReader<'a>> {
-        #[allow(clippy::decimal_literal_representation)]
-        let n_chunks = (slice.len() / 16384).clamp(1, target_parallelism);
-        let chunks = get_ntriples_file_chunks(slice, n_chunks);
-        let from_ntriples_slice_readers: Vec<_> = chunks
+        let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
+        get_ntriples_file_chunks(slice, n_chunks)
             .into_iter()
-            .map(|(start, end)| {
-                let parser = self.clone();
-                parser.parse_slice(&slice[start..end])
-            })
-            .collect();
-        from_ntriples_slice_readers
+            .map(|(start, end)| self.clone().parse_slice(&slice[start..end]))
+            .collect()
     }
 
     /// Allows to parse a N-Triples file by using a low-level API.

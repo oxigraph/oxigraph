@@ -1,16 +1,17 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`]
 //! and a serializer implemented by [`TurtleSerializer`].
 
+use crate::chunker::get_turtle_file_chunks;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
-    get_turtle_file_chunks, FromReadIterator, FromSliceIterator, Parser, TurtleParseError,
-    TurtleSyntaxError,
+    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
 };
 #[cfg(feature = "async-tokio")]
 use crate::trig::ToTokioAsyncWriteTriGWriter;
 use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
+use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
 use std::collections::hash_map::Iter;
@@ -252,36 +253,28 @@ impl TurtleParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unwrap_in_result)]
     pub fn split_slice_for_parallel_parsing(
         mut self,
         slice: &[u8],
         target_parallelism: usize,
     ) -> Vec<FromSliceTurtleReader<'_>> {
-        #[allow(clippy::decimal_literal_representation)]
-        let n_chunks = (slice.len() / 16384).clamp(1, target_parallelism);
+        let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
 
         if n_chunks > 1 {
             // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
             let mut from_slice_reader = self.clone().parse_slice(slice);
-            // Possible parsing error will be handled in first chunk.
-            if from_slice_reader.next().is_some() {
-                for (p, iri) in from_slice_reader.prefixes() {
-                    // Already know this is a valid IRI
-                    self = self.with_prefix(p, iri).unwrap();
-                }
+            // We don't care about errors: they will be raised when parsing the first chunk anyway
+            from_slice_reader.next();
+            for (p, iri) in from_slice_reader.prefixes() {
+                // Already know this is a valid IRI
+                self = self.with_prefix(p, iri).unwrap();
             }
         }
 
-        let chunks = get_turtle_file_chunks(slice, n_chunks, self.clone());
-        let from_turtle_slice_readers: Vec<_> = chunks
+        get_turtle_file_chunks(slice, n_chunks, &self)
             .into_iter()
-            .map(|(start, end)| {
-                let parser = self.clone();
-                parser.parse_slice(&slice[start..end])
-            })
-            .collect();
-        from_turtle_slice_readers
+            .map(|(start, end)| self.clone().parse_slice(&slice[start..end]))
+            .collect()
     }
 
     /// Allows to parse a Turtle file by using a low-level API.

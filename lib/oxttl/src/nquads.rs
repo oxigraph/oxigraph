@@ -1,12 +1,14 @@
 //! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`]
 //! and a serializer implemented by [`NQuadsSerializer`].
 
+use crate::chunker::get_ntriples_file_chunks;
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
     FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
 };
+use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxrdf::{Quad, QuadRef};
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
@@ -172,6 +174,52 @@ impl NQuadsParser {
             )
             .into_iter(),
         }
+    }
+
+    /// Creates a vector of iterators that may be used to parse an NQuads document slice in parallel.
+    /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
+    /// Intended to work on large documents.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxttl::NQuadsParser;
+    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    ///
+    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/foo> <http://schema.org/name> "Foo" .
+    /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let readers = NQuadsParser::new().split_slice_for_parallel_parsing(file.as_ref(), 2);
+    /// let count = readers
+    ///     .into_par_iter()
+    ///     .map(|reader| {
+    ///         let mut count = 0;
+    ///         for quad in reader {
+    ///             let quad = quad.unwrap();
+    ///             if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///                 count += 1;
+    ///             }
+    ///         }
+    ///         count
+    ///     })
+    ///     .sum();
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn split_slice_for_parallel_parsing<'a>(
+        &self,
+        slice: &'a [u8],
+        target_parallelism: usize,
+    ) -> Vec<FromSliceNQuadsReader<'a>> {
+        let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
+        get_ntriples_file_chunks(slice, n_chunks)
+            .into_iter()
+            .map(|(start, end)| self.clone().parse_slice(&slice[start..end]))
+            .collect()
     }
 
     /// Allows to parse a N-Quads file by using a low-level API.
