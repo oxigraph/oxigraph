@@ -25,10 +25,48 @@
 
 use crate::TurtleParser;
 
-const EOT_CHAR: u8 = b'.';
+const PERIOD_CHAR: u8 = b'.';
+const NEWLINE_CHAR: u8 = b'\n';
+
+// Given a number of desired chunks, corresponding to threads, find offsets that break the file into chunks that can be read in parallel.
+// For NTriples, this can be done simply on newlines.
+pub fn get_ntriples_file_chunks(bytes: &[u8], n_chunks: usize) -> Vec<(usize, usize)> {
+    let mut last_pos = 0;
+    let total_len = bytes.len();
+    let chunk_size = total_len / n_chunks;
+    let mut offsets = Vec::with_capacity(n_chunks);
+    for _ in 0..n_chunks {
+        let search_pos = last_pos + chunk_size;
+
+        if search_pos >= bytes.len() {
+            break;
+        }
+
+        let end_pos = match next_newline_position(&bytes[search_pos..]) {
+            Some(pos) => search_pos + pos,
+            None => {
+                // We keep the valid chunks we found, and add (outside the loop) the rest of the bytes as a chunk.
+                break;
+            }
+        };
+        offsets.push((last_pos, end_pos));
+        last_pos = end_pos;
+    }
+    if last_pos < total_len {
+        offsets.push((last_pos, total_len));
+    }
+    offsets
+}
+
+// Finds the first newline in input that is preceded by something that is not an escape char.
+// Such newlines split the triples in the NTriples format.
+fn next_newline_position(input: &[u8]) -> Option<usize> {
+    Some(memchr::memchr(NEWLINE_CHAR, input)? + 1)
+}
 
 // Given a number of desired chunks, corresponding to threads find offsets that break the file into chunks that can be read in parallel.
-// Parser should not be reused, hence it is passed by value.
+// A Turtle parser will be used to check (heuristically) if an offset starting with a period actually splits the file properly.
+// The parser should not be reused, hence it is passed by value.
 #[allow(clippy::needless_pass_by_value)]
 pub fn get_turtle_file_chunks(
     bytes: &[u8],
@@ -46,7 +84,7 @@ pub fn get_turtle_file_chunks(
             break;
         }
 
-        let end_pos = match next_terminating_period(parser.clone(), &bytes[search_pos..]) {
+        let end_pos = match next_terminating_char(parser.clone(), &bytes[search_pos..]) {
             Some(pos) => search_pos + pos,
             None => {
                 // We keep the valid chunks we found, and add (outside the loop) the rest of the bytes as a chunk.
@@ -67,7 +105,7 @@ pub fn get_turtle_file_chunks(
 // If no such period can be found, looking at 1000 consecutive periods, we give up.
 // Important to keep this number this high, as some TTL files can have a lot of periods.
 #[allow(clippy::needless_pass_by_value)]
-fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usize> {
+fn next_terminating_char(parser: TurtleParser, mut input: &[u8]) -> Option<usize> {
     fn accept(parser: TurtleParser, input: &[u8]) -> bool {
         let mut f = parser.parse_slice(input);
         for _ in 0..3 {
@@ -83,7 +121,7 @@ fn next_terminating_period(parser: TurtleParser, mut input: &[u8]) -> Option<usi
     }
     let mut total_pos = 0;
     for _ in 0..1_000 {
-        let pos = memchr::memchr(EOT_CHAR, input)? + 1;
+        let pos = memchr::memchr(PERIOD_CHAR, input)? + 1;
         if input.len() - pos == 0 {
             return None;
         }
