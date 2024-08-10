@@ -5,7 +5,8 @@ use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
-    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
+    get_ntriples_file_chunks, FromReadIterator, FromSliceIterator, Parser, TurtleParseError,
+    TurtleSyntaxError,
 };
 use oxrdf::{Triple, TripleRef};
 use std::io::{self, Read, Write};
@@ -172,6 +173,59 @@ impl NTriplesParser {
             )
             .into_iter(),
         }
+    }
+
+    /// Creates a vector of iterators that may be used to parse an NTriples document slice in parallel.
+    /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
+    /// Intended to work on large documents.
+    ///
+    /// Count the number of people:
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxttl::{NTriplesParser};
+    /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    ///
+    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/foo> <http://schema.org/name> "Foo" .
+    /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let readers = NTriplesParser::new().split_slice_for_parallel_parsing(file.as_ref(), 2);
+    /// let count = readers
+    ///     .into_par_iter()
+    ///     .map(|reader| {
+    ///         let mut count = 0;
+    ///         for triple in reader {
+    ///             let triple = triple.unwrap();
+    ///             if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
+    ///                 count += 1;
+    ///             }
+    ///         }
+    ///         count
+    ///     })
+    ///     .sum();
+    /// assert_eq!(2, count);
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[allow(clippy::unwrap_in_result)]
+    pub fn split_slice_for_parallel_parsing<'a>(
+        &self,
+        slice: &'a [u8],
+        target_parallelism: usize,
+    ) -> Vec<FromSliceNTriplesReader<'a>> {
+        #[allow(clippy::decimal_literal_representation)]
+        let n_chunks = (slice.len() / 16384).clamp(1, target_parallelism);
+        let chunks = get_ntriples_file_chunks(slice, n_chunks);
+        let from_ntriples_slice_readers: Vec<_> = chunks
+            .into_iter()
+            .map(|(start, end)| {
+                let parser = self.clone();
+                parser.parse_slice(&slice[start..end])
+            })
+            .collect();
+        from_ntriples_slice_readers
     }
 
     /// Allows to parse a N-Triples file by using a low-level API.
