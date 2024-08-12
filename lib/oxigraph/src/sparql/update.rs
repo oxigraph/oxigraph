@@ -124,9 +124,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         let dataset = Rc::new(DatasetView::new(self.transaction.reader(), using));
         let mut pattern = sparopt::algebra::GraphPattern::from(algebra);
         if !self.options.query_options.without_optimizations {
-            pattern = Optimizer::optimize_graph_pattern(sparopt::algebra::GraphPattern::Reduced {
-                inner: Box::new(pattern),
-            });
+            pattern = Optimizer::optimize_graph_pattern(pattern);
         }
         let evaluator = SimpleEvaluator::new(
             Rc::clone(&dataset),

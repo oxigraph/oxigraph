@@ -68,9 +68,7 @@ pub(crate) fn evaluate_query(
         } => {
             let mut pattern = GraphPattern::from(&pattern);
             if !options.without_optimizations {
-                pattern = Optimizer::optimize_graph_pattern(GraphPattern::Reduced {
-                    inner: Box::new(pattern),
-                });
+                pattern = Optimizer::optimize_graph_pattern(pattern);
             }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
@@ -91,9 +89,7 @@ pub(crate) fn evaluate_query(
         } => {
             let mut pattern = GraphPattern::from(&pattern);
             if !options.without_optimizations {
-                pattern = Optimizer::optimize_graph_pattern(GraphPattern::Reduced {
-                    inner: Box::new(pattern),
-                });
+                pattern = Optimizer::optimize_graph_pattern(pattern);
             }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
@@ -111,9 +107,7 @@ pub(crate) fn evaluate_query(
         } => {
             let mut pattern = GraphPattern::from(&pattern);
             if !options.without_optimizations {
-                pattern = Optimizer::optimize_graph_pattern(GraphPattern::Reduced {
-                    inner: Box::new(pattern),
-                });
+                pattern = Optimizer::optimize_graph_pattern(pattern);
             }
             let planning_duration = start_planning.elapsed();
             let (results, explanation) = SimpleEvaluator::new(
