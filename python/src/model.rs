@@ -1,11 +1,7 @@
 use oxigraph::model::*;
-use pyo3::basic::CompareOp;
-use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
-use pyo3::{PyClass, PyTypeInfo};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
@@ -18,7 +14,7 @@ use std::vec::IntoIter;
 ///
 /// >>> str(NamedNode('http://example.com'))
 /// '<http://example.com>'
-#[pyclass(frozen, name = "NamedNode", module = "pyoxigraph")]
+#[pyclass(frozen, name = "NamedNode", module = "pyoxigraph", eq, ord, hash)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct PyNamedNode {
     inner: NamedNode,
@@ -89,18 +85,6 @@ impl PyNamedNode {
         buffer
     }
 
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        if let Ok(other) = other.extract::<PyRef<'_, Self>>() {
-            Ok(op.matches(self.cmp(&other)))
-        } else {
-            term_equality(self, other, op)
-        }
-    }
-
     /// :rtype: typing.Any
     fn __getnewargs__(&self) -> (&str,) {
         (self.value(),)
@@ -134,7 +118,7 @@ impl PyNamedNode {
 ///
 /// >>> str(BlankNode('ex'))
 /// '_:ex'
-#[pyclass(frozen, name = "BlankNode", module = "pyoxigraph")]
+#[pyclass(frozen, name = "BlankNode", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyBlankNode {
     inner: BlankNode,
@@ -209,14 +193,6 @@ impl PyBlankNode {
         buffer
     }
 
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        term_equality(self, other, op)
-    }
-
     /// :rtype: typing.Any
     fn __getnewargs__(&self) -> (&str,) {
         (self.value(),)
@@ -258,7 +234,7 @@ impl PyBlankNode {
 /// '"example"@en'
 /// >>> str(Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer')))
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
-#[pyclass(frozen, name = "Literal", module = "pyoxigraph")]
+#[pyclass(frozen, name = "Literal", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyLiteral {
     inner: Literal,
@@ -354,14 +330,6 @@ impl PyLiteral {
         buffer
     }
 
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        term_equality(self, other, op)
-    }
-
     /// :rtype: typing.Any
     fn __getnewargs_ex__<'a, 'py>(
         &'a self,
@@ -395,7 +363,7 @@ impl PyLiteral {
 }
 
 /// The RDF `default graph name <https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph>`_.
-#[pyclass(frozen, name = "DefaultGraph", module = "pyoxigraph")]
+#[pyclass(frozen, name = "DefaultGraph", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct PyDefaultGraph;
 
@@ -418,14 +386,6 @@ impl PyDefaultGraph {
 
     fn __repr__(&self) -> &str {
         "<DefaultGraph>"
-    }
-
-    fn __hash__(&self) -> u64 {
-        0
-    }
-
-    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        term_equality(self, other, op)
     }
 
     /// :rtype: typing.Any
@@ -574,7 +534,7 @@ impl IntoPy<PyObject> for PyTerm {
 /// A triple could also be easily destructed into its components:
 ///
 /// >>> (s, p, o) = Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))
-#[pyclass(frozen, sequence, name = "Triple", module = "pyoxigraph")]
+#[pyclass(frozen, sequence, name = "Triple", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyTriple {
     inner: Triple,
@@ -655,14 +615,6 @@ impl PyTriple {
         let mut buffer = String::new();
         triple_repr(self.inner.as_ref(), &mut buffer);
         buffer
-    }
-
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        term_equality(self, other, op)
     }
 
     fn __len__(&self) -> usize {
@@ -772,7 +724,7 @@ impl IntoPy<PyObject> for PyGraphName {
 /// A quad could also be easily destructed into its components:
 ///
 /// >>> (s, p, o, g) = Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))
-#[pyclass(frozen, sequence, name = "Quad", module = "pyoxigraph")]
+#[pyclass(frozen, sequence, name = "Quad", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyQuad {
     inner: Quad,
@@ -883,14 +835,6 @@ impl PyQuad {
         buffer
     }
 
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        term_equality(self, other, op)
-    }
-
     fn __len__(&self) -> usize {
         4
     }
@@ -959,7 +903,7 @@ impl PyQuad {
 ///
 /// >>> str(Variable('foo'))
 /// '?foo'
-#[pyclass(frozen, name = "Variable", module = "pyoxigraph")]
+#[pyclass(frozen, name = "Variable", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct PyVariable {
     inner: Variable,
@@ -1008,14 +952,6 @@ impl PyVariable {
 
     fn __repr__(&self) -> String {
         format!("<Variable value={}>", self.inner.as_str())
-    }
-
-    fn __hash__(&self) -> u64 {
-        hash(&self.inner)
-    }
-
-    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
-        term_equality(self, other, op)
     }
 
     /// :rtype: typing.Any
@@ -1122,46 +1058,6 @@ impl<'a> From<&'a PyGraphNameRef<'a>> for GraphNameRef<'a> {
             PyGraphNameRef::DefaultGraph(_) => Self::DefaultGraph,
         }
     }
-}
-
-fn term_equality<T: PyClass + Eq>(
-    this: &T,
-    other: &Bound<'_, PyAny>,
-    op: CompareOp,
-) -> PyResult<bool> {
-    if let Ok(other) = other.extract::<PyRef<'_, T>>() {
-        match op {
-            CompareOp::Eq => Ok(*this == *other),
-            CompareOp::Ne => Ok(*this != *other),
-            _ => Err(PyNotImplementedError::new_err(
-                "Ordering is not implemented",
-            )),
-        }
-    } else if PyNamedNode::is_type_of_bound(other)
-        || PyBlankNode::is_type_of_bound(other)
-        || PyLiteral::is_type_of_bound(other)
-        || PyDefaultGraph::is_type_of_bound(other)
-        || PyTriple::is_type_of_bound(other)
-        || PyQuad::is_type_of_bound(other)
-    {
-        match op {
-            CompareOp::Eq => Ok(false),
-            CompareOp::Ne => Ok(true),
-            _ => Err(PyNotImplementedError::new_err(
-                "Ordering is not implemented",
-            )),
-        }
-    } else {
-        Err(PyTypeError::new_err(
-            "RDf terms could only be compared with RDF terms",
-        ))
-    }
-}
-
-fn hash(t: &impl Hash) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
 }
 
 fn named_node_repr(node: NamedNodeRef<'_>, buffer: &mut String) {
