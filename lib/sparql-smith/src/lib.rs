@@ -101,7 +101,9 @@ struct QueryContent {
 #[derive(Arbitrary)]
 enum QueryVariant {
     Select(SelectQuery),
-    // TODO: Other variants!
+    Construct(ConstructQuery),
+    Describe(DescribeQuery),
+    Ask(AskQuery),
 }
 
 impl<'a> Arbitrary<'a> for Query {
@@ -126,6 +128,9 @@ impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner.variant {
             QueryVariant::Select(s) => write!(f, "{s}"),
+            QueryVariant::Construct(s) => write!(f, "{s}"),
+            QueryVariant::Describe(s) => write!(f, "{s}"),
+            QueryVariant::Ask(s) => write!(f, "{s}"),
         }?;
         write!(f, "{}", self.inner.values_clause)
     }
@@ -227,6 +232,91 @@ impl fmt::Display for SelectClause {
 }
 
 #[derive(Arbitrary)]
+enum ConstructQuery {
+    // [10] ConstructQuery	  ::=  	'CONSTRUCT' ( ConstructTemplate DatasetClause* WhereClause SolutionModifier | DatasetClause* 'WHERE' '{' TriplesTemplate? '}' SolutionModifier )
+    Full {
+        construct_template: ConstructTemplate,
+        where_clause: WhereClause,
+        solution_modifier: SolutionModifier,
+    },
+    Short {
+        triples_template: Option<ConstructTriples>,
+        solution_modifier: SolutionModifier,
+    },
+}
+
+impl fmt::Display for ConstructQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Full {
+                construct_template,
+                where_clause,
+                solution_modifier,
+            } => write!(
+                f,
+                "CONSTRUCT {construct_template}{where_clause}{solution_modifier}"
+            ),
+            Self::Short {
+                triples_template,
+                solution_modifier,
+            } => {
+                if let Some(triples) = triples_template {
+                    write!(f, "CONSTRUCT WHERE {{ {triples} }}{solution_modifier}")
+                } else {
+                    write!(f, "CONSTRUCT {{}}{solution_modifier}")
+                }
+            }
+        }
+    }
+}
+
+#[derive(Arbitrary)]
+struct DescribeQuery {
+    // [11]  	DescribeQuery	  ::=  	'DESCRIBE' ( VarOrIri+ | '*' ) DatasetClause* WhereClause? SolutionModifier
+    describe: DescribeList,
+    where_clause: WhereClause,
+    solution_modifier: SolutionModifier,
+}
+
+#[derive(Arbitrary)]
+enum DescribeList {
+    Star,
+    Terms {
+        start: VarOrIri,
+        others: Vec<VarOrIri>,
+    },
+}
+
+impl fmt::Display for DescribeQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("DESCRIBE ")?;
+        match &self.describe {
+            DescribeList::Star => f.write_str("*")?,
+            DescribeList::Terms { start, others } => {
+                write!(f, "{start}")?;
+                for e in others {
+                    write!(f, " {e}")?;
+                }
+            }
+        }
+        write!(f, "{}{}", self.where_clause, self.solution_modifier)
+    }
+}
+
+#[derive(Arbitrary)]
+struct AskQuery {
+    // [12]  	AskQuery	  ::=  	'ASK' DatasetClause* WhereClause SolutionModifier
+    where_clause: WhereClause,
+    solution_modifier: SolutionModifier,
+}
+
+impl fmt::Display for AskQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ASK {}{}", self.where_clause, self.solution_modifier)
+    }
+}
+
+#[derive(Arbitrary)]
 struct WhereClause {
     // [17]   WhereClause   ::=   'WHERE'? GroupGraphPattern
     with_where: bool,
@@ -247,7 +337,6 @@ struct SolutionModifier {
     // [18]   SolutionModifier   ::=   GroupClause? HavingClause? OrderClause? LimitOffsetClauses?
     group: Option<GroupClause>,
     having: Option<HavingClause>,
-    #[cfg(feature = "order")]
     order: Option<OrderClause>,
     #[cfg(feature = "limit-offset")]
     limit_offset: Option<LimitOffsetClauses>,
@@ -261,7 +350,6 @@ impl fmt::Display for SolutionModifier {
         if let Some(having) = &self.having {
             write!(f, " {having}")?;
         }
-        #[cfg(feature = "order")]
         if let Some(order) = &self.order {
             write!(f, " {order}")?;
         }
@@ -336,7 +424,6 @@ impl fmt::Display for HavingClause {
 // [22]   HavingCondition   ::=   Constraint
 type HavingCondition = Constraint;
 
-#[cfg(feature = "order")]
 #[derive(Arbitrary)]
 struct OrderClause {
     // [23]   OrderClause   ::=   'ORDER' 'BY' OrderCondition+
@@ -344,7 +431,6 @@ struct OrderClause {
     others: Vec<OrderCondition>,
 }
 
-#[cfg(feature = "order")]
 impl fmt::Display for OrderClause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ORDER BY {}", self.start)?;
@@ -355,7 +441,6 @@ impl fmt::Display for OrderClause {
     }
 }
 
-#[cfg(feature = "order")]
 #[derive(Arbitrary)]
 enum OrderCondition {
     // [24]   OrderCondition   ::=   ( ( 'ASC' | 'DESC' ) BrackettedExpression ) | ( Constraint | Var )
@@ -367,7 +452,6 @@ enum OrderCondition {
     Var(Var),
 }
 
-#[cfg(feature = "order")]
 impl fmt::Display for OrderCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -456,7 +540,7 @@ pub struct Update {
 struct UpdateContent {
     // [3]  UpdateUnit	  ::=  	Update
     // [29] Update	  ::=  	Prologue ( Update1 ( ';' Update )? )?
-    variants: Vec<UpdateVariant>,
+    variants: Vec<Update1>,
 }
 
 impl<'a> Arbitrary<'a> for Update {
@@ -493,34 +577,34 @@ impl fmt::Debug for Update {
 }
 
 #[derive(Arbitrary)]
-enum UpdateVariant {
+enum Update1 {
     // [30]  	Update1	  ::=  	Load | Clear | Drop | Add | Move | Copy | Create | InsertData | DeleteData | DeleteWhere | Modify
-    Load(Clear),
+    // TODO Load
+    Clear(Clear),
     Drop(Drop),
     Add(Add),
     Move(Move),
     Copy(Copy),
-    Crate(Create),
+    Create(Create),
     InsertData(InsertData),
     DeleteData(DeleteData),
     DeleteWhere(DeleteWhere),
     Modify(Modify),
-    // TODO: Other variants!
 }
 
-impl fmt::Display for UpdateVariant {
+impl fmt::Display for Update1 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UpdateVariant::Load(a) => a.fmt(f),
-            UpdateVariant::Drop(a) => a.fmt(f),
-            UpdateVariant::Add(a) => a.fmt(f),
-            UpdateVariant::Move(a) => a.fmt(f),
-            UpdateVariant::Copy(a) => a.fmt(f),
-            UpdateVariant::Crate(a) => a.fmt(f),
-            UpdateVariant::InsertData(a) => a.fmt(f),
-            UpdateVariant::DeleteData(a) => a.fmt(f),
-            UpdateVariant::DeleteWhere(a) => a.fmt(f),
-            UpdateVariant::Modify(a) => a.fmt(f),
+            Update1::Clear(a) => a.fmt(f),
+            Update1::Drop(a) => a.fmt(f),
+            Update1::Add(a) => a.fmt(f),
+            Update1::Move(a) => a.fmt(f),
+            Update1::Copy(a) => a.fmt(f),
+            Update1::Create(a) => a.fmt(f),
+            Update1::InsertData(a) => a.fmt(f),
+            Update1::DeleteData(a) => a.fmt(f),
+            Update1::DeleteWhere(a) => a.fmt(f),
+            Update1::Modify(a) => a.fmt(f),
         }
     }
 }
@@ -672,9 +756,18 @@ struct Modify {
     // [42]  	DeleteClause	  ::=  	'DELETE' QuadPattern
     // [43]  	InsertClause	  ::=  	'INSERT' QuadPattern
     with: Option<Iri>,
-    delete: QuadPattern,
-    insert: QuadPattern,
+    variant: ModifyVariant,
     where_: GroupGraphPattern,
+}
+
+#[derive(Arbitrary)]
+enum ModifyVariant {
+    DeleteInsert {
+        delete: QuadPattern,
+        insert: QuadPattern,
+    },
+    Delete(QuadPattern),
+    Insert(QuadPattern),
 }
 
 impl fmt::Display for Modify {
@@ -682,11 +775,15 @@ impl fmt::Display for Modify {
         if let Some(with) = &self.with {
             write!(f, "WITH {with} ")?;
         }
-        write!(
-            f,
-            "DELETE {} INSERT {} WHERE {}",
-            self.delete, self.insert, self.where_
-        )
+        match &self.variant {
+            ModifyVariant::DeleteInsert { delete, insert } => write!(
+                f,
+                "DELETE {} INSERT {} WHERE {}",
+                delete, insert, self.where_
+            ),
+            ModifyVariant::Delete(delete) => write!(f, "DELETE {} WHERE {}", delete, self.where_),
+            ModifyVariant::Insert(insert) => write!(f, "INSERT {} WHERE {}", insert, self.where_),
+        }
     }
 }
 
@@ -1212,6 +1309,87 @@ impl fmt::Display for ExpressionList {
             write!(f, "{e}")?;
         }
         f.write_str(")")
+    }
+}
+
+#[derive(Arbitrary)]
+struct ConstructTemplate {
+    // [73]  	ConstructTemplate	  ::=  	'{' ConstructTriples? '}'
+    triples: Option<ConstructTriples>,
+}
+
+impl fmt::Display for ConstructTemplate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(triples) = &self.triples {
+            write!(f, "{{ {triples} }}")
+        } else {
+            f.write_str("{}")
+        }
+    }
+}
+
+#[derive(Arbitrary)]
+struct ConstructTriples {
+    // [74]  	ConstructTriples	  ::=  	TriplesSameSubject ( '.' ConstructTriples? )?
+    start: TriplesSameSubject,
+    others: Vec<TriplesSameSubject>,
+}
+
+impl fmt::Display for ConstructTriples {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.start)?;
+        for other in &self.others {
+            write!(f, " . {other}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Arbitrary)]
+enum TriplesSameSubject {
+    // [75]  	TriplesSameSubject	  ::=  	VarOrTerm PropertyListNotEmpty | TriplesNode PropertyList
+    Atomic {
+        subject: VarOrTerm,
+        predicate_object: PropertyListNotEmpty,
+    },
+    Other {
+        subject: TriplesNode,
+        predicate_object: PropertyList,
+    },
+}
+
+impl fmt::Display for TriplesSameSubject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Atomic {
+                subject,
+                predicate_object,
+            } => {
+                write!(f, "{subject}{predicate_object}")
+            }
+            Self::Other {
+                subject,
+                predicate_object,
+            } => {
+                write!(f, "{subject} {predicate_object}")
+            }
+        }
+    }
+}
+
+#[derive(Arbitrary)]
+struct PropertyList {
+    // [76]  	PropertyList	  ::=  	PropertyListNotEmpty?
+    inner: Option<PropertyListNotEmpty>,
+}
+
+impl fmt::Display for PropertyList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(p) = &self.inner {
+            write!(f, "{p}")
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -1817,38 +1995,55 @@ impl fmt::Display for RelationalExpression {
 type NumericExpression = AdditiveExpression;
 
 #[derive(Arbitrary)]
-enum AdditiveExpression {
+struct AdditiveExpression {
     // [116]   AdditiveExpression   ::=   MultiplicativeExpression ( '+' MultiplicativeExpression | '-' MultiplicativeExpression | ( NumericLiteralPositive | NumericLiteralNegative ) ( ( '*' UnaryExpression ) | ( '/' UnaryExpression ) )* )*
-    Base(MultiplicativeExpression),
-    Plus(MultiplicativeExpression, MultiplicativeExpression),
-    Minus(MultiplicativeExpression, MultiplicativeExpression), // TODO: Prefix + and -
+    base: MultiplicativeExpression,
+    elements: Vec<AdditiveExpressionElements>,
+}
+
+#[derive(Arbitrary)]
+enum AdditiveExpressionElements {
+    Plus(MultiplicativeExpression),
+    Minus(MultiplicativeExpression),
+    // NumericLiteralPositive | NumericLiteralNegative are already covered by UnaryExpression, we don't need to disambiguate
 }
 
 impl fmt::Display for AdditiveExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Base(e) => write!(f, "{e}"),
-            Self::Plus(a, b) => write!(f, "{a} + {b}"),
-            Self::Minus(a, b) => write!(f, "{a} - {b}"),
+        write!(f, "{}", self.base)?;
+        for element in &self.elements {
+            match element {
+                AdditiveExpressionElements::Plus(e) => write!(f, " + {e}"),
+                AdditiveExpressionElements::Minus(e) => write!(f, " - {e}"),
+            }?;
         }
+        Ok(())
     }
 }
 
 #[derive(Arbitrary)]
-enum MultiplicativeExpression {
+struct MultiplicativeExpression {
     // [117]   MultiplicativeExpression   ::=   UnaryExpression ( '*' UnaryExpression | '/' UnaryExpression )*
-    Base(UnaryExpression),
-    Mul(UnaryExpression, UnaryExpression),
-    Div(UnaryExpression, UnaryExpression),
+    base: UnaryExpression,
+    elements: Vec<MultiplicativeExpressionElements>,
+}
+
+#[derive(Arbitrary)]
+enum MultiplicativeExpressionElements {
+    Mul(UnaryExpression),
+    Div(UnaryExpression),
 }
 
 impl fmt::Display for MultiplicativeExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Base(e) => write!(f, "{e}"),
-            Self::Mul(a, b) => write!(f, "{a} * {b}"),
-            Self::Div(a, b) => write!(f, "{a} / {b}"),
+        write!(f, "{}", self.base)?;
+        for element in &self.elements {
+            match element {
+                MultiplicativeExpressionElements::Mul(e) => write!(f, " * {e}"),
+                MultiplicativeExpressionElements::Div(e) => write!(f, " / {e}"),
+            }?;
         }
+        Ok(())
     }
 }
 
@@ -1965,10 +2160,45 @@ enum BuiltInCall {
     //   | NotExistsFunc
     Str(Box<Expression>),
     Lang(Box<Expression>),
+    LangMatches(Box<Expression>, Box<Expression>),
     Datatype(Box<Expression>),
     Bound(Var),
     Iri(Box<Expression>),
-    Bnode(Box<Expression>),
+    Uri(Box<Expression>),
+    BNode(Box<Expression>), // TODO: no arg
+    // TODO Rand,
+    Abs(Box<Expression>),
+    Ceil(Box<Expression>),
+    Floor(Box<Expression>),
+    Round(Box<Expression>),
+    Concat(ExpressionList),
+    Substring(SubstringExpression),
+    Strlen(Box<Expression>),
+    StrReplace(StrReplaceExpression),
+    UCase(Box<Expression>),
+    LCase(Box<Expression>),
+    EncodeForUri(Box<Expression>),
+    Contains(Box<Expression>, Box<Expression>),
+    StrStarts(Box<Expression>, Box<Expression>),
+    StrEnds(Box<Expression>, Box<Expression>),
+    StrBefore(Box<Expression>, Box<Expression>),
+    StrAfter(Box<Expression>, Box<Expression>),
+    Year(Box<Expression>),
+    Month(Box<Expression>),
+    Day(Box<Expression>),
+    Hours(Box<Expression>),
+    Minutes(Box<Expression>),
+    Seconds(Box<Expression>),
+    Timezone(Box<Expression>),
+    Tz(Box<Expression>),
+    // TODO NOW,
+    // TODO UUID
+    // TODO STRUUID
+    MD5(Box<Expression>),
+    SHA1(Box<Expression>),
+    SHA256(Box<Expression>),
+    SHA384(Box<Expression>),
+    SHA512(Box<Expression>),
     Coalesce(ExpressionList),
     If(Box<Expression>, Box<Expression>, Box<Expression>),
     StrLang(Box<Expression>, Box<Expression>),
@@ -1978,8 +2208,9 @@ enum BuiltInCall {
     IsBlank(Box<Expression>),
     IsLiteral(Box<Expression>),
     IsNumeric(Box<Expression>),
+    Regex(RegexExpression),
     Exists(ExistsFunc),
-    NotExists(NotExistsFunc), // TODO: Other functions
+    NotExists(NotExistsFunc),
 }
 
 impl fmt::Display for BuiltInCall {
@@ -1987,10 +2218,39 @@ impl fmt::Display for BuiltInCall {
         match self {
             Self::Str(v) => write!(f, "STR({v})"),
             Self::Lang(v) => write!(f, "LANG({v})"),
+            Self::LangMatches(a, b) => write!(f, "LangMatches({a}, {b})"),
             Self::Datatype(v) => write!(f, "DATATYPE({v})"),
             Self::Bound(v) => write!(f, "BOUND({v})"),
             Self::Iri(v) => write!(f, "IRI({v})"),
-            Self::Bnode(v) => write!(f, "BNODE({v})"),
+            Self::Uri(e) => write!(f, "URI({e})"),
+            Self::BNode(v) => write!(f, "BNODE({v})"),
+            Self::Abs(e) => write!(f, "ABS({e})"),
+            Self::Ceil(e) => write!(f, "CEIL({e})"),
+            Self::Floor(e) => write!(f, "FLOOR({e})"),
+            Self::Round(e) => write!(f, "ROUND({e})"),
+            Self::Concat(e) => write!(f, "CONCAT({e})"),
+            Self::Strlen(e) => write!(f, "STRLEN({e})"),
+            Self::UCase(e) => write!(f, "UCASE({e})"),
+            Self::LCase(e) => write!(f, "LCASE({e})"),
+            Self::EncodeForUri(e) => write!(f, "ENCODE_FOR_URI({e})"),
+            Self::Contains(a, b) => write!(f, "CONTAINS({a}, {b})"),
+            Self::StrStarts(a, b) => write!(f, "STRSTARTS({a}, {b})"),
+            Self::StrEnds(a, b) => write!(f, "STRENDS({a}, {b})"),
+            Self::StrBefore(a, b) => write!(f, "STRBEFORE({a}, {b})"),
+            Self::StrAfter(a, b) => write!(f, "STRAFTER({a}, {b})"),
+            Self::Year(e) => write!(f, "YEAR({e})"),
+            Self::Month(e) => write!(f, "MONTH({e})"),
+            Self::Day(e) => write!(f, "DAY({e})"),
+            Self::Hours(e) => write!(f, "HOURS({e})"),
+            Self::Minutes(e) => write!(f, "MINUTES({e})"),
+            Self::Seconds(e) => write!(f, "SECONDS({e})"),
+            Self::Timezone(e) => write!(f, "TIMEZONE({e})"),
+            Self::Tz(e) => write!(f, "TZ({e})"),
+            Self::MD5(e) => write!(f, "MD5({e})"),
+            Self::SHA1(e) => write!(f, "SH1({e})"),
+            Self::SHA256(e) => write!(f, "SHA256({e})"),
+            Self::SHA384(e) => write!(f, "SHA384({e})"),
+            Self::SHA512(e) => write!(f, "SHA512({e})"),
             Self::Coalesce(vs) => write!(f, "COALESCE{vs}"),
             Self::If(a, b, c) => write!(f, "IF({a}, {b}, {c})"),
             Self::StrLang(a, b) => write!(f, "STRLANG({a}, {b})"),
@@ -2002,7 +2262,65 @@ impl fmt::Display for BuiltInCall {
             Self::IsNumeric(e) => write!(f, "isNumeric({e})"),
             Self::Exists(e) => write!(f, "{e}"),
             Self::NotExists(e) => write!(f, "{e}"),
+            Self::Substring(e) => write!(f, "{e}"),
+            Self::StrReplace(e) => write!(f, "{e}"),
+            Self::Regex(e) => write!(f, "{e}"),
         }
+    }
+}
+
+#[derive(Arbitrary)]
+struct RegexExpression {
+    // [122]  	RegexExpression	  ::=  	'REGEX' '(' Expression ',' Expression ( ',' Expression )? ')'
+    arg1: Box<Expression>,
+    arg2: Box<Expression>,
+    arg3: Option<Box<Expression>>,
+}
+
+impl fmt::Display for RegexExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "REGEX({}, {}", self.arg1, self.arg2)?;
+        if let Some(arg3) = &self.arg3 {
+            write!(f, ", {arg3}")?;
+        }
+        write!(f, ")")
+    }
+}
+
+#[derive(Arbitrary)]
+struct SubstringExpression {
+    // [123]  	SubstringExpression	  ::=  	'SUBSTR' '(' Expression ',' Expression ( ',' Expression )? ')'
+    arg1: Box<Expression>,
+    arg2: Box<Expression>,
+    arg3: Option<Box<Expression>>,
+}
+
+impl fmt::Display for SubstringExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SUBSTR({}, {}", self.arg1, self.arg2)?;
+        if let Some(arg3) = &self.arg3 {
+            write!(f, ", {arg3}")?;
+        }
+        write!(f, ")")
+    }
+}
+
+#[derive(Arbitrary)]
+struct StrReplaceExpression {
+    // [124]  	StrReplaceExpression	  ::=  	'REPLACE' '(' Expression ',' Expression ',' Expression ( ',' Expression )? ')'
+    arg1: Box<Expression>,
+    arg2: Box<Expression>,
+    arg3: Box<Expression>,
+    arg4: Option<Box<Expression>>,
+}
+
+impl fmt::Display for StrReplaceExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SUBSTR({}, {}, {}", self.arg1, self.arg2, self.arg3)?;
+        if let Some(arg4) = &self.arg4 {
+            write!(f, ", {arg4}")?;
+        }
+        write!(f, ")")
     }
 }
 

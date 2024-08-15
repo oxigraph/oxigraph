@@ -1,8 +1,9 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use oxigraph_fuzz::count_quad_blank_nodes;
 use oxrdf::graph::CanonicalizationAlgorithm;
-use oxrdf::{Dataset, GraphName, Quad, Subject, Term, Triple};
+use oxrdf::{Dataset, Quad};
 use oxttl::{TriGParser, TriGSerializer};
 
 fn parse<'a>(
@@ -46,30 +47,6 @@ fn parse<'a>(
     )
 }
 
-fn count_triple_blank_nodes(triple: &Triple) -> usize {
-    (match &triple.subject {
-        Subject::BlankNode(_) => 1,
-        Subject::Triple(t) => count_triple_blank_nodes(t),
-        _ => 0,
-    }) + (match &triple.object {
-        Term::BlankNode(_) => 1,
-        Term::Triple(t) => count_triple_blank_nodes(t),
-        _ => 0,
-    })
-}
-
-fn count_quad_blank_nodes(quad: &Quad) -> usize {
-    (match &quad.subject {
-        Subject::BlankNode(_) => 1,
-        Subject::Triple(t) => count_triple_blank_nodes(t),
-        _ => 0,
-    }) + (match &quad.object {
-        Term::BlankNode(_) => 1,
-        Term::Triple(t) => count_triple_blank_nodes(t),
-        _ => 0,
-    }) + usize::from(matches!(quad.graph_name, GraphName::BlankNode(_)))
-}
-
 fn serialize_quads(quads: &[Quad], prefixes: Vec<(String, String)>) -> Vec<u8> {
     let mut serializer = TriGSerializer::new();
     for (prefix_name, prefix_iri) in prefixes {
@@ -100,7 +77,10 @@ fuzz_target!(|data: &[u8]| {
         assert!(errors_unchecked.is_empty());
     }
 
-    let bnodes_count = quads.iter().map(count_quad_blank_nodes).sum::<usize>();
+    let bnodes_count = quads
+        .iter()
+        .map(|q| count_quad_blank_nodes(q.as_ref()))
+        .sum::<usize>();
     if bnodes_count == 0 {
         assert_eq!(
             quads,

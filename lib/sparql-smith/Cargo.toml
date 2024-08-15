@@ -15,8 +15,7 @@ rust-version.workspace = true
 
 [features]
 default = []
-limit-offset = ["order"]
-order = []
+limit-offset = []
 service = []
 sep-0006 = []
 
