@@ -2,11 +2,11 @@
 
 use libfuzzer_sys::fuzz_target;
 use oxigraph::io::RdfFormat;
-use oxigraph::model::NamedNode;
-use oxigraph::sparql::{
-    EvaluationError, Query, QueryOptions, QueryResults, QuerySolutionIter, ServiceHandler,
-};
+use oxigraph::model::graph::CanonicalizationAlgorithm;
+use oxigraph::model::{Graph, NamedNode};
+use oxigraph::sparql::{EvaluationError, Query, QueryOptions, QueryResults, ServiceHandler};
 use oxigraph::store::Store;
+use oxigraph_fuzz::count_triple_blank_nodes;
 use std::sync::OnceLock;
 
 fuzz_target!(|data: sparql_smith::Query| {
@@ -24,45 +24,50 @@ fuzz_target!(|data: sparql_smith::Query| {
         let options = QueryOptions::default().with_service_handler(StoreServiceHandler {
             store: store.clone(),
         });
-        let with_opt = store.query_opt(query.clone(), options.clone()).unwrap();
-        let without_opt = store
-            .query_opt(query, options.without_optimizations())
-            .unwrap();
-        match (with_opt, without_opt) {
-            (QueryResults::Solutions(with_opt), QueryResults::Solutions(without_opt)) => {
-                assert_eq!(
-                    query_solutions_key(with_opt, query_str.contains(" REDUCED ")),
-                    query_solutions_key(without_opt, query_str.contains(" REDUCED "))
-                )
-            }
-            (QueryResults::Graph(_), QueryResults::Graph(_)) => unimplemented!(),
-            (QueryResults::Boolean(with_opt), QueryResults::Boolean(without_opt)) => {
-                assert_eq!(with_opt, without_opt)
-            }
-            _ => panic!("Different query result types"),
-        }
+        let with_opt = store.query_opt(query.clone(), options.clone());
+        let without_opt = store.query_opt(query, options.without_optimizations());
+        assert_eq!(
+            query_results_key(with_opt, query_str.contains(" REDUCED ")),
+            query_results_key(without_opt, query_str.contains(" REDUCED "))
+        )
     }
 });
 
-fn query_solutions_key(iter: QuerySolutionIter, is_reduced: bool) -> String {
-    // TODO: ordering
-    let mut b = iter
-        .into_iter()
-        .filter_map(Result::ok)
-        .map(|t| {
-            let mut b = t
-                .iter()
-                .map(|(var, val)| format!("{var}: {val}"))
+fn query_results_key(results: Result<QueryResults, EvaluationError>, is_reduced: bool) -> String {
+    match results {
+        Ok(QueryResults::Solutions(iter)) => {
+            // TODO: ordering
+            let mut b = iter
+                .into_iter()
+                .filter_map(Result::ok)
+                .map(|t| {
+                    let mut b = t
+                        .iter()
+                        .map(|(var, val)| format!("{var}: {val}"))
+                        .collect::<Vec<_>>();
+                    b.sort_unstable();
+                    b.join(" ")
+                })
                 .collect::<Vec<_>>();
             b.sort_unstable();
-            b.join(" ")
-        })
-        .collect::<Vec<_>>();
-    b.sort_unstable();
-    if is_reduced {
-        b.dedup();
+            if is_reduced {
+                b.dedup();
+            }
+            b.join("\n")
+        }
+        Ok(QueryResults::Graph(iter)) => {
+            let mut graph = iter.filter_map(Result::ok).collect::<Graph>();
+            if graph.iter().map(count_triple_blank_nodes).sum::<usize>() > 4 {
+                return String::new(); // canonicalization might be too slow
+            };
+            graph.canonicalize(CanonicalizationAlgorithm::Unstable);
+            let mut triples = graph.into_iter().map(|t| t.to_string()).collect::<Vec<_>>();
+            triples.sort_unstable();
+            triples.join("\n")
+        }
+        Ok(QueryResults::Boolean(bool)) => if bool { "true" } else { "" }.into(),
+        Err(_) => String::new(),
     }
-    b.join("\n")
 }
 
 #[derive(Clone)]
