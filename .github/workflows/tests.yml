@@ -5,8 +5,10 @@ on:
     branches:
       - main
       - next
-  schedule:
-    - cron: "12 3 * * *"
+  push:
+    branches:
+      - main
+      - next
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -454,50 +456,6 @@ jobs:
           parallel-fuzzing: true
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
 
-  fuzz_repo:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
-        with:
-          language: rust
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          sanitizer: address
-      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 7200
-          mode: batch
-          sanitizer: address
-          minimize-crashes: true
-          parallel-fuzzing: true
-          storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
-        continue-on-error: true
-      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 3600
-          mode: prune
-          storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
-        continue-on-error: true
-
-  fuzz_coverage:
-    if: github.event_name != 'pull_request'
-    needs: fuzz_repo
-    runs-on: ubuntu-latest
-    steps:
-      - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
-        with:
-          language: rust
-          sanitizer: coverage
-      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 3600
-          mode: coverage
-          sanitizer: coverage
-          storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
-
   shellcheck:
     runs-on: ubuntu-latest
     steps:
@@ -536,7 +494,7 @@ jobs:
         working-directory: ./js
       - run: cargo codspeed build -p oxigraph --features http-client-native-tls
       - run: cargo codspeed build -p oxigraph-testsuite
-      - uses: CodSpeedHQ/action@v2
+      - uses: CodSpeedHQ/action@v3
         with:
           run: cargo codspeed run && npm run --prefix js bench
           token: ${{ secrets.CODSPEED_TOKEN }}
