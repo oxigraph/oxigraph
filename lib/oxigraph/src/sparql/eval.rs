@@ -213,6 +213,7 @@ impl SimpleEvaluator {
                     iter: eval(from),
                     template,
                     buffered_results: Vec::default(),
+                    already_emitted_results: FxHashSet::default(),
                     bnodes: Vec::default(),
                 }),
             }),
@@ -4942,6 +4943,7 @@ struct ConstructIterator {
     iter: EncodedTuplesIterator,
     template: Vec<TripleTemplate>,
     buffered_results: Vec<Result<Triple, EvaluationError>>,
+    already_emitted_results: FxHashSet<EncodedTriple>,
     bnodes: Vec<EncodedTerm>,
 }
 
@@ -4964,15 +4966,29 @@ impl Iterator for ConstructIterator {
                         get_triple_template_value(&template.predicate, &tuple, &mut self.bnodes),
                         get_triple_template_value(&template.object, &tuple, &mut self.bnodes),
                     ) {
-                        self.buffered_results.push(decode_triple(
-                            &*self.eval.dataset,
-                            &subject,
-                            &predicate,
-                            &object,
-                        ));
+                        let triple = EncodedTriple {
+                            subject,
+                            predicate,
+                            object,
+                        };
+                        // We allocate new blank nodes for each solution,
+                        // triples with blank nodes are likely to be new.
+                        let new_triple = triple.subject.is_blank_node()
+                            || triple.subject.is_triple()
+                            || triple.object.is_blank_node()
+                            || triple.object.is_triple()
+                            || self.already_emitted_results.insert(triple.clone());
+                        if new_triple {
+                            self.buffered_results
+                                .push(self.eval.dataset.decode_triple(&triple).map_err(Into::into));
+                            if self.already_emitted_results.len() > 1024 * 1024 {
+                                // We don't want to have a too big memory impact
+                                self.already_emitted_results.clear();
+                            }
+                        }
                     }
                 }
-                self.bnodes.clear(); // We do not reuse old bnodes
+                self.bnodes.clear(); // We do not reuse blank nodes
             }
         }
     }
@@ -5026,19 +5042,6 @@ fn get_triple_template_value<'a>(
 
 fn new_bnode() -> EncodedTerm {
     EncodedTerm::NumericalBlankNode { id: random() }
-}
-
-fn decode_triple<D: Decoder>(
-    decoder: &D,
-    subject: &EncodedTerm,
-    predicate: &EncodedTerm,
-    object: &EncodedTerm,
-) -> Result<Triple, EvaluationError> {
-    Ok(Triple::new(
-        decoder.decode_subject(subject)?,
-        decoder.decode_named_node(predicate)?,
-        decoder.decode_term(object)?,
-    ))
 }
 
 struct DescribeIterator {
