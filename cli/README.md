@@ -248,6 +248,11 @@ ExecStart=/PATH/TO/oxigraph serve --location /PATH/TO/OXIGRAPH/DATA
 WantedBy=multi-user.target
 ```
 
+## Man pages and autocompletion
+
+Autocompletion for various shells are generated on build in the `target/{debug,release}/build/oxigraph-cli-<hash>/out/complete` directory.
+Similarly, man pages are generated in the `target/{debug,release}/build/oxigraph-cli-<hash>/out/man` directory.
+
 ## Migration guide
 
 ### From 0.2 to 0.3
