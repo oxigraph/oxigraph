@@ -42,5 +42,12 @@ assert_cmd.workspace = true
 assert_fs.workspace = true
 predicates.workspace = true
 
+[build-dependencies]
+clap = { workspace = true, features = ["derive"] }
+clap_complete.workspace = true
+clap_mangen.workspace = true
+
 [lints]
 workspace = true
+
+
