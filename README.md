@@ -84,6 +84,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 ## Sponsors
 
+* [Zazuko](https://zazuko.com/), a knowledge graph consulting company.
 * [RelationLabs](https://relationlabs.ai/) that is building [Relation-Graph](https://github.com/relationlabs/Relation-Graph), a SPARQL database module for the [Substrate blockchain platform](https://substrate.io/) based on Oxigraph.
 * [Field 33](https://field33.com) that was building [an ontology management platform](https://plow.pm/).
 * [Magnus Bakken](https://github.com/magbak) who is building [Data Treehouse](https://www.data-treehouse.com/), a time-series + RDF datalake platform, and [chrontext](https://github.com/magbak/chrontext), a SPARQL query endpoint on top of joint RDF and time series databases.
