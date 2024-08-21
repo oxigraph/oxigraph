@@ -36,7 +36,7 @@ use url::form_urlencoded;
 
 mod cli;
 
-const MAX_SPARQL_BODY_SIZE: u64 = 0x0010_0000;
+const MAX_SPARQL_BODY_SIZE: u64 = 1024 * 1024 * 128; // 128MB
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 #[allow(clippy::large_include_file)]
@@ -747,8 +747,7 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-query" {
-                let query = io::read_to_string(request.body_mut().take(MAX_SPARQL_BODY_SIZE))
-                    .map_err(bad_request)?;
+                let query = limited_string_body(request)?;
                 configure_and_evaluate_sparql_query(
                     &store,
                     &[url_query(request)],
@@ -756,12 +755,7 @@ fn handle_request(
                     request,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
-                let mut buffer = Vec::new();
-                request
-                    .body_mut()
-                    .take(MAX_SPARQL_BODY_SIZE)
-                    .read_to_end(&mut buffer)
-                    .map_err(bad_request)?;
+                let buffer = limited_body(request)?;
                 configure_and_evaluate_sparql_query(
                     &store,
                     &[url_query(request), &buffer],
@@ -779,8 +773,7 @@ fn handle_request(
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
             if content_type == "application/sparql-update" {
-                let update = io::read_to_string(request.body_mut().take(MAX_SPARQL_BODY_SIZE))
-                    .map_err(bad_request)?;
+                let update = limited_string_body(request)?;
                 configure_and_evaluate_sparql_update(
                     &store,
                     &[url_query(request)],
@@ -788,12 +781,7 @@ fn handle_request(
                     request,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
-                let mut buffer = Vec::new();
-                request
-                    .body_mut()
-                    .take(MAX_SPARQL_BODY_SIZE)
-                    .read_to_end(&mut buffer)
-                    .map_err(bad_request)?;
+                let buffer = limited_body(request)?;
                 configure_and_evaluate_sparql_update(
                     &store,
                     &[url_query(request), &buffer],
@@ -1012,6 +1000,42 @@ fn url_query_parameter<'a>(request: &'a Request, param: &str) -> Option<Cow<'a, 
         .query_pairs()
         .find(|(k, _)| k == param)
         .map(|(_, v)| v)
+}
+
+fn limited_string_body(request: &mut Request) -> Result<String, HttpError> {
+    String::from_utf8(limited_body(request)?)
+        .map_err(|e| bad_request(format!("Invalid UTF-8 body: {e}")))
+}
+
+fn limited_body(request: &mut Request) -> Result<Vec<u8>, HttpError> {
+    let body = request.body_mut();
+    if let Some(body_len) = body.len() {
+        if body_len > MAX_SPARQL_BODY_SIZE {
+            // it's too big
+            return Err(bad_request(format!(
+                "SPARQL body payloads are limited to {MAX_SPARQL_BODY_SIZE} bytes, found {body_len} bytes"
+            )));
+        }
+        let mut payload = Vec::with_capacity(
+            body_len
+                .try_into()
+                .map_err(|_| bad_request("Huge body size"))?,
+        );
+        body.read_to_end(&mut payload)
+            .map_err(internal_server_error)?;
+        Ok(payload)
+    } else {
+        let mut payload = Vec::new();
+        body.take(MAX_SPARQL_BODY_SIZE + 1)
+            .read_to_end(&mut payload)
+            .map_err(internal_server_error)?;
+        if payload.len() > MAX_SPARQL_BODY_SIZE.try_into().unwrap() {
+            return Err(bad_request(format!(
+                "SPARQL body payloads are limited to {MAX_SPARQL_BODY_SIZE} bytes"
+            )));
+        }
+        Ok(payload)
+    }
 }
 
 fn configure_and_evaluate_sparql_query(
