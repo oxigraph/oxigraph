@@ -1,3 +1,30 @@
+## [0.4.0-alpha.8] - 2024-08-22
+
+### Added
+- oxttl, oxrdfxml, sparesults and oxrdfio: new `parse_slice` method to parse a byte slice directly.
+- oxttl N-Triples, N-Quads and Turtle: new `split_slice_for_parallel_parsing` method that splits a slice into chunks that can be parsed in parallel.
+- Python: support for custom SPARQL functions.
+- CLI: man pages and shell autocompletion files are now automatically generated on build.
+
+### Removed
+- The storage "secondary" mode. It was quite buggy, especially with RocksDB 9. If you need it, please reach out.
+
+### Changed
+- Upgrades Rust MSV to 1.75.
+- Bumps RocksDB to 9.5.2.
+- IRI: ipvFuture are now allowed and some characters are now disallowed in some places to follow RFC 3987.
+- sparesults: `parse_` and `serialize_` functions now take the parser/serializer by value but the parsers and serializers are now `Clone`.
+- Release builds abort instead of unwind on panics.
+- Turtle-like languages: escaped UTF-16 surrogates are now supported in unchecked/lenient mode.
+- SPARQL: fixes parsing of `CONSTRUCT` queries when a dot directly follows a semicolon.
+- SPARQL: avoids to return duplicated triples in `CONSTRUCT` response (the deduplication is only partial, some duplicates may still be returned).
+- JS: better TypeScript types now written by hand.
+- JS: allow any `Iterator` implementation in `Store` constructor.
+- Python: `Store.bulk_load` now properly uses the bulk loader.
+- Python: improves the way the GIL is released. Might fix some weird bugs.
+- HTTP: increases max SPARQL body size to 128MB.
+
+
 ## [0.4.0-alpha.7] - 2024-05-18
 
 ### Added
