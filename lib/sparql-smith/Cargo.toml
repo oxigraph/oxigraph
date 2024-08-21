@@ -1,6 +1,6 @@
 [package]
 name = "sparql-smith"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
