@@ -13,7 +13,6 @@ members = [
     "lib/sparopt",
     "lib/sparql-smith",
     "oxrocksdb-sys",
-    "python",
     "testsuite"
 ]
 resolver = "2"
