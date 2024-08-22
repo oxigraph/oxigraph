@@ -24,6 +24,11 @@ pub enum Command {
         /// Allows cross-origin requests
         #[arg(long)]
         cors: bool,
+        /// If the SPARQL queries should look for triples in all the dataset graphs by default (ie. without `GRAPH` operations)
+        ///
+        /// This is equivalent as setting the union-default-graph option in all SPARQL queries
+        #[arg(long)]
+        union_default_graph: bool,
     },
     /// Start Oxigraph HTTP server in read-only mode
     ///
@@ -39,6 +44,11 @@ pub enum Command {
         /// Allow cross-origin requests
         #[arg(long)]
         cors: bool,
+        /// If the SPARQL queries should look for triples in all the dataset graphs by default (ie. without `GRAPH` operations)
+        ///
+        /// This is equivalent as setting the union-default-graph option in all SPARQL queries
+        #[arg(long)]
+        union_default_graph: bool,
     },
     /// Create a database backup into a target directory
     ///
@@ -169,6 +179,9 @@ pub enum Command {
         /// Beware, computing the statistics adds some overhead to the evaluation runtime.
         #[arg(long)]
         stats: bool,
+        /// If the SPARQL queries should look for triples in all the dataset graphs by default (ie. without `GRAPH` operations)
+        #[arg(long)]
+        union_default_graph: bool,
     },
     /// Execute a SPARQL update against the store
     Update {
