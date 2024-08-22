@@ -51,6 +51,7 @@ pub fn main() -> anyhow::Result<()> {
             location,
             bind,
             cors,
+            union_default_graph,
         } => serve(
             if let Some(location) = location {
                 Store::open(location)
@@ -60,12 +61,20 @@ pub fn main() -> anyhow::Result<()> {
             &bind,
             false,
             cors,
+            union_default_graph,
         ),
         Command::ServeReadOnly {
             location,
             bind,
             cors,
-        } => serve(Store::open_read_only(location)?, &bind, true, cors),
+            union_default_graph,
+        } => serve(
+            Store::open_read_only(location)?,
+            &bind,
+            true,
+            cors,
+            union_default_graph,
+        ),
         Command::Backup {
             location,
             destination,
@@ -250,6 +259,7 @@ pub fn main() -> anyhow::Result<()> {
             explain,
             explain_file,
             stats,
+            union_default_graph,
         } => {
             let query = if let Some(query) = query {
                 query
@@ -260,7 +270,10 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 io::read_to_string(stdin().lock())?
             };
-            let query = Query::parse(&query, query_base.as_deref())?;
+            let mut query = Query::parse(&query, query_base.as_deref())?;
+            if union_default_graph {
+                query.dataset_mut().set_default_graph_as_union();
+            }
             let store = Store::open_read_only(location)?;
             let (results, explanation) =
                 store.explain_query_opt(query, QueryOptions::default(), stats)?;
@@ -630,15 +643,21 @@ fn rdf_format_from_name(name: &str) -> anyhow::Result<RdfFormat> {
     bail!("The file format '{name}' is unknown")
 }
 
-fn serve(store: Store, bind: &str, read_only: bool, cors: bool) -> anyhow::Result<()> {
+fn serve(
+    store: Store,
+    bind: &str,
+    read_only: bool,
+    cors: bool,
+    union_default_graph: bool,
+) -> anyhow::Result<()> {
     let mut server = if cors {
         Server::new(cors_middleware(move |request| {
-            handle_request(request, store.clone(), read_only)
+            handle_request(request, store.clone(), read_only, union_default_graph)
                 .unwrap_or_else(|(status, message)| error(status, message))
         }))
     } else {
         Server::new(move |request| {
-            handle_request(request, store.clone(), read_only)
+            handle_request(request, store.clone(), read_only, union_default_graph)
                 .unwrap_or_else(|(status, message)| error(status, message))
         })
     }
@@ -706,6 +725,7 @@ fn handle_request(
     request: &mut Request,
     store: Store,
     read_only: bool,
+    union_default_graph: bool,
 ) -> Result<Response, HttpError> {
     match (request.url().path(), request.method().as_ref()) {
         ("/", "HEAD") => Ok(Response::builder(Status::OK)
@@ -740,9 +760,13 @@ fn handle_request(
             .with_header(HeaderName::CONTENT_TYPE, "image/svg+xml")
             .unwrap()
             .with_body(LOGO)),
-        ("/query", "GET") => {
-            configure_and_evaluate_sparql_query(&store, &[url_query(request)], None, request)
-        }
+        ("/query", "GET") => configure_and_evaluate_sparql_query(
+            &store,
+            &[url_query(request)],
+            None,
+            request,
+            union_default_graph,
+        ),
         ("/query", "POST") => {
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
@@ -753,6 +777,7 @@ fn handle_request(
                     &[url_query(request)],
                     Some(query),
                     request,
+                    union_default_graph,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
                 let buffer = limited_body(request)?;
@@ -761,6 +786,7 @@ fn handle_request(
                     &[url_query(request), &buffer],
                     None,
                     request,
+                    union_default_graph,
                 )
             } else {
                 Err(unsupported_media_type(&content_type))
@@ -1043,10 +1069,10 @@ fn configure_and_evaluate_sparql_query(
     encoded: &[&[u8]],
     mut query: Option<String>,
     request: &Request,
+    mut use_default_graph_as_union: bool,
 ) -> Result<Response, HttpError> {
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
-    let mut use_default_graph_as_union = false;
     for encoded in encoded {
         for (k, v) in form_urlencoded::parse(encoded) {
             match k.as_ref() {
@@ -1954,7 +1980,27 @@ mod tests {
     }
 
     #[test]
-    fn cli_ask_update_inline() -> Result<()> {
+    fn cli_ask_union_default_graph() -> Result<()> {
+        let store_dir = initialized_cli_store(
+            "GRAPH <http://example.com/g> { <http://example.com/s> <http://example.com/p> <http://example.com/o> }",
+        )?;
+        cli_command()
+            .arg("query")
+            .arg("--location")
+            .arg(store_dir.path())
+            .arg("--query")
+            .arg("ASK { ?s ?p ?o }")
+            .arg("--results-format")
+            .arg("tsv")
+            .arg("--union-default-graph")
+            .assert()
+            .stdout("true")
+            .success();
+        Ok(())
+    }
+
+    #[test]
+    fn cli_update_inline() -> Result<()> {
         let store_dir = TempDir::new()?;
         cli_command()
             .arg("update")
@@ -2806,12 +2852,12 @@ mod tests {
         }
 
         fn exec(&self, mut request: Request) -> Response {
-            handle_request(&mut request, self.store.clone(), false)
+            handle_request(&mut request, self.store.clone(), false, false)
                 .unwrap_or_else(|(status, message)| error(status, message))
         }
 
         fn exec_read_only(&self, mut request: Request) -> Response {
-            handle_request(&mut request, self.store.clone(), true)
+            handle_request(&mut request, self.store.clone(), true, false)
                 .unwrap_or_else(|(status, message)| error(status, message))
         }
 
