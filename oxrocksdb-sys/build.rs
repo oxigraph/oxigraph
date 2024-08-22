@@ -52,6 +52,9 @@ fn build_rocksdb_api(includes: &[PathBuf]) {
     } else {
         config.flag("-std=c++17");
     }
+    if target.contains("armv5te") || target.contains("riscv64gc") {
+        println!("cargo:rustc-link-lib=atomic");
+    }
     config.cpp(true).file("api/c.cc").compile("oxrocksdb_api");
 }
 
