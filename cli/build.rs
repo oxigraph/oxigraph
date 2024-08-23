@@ -2,6 +2,7 @@ include!("src/cli.rs");
 
 use clap::{CommandFactory, ValueEnum};
 use clap_complete::Shell;
+use clap_mangen::Man;
 use std::env::var_os;
 use std::fs::create_dir_all;
 use std::io::Result;
@@ -18,7 +19,10 @@ fn main() -> Result<()> {
 
     let man_dir = out_dir.join("man");
     create_dir_all(&man_dir)?;
-    clap_mangen::generate_to(app, &man_dir)?;
+    Man::new(app.clone().disable_help_subcommand(true)).generate_to(&man_dir)?;
+    for subcommand in app.get_subcommands() {
+        Man::new(subcommand.clone().disable_help_subcommand(true)).generate_to(&man_dir)?;
+    }
 
     Ok(())
 }

@@ -220,7 +220,7 @@ pub enum Command {
         /// If no file is given, stdout is written.
         #[arg(short, long, value_hint = ValueHint::FilePath)]
         to_file: Option<PathBuf>,
-        /// The format of the file(s) to convert from
+        /// The format of the file(s) to convert to
         ///
         /// It can be an extension like "nt" or a MIME type like "application/n-triples".
         ///
