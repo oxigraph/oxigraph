@@ -1536,9 +1536,6 @@ impl Iterator for GraphNameIter {
 /// If the operation fails in the middle, only a part of the data may be written to the store.
 /// Results might get weird if you delete data during the loading process.</div>
 ///
-/// <div class="warning">
-///
-/// It is optimized for speed.</div>
 /// Memory usage is configurable using [`with_max_memory_size_in_megabytes`](Self::with_max_memory_size_in_megabytes)
 /// and the number of used threads with [`with_num_threads`](Self::with_num_threads).
 /// By default the memory consumption target (excluding the system and RocksDB internal consumption)
@@ -1636,9 +1633,7 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">
-    ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     ///
     /// To get better speed on valid datasets, consider enabling [`RdfParser::unchecked`] option to skip some validations.
     ///
@@ -1708,9 +1703,7 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">
-    ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     ///
     /// Usage example:
     /// ```
@@ -1772,9 +1765,7 @@ impl BulkLoader {
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">
-    ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     ///
     /// Usage example:
     /// ```
@@ -1840,9 +1831,7 @@ impl BulkLoader {
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">
-    ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     pub fn load_quads(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
@@ -1856,9 +1845,7 @@ impl BulkLoader {
     /// If the process fails in the middle of the file, only a part of the data may be written to the store.
     /// Results might get weird if you delete data during the loading process.</div>
     ///
-    /// <div class="warning">
-    ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.</div>
+    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,
