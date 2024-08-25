@@ -1,3 +1,13 @@
+## [0.4.0-rc.1] - 2024-08-25
+
+### Added
+ - CLI: `union-default-graph` option to the `serve` and `query` commands to use by default the union of all graphs as the default graph in SPARQL queries.
+
+### Changed
+- RocksDB build: link with the atomic library on armv5te and riscv64gc
+- CLI build: do not generate man pages for help commands.
+
+
 ## [0.4.0-alpha.8] - 2024-08-22
 
 ### Added

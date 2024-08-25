@@ -1,6 +1,6 @@
 [package]
 name = "sparopt"
-version = "0.1.0-alpha.6"
+version = "0.1.0-rc.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
