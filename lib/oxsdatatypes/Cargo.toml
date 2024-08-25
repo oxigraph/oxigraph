@@ -1,6 +1,6 @@
 [package]
 name = "oxsdatatypes"
-version = "0.2.0-alpha.2"
+version = "0.2.0-rc.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
