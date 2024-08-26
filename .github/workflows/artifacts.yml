@@ -45,7 +45,7 @@ jobs:
         if: github.event_name == 'release'
       - run: mv target/aarch64-unknown-linux-gnu/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_aarch64_linux_gnu
         if: github.event_name == 'release'
-      - uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v2
         with:
           files: |
             oxigraph_${{ github.event.release.tag_name }}_x86_64_linux_gnu
@@ -81,7 +81,7 @@ jobs:
         if: github.event_name == 'release'
       - run: mv target/aarch64-apple-darwin/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_aarch64_apple
         if: github.event_name == 'release'
-      - uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v2
         with:
           files: |
             oxigraph_${{ github.event.release.tag_name }}_x86_64_apple
@@ -104,7 +104,7 @@ jobs:
           path: target/release/oxigraph.exe
       - run: mv target/release/oxigraph.exe oxigraph_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
         if: github.event_name == 'release'
-      - uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v2
         with:
           files: oxigraph_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
         if: github.event_name == 'release'
@@ -415,7 +415,7 @@ jobs:
           zip -r oxigraph_${{ github.event.release.tag_name }}.zip .
           tar -czf /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
           mv /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
-      - uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v2
         with:
           files: |
             oxigraph_${{ github.event.release.tag_name }}.zip
