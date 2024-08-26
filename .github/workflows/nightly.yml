@@ -54,7 +54,7 @@ jobs:
       - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 3600
+          fuzz-seconds: 600
           mode: coverage
           sanitizer: coverage
           storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
