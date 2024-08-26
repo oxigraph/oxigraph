@@ -409,7 +409,7 @@ jobs:
       - run: |
           pip install pyodide-build
           echo EMSCRIPTEN_VERSION=$(pyodide config get emscripten_version) >> $GITHUB_ENV
-      - uses: mymindstorm/setup-emsdk@v13
+      - uses: mymindstorm/setup-emsdk@v14
         with:
           version: ${{ env.EMSCRIPTEN_VERSION }}
       - run: pyodide build
