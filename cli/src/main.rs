@@ -1069,10 +1069,11 @@ fn configure_and_evaluate_sparql_query(
     encoded: &[&[u8]],
     mut query: Option<String>,
     request: &Request,
-    mut use_default_graph_as_union: bool,
+    default_use_default_graph_as_union: bool,
 ) -> Result<Response, HttpError> {
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
+    let mut use_default_graph_as_union = false;
     for encoded in encoded {
         for (k, v) in form_urlencoded::parse(encoded) {
             match k.as_ref() {
@@ -1088,6 +1089,9 @@ fn configure_and_evaluate_sparql_query(
                 _ => (),
             }
         }
+    }
+    if default_graph_uris.is_empty() && named_graph_uris.is_empty() {
+        use_default_graph_as_union |= default_use_default_graph_as_union;
     }
     let query = query.ok_or_else(|| bad_request("You should set the 'query' parameter"))?;
     evaluate_sparql_query(
