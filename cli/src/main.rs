@@ -1662,7 +1662,14 @@ mod tests {
 
     fn cli_command() -> Command {
         let mut command = Command::new(env!("CARGO"));
-        command.arg("run").arg("--bin").arg("oxigraph").arg("--");
+        command
+            .arg("run")
+            .arg("--bin")
+            .arg("oxigraph")
+            .arg("--no-default-features");
+        #[cfg(feature = "rocksdb-pkg-config")]
+        command.arg("--features").arg("rocksdb-pkg-config");
+        command.arg("--");
         command
     }
 
