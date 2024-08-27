@@ -4463,7 +4463,7 @@ impl PathEvaluator {
                 let ps = Rc::clone(ps);
                 Box::new(
                     self.dataset
-                        .encoded_quads_for_pattern(Some(end), None, None, None)
+                        .encoded_quads_for_pattern(None, None, Some(end), None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
                                 if ps.iter().any(|p| *p == t.predicate) {
