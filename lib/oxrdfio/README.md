@@ -40,11 +40,11 @@ let ntriples_file = b"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf
 <http://example.com/bar> <http://schema.org/name> \"Bar\" .
 ";
 
-let mut writer = RdfSerializer::from_format(RdfFormat::NTriples).serialize_to_write(Vec::new());
-for quad in RdfParser::from_format(RdfFormat::Turtle).parse_read(turtle_file.as_ref()) {
-    writer.write_quad(&quad.unwrap()).unwrap();
+let mut serializer = RdfSerializer::from_format(RdfFormat::NTriples).for_writer(Vec::new());
+for quad in RdfParser::from_format(RdfFormat::Turtle).for_reader(turtle_file.as_ref()) {
+    serializer.serialize_quad(&quad.unwrap()).unwrap();
 }
-assert_eq!(writer.finish().unwrap(), ntriples_file);
+assert_eq!(serializer.finish().unwrap(), ntriples_file);
 ```
 
 Parsers for other RDF formats exists in Rust like [graph-rdfa-processor](https://github.com/nbittich/graph-rdfa-processor) for RDFa and [json-ld](https://github.com/timothee-haudebourg/json-ld) for JSON-LD.

@@ -299,25 +299,25 @@ pub fn main() -> anyhow::Result<()> {
                             bail!("The --results-format option must be set when writing to stdout")
                         };
                         if let Some(results_file) = results_file {
-                            let mut writer = QueryResultsSerializer::from_format(format)
-                                .serialize_solutions_to_write(
+                            let mut serializer = QueryResultsSerializer::from_format(format)
+                                .serialize_solutions_to_writer(
                                     BufWriter::new(File::create(results_file)?),
                                     solutions.variables().to_vec(),
                                 )?;
                             for solution in solutions {
-                                writer.write(&solution?)?;
+                                serializer.serialize(&solution?)?;
                             }
-                            close_file_writer(writer.finish()?)?;
+                            close_file_writer(serializer.finish()?)?;
                         } else {
-                            let mut writer = QueryResultsSerializer::from_format(format)
-                                .serialize_solutions_to_write(
+                            let mut serializer = QueryResultsSerializer::from_format(format)
+                                .serialize_solutions_to_writer(
                                     stdout().lock(),
                                     solutions.variables().to_vec(),
                                 )?;
                             for solution in solutions {
-                                writer.write(&solution?)?;
+                                serializer.serialize(&solution?)?;
                             }
-                            writer.finish()?.flush()?;
+                            serializer.finish()?.flush()?;
                         }
                     }
                     QueryResults::Boolean(result) => {
@@ -342,14 +342,14 @@ pub fn main() -> anyhow::Result<()> {
                         if let Some(results_file) = results_file {
                             close_file_writer(
                                 QueryResultsSerializer::from_format(format)
-                                    .serialize_boolean_to_write(
+                                    .serialize_boolean_to_writer(
                                         BufWriter::new(File::create(results_file)?),
                                         result,
                                     )?,
                             )?;
                         } else {
                             QueryResultsSerializer::from_format(format)
-                                .serialize_boolean_to_write(stdout().lock(), result)?
+                                .serialize_boolean_to_writer(stdout().lock(), result)?
                                 .flush()?;
                         }
                     }
@@ -363,18 +363,18 @@ pub fn main() -> anyhow::Result<()> {
                         }?;
                         let serializer = RdfSerializer::from_format(format);
                         if let Some(results_file) = results_file {
-                            let mut writer = serializer
-                                .serialize_to_write(BufWriter::new(File::create(results_file)?));
+                            let mut serializer =
+                                serializer.for_writer(BufWriter::new(File::create(results_file)?));
                             for triple in triples {
-                                writer.write_triple(triple?.as_ref())?;
+                                serializer.serialize_triple(triple?.as_ref())?;
                             }
-                            close_file_writer(writer.finish()?)?;
+                            close_file_writer(serializer.finish()?)?;
                         } else {
-                            let mut writer = serializer.serialize_to_write(stdout().lock());
+                            let mut serializer = serializer.for_writer(stdout().lock());
                             for triple in triples {
-                                writer.write_triple(triple?.as_ref())?;
+                                serializer.serialize_triple(triple?.as_ref())?;
                             }
-                            writer.finish()?.flush()?;
+                            serializer.finish()?.flush()?;
                         }
                     }
                 }
@@ -525,7 +525,7 @@ pub fn main() -> anyhow::Result<()> {
 
 fn bulk_load(
     loader: &BulkLoader,
-    read: impl Read,
+    reader: impl Read,
     format: RdfFormat,
     base_iri: Option<&str>,
     to_graph_name: Option<NamedNode>,
@@ -543,13 +543,13 @@ fn bulk_load(
     if lenient {
         parser = parser.unchecked();
     }
-    loader.load_from_read(parser, read)?;
+    loader.load_from_reader(parser, reader)?;
     Ok(())
 }
 
 fn dump<W: Write>(
     store: &Store,
-    write: W,
+    writer: W,
     format: RdfFormat,
     from_graph_name: Option<GraphNameRef<'_>>,
 ) -> anyhow::Result<W> {
@@ -558,29 +558,29 @@ fn dump<W: Write>(
         "The --graph option is required when writing a format not supporting datasets like NTriples, Turtle or RDF/XML. Use --graph \"default\" to dump only the default graph."
     );
     Ok(if let Some(from_graph_name) = from_graph_name {
-        store.dump_graph_to_write(from_graph_name, format, write)
+        store.dump_graph_to_writer(from_graph_name, format, writer)
     } else {
-        store.dump_to_write(format, write)
+        store.dump_to_writer(format, writer)
     }?)
 }
 
 fn do_convert<R: Read, W: Write>(
     parser: RdfParser,
-    read: R,
+    reader: R,
     mut serializer: RdfSerializer,
-    write: W,
+    writer: W,
     lenient: bool,
     from_graph: &Option<GraphName>,
     default_graph: &GraphName,
 ) -> anyhow::Result<W> {
-    let mut parser = parser.parse_read(read);
+    let mut parser = parser.for_reader(reader);
     let first = parser.next(); // We read the first element to get prefixes
     for (prefix_name, prefix_iri) in parser.prefixes() {
         serializer = serializer
             .with_prefix(prefix_name, prefix_iri)
             .with_context(|| format!("Invalid IRI for prefix {prefix_name}: {prefix_iri}"))?;
     }
-    let mut writer = serializer.serialize_to_write(write);
+    let mut serializer = serializer.for_writer(writer);
     for quad_result in first.into_iter().chain(parser) {
         match quad_result {
             Ok(mut quad) => {
@@ -594,7 +594,7 @@ fn do_convert<R: Read, W: Write>(
                 if quad.graph_name.is_default_graph() {
                     quad.graph_name = default_graph.clone();
                 }
-                writer.write_quad(&quad)?;
+                serializer.serialize_quad(&quad)?;
             }
             Err(e) => {
                 if lenient {
@@ -605,7 +605,7 @@ fn do_convert<R: Read, W: Write>(
             }
         }
     }
-    Ok(writer.finish()?)
+    Ok(serializer.finish()?)
 }
 
 fn format_from_path<T>(
@@ -830,18 +830,13 @@ fn handle_request(
                     Some(GraphName::from(target).as_ref()),
                 );
                 ReadForWrite::build_response(
-                    move |w| {
-                        Ok((
-                            RdfSerializer::from_format(format).serialize_to_write(w),
-                            quads,
-                        ))
-                    },
-                    |(mut writer, mut quads)| {
+                    move |w| Ok((RdfSerializer::from_format(format).for_writer(w), quads)),
+                    |(mut serializer, mut quads)| {
                         Ok(if let Some(q) = quads.next() {
-                            writer.write_triple(&q?.into())?;
-                            Some((writer, quads))
+                            serializer.serialize_triple(&q?.into())?;
+                            Some((serializer, quads))
                         } else {
-                            writer.finish()?;
+                            serializer.finish()?;
                             None
                         })
                     },
@@ -857,16 +852,16 @@ fn handle_request(
                 ReadForWrite::build_response(
                     move |w| {
                         Ok((
-                            RdfSerializer::from_format(format).serialize_to_write(w),
+                            RdfSerializer::from_format(format).for_writer(w),
                             store.iter(),
                         ))
                     },
-                    |(mut writer, mut quads)| {
+                    |(mut serializer, mut quads)| {
                         Ok(if let Some(q) = quads.next() {
-                            writer.write_quad(&q?)?;
-                            Some((writer, quads))
+                            serializer.serialize_quad(&q?)?;
+                            Some((serializer, quads))
                         } else {
-                            writer.finish()?;
+                            serializer.finish()?;
                             None
                         })
                     },
@@ -1146,16 +1141,16 @@ fn evaluate_sparql_query(
                 move |w| {
                     Ok((
                         QueryResultsSerializer::from_format(format)
-                            .serialize_solutions_to_write(w, solutions.variables().to_vec())?,
+                            .serialize_solutions_to_writer(w, solutions.variables().to_vec())?,
                         solutions,
                     ))
                 },
-                |(mut writer, mut solutions)| {
+                |(mut serializer, mut solutions)| {
                     Ok(if let Some(solution) = solutions.next() {
-                        writer.write(&solution?)?;
-                        Some((writer, solutions))
+                        serializer.serialize(&solution?)?;
+                        Some((serializer, solutions))
                     } else {
-                        writer.finish()?;
+                        serializer.finish()?;
                         None
                     })
                 },
@@ -1166,7 +1161,7 @@ fn evaluate_sparql_query(
             let format = query_results_content_negotiation(request)?;
             let mut body = Vec::new();
             QueryResultsSerializer::from_format(format)
-                .serialize_boolean_to_write(&mut body, result)
+                .serialize_boolean_to_writer(&mut body, result)
                 .map_err(internal_server_error)?;
             Ok(Response::builder(Status::OK)
                 .with_header(HeaderName::CONTENT_TYPE, format.media_type())
@@ -1176,18 +1171,13 @@ fn evaluate_sparql_query(
         QueryResults::Graph(triples) => {
             let format = rdf_content_negotiation(request)?;
             ReadForWrite::build_response(
-                move |w| {
-                    Ok((
-                        RdfSerializer::from_format(format).serialize_to_write(w),
-                        triples,
-                    ))
-                },
-                |(mut writer, mut triples)| {
+                move |w| Ok((RdfSerializer::from_format(format).for_writer(w), triples)),
+                |(mut serializer, mut triples)| {
                     Ok(if let Some(t) = triples.next() {
-                        writer.write_triple(&t?)?;
-                        Some((writer, triples))
+                        serializer.serialize_triple(&t?)?;
+                        Some((serializer, triples))
                     } else {
-                        writer.finish()?;
+                        serializer.finish()?;
                         None
                     })
                 },
@@ -1477,9 +1467,9 @@ fn web_load_graph(
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_from_read(parser, request.body_mut())
+        web_bulk_loader(store, request).load_from_reader(parser, request.body_mut())
     } else {
-        store.load_from_read(parser, request.body_mut())
+        store.load_from_reader(parser, request.body_mut())
     }
     .map_err(loader_to_http_error)
 }
@@ -1494,9 +1484,9 @@ fn web_load_dataset(
         parser = parser.unchecked();
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_from_read(parser, request.body_mut())
+        web_bulk_loader(store, request).load_from_reader(parser, request.body_mut())
     } else {
-        store.load_from_read(parser, request.body_mut())
+        store.load_from_reader(parser, request.body_mut())
     }
     .map_err(loader_to_http_error)
 }

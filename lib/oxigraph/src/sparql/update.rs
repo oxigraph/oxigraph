@@ -172,17 +172,18 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             GraphName::NamedNode(graph_name) => graph_name.into(),
             GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
         };
-        let mut parser = RdfParser::from_format(format)
+        let parser = RdfParser::from_format(format)
             .rename_blank_nodes()
             .without_named_graphs()
-            .with_default_graph(to_graph_name);
-        parser = parser.with_base_iri(from.as_str()).map_err(|e| {
-            EvaluationError::Service(Box::new(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Invalid URL: {from}: {e}"),
-            )))
-        })?;
-        for q in parser.parse_read(body) {
+            .with_default_graph(to_graph_name)
+            .with_base_iri(from.as_str())
+            .map_err(|e| {
+                EvaluationError::Service(Box::new(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid URL: {from}: {e}"),
+                )))
+            })?;
+        for q in parser.for_reader(body) {
             self.transaction.insert(q?.as_ref())?;
         }
         Ok(())

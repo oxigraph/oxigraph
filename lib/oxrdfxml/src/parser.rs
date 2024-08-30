@@ -42,7 +42,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
+/// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -69,7 +69,7 @@ impl RdfXmlParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.unchecked = true;
@@ -101,7 +101,7 @@ impl RdfXmlParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
+    /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -110,10 +110,10 @@ impl RdfXmlParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(self, read: R) -> FromReadRdfXmlReader<R> {
-        FromReadRdfXmlReader {
+    pub fn for_reader<R: Read>(self, reader: R) -> ReaderRdfXmlParser<R> {
+        ReaderRdfXmlParser {
             results: Vec::new(),
-            reader: self.parse(BufReader::new(read)),
+            parser: self.parse(BufReader::new(reader)),
             reader_buffer: Vec::default(),
         }
     }
@@ -139,7 +139,7 @@ impl RdfXmlParser {
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
-    /// let mut parser = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
+    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -151,13 +151,13 @@ impl RdfXmlParser {
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn for_tokio_async_reader<R: AsyncRead + Unpin>(
         self,
-        read: R,
-    ) -> FromTokioAsyncReadRdfXmlReader<R> {
-        FromTokioAsyncReadRdfXmlReader {
+        reader: R,
+    ) -> TokioAsyncReaderRdfXmlParser<R> {
+        TokioAsyncReaderRdfXmlParser {
             results: Vec::new(),
-            reader: self.parse(AsyncBufReader::new(read)),
+            parser: self.parse(AsyncBufReader::new(reader)),
             reader_buffer: Vec::default(),
         }
     }
@@ -181,7 +181,7 @@ impl RdfXmlParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in RdfXmlParser::new().parse_slice(file) {
+    /// for triple in RdfXmlParser::new().for_slice(file) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -190,18 +190,18 @@ impl RdfXmlParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_slice(self, slice: &[u8]) -> FromSliceRdfXmlReader<'_> {
-        FromSliceRdfXmlReader {
+    pub fn for_slice(self, slice: &[u8]) -> SliceRdfXmlParser<'_> {
+        SliceRdfXmlParser {
             results: Vec::new(),
-            reader: self.parse(slice),
+            parser: self.parse(slice),
             reader_buffer: Vec::default(),
         }
     }
 
-    fn parse<T>(&self, reader: T) -> RdfXmlReader<T> {
+    fn parse<T>(&self, reader: T) -> InternalRdfXmlParser<T> {
         let mut reader = NsReader::from_reader(reader);
         reader.config_mut().expand_empty_elements = true;
-        RdfXmlReader {
+        InternalRdfXmlParser {
             reader,
             state: vec![RdfXmlState::Doc {
                 base_iri: self.base.clone(),
@@ -215,7 +215,9 @@ impl RdfXmlParser {
     }
 }
 
-/// Parses a RDF/XML file from a [`Read`] implementation. Can be built using [`RdfXmlParser::parse_read`].
+/// Parses a RDF/XML file from a [`Read`] implementation.
+///
+/// Can be built using [`RdfXmlParser::for_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -234,7 +236,7 @@ impl RdfXmlParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
+/// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -244,20 +246,20 @@ impl RdfXmlParser {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromReadRdfXmlReader<R: Read> {
+pub struct ReaderRdfXmlParser<R: Read> {
     results: Vec<Triple>,
-    reader: RdfXmlReader<BufReader<R>>,
+    parser: InternalRdfXmlParser<BufReader<R>>,
     reader_buffer: Vec<u8>,
 }
 
-impl<R: Read> Iterator for FromReadRdfXmlReader<R> {
+impl<R: Read> Iterator for ReaderRdfXmlParser<R> {
     type Item = Result<Triple, RdfXmlParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(triple) = self.results.pop() {
                 return Some(Ok(triple));
-            } else if self.reader.is_end {
+            } else if self.parser.is_end {
                 return None;
             }
             if let Err(e) = self.parse_step() {
@@ -267,7 +269,7 @@ impl<R: Read> Iterator for FromReadRdfXmlReader<R> {
     }
 }
 
-impl<R: Read> FromReadRdfXmlReader<R> {
+impl<R: Read> ReaderRdfXmlParser<R> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -286,12 +288,12 @@ impl<R: Read> FromReadRdfXmlReader<R> {
     ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let mut reader = RdfXmlParser::new().parse_read(file.as_ref());
-    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    /// let mut parser = RdfXmlParser::new().for_reader(file.as_ref());
+    /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// reader.next().unwrap()?; // We read the first triple
+    /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [
     ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
     ///         ("schema", "http://schema.org/")
@@ -301,8 +303,8 @@ impl<R: Read> FromReadRdfXmlReader<R> {
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
-            inner: self.reader.reader.prefixes(),
-            decoder: self.reader.reader.decoder(),
+            inner: self.parser.reader.prefixes(),
+            decoder: self.parser.reader.decoder(),
         }
     }
 
@@ -318,33 +320,35 @@ impl<R: Read> FromReadRdfXmlReader<R> {
     ///  </rdf:Description>
     /// </rdf:RDF>"#;
     ///
-    /// let mut reader = RdfXmlParser::new().parse_read(file.as_ref());
-    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    /// let mut parser = RdfXmlParser::new().for_reader(file.as_ref());
+    /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// parser.next().unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        Some(self.reader.state.last()?.base_iri()?.as_str())
+        Some(self.parser.state.last()?.base_iri()?.as_str())
     }
 
     /// The current byte position in the input data.
     pub fn buffer_position(&self) -> u64 {
-        self.reader.reader.buffer_position()
+        self.parser.reader.buffer_position()
     }
 
     fn parse_step(&mut self) -> Result<(), RdfXmlParseError> {
         self.reader_buffer.clear();
         let event = self
-            .reader
+            .parser
             .reader
             .read_event_into(&mut self.reader_buffer)?;
-        self.reader.parse_event(event, &mut self.results)
+        self.parser.parse_event(event, &mut self.results)
     }
 }
 
-/// Parses a RDF/XML file from a [`AsyncRead`] implementation. Can be built using [`RdfXmlParser::parse_tokio_async_read`].
+/// Parses a RDF/XML file from a [`AsyncRead`] implementation.
+///
+/// Can be built using [`RdfXmlParser::for_tokio_async_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -365,7 +369,7 @@ impl<R: Read> FromReadRdfXmlReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
-/// let mut parser = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
+/// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -378,20 +382,20 @@ impl<R: Read> FromReadRdfXmlReader<R> {
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct FromTokioAsyncReadRdfXmlReader<R: AsyncRead + Unpin> {
+pub struct TokioAsyncReaderRdfXmlParser<R: AsyncRead + Unpin> {
     results: Vec<Triple>,
-    reader: RdfXmlReader<AsyncBufReader<R>>,
+    parser: InternalRdfXmlParser<AsyncBufReader<R>>,
     reader_buffer: Vec<u8>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Triple, RdfXmlParseError>> {
         loop {
             if let Some(triple) = self.results.pop() {
                 return Some(Ok(triple));
-            } else if self.reader.is_end {
+            } else if self.parser.is_end {
                 return None;
             }
             if let Err(e) = self.parse_step().await {
@@ -420,12 +424,12 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
     ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let mut reader = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
-    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
+    /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// reader.next().await.unwrap()?; // We read the first triple
+    /// parser.next().await.unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [
     ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
     ///         ("schema", "http://schema.org/")
@@ -436,8 +440,8 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
-            inner: self.reader.reader.prefixes(),
-            decoder: self.reader.reader.decoder(),
+            inner: self.parser.reader.prefixes(),
+            decoder: self.parser.reader.decoder(),
         }
     }
 
@@ -455,35 +459,37 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
     ///  </rdf:Description>
     /// </rdf:RDF>"#;
     ///
-    /// let mut reader = RdfXmlParser::new().parse_tokio_async_read(file.as_ref());
-    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
+    /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// reader.next().await.unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// parser.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Ok(())
     /// # }
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        Some(self.reader.state.last()?.base_iri()?.as_str())
+        Some(self.parser.state.last()?.base_iri()?.as_str())
     }
 
     /// The current byte position in the input data.
     pub fn buffer_position(&self) -> u64 {
-        self.reader.reader.buffer_position()
+        self.parser.reader.buffer_position()
     }
 
     async fn parse_step(&mut self) -> Result<(), RdfXmlParseError> {
         self.reader_buffer.clear();
         let event = self
-            .reader
+            .parser
             .reader
             .read_event_into_async(&mut self.reader_buffer)
             .await?;
-        self.reader.parse_event(event, &mut self.results)
+        self.parser.parse_event(event, &mut self.results)
     }
 }
 
-/// Parses a RDF/XML file from a byte slice. Can be built using [`RdfXmlParser::parse_slice`].
+/// Parses a RDF/XML file from a byte slice.
+///
+/// Can be built using [`RdfXmlParser::for_slice`].
 ///
 /// Count the number of people:
 /// ```
@@ -502,7 +508,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in RdfXmlParser::new().parse_slice(file) {
+/// for triple in RdfXmlParser::new().for_slice(file) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -512,20 +518,20 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadRdfXmlReader<R> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromSliceRdfXmlReader<'a> {
+pub struct SliceRdfXmlParser<'a> {
     results: Vec<Triple>,
-    reader: RdfXmlReader<&'a [u8]>,
+    parser: InternalRdfXmlParser<&'a [u8]>,
     reader_buffer: Vec<u8>,
 }
 
-impl<'a> Iterator for FromSliceRdfXmlReader<'a> {
+impl<'a> Iterator for SliceRdfXmlParser<'a> {
     type Item = Result<Triple, RdfXmlSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(triple) = self.results.pop() {
                 return Some(Ok(triple));
-            } else if self.reader.is_end {
+            } else if self.parser.is_end {
                 return None;
             }
             if let Err(RdfXmlParseError::Syntax(e)) = self.parse_step() {
@@ -536,7 +542,7 @@ impl<'a> Iterator for FromSliceRdfXmlReader<'a> {
     }
 }
 
-impl<'a> FromSliceRdfXmlReader<'a> {
+impl<'a> SliceRdfXmlParser<'a> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -555,12 +561,12 @@ impl<'a> FromSliceRdfXmlReader<'a> {
     ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let mut reader = RdfXmlParser::new().parse_slice(file);
-    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    /// let mut parser = RdfXmlParser::new().for_slice(file);
+    /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// reader.next().unwrap()?; // We read the first triple
+    /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [
     ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
     ///         ("schema", "http://schema.org/")
@@ -570,8 +576,8 @@ impl<'a> FromSliceRdfXmlReader<'a> {
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
-            inner: self.reader.reader.prefixes(),
-            decoder: self.reader.reader.decoder(),
+            inner: self.parser.reader.prefixes(),
+            decoder: self.parser.reader.decoder(),
         }
     }
 
@@ -587,35 +593,35 @@ impl<'a> FromSliceRdfXmlReader<'a> {
     ///  </rdf:Description>
     /// </rdf:RDF>"#;
     ///
-    /// let mut reader = RdfXmlParser::new().parse_slice(file);
-    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    /// let mut parser = RdfXmlParser::new().for_slice(file);
+    /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// parser.next().unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        Some(self.reader.state.last()?.base_iri()?.as_str())
+        Some(self.parser.state.last()?.base_iri()?.as_str())
     }
 
     /// The current byte position in the input data.
     pub fn buffer_position(&self) -> u64 {
-        self.reader.reader.buffer_position()
+        self.parser.reader.buffer_position()
     }
 
     fn parse_step(&mut self) -> Result<(), RdfXmlParseError> {
         self.reader_buffer.clear();
         let event = self
-            .reader
+            .parser
             .reader
             .read_event_into(&mut self.reader_buffer)?;
-        self.reader.parse_event(event, &mut self.results)
+        self.parser.parse_event(event, &mut self.results)
     }
 }
 
 /// Iterator on the file prefixes.
 ///
-/// See [`FromReadRdfXmlReader::prefixes`].
+/// See [`ReaderRdfXmlParser::prefixes`].
 pub struct RdfXmlPrefixesIter<'a> {
     inner: PrefixIter<'a>,
     decoder: Decoder,
@@ -767,7 +773,7 @@ impl RdfXmlState {
     }
 }
 
-struct RdfXmlReader<R> {
+struct InternalRdfXmlParser<R> {
     reader: NsReader<R>,
     state: Vec<RdfXmlState>,
     custom_entities: HashMap<String, String>,
@@ -777,7 +783,7 @@ struct RdfXmlReader<R> {
     unchecked: bool,
 }
 
-impl<R> RdfXmlReader<R> {
+impl<R> InternalRdfXmlParser<R> {
     fn parse_event(
         &mut self,
         event: Event<'_>,

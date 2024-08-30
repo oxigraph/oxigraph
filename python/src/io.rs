@@ -1,7 +1,7 @@
 #![allow(clippy::needless_option_as_deref)]
 
 use crate::model::{PyQuad, PyTriple};
-use oxigraph::io::{FromReadQuadReader, RdfFormat, RdfParseError, RdfParser, RdfSerializer};
+use oxigraph::io::{RdfFormat, RdfParseError, RdfParser, RdfSerializer, ReaderQuadParser};
 use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
 use pyo3::intern;
@@ -76,7 +76,7 @@ pub fn parse(
         parser = parser.rename_blank_nodes();
     }
     Ok(PyQuadReader {
-        inner: parser.parse_read(input),
+        inner: parser.for_reader(input),
         file_path: path,
     }
     .into_py(py))
@@ -128,11 +128,11 @@ pub fn serialize<'py>(
     PyWritable::do_write(
         |output, file_path| {
             let format = lookup_rdf_format(format, file_path.as_deref())?;
-            let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
+            let mut serializer = RdfSerializer::from_format(format).for_writer(output);
             for i in input.iter()? {
                 let i = i?;
                 if let Ok(triple) = i.extract::<PyRef<'_, PyTriple>>() {
-                    writer.write_triple(&*triple)
+                    serializer.serialize_triple(&*triple)
                 } else {
                     let quad = i.extract::<PyRef<'_, PyQuad>>()?;
                     let quad = QuadRef::from(&*quad);
@@ -141,10 +141,10 @@ pub fn serialize<'py>(
                             "The {format} format does not support named graphs",
                         ));
                     }
-                    writer.write_quad(quad)
+                    serializer.serialize_quad(quad)
                 }?;
             }
-            Ok(writer.finish()?)
+            Ok(serializer.finish()?)
         },
         output,
         py,
@@ -153,7 +153,7 @@ pub fn serialize<'py>(
 
 #[pyclass(name = "QuadReader", module = "pyoxigraph")]
 pub struct PyQuadReader {
-    inner: FromReadQuadReader<PyReadable>,
+    inner: ReaderQuadParser<PyReadable>,
     file_path: Option<PathBuf>,
 }
 
@@ -423,8 +423,8 @@ impl PyWritable {
             Some(PyWritableOutput::Io(object)) => (Self::Io(PyIo(object)), None),
             None => (Self::Bytes(Vec::new()), None),
         };
-        let writer = write(BufWriter::new(output), file_path)?;
-        py.allow_threads(|| writer.into_inner())?.close(py)
+        let serializer = write(BufWriter::new(output), file_path)?;
+        py.allow_threads(|| serializer.into_inner())?.close(py)
     }
 
     fn close(self, py: Python<'_>) -> PyResult<Option<Bound<'_, PyBytes>>> {

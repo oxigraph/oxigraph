@@ -280,8 +280,8 @@ pub struct QueryExplanation {
 
 impl QueryExplanation {
     /// Writes the explanation as JSON.
-    pub fn write_in_json(&self, write: impl io::Write) -> io::Result<()> {
-        let mut writer = ToWriteJsonWriter::new(write);
+    pub fn write_in_json(&self, writer: impl io::Write) -> io::Result<()> {
+        let mut writer = ToWriteJsonWriter::new(writer);
         writer.write_event(JsonEvent::StartObject)?;
         if let Some(parsing_duration) = self.parsing_duration {
             writer.write_event(JsonEvent::ObjectKey("parsing duration in seconds".into()))?;

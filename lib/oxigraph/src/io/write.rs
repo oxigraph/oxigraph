@@ -4,7 +4,7 @@
 
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use oxrdfio::{RdfSerializer, ToWriteQuadWriter};
+use oxrdfio::{RdfSerializer, WriterQuadSerializer};
 use std::io::{self, Write};
 
 /// A serializer for RDF graph serialization formats.
@@ -19,13 +19,13 @@ use std::io::{self, Write};
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
-/// writer.write(&Triple {
+/// let mut serializer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
+/// serializer.write(&Triple {
 ///     subject: NamedNode::new("http://example.com/s")?.into(),
 ///     predicate: NamedNode::new("http://example.com/p")?,
 ///     object: NamedNode::new("http://example.com/o")?.into(),
 /// })?;
-/// writer.finish()?;
+/// serializer.finish()?;
 ///
 /// assert_eq!(
 ///     buffer.as_slice(),
@@ -48,9 +48,9 @@ impl GraphSerializer {
     }
 
     /// Returns a [`TripleWriter`] allowing writing triples into the given [`Write`] implementation
-    pub fn triple_writer<W: Write>(self, write: W) -> TripleWriter<W> {
+    pub fn triple_writer<W: Write>(self, writer: W) -> TripleWriter<W> {
         TripleWriter {
-            writer: self.inner.serialize_to_write(write),
+            serializer: self.inner.for_writer(writer),
         }
     }
 }
@@ -67,13 +67,13 @@ impl GraphSerializer {
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
-/// writer.write(&Triple {
+/// let mut serializer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
+/// serializer.write(&Triple {
 ///     subject: NamedNode::new("http://example.com/s")?.into(),
 ///     predicate: NamedNode::new("http://example.com/p")?,
 ///     object: NamedNode::new("http://example.com/o")?.into(),
 /// })?;
-/// writer.finish()?;
+/// serializer.finish()?;
 ///
 /// assert_eq!(
 ///     buffer.as_slice(),
@@ -83,18 +83,18 @@ impl GraphSerializer {
 /// ```
 #[must_use]
 pub struct TripleWriter<W: Write> {
-    writer: ToWriteQuadWriter<W>,
+    serializer: WriterQuadSerializer<W>,
 }
 
 impl<W: Write> TripleWriter<W> {
     /// Writes a triple
     pub fn write<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> io::Result<()> {
-        self.writer.write_triple(triple)
+        self.serializer.serialize_triple(triple)
     }
 
     /// Writes the last bytes of the file
     pub fn finish(self) -> io::Result<()> {
-        self.writer.finish()?.flush()
+        self.serializer.finish()?.flush()
     }
 }
 
@@ -109,14 +109,14 @@ impl<W: Write> TripleWriter<W> {
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer);
-/// writer.write(&Quad {
+/// let mut serializer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer);
+/// serializer.write(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
 ///    object: NamedNode::new("http://example.com/o")?.into(),
 ///    graph_name: NamedNode::new("http://example.com/g")?.into(),
 /// })?;
-/// writer.finish()?;
+/// serializer.finish()?;
 ///
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -136,9 +136,9 @@ impl DatasetSerializer {
     }
 
     /// Returns a [`QuadWriter`] allowing writing triples into the given [`Write`] implementation
-    pub fn quad_writer<W: Write>(self, write: W) -> QuadWriter<W> {
+    pub fn quad_writer<W: Write>(self, writer: W) -> QuadWriter<W> {
         QuadWriter {
-            writer: self.inner.serialize_to_write(write),
+            serializer: self.inner.for_writer(writer),
         }
     }
 }
@@ -155,31 +155,31 @@ impl DatasetSerializer {
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut writer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer);
-/// writer.write(&Quad {
+/// let mut serializer = DatasetSerializer::from_format(DatasetFormat::NQuads).quad_writer(&mut buffer);
+/// serializer.write(&Quad {
 ///    subject: NamedNode::new("http://example.com/s")?.into(),
 ///    predicate: NamedNode::new("http://example.com/p")?,
 ///    object: NamedNode::new("http://example.com/o")?.into(),
 ///    graph_name: NamedNode::new("http://example.com/g")?.into(),
 /// })?;
-/// writer.finish()?;
+/// serializer.finish()?;
 ///
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct QuadWriter<W: Write> {
-    writer: ToWriteQuadWriter<W>,
+    serializer: WriterQuadSerializer<W>,
 }
 
 impl<W: Write> QuadWriter<W> {
     /// Writes a quad
     pub fn write<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> io::Result<()> {
-        self.writer.write_quad(quad)
+        self.serializer.serialize_quad(quad)
     }
 
     /// Writes the last bytes of the file
     pub fn finish(self) -> io::Result<()> {
-        self.writer.finish()?.flush()
+        self.serializer.finish()?.flush()
     }
 }

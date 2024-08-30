@@ -100,7 +100,7 @@ pub fn get_turtle_file_chunks(
 // Important to keep this number this high, as some TTL files can have a lot of periods.
 fn next_terminating_char(parser: &TurtleParser, mut input: &[u8]) -> Option<usize> {
     fn accept(parser: TurtleParser, input: &[u8]) -> bool {
-        let mut f = parser.parse_slice(input);
+        let mut f = parser.for_slice(input);
         for _ in 0..3 {
             if let Some(r) = f.next() {
                 if r.is_err() {

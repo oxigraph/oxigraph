@@ -14,8 +14,8 @@ use std::sync::Arc;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite, BufReader as AsyncBufReader};
 
-pub fn write_boolean_xml_result<W: Write>(write: W, value: bool) -> io::Result<W> {
-    let mut writer = Writer::new(write);
+pub fn write_boolean_xml_result<W: Write>(writer: W, value: bool) -> io::Result<W> {
+    let mut writer = Writer::new(writer);
     for event in inner_write_boolean_xml_result(value) {
         writer.write_event(event).map_err(map_xml_error)?;
     }
@@ -24,10 +24,10 @@ pub fn write_boolean_xml_result<W: Write>(write: W, value: bool) -> io::Result<W
 
 #[cfg(feature = "async-tokio")]
 pub async fn tokio_async_write_boolean_xml_result<W: AsyncWrite + Unpin>(
-    write: W,
+    writer: W,
     value: bool,
 ) -> io::Result<W> {
-    let mut writer = Writer::new(write);
+    let mut writer = Writer::new(writer);
     for event in inner_write_boolean_xml_result(value) {
         writer
             .write_event_async(event)
@@ -53,21 +53,21 @@ fn inner_write_boolean_xml_result(value: bool) -> [Event<'static>; 8] {
     ]
 }
 
-pub struct ToWriteXmlSolutionsWriter<W: Write> {
-    inner: InnerXmlSolutionsWriter,
+pub struct WriterXmlSolutionsSerializer<W: Write> {
+    inner: InnerXmlSolutionsSerializer,
     writer: Writer<W>,
 }
 
-impl<W: Write> ToWriteXmlSolutionsWriter<W> {
-    pub fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
-        let mut writer = Writer::new(write);
+impl<W: Write> WriterXmlSolutionsSerializer<W> {
+    pub fn start(writer: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = Writer::new(writer);
         let mut buffer = Vec::with_capacity(48);
-        let inner = InnerXmlSolutionsWriter::start(&mut buffer, variables);
+        let inner = InnerXmlSolutionsSerializer::start(&mut buffer, variables);
         Self::do_write(&mut writer, buffer)?;
         Ok(Self { inner, writer })
     }
 
-    pub fn write<'a>(
+    pub fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
@@ -92,22 +92,22 @@ impl<W: Write> ToWriteXmlSolutionsWriter<W> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct ToTokioAsyncWriteXmlSolutionsWriter<W: AsyncWrite + Unpin> {
-    inner: InnerXmlSolutionsWriter,
+pub struct TokioAsyncWriterXmlSolutionsSerializer<W: AsyncWrite + Unpin> {
+    inner: InnerXmlSolutionsSerializer,
     writer: Writer<W>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteXmlSolutionsWriter<W> {
-    pub async fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
-        let mut writer = Writer::new(write);
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterXmlSolutionsSerializer<W> {
+    pub async fn start(writer: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = Writer::new(writer);
         let mut buffer = Vec::with_capacity(48);
-        let inner = InnerXmlSolutionsWriter::start(&mut buffer, variables);
+        let inner = InnerXmlSolutionsSerializer::start(&mut buffer, variables);
         Self::do_write(&mut writer, buffer).await?;
         Ok(Self { inner, writer })
     }
 
-    pub async fn write<'a>(
+    pub async fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
@@ -134,9 +134,9 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteXmlSolutionsWriter<W> {
     }
 }
 
-struct InnerXmlSolutionsWriter;
+struct InnerXmlSolutionsSerializer;
 
-impl InnerXmlSolutionsWriter {
+impl InnerXmlSolutionsSerializer {
     fn start<'a>(output: &mut Vec<Event<'a>>, variables: &'a [Variable]) -> Self {
         output.push(Event::Decl(BytesDecl::new("1.0", None, None)));
         output.push(Event::Start(BytesStart::new("sparql").with_attributes([(
@@ -218,20 +218,20 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
     }
 }
 
-pub enum FromReadXmlQueryResultsReader<R: Read> {
+pub enum ReaderXmlQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromReadXmlSolutionsReader<R>,
+        solutions: ReaderXmlSolutionsParser<R>,
     },
     Boolean(bool),
 }
 
-impl<R: Read> FromReadXmlQueryResultsReader<R> {
-    pub fn read(read: R) -> Result<Self, QueryResultsParseError> {
-        let mut reader = Reader::from_reader(BufReader::new(read));
-        XmlInnerQueryResultsReader::set_options(reader.config_mut());
+impl<R: Read> ReaderXmlQueryResultsParserOutput<R> {
+    pub fn read(reader: R) -> Result<Self, QueryResultsParseError> {
+        let mut reader = Reader::from_reader(BufReader::new(reader));
+        XmlInnerQueryResultsParser::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
-        let mut inner = XmlInnerQueryResultsReader {
+        let mut inner = XmlInnerQueryResultsParser {
             state: ResultsState::Start,
             variables: Vec::new(),
             decoder: reader.decoder(),
@@ -246,7 +246,7 @@ impl<R: Read> FromReadXmlQueryResultsReader<R> {
                         solutions,
                     } => Self::Solutions {
                         variables,
-                        solutions: FromReadXmlSolutionsReader {
+                        solutions: ReaderXmlSolutionsParser {
                             reader,
                             inner: solutions,
                             reader_buffer,
@@ -259,14 +259,14 @@ impl<R: Read> FromReadXmlQueryResultsReader<R> {
     }
 }
 
-pub struct FromReadXmlSolutionsReader<R: Read> {
+pub struct ReaderXmlSolutionsParser<R: Read> {
     reader: Reader<BufReader<R>>,
-    inner: XmlInnerSolutionsReader,
+    inner: XmlInnerSolutionsParser,
     reader_buffer: Vec<u8>,
 }
 
-impl<R: Read> FromReadXmlSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+impl<R: Read> ReaderXmlSolutionsParser<R> {
+    pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         loop {
             self.reader_buffer.clear();
             let event = self.reader.read_event_into(&mut self.reader_buffer)?;
@@ -281,21 +281,21 @@ impl<R: Read> FromReadXmlSolutionsReader<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub enum FromTokioAsyncReadXmlQueryResultsReader<R: AsyncRead + Unpin> {
+pub enum TokioAsyncReaderXmlQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromTokioAsyncReadXmlSolutionsReader<R>,
+        solutions: TokioAsyncReaderXmlSolutionsParser<R>,
     },
     Boolean(bool),
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlQueryResultsReader<R> {
-    pub async fn read(read: R) -> Result<Self, QueryResultsParseError> {
-        let mut reader = Reader::from_reader(AsyncBufReader::new(read));
-        XmlInnerQueryResultsReader::set_options(reader.config_mut());
+impl<R: AsyncRead + Unpin> TokioAsyncReaderXmlQueryResultsParserOutput<R> {
+    pub async fn read(reader: R) -> Result<Self, QueryResultsParseError> {
+        let mut reader = Reader::from_reader(AsyncBufReader::new(reader));
+        XmlInnerQueryResultsParser::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
-        let mut inner = XmlInnerQueryResultsReader {
+        let mut inner = XmlInnerQueryResultsParser {
             state: ResultsState::Start,
             variables: Vec::new(),
             decoder: reader.decoder(),
@@ -310,7 +310,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlQueryResultsReader<R> {
                         solutions,
                     } => Self::Solutions {
                         variables,
-                        solutions: FromTokioAsyncReadXmlSolutionsReader {
+                        solutions: TokioAsyncReaderXmlSolutionsParser {
                             reader,
                             inner: solutions,
                             reader_buffer,
@@ -324,15 +324,17 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlQueryResultsReader<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct FromTokioAsyncReadXmlSolutionsReader<R: AsyncRead + Unpin> {
+pub struct TokioAsyncReaderXmlSolutionsParser<R: AsyncRead + Unpin> {
     reader: Reader<AsyncBufReader<R>>,
-    inner: XmlInnerSolutionsReader,
+    inner: XmlInnerSolutionsParser,
     reader_buffer: Vec<u8>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlSolutionsReader<R> {
-    pub async fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderXmlSolutionsParser<R> {
+    pub async fn parse_next(
+        &mut self,
+    ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         loop {
             self.reader_buffer.clear();
             let event = self
@@ -349,15 +351,15 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadXmlSolutionsReader<R> {
     }
 }
 
-pub enum FromSliceXmlQueryResultsReader<'a> {
+pub enum SliceXmlQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromSliceXmlSolutionsReader<'a>,
+        solutions: SliceXmlSolutionsParser<'a>,
     },
     Boolean(bool),
 }
 
-impl<'a> FromSliceXmlQueryResultsReader<'a> {
+impl<'a> SliceXmlQueryResultsParserOutput<'a> {
     pub fn read(slice: &'a [u8]) -> Result<Self, QueryResultsSyntaxError> {
         Self::do_read(slice).map_err(|e| match e {
             QueryResultsParseError::Syntax(e) => e,
@@ -369,9 +371,9 @@ impl<'a> FromSliceXmlQueryResultsReader<'a> {
 
     fn do_read(slice: &'a [u8]) -> Result<Self, QueryResultsParseError> {
         let mut reader = Reader::from_reader(slice);
-        XmlInnerQueryResultsReader::set_options(reader.config_mut());
+        XmlInnerQueryResultsParser::set_options(reader.config_mut());
         let mut reader_buffer = Vec::new();
-        let mut inner = XmlInnerQueryResultsReader {
+        let mut inner = XmlInnerQueryResultsParser {
             state: ResultsState::Start,
             variables: Vec::new(),
             decoder: reader.decoder(),
@@ -386,7 +388,7 @@ impl<'a> FromSliceXmlQueryResultsReader<'a> {
                         solutions,
                     } => Self::Solutions {
                         variables,
-                        solutions: FromSliceXmlSolutionsReader {
+                        solutions: SliceXmlSolutionsParser {
                             reader,
                             inner: solutions,
                             reader_buffer,
@@ -399,15 +401,15 @@ impl<'a> FromSliceXmlQueryResultsReader<'a> {
     }
 }
 
-pub struct FromSliceXmlSolutionsReader<'a> {
+pub struct SliceXmlSolutionsParser<'a> {
     reader: Reader<&'a [u8]>,
-    inner: XmlInnerSolutionsReader,
+    inner: XmlInnerSolutionsParser,
     reader_buffer: Vec<u8>,
 }
 
-impl<'a> FromSliceXmlSolutionsReader<'a> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
-        self.do_read_next().map_err(|e| match e {
+impl<'a> SliceXmlSolutionsParser<'a> {
+    pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
+        self.do_parse_next().map_err(|e| match e {
             QueryResultsParseError::Syntax(e) => e,
             QueryResultsParseError::Io(e) => {
                 unreachable!("I/O error are not possible for slice but found {e}")
@@ -415,7 +417,7 @@ impl<'a> FromSliceXmlSolutionsReader<'a> {
         })
     }
 
-    fn do_read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+    fn do_parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         loop {
             self.reader_buffer.clear();
             let event = self.reader.read_event_into(&mut self.reader_buffer)?;
@@ -432,7 +434,7 @@ impl<'a> FromSliceXmlSolutionsReader<'a> {
 enum XmlInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
-        solutions: XmlInnerSolutionsReader,
+        solutions: XmlInnerSolutionsParser,
     },
     Boolean(bool),
 }
@@ -446,13 +448,13 @@ enum ResultsState {
     Boolean,
 }
 
-struct XmlInnerQueryResultsReader {
+struct XmlInnerQueryResultsParser {
     state: ResultsState,
     variables: Vec<Variable>,
     decoder: Decoder,
 }
 
-impl XmlInnerQueryResultsReader {
+impl XmlInnerQueryResultsParser {
     fn set_options(config: &mut Config) {
         config.trim_text(true);
         config.expand_empty_elements = true;
@@ -514,7 +516,7 @@ impl XmlInnerQueryResultsReader {
                         }
                         Ok(Some(XmlInnerQueryResults::Solutions {
                             variables: take(&mut self.variables),
-                            solutions: XmlInnerSolutionsReader {
+                            solutions: XmlInnerSolutionsParser {
                                 decoder: self.decoder,
                                 mapping,
                                 state_stack: vec![State::Start, State::Start],
@@ -589,7 +591,7 @@ enum State {
     Object,
 }
 
-struct XmlInnerSolutionsReader {
+struct XmlInnerSolutionsParser {
     decoder: Decoder,
     mapping: BTreeMap<String, usize>,
     state_stack: Vec<State>,
@@ -603,7 +605,7 @@ struct XmlInnerSolutionsReader {
     object_stack: Vec<Term>,
 }
 
-impl XmlInnerSolutionsReader {
+impl XmlInnerSolutionsParser {
     #[allow(clippy::unwrap_in_result)]
     pub fn read_event(
         &mut self,

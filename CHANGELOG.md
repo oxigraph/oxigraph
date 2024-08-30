@@ -1,7 +1,7 @@
 ## [0.4.0-rc.1] - 2024-08-25
 
 ### Added
- - CLI: `union-default-graph` option to the `serve` and `query` commands to use by default the union of all graphs as the default graph in SPARQL queries.
+- CLI: `union-default-graph` option to the `serve` and `query` commands to use by default the union of all graphs as the default graph in SPARQL queries.
 
 ### Changed
 - RocksDB build: link with the atomic library on armv5te and riscv64gc
@@ -47,7 +47,7 @@
   It is now used when a `Store` is created without an underlying storage directory.
 - SPARQL: `DESCRIBE` now implements [Concise Bounded Description](https://www.w3.org/submissions/CBD/).
 - SPARQL: avoids join reordering inside of `SERVICE` calls.
-- SPARQL: fixes parsing of `DESCRIBE` query when there is a space between the IRI after `FROM` and the `WHERE` keyword. 
+- SPARQL: fixes parsing of `DESCRIBE` query when there is a space between the IRI after `FROM` and the `WHERE` keyword.
 - Uses the "fx hash" from Firefox and rustc in the hash maps to make hashing faster.
 - RDF/XML: if `unchecked` is enabled, `rdf:ID` distinctness won't be validated.
 - Python: uses Python 0.21 bindings.
@@ -105,7 +105,7 @@
 
 ### Changed
 - Turtle: Fixes parsing bug with escaped dot at the end of local name.
-- `oxttl`: Changes `prefixes` getter return type. 
+- `oxttl`: Changes `prefixes` getter return type.
 - JS: simplify build.
 - Python: uses rustls by default all platforms that are not Windows/macOS/iOS/WASM.
 - Strips debug info of the Rust std library in release build.
@@ -234,7 +234,7 @@
 - SPARQL: improves a bit the AST in case of a lot of `&&`, `||` or `IN` operators.
 - SPARQL: fixes some optimization bugs around `MINUS` inside `OPTIONAL`.
 - SPARQL: makes for loop join choice instead of hash join a bit more aggressive.
-- Avoids random crashes when building RocksDB for aarch64. 
+- Avoids random crashes when building RocksDB for aarch64.
 - Python: fixes support of text I/O with not-ASCII char.
 - Python: upgrades PyO3 to 0.19.
 - `spargebra`: `GroundTermPattern::Triple` is now properly gated behind the `"rdf-star"` feature.
@@ -316,7 +316,7 @@
 
 ### Added
 - SPARQL: Implementation of the `LATERAL` operator following [SPARQL SEP-0006](https://github.com/w3c/sparql-12/blob/main/SEP/SEP-0006/sep-0006.md).
-  Support is behind the `sep-0006` feature in `spargebra` and enabled by default in Oxigraph. 
+  Support is behind the `sep-0006` feature in `spargebra` and enabled by default in Oxigraph.
 - SPARQL: Implementation of the `ADJUST` function following [SPARQL SEP-0002](https://github.com/w3c/sparql-12/blob/main/SEP/SEP-0002/sep-0002.md).
   Support is behind the `sep-0002` feature in `spargebra` and enabled by default in Oxigraph.
 - Rust: There is a new stand-alone crate `oxsdatatypes` implementing Rust structs for the common XML schema datatypes.
@@ -333,7 +333,7 @@
 - Python: Local builds will now target the specific Python version instead of [abi3](https://docs.python.org/3/c-api/stable.html).
   abi3 wheels are still released on Pypi alongside new Python-version specific builds for Linux+GNU.
 - SPARQL: Fixes a panic when the estimated upper bound of the results size was overflowing a `usize`.
-- Python: Uses `typing.IO` in Python stubs instead of narrower interfaces. 
+- Python: Uses `typing.IO` in Python stubs instead of narrower interfaces.
 - Upgrades RocksDB to 7.9.2, `quick-xml` to 0.27 and `pyo3` to 0.18.
 
 
@@ -417,7 +417,7 @@
 ### Changed
 - Fixes a bug in SPARQL parser that was always enabling the `SILENT` option of the `SERVICE` operator.
 - Allows unknown keys in the objects present in the SPARQL JSON query results. It allows to parse e.g. Virtuoso query results.
-- Allows `"typed-literal"` as an alias of `"literal"` in SPARQL JSON query results. 
+- Allows `"typed-literal"` as an alias of `"literal"` in SPARQL JSON query results.
 - Improves the HTTP client error reporting: no silent failures on 4XX and 5XX responses.
 - Upgrades RocksDB to 7.3.1.
 - Upgrades quick-xml to 0.23.
@@ -451,7 +451,7 @@
 
 ### Added
 - The bulk loader now checks available memory and tries to increase its batch size to make use of it.
-- The Bulk loader provides now a `--lenient` option to keep loading a file even if invalid data is found (works only with N-Triples and N-Quads). 
+- The Bulk loader provides now a `--lenient` option to keep loading a file even if invalid data is found (works only with N-Triples and N-Quads).
   This behavior can be customised in the Rust API using the `BulkLoader::on_parse_error` method.
 
 ### Changed
@@ -509,7 +509,7 @@
 - `Store` operations are now transactional using the "repeatable read" isolation level:
   the store only exposes changes that have been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
   the `Store` `transaction` method now allows to do read/write transactions.
--`RDF-star <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
+  -`RDF-star <https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html>`_ is now supported (including serialization formats and SPARQL-star). :py:class:`.Triple` can now be used in :py:attr:`.Triple.object`, :py:attr:`.Triple.object`, :py:attr:`.Quad.subject` and :py:attr:`.Quad.object`.
 
 ### Changed
 - SPARQL: It is now possible to compare `rdf:langString` literals with the same language tag.
@@ -576,7 +576,7 @@ Many thanks to [Thad Guidry](https://github.com/thadguidry), [James Overton](htt
 - Support of XML entities to the RDF/XML parser
 
 ### Changed
-- Serve: Allows unsupported query parameters in HTTP SPARQL requests. 
+- Serve: Allows unsupported query parameters in HTTP SPARQL requests.
 - Fixes WASM compilation bug and optimises WASM release packages.
 - Fixes named graph creation inside of a SledStore transaction.
 

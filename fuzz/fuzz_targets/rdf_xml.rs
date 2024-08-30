@@ -12,7 +12,7 @@ fn parse(data: &[u8], unchecked: bool) -> (Vec<Triple>, Vec<String>) {
     if unchecked {
         parser = parser.unchecked();
     }
-    for result in parser.parse_slice(data) {
+    for result in parser.for_slice(data) {
         match result {
             Ok(triple) => triples.push(triple),
             Err(error) => errors.push(error.to_string()),
@@ -55,15 +55,15 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // We serialize
-    let mut writer = RdfXmlSerializer::new().serialize_to_write(Vec::new());
+    let mut serializer = RdfXmlSerializer::new().for_writer(Vec::new());
     for triple in &triples {
-        writer.write_triple(triple).unwrap();
+        serializer.serialize_triple(triple).unwrap();
     }
-    let new_serialization = writer.finish().unwrap();
+    let new_serialization = serializer.finish().unwrap();
 
     // We parse the serialization
     let new_triples = RdfXmlParser::new()
-        .parse_slice(&new_serialization)
+        .for_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             format!(

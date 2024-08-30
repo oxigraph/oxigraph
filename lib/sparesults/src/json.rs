@@ -12,24 +12,24 @@ use std::mem::take;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
-pub fn write_boolean_json_result<W: Write>(write: W, value: bool) -> io::Result<W> {
-    let mut writer = ToWriteJsonWriter::new(write);
+pub fn write_boolean_json_result<W: Write>(writer: W, value: bool) -> io::Result<W> {
+    let mut serializer = ToWriteJsonWriter::new(writer);
     for event in inner_write_boolean_json_result(value) {
-        writer.write_event(event)?;
+        serializer.write_event(event)?;
     }
-    writer.finish()
+    serializer.finish()
 }
 
 #[cfg(feature = "async-tokio")]
 pub async fn tokio_async_write_boolean_json_result<W: AsyncWrite + Unpin>(
-    write: W,
+    writer: W,
     value: bool,
 ) -> io::Result<W> {
-    let mut writer = ToTokioAsyncWriteJsonWriter::new(write);
+    let mut serializer = ToTokioAsyncWriteJsonWriter::new(writer);
     for event in inner_write_boolean_json_result(value) {
-        writer.write_event(event).await?;
+        serializer.write_event(event).await?;
     }
-    writer.finish()
+    serializer.finish()
 }
 
 fn inner_write_boolean_json_result(value: bool) -> [JsonEvent<'static>; 7] {
@@ -44,21 +44,21 @@ fn inner_write_boolean_json_result(value: bool) -> [JsonEvent<'static>; 7] {
     ]
 }
 
-pub struct ToWriteJsonSolutionsWriter<W: Write> {
-    inner: InnerJsonSolutionsWriter,
+pub struct WriterJsonSolutionsSerializer<W: Write> {
+    inner: InnerJsonSolutionsSerializer,
     writer: ToWriteJsonWriter<W>,
 }
 
-impl<W: Write> ToWriteJsonSolutionsWriter<W> {
-    pub fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
-        let mut writer = ToWriteJsonWriter::new(write);
+impl<W: Write> WriterJsonSolutionsSerializer<W> {
+    pub fn start(writer: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = ToWriteJsonWriter::new(writer);
         let mut buffer = Vec::with_capacity(48);
-        let inner = InnerJsonSolutionsWriter::start(&mut buffer, variables);
+        let inner = InnerJsonSolutionsSerializer::start(&mut buffer, variables);
         Self::do_write(&mut writer, buffer)?;
         Ok(Self { inner, writer })
     }
 
-    pub fn write<'a>(
+    pub fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
@@ -83,22 +83,22 @@ impl<W: Write> ToWriteJsonSolutionsWriter<W> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct ToTokioAsyncWriteJsonSolutionsWriter<W: AsyncWrite + Unpin> {
-    inner: InnerJsonSolutionsWriter,
+pub struct TokioAsyncWriterJsonSolutionsSerializer<W: AsyncWrite + Unpin> {
+    inner: InnerJsonSolutionsSerializer,
     writer: ToTokioAsyncWriteJsonWriter<W>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteJsonSolutionsWriter<W> {
-    pub async fn start(write: W, variables: &[Variable]) -> io::Result<Self> {
-        let mut writer = ToTokioAsyncWriteJsonWriter::new(write);
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonSolutionsSerializer<W> {
+    pub async fn start(writer: W, variables: &[Variable]) -> io::Result<Self> {
+        let mut writer = ToTokioAsyncWriteJsonWriter::new(writer);
         let mut buffer = Vec::with_capacity(48);
-        let inner = InnerJsonSolutionsWriter::start(&mut buffer, variables);
+        let inner = InnerJsonSolutionsSerializer::start(&mut buffer, variables);
         Self::do_write(&mut writer, buffer).await?;
         Ok(Self { inner, writer })
     }
 
-    pub async fn write<'a>(
+    pub async fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
@@ -125,9 +125,9 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteJsonSolutionsWriter<W> {
     }
 }
 
-struct InnerJsonSolutionsWriter;
+struct InnerJsonSolutionsSerializer;
 
-impl InnerJsonSolutionsWriter {
+impl InnerJsonSolutionsSerializer {
     fn start<'a>(output: &mut Vec<JsonEvent<'a>>, variables: &'a [Variable]) -> Self {
         output.push(JsonEvent::StartObject);
         output.push(JsonEvent::ObjectKey("head".into()));
@@ -220,29 +220,29 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
     }
 }
 
-pub enum FromReadJsonQueryResultsReader<R: Read> {
+pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromReadJsonSolutionsReader<R>,
+        solutions: ReaderJsonSolutionsParser<R>,
     },
     Boolean(bool),
 }
 
-impl<R: Read> FromReadJsonQueryResultsReader<R> {
-    pub fn read(read: R) -> Result<Self, QueryResultsParseError> {
-        let mut reader = FromReadJsonReader::new(read);
+impl<R: Read> ReaderJsonQueryResultsParserOutput<R> {
+    pub fn read(reader: R) -> Result<Self, QueryResultsParseError> {
+        let mut json_reader = FromReadJsonReader::new(reader);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(reader.read_next_event()?)? {
+            if let Some(result) = inner.read_event(json_reader.read_next_event()?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
                         solutions,
                     } => Ok(Self::Solutions {
                         variables,
-                        solutions: FromReadJsonSolutionsReader {
+                        solutions: ReaderJsonSolutionsParser {
                             inner: solutions,
-                            reader,
+                            json_reader,
                         },
                     }),
                     JsonInnerQueryResults::Boolean(value) => Ok(Self::Boolean(value)),
@@ -252,16 +252,16 @@ impl<R: Read> FromReadJsonQueryResultsReader<R> {
     }
 }
 
-pub struct FromReadJsonSolutionsReader<R: Read> {
+pub struct ReaderJsonSolutionsParser<R: Read> {
     inner: JsonInnerSolutions,
-    reader: FromReadJsonReader<R>,
+    json_reader: FromReadJsonReader<R>,
 }
 
-impl<R: Read> FromReadJsonSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+impl<R: Read> ReaderJsonSolutionsParser<R> {
+    pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.reader.read_next_event()?;
+                let event = self.json_reader.read_next_event()?;
                 if event == JsonEvent::Eof {
                     return Ok(None);
                 }
@@ -275,30 +275,30 @@ impl<R: Read> FromReadJsonSolutionsReader<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub enum FromTokioAsyncReadJsonQueryResultsReader<R: AsyncRead + Unpin> {
+pub enum TokioAsyncReaderJsonQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromTokioAsyncReadJsonSolutionsReader<R>,
+        solutions: TokioAsyncReaderJsonSolutionsParser<R>,
     },
     Boolean(bool),
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadJsonQueryResultsReader<R> {
-    pub async fn read(read: R) -> Result<Self, QueryResultsParseError> {
-        let mut reader = FromTokioAsyncReadJsonReader::new(read);
+impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonQueryResultsParserOutput<R> {
+    pub async fn read(reader: R) -> Result<Self, QueryResultsParseError> {
+        let mut json_reader = FromTokioAsyncReadJsonReader::new(reader);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(reader.read_next_event().await?)? {
+            if let Some(result) = inner.read_event(json_reader.read_next_event().await?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
                         solutions,
                     } => Ok(Self::Solutions {
                         variables,
-                        solutions: FromTokioAsyncReadJsonSolutionsReader {
+                        solutions: TokioAsyncReaderJsonSolutionsParser {
                             inner: solutions,
-                            reader,
+                            json_reader,
                         },
                     }),
                     JsonInnerQueryResults::Boolean(value) => Ok(Self::Boolean(value)),
@@ -309,17 +309,19 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadJsonQueryResultsReader<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct FromTokioAsyncReadJsonSolutionsReader<R: AsyncRead + Unpin> {
+pub struct TokioAsyncReaderJsonSolutionsParser<R: AsyncRead + Unpin> {
     inner: JsonInnerSolutions,
-    reader: FromTokioAsyncReadJsonReader<R>,
+    json_reader: FromTokioAsyncReadJsonReader<R>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadJsonSolutionsReader<R> {
-    pub async fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
+    pub async fn parse_next(
+        &mut self,
+    ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.reader.read_next_event().await?;
+                let event = self.json_reader.read_next_event().await?;
                 if event == JsonEvent::Eof {
                     return Ok(None);
                 }
@@ -332,29 +334,29 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadJsonSolutionsReader<R> {
     }
 }
 
-pub enum FromSliceJsonQueryResultsReader<'a> {
+pub enum SliceJsonQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromSliceJsonSolutionsReader<'a>,
+        solutions: SliceJsonSolutionsParser<'a>,
     },
     Boolean(bool),
 }
 
-impl<'a> FromSliceJsonQueryResultsReader<'a> {
+impl<'a> SliceJsonQueryResultsParserOutput<'a> {
     pub fn read(slice: &'a [u8]) -> Result<Self, QueryResultsSyntaxError> {
-        let mut reader = FromBufferJsonReader::new(slice);
+        let mut json_reader = FromBufferJsonReader::new(slice);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(reader.read_next_event()?)? {
+            if let Some(result) = inner.read_event(json_reader.read_next_event()?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
                         solutions,
                     } => Ok(Self::Solutions {
                         variables,
-                        solutions: FromSliceJsonSolutionsReader {
+                        solutions: SliceJsonSolutionsParser {
                             inner: solutions,
-                            reader,
+                            json_reader,
                         },
                     }),
                     JsonInnerQueryResults::Boolean(value) => Ok(Self::Boolean(value)),
@@ -364,16 +366,16 @@ impl<'a> FromSliceJsonQueryResultsReader<'a> {
     }
 }
 
-pub struct FromSliceJsonSolutionsReader<'a> {
+pub struct SliceJsonSolutionsParser<'a> {
     inner: JsonInnerSolutions,
-    reader: FromBufferJsonReader<'a>,
+    json_reader: FromBufferJsonReader<'a>,
 }
 
-impl<'a> FromSliceJsonSolutionsReader<'a> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
+impl<'a> SliceJsonSolutionsParser<'a> {
+    pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.reader.read_next_event()?;
+                let event = self.json_reader.read_next_event()?;
                 if event == JsonEvent::Eof {
                     return Ok(None);
                 }
@@ -395,7 +397,7 @@ enum JsonInnerQueryResults {
 }
 
 enum JsonInnerSolutions {
-    Reader(JsonInnerSolutionsReader),
+    Reader(JsonInnerSolutionsParser),
     Iterator(JsonBufferedSolutionsIterator),
 }
 
@@ -641,8 +643,8 @@ impl JsonInnerReader {
                         }
                         Ok(Some(JsonInnerQueryResults::Solutions {
                             variables: take(&mut self.variables),
-                            solutions: JsonInnerSolutions::Reader(JsonInnerSolutionsReader {
-                                state: JsonInnerSolutionsReaderState::BeforeSolution,
+                            solutions: JsonInnerSolutions::Reader(JsonInnerSolutionsParser {
+                                state: JsonInnerSolutionsParserState::BeforeSolution,
                                 mapping,
                                 new_bindings: Vec::new(),
                             }),
@@ -755,13 +757,13 @@ impl JsonInnerReader {
     }
 }
 
-struct JsonInnerSolutionsReader {
-    state: JsonInnerSolutionsReaderState,
+struct JsonInnerSolutionsParser {
+    state: JsonInnerSolutionsParserState,
     mapping: BTreeMap<String, usize>,
     new_bindings: Vec<Option<Term>>,
 }
 
-enum JsonInnerSolutionsReaderState {
+enum JsonInnerSolutionsParserState {
     BeforeSolution,
     BetweenSolutionTerms,
     Term {
@@ -771,57 +773,57 @@ enum JsonInnerSolutionsReaderState {
     AfterEnd,
 }
 
-impl JsonInnerSolutionsReader {
+impl JsonInnerSolutionsParser {
     fn read_event(
         &mut self,
         event: JsonEvent<'_>,
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         match &mut self.state {
-            JsonInnerSolutionsReaderState::BeforeSolution => match event {
+            JsonInnerSolutionsParserState::BeforeSolution => match event {
                 JsonEvent::StartObject => {
-                    self.state = JsonInnerSolutionsReaderState::BetweenSolutionTerms;
+                    self.state = JsonInnerSolutionsParserState::BetweenSolutionTerms;
                     self.new_bindings = vec![None; self.mapping.len()];
                     Ok(None)
                 }
                 JsonEvent::EndArray => {
-                    self.state = JsonInnerSolutionsReaderState::AfterEnd;
+                    self.state = JsonInnerSolutionsParserState::AfterEnd;
                     Ok(None)
                 }
                 _ => Err(QueryResultsSyntaxError::msg(
                     "Expecting a new solution object",
                 )),
             },
-            JsonInnerSolutionsReaderState::BetweenSolutionTerms => match event {
+            JsonInnerSolutionsParserState::BetweenSolutionTerms => match event {
                 JsonEvent::ObjectKey(key) => {
                     let key = *self.mapping.get(key.as_ref()).ok_or_else(|| {
                         QueryResultsSyntaxError::msg(format!(
                             "The variable {key} has not been defined in the header"
                         ))
                     })?;
-                    self.state = JsonInnerSolutionsReaderState::Term {
+                    self.state = JsonInnerSolutionsParserState::Term {
                         reader: JsonInnerTermReader::default(),
                         key,
                     };
                     Ok(None)
                 }
                 JsonEvent::EndObject => {
-                    self.state = JsonInnerSolutionsReaderState::BeforeSolution;
+                    self.state = JsonInnerSolutionsParserState::BeforeSolution;
                     Ok(Some(take(&mut self.new_bindings)))
                 }
                 _ => unreachable!(),
             },
-            JsonInnerSolutionsReaderState::Term {
+            JsonInnerSolutionsParserState::Term {
                 ref mut reader,
                 key,
             } => {
                 let result = reader.read_event(event);
                 if let Some(term) = result? {
                     self.new_bindings[*key] = Some(term);
-                    self.state = JsonInnerSolutionsReaderState::BetweenSolutionTerms;
+                    self.state = JsonInnerSolutionsParserState::BetweenSolutionTerms;
                 }
                 Ok(None)
             }
-            JsonInnerSolutionsReaderState::AfterEnd => {
+            JsonInnerSolutionsParserState::AfterEnd => {
                 if event == JsonEvent::EndObject {
                     Ok(None)
                 } else {

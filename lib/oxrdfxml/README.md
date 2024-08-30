@@ -28,7 +28,7 @@ let file = br#"<?xml version="1.0"?>
 
 let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
 let mut count = 0;
-for triple in RdfXmlParser::new().parse_read(file.as_ref()) {
+for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
     let triple = triple.unwrap();
     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
         count += 1;

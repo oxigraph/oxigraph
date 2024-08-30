@@ -19,14 +19,14 @@ fn parse_nt(c: &mut Criterion) {
     group.sample_size(50);
     group.bench_function("parse BSBM explore 1000", |b| {
         b.iter(|| {
-            for r in RdfParser::from_format(RdfFormat::NTriples).parse_slice(&data) {
+            for r in RdfParser::from_format(RdfFormat::NTriples).for_slice(&data) {
                 r.unwrap();
             }
         })
     });
     group.bench_function("parse BSBM explore 1000 with Read", |b| {
         b.iter(|| {
-            for r in RdfParser::from_format(RdfFormat::NTriples).parse_read(data.as_slice()) {
+            for r in RdfParser::from_format(RdfFormat::NTriples).for_reader(data.as_slice()) {
                 r.unwrap();
             }
         })
@@ -35,7 +35,7 @@ fn parse_nt(c: &mut Criterion) {
         b.iter(|| {
             for r in RdfParser::from_format(RdfFormat::NTriples)
                 .unchecked()
-                .parse_slice(&data)
+                .for_slice(&data)
             {
                 r.unwrap();
             }
@@ -45,7 +45,7 @@ fn parse_nt(c: &mut Criterion) {
         b.iter(|| {
             for r in RdfParser::from_format(RdfFormat::NTriples)
                 .unchecked()
-                .parse_read(data.as_slice())
+                .for_reader(data.as_slice())
             {
                 r.unwrap();
             }
@@ -87,14 +87,14 @@ fn store_load(c: &mut Criterion) {
 }
 
 fn do_load(store: &Store, data: &[u8]) {
-    store.load_from_read(RdfFormat::NTriples, data).unwrap();
+    store.load_from_reader(RdfFormat::NTriples, data).unwrap();
     store.optimize().unwrap();
 }
 
 fn do_bulk_load(store: &Store, data: &[u8]) {
     store
         .bulk_loader()
-        .load_from_read(
+        .load_from_reader(
             RdfParser::from_format(RdfFormat::NTriples).unchecked(),
             data,
         )

@@ -1,16 +1,18 @@
 #[cfg(feature = "async-tokio")]
 use crate::csv::{
-    tokio_async_write_boolean_csv_result, ToTokioAsyncWriteCsvSolutionsWriter,
-    ToTokioAsyncWriteTsvSolutionsWriter,
+    tokio_async_write_boolean_csv_result, TokioAsyncWriterCsvSolutionsSerializer,
+    TokioAsyncWriterTsvSolutionsSerializer,
 };
-use crate::csv::{write_boolean_csv_result, ToWriteCsvSolutionsWriter, ToWriteTsvSolutionsWriter};
+use crate::csv::{
+    write_boolean_csv_result, WriterCsvSolutionsSerializer, WriterTsvSolutionsSerializer,
+};
 use crate::format::QueryResultsFormat;
 #[cfg(feature = "async-tokio")]
-use crate::json::{tokio_async_write_boolean_json_result, ToTokioAsyncWriteJsonSolutionsWriter};
-use crate::json::{write_boolean_json_result, ToWriteJsonSolutionsWriter};
+use crate::json::{tokio_async_write_boolean_json_result, TokioAsyncWriterJsonSolutionsSerializer};
+use crate::json::{write_boolean_json_result, WriterJsonSolutionsSerializer};
 #[cfg(feature = "async-tokio")]
-use crate::xml::{tokio_async_write_boolean_xml_result, ToTokioAsyncWriteXmlSolutionsWriter};
-use crate::xml::{write_boolean_xml_result, ToWriteXmlSolutionsWriter};
+use crate::xml::{tokio_async_write_boolean_xml_result, TokioAsyncWriterXmlSolutionsSerializer};
+use crate::xml::{write_boolean_xml_result, WriterXmlSolutionsSerializer};
 use oxrdf::{TermRef, Variable, VariableRef};
 use std::io::{self, Write};
 #[cfg(feature = "async-tokio")]
@@ -34,14 +36,14 @@ use tokio::io::AsyncWrite;
 ///
 /// // boolean
 /// let mut buffer = Vec::new();
-/// json_serializer.clone().serialize_boolean_to_write(&mut buffer, true)?;
+/// json_serializer.clone().serialize_boolean_to_writer(&mut buffer, true)?;
 /// assert_eq!(buffer, br#"{"head":{},"boolean":true}"#);
 ///
 /// // solutions
 /// let mut buffer = Vec::new();
-/// let mut writer = json_serializer.serialize_solutions_to_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-/// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
-/// writer.finish()?;
+/// let mut serializer = json_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
+/// serializer.serialize(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
+/// serializer.finish()?;
 /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
 /// # std::io::Result::Ok(())
 /// ```
@@ -66,16 +68,16 @@ impl QueryResultsSerializer {
     ///
     /// let xml_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Xml);
     /// let mut buffer = Vec::new();
-    /// xml_serializer.serialize_boolean_to_write(&mut buffer, true)?;
+    /// xml_serializer.serialize_boolean_to_writer(&mut buffer, true)?;
     /// assert_eq!(buffer, br#"<?xml version="1.0"?><sparql xmlns="http://www.w3.org/2005/sparql-results#"><head></head><boolean>true</boolean></sparql>"#);
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn serialize_boolean_to_write<W: Write>(self, write: W, value: bool) -> io::Result<W> {
+    pub fn serialize_boolean_to_writer<W: Write>(self, writer: W, value: bool) -> io::Result<W> {
         match self.format {
-            QueryResultsFormat::Xml => write_boolean_xml_result(write, value),
-            QueryResultsFormat::Json => write_boolean_json_result(write, value),
+            QueryResultsFormat::Xml => write_boolean_xml_result(writer, value),
+            QueryResultsFormat::Json => write_boolean_json_result(writer, value),
             QueryResultsFormat::Csv | QueryResultsFormat::Tsv => {
-                write_boolean_csv_result(write, value)
+                write_boolean_csv_result(writer, value)
             }
         }
     }
@@ -100,28 +102,28 @@ impl QueryResultsSerializer {
     #[cfg(feature = "async-tokio")]
     pub async fn serialize_boolean_to_tokio_async_write<W: AsyncWrite + Unpin>(
         self,
-        write: W,
+        writer: W,
         value: bool,
     ) -> io::Result<W> {
         match self.format {
-            QueryResultsFormat::Xml => tokio_async_write_boolean_xml_result(write, value).await,
-            QueryResultsFormat::Json => tokio_async_write_boolean_json_result(write, value).await,
+            QueryResultsFormat::Xml => tokio_async_write_boolean_xml_result(writer, value).await,
+            QueryResultsFormat::Json => tokio_async_write_boolean_json_result(writer, value).await,
             QueryResultsFormat::Csv | QueryResultsFormat::Tsv => {
-                tokio_async_write_boolean_csv_result(write, value).await
+                tokio_async_write_boolean_csv_result(writer, value).await
             }
         }
     }
 
-    #[deprecated(note = "use serialize_boolean_to_write", since = "0.4.0")]
+    #[deprecated(note = "use serialize_boolean_to_writer", since = "0.4.0")]
     pub fn write_boolean_result<W: Write>(&self, writer: W, value: bool) -> io::Result<W> {
-        self.clone().serialize_boolean_to_write(writer, value)
+        self.clone().serialize_boolean_to_writer(writer, value)
     }
 
-    /// Returns a `SolutionsWriter` allowing writing query solutions into the given [`Write`] implementation.
+    /// Returns a `SolutionsSerializer` allowing writing query solutions into the given [`Write`] implementation.
     ///
     /// <div class="warning">
     ///
-    /// Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+    /// Do not forget to run the [`finish`](WriterSolutionsSerializer::finish()) method to properly write the last bytes of the file.</div>
     ///
     /// <div class="warning">
     ///
@@ -135,40 +137,40 @@ impl QueryResultsSerializer {
     ///
     /// let xml_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Xml);
     /// let mut buffer = Vec::new();
-    /// let mut writer = xml_serializer.serialize_solutions_to_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-    /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
-    /// writer.finish()?;
+    /// let mut serializer = xml_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
+    /// serializer.serialize(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
+    /// serializer.finish()?;
     /// assert_eq!(buffer, br#"<?xml version="1.0"?><sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#);
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn serialize_solutions_to_write<W: Write>(
+    pub fn serialize_solutions_to_writer<W: Write>(
         self,
-        write: W,
+        writer: W,
         variables: Vec<Variable>,
-    ) -> io::Result<ToWriteSolutionsWriter<W>> {
-        Ok(ToWriteSolutionsWriter {
+    ) -> io::Result<WriterSolutionsSerializer<W>> {
+        Ok(WriterSolutionsSerializer {
             formatter: match self.format {
-                QueryResultsFormat::Xml => ToWriteSolutionsWriterKind::Xml(
-                    ToWriteXmlSolutionsWriter::start(write, &variables)?,
+                QueryResultsFormat::Xml => WriterSolutionsSerializerKind::Xml(
+                    WriterXmlSolutionsSerializer::start(writer, &variables)?,
                 ),
-                QueryResultsFormat::Json => ToWriteSolutionsWriterKind::Json(
-                    ToWriteJsonSolutionsWriter::start(write, &variables)?,
+                QueryResultsFormat::Json => WriterSolutionsSerializerKind::Json(
+                    WriterJsonSolutionsSerializer::start(writer, &variables)?,
                 ),
-                QueryResultsFormat::Csv => ToWriteSolutionsWriterKind::Csv(
-                    ToWriteCsvSolutionsWriter::start(write, variables)?,
+                QueryResultsFormat::Csv => WriterSolutionsSerializerKind::Csv(
+                    WriterCsvSolutionsSerializer::start(writer, variables)?,
                 ),
-                QueryResultsFormat::Tsv => ToWriteSolutionsWriterKind::Tsv(
-                    ToWriteTsvSolutionsWriter::start(write, variables)?,
+                QueryResultsFormat::Tsv => WriterSolutionsSerializerKind::Tsv(
+                    WriterTsvSolutionsSerializer::start(writer, variables)?,
                 ),
             },
         })
     }
 
-    /// Returns a `SolutionsWriter` allowing writing query solutions into the given [`Write`] implementation.
+    /// Returns a `SolutionsSerializer` allowing writing query solutions into the given [`Write`] implementation.
     ///
     /// <div class="warning">
     ///
-    /// Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+    /// Do not forget to run the [`finish`](WriterSolutionsSerializer::finish()) method to properly write the last bytes of the file.</div>
     ///
     /// <div class="warning">
     ///
@@ -184,9 +186,9 @@ impl QueryResultsSerializer {
     /// # async fn main() -> std::io::Result<()> {
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
-    /// let mut writer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]).await?;
-    /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test")))).await?;
-    /// writer.finish().await?;
+    /// let mut serializer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]).await?;
+    /// serializer.serialize(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test")))).await?;
+    /// serializer.finish().await?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#);
     /// # Ok(())
     /// # }    
@@ -194,37 +196,37 @@ impl QueryResultsSerializer {
     #[cfg(feature = "async-tokio")]
     pub async fn serialize_solutions_to_tokio_async_write<W: AsyncWrite + Unpin>(
         self,
-        write: W,
+        writer: W,
         variables: Vec<Variable>,
-    ) -> io::Result<ToTokioAsyncWriteSolutionsWriter<W>> {
-        Ok(ToTokioAsyncWriteSolutionsWriter {
+    ) -> io::Result<TokioAsyncWriterSolutionsSerializer<W>> {
+        Ok(TokioAsyncWriterSolutionsSerializer {
             formatter: match self.format {
-                QueryResultsFormat::Xml => ToTokioAsyncWriteSolutionsWriterKind::Xml(
-                    ToTokioAsyncWriteXmlSolutionsWriter::start(write, &variables).await?,
+                QueryResultsFormat::Xml => TokioAsyncWriterSolutionsSerializerKind::Xml(
+                    TokioAsyncWriterXmlSolutionsSerializer::start(writer, &variables).await?,
                 ),
-                QueryResultsFormat::Json => ToTokioAsyncWriteSolutionsWriterKind::Json(
-                    ToTokioAsyncWriteJsonSolutionsWriter::start(write, &variables).await?,
+                QueryResultsFormat::Json => TokioAsyncWriterSolutionsSerializerKind::Json(
+                    TokioAsyncWriterJsonSolutionsSerializer::start(writer, &variables).await?,
                 ),
-                QueryResultsFormat::Csv => ToTokioAsyncWriteSolutionsWriterKind::Csv(
-                    ToTokioAsyncWriteCsvSolutionsWriter::start(write, variables).await?,
+                QueryResultsFormat::Csv => TokioAsyncWriterSolutionsSerializerKind::Csv(
+                    TokioAsyncWriterCsvSolutionsSerializer::start(writer, variables).await?,
                 ),
-                QueryResultsFormat::Tsv => ToTokioAsyncWriteSolutionsWriterKind::Tsv(
-                    ToTokioAsyncWriteTsvSolutionsWriter::start(write, variables).await?,
+                QueryResultsFormat::Tsv => TokioAsyncWriterSolutionsSerializerKind::Tsv(
+                    TokioAsyncWriterTsvSolutionsSerializer::start(writer, variables).await?,
                 ),
             },
         })
     }
 
-    #[deprecated(note = "use serialize_solutions_to_write", since = "0.4.0")]
+    #[deprecated(note = "use serialize_solutions_to_writer", since = "0.4.0")]
     pub fn solutions_writer<W: Write>(
         &self,
         writer: W,
         variables: Vec<Variable>,
-    ) -> io::Result<ToWriteSolutionsWriter<W>> {
+    ) -> io::Result<WriterSolutionsSerializer<W>> {
         Self {
             format: self.format,
         }
-        .serialize_solutions_to_write(writer, variables)
+        .serialize_solutions_to_writer(writer, variables)
     }
 }
 
@@ -240,7 +242,7 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 ///
 /// <div class="warning">
 ///
-/// Do not forget to run the [`finish`](ToWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+/// Do not forget to run the [`finish`](WriterSolutionsSerializer::finish()) method to properly write the last bytes of the file.</div>
 ///
 /// <div class="warning">
 ///
@@ -254,34 +256,34 @@ impl From<QueryResultsFormat> for QueryResultsSerializer {
 ///
 /// let tsv_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
 /// let mut buffer = Vec::new();
-/// let mut writer = tsv_serializer.serialize_solutions_to_write(
+/// let mut serializer = tsv_serializer.serialize_solutions_to_writer(
 ///     &mut buffer,
 ///     vec![
 ///         Variable::new_unchecked("foo"),
 ///         Variable::new_unchecked("bar"),
 ///     ],
 /// )?;
-/// writer.write(once((
+/// serializer.serialize(once((
 ///     VariableRef::new_unchecked("foo"),
 ///     LiteralRef::from("test"),
 /// )))?;
-/// writer.finish()?;
+/// serializer.finish()?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]
-pub struct ToWriteSolutionsWriter<W: Write> {
-    formatter: ToWriteSolutionsWriterKind<W>,
+pub struct WriterSolutionsSerializer<W: Write> {
+    formatter: WriterSolutionsSerializerKind<W>,
 }
 
-enum ToWriteSolutionsWriterKind<W: Write> {
-    Xml(ToWriteXmlSolutionsWriter<W>),
-    Json(ToWriteJsonSolutionsWriter<W>),
-    Csv(ToWriteCsvSolutionsWriter<W>),
-    Tsv(ToWriteTsvSolutionsWriter<W>),
+enum WriterSolutionsSerializerKind<W: Write> {
+    Xml(WriterXmlSolutionsSerializer<W>),
+    Json(WriterJsonSolutionsSerializer<W>),
+    Csv(WriterCsvSolutionsSerializer<W>),
+    Tsv(WriterTsvSolutionsSerializer<W>),
 }
 
-impl<W: Write> ToWriteSolutionsWriter<W> {
+impl<W: Write> WriterSolutionsSerializer<W> {
     /// Writes a solution.
     ///
     /// Example in JSON (the API is the same for XML, CSV and TSV):
@@ -292,33 +294,33 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
     ///
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
-    /// let mut writer = json_serializer.serialize_solutions_to_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
-    /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
-    /// writer.write(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())])))?;
-    /// writer.finish()?;
+    /// let mut serializer = json_serializer.serialize_solutions_to_writer(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")])?;
+    /// serializer.serialize(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test"))))?;
+    /// serializer.serialize(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())])))?;
+    /// serializer.finish()?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn write<'a>(
+    pub fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (impl Into<VariableRef<'a>>, impl Into<TermRef<'a>>)>,
     ) -> io::Result<()> {
         let solution = solution.into_iter().map(|(v, s)| (v.into(), s.into()));
         match &mut self.formatter {
-            ToWriteSolutionsWriterKind::Xml(writer) => writer.write(solution),
-            ToWriteSolutionsWriterKind::Json(writer) => writer.write(solution),
-            ToWriteSolutionsWriterKind::Csv(writer) => writer.write(solution),
-            ToWriteSolutionsWriterKind::Tsv(writer) => writer.write(solution),
+            WriterSolutionsSerializerKind::Xml(writer) => writer.serialize(solution),
+            WriterSolutionsSerializerKind::Json(writer) => writer.serialize(solution),
+            WriterSolutionsSerializerKind::Csv(writer) => writer.serialize(solution),
+            WriterSolutionsSerializerKind::Tsv(writer) => writer.serialize(solution),
         }
     }
 
     /// Writes the last bytes of the file.
     pub fn finish(self) -> io::Result<W> {
         match self.formatter {
-            ToWriteSolutionsWriterKind::Xml(write) => write.finish(),
-            ToWriteSolutionsWriterKind::Json(write) => write.finish(),
-            ToWriteSolutionsWriterKind::Csv(write) => Ok(write.finish()),
-            ToWriteSolutionsWriterKind::Tsv(write) => Ok(write.finish()),
+            WriterSolutionsSerializerKind::Xml(serializer) => serializer.finish(),
+            WriterSolutionsSerializerKind::Json(serializer) => serializer.finish(),
+            WriterSolutionsSerializerKind::Csv(serializer) => Ok(serializer.finish()),
+            WriterSolutionsSerializerKind::Tsv(serializer) => Ok(serializer.finish()),
         }
     }
 }
@@ -329,7 +331,7 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
 ///
 /// <div class="warning">
 ///
-/// Do not forget to run the [`finish`](ToTokioAsyncWriteSolutionsWriter::finish()) method to properly write the last bytes of the file.</div>
+/// Do not forget to run the [`finish`](TokioAsyncWriterSolutionsSerializer::finish()) method to properly write the last bytes of the file.</div>
 ///
 /// <div class="warning">
 ///
@@ -345,7 +347,7 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
 /// # async fn main() -> std::io::Result<()> {
 /// let tsv_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
 /// let mut buffer = Vec::new();
-/// let mut writer = tsv_serializer
+/// let mut serializer = tsv_serializer
 ///     .serialize_solutions_to_tokio_async_write(
 ///         &mut buffer,
 ///         vec![
@@ -354,33 +356,33 @@ impl<W: Write> ToWriteSolutionsWriter<W> {
 ///         ],
 ///     )
 ///     .await?;
-/// writer
-///     .write(once((
+/// serializer
+///     .serialize(once((
 ///         VariableRef::new_unchecked("foo"),
 ///         LiteralRef::from("test"),
 ///     )))
 ///     .await?;
-/// writer.finish().await?;
+/// serializer.finish().await?;
 /// assert_eq!(buffer, b"?foo\t?bar\n\"test\"\t\n");
 /// # Ok(())
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct ToTokioAsyncWriteSolutionsWriter<W: AsyncWrite + Unpin> {
-    formatter: ToTokioAsyncWriteSolutionsWriterKind<W>,
+pub struct TokioAsyncWriterSolutionsSerializer<W: AsyncWrite + Unpin> {
+    formatter: TokioAsyncWriterSolutionsSerializerKind<W>,
 }
 
 #[cfg(feature = "async-tokio")]
-enum ToTokioAsyncWriteSolutionsWriterKind<W: AsyncWrite + Unpin> {
-    Xml(ToTokioAsyncWriteXmlSolutionsWriter<W>),
-    Json(ToTokioAsyncWriteJsonSolutionsWriter<W>),
-    Csv(ToTokioAsyncWriteCsvSolutionsWriter<W>),
-    Tsv(ToTokioAsyncWriteTsvSolutionsWriter<W>),
+enum TokioAsyncWriterSolutionsSerializerKind<W: AsyncWrite + Unpin> {
+    Xml(TokioAsyncWriterXmlSolutionsSerializer<W>),
+    Json(TokioAsyncWriterJsonSolutionsSerializer<W>),
+    Csv(TokioAsyncWriterCsvSolutionsSerializer<W>),
+    Tsv(TokioAsyncWriterTsvSolutionsSerializer<W>),
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteSolutionsWriter<W> {
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterSolutionsSerializer<W> {
     /// Writes a solution.
     ///
     /// Example in JSON (the API is the same for XML, CSV and TSV):
@@ -393,34 +395,42 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteSolutionsWriter<W> {
     /// # async fn main() -> std::io::Result<()> {
     /// let json_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json);
     /// let mut buffer = Vec::new();
-    /// let mut writer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]).await?;
-    /// writer.write(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test")))).await?;
-    /// writer.write(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())]))).await?;
-    /// writer.finish().await?;
+    /// let mut serializer = json_serializer.serialize_solutions_to_tokio_async_write(&mut buffer, vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]).await?;
+    /// serializer.serialize(once((VariableRef::new_unchecked("foo"), LiteralRef::from("test")))).await?;
+    /// serializer.serialize(&QuerySolution::from((vec![Variable::new_unchecked("bar")], vec![Some(Literal::from("test").into())]))).await?;
+    /// serializer.finish().await?;
     /// assert_eq!(buffer, br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}},{"bar":{"type":"literal","value":"test"}}]}}"#);
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn write<'a>(
+    pub async fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (impl Into<VariableRef<'a>>, impl Into<TermRef<'a>>)>,
     ) -> io::Result<()> {
         let solution = solution.into_iter().map(|(v, s)| (v.into(), s.into()));
         match &mut self.formatter {
-            ToTokioAsyncWriteSolutionsWriterKind::Xml(writer) => writer.write(solution).await,
-            ToTokioAsyncWriteSolutionsWriterKind::Json(writer) => writer.write(solution).await,
-            ToTokioAsyncWriteSolutionsWriterKind::Csv(writer) => writer.write(solution).await,
-            ToTokioAsyncWriteSolutionsWriterKind::Tsv(writer) => writer.write(solution).await,
+            TokioAsyncWriterSolutionsSerializerKind::Xml(writer) => {
+                writer.serialize(solution).await
+            }
+            TokioAsyncWriterSolutionsSerializerKind::Json(writer) => {
+                writer.serialize(solution).await
+            }
+            TokioAsyncWriterSolutionsSerializerKind::Csv(writer) => {
+                writer.serialize(solution).await
+            }
+            TokioAsyncWriterSolutionsSerializerKind::Tsv(writer) => {
+                writer.serialize(solution).await
+            }
         }
     }
 
     /// Writes the last bytes of the file.
     pub async fn finish(self) -> io::Result<W> {
         match self.formatter {
-            ToTokioAsyncWriteSolutionsWriterKind::Xml(write) => write.finish().await,
-            ToTokioAsyncWriteSolutionsWriterKind::Json(write) => write.finish().await,
-            ToTokioAsyncWriteSolutionsWriterKind::Csv(write) => Ok(write.finish()),
-            ToTokioAsyncWriteSolutionsWriterKind::Tsv(write) => Ok(write.finish()),
+            TokioAsyncWriterSolutionsSerializerKind::Xml(serializer) => serializer.finish().await,
+            TokioAsyncWriterSolutionsSerializerKind::Json(serializer) => serializer.finish().await,
+            TokioAsyncWriterSolutionsSerializerKind::Csv(serializer) => Ok(serializer.finish()),
+            TokioAsyncWriterSolutionsSerializerKind::Tsv(serializer) => Ok(serializer.finish()),
         }
     }
 }

@@ -14,7 +14,7 @@ fuzz_target!(|data: sparql_smith::Query| {
     let store = STORE.get_or_init(|| {
         let store = Store::new().unwrap();
         store
-            .load_from_read(RdfFormat::TriG, sparql_smith::DATA_TRIG.as_bytes())
+            .load_from_reader(RdfFormat::TriG, sparql_smith::DATA_TRIG.as_bytes())
             .unwrap();
         store
     });

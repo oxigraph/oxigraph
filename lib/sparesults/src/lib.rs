@@ -16,12 +16,14 @@ mod xml;
 pub use crate::error::{QueryResultsParseError, QueryResultsSyntaxError, TextPosition};
 pub use crate::format::QueryResultsFormat;
 pub use crate::parser::{
-    FromReadQueryResultsReader, FromReadSolutionsReader, FromSliceQueryResultsReader,
-    FromSliceSolutionsReader, QueryResultsParser,
+    QueryResultsParser, ReaderQueryResultsParserOutput, ReaderSolutionsParser,
+    SliceQueryResultsParserOutput, SliceSolutionsParser,
 };
 #[cfg(feature = "async-tokio")]
-pub use crate::parser::{FromTokioAsyncReadQueryResultsReader, FromTokioAsyncReadSolutionsReader};
+pub use crate::parser::{
+    TokioAsyncReaderQueryResultsParserOutput, TokioAsyncReaderSolutionsParser,
+};
 #[cfg(feature = "async-tokio")]
-pub use crate::serializer::ToTokioAsyncWriteSolutionsWriter;
-pub use crate::serializer::{QueryResultsSerializer, ToWriteSolutionsWriter};
+pub use crate::serializer::TokioAsyncWriterSolutionsSerializer;
+pub use crate::serializer::{QueryResultsSerializer, WriterSolutionsSerializer};
 pub use crate::solution::QuerySolution;

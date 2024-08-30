@@ -4,10 +4,8 @@
 use crate::chunker::get_ntriples_file_chunks;
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
-use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{
-    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
-};
+use crate::toolkit::TokioAsyncReaderIterator;
+use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
 use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxrdf::{Triple, TripleRef};
 use std::io::{self, Read, Write};
@@ -30,7 +28,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in NTriplesParser::new().parse_read(file.as_ref()) {
+/// for triple in NTriplesParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -58,7 +56,7 @@ impl NTriplesParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.    ///
+    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.    ///
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.unchecked = true;
@@ -87,7 +85,7 @@ impl NTriplesParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in NTriplesParser::new().parse_read(file.as_ref()) {
+    /// for triple in NTriplesParser::new().for_reader(file.as_ref()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -96,9 +94,9 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(self, read: R) -> FromReadNTriplesReader<R> {
-        FromReadNTriplesReader {
-            inner: self.parse().parser.parse_read(read),
+    pub fn for_reader<R: Read>(self, reader: R) -> ReaderNTriplesParser<R> {
+        ReaderNTriplesParser {
+            inner: self.low_level().parser.for_reader(reader),
         }
     }
 
@@ -118,7 +116,7 @@ impl NTriplesParser {
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
-    /// let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
+    /// let mut parser = NTriplesParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -130,12 +128,12 @@ impl NTriplesParser {
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn for_tokio_async_reader<R: AsyncRead + Unpin>(
         self,
-        read: R,
-    ) -> FromTokioAsyncReadNTriplesReader<R> {
-        FromTokioAsyncReadNTriplesReader {
-            inner: self.parse().parser.parse_tokio_async_read(read),
+        reader: R,
+    ) -> TokioAsyncReaderNTriplesParser<R> {
+        TokioAsyncReaderNTriplesParser {
+            inner: self.low_level().parser.for_tokio_async_reader(reader),
         }
     }
 
@@ -153,7 +151,7 @@ impl NTriplesParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in NTriplesParser::new().parse_slice(file) {
+    /// for triple in NTriplesParser::new().for_slice(file) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -162,8 +160,8 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_slice(self, slice: &[u8]) -> FromSliceNTriplesReader<'_> {
-        FromSliceNTriplesReader {
+    pub fn for_slice(self, slice: &[u8]) -> SliceNTriplesParser<'_> {
+        SliceNTriplesParser {
             inner: NQuadsRecognizer::new_parser(
                 slice,
                 true,
@@ -214,11 +212,11 @@ impl NTriplesParser {
         &self,
         slice: &'a [u8],
         target_parallelism: usize,
-    ) -> Vec<FromSliceNTriplesReader<'a>> {
+    ) -> Vec<SliceNTriplesParser<'a>> {
         let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
         get_ntriples_file_chunks(slice, n_chunks)
             .into_iter()
-            .map(|(start, end)| self.clone().parse_slice(&slice[start..end]))
+            .map(|(start, end)| self.clone().for_slice(&slice[start..end]))
             .collect()
     }
 
@@ -238,7 +236,7 @@ impl NTriplesParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// let mut parser = NTriplesParser::new().parse();
+    /// let mut parser = NTriplesParser::new().low_level();
     /// let mut file_chunks = file.iter();
     /// while !parser.is_end() {
     ///     // We feed more data to the parser
@@ -248,7 +246,7 @@ impl NTriplesParser {
     ///         parser.end(); // It's finished
     ///     }
     ///     // We read as many triples from the parser as possible
-    ///     while let Some(triple) = parser.read_next() {
+    ///     while let Some(triple) = parser.parse_next() {
     ///         let triple = triple?;
     ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///             count += 1;
@@ -259,8 +257,8 @@ impl NTriplesParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn parse(self) -> LowLevelNTriplesReader {
-        LowLevelNTriplesReader {
+    pub fn low_level(self) -> LowLevelNTriplesParser {
+        LowLevelNTriplesParser {
             parser: NQuadsRecognizer::new_parser(
                 Vec::new(),
                 false,
@@ -273,7 +271,9 @@ impl NTriplesParser {
     }
 }
 
-/// Parses a N-Triples file from a [`Read`] implementation. Can be built using [`NTriplesParser::parse_read`].
+/// Parses a N-Triples file from a [`Read`] implementation.
+///
+/// Can be built using [`NTriplesParser::for_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -287,7 +287,7 @@ impl NTriplesParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in NTriplesParser::new().parse_read(file.as_ref()) {
+/// for triple in NTriplesParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -297,11 +297,11 @@ impl NTriplesParser {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromReadNTriplesReader<R: Read> {
-    inner: FromReadIterator<R, NQuadsRecognizer>,
+pub struct ReaderNTriplesParser<R: Read> {
+    inner: ReaderIterator<R, NQuadsRecognizer>,
 }
 
-impl<R: Read> Iterator for FromReadNTriplesReader<R> {
+impl<R: Read> Iterator for ReaderNTriplesParser<R> {
     type Item = Result<Triple, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -309,7 +309,9 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
     }
 }
 
-/// Parses a N-Triples file from a [`AsyncRead`] implementation. Can be built using [`NTriplesParser::parse_tokio_async_read`].
+/// Parses a N-Triples file from a [`AsyncRead`] implementation.
+///
+/// Can be built using [`NTriplesParser::for_tokio_async_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -325,7 +327,7 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
-/// let mut parser = NTriplesParser::new().parse_tokio_async_read(file.as_ref());
+/// let mut parser = NTriplesParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -338,19 +340,21 @@ impl<R: Read> Iterator for FromReadNTriplesReader<R> {
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct FromTokioAsyncReadNTriplesReader<R: AsyncRead + Unpin> {
-    inner: FromTokioAsyncReadIterator<R, NQuadsRecognizer>,
+pub struct TokioAsyncReaderNTriplesParser<R: AsyncRead + Unpin> {
+    inner: TokioAsyncReaderIterator<R, NQuadsRecognizer>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadNTriplesReader<R> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderNTriplesParser<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Triple, TurtleParseError>> {
         Some(self.inner.next().await?.map(Into::into))
     }
 }
 
-/// Parses a N-Triples file from a byte slice. Can be built using [`NTriplesParser::parse_slice`].
+/// Parses a N-Triples file from a byte slice.
+///
+/// Can be built using [`NTriplesParser::for_slice`].
 ///
 /// Count the number of people:
 /// ```
@@ -364,7 +368,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNTriplesReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in NTriplesParser::new().parse_slice(file) {
+/// for triple in NTriplesParser::new().for_slice(file) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -374,11 +378,11 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNTriplesReader<R> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromSliceNTriplesReader<'a> {
-    inner: FromSliceIterator<'a, NQuadsRecognizer>,
+pub struct SliceNTriplesParser<'a> {
+    inner: SliceIterator<'a, NQuadsRecognizer>,
 }
 
-impl<'a> Iterator for FromSliceNTriplesReader<'a> {
+impl<'a> Iterator for SliceNTriplesParser<'a> {
     type Item = Result<Triple, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -386,7 +390,9 @@ impl<'a> Iterator for FromSliceNTriplesReader<'a> {
     }
 }
 
-/// Parses a N-Triples file by using a low-level API. Can be built using [`NTriplesParser::parse`].
+/// Parses a N-Triples file by using a low-level API.
+///
+/// Can be built using [`NTriplesParser::low_level`].
 ///
 /// Count the number of people:
 /// ```
@@ -402,7 +408,7 @@ impl<'a> Iterator for FromSliceNTriplesReader<'a> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// let mut parser = NTriplesParser::new().parse();
+/// let mut parser = NTriplesParser::new().low_level();
 /// let mut file_chunks = file.iter();
 /// while !parser.is_end() {
 ///     // We feed more data to the parser
@@ -412,7 +418,7 @@ impl<'a> Iterator for FromSliceNTriplesReader<'a> {
 ///         parser.end(); // It's finished
 ///     }
 ///     // We read as many triples from the parser as possible
-///     while let Some(triple) = parser.read_next() {
+///     while let Some(triple) = parser.parse_next() {
 ///         let triple = triple?;
 ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///             count += 1;
@@ -422,24 +428,24 @@ impl<'a> Iterator for FromSliceNTriplesReader<'a> {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct LowLevelNTriplesReader {
+pub struct LowLevelNTriplesParser {
     parser: Parser<Vec<u8>, NQuadsRecognizer>,
 }
 
-impl LowLevelNTriplesReader {
-    /// Adds some extra bytes to the parser. Should be called when [`read_next`](Self::read_next) returns [`None`] and there is still unread data.
+impl LowLevelNTriplesParser {
+    /// Adds some extra bytes to the parser. Should be called when [`parse_next`](Self::parse_next) returns [`None`] and there is still unread data.
     pub fn extend_from_slice(&mut self, other: &[u8]) {
         self.parser.extend_from_slice(other)
     }
 
     /// Tell the parser that the file is finished.
     ///
-    /// This triggers the parsing of the final bytes and might lead [`read_next`](Self::read_next) to return some extra values.
+    /// This triggers the parsing of the final bytes and might lead [`parse_next`](Self::parse_next) to return some extra values.
     pub fn end(&mut self) {
         self.parser.end()
     }
 
-    /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`read_next`](Self::read_next) is always going to return `None`.
+    /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`parse_next`](Self::parse_next) is always going to return `None`.
     pub fn is_end(&self) -> bool {
         self.parser.is_end()
     }
@@ -448,8 +454,8 @@ impl LowLevelNTriplesReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Triple, TurtleSyntaxError>> {
-        Some(self.parser.read_next()?.map(Into::into))
+    pub fn parse_next(&mut self) -> Option<Result<Triple, TurtleSyntaxError>> {
+        Some(self.parser.parse_next()?.map(Into::into))
     }
 }
 
@@ -461,27 +467,28 @@ impl LowLevelNTriplesReader {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::NTriplesSerializer;
 ///
-/// let mut writer = NTriplesSerializer::new().serialize_to_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+/// let mut serializer = NTriplesSerializer::new().for_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-///     writer.finish().as_slice()
+///     serializer.finish().as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
-pub struct NTriplesSerializer;
+#[allow(clippy::empty_structs_with_brackets)]
+pub struct NTriplesSerializer {}
 
 impl NTriplesSerializer {
     /// Builds a new [`NTriplesSerializer`].
     #[inline]
     pub fn new() -> Self {
-        Self
+        Self {}
     }
 
     /// Writes a N-Triples file to a [`Write`] implementation.
@@ -490,22 +497,22 @@ impl NTriplesSerializer {
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::NTriplesSerializer;
     ///
-    /// let mut writer = NTriplesSerializer::new().serialize_to_write(Vec::new());
-    /// writer.write_triple(TripleRef::new(
+    /// let mut serializer = NTriplesSerializer::new().for_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// ))?;
     /// assert_eq!(
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-    ///     writer.finish().as_slice()
+    ///     serializer.finish().as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteNTriplesWriter<W> {
-        ToWriteNTriplesWriter {
-            write,
-            writer: self.serialize(),
+    pub fn for_writer<W: Write>(self, writer: W) -> WriterNTriplesSerializer<W> {
+        WriterNTriplesSerializer {
+            writer,
+            low_level_writer: self.low_level(),
         }
     }
 
@@ -517,27 +524,27 @@ impl NTriplesSerializer {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> std::io::Result<()> {
-    /// let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
-    /// writer.write_triple(TripleRef::new(
+    /// let mut serializer = NTriplesSerializer::new().for_tokio_async_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new_unchecked("http://example.com#me"),
     ///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
     ///     NamedNodeRef::new_unchecked("http://schema.org/Person"),
     /// )).await?;
     /// assert_eq!(
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-    ///     writer.finish().as_slice()
+    ///     serializer.finish().as_slice()
     /// );
     /// # Ok(())
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+    pub fn for_tokio_async_writer<W: AsyncWrite + Unpin>(
         self,
-        write: W,
-    ) -> ToTokioAsyncWriteNTriplesWriter<W> {
-        ToTokioAsyncWriteNTriplesWriter {
-            write,
-            writer: self.serialize(),
+        writer: W,
+    ) -> TokioAsyncWriterNTriplesSerializer<W> {
+        TokioAsyncWriterNTriplesSerializer {
+            writer,
+            low_level_writer: self.low_level(),
             buffer: Vec::new(),
         }
     }
@@ -549,8 +556,8 @@ impl NTriplesSerializer {
     /// use oxttl::NTriplesSerializer;
     ///
     /// let mut buf = Vec::new();
-    /// let mut writer = NTriplesSerializer::new().serialize();
-    /// writer.write_triple(TripleRef::new(
+    /// let mut serializer = NTriplesSerializer::new().low_level();
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
@@ -562,48 +569,52 @@ impl NTriplesSerializer {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn serialize(self) -> LowLevelNTriplesWriter {
-        LowLevelNTriplesWriter
+    pub fn low_level(self) -> LowLevelNTriplesSerializer {
+        LowLevelNTriplesSerializer {}
     }
 }
 
-/// Writes a N-Triples file to a [`Write`] implementation. Can be built using [`NTriplesSerializer::serialize_to_write`].
+/// Writes a N-Triples file to a [`Write`] implementation.
+///
+/// Can be built using [`NTriplesSerializer::for_writer`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::NTriplesSerializer;
 ///
-/// let mut writer = NTriplesSerializer::new().serialize_to_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+/// let mut serializer = NTriplesSerializer::new().for_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-///     writer.finish().as_slice()
+///     serializer.finish().as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct ToWriteNTriplesWriter<W: Write> {
-    write: W,
-    writer: LowLevelNTriplesWriter,
+pub struct WriterNTriplesSerializer<W: Write> {
+    writer: W,
+    low_level_writer: LowLevelNTriplesSerializer,
 }
 
-impl<W: Write> ToWriteNTriplesWriter<W> {
+impl<W: Write> WriterNTriplesSerializer<W> {
     /// Writes an extra triple.
-    pub fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
-        self.writer.write_triple(t, &mut self.write)
+    pub fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        self.low_level_writer.serialize_triple(t, &mut self.writer)
     }
 
     /// Ends the write process and returns the underlying [`Write`].
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
-/// Writes a N-Triples file to a [`AsyncWrite`] implementation. Can be built using [`NTriplesSerializer::serialize_to_tokio_async_write`].
+/// Writes a N-Triples file to a [`AsyncWrite`] implementation.
+///
+/// Can be built using [`NTriplesSerializer::for_tokio_async_writer`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
@@ -611,52 +622,55 @@ impl<W: Write> ToWriteNTriplesWriter<W> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> std::io::Result<()> {
-/// let mut writer = NTriplesSerializer::new().serialize_to_tokio_async_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+/// let mut serializer = NTriplesSerializer::new().for_tokio_async_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new_unchecked("http://example.com#me"),
 ///     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
 ///     NamedNodeRef::new_unchecked("http://schema.org/Person")
 /// )).await?;
 /// assert_eq!(
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .\n",
-///     writer.finish().as_slice()
+///     serializer.finish().as_slice()
 /// );
 /// # Ok(())
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct ToTokioAsyncWriteNTriplesWriter<W: AsyncWrite + Unpin> {
-    write: W,
-    writer: LowLevelNTriplesWriter,
+pub struct TokioAsyncWriterNTriplesSerializer<W: AsyncWrite + Unpin> {
+    writer: W,
+    low_level_writer: LowLevelNTriplesSerializer,
     buffer: Vec<u8>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNTriplesWriter<W> {
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterNTriplesSerializer<W> {
     /// Writes an extra triple.
-    pub async fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
-        self.writer.write_triple(t, &mut self.buffer)?;
-        self.write.write_all(&self.buffer).await?;
+    pub async fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+        self.low_level_writer
+            .serialize_triple(t, &mut self.buffer)?;
+        self.writer.write_all(&self.buffer).await?;
         self.buffer.clear();
         Ok(())
     }
 
     /// Ends the write process and returns the underlying [`Write`].
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
-/// Writes a N-Triples file by using a low-level API. Can be built using [`NTriplesSerializer::serialize`].
+/// Writes a N-Triples file by using a low-level API.
+///
+/// Can be built using [`NTriplesSerializer::low_level`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::NTriplesSerializer;
 ///
 /// let mut buf = Vec::new();
-/// let mut writer = NTriplesSerializer::new().serialize();
-/// writer.write_triple(TripleRef::new(
+/// let mut serializer = NTriplesSerializer::new().low_level();
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
@@ -667,17 +681,18 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNTriplesWriter<W> {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct LowLevelNTriplesWriter;
+#[allow(clippy::empty_structs_with_brackets)]
+pub struct LowLevelNTriplesSerializer {}
 
-impl LowLevelNTriplesWriter {
+impl LowLevelNTriplesSerializer {
     /// Writes an extra triple.
     #[allow(clippy::unused_self)]
-    pub fn write_triple<'a>(
+    pub fn serialize_triple<'a>(
         &mut self,
         t: impl Into<TripleRef<'a>>,
-        mut write: impl Write,
+        mut writer: impl Write,
     ) -> io::Result<()> {
-        writeln!(write, "{} .", t.into())
+        writeln!(writer, "{} .", t.into())
     }
 }
 
@@ -690,7 +705,7 @@ mod tests {
     fn unchecked_parsing() {
         let triples = NTriplesParser::new()
             .unchecked()
-            .parse_read(r#"<foo> <bar> "baz"@toolonglangtag ."#.as_bytes())
+            .for_reader(r#"<foo> <bar> "baz"@toolonglangtag ."#.as_bytes())
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert_eq!(

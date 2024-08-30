@@ -407,7 +407,7 @@ impl PyStore {
                 parser = parser.with_default_graph(to_graph_name);
             }
             self.inner
-                .load_from_read(parser, input)
+                .load_from_reader(parser, input)
                 .map_err(|e| map_loader_error(e, path))
         })
     }
@@ -477,7 +477,7 @@ impl PyStore {
             }
             self.inner
                 .bulk_loader()
-                .load_from_read(parser, input)
+                .load_from_reader(parser, input)
                 .map_err(|e| map_loader_error(e, path))
         })
     }
@@ -536,9 +536,9 @@ impl PyStore {
                     let format = lookup_rdf_format(format, file_path.as_deref())?;
                     if let Some(from_graph_name) = from_graph_name {
                         self.inner
-                            .dump_graph_to_write(from_graph_name, format, output)
+                            .dump_graph_to_writer(from_graph_name, format, output)
                     } else {
-                        self.inner.dump_to_write(format, output)
+                        self.inner.dump_to_writer(format, output)
                     }
                     .map_err(map_serializer_error)
                 })
