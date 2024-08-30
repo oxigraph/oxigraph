@@ -487,7 +487,7 @@ jobs:
         with: { tool: cargo-codspeed }
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
           cache-dependency-path: "js/package.json"
       - run: npm install
@@ -506,9 +506,11 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@v2
-        with: { tool: cargo-llvm-cov }
-      - run: cargo llvm-cov --codecov --output-path codecov.json
+        with:
+          version: nightly
+          component: llvm-tools-preview
+      - run: cargo install cargo-llvm-cov || true
+      - run: cargo llvm-cov --doctests --codecov --output-path codecov.json
       - uses: codecov/codecov-action@v4
         with:
           files: codecov.json
