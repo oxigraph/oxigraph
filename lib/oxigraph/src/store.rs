@@ -432,11 +432,11 @@ impl Store {
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.load_from_read(RdfFormat::NQuads, file.as_ref())?;
+    /// store.load_from_reader(RdfFormat::NQuads, file.as_ref())?;
     ///
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";
-    /// store.load_from_read(
+    /// store.load_from_reader(
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
@@ -450,15 +450,15 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn load_from_read(
+    pub fn load_from_reader(
         &self,
         parser: impl Into<RdfParser>,
-        read: impl Read,
+        reader: impl Read,
     ) -> Result<(), LoaderError> {
         let quads = parser
             .into()
             .rename_blank_nodes()
-            .parse_read(read)
+            .for_reader(reader)
             .collect::<Result<Vec<_>, _>>()?;
         self.storage.transaction(move |mut t| {
             for quad in &quads {
@@ -494,10 +494,10 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "use Store.load_from_read instead", since = "0.4.0")]
+    #[deprecated(note = "use Store.load_from_reader instead", since = "0.4.0")]
     pub fn load_graph(
         &self,
-        read: impl Read,
+        reader: impl Read,
         format: impl Into<RdfFormat>,
         to_graph_name: impl Into<GraphName>,
         base_iri: Option<&str>,
@@ -513,7 +513,7 @@ impl Store {
                     error: e,
                 })?;
         }
-        self.load_from_read(parser, read)
+        self.load_from_reader(parser, reader)
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -538,10 +538,10 @@ impl Store {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "use Store.load_from_read instead", since = "0.4.0")]
+    #[deprecated(note = "use Store.load_from_reader instead", since = "0.4.0")]
     pub fn load_dataset(
         &self,
-        read: impl Read,
+        reader: impl Read,
         format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
@@ -554,7 +554,7 @@ impl Store {
                     error: e,
                 })?;
         }
-        self.load_from_read(parser, read)
+        self.load_from_reader(parser, reader)
     }
 
     /// Adds a quad to this store.
@@ -630,26 +630,26 @@ impl Store {
     ///         .as_bytes();
     ///
     /// let store = Store::new()?;
-    /// store.load_from_read(RdfFormat::NQuads, file)?;
+    /// store.load_from_reader(RdfFormat::NQuads, file)?;
     ///
-    /// let buffer = store.dump_to_write(RdfFormat::NQuads, Vec::new())?;
+    /// let buffer = store.dump_to_writer(RdfFormat::NQuads, Vec::new())?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn dump_to_write<W: Write>(
+    pub fn dump_to_writer<W: Write>(
         &self,
         serializer: impl Into<RdfSerializer>,
-        write: W,
+        writer: W,
     ) -> Result<W, SerializerError> {
         let serializer = serializer.into();
         if !serializer.format().supports_datasets() {
             return Err(SerializerError::DatasetFormatExpected(serializer.format()));
         }
-        let mut writer = serializer.serialize_to_write(write);
+        let mut serializer = serializer.for_writer(writer);
         for quad in self {
-            writer.write_quad(&quad?)?;
+            serializer.serialize_quad(&quad?)?;
         }
-        Ok(writer.finish()?)
+        Ok(serializer.finish()?)
     }
 
     /// Dumps a store graph into a file.
@@ -666,21 +666,21 @@ impl Store {
     /// store.load_graph(file, RdfFormat::NTriples, GraphName::DefaultGraph, None)?;
     ///
     /// let mut buffer = Vec::new();
-    /// store.dump_graph_to_write(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
+    /// store.dump_graph_to_writer(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn dump_graph_to_write<'a, W: Write>(
+    pub fn dump_graph_to_writer<'a, W: Write>(
         &self,
         from_graph_name: impl Into<GraphNameRef<'a>>,
         serializer: impl Into<RdfSerializer>,
-        write: W,
+        writer: W,
     ) -> Result<W, SerializerError> {
-        let mut writer = serializer.into().serialize_to_write(write);
+        let mut serializer = serializer.into().for_writer(writer);
         for quad in self.quads_for_pattern(None, None, None, Some(from_graph_name.into())) {
-            writer.write_triple(quad?.as_ref())?;
+            serializer.serialize_triple(quad?.as_ref())?;
         }
-        Ok(writer.finish()?)
+        Ok(serializer.finish()?)
     }
 
     /// Dumps a store graph into a file.
@@ -701,14 +701,14 @@ impl Store {
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    #[deprecated(note = "use Store.dump_graph_to_write instead", since = "0.4.0")]
+    #[deprecated(note = "use Store.dump_graph_to_writer instead", since = "0.4.0")]
     pub fn dump_graph<'a, W: Write>(
         &self,
-        write: W,
+        writer: W,
         format: impl Into<RdfFormat>,
         from_graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<W, SerializerError> {
-        self.dump_graph_to_write(from_graph_name, format.into(), write)
+        self.dump_graph_to_writer(from_graph_name, format.into(), writer)
     }
 
     /// Dumps the store into a file.
@@ -722,19 +722,19 @@ impl Store {
     ///         .as_bytes();
     ///
     /// let store = Store::new()?;
-    /// store.load_from_read(RdfFormat::NQuads, file)?;
+    /// store.load_from_reader(RdfFormat::NQuads, file)?;
     ///
     /// let buffer = store.dump_dataset(Vec::new(), RdfFormat::NQuads)?;
     /// assert_eq!(file, buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
-    #[deprecated(note = "use Store.dump_to_write instead", since = "0.4.0")]
+    #[deprecated(note = "use Store.dump_to_writer instead", since = "0.4.0")]
     pub fn dump_dataset<W: Write>(
         &self,
-        write: W,
+        writer: W,
         format: impl Into<RdfFormat>,
     ) -> Result<W, SerializerError> {
-        self.dump_to_write(format.into(), write)
+        self.dump_to_writer(format.into(), writer)
     }
 
     /// Returns all the store named graphs.
@@ -920,7 +920,7 @@ impl Store {
     /// but hard links will be used to point to the original database immutable snapshots.
     /// This allows cheap regular backups.
     ///
-    /// If you want to move your data to another RDF storage system, you should have a look at the [`Store::dump_to_write`] function instead.
+    /// If you want to move your data to another RDF storage system, you should have a look at the [`Store::dump_to_writer`] function instead.
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     pub fn backup(&self, target_directory: impl AsRef<Path>) -> Result<(), StorageError> {
         self.storage.backup(target_directory.as_ref())
@@ -941,7 +941,7 @@ impl Store {
     ///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store
     ///     .bulk_loader()
-    ///     .load_from_read(RdfFormat::NQuads, file.as_ref())?;
+    ///     .load_from_reader(RdfFormat::NQuads, file.as_ref())?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1188,12 +1188,12 @@ impl<'a> Transaction<'a> {
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.transaction(|mut t| t.load_from_read(RdfFormat::NQuads, file.as_ref()))?;
+    /// store.transaction(|mut t| t.load_from_reader(RdfFormat::NQuads, file.as_ref()))?;
     ///
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";
     /// store.transaction(|mut t|
-    ///     t.load_from_read(
+    ///     t.load_from_reader(
     ///         RdfParser::from_format(RdfFormat::Turtle)
     ///             .with_base_iri("http://example.com")
     ///             .unwrap()
@@ -1209,12 +1209,12 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn load_from_read(
+    pub fn load_from_reader(
         &mut self,
         parser: impl Into<RdfParser>,
-        read: impl Read,
+        reader: impl Read,
     ) -> Result<(), LoaderError> {
-        for quad in parser.into().rename_blank_nodes().parse_read(read) {
+        for quad in parser.into().rename_blank_nodes().for_reader(reader) {
             self.insert(quad?.as_ref())?;
         }
         Ok(())
@@ -1246,10 +1246,10 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
     /// ```
-    #[deprecated(note = "use Transaction.load_from_read instead", since = "0.4.0")]
+    #[deprecated(note = "use Transaction.load_from_reader instead", since = "0.4.0")]
     pub fn load_graph(
         &mut self,
-        read: impl Read,
+        reader: impl Read,
         format: impl Into<RdfFormat>,
         to_graph_name: impl Into<GraphName>,
         base_iri: Option<&str>,
@@ -1265,7 +1265,7 @@ impl<'a> Transaction<'a> {
                     error: e,
                 })?;
         }
-        self.load_from_read(parser, read)
+        self.load_from_reader(parser, reader)
     }
 
     /// Loads a dataset file (i.e. quads) into the store.
@@ -1290,10 +1290,10 @@ impl<'a> Transaction<'a> {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
     /// ```
-    #[deprecated(note = "use Transaction.load_from_read instead", since = "0.4.0")]
+    #[deprecated(note = "use Transaction.load_from_reader instead", since = "0.4.0")]
     pub fn load_dataset(
         &mut self,
-        read: impl Read,
+        reader: impl Read,
         format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
@@ -1306,7 +1306,7 @@ impl<'a> Transaction<'a> {
                     error: e,
                 })?;
         }
-        self.load_from_read(parser, read)
+        self.load_from_reader(parser, reader)
     }
 
     /// Adds a quad to this store.
@@ -1555,7 +1555,7 @@ impl Iterator for GraphNameIter {
 ///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
 /// store
 ///     .bulk_loader()
-///     .load_from_read(RdfFormat::NQuads, file.as_ref())?;
+///     .load_from_reader(RdfFormat::NQuads, file.as_ref())?;
 ///
 /// // we inspect the store contents
 /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1627,7 +1627,7 @@ impl BulkLoader {
 
     /// Loads a file using the bulk loader.
     ///
-    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_read`] might be more convenient.
+    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_reader`] might be more convenient.
     ///
     /// <div class="warning">This method is not atomic.
     /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
@@ -1647,14 +1647,14 @@ impl BulkLoader {
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.bulk_loader().load_from_read(
+    /// store.bulk_loader().load_from_reader(
     ///     RdfParser::from_format(RdfFormat::NQuads).unchecked(), // we inject a custom parser with options
     ///     file.as_ref()
     /// )?;
     ///
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";
-    /// store.bulk_loader().load_from_read(
+    /// store.bulk_loader().load_from_reader(
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
@@ -1668,16 +1668,16 @@ impl BulkLoader {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn load_from_read(
+    pub fn load_from_reader(
         &self,
         parser: impl Into<RdfParser>,
-        read: impl Read,
+        reader: impl Read,
     ) -> Result<(), LoaderError> {
         self.load_ok_quads(
             parser
                 .into()
                 .rename_blank_nodes()
-                .parse_read(read)
+                .for_reader(reader)
                 .filter_map(|r| match r {
                     Ok(q) => Some(Ok(q)),
                     Err(e) => {
@@ -1725,10 +1725,10 @@ impl BulkLoader {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "use BulkLoader.load_from_read instead", since = "0.4.0")]
+    #[deprecated(note = "use BulkLoader.load_from_reader instead", since = "0.4.0")]
     pub fn load_dataset(
         &self,
-        read: impl Read,
+        reader: impl Read,
         format: impl Into<RdfFormat>,
         base_iri: Option<&str>,
     ) -> Result<(), LoaderError> {
@@ -1741,7 +1741,7 @@ impl BulkLoader {
                     error: e,
                 })?;
         }
-        self.load_ok_quads(parser.parse_read(read).filter_map(|r| match r {
+        self.load_ok_quads(parser.for_reader(reader).filter_map(|r| match r {
             Ok(q) => Some(Ok(q)),
             Err(e) => {
                 if let Some(callback) = &self.on_parse_error {
@@ -1789,10 +1789,10 @@ impl BulkLoader {
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[deprecated(note = "use BulkLoader.load_from_read instead", since = "0.4.0")]
+    #[deprecated(note = "use BulkLoader.load_from_reader instead", since = "0.4.0")]
     pub fn load_graph(
         &self,
-        read: impl Read,
+        reader: impl Read,
         format: impl Into<RdfFormat>,
         to_graph_name: impl Into<GraphName>,
         base_iri: Option<&str>,
@@ -1809,7 +1809,7 @@ impl BulkLoader {
                     error: e,
                 })?;
         }
-        self.load_ok_quads(parser.parse_read(read).filter_map(|r| match r {
+        self.load_ok_quads(parser.for_reader(reader).filter_map(|r| match r {
             Ok(q) => Some(Ok(q)),
             Err(e) => {
                 if let Some(callback) = &self.on_parse_error {

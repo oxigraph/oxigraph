@@ -226,7 +226,7 @@ impl fmt::Display for GraphUpdateOperation {
         match self {
             Self::InsertData { data } => {
                 writeln!(f, "INSERT DATA {{")?;
-                write_quads(data, f)?;
+                serialize_quads(data, f)?;
                 f.write_str("}")
             }
             Self::DeleteData { data } => {
@@ -313,7 +313,7 @@ impl fmt::Display for GraphUpdateOperation {
     }
 }
 
-fn write_quads(quads: &[Quad], f: &mut fmt::Formatter<'_>) -> fmt::Result {
+fn serialize_quads(quads: &[Quad], f: &mut fmt::Formatter<'_>) -> fmt::Result {
     for quad in quads {
         if quad.graph_name == GraphName::DefaultGraph {
             writeln!(f, "\t{} {} {} .", quad.subject, quad.predicate, quad.object)?;

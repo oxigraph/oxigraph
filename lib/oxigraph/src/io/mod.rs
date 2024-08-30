@@ -19,11 +19,11 @@
 //! <http://example.com/bar> <http://schema.org/name> \"Bar\" .
 //! ";
 //!
-//! let mut writer = RdfSerializer::from_format(RdfFormat::NTriples).serialize_to_write(Vec::new());
-//! for quad in RdfParser::from_format(RdfFormat::Turtle).parse_read(turtle_file.as_ref()) {
-//!     writer.write_quad(&quad.unwrap()).unwrap();
+//! let mut serializer = RdfSerializer::from_format(RdfFormat::NTriples).for_writer(Vec::new());
+//! for quad in RdfParser::from_format(RdfFormat::Turtle).for_reader(turtle_file.as_ref()) {
+//!     serializer.serialize_quad(&quad.unwrap()).unwrap();
 //! }
-//! assert_eq!(writer.finish().unwrap(), ntriples_file);
+//! assert_eq!(serializer.finish().unwrap(), ntriples_file);
 //! ```
 
 mod format;
@@ -36,4 +36,7 @@ pub use self::format::{DatasetFormat, GraphFormat};
 pub use self::read::{DatasetParser, GraphParser};
 #[allow(deprecated)]
 pub use self::write::{DatasetSerializer, GraphSerializer};
-pub use oxrdfio::*;
+pub use oxrdfio::{
+    RdfFormat, RdfParseError, RdfParser, RdfSerializer, RdfSyntaxError, ReaderQuadParser,
+    SliceQuadParser, TextPosition, WriterQuadSerializer,
+};

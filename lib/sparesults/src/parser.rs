@@ -1,26 +1,26 @@
 use crate::csv::{
-    FromReadTsvQueryResultsReader, FromReadTsvSolutionsReader, FromSliceTsvQueryResultsReader,
-    FromSliceTsvSolutionsReader,
+    ReaderTsvQueryResultsParserOutput, ReaderTsvSolutionsParser, SliceTsvQueryResultsParserOutput,
+    SliceTsvSolutionsParser,
 };
 #[cfg(feature = "async-tokio")]
-use crate::csv::{FromTokioAsyncReadTsvQueryResultsReader, FromTokioAsyncReadTsvSolutionsReader};
+use crate::csv::{TokioAsyncReaderTsvQueryResultsParserOutput, TokioAsyncReaderTsvSolutionsParser};
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use crate::format::QueryResultsFormat;
 use crate::json::{
-    FromReadJsonQueryResultsReader, FromReadJsonSolutionsReader, FromSliceJsonQueryResultsReader,
-    FromSliceJsonSolutionsReader,
+    ReaderJsonQueryResultsParserOutput, ReaderJsonSolutionsParser,
+    SliceJsonQueryResultsParserOutput, SliceJsonSolutionsParser,
 };
 #[cfg(feature = "async-tokio")]
 use crate::json::{
-    FromTokioAsyncReadJsonQueryResultsReader, FromTokioAsyncReadJsonSolutionsReader,
+    TokioAsyncReaderJsonQueryResultsParserOutput, TokioAsyncReaderJsonSolutionsParser,
 };
 use crate::solution::QuerySolution;
 use crate::xml::{
-    FromReadXmlQueryResultsReader, FromReadXmlSolutionsReader, FromSliceXmlQueryResultsReader,
-    FromSliceXmlSolutionsReader,
+    ReaderXmlQueryResultsParserOutput, ReaderXmlSolutionsParser, SliceXmlQueryResultsParserOutput,
+    SliceXmlSolutionsParser,
 };
 #[cfg(feature = "async-tokio")]
-use crate::xml::{FromTokioAsyncReadXmlQueryResultsReader, FromTokioAsyncReadXmlSolutionsReader};
+use crate::xml::{TokioAsyncReaderXmlQueryResultsParserOutput, TokioAsyncReaderXmlSolutionsParser};
 use oxrdf::Variable;
 use std::io::Read;
 use std::sync::Arc;
@@ -36,16 +36,16 @@ use tokio::io::AsyncRead;
 ///
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 /// use oxrdf::{Literal, Variable};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 /// // boolean
-/// if let FromReadQueryResultsReader::Boolean(v) = json_parser.clone().parse_read(br#"{"boolean":true}"#.as_slice())? {
+/// if let ReaderQueryResultsParserOutput::Boolean(v) = json_parser.clone().for_reader(br#"{"boolean":true}"#.as_slice())? {
 ///     assert_eq!(v, true);
 /// }
 /// // solutions
-/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
+/// if let ReaderQueryResultsParserOutput::Solutions(solutions) = json_parser.for_reader(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -72,18 +72,18 @@ impl QueryResultsParser {
     ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
-    /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
+    /// use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
     /// use oxrdf::{Literal, Variable};
     ///
     /// let xml_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let FromReadQueryResultsReader::Boolean(v) = xml_parser.clone().parse_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice())? {
+    /// if let ReaderQueryResultsParserOutput::Boolean(v) = xml_parser.clone().for_reader(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice())? {
     ///     assert_eq!(v, true);
     /// }
     ///
     /// // solutions
-    /// if let FromReadQueryResultsReader::Solutions(solutions) = xml_parser.parse_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#.as_slice())? {
+    /// if let ReaderQueryResultsParserOutput::Solutions(solutions) = xml_parser.for_reader(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#.as_slice())? {
     ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
     ///     for solution in solutions {
     ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -91,51 +91,51 @@ impl QueryResultsParser {
     /// }
     /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(
+    pub fn for_reader<R: Read>(
         self,
         reader: R,
-    ) -> Result<FromReadQueryResultsReader<R>, QueryResultsParseError> {
+    ) -> Result<ReaderQueryResultsParserOutput<R>, QueryResultsParseError> {
         Ok(match self.format {
-            QueryResultsFormat::Xml => match FromReadXmlQueryResultsReader::read(reader)? {
-                FromReadXmlQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
-                FromReadXmlQueryResultsReader::Solutions {
+            QueryResultsFormat::Xml => match ReaderXmlQueryResultsParserOutput::read(reader)? {
+                ReaderXmlQueryResultsParserOutput::Boolean(r) => ReaderQueryResultsParserOutput::Boolean(r),
+                ReaderXmlQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
+                } => ReaderQueryResultsParserOutput::Solutions(ReaderSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromReadSolutionsReaderKind::Xml(solutions),
+                    solutions: ReaderSolutionsParserKind::Xml(solutions),
                 }),
             },
-            QueryResultsFormat::Json => match FromReadJsonQueryResultsReader::read(reader)? {
-                FromReadJsonQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
-                FromReadJsonQueryResultsReader::Solutions {
+            QueryResultsFormat::Json => match ReaderJsonQueryResultsParserOutput::read(reader)? {
+                ReaderJsonQueryResultsParserOutput::Boolean(r) => ReaderQueryResultsParserOutput::Boolean(r),
+                ReaderJsonQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
+                } => ReaderQueryResultsParserOutput::Solutions(ReaderSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromReadSolutionsReaderKind::Json(solutions),
+                    solutions: ReaderSolutionsParserKind::Json(solutions),
                 }),
             },
             QueryResultsFormat::Csv => return Err(QueryResultsSyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation").into()),
-            QueryResultsFormat::Tsv => match FromReadTsvQueryResultsReader::read(reader)? {
-                FromReadTsvQueryResultsReader::Boolean(r) => FromReadQueryResultsReader::Boolean(r),
-                FromReadTsvQueryResultsReader::Solutions {
+            QueryResultsFormat::Tsv => match ReaderTsvQueryResultsParserOutput::read(reader)? {
+                ReaderTsvQueryResultsParserOutput::Boolean(r) => ReaderQueryResultsParserOutput::Boolean(r),
+                ReaderTsvQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromReadQueryResultsReader::Solutions(FromReadSolutionsReader {
+                } => ReaderQueryResultsParserOutput::Solutions(ReaderSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromReadSolutionsReaderKind::Tsv(solutions),
+                    solutions: ReaderSolutionsParserKind::Tsv(solutions),
                 }),
             },
         })
     }
 
-    #[deprecated(note = "use parse_read", since = "0.4.0")]
+    #[deprecated(note = "use for_read", since = "0.4.0")]
     pub fn read_results<R: Read>(
         &self,
         reader: R,
-    ) -> Result<FromReadQueryResultsReader<R>, QueryResultsParseError> {
-        self.clone().parse_read(reader)
+    ) -> Result<ReaderQueryResultsParserOutput<R>, QueryResultsParseError> {
+        self.clone().for_reader(reader)
     }
 
     /// Reads a result file from a Tokio [`AsyncRead`] implementation.
@@ -144,7 +144,7 @@ impl QueryResultsParser {
     ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
-    /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromTokioAsyncReadQueryResultsReader};
+    /// use sparesults::{QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput};
     /// use oxrdf::{Literal, Variable};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
@@ -152,12 +152,12 @@ impl QueryResultsParser {
     /// let xml_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let FromTokioAsyncReadQueryResultsReader::Boolean(v) = xml_parser.clone().parse_tokio_async_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice()).await? {
+    /// if let TokioAsyncReaderQueryResultsParserOutput::Boolean(v) = xml_parser.clone().for_tokio_async_reader(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#.as_slice()).await? {
     ///     assert_eq!(v, true);
     /// }
     ///
     /// // solutions
-    /// if let FromTokioAsyncReadQueryResultsReader::Solutions(mut solutions) = xml_parser.parse_tokio_async_read(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#.as_slice()).await? {
+    /// if let TokioAsyncReaderQueryResultsParserOutput::Solutions(mut solutions) = xml_parser.for_tokio_async_reader(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#.as_slice()).await? {
     ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
     ///     while let Some(solution) = solutions.next().await {
     ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -167,40 +167,40 @@ impl QueryResultsParser {
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub async fn parse_tokio_async_read<R: AsyncRead + Unpin>(
+    pub async fn for_tokio_async_reader<R: AsyncRead + Unpin>(
         self,
         reader: R,
-    ) -> Result<FromTokioAsyncReadQueryResultsReader<R>, QueryResultsParseError> {
+    ) -> Result<TokioAsyncReaderQueryResultsParserOutput<R>, QueryResultsParseError> {
         Ok(match self.format {
-            QueryResultsFormat::Xml => match FromTokioAsyncReadXmlQueryResultsReader::read(reader).await? {
-                FromTokioAsyncReadXmlQueryResultsReader::Boolean(r) => FromTokioAsyncReadQueryResultsReader::Boolean(r),
-                FromTokioAsyncReadXmlQueryResultsReader::Solutions {
+            QueryResultsFormat::Xml => match TokioAsyncReaderXmlQueryResultsParserOutput::read(reader).await? {
+                TokioAsyncReaderXmlQueryResultsParserOutput::Boolean(r) => TokioAsyncReaderQueryResultsParserOutput::Boolean(r),
+                TokioAsyncReaderXmlQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromTokioAsyncReadQueryResultsReader::Solutions(FromTokioAsyncReadSolutionsReader {
+                } => TokioAsyncReaderQueryResultsParserOutput::Solutions(TokioAsyncReaderSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromTokioAsyncReadSolutionsReaderKind::Xml(solutions),
+                    solutions: TokioAsyncReaderSolutionsParserKind::Xml(solutions),
                 }),
             },
-            QueryResultsFormat::Json => match FromTokioAsyncReadJsonQueryResultsReader::read(reader).await? {
-                FromTokioAsyncReadJsonQueryResultsReader::Boolean(r) => FromTokioAsyncReadQueryResultsReader::Boolean(r),
-                FromTokioAsyncReadJsonQueryResultsReader::Solutions {
+            QueryResultsFormat::Json => match TokioAsyncReaderJsonQueryResultsParserOutput::read(reader).await? {
+                TokioAsyncReaderJsonQueryResultsParserOutput::Boolean(r) => TokioAsyncReaderQueryResultsParserOutput::Boolean(r),
+                TokioAsyncReaderJsonQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromTokioAsyncReadQueryResultsReader::Solutions(FromTokioAsyncReadSolutionsReader {
+                } => TokioAsyncReaderQueryResultsParserOutput::Solutions(TokioAsyncReaderSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromTokioAsyncReadSolutionsReaderKind::Json(solutions),
+                    solutions: TokioAsyncReaderSolutionsParserKind::Json(solutions),
                 }),
             },
             QueryResultsFormat::Csv => return Err(QueryResultsSyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation").into()),
-            QueryResultsFormat::Tsv => match FromTokioAsyncReadTsvQueryResultsReader::read(reader).await? {
-                FromTokioAsyncReadTsvQueryResultsReader::Boolean(r) => FromTokioAsyncReadQueryResultsReader::Boolean(r),
-                FromTokioAsyncReadTsvQueryResultsReader::Solutions {
+            QueryResultsFormat::Tsv => match TokioAsyncReaderTsvQueryResultsParserOutput::read(reader).await? {
+                TokioAsyncReaderTsvQueryResultsParserOutput::Boolean(r) => TokioAsyncReaderQueryResultsParserOutput::Boolean(r),
+                TokioAsyncReaderTsvQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromTokioAsyncReadQueryResultsReader::Solutions(FromTokioAsyncReadSolutionsReader {
+                } => TokioAsyncReaderQueryResultsParserOutput::Solutions(TokioAsyncReaderSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromTokioAsyncReadSolutionsReaderKind::Tsv(solutions),
+                    solutions: TokioAsyncReaderSolutionsParserKind::Tsv(solutions),
                 }),
             },
         })
@@ -212,18 +212,18 @@ impl QueryResultsParser {
     ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
-    /// use sparesults::{QueryResultsFormat, QueryResultsParser, FromSliceQueryResultsReader};
+    /// use sparesults::{QueryResultsFormat, QueryResultsParser, SliceQueryResultsParserOutput};
     /// use oxrdf::{Literal, Variable};
     ///
     /// let xml_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
-    /// if let FromSliceQueryResultsReader::Boolean(v) = xml_parser.clone().parse_slice(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#)? {
+    /// if let SliceQueryResultsParserOutput::Boolean(v) = xml_parser.clone().for_slice(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head/><boolean>true</boolean></sparql>"#)? {
     ///     assert_eq!(v, true);
     /// }
     ///
     /// // solutions
-    /// if let FromSliceQueryResultsReader::Solutions(solutions) = xml_parser.parse_slice(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#)? {
+    /// if let SliceQueryResultsParserOutput::Solutions(solutions) = xml_parser.for_slice(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#)? {
     ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
     ///     for solution in solutions {
     ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -231,40 +231,40 @@ impl QueryResultsParser {
     /// }
     /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
     /// ```
-    pub fn parse_slice(
+    pub fn for_slice(
         self,
         slice: &[u8],
-    ) -> Result<FromSliceQueryResultsReader<'_>, QueryResultsSyntaxError> {
+    ) -> Result<SliceQueryResultsParserOutput<'_>, QueryResultsSyntaxError> {
         Ok(match self.format {
-            QueryResultsFormat::Xml => match FromSliceXmlQueryResultsReader::read(slice)? {
-                FromSliceXmlQueryResultsReader::Boolean(r) => FromSliceQueryResultsReader::Boolean(r),
-                FromSliceXmlQueryResultsReader::Solutions {
+            QueryResultsFormat::Xml => match SliceXmlQueryResultsParserOutput::read(slice)? {
+                SliceXmlQueryResultsParserOutput::Boolean(r) => SliceQueryResultsParserOutput::Boolean(r),
+                SliceXmlQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromSliceQueryResultsReader::Solutions(FromSliceSolutionsReader {
+                } => SliceQueryResultsParserOutput::Solutions(SliceSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromSliceSolutionsReaderKind::Xml(solutions),
+                    solutions: SliceSolutionsParserKind::Xml(solutions),
                 }),
             },
-            QueryResultsFormat::Json => match FromSliceJsonQueryResultsReader::read(slice)? {
-                FromSliceJsonQueryResultsReader::Boolean(r) => FromSliceQueryResultsReader::Boolean(r),
-                FromSliceJsonQueryResultsReader::Solutions {
+            QueryResultsFormat::Json => match SliceJsonQueryResultsParserOutput::read(slice)? {
+                SliceJsonQueryResultsParserOutput::Boolean(r) => SliceQueryResultsParserOutput::Boolean(r),
+                SliceJsonQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromSliceQueryResultsReader::Solutions(FromSliceSolutionsReader {
+                } => SliceQueryResultsParserOutput::Solutions(SliceSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromSliceSolutionsReaderKind::Json(solutions),
+                    solutions: SliceSolutionsParserKind::Json(solutions),
                 }),
             },
             QueryResultsFormat::Csv => return Err(QueryResultsSyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation")),
-            QueryResultsFormat::Tsv => match FromSliceTsvQueryResultsReader::read(slice)? {
-                FromSliceTsvQueryResultsReader::Boolean(r) => FromSliceQueryResultsReader::Boolean(r),
-                FromSliceTsvQueryResultsReader::Solutions {
+            QueryResultsFormat::Tsv => match SliceTsvQueryResultsParserOutput::read(slice)? {
+                SliceTsvQueryResultsParserOutput::Boolean(r) => SliceQueryResultsParserOutput::Boolean(r),
+                SliceTsvQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
-                } => FromSliceQueryResultsReader::Solutions(FromSliceSolutionsReader {
+                } => SliceQueryResultsParserOutput::Solutions(SliceSolutionsParser {
                     variables: variables.into(),
-                    solutions: FromSliceSolutionsReaderKind::Tsv(solutions),
+                    solutions: SliceSolutionsParserKind::Tsv(solutions),
                 }),
             },
         })
@@ -279,25 +279,25 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 
 /// The reader for a given read of a results file.
 ///
-/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`FromReadSolutionsReader`]).
+/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`ReaderSolutionsParser`]).
 ///
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
 /// use oxrdf::{Literal, Variable};
-/// use sparesults::{FromReadQueryResultsReader, QueryResultsFormat, QueryResultsParser};
+/// use sparesults::{ReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
 ///
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
 /// // boolean
-/// if let FromReadQueryResultsReader::Boolean(v) =
-///     tsv_parser.clone().parse_read(b"true".as_slice())?
+/// if let ReaderQueryResultsParserOutput::Boolean(v) =
+///     tsv_parser.clone().for_reader(b"true".as_slice())?
 /// {
 ///     assert_eq!(v, true);
 /// }
 ///
 /// // solutions
-/// if let FromReadQueryResultsReader::Solutions(solutions) =
-///     tsv_parser.parse_read(b"?foo\t?bar\n\"test\"\t".as_slice())?
+/// if let ReaderQueryResultsParserOutput::Solutions(solutions) =
+///     tsv_parser.for_reader(b"?foo\t?bar\n\"test\"\t".as_slice())?
 /// {
 ///     assert_eq!(
 ///         solutions.variables(),
@@ -318,22 +318,22 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 /// }
 /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
-pub enum FromReadQueryResultsReader<R: Read> {
-    Solutions(FromReadSolutionsReader<R>),
+pub enum ReaderQueryResultsParserOutput<R: Read> {
+    Solutions(ReaderSolutionsParser<R>),
     Boolean(bool),
 }
 
-/// A streaming reader of a set of [`QuerySolution`] solutions.
+/// A streaming parser of a set of [`QuerySolution`] solutions.
 ///
 /// It implements the [`Iterator`] API to iterate over the solutions.
 ///
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 /// use oxrdf::{Literal, Variable};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
-/// if let FromReadQueryResultsReader::Solutions(solutions) = json_parser.parse_read(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
+/// if let ReaderQueryResultsParserOutput::Solutions(solutions) = json_parser.for_reader(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -341,28 +341,28 @@ pub enum FromReadQueryResultsReader<R: Read> {
 /// }
 /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
-pub struct FromReadSolutionsReader<R: Read> {
+pub struct ReaderSolutionsParser<R: Read> {
     variables: Arc<[Variable]>,
-    solutions: FromReadSolutionsReaderKind<R>,
+    solutions: ReaderSolutionsParserKind<R>,
 }
 
-enum FromReadSolutionsReaderKind<R: Read> {
-    Xml(FromReadXmlSolutionsReader<R>),
-    Json(FromReadJsonSolutionsReader<R>),
-    Tsv(FromReadTsvSolutionsReader<R>),
+enum ReaderSolutionsParserKind<R: Read> {
+    Xml(ReaderXmlSolutionsParser<R>),
+    Json(ReaderJsonSolutionsParser<R>),
+    Tsv(ReaderTsvSolutionsParser<R>),
 }
 
-impl<R: Read> FromReadSolutionsReader<R> {
+impl<R: Read> ReaderSolutionsParser<R> {
     /// Ordered list of the declared variables at the beginning of the results.
     ///
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
     /// use oxrdf::Variable;
-    /// use sparesults::{FromReadQueryResultsReader, QueryResultsFormat, QueryResultsParser};
+    /// use sparesults::{ReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
     ///
     /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
-    /// if let FromReadQueryResultsReader::Solutions(solutions) =
-    ///     tsv_parser.parse_read(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())?
+    /// if let ReaderQueryResultsParserOutput::Solutions(solutions) =
+    ///     tsv_parser.for_reader(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())?
     /// {
     ///     assert_eq!(
     ///         solutions.variables(),
@@ -380,15 +380,15 @@ impl<R: Read> FromReadSolutionsReader<R> {
     }
 }
 
-impl<R: Read> Iterator for FromReadSolutionsReader<R> {
+impl<R: Read> Iterator for ReaderSolutionsParser<R> {
     type Item = Result<QuerySolution, QueryResultsParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(
             match &mut self.solutions {
-                FromReadSolutionsReaderKind::Xml(reader) => reader.read_next(),
-                FromReadSolutionsReaderKind::Json(reader) => reader.read_next(),
-                FromReadSolutionsReaderKind::Tsv(reader) => reader.read_next(),
+                ReaderSolutionsParserKind::Xml(reader) => reader.parse_next(),
+                ReaderSolutionsParserKind::Json(reader) => reader.parse_next(),
+                ReaderSolutionsParserKind::Tsv(reader) => reader.parse_next(),
             }
             .transpose()?
             .map(|values| (Arc::clone(&self.variables), values).into()),
@@ -398,13 +398,13 @@ impl<R: Read> Iterator for FromReadSolutionsReader<R> {
 
 /// The reader for a given read of a results file.
 ///
-/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`FromReadSolutionsReader`]).
+/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`ReaderSolutionsParser`]).
 ///
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
 /// use oxrdf::{Literal, Variable};
 /// use sparesults::{
-///     FromTokioAsyncReadQueryResultsReader, QueryResultsFormat, QueryResultsParser,
+///     TokioAsyncReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser,
 /// };
 ///
 /// # #[tokio::main(flavor = "current_thread")]
@@ -412,17 +412,17 @@ impl<R: Read> Iterator for FromReadSolutionsReader<R> {
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
 /// // boolean
-/// if let FromTokioAsyncReadQueryResultsReader::Boolean(v) = tsv_parser
+/// if let TokioAsyncReaderQueryResultsParserOutput::Boolean(v) = tsv_parser
 ///     .clone()
-///     .parse_tokio_async_read(b"true".as_slice())
+///     .for_tokio_async_reader(b"true".as_slice())
 ///     .await?
 /// {
 ///     assert_eq!(v, true);
 /// }
 ///
 /// // solutions
-/// if let FromTokioAsyncReadQueryResultsReader::Solutions(mut solutions) = tsv_parser
-///     .parse_tokio_async_read(b"?foo\t?bar\n\"test\"\t".as_slice())
+/// if let TokioAsyncReaderQueryResultsParserOutput::Solutions(mut solutions) = tsv_parser
+///     .for_tokio_async_reader(b"?foo\t?bar\n\"test\"\t".as_slice())
 ///     .await?
 /// {
 ///     assert_eq!(
@@ -446,24 +446,24 @@ impl<R: Read> Iterator for FromReadSolutionsReader<R> {
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
-pub enum FromTokioAsyncReadQueryResultsReader<R: AsyncRead + Unpin> {
-    Solutions(FromTokioAsyncReadSolutionsReader<R>),
+pub enum TokioAsyncReaderQueryResultsParserOutput<R: AsyncRead + Unpin> {
+    Solutions(TokioAsyncReaderSolutionsParser<R>),
     Boolean(bool),
 }
 
-/// A streaming reader of a set of [`QuerySolution`] solutions.
+/// A streaming parser of a set of [`QuerySolution`] solutions.
 ///
 /// It implements the [`Iterator`] API to iterate over the solutions.
 ///
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromTokioAsyncReadQueryResultsReader};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput};
 /// use oxrdf::{Literal, Variable};
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), sparesults::QueryResultsParseError> {
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
-/// if let FromTokioAsyncReadQueryResultsReader::Solutions(mut solutions) = json_parser.parse_tokio_async_read(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice()).await? {
+/// if let TokioAsyncReaderQueryResultsParserOutput::Solutions(mut solutions) = json_parser.for_tokio_async_reader(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice()).await? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     while let Some(solution) = solutions.next().await {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -473,34 +473,34 @@ pub enum FromTokioAsyncReadQueryResultsReader<R: AsyncRead + Unpin> {
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
-pub struct FromTokioAsyncReadSolutionsReader<R: AsyncRead + Unpin> {
+pub struct TokioAsyncReaderSolutionsParser<R: AsyncRead + Unpin> {
     variables: Arc<[Variable]>,
-    solutions: FromTokioAsyncReadSolutionsReaderKind<R>,
+    solutions: TokioAsyncReaderSolutionsParserKind<R>,
 }
 
 #[cfg(feature = "async-tokio")]
-enum FromTokioAsyncReadSolutionsReaderKind<R: AsyncRead + Unpin> {
-    Json(FromTokioAsyncReadJsonSolutionsReader<R>),
-    Xml(FromTokioAsyncReadXmlSolutionsReader<R>),
-    Tsv(FromTokioAsyncReadTsvSolutionsReader<R>),
+enum TokioAsyncReaderSolutionsParserKind<R: AsyncRead + Unpin> {
+    Json(TokioAsyncReaderJsonSolutionsParser<R>),
+    Xml(TokioAsyncReaderXmlSolutionsParser<R>),
+    Tsv(TokioAsyncReaderTsvSolutionsParser<R>),
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
     /// Ordered list of the declared variables at the beginning of the results.
     ///
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
     /// use oxrdf::Variable;
     /// use sparesults::{
-    ///     FromTokioAsyncReadQueryResultsReader, QueryResultsFormat, QueryResultsParser,
+    ///     TokioAsyncReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser,
     /// };
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), sparesults::QueryResultsParseError> {
     /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
-    /// if let FromTokioAsyncReadQueryResultsReader::Solutions(solutions) = tsv_parser
-    ///     .parse_tokio_async_read(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())
+    /// if let TokioAsyncReaderQueryResultsParserOutput::Solutions(solutions) = tsv_parser
+    ///     .for_tokio_async_reader(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())
     ///     .await?
     /// {
     ///     assert_eq!(
@@ -523,9 +523,9 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
     pub async fn next(&mut self) -> Option<Result<QuerySolution, QueryResultsParseError>> {
         Some(
             match &mut self.solutions {
-                FromTokioAsyncReadSolutionsReaderKind::Json(reader) => reader.read_next().await,
-                FromTokioAsyncReadSolutionsReaderKind::Xml(reader) => reader.read_next().await,
-                FromTokioAsyncReadSolutionsReaderKind::Tsv(reader) => reader.read_next().await,
+                TokioAsyncReaderSolutionsParserKind::Json(reader) => reader.parse_next().await,
+                TokioAsyncReaderSolutionsParserKind::Xml(reader) => reader.parse_next().await,
+                TokioAsyncReaderSolutionsParserKind::Tsv(reader) => reader.parse_next().await,
             }
             .transpose()?
             .map(|values| (Arc::clone(&self.variables), values).into()),
@@ -535,25 +535,25 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
 
 /// The reader for a given read of a results file.
 ///
-/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`FromSliceSolutionsReader`]).
+/// It is either a read boolean ([`bool`]) or a streaming reader of a set of solutions ([`SliceSolutionsParser`]).
 ///
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
 /// use oxrdf::{Literal, Variable};
-/// use sparesults::{FromReadQueryResultsReader, QueryResultsFormat, QueryResultsParser};
+/// use sparesults::{ReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
 ///
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
 /// // boolean
-/// if let FromReadQueryResultsReader::Boolean(v) =
-///     tsv_parser.clone().parse_read(b"true".as_slice())?
+/// if let ReaderQueryResultsParserOutput::Boolean(v) =
+///     tsv_parser.clone().for_reader(b"true".as_slice())?
 /// {
 ///     assert_eq!(v, true);
 /// }
 ///
 /// // solutions
-/// if let FromReadQueryResultsReader::Solutions(solutions) =
-///     tsv_parser.parse_read(b"?foo\t?bar\n\"test\"\t".as_slice())?
+/// if let ReaderQueryResultsParserOutput::Solutions(solutions) =
+///     tsv_parser.for_reader(b"?foo\t?bar\n\"test\"\t".as_slice())?
 /// {
 ///     assert_eq!(
 ///         solutions.variables(),
@@ -574,22 +574,22 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadSolutionsReader<R> {
 /// }
 /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
-pub enum FromSliceQueryResultsReader<'a> {
-    Solutions(FromSliceSolutionsReader<'a>),
+pub enum SliceQueryResultsParserOutput<'a> {
+    Solutions(SliceSolutionsParser<'a>),
     Boolean(bool),
 }
 
-/// A streaming reader of a set of [`QuerySolution`] solutions.
+/// A streaming parser of a set of [`QuerySolution`] solutions.
 ///
 /// It implements the [`Iterator`] API to iterate over the solutions.
 ///
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
-/// use sparesults::{QueryResultsFormat, QueryResultsParser, FromSliceQueryResultsReader};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, SliceQueryResultsParserOutput};
 /// use oxrdf::{Literal, Variable};
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
-/// if let FromSliceQueryResultsReader::Solutions(solutions) = json_parser.parse_slice(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#)? {
+/// if let SliceQueryResultsParserOutput::Solutions(solutions) = json_parser.for_slice(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#)? {
 ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
 ///     for solution in solutions {
 ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
@@ -597,28 +597,28 @@ pub enum FromSliceQueryResultsReader<'a> {
 /// }
 /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
 /// ```
-pub struct FromSliceSolutionsReader<'a> {
+pub struct SliceSolutionsParser<'a> {
     variables: Arc<[Variable]>,
-    solutions: FromSliceSolutionsReaderKind<'a>,
+    solutions: SliceSolutionsParserKind<'a>,
 }
 
-enum FromSliceSolutionsReaderKind<'a> {
-    Xml(FromSliceXmlSolutionsReader<'a>),
-    Json(FromSliceJsonSolutionsReader<'a>),
-    Tsv(FromSliceTsvSolutionsReader<'a>),
+enum SliceSolutionsParserKind<'a> {
+    Xml(SliceXmlSolutionsParser<'a>),
+    Json(SliceJsonSolutionsParser<'a>),
+    Tsv(SliceTsvSolutionsParser<'a>),
 }
 
-impl<'a> FromSliceSolutionsReader<'a> {
+impl<'a> SliceSolutionsParser<'a> {
     /// Ordered list of the declared variables at the beginning of the results.
     ///
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
     /// use oxrdf::Variable;
-    /// use sparesults::{FromSliceQueryResultsReader, QueryResultsFormat, QueryResultsParser};
+    /// use sparesults::{SliceQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
     ///
     /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
-    /// if let FromSliceQueryResultsReader::Solutions(solutions) =
-    ///     tsv_parser.parse_slice(b"?foo\t?bar\n\"ex1\"\t\"ex2\"")?
+    /// if let SliceQueryResultsParserOutput::Solutions(solutions) =
+    ///     tsv_parser.for_slice(b"?foo\t?bar\n\"ex1\"\t\"ex2\"")?
     /// {
     ///     assert_eq!(
     ///         solutions.variables(),
@@ -636,15 +636,15 @@ impl<'a> FromSliceSolutionsReader<'a> {
     }
 }
 
-impl<'a> Iterator for FromSliceSolutionsReader<'a> {
+impl<'a> Iterator for SliceSolutionsParser<'a> {
     type Item = Result<QuerySolution, QueryResultsSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(
             match &mut self.solutions {
-                FromSliceSolutionsReaderKind::Xml(reader) => reader.read_next(),
-                FromSliceSolutionsReaderKind::Json(reader) => reader.read_next(),
-                FromSliceSolutionsReaderKind::Tsv(reader) => reader.read_next(),
+                SliceSolutionsParserKind::Xml(reader) => reader.parse_next(),
+                SliceSolutionsParserKind::Json(reader) => reader.parse_next(),
+                SliceSolutionsParserKind::Tsv(reader) => reader.parse_next(),
             }
             .transpose()?
             .map(|values| (Arc::clone(&self.variables), values).into()),

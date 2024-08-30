@@ -55,10 +55,10 @@ fn parse_bench(
 
 fn parse_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "oxttl ntriples", name, data, |data| {
-        let mut parser = oxttl::NTriplesParser::new().parse();
+        let mut parser = oxttl::NTriplesParser::new().low_level();
         parser.extend_from_slice(data);
         parser.end();
-        while let Some(result) = parser.read_next() {
+        while let Some(result) = parser.parse_next() {
             result.unwrap();
         }
     });
@@ -66,10 +66,10 @@ fn parse_ntriples(c: &mut Criterion, name: &str, data: &[u8]) {
 
 fn parse_turtle(c: &mut Criterion, name: &str, data: &[u8]) {
     parse_bench(c, "oxttl turtle", name, data, |data| {
-        let mut parser = oxttl::TurtleParser::new().parse();
+        let mut parser = oxttl::TurtleParser::new().low_level();
         parser.extend_from_slice(data);
         parser.end();
-        while let Some(result) = parser.read_next() {
+        while let Some(result) = parser.parse_next() {
             result.unwrap();
         }
     });

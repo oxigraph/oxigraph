@@ -4,10 +4,8 @@
 use crate::chunker::get_ntriples_file_chunks;
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
-use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{
-    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
-};
+use crate::toolkit::TokioAsyncReaderIterator;
+use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
 use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxrdf::{Quad, QuadRef};
 use std::io::{self, Read, Write};
@@ -30,7 +28,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for quad in NQuadsParser::new().parse_read(file.as_ref()) {
+/// for quad in NQuadsParser::new().for_reader(file.as_ref()) {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
@@ -58,7 +56,7 @@ impl NQuadsParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.unchecked = true;
@@ -87,7 +85,7 @@ impl NQuadsParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for quad in NQuadsParser::new().parse_read(file.as_ref()) {
+    /// for quad in NQuadsParser::new().for_reader(file.as_ref()) {
     ///     let quad = quad?;
     ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
     ///         count += 1;
@@ -96,9 +94,9 @@ impl NQuadsParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(self, read: R) -> FromReadNQuadsReader<R> {
-        FromReadNQuadsReader {
-            inner: self.parse().parser.parse_read(read),
+    pub fn for_reader<R: Read>(self, reader: R) -> ReaderNQuadsParser<R> {
+        ReaderNQuadsParser {
+            inner: self.low_level().parser.for_reader(reader),
         }
     }
 
@@ -118,7 +116,7 @@ impl NQuadsParser {
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
-    /// let mut parser = NQuadsParser::new().parse_tokio_async_read(file.as_ref());
+    /// let mut parser = NQuadsParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -130,12 +128,12 @@ impl NQuadsParser {
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn for_tokio_async_reader<R: AsyncRead + Unpin>(
         self,
-        read: R,
-    ) -> FromTokioAsyncReadNQuadsReader<R> {
-        FromTokioAsyncReadNQuadsReader {
-            inner: self.parse().parser.parse_tokio_async_read(read),
+        reader: R,
+    ) -> TokioAsyncReaderNQuadsParser<R> {
+        TokioAsyncReaderNQuadsParser {
+            inner: self.low_level().parser.for_tokio_async_reader(reader),
         }
     }
 
@@ -153,7 +151,7 @@ impl NQuadsParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for quad in NQuadsParser::new().parse_slice(file) {
+    /// for quad in NQuadsParser::new().for_slice(file) {
     ///     let quad = quad?;
     ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
     ///         count += 1;
@@ -162,8 +160,8 @@ impl NQuadsParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_slice(self, slice: &[u8]) -> FromSliceNQuadsReader<'_> {
-        FromSliceNQuadsReader {
+    pub fn for_slice(self, slice: &[u8]) -> SliceNQuadsParser<'_> {
+        SliceNQuadsParser {
             inner: NQuadsRecognizer::new_parser(
                 slice,
                 true,
@@ -214,11 +212,11 @@ impl NQuadsParser {
         &self,
         slice: &'a [u8],
         target_parallelism: usize,
-    ) -> Vec<FromSliceNQuadsReader<'a>> {
+    ) -> Vec<SliceNQuadsParser<'a>> {
         let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
         get_ntriples_file_chunks(slice, n_chunks)
             .into_iter()
-            .map(|(start, end)| self.clone().parse_slice(&slice[start..end]))
+            .map(|(start, end)| self.clone().for_slice(&slice[start..end]))
             .collect()
     }
 
@@ -238,7 +236,7 @@ impl NQuadsParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// let mut parser = NQuadsParser::new().parse();
+    /// let mut parser = NQuadsParser::new().low_level();
     /// let mut file_chunks = file.iter();
     /// while !parser.is_end() {
     ///     // We feed more data to the parser
@@ -248,7 +246,7 @@ impl NQuadsParser {
     ///         parser.end(); // It's finished
     ///     }
     ///     // We read as many quads from the parser as possible
-    ///     while let Some(quad) = parser.read_next() {
+    ///     while let Some(quad) = parser.parse_next() {
     ///         let quad = quad?;
     ///         if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
     ///             count += 1;
@@ -259,8 +257,8 @@ impl NQuadsParser {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn parse(self) -> LowLevelNQuadsReader {
-        LowLevelNQuadsReader {
+    pub fn low_level(self) -> LowLevelNQuadsParser {
+        LowLevelNQuadsParser {
             parser: NQuadsRecognizer::new_parser(
                 Vec::new(),
                 false,
@@ -273,7 +271,9 @@ impl NQuadsParser {
     }
 }
 
-/// Parses a N-Quads file from a [`Read`] implementation. Can be built using [`NQuadsParser::parse_read`].
+/// Parses a N-Quads file from a [`Read`] implementation.
+///
+/// Can be built using [`NQuadsParser::for_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -287,7 +287,7 @@ impl NQuadsParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for quad in NQuadsParser::new().parse_read(file.as_ref()) {
+/// for quad in NQuadsParser::new().for_reader(file.as_ref()) {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
@@ -297,11 +297,11 @@ impl NQuadsParser {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromReadNQuadsReader<R: Read> {
-    inner: FromReadIterator<R, NQuadsRecognizer>,
+pub struct ReaderNQuadsParser<R: Read> {
+    inner: ReaderIterator<R, NQuadsRecognizer>,
 }
 
-impl<R: Read> Iterator for FromReadNQuadsReader<R> {
+impl<R: Read> Iterator for ReaderNQuadsParser<R> {
     type Item = Result<Quad, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -309,7 +309,9 @@ impl<R: Read> Iterator for FromReadNQuadsReader<R> {
     }
 }
 
-/// Parses a N-Quads file from a [`AsyncRead`] implementation. Can be built using [`NQuadsParser::parse_tokio_async_read`].
+/// Parses a N-Quads file from a [`AsyncRead`] implementation.
+///
+/// Can be built using [`NQuadsParser::for_tokio_async_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -325,7 +327,7 @@ impl<R: Read> Iterator for FromReadNQuadsReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
-/// let mut parser = NQuadsParser::new().parse_tokio_async_read(file.as_ref());
+/// let mut parser = NQuadsParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -338,19 +340,21 @@ impl<R: Read> Iterator for FromReadNQuadsReader<R> {
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct FromTokioAsyncReadNQuadsReader<R: AsyncRead + Unpin> {
-    inner: FromTokioAsyncReadIterator<R, NQuadsRecognizer>,
+pub struct TokioAsyncReaderNQuadsParser<R: AsyncRead + Unpin> {
+    inner: TokioAsyncReaderIterator<R, NQuadsRecognizer>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderNQuadsParser<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Quad, TurtleParseError>> {
         Some(self.inner.next().await?.map(Into::into))
     }
 }
 
-/// Parses a N-Quads file from a byte slice. Can be built using [`NQuadsParser::parse_slice`].
+/// Parses a N-Quads file from a byte slice.
+///
+/// Can be built using [`NQuadsParser::for_slice`].
 ///
 /// Count the number of people:
 /// ```
@@ -364,7 +368,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for quad in NQuadsParser::new().parse_slice(file) {
+/// for quad in NQuadsParser::new().for_slice(file) {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
@@ -374,11 +378,11 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadNQuadsReader<R> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromSliceNQuadsReader<'a> {
-    inner: FromSliceIterator<'a, NQuadsRecognizer>,
+pub struct SliceNQuadsParser<'a> {
+    inner: SliceIterator<'a, NQuadsRecognizer>,
 }
 
-impl<'a> Iterator for FromSliceNQuadsReader<'a> {
+impl<'a> Iterator for SliceNQuadsParser<'a> {
     type Item = Result<Quad, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -386,7 +390,9 @@ impl<'a> Iterator for FromSliceNQuadsReader<'a> {
     }
 }
 
-/// Parses a N-Quads file by using a low-level API. Can be built using [`NQuadsParser::parse`].
+/// Parses a N-Quads file by using a low-level API.
+///
+/// Can be built using [`NQuadsParser::low_level`].
 ///
 /// Count the number of people:
 /// ```
@@ -402,7 +408,7 @@ impl<'a> Iterator for FromSliceNQuadsReader<'a> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// let mut parser = NQuadsParser::new().parse();
+/// let mut parser = NQuadsParser::new().low_level();
 /// let mut file_chunks = file.iter();
 /// while !parser.is_end() {
 ///     // We feed more data to the parser
@@ -412,7 +418,7 @@ impl<'a> Iterator for FromSliceNQuadsReader<'a> {
 ///         parser.end(); // It's finished
 ///     }
 ///     // We read as many quads from the parser as possible
-///     while let Some(quad) = parser.read_next() {
+///     while let Some(quad) = parser.parse_next() {
 ///         let quad = quad?;
 ///         if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///             count += 1;
@@ -422,24 +428,24 @@ impl<'a> Iterator for FromSliceNQuadsReader<'a> {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct LowLevelNQuadsReader {
+pub struct LowLevelNQuadsParser {
     parser: Parser<Vec<u8>, NQuadsRecognizer>,
 }
 
-impl LowLevelNQuadsReader {
-    /// Adds some extra bytes to the parser. Should be called when [`read_next`](Self::read_next) returns [`None`] and there is still unread data.
+impl LowLevelNQuadsParser {
+    /// Adds some extra bytes to the parser. Should be called when [`parse_next`](Self::parse_next) returns [`None`] and there is still unread data.
     pub fn extend_from_slice(&mut self, other: &[u8]) {
         self.parser.extend_from_slice(other)
     }
 
     /// Tell the parser that the file is finished.
     ///
-    /// This triggers the parsing of the final bytes and might lead [`read_next`](Self::read_next) to return some extra values.
+    /// This triggers the parsing of the final bytes and might lead [`parse_next`](Self::parse_next) to return some extra values.
     pub fn end(&mut self) {
         self.parser.end()
     }
 
-    /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`read_next`](Self::read_next) is always going to return `None`.
+    /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`parse_next`](Self::parse_next) is always going to return `None`.
     pub fn is_end(&self) -> bool {
         self.parser.is_end()
     }
@@ -448,8 +454,8 @@ impl LowLevelNQuadsReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Quad, TurtleSyntaxError>> {
-        self.parser.read_next()
+    pub fn parse_next(&mut self) -> Option<Result<Quad, TurtleSyntaxError>> {
+        self.parser.parse_next()
     }
 }
 
@@ -461,8 +467,8 @@ impl LowLevelNQuadsReader {
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::NQuadsSerializer;
 ///
-/// let mut writer = NQuadsSerializer::new().serialize_to_write(Vec::new());
-/// writer.write_quad(QuadRef::new(
+/// let mut serializer = NQuadsSerializer::new().for_writer(Vec::new());
+/// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
@@ -470,19 +476,20 @@ impl LowLevelNQuadsReader {
 /// ))?;
 /// assert_eq!(
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
-///     writer.finish().as_slice()
+///     serializer.finish().as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
-pub struct NQuadsSerializer;
+#[allow(clippy::empty_structs_with_brackets)]
+pub struct NQuadsSerializer {}
 
 impl NQuadsSerializer {
     /// Builds a new [`NQuadsSerializer`].
     #[inline]
     pub fn new() -> Self {
-        Self
+        Self {}
     }
 
     /// Writes a N-Quads file to a [`Write`] implementation.
@@ -491,8 +498,8 @@ impl NQuadsSerializer {
     /// use oxrdf::{NamedNodeRef, QuadRef};
     /// use oxttl::NQuadsSerializer;
     ///
-    /// let mut writer = NQuadsSerializer::new().serialize_to_write(Vec::new());
-    /// writer.write_quad(QuadRef::new(
+    /// let mut serializer = NQuadsSerializer::new().for_writer(Vec::new());
+    /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
@@ -500,14 +507,14 @@ impl NQuadsSerializer {
     /// ))?;
     /// assert_eq!(
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
-    ///     writer.finish().as_slice()
+    ///     serializer.finish().as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteNQuadsWriter<W> {
-        ToWriteNQuadsWriter {
-            write,
-            writer: self.serialize(),
+    pub fn for_writer<W: Write>(self, writer: W) -> WriterNQuadsSerializer<W> {
+        WriterNQuadsSerializer {
+            writer,
+            low_level_writer: self.low_level(),
         }
     }
 
@@ -519,8 +526,8 @@ impl NQuadsSerializer {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> std::io::Result<()> {
-    ///     let mut writer = NQuadsSerializer::new().serialize_to_tokio_async_write(Vec::new());
-    ///     writer.write_quad(QuadRef::new(
+    ///     let mut serializer = NQuadsSerializer::new().for_tokio_async_writer(Vec::new());
+    ///     serializer.serialize_quad(QuadRef::new(
     ///         NamedNodeRef::new_unchecked("http://example.com#me"),
     ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
     ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
@@ -528,19 +535,19 @@ impl NQuadsSerializer {
     ///     )).await?;
     ///     assert_eq!(
     ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
-    ///         writer.finish().as_slice()
+    ///         serializer.finish().as_slice()
     ///     );
     /// # Ok(())
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+    pub fn for_tokio_async_writer<W: AsyncWrite + Unpin>(
         self,
-        write: W,
-    ) -> ToTokioAsyncWriteNQuadsWriter<W> {
-        ToTokioAsyncWriteNQuadsWriter {
-            write,
-            writer: self.serialize(),
+        writer: W,
+    ) -> TokioAsyncWriterNQuadsSerializer<W> {
+        TokioAsyncWriterNQuadsSerializer {
+            writer,
+            low_level_writer: self.low_level(),
             buffer: Vec::new(),
         }
     }
@@ -552,8 +559,8 @@ impl NQuadsSerializer {
     /// use oxttl::NQuadsSerializer;
     ///
     /// let mut buf = Vec::new();
-    /// let mut writer = NQuadsSerializer::new().serialize();
-    /// writer.write_quad(QuadRef::new(
+    /// let mut serializer = NQuadsSerializer::new().low_level();
+    /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
@@ -566,19 +573,21 @@ impl NQuadsSerializer {
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn serialize(self) -> LowLevelNQuadsWriter {
-        LowLevelNQuadsWriter
+    pub fn low_level(self) -> LowLevelNQuadsSerializer {
+        LowLevelNQuadsSerializer {}
     }
 }
 
-/// Writes a N-Quads file to a [`Write`] implementation. Can be built using [`NQuadsSerializer::serialize_to_write`].
+/// Writes a N-Quads file to a [`Write`] implementation.
+///
+/// Can be built using [`NQuadsSerializer::for_writer`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::NQuadsSerializer;
 ///
-/// let mut writer = NQuadsSerializer::new().serialize_to_write(Vec::new());
-/// writer.write_quad(QuadRef::new(
+/// let mut serializer = NQuadsSerializer::new().for_writer(Vec::new());
+/// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
@@ -586,29 +595,31 @@ impl NQuadsSerializer {
 /// ))?;
 /// assert_eq!(
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
-///     writer.finish().as_slice()
+///     serializer.finish().as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct ToWriteNQuadsWriter<W: Write> {
-    write: W,
-    writer: LowLevelNQuadsWriter,
+pub struct WriterNQuadsSerializer<W: Write> {
+    writer: W,
+    low_level_writer: LowLevelNQuadsSerializer,
 }
 
-impl<W: Write> ToWriteNQuadsWriter<W> {
+impl<W: Write> WriterNQuadsSerializer<W> {
     /// Writes an extra quad.
-    pub fn write_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
-        self.writer.write_quad(q, &mut self.write)
+    pub fn serialize_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        self.low_level_writer.serialize_quad(q, &mut self.writer)
     }
 
     /// Ends the write process and returns the underlying [`Write`].
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
-/// Writes a N-Quads file to a [`AsyncWrite`] implementation. Can be built using [`NQuadsSerializer::serialize_to_tokio_async_write`].
+/// Writes a N-Quads file to a [`AsyncWrite`] implementation.
+///
+/// Can be built using [`NQuadsSerializer::for_tokio_async_writer`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
@@ -616,8 +627,8 @@ impl<W: Write> ToWriteNQuadsWriter<W> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> std::io::Result<()> {
-///     let mut writer = NQuadsSerializer::new().serialize_to_tokio_async_write(Vec::new());
-///     writer.write_quad(QuadRef::new(
+///     let mut serializer = NQuadsSerializer::new().for_tokio_async_writer(Vec::new());
+///     serializer.serialize_quad(QuadRef::new(
 ///         NamedNodeRef::new_unchecked("http://example.com#me"),
 ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
 ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
@@ -625,44 +636,46 @@ impl<W: Write> ToWriteNQuadsWriter<W> {
 ///     )).await?;
 ///     assert_eq!(
 ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
-///         writer.finish().as_slice()
+///         serializer.finish().as_slice()
 ///     );
 /// # Ok(())
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct ToTokioAsyncWriteNQuadsWriter<W: AsyncWrite + Unpin> {
-    write: W,
-    writer: LowLevelNQuadsWriter,
+pub struct TokioAsyncWriterNQuadsSerializer<W: AsyncWrite + Unpin> {
+    writer: W,
+    low_level_writer: LowLevelNQuadsSerializer,
     buffer: Vec<u8>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNQuadsWriter<W> {
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterNQuadsSerializer<W> {
     /// Writes an extra quad.
-    pub async fn write_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
-        self.writer.write_quad(q, &mut self.buffer)?;
-        self.write.write_all(&self.buffer).await?;
+    pub async fn serialize_quad<'a>(&mut self, q: impl Into<QuadRef<'a>>) -> io::Result<()> {
+        self.low_level_writer.serialize_quad(q, &mut self.buffer)?;
+        self.writer.write_all(&self.buffer).await?;
         self.buffer.clear();
         Ok(())
     }
 
     /// Ends the write process and returns the underlying [`Write`].
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
-/// Writes a N-Quads file by using a low-level API. Can be built using [`NQuadsSerializer::serialize`].
+/// Writes a N-Quads file by using a low-level API.
+///
+/// Can be built using [`NQuadsSerializer::low_level`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
 /// use oxttl::NQuadsSerializer;
 ///
 /// let mut buf = Vec::new();
-/// let mut writer = NQuadsSerializer::new().serialize();
-/// writer.write_quad(QuadRef::new(
+/// let mut serializer = NQuadsSerializer::new().low_level();
+/// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
@@ -674,16 +687,17 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteNQuadsWriter<W> {
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct LowLevelNQuadsWriter;
+#[allow(clippy::empty_structs_with_brackets)]
+pub struct LowLevelNQuadsSerializer {}
 
-impl LowLevelNQuadsWriter {
+impl LowLevelNQuadsSerializer {
     /// Writes an extra quad.
     #[allow(clippy::unused_self)]
-    pub fn write_quad<'a>(
+    pub fn serialize_quad<'a>(
         &mut self,
         q: impl Into<QuadRef<'a>>,
-        mut write: impl Write,
+        mut writer: impl Write,
     ) -> io::Result<()> {
-        writeln!(write, "{} .", q.into())
+        writeln!(writer, "{} .", q.into())
     }
 }

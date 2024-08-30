@@ -117,7 +117,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
         self.is_ending = true;
     }
 
-    pub fn extend_from_read(&mut self, read: &mut impl Read) -> io::Result<()> {
+    pub fn extend_from_reader(&mut self, reader: &mut impl Read) -> io::Result<()> {
         self.shrink_data();
         if self.data.len() == self.max_buffer_size {
             return Err(io::Error::new(
@@ -135,7 +135,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
             // We keep extending to have as much space as available without reallocation
             self.data.resize(self.data.capacity(), 0);
         }
-        let read = read.read(&mut self.data[new_start..])?;
+        let read = reader.read(&mut self.data[new_start..])?;
         self.data.truncate(new_start + read);
         self.is_ending = read == 0;
         Ok(())
@@ -144,7 +144,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
     #[cfg(feature = "async-tokio")]
     pub async fn extend_from_tokio_async_read(
         &mut self,
-        read: &mut (impl AsyncRead + Unpin),
+        reader: &mut (impl AsyncRead + Unpin),
     ) -> io::Result<()> {
         self.shrink_data();
         if self.data.len() == self.max_buffer_size {
@@ -163,7 +163,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
             // We keep extending to have as much space as available without reallocation
             self.data.resize(self.data.capacity(), 0);
         }
-        let read = read.read(&mut self.data[new_start..]).await?;
+        let read = reader.read(&mut self.data[new_start..]).await?;
         self.data.truncate(new_start + read);
         self.is_ending = read == 0;
         Ok(())
@@ -184,7 +184,7 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
 
 impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
     #[allow(clippy::unwrap_in_result)]
-    pub fn read_next(
+    pub fn parse_next(
         &mut self,
         options: &R::Options,
     ) -> Option<Result<TokenOrLineJump<R::Token<'_>>, TurtleSyntaxError>> {

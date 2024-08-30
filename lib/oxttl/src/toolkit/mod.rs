@@ -9,7 +9,7 @@ mod parser;
 pub use self::error::{TextPosition, TurtleParseError, TurtleSyntaxError};
 pub use self::lexer::{Lexer, TokenOrLineJump, TokenRecognizer, TokenRecognizerError};
 #[cfg(feature = "async-tokio")]
-pub use self::parser::FromTokioAsyncReadIterator;
+pub use self::parser::TokioAsyncReaderIterator;
 pub use self::parser::{
-    FromReadIterator, FromSliceIterator, Parser, RuleRecognizer, RuleRecognizerError,
+    Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
 };

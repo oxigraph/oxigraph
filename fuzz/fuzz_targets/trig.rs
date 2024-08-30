@@ -18,28 +18,28 @@ fn parse<'a>(
     if unchecked {
         parser = parser.unchecked();
     }
-    let mut reader = parser.parse();
+    let mut parser = parser.low_level();
     for chunk in chunks {
-        reader.extend_from_slice(chunk);
-        while let Some(result) = reader.read_next() {
+        parser.extend_from_slice(chunk);
+        while let Some(result) = parser.parse_next() {
             match result {
                 Ok(quad) => quads.push(quad),
                 Err(error) => errors.push(error.to_string()),
             }
         }
     }
-    reader.end();
-    while let Some(result) = reader.read_next() {
+    parser.end();
+    while let Some(result) = parser.parse_next() {
         match result {
             Ok(quad) => quads.push(quad),
             Err(error) => errors.push(error.to_string()),
         }
     }
-    assert!(reader.is_end());
+    assert!(parser.is_end());
     (
         quads,
         errors,
-        reader
+        parser
             .prefixes()
             .map(|(k, v)| (k.to_owned(), v.to_owned()))
             .collect(),
@@ -75,11 +75,11 @@ fn serialize_quads(quads: &[Quad], prefixes: Vec<(String, String)>) -> Vec<u8> {
     for (prefix_name, prefix_iri) in prefixes {
         serializer = serializer.with_prefix(prefix_name, prefix_iri).unwrap();
     }
-    let mut writer = serializer.serialize_to_write(Vec::new());
+    let mut serializer = serializer.for_writer(Vec::new());
     for quad in quads {
-        writer.write_quad(quad).unwrap();
+        serializer.serialize_quad(quad).unwrap();
     }
-    writer.finish().unwrap()
+    serializer.finish().unwrap()
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -150,7 +150,7 @@ fuzz_target!(|data: &[u8]| {
     // We parse the serialization
     let new_quads = TriGParser::new()
         .with_quoted_triples()
-        .parse_slice(&new_serialization)
+        .for_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             format!(

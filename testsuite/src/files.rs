@@ -38,7 +38,7 @@ pub fn load_to_graph(
     ignore_errors: bool,
 ) -> Result<()> {
     let parser = RdfParser::from_format(format).with_base_iri(base_iri.unwrap_or(url))?;
-    for t in parser.parse_read(read_file(url)?) {
+    for t in parser.for_reader(read_file(url)?) {
         match t {
             Ok(t) => {
                 graph.insert(&t.into());
@@ -70,7 +70,7 @@ pub fn load_to_dataset(
     if unchecked {
         parser = parser.unchecked();
     }
-    for q in parser.parse_read(read_file(url)?) {
+    for q in parser.for_reader(read_file(url)?) {
         match q {
             Ok(q) => {
                 dataset.insert(&q);
@@ -107,7 +107,7 @@ pub fn load_n3(url: &str, ignore_errors: bool) -> Result<Vec<N3Quad>> {
     for q in N3Parser::new()
         .with_base_iri(url)?
         .with_prefix("", format!("{url}#"))?
-        .parse_read(read_file(url)?)
+        .for_reader(read_file(url)?)
     {
         match q {
             Ok(q) => quads.push(q),

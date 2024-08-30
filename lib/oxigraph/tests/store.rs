@@ -111,7 +111,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 #[test]
 fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
+    store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -124,7 +124,7 @@ fn test_load_graph() -> Result<(), Box<dyn Error>> {
 fn test_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let dir = TempDir::default();
     let store = Store::open(&dir.0)?;
-    store.load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
+    store.load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -137,7 +137,7 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
         .bulk_loader()
-        .load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
+        .load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -152,7 +152,7 @@ fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let store = Store::open(&dir.0)?;
     store
         .bulk_loader()
-        .load_from_read(RdfFormat::Turtle, DATA.as_bytes())?;
+        .load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -163,7 +163,7 @@ fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.bulk_loader().on_parse_error(|_| Ok(())).load_from_read(
+    store.bulk_loader().on_parse_error(|_| Ok(())).load_from_reader(
         RdfFormat::NTriples,
         b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> .".as_slice(),
     )?;
@@ -190,7 +190,7 @@ fn test_bulk_load_empty() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.load_from_read(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
+    store.load_from_reader(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
     for q in quads(NamedNodeRef::new_unchecked(
         "http://www.wikidata.org/wiki/Special:EntityData/Q90",
     )) {
@@ -205,7 +205,7 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
         .bulk_loader()
-        .load_from_read(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
+        .load_from_reader(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
     let graph_name =
         NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
     for q in quads(graph_name) {
@@ -220,7 +220,7 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
 fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     for _ in 0..2 {
-        store.load_from_read(
+        store.load_from_reader(
             RdfFormat::NTriples,
             "_:a <http://example.com/p> <http://example.com/p> .".as_bytes(),
         )?;
@@ -237,7 +237,7 @@ fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     }
 
     let mut buffer = Vec::new();
-    store.dump_graph_to_write(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
+    store.dump_graph_to_writer(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
     assert_eq!(
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES
@@ -252,7 +252,7 @@ fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
         store.insert(q)?;
     }
 
-    let buffer = store.dump_to_write(RdfFormat::NQuads, Vec::new())?;
+    let buffer = store.dump_to_writer(RdfFormat::NQuads, Vec::new())?;
     assert_eq!(
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES

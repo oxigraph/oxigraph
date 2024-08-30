@@ -645,7 +645,7 @@ fn solutions_to_string(solutions: Vec<Vec<(Variable, Term)>>, ordered: bool) -> 
 }
 
 fn load_to_store(url: &str, store: &Store, to_graph_name: impl Into<GraphName>) -> Result<()> {
-    store.load_from_read(
+    store.load_from_reader(
         RdfParser::from_format(guess_rdf_format(url)?)
             .with_base_iri(url)?
             .with_default_graph(to_graph_name),

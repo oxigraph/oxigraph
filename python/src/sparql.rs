@@ -4,8 +4,8 @@ use crate::store::map_storage_error;
 use oxigraph::io::RdfSerializer;
 use oxigraph::model::Term;
 use oxigraph::sparql::results::{
-    FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsFormat,
-    QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
+    QueryResultsFormat, QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
+    ReaderQueryResultsParserOutput, ReaderSolutionsParser,
 };
 use oxigraph::sparql::{
     EvaluationError, Query, QueryOptions, QueryResults, QuerySolution, QuerySolutionIter,
@@ -216,7 +216,7 @@ pub struct PyQuerySolutions {
 enum PyQuerySolutionsVariant {
     Query(UngilQuerySolutionIter),
     Reader {
-        iter: FromReadSolutionsReader<PyReadable>,
+        iter: ReaderSolutionsParser<PyReadable>,
         file_path: Option<PathBuf>,
     },
 }
@@ -286,8 +286,8 @@ impl PyQuerySolutions {
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
                 py.allow_threads(|| {
-                    let mut writer = QueryResultsSerializer::from_format(format)
-                        .serialize_solutions_to_write(
+                    let mut serializer = QueryResultsSerializer::from_format(format)
+                        .serialize_solutions_to_writer(
                             output,
                             match &self.inner {
                                 PyQuerySolutionsVariant::Query(inner) => {
@@ -301,19 +301,19 @@ impl PyQuerySolutions {
                     match &mut self.inner {
                         PyQuerySolutionsVariant::Query(inner) => {
                             for solution in &mut inner.0 {
-                                writer.write(&solution.map_err(map_evaluation_error)?)?;
+                                serializer.serialize(&solution.map_err(map_evaluation_error)?)?;
                             }
                         }
                         PyQuerySolutionsVariant::Reader { iter, file_path } => {
                             for solution in iter {
-                                writer.write(&solution.map_err(|e| {
+                                serializer.serialize(&solution.map_err(|e| {
                                     map_query_results_parse_error(e, file_path.clone())
                                 })?)?;
                             }
                         }
                     }
 
-                    Ok(writer.finish()?)
+                    Ok(serializer.finish()?)
                 })
             },
             output,
@@ -393,7 +393,7 @@ impl PyQueryBoolean {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
                 py.allow_threads(|| {
                     Ok(QueryResultsSerializer::from_format(format)
-                        .serialize_boolean_to_write(output, self.inner)?)
+                        .serialize_boolean_to_writer(output, self.inner)?)
                 })
             },
             output,
@@ -468,11 +468,11 @@ impl PyQueryTriples {
             |output, file_path| {
                 let format = lookup_rdf_format(format, file_path.as_deref())?;
                 py.allow_threads(move || {
-                    let mut writer = RdfSerializer::from_format(format).serialize_to_write(output);
+                    let mut serializer = RdfSerializer::from_format(format).for_writer(output);
                     for triple in &mut self.inner.0 {
-                        writer.write_triple(&triple.map_err(map_evaluation_error)?)?;
+                        serializer.serialize_triple(&triple.map_err(map_evaluation_error)?)?;
                     }
-                    Ok(writer.finish()?)
+                    Ok(serializer.finish()?)
                 })
             },
             output,
@@ -532,17 +532,17 @@ pub fn parse_query_results(
     let input = PyReadable::from_args(&path, input, py)?;
     let format = lookup_query_results_format(format, path.as_deref())?;
     let results = QueryResultsParser::from_format(format)
-        .parse_read(input)
+        .for_reader(input)
         .map_err(|e| map_query_results_parse_error(e, path.clone()))?;
     Ok(match results {
-        FromReadQueryResultsReader::Solutions(iter) => PyQuerySolutions {
+        ReaderQueryResultsParserOutput::Solutions(iter) => PyQuerySolutions {
             inner: PyQuerySolutionsVariant::Reader {
                 iter,
                 file_path: path,
             },
         }
         .into_py(py),
-        FromReadQueryResultsReader::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
+        ReaderQueryResultsParserOutput::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
     })
 }
 

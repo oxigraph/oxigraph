@@ -4,13 +4,11 @@
 use crate::chunker::get_turtle_file_chunks;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
-use crate::toolkit::FromTokioAsyncReadIterator;
-use crate::toolkit::{
-    FromReadIterator, FromSliceIterator, Parser, TurtleParseError, TurtleSyntaxError,
-};
+use crate::toolkit::TokioAsyncReaderIterator;
+use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
 #[cfg(feature = "async-tokio")]
-use crate::trig::ToTokioAsyncWriteTriGWriter;
-use crate::trig::{LowLevelTriGWriter, ToWriteTriGWriter, TriGSerializer};
+use crate::trig::TokioAsyncWriterTriGSerializer;
+use crate::trig::{LowLevelTriGSerializer, TriGSerializer, WriterTriGSerializer};
 use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
@@ -39,7 +37,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in TurtleParser::new().parse_read(file.as_ref()) {
+/// for triple in TurtleParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -69,7 +67,7 @@ impl TurtleParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.unchecked = true;
@@ -118,7 +116,7 @@ impl TurtleParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in TurtleParser::new().parse_read(file.as_ref()) {
+    /// for triple in TurtleParser::new().for_reader(file.as_ref()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -127,9 +125,9 @@ impl TurtleParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(self, read: R) -> FromReadTurtleReader<R> {
-        FromReadTurtleReader {
-            inner: self.parse().parser.parse_read(read),
+    pub fn for_reader<R: Read>(self, reader: R) -> ReaderTurtleParser<R> {
+        ReaderTurtleParser {
+            inner: self.low_level().parser.for_reader(reader),
         }
     }
 
@@ -152,7 +150,7 @@ impl TurtleParser {
     ///
     /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
     /// let mut count = 0;
-    /// let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
+    /// let mut parser = TurtleParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -164,12 +162,12 @@ impl TurtleParser {
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn for_tokio_async_reader<R: AsyncRead + Unpin>(
         self,
-        read: R,
-    ) -> FromTokioAsyncReadTurtleReader<R> {
-        FromTokioAsyncReadTurtleReader {
-            inner: self.parse().parser.parse_tokio_async_read(read),
+        reader: R,
+    ) -> TokioAsyncReaderTurtleParser<R> {
+        TokioAsyncReaderTurtleParser {
+            inner: self.low_level().parser.for_tokio_async_reader(reader),
         }
     }
 
@@ -190,7 +188,7 @@ impl TurtleParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in TurtleParser::new().parse_slice(file) {
+    /// for triple in TurtleParser::new().for_slice(file) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -199,8 +197,8 @@ impl TurtleParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse_slice(self, slice: &[u8]) -> FromSliceTurtleReader<'_> {
-        FromSliceTurtleReader {
+    pub fn for_slice(self, slice: &[u8]) -> SliceTurtleParser<'_> {
+        SliceTurtleParser {
             inner: TriGRecognizer::new_parser(
                 slice,
                 true,
@@ -257,15 +255,15 @@ impl TurtleParser {
         mut self,
         slice: &[u8],
         target_parallelism: usize,
-    ) -> Vec<FromSliceTurtleReader<'_>> {
+    ) -> Vec<SliceTurtleParser<'_>> {
         let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
 
         if n_chunks > 1 {
             // Prefixes must be determined before chunks, since determining chunks relies on parser with prefixes determined.
-            let mut from_slice_reader = self.clone().parse_slice(slice);
+            let mut from_slice_parser = self.clone().for_slice(slice);
             // We don't care about errors: they will be raised when parsing the first chunk anyway
-            from_slice_reader.next();
-            for (p, iri) in from_slice_reader.prefixes() {
+            from_slice_parser.next();
+            for (p, iri) in from_slice_parser.prefixes() {
                 // Already know this is a valid IRI
                 self = self.with_prefix(p, iri).unwrap();
             }
@@ -273,7 +271,7 @@ impl TurtleParser {
 
         get_turtle_file_chunks(slice, n_chunks, &self)
             .into_iter()
-            .map(|(start, end)| self.clone().parse_slice(&slice[start..end]))
+            .map(|(start, end)| self.clone().for_slice(&slice[start..end]))
             .collect()
     }
 
@@ -295,7 +293,7 @@ impl TurtleParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// let mut parser = TurtleParser::new().parse();
+    /// let mut parser = TurtleParser::new().low_level();
     /// let mut file_chunks = file.iter();
     /// while !parser.is_end() {
     ///     // We feed more data to the parser
@@ -305,7 +303,7 @@ impl TurtleParser {
     ///         parser.end(); // It's finished
     ///     }
     ///     // We read as many triples from the parser as possible
-    ///     while let Some(triple) = parser.read_next() {
+    ///     while let Some(triple) = parser.parse_next() {
     ///         let triple = triple?;
     ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///             count += 1;
@@ -315,8 +313,8 @@ impl TurtleParser {
     /// assert_eq!(2, count);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn parse(self) -> LowLevelTurtleReader {
-        LowLevelTurtleReader {
+    pub fn low_level(self) -> LowLevelTurtleParser {
+        LowLevelTurtleParser {
             parser: TriGRecognizer::new_parser(
                 Vec::new(),
                 false,
@@ -331,7 +329,9 @@ impl TurtleParser {
     }
 }
 
-/// Parses a Turtle file from a [`Read`] implementation. Can be built using [`TurtleParser::parse_read`].
+/// Parses a Turtle file from a [`Read`] implementation.
+///
+/// Can be built using [`TurtleParser::for_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -348,7 +348,7 @@ impl TurtleParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in TurtleParser::new().parse_read(file.as_ref()) {
+/// for triple in TurtleParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -358,11 +358,11 @@ impl TurtleParser {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromReadTurtleReader<R: Read> {
-    inner: FromReadIterator<R, TriGRecognizer>,
+pub struct ReaderTurtleParser<R: Read> {
+    inner: ReaderIterator<R, TriGRecognizer>,
 }
 
-impl<R: Read> FromReadTurtleReader<R> {
+impl<R: Read> ReaderTurtleParser<R> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -377,12 +377,12 @@ impl<R: Read> FromReadTurtleReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse_read(file.as_ref());
-    /// assert!(reader.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
+    /// let mut parser = TurtleParser::new().for_reader(file.as_ref());
+    /// assert!(parser.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
     ///
-    /// reader.next().unwrap()?; // We read the first triple
+    /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -403,11 +403,11 @@ impl<R: Read> FromReadTurtleReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse_read(file.as_ref());
-    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    /// let mut parser = TurtleParser::new().for_reader(file.as_ref());
+    /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// parser.next().unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
@@ -421,7 +421,7 @@ impl<R: Read> FromReadTurtleReader<R> {
     }
 }
 
-impl<R: Read> Iterator for FromReadTurtleReader<R> {
+impl<R: Read> Iterator for ReaderTurtleParser<R> {
     type Item = Result<Triple, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -429,7 +429,9 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
     }
 }
 
-/// Parses a Turtle file from a [`AsyncRead`] implementation. Can be built using [`TurtleParser::parse_tokio_async_read`].
+/// Parses a Turtle file from a [`AsyncRead`] implementation.
+///
+/// Can be built using [`TurtleParser::for_tokio_async_reader`].
 ///
 /// Count the number of people:
 /// ```
@@ -448,7 +450,7 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
 /// let mut count = 0;
-/// let mut parser = TurtleParser::new().parse_tokio_async_read(file.as_ref());
+/// let mut parser = TurtleParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -461,12 +463,12 @@ impl<R: Read> Iterator for FromReadTurtleReader<R> {
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct FromTokioAsyncReadTurtleReader<R: AsyncRead + Unpin> {
-    inner: FromTokioAsyncReadIterator<R, TriGRecognizer>,
+pub struct TokioAsyncReaderTurtleParser<R: AsyncRead + Unpin> {
+    inner: TokioAsyncReaderIterator<R, TriGRecognizer>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderTurtleParser<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Triple, TurtleParseError>> {
         Some(self.inner.next().await?.map(Into::into))
@@ -488,12 +490,12 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse_tokio_async_read(file.as_ref());
-    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    /// let mut parser = TurtleParser::new().for_tokio_async_reader(file.as_ref());
+    /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// reader.next().await.unwrap()?; // We read the first triple
+    /// parser.next().await.unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Ok(())
@@ -517,11 +519,11 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse_tokio_async_read(file.as_ref());
-    /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
+    /// let mut parser = TurtleParser::new().for_tokio_async_reader(file.as_ref());
+    /// assert!(parser.base_iri().is_none()); // No base IRI at the beginning
     ///
-    /// reader.next().await.unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// parser.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
     /// # Ok(())
     /// # }
     /// ```
@@ -536,7 +538,9 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
     }
 }
 
-/// Parses a Turtle file from a byte slice. Can be built using [`TurtleParser::parse_slice`].
+/// Parses a Turtle file from a byte slice.
+///
+/// Can be built using [`TurtleParser::for_slice`].
 ///
 /// Count the number of people:
 /// ```
@@ -553,7 +557,7 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in TurtleParser::new().parse_slice(file) {
+/// for triple in TurtleParser::new().for_slice(file) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -563,11 +567,11 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTurtleReader<R> {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct FromSliceTurtleReader<'a> {
-    inner: FromSliceIterator<'a, TriGRecognizer>,
+pub struct SliceTurtleParser<'a> {
+    inner: SliceIterator<'a, TriGRecognizer>,
 }
 
-impl<'a> FromSliceTurtleReader<'a> {
+impl<'a> SliceTurtleParser<'a> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -582,12 +586,12 @@ impl<'a> FromSliceTurtleReader<'a> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse_slice(file);
-    /// assert!(reader.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
+    /// let mut parser = TurtleParser::new().for_slice(file);
+    /// assert!(parser.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
     ///
-    /// reader.next().unwrap()?; // We read the first triple
+    /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -608,11 +612,11 @@ impl<'a> FromSliceTurtleReader<'a> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse_slice(file);
-    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    /// let mut parser = TurtleParser::new().for_slice(file);
+    /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// parser.next().unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
@@ -626,7 +630,7 @@ impl<'a> FromSliceTurtleReader<'a> {
     }
 }
 
-impl<'a> Iterator for FromSliceTurtleReader<'a> {
+impl<'a> Iterator for SliceTurtleParser<'a> {
     type Item = Result<Triple, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -634,7 +638,9 @@ impl<'a> Iterator for FromSliceTurtleReader<'a> {
     }
 }
 
-/// Parses a Turtle file by using a low-level API. Can be built using [`TurtleParser::parse`].
+/// Parses a Turtle file by using a low-level API.
+///
+/// Can be built using [`TurtleParser::low_level`].
 ///
 /// Count the number of people:
 /// ```
@@ -652,7 +658,7 @@ impl<'a> Iterator for FromSliceTurtleReader<'a> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// let mut parser = TurtleParser::new().parse();
+/// let mut parser = TurtleParser::new().low_level();
 /// let mut file_chunks = file.iter();
 /// while !parser.is_end() {
 ///     // We feed more data to the parser
@@ -662,7 +668,7 @@ impl<'a> Iterator for FromSliceTurtleReader<'a> {
 ///         parser.end(); // It's finished
 ///     }
 ///     // We read as many triples from the parser as possible
-///     while let Some(triple) = parser.read_next() {
+///     while let Some(triple) = parser.parse_next() {
 ///         let triple = triple?;
 ///         if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///             count += 1;
@@ -672,24 +678,24 @@ impl<'a> Iterator for FromSliceTurtleReader<'a> {
 /// assert_eq!(2, count);
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct LowLevelTurtleReader {
+pub struct LowLevelTurtleParser {
     parser: Parser<Vec<u8>, TriGRecognizer>,
 }
 
-impl LowLevelTurtleReader {
-    /// Adds some extra bytes to the parser. Should be called when [`read_next`](Self::read_next) returns [`None`] and there is still unread data.
+impl LowLevelTurtleParser {
+    /// Adds some extra bytes to the parser. Should be called when [`parse_next`](Self::parse_next) returns [`None`] and there is still unread data.
     pub fn extend_from_slice(&mut self, other: &[u8]) {
         self.parser.extend_from_slice(other)
     }
 
     /// Tell the parser that the file is finished.
     ///
-    /// This triggers the parsing of the final bytes and might lead [`read_next`](Self::read_next) to return some extra values.
+    /// This triggers the parsing of the final bytes and might lead [`parse_next`](Self::parse_next) to return some extra values.
     pub fn end(&mut self) {
         self.parser.end()
     }
 
-    /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`read_next`](Self::read_next) is always going to return `None`.
+    /// Returns if the parsing is finished i.e. [`end`](Self::end) has been called and [`parse_next`](Self::parse_next) is always going to return `None`.
     pub fn is_end(&self) -> bool {
         self.parser.is_end()
     }
@@ -698,8 +704,8 @@ impl LowLevelTurtleReader {
     ///
     /// Returns [`None`] if the parsing is finished or more data is required.
     /// If it is the case more data should be fed using [`extend_from_slice`](Self::extend_from_slice).
-    pub fn read_next(&mut self) -> Option<Result<Triple, TurtleSyntaxError>> {
-        Some(self.parser.read_next()?.map(Into::into))
+    pub fn parse_next(&mut self) -> Option<Result<Triple, TurtleSyntaxError>> {
+        Some(self.parser.parse_next()?.map(Into::into))
     }
 
     /// The list of IRI prefixes considered at the current step of the parsing.
@@ -716,13 +722,13 @@ impl LowLevelTurtleReader {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse();
-    /// reader.extend_from_slice(file);
-    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    /// let mut parser = TurtleParser::new().low_level();
+    /// parser.extend_from_slice(file);
+    /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// reader.read_next().unwrap()?; // We read the first triple
+    /// parser.parse_next().unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -743,12 +749,12 @@ impl LowLevelTurtleReader {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = TurtleParser::new().parse();
-    /// reader.extend_from_slice(file);
-    /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
+    /// let mut parser = TurtleParser::new().low_level();
+    /// parser.extend_from_slice(file);
+    /// assert!(parser.base_iri().is_none()); // No base IRI at the beginning
     ///
-    /// reader.read_next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// parser.parse_next().unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
@@ -763,7 +769,7 @@ impl LowLevelTurtleReader {
 
 /// Iterator on the file prefixes.
 ///
-/// See [`LowLevelTurtleReader::prefixes`].
+/// See [`LowLevelTurtleParser::prefixes`].
 pub struct TurtlePrefixesIter<'a> {
     inner: Iter<'a, String, Iri<String>>,
 }
@@ -791,17 +797,17 @@ impl<'a> Iterator for TurtlePrefixesIter<'a> {
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
-/// let mut writer = TurtleSerializer::new()
+/// let mut serializer = TurtleSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
-///     .serialize_to_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+///     .for_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
-///     writer.finish()?.as_slice()
+///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
@@ -834,23 +840,23 @@ impl TurtleSerializer {
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
     ///
-    /// let mut writer = TurtleSerializer::new()
+    /// let mut serializer = TurtleSerializer::new()
     ///     .with_prefix("schema", "http://schema.org/")?
-    ///     .serialize_to_write(Vec::new());
-    /// writer.write_triple(TripleRef::new(
+    ///     .for_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// ))?;
     /// assert_eq!(
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
-    ///     writer.finish()?.as_slice()
+    ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteTurtleWriter<W> {
-        ToWriteTurtleWriter {
-            inner: self.inner.serialize_to_write(write),
+    pub fn for_writer<W: Write>(self, writer: W) -> WriterTurtleSerializer<W> {
+        WriterTurtleSerializer {
+            inner: self.inner.for_writer(writer),
         }
     }
 
@@ -862,11 +868,11 @@ impl TurtleSerializer {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(),Box<dyn std::error::Error>> {
-    /// let mut writer = TurtleSerializer::new()
+    /// let mut serializer = TurtleSerializer::new()
     ///     .with_prefix("schema", "http://schema.org/")?
-    ///     .serialize_to_tokio_async_write(Vec::new());
+    ///     .for_tokio_async_writer(Vec::new());
     /// writer
-    ///     .write_triple(TripleRef::new(
+    ///     .serialize_triple(TripleRef::new(
     ///         NamedNodeRef::new_unchecked("http://example.com#me"),
     ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
     ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
@@ -874,18 +880,18 @@ impl TurtleSerializer {
     ///     .await?;
     /// assert_eq!(
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
-    ///     writer.finish().await?.as_slice()
+    ///     serializer.finish().await?.as_slice()
     /// );
     /// # Ok(())
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+    pub fn for_tokio_async_writer<W: AsyncWrite + Unpin>(
         self,
-        write: W,
-    ) -> ToTokioAsyncWriteTurtleWriter<W> {
-        ToTokioAsyncWriteTurtleWriter {
-            inner: self.inner.serialize_to_tokio_async_write(write),
+        writer: W,
+    ) -> TokioAsyncWriterTurtleSerializer<W> {
+        TokioAsyncWriterTurtleSerializer {
+            inner: self.inner.for_tokio_async_writer(writer),
         }
     }
 
@@ -896,10 +902,10 @@ impl TurtleSerializer {
     /// use oxttl::TurtleSerializer;
     ///
     /// let mut buf = Vec::new();
-    /// let mut writer = TurtleSerializer::new()
+    /// let mut serializer = TurtleSerializer::new()
     ///     .with_prefix("schema", "http://schema.org/")?
-    ///     .serialize();
-    /// writer.write_triple(
+    ///     .low_level();
+    /// serializer.serialize_triple(
     ///     TripleRef::new(
     ///         NamedNodeRef::new("http://example.com#me")?,
     ///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -907,50 +913,52 @@ impl TurtleSerializer {
     ///     ),
     ///     &mut buf,
     /// )?;
-    /// writer.finish(&mut buf)?;
+    /// serializer.finish(&mut buf)?;
     /// assert_eq!(
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
     ///     buf.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn serialize(self) -> LowLevelTurtleWriter {
-        LowLevelTurtleWriter {
-            inner: self.inner.serialize(),
+    pub fn low_level(self) -> LowLevelTurtleSerializer {
+        LowLevelTurtleSerializer {
+            inner: self.inner.low_level(),
         }
     }
 }
 
-/// Writes a Turtle file to a [`Write`] implementation. Can be built using [`TurtleSerializer::serialize_to_write`].
+/// Writes a Turtle file to a [`Write`] implementation.
+///
+/// Can be built using [`TurtleSerializer::for_writer`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
-/// let mut writer = TurtleSerializer::new()
+/// let mut serializer = TurtleSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
-///     .serialize_to_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+///     .for_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
-///     writer.finish()?.as_slice()
+///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct ToWriteTurtleWriter<W: Write> {
-    inner: ToWriteTriGWriter<W>,
+pub struct WriterTurtleSerializer<W: Write> {
+    inner: WriterTriGSerializer<W>,
 }
 
-impl<W: Write> ToWriteTurtleWriter<W> {
+impl<W: Write> WriterTurtleSerializer<W> {
     /// Writes an extra triple.
-    pub fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+    pub fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
         self.inner
-            .write_quad(t.into().in_graph(GraphNameRef::DefaultGraph))
+            .serialize_quad(t.into().in_graph(GraphNameRef::DefaultGraph))
     }
 
     /// Ends the write process and returns the underlying [`Write`].
@@ -959,7 +967,9 @@ impl<W: Write> ToWriteTurtleWriter<W> {
     }
 }
 
-/// Writes a Turtle file to a [`AsyncWrite`] implementation. Can be built using [`TurtleSerializer::serialize_to_tokio_async_write`].
+/// Writes a Turtle file to a [`AsyncWrite`] implementation.
+///
+/// Can be built using [`TurtleSerializer::for_tokio_async_writer`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
@@ -967,11 +977,11 @@ impl<W: Write> ToWriteTurtleWriter<W> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut writer = TurtleSerializer::new()
+/// let mut serializer = TurtleSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
-///     .serialize_to_tokio_async_write(Vec::new());
-/// writer
-///     .write_triple(TripleRef::new(
+///     .for_tokio_async_writer(Vec::new());
+/// serializer
+///     .serialize_triple(TripleRef::new(
 ///         NamedNodeRef::new_unchecked("http://example.com#me"),
 ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
 ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
@@ -979,23 +989,23 @@ impl<W: Write> ToWriteTurtleWriter<W> {
 ///     .await?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
-///     writer.finish().await?.as_slice()
+///     serializer.finish().await?.as_slice()
 /// );
 /// # Ok(())
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct ToTokioAsyncWriteTurtleWriter<W: AsyncWrite + Unpin> {
-    inner: ToTokioAsyncWriteTriGWriter<W>,
+pub struct TokioAsyncWriterTurtleSerializer<W: AsyncWrite + Unpin> {
+    inner: TokioAsyncWriterTriGSerializer<W>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTurtleWriter<W> {
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterTurtleSerializer<W> {
     /// Writes an extra triple.
-    pub async fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+    pub async fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
         self.inner
-            .write_quad(t.into().in_graph(GraphNameRef::DefaultGraph))
+            .serialize_quad(t.into().in_graph(GraphNameRef::DefaultGraph))
             .await
     }
 
@@ -1005,17 +1015,19 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTurtleWriter<W> {
     }
 }
 
-/// Writes a Turtle file by using a low-level API. Can be built using [`TurtleSerializer::serialize`].
+/// Writes a Turtle file by using a low-level API.
+///
+/// Can be built using [`TurtleSerializer::low_level`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
 /// let mut buf = Vec::new();
-/// let mut writer = TurtleSerializer::new()
+/// let mut serializer = TurtleSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
-///     .serialize();
-/// writer.write_triple(
+///     .low_level();
+/// serializer.serialize_triple(
 ///     TripleRef::new(
 ///         NamedNodeRef::new("http://example.com#me")?,
 ///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
@@ -1023,31 +1035,31 @@ impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTurtleWriter<W> {
 ///     ),
 ///     &mut buf,
 /// )?;
-/// writer.finish(&mut buf)?;
+/// serializer.finish(&mut buf)?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     buf.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct LowLevelTurtleWriter {
-    inner: LowLevelTriGWriter,
+pub struct LowLevelTurtleSerializer {
+    inner: LowLevelTriGSerializer,
 }
 
-impl LowLevelTurtleWriter {
+impl LowLevelTurtleSerializer {
     /// Writes an extra triple.
-    pub fn write_triple<'a>(
+    pub fn serialize_triple<'a>(
         &mut self,
         t: impl Into<TripleRef<'a>>,
-        write: impl Write,
+        writer: impl Write,
     ) -> io::Result<()> {
         self.inner
-            .write_quad(t.into().in_graph(GraphNameRef::DefaultGraph), write)
+            .serialize_quad(t.into().in_graph(GraphNameRef::DefaultGraph), writer)
     }
 
     /// Finishes to write the file.
-    pub fn finish(&mut self, write: impl Write) -> io::Result<()> {
-        self.inner.finish(write)
+    pub fn finish(&mut self, writer: impl Write) -> io::Result<()> {
+        self.inner.finish(writer)
     }
 }
 
@@ -1059,28 +1071,28 @@ mod tests {
 
     #[test]
     fn test_write() -> io::Result<()> {
-        let mut writer = TurtleSerializer::new().serialize_to_write(Vec::new());
-        writer.write_triple(TripleRef::new(
+        let mut serializer = TurtleSerializer::new().for_writer(Vec::new());
+        serializer.serialize_triple(TripleRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
             NamedNodeRef::new_unchecked("http://example.com/p"),
             NamedNodeRef::new_unchecked("http://example.com/o"),
         ))?;
-        writer.write_triple(TripleRef::new(
+        serializer.serialize_triple(TripleRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
             NamedNodeRef::new_unchecked("http://example.com/p"),
             LiteralRef::new_simple_literal("foo"),
         ))?;
-        writer.write_triple(TripleRef::new(
+        serializer.serialize_triple(TripleRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
             NamedNodeRef::new_unchecked("http://example.com/p2"),
             LiteralRef::new_language_tagged_literal_unchecked("foo", "en"),
         ))?;
-        writer.write_triple(TripleRef::new(
+        serializer.serialize_triple(TripleRef::new(
             BlankNodeRef::new_unchecked("b"),
             NamedNodeRef::new_unchecked("http://example.com/p2"),
             BlankNodeRef::new_unchecked("b2"),
         ))?;
-        assert_eq!(String::from_utf8(writer.finish()?).unwrap(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> , \"foo\" ;\n\t<http://example.com/p2> \"foo\"@en .\n_:b <http://example.com/p2> _:b2 .\n");
+        assert_eq!(String::from_utf8(serializer.finish()?).unwrap(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> , \"foo\" ;\n\t<http://example.com/p2> \"foo\"@en .\n_:b <http://example.com/p2> _:b2 .\n");
         Ok(())
     }
 }

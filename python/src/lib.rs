@@ -17,7 +17,6 @@ use pyo3::prelude::*;
 #[pymodule]
 pub mod pyoxigraph {
     use super::*;
-
     #[pymodule_export]
     use super::{
         parse, parse_query_results, serialize, PyBlankNode, PyCanonicalizationAlgorithm, PyDataset,

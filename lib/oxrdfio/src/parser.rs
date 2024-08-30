@@ -5,25 +5,23 @@ use crate::format::RdfFormat;
 use crate::RdfSyntaxError;
 use oxrdf::{BlankNode, GraphName, IriParseError, Quad, Subject, Term, Triple};
 #[cfg(feature = "async-tokio")]
-use oxrdfxml::FromTokioAsyncReadRdfXmlReader;
-use oxrdfxml::{FromReadRdfXmlReader, FromSliceRdfXmlReader, RdfXmlParser, RdfXmlPrefixesIter};
+use oxrdfxml::TokioAsyncReaderRdfXmlParser;
+use oxrdfxml::{RdfXmlParser, RdfXmlPrefixesIter, ReaderRdfXmlParser, SliceRdfXmlParser};
 #[cfg(feature = "async-tokio")]
-use oxttl::n3::FromTokioAsyncReadN3Reader;
-use oxttl::n3::{FromReadN3Reader, FromSliceN3Reader, N3Parser, N3PrefixesIter, N3Quad, N3Term};
+use oxttl::n3::TokioAsyncReaderN3Parser;
+use oxttl::n3::{N3Parser, N3PrefixesIter, N3Quad, N3Term, ReaderN3Parser, SliceN3Parser};
 #[cfg(feature = "async-tokio")]
-use oxttl::nquads::FromTokioAsyncReadNQuadsReader;
-use oxttl::nquads::{FromReadNQuadsReader, FromSliceNQuadsReader, NQuadsParser};
+use oxttl::nquads::TokioAsyncReaderNQuadsParser;
+use oxttl::nquads::{NQuadsParser, ReaderNQuadsParser, SliceNQuadsParser};
 #[cfg(feature = "async-tokio")]
-use oxttl::ntriples::FromTokioAsyncReadNTriplesReader;
-use oxttl::ntriples::{FromReadNTriplesReader, FromSliceNTriplesReader, NTriplesParser};
+use oxttl::ntriples::TokioAsyncReaderNTriplesParser;
+use oxttl::ntriples::{NTriplesParser, ReaderNTriplesParser, SliceNTriplesParser};
 #[cfg(feature = "async-tokio")]
-use oxttl::trig::FromTokioAsyncReadTriGReader;
-use oxttl::trig::{FromReadTriGReader, FromSliceTriGReader, TriGParser, TriGPrefixesIter};
+use oxttl::trig::TokioAsyncReaderTriGParser;
+use oxttl::trig::{ReaderTriGParser, SliceTriGParser, TriGParser, TriGPrefixesIter};
 #[cfg(feature = "async-tokio")]
-use oxttl::turtle::FromTokioAsyncReadTurtleReader;
-use oxttl::turtle::{
-    FromReadTurtleReader, FromSliceTurtleReader, TurtleParser, TurtlePrefixesIter,
-};
+use oxttl::turtle::TokioAsyncReaderTurtleParser;
+use oxttl::turtle::{ReaderTurtleParser, SliceTurtleParser, TurtleParser, TurtlePrefixesIter};
 use std::collections::HashMap;
 use std::io::Read;
 #[cfg(feature = "async-tokio")]
@@ -50,9 +48,8 @@ use tokio::io::AsyncRead;
 ///
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
-/// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let quads = parser
-///     .parse_read(file.as_bytes())
+/// let quads = RdfParser::from_format(RdfFormat::NTriples)
+///     .for_reader(file.as_bytes())
 ///     .collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(quads.len(), 1);
@@ -161,9 +158,9 @@ impl RdfParser {
     ///
     /// let file = "</s> </p> </o> .";
     ///
-    /// let parser = RdfParser::from_format(RdfFormat::Turtle).with_base_iri("http://example.com")?;
-    /// let quads = parser
-    ///     .parse_read(file.as_bytes())
+    /// let quads = RdfParser::from_format(RdfFormat::Turtle)
+    ///     .with_base_iri("http://example.com")?
+    ///     .for_reader(file.as_bytes())
     ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
@@ -191,10 +188,9 @@ impl RdfParser {
     ///
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
-    /// let parser = RdfParser::from_format(RdfFormat::Turtle)
-    ///     .with_default_graph(NamedNode::new("http://example.com/g")?);
-    /// let quads = parser
-    ///     .parse_read(file.as_bytes())
+    /// let quads = RdfParser::from_format(RdfFormat::Turtle)
+    ///     .with_default_graph(NamedNode::new("http://example.com/g")?)
+    ///     .for_reader(file.as_bytes())
     ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
@@ -217,7 +213,7 @@ impl RdfParser {
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .";
     ///
     /// let parser = RdfParser::from_format(RdfFormat::NQuads).without_named_graphs();
-    /// assert!(parser.parse_read(file.as_bytes()).next().unwrap().is_err());
+    /// assert!(parser.for_reader(file.as_bytes()).next().unwrap().is_err());
     /// ```
     #[inline]
     pub fn without_named_graphs(mut self) -> Self {
@@ -236,11 +232,11 @@ impl RdfParser {
     ///
     /// let result1 = RdfParser::from_format(RdfFormat::NQuads)
     ///     .rename_blank_nodes()
-    ///     .parse_read(file.as_bytes())
+    ///     .for_reader(file.as_bytes())
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// let result2 = RdfParser::from_format(RdfFormat::NQuads)
     ///     .rename_blank_nodes()
-    ///     .parse_read(file.as_bytes())
+    ///     .for_reader(file.as_bytes())
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_ne!(result1, result2);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -255,7 +251,7 @@ impl RdfParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, then broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.inner = match self.inner {
@@ -278,26 +274,23 @@ impl RdfParser {
     ///
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
-    /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-    /// let quads = parser
-    ///     .parse_read(file.as_bytes())
+    /// let quads = RdfParser::from_format(RdfFormat::NTriples)
+    ///     .for_reader(file.as_bytes())
     ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn parse_read<R: Read>(self, reader: R) -> FromReadQuadReader<R> {
-        FromReadQuadReader {
-            parser: match self.inner {
-                RdfParserKind::N3(p) => FromReadQuadReaderKind::N3(p.parse_read(reader)),
-                RdfParserKind::NQuads(p) => FromReadQuadReaderKind::NQuads(p.parse_read(reader)),
-                RdfParserKind::NTriples(p) => {
-                    FromReadQuadReaderKind::NTriples(p.parse_read(reader))
-                }
-                RdfParserKind::RdfXml(p) => FromReadQuadReaderKind::RdfXml(p.parse_read(reader)),
-                RdfParserKind::TriG(p) => FromReadQuadReaderKind::TriG(p.parse_read(reader)),
-                RdfParserKind::Turtle(p) => FromReadQuadReaderKind::Turtle(p.parse_read(reader)),
+    pub fn for_reader<R: Read>(self, reader: R) -> ReaderQuadParser<R> {
+        ReaderQuadParser {
+            inner: match self.inner {
+                RdfParserKind::N3(p) => ReaderQuadParserKind::N3(p.for_reader(reader)),
+                RdfParserKind::NQuads(p) => ReaderQuadParserKind::NQuads(p.for_reader(reader)),
+                RdfParserKind::NTriples(p) => ReaderQuadParserKind::NTriples(p.for_reader(reader)),
+                RdfParserKind::RdfXml(p) => ReaderQuadParserKind::RdfXml(p.for_reader(reader)),
+                RdfParserKind::TriG(p) => ReaderQuadParserKind::TriG(p.for_reader(reader)),
+                RdfParserKind::Turtle(p) => ReaderQuadParserKind::Turtle(p.for_reader(reader)),
             },
             mapper: QuadMapper {
                 default_graph: self.default_graph.clone(),
@@ -318,38 +311,38 @@ impl RdfParser {
     /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
-    /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-    /// let mut reader = parser.parse_tokio_async_read(file.as_bytes());
-    /// if let Some(quad) = reader.next().await {
+    /// let mut parser =
+    ///     RdfParser::from_format(RdfFormat::NTriples).for_tokio_async_reader(file.as_bytes());
+    /// if let Some(quad) = parser.next().await {
     ///     assert_eq!(quad?.subject.to_string(), "<http://example.com/s>");
     /// }
     /// # Ok(())
     /// # }
     /// ```
     #[cfg(feature = "async-tokio")]
-    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn for_tokio_async_reader<R: AsyncRead + Unpin>(
         self,
         reader: R,
-    ) -> FromTokioAsyncReadQuadReader<R> {
-        FromTokioAsyncReadQuadReader {
-            parser: match self.inner {
+    ) -> TokioAsyncReaderQuadParser<R> {
+        TokioAsyncReaderQuadParser {
+            inner: match self.inner {
                 RdfParserKind::N3(p) => {
-                    FromTokioAsyncReadQuadReaderKind::N3(p.parse_tokio_async_read(reader))
+                    TokioAsyncReaderQuadParserKind::N3(p.for_tokio_async_reader(reader))
                 }
                 RdfParserKind::NQuads(p) => {
-                    FromTokioAsyncReadQuadReaderKind::NQuads(p.parse_tokio_async_read(reader))
+                    TokioAsyncReaderQuadParserKind::NQuads(p.for_tokio_async_reader(reader))
                 }
                 RdfParserKind::NTriples(p) => {
-                    FromTokioAsyncReadQuadReaderKind::NTriples(p.parse_tokio_async_read(reader))
+                    TokioAsyncReaderQuadParserKind::NTriples(p.for_tokio_async_reader(reader))
                 }
                 RdfParserKind::RdfXml(p) => {
-                    FromTokioAsyncReadQuadReaderKind::RdfXml(p.parse_tokio_async_read(reader))
+                    TokioAsyncReaderQuadParserKind::RdfXml(p.for_tokio_async_reader(reader))
                 }
                 RdfParserKind::TriG(p) => {
-                    FromTokioAsyncReadQuadReaderKind::TriG(p.parse_tokio_async_read(reader))
+                    TokioAsyncReaderQuadParserKind::TriG(p.for_tokio_async_reader(reader))
                 }
                 RdfParserKind::Turtle(p) => {
-                    FromTokioAsyncReadQuadReaderKind::Turtle(p.parse_tokio_async_read(reader))
+                    TokioAsyncReaderQuadParserKind::Turtle(p.for_tokio_async_reader(reader))
                 }
             },
             mapper: QuadMapper {
@@ -367,24 +360,23 @@ impl RdfParser {
     ///
     /// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
-    /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-    /// let quads = parser.parse_slice(file).collect::<Result<Vec<_>, _>>()?;
+    /// let quads = RdfParser::from_format(RdfFormat::NTriples)
+    ///     .for_slice(file)
+    ///     .collect::<Result<Vec<_>, _>>()?;
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn parse_slice(self, slice: &[u8]) -> FromSliceQuadReader<'_> {
-        FromSliceQuadReader {
-            parser: match self.inner {
-                RdfParserKind::N3(p) => FromSliceQuadReaderKind::N3(p.parse_slice(slice)),
-                RdfParserKind::NQuads(p) => FromSliceQuadReaderKind::NQuads(p.parse_slice(slice)),
-                RdfParserKind::NTriples(p) => {
-                    FromSliceQuadReaderKind::NTriples(p.parse_slice(slice))
-                }
-                RdfParserKind::RdfXml(p) => FromSliceQuadReaderKind::RdfXml(p.parse_slice(slice)),
-                RdfParserKind::TriG(p) => FromSliceQuadReaderKind::TriG(p.parse_slice(slice)),
-                RdfParserKind::Turtle(p) => FromSliceQuadReaderKind::Turtle(p.parse_slice(slice)),
+    pub fn for_slice(self, slice: &[u8]) -> SliceQuadParser<'_> {
+        SliceQuadParser {
+            inner: match self.inner {
+                RdfParserKind::N3(p) => SliceQuadParserKind::N3(p.for_slice(slice)),
+                RdfParserKind::NQuads(p) => SliceQuadParserKind::NQuads(p.for_slice(slice)),
+                RdfParserKind::NTriples(p) => SliceQuadParserKind::NTriples(p.for_slice(slice)),
+                RdfParserKind::RdfXml(p) => SliceQuadParserKind::RdfXml(p.for_slice(slice)),
+                RdfParserKind::TriG(p) => SliceQuadParserKind::TriG(p.for_slice(slice)),
+                RdfParserKind::Turtle(p) => SliceQuadParserKind::Turtle(p.for_slice(slice)),
             },
             mapper: QuadMapper {
                 default_graph: self.default_graph.clone(),
@@ -401,7 +393,9 @@ impl From<RdfFormat> for RdfParser {
     }
 }
 
-/// Parses a RDF file from a [`Read`] implementation. Can be built using [`RdfParser::parse_read`].
+/// Parses a RDF file from a [`Read`] implementation.
+///
+/// Can be built using [`RdfParser::for_reader`].
 ///
 /// Reads are buffered.
 ///
@@ -410,9 +404,8 @@ impl From<RdfFormat> for RdfParser {
 ///
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
-/// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let quads = parser
-///     .parse_read(file.as_bytes())
+/// let quads = RdfParser::from_format(RdfFormat::NTriples)
+///     .for_reader(file.as_bytes())
 ///     .collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(quads.len(), 1);
@@ -420,46 +413,46 @@ impl From<RdfFormat> for RdfParser {
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]
-pub struct FromReadQuadReader<R: Read> {
-    parser: FromReadQuadReaderKind<R>,
+pub struct ReaderQuadParser<R: Read> {
+    inner: ReaderQuadParserKind<R>,
     mapper: QuadMapper,
 }
 
-enum FromReadQuadReaderKind<R: Read> {
-    N3(FromReadN3Reader<R>),
-    NQuads(FromReadNQuadsReader<R>),
-    NTriples(FromReadNTriplesReader<R>),
-    RdfXml(FromReadRdfXmlReader<R>),
-    TriG(FromReadTriGReader<R>),
-    Turtle(FromReadTurtleReader<R>),
+enum ReaderQuadParserKind<R: Read> {
+    N3(ReaderN3Parser<R>),
+    NQuads(ReaderNQuadsParser<R>),
+    NTriples(ReaderNTriplesParser<R>),
+    RdfXml(ReaderRdfXmlParser<R>),
+    TriG(ReaderTriGParser<R>),
+    Turtle(ReaderTurtleParser<R>),
 }
 
-impl<R: Read> Iterator for FromReadQuadReader<R> {
+impl<R: Read> Iterator for ReaderQuadParser<R> {
     type Item = Result<Quad, RdfParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(match &mut self.parser {
-            FromReadQuadReaderKind::N3(parser) => match parser.next()? {
+        Some(match &mut self.inner {
+            ReaderQuadParserKind::N3(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_n3_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
             },
-            FromReadQuadReaderKind::NQuads(parser) => match parser.next()? {
+            ReaderQuadParserKind::NQuads(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
             },
-            FromReadQuadReaderKind::NTriples(parser) => match parser.next()? {
+            ReaderQuadParserKind::NTriples(parser) => match parser.next()? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
-            FromReadQuadReaderKind::RdfXml(parser) => match parser.next()? {
+            ReaderQuadParserKind::RdfXml(parser) => match parser.next()? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
-            FromReadQuadReaderKind::TriG(parser) => match parser.next()? {
+            ReaderQuadParserKind::TriG(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
             },
-            FromReadQuadReaderKind::Turtle(parser) => match parser.next()? {
+            ReaderQuadParserKind::Turtle(parser) => match parser.next()? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
@@ -467,7 +460,7 @@ impl<R: Read> Iterator for FromReadQuadReader<R> {
     }
 }
 
-impl<R: Read> FromReadQuadReader<R> {
+impl<R: Read> ReaderQuadParser<R> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -484,24 +477,24 @@ impl<R: Read> FromReadQuadReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_read(file.as_slice());
-    /// assert!(reader.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
+    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_slice());
+    /// assert!(parser.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
     ///
-    /// reader.next().unwrap()?; // We read the first triple
+    /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
-            inner: match &self.parser {
-                FromReadQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
-                FromReadQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
-                FromReadQuadReaderKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
-                FromReadQuadReaderKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
-                FromReadQuadReaderKind::NQuads(_) | FromReadQuadReaderKind::NTriples(_) => {
+            inner: match &self.inner {
+                ReaderQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
+                ReaderQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
+                ReaderQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
+                ReaderQuadParserKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
+                ReaderQuadParserKind::NQuads(_) | ReaderQuadParserKind::NTriples(_) => {
                     PrefixesIterKind::None
                 }
             },
@@ -520,25 +513,27 @@ impl<R: Read> FromReadQuadReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_read(file.as_slice());
-    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_slice());
+    /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// parser.next().unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        match &self.parser {
-            FromReadQuadReaderKind::N3(p) => p.base_iri(),
-            FromReadQuadReaderKind::TriG(p) => p.base_iri(),
-            FromReadQuadReaderKind::Turtle(p) => p.base_iri(),
-            FromReadQuadReaderKind::RdfXml(p) => p.base_iri(),
-            FromReadQuadReaderKind::NQuads(_) | FromReadQuadReaderKind::NTriples(_) => None,
+        match &self.inner {
+            ReaderQuadParserKind::N3(p) => p.base_iri(),
+            ReaderQuadParserKind::TriG(p) => p.base_iri(),
+            ReaderQuadParserKind::Turtle(p) => p.base_iri(),
+            ReaderQuadParserKind::RdfXml(p) => p.base_iri(),
+            ReaderQuadParserKind::NQuads(_) | ReaderQuadParserKind::NTriples(_) => None,
         }
     }
 }
 
-/// Parses a RDF file from a Tokio [`AsyncRead`] implementation. Can be built using [`RdfParser::parse_tokio_async_read`].
+/// Parses a RDF file from a Tokio [`AsyncRead`] implementation.
+///
+/// Can be built using [`RdfParser::for_tokio_async_reader`].
 ///
 /// Reads are buffered.
 ///
@@ -549,9 +544,9 @@ impl<R: Read> FromReadQuadReader<R> {
 /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
-/// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let mut reader = parser.parse_tokio_async_read(file.as_bytes());
-/// if let Some(quad) = reader.next().await {
+/// let mut parser =
+///     RdfParser::from_format(RdfFormat::NTriples).for_tokio_async_reader(file.as_bytes());
+/// if let Some(quad) = parser.next().await {
 ///     assert_eq!(quad?.subject.to_string(), "<http://example.com/s>");
 /// }
 /// # Ok(())
@@ -559,46 +554,46 @@ impl<R: Read> FromReadQuadReader<R> {
 /// ```
 #[must_use]
 #[cfg(feature = "async-tokio")]
-pub struct FromTokioAsyncReadQuadReader<R: AsyncRead + Unpin> {
-    parser: FromTokioAsyncReadQuadReaderKind<R>,
+pub struct TokioAsyncReaderQuadParser<R: AsyncRead + Unpin> {
+    inner: TokioAsyncReaderQuadParserKind<R>,
     mapper: QuadMapper,
 }
 
 #[cfg(feature = "async-tokio")]
-enum FromTokioAsyncReadQuadReaderKind<R: AsyncRead + Unpin> {
-    N3(FromTokioAsyncReadN3Reader<R>),
-    NQuads(FromTokioAsyncReadNQuadsReader<R>),
-    NTriples(FromTokioAsyncReadNTriplesReader<R>),
-    RdfXml(FromTokioAsyncReadRdfXmlReader<R>),
-    TriG(FromTokioAsyncReadTriGReader<R>),
-    Turtle(FromTokioAsyncReadTurtleReader<R>),
+enum TokioAsyncReaderQuadParserKind<R: AsyncRead + Unpin> {
+    N3(TokioAsyncReaderN3Parser<R>),
+    NQuads(TokioAsyncReaderNQuadsParser<R>),
+    NTriples(TokioAsyncReaderNTriplesParser<R>),
+    RdfXml(TokioAsyncReaderRdfXmlParser<R>),
+    TriG(TokioAsyncReaderTriGParser<R>),
+    Turtle(TokioAsyncReaderTurtleParser<R>),
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     pub async fn next(&mut self) -> Option<Result<Quad, RdfParseError>> {
-        Some(match &mut self.parser {
-            FromTokioAsyncReadQuadReaderKind::N3(parser) => match parser.next().await? {
+        Some(match &mut self.inner {
+            TokioAsyncReaderQuadParserKind::N3(parser) => match parser.next().await? {
                 Ok(quad) => self.mapper.map_n3_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
             },
-            FromTokioAsyncReadQuadReaderKind::NQuads(parser) => match parser.next().await? {
+            TokioAsyncReaderQuadParserKind::NQuads(parser) => match parser.next().await? {
                 Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
             },
-            FromTokioAsyncReadQuadReaderKind::NTriples(parser) => match parser.next().await? {
+            TokioAsyncReaderQuadParserKind::NTriples(parser) => match parser.next().await? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
-            FromTokioAsyncReadQuadReaderKind::RdfXml(parser) => match parser.next().await? {
+            TokioAsyncReaderQuadParserKind::RdfXml(parser) => match parser.next().await? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
-            FromTokioAsyncReadQuadReaderKind::TriG(parser) => match parser.next().await? {
+            TokioAsyncReaderQuadParserKind::TriG(parser) => match parser.next().await? {
                 Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
             },
-            FromTokioAsyncReadQuadReaderKind::Turtle(parser) => match parser.next().await? {
+            TokioAsyncReaderQuadParserKind::Turtle(parser) => match parser.next().await? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
@@ -623,12 +618,12 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_read(file.as_slice());
-    /// assert_eq!(reader.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
+    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_slice());
+    /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// reader.next().await.unwrap()?; // We read the first triple
+    /// parser.next().await.unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Ok(())
@@ -636,17 +631,13 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
     /// ```
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
-            inner: match &self.parser {
-                FromTokioAsyncReadQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
-                FromTokioAsyncReadQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
-                FromTokioAsyncReadQuadReaderKind::Turtle(p) => {
-                    PrefixesIterKind::Turtle(p.prefixes())
-                }
-                FromTokioAsyncReadQuadReaderKind::RdfXml(p) => {
-                    PrefixesIterKind::RdfXml(p.prefixes())
-                }
-                FromTokioAsyncReadQuadReaderKind::NQuads(_)
-                | FromTokioAsyncReadQuadReaderKind::NTriples(_) => PrefixesIterKind::None,
+            inner: match &self.inner {
+                TokioAsyncReaderQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
+                TokioAsyncReaderQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
+                TokioAsyncReaderQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
+                TokioAsyncReaderQuadParserKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
+                TokioAsyncReaderQuadParserKind::NQuads(_)
+                | TokioAsyncReaderQuadParserKind::NTriples(_) => PrefixesIterKind::None,
             },
         }
     }
@@ -665,82 +656,85 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadQuadReader<R> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader =
-    ///     RdfParser::from_format(RdfFormat::Turtle).parse_tokio_async_read(file.as_slice());
-    /// assert!(reader.base_iri().is_none()); // No base IRI at the beginning
+    /// let mut parser =
+    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_slice());
+    /// assert!(parser.base_iri().is_none()); // No base IRI at the beginning
     ///
-    /// reader.next().await.unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// parser.next().await.unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
     /// # Ok(())
     /// # }
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        match &self.parser {
-            FromTokioAsyncReadQuadReaderKind::N3(p) => p.base_iri(),
-            FromTokioAsyncReadQuadReaderKind::TriG(p) => p.base_iri(),
-            FromTokioAsyncReadQuadReaderKind::Turtle(p) => p.base_iri(),
-            FromTokioAsyncReadQuadReaderKind::RdfXml(p) => p.base_iri(),
-            FromTokioAsyncReadQuadReaderKind::NQuads(_)
-            | FromTokioAsyncReadQuadReaderKind::NTriples(_) => None,
+        match &self.inner {
+            TokioAsyncReaderQuadParserKind::N3(p) => p.base_iri(),
+            TokioAsyncReaderQuadParserKind::TriG(p) => p.base_iri(),
+            TokioAsyncReaderQuadParserKind::Turtle(p) => p.base_iri(),
+            TokioAsyncReaderQuadParserKind::RdfXml(p) => p.base_iri(),
+            TokioAsyncReaderQuadParserKind::NQuads(_)
+            | TokioAsyncReaderQuadParserKind::NTriples(_) => None,
         }
     }
 }
 
-/// Parses a RDF file from a byte slice. Can be built using [`RdfParser::parse_slice`].
+/// Parses a RDF file from a byte slice.
+///
+/// Can be built using [`RdfParser::for_slice`].
 ///
 /// ```
 /// use oxrdfio::{RdfFormat, RdfParser};
 ///
 /// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
-/// let parser = RdfParser::from_format(RdfFormat::NTriples);
-/// let quads = parser.parse_slice(file).collect::<Result<Vec<_>, _>>()?;
+/// let quads = RdfParser::from_format(RdfFormat::NTriples)
+///     .for_slice(file)
+///     .collect::<Result<Vec<_>, _>>()?;
 ///
 /// assert_eq!(quads.len(), 1);
 /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
 /// # std::io::Result::Ok(())
 /// ```
 #[must_use]
-pub struct FromSliceQuadReader<'a> {
-    parser: FromSliceQuadReaderKind<'a>,
+pub struct SliceQuadParser<'a> {
+    inner: SliceQuadParserKind<'a>,
     mapper: QuadMapper,
 }
 
-enum FromSliceQuadReaderKind<'a> {
-    N3(FromSliceN3Reader<'a>),
-    NQuads(FromSliceNQuadsReader<'a>),
-    NTriples(FromSliceNTriplesReader<'a>),
-    RdfXml(FromSliceRdfXmlReader<'a>),
-    TriG(FromSliceTriGReader<'a>),
-    Turtle(FromSliceTurtleReader<'a>),
+enum SliceQuadParserKind<'a> {
+    N3(SliceN3Parser<'a>),
+    NQuads(SliceNQuadsParser<'a>),
+    NTriples(SliceNTriplesParser<'a>),
+    RdfXml(SliceRdfXmlParser<'a>),
+    TriG(SliceTriGParser<'a>),
+    Turtle(SliceTurtleParser<'a>),
 }
 
-impl<'a> Iterator for FromSliceQuadReader<'a> {
+impl<'a> Iterator for SliceQuadParser<'a> {
     type Item = Result<Quad, RdfSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(match &mut self.parser {
-            FromSliceQuadReaderKind::N3(parser) => match parser.next()? {
+        Some(match &mut self.inner {
+            SliceQuadParserKind::N3(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_n3_quad(quad),
                 Err(e) => Err(e.into()),
             },
-            FromSliceQuadReaderKind::NQuads(parser) => match parser.next()? {
+            SliceQuadParserKind::NQuads(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_quad(quad),
                 Err(e) => Err(e.into()),
             },
-            FromSliceQuadReaderKind::NTriples(parser) => match parser.next()? {
+            SliceQuadParserKind::NTriples(parser) => match parser.next()? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
-            FromSliceQuadReaderKind::RdfXml(parser) => match parser.next()? {
+            SliceQuadParserKind::RdfXml(parser) => match parser.next()? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
-            FromSliceQuadReaderKind::TriG(parser) => match parser.next()? {
+            SliceQuadParserKind::TriG(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_quad(quad),
                 Err(e) => Err(e.into()),
             },
-            FromSliceQuadReaderKind::Turtle(parser) => match parser.next()? {
+            SliceQuadParserKind::Turtle(parser) => match parser.next()? {
                 Ok(triple) => Ok(self.mapper.map_triple_to_quad(triple)),
                 Err(e) => Err(e.into()),
             },
@@ -748,7 +742,7 @@ impl<'a> Iterator for FromSliceQuadReader<'a> {
     }
 }
 
-impl<'a> FromSliceQuadReader<'a> {
+impl<'a> SliceQuadParser<'a> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -765,24 +759,24 @@ impl<'a> FromSliceQuadReader<'a> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_slice(file);
-    /// assert!(reader.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
+    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_slice(file);
+    /// assert!(parser.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
     ///
-    /// reader.next().unwrap()?; // We read the first triple
+    /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(
-    ///     reader.prefixes().collect::<Vec<_>>(),
+    ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
-            inner: match &self.parser {
-                FromSliceQuadReaderKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
-                FromSliceQuadReaderKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
-                FromSliceQuadReaderKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
-                FromSliceQuadReaderKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
-                FromSliceQuadReaderKind::NQuads(_) | FromSliceQuadReaderKind::NTriples(_) => {
+            inner: match &self.inner {
+                SliceQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
+                SliceQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
+                SliceQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
+                SliceQuadParserKind::RdfXml(p) => PrefixesIterKind::RdfXml(p.prefixes()),
+                SliceQuadParserKind::NQuads(_) | SliceQuadParserKind::NTriples(_) => {
                     PrefixesIterKind::None
                 }
             },
@@ -801,27 +795,27 @@ impl<'a> FromSliceQuadReader<'a> {
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut reader = RdfParser::from_format(RdfFormat::Turtle).parse_slice(file);
-    /// assert!(reader.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
+    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_slice(file);
+    /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// reader.next().unwrap()?; // We read the first triple
-    /// assert_eq!(reader.base_iri(), Some("http://example.com/")); // There is now a base IRI.
+    /// parser.next().unwrap()?; // We read the first triple
+    /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        match &self.parser {
-            FromSliceQuadReaderKind::N3(p) => p.base_iri(),
-            FromSliceQuadReaderKind::TriG(p) => p.base_iri(),
-            FromSliceQuadReaderKind::Turtle(p) => p.base_iri(),
-            FromSliceQuadReaderKind::RdfXml(p) => p.base_iri(),
-            FromSliceQuadReaderKind::NQuads(_) | FromSliceQuadReaderKind::NTriples(_) => None,
+        match &self.inner {
+            SliceQuadParserKind::N3(p) => p.base_iri(),
+            SliceQuadParserKind::TriG(p) => p.base_iri(),
+            SliceQuadParserKind::Turtle(p) => p.base_iri(),
+            SliceQuadParserKind::RdfXml(p) => p.base_iri(),
+            SliceQuadParserKind::NQuads(_) | SliceQuadParserKind::NTriples(_) => None,
         }
     }
 }
 
 /// Iterator on the file prefixes.
 ///
-/// See [`FromReadQuadReader::prefixes`].
+/// See [`ReaderQuadParser::prefixes`].
 pub struct PrefixesIter<'a> {
     inner: PrefixesIterKind<'a>,
 }

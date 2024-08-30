@@ -381,6 +381,7 @@ impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
 }
 
 /// An owned RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
+///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Term {
@@ -601,6 +602,7 @@ impl TryFrom<Term> for Subject {
 }
 
 /// A borrowed RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
+///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub enum TermRef<'a> {
@@ -935,7 +937,8 @@ impl<'a> From<TripleRef<'a>> for Triple {
     }
 }
 
-/// A possible owned graph name.
+/// An owned graph name
+///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub enum GraphName {
@@ -1023,7 +1026,8 @@ impl From<NamedOrBlankNodeRef<'_>> for GraphName {
     }
 }
 
-/// A possible borrowed graph name.
+/// A borrowed graph name
+///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
 pub enum GraphNameRef<'a> {

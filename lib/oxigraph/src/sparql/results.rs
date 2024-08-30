@@ -5,25 +5,25 @@
 //! Usage example converting a JSON result file into a TSV result file:
 //!
 //! ```
-//! use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, FromReadQueryResultsReader, QueryResultsSerializer};
+//! use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput, QueryResultsSerializer};
 //! use std::io::Result;
 //!
 //! fn convert_json_to_tsv(json_file: &[u8]) -> Result<Vec<u8>> {
 //!     let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 //!     let tsv_serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Tsv);
 //!     // We start to read the JSON file and see which kind of results it is
-//!     match json_parser.parse_read(json_file)? {
-//!         FromReadQueryResultsReader::Boolean(value) => {
+//!     match json_parser.for_reader(json_file)? {
+//!         ReaderQueryResultsParserOutput::Boolean(value) => {
 //!             // it's a boolean result, we copy it in TSV to the output buffer
-//!             tsv_serializer.serialize_boolean_to_write(Vec::new(), value)
+//!             tsv_serializer.serialize_boolean_to_writer(Vec::new(), value)
 //!         }
-//!         FromReadQueryResultsReader::Solutions(solutions_reader) => {
+//!         ReaderQueryResultsParserOutput::Solutions(solutions_reader) => {
 //!             // it's a set of solutions, we create a writer and we write to it while reading in streaming from the JSON file
-//!             let mut serialize_solutions_to_write = tsv_serializer.serialize_solutions_to_write(Vec::new(), solutions_reader.variables().to_vec())?;
+//!             let mut tsv_solutions_serializer = tsv_serializer.serialize_solutions_to_writer(Vec::new(), solutions_reader.variables().to_vec())?;
 //!             for solution in solutions_reader {
-//!                 serialize_solutions_to_write.write(&solution?)?;
+//!                 tsv_solutions_serializer.serialize(&solution?)?;
 //!             }
-//!             serialize_solutions_to_write.finish()
+//!             tsv_solutions_serializer.finish()
 //!         }
 //!     }
 //! }

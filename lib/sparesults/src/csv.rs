@@ -13,97 +13,97 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 const MAX_BUFFER_SIZE: usize = 4096 * 4096;
 
-pub fn write_boolean_csv_result<W: Write>(mut write: W, value: bool) -> io::Result<W> {
-    write.write_all(if value { b"true" } else { b"false" })?;
-    Ok(write)
+pub fn write_boolean_csv_result<W: Write>(mut writer: W, value: bool) -> io::Result<W> {
+    writer.write_all(if value { b"true" } else { b"false" })?;
+    Ok(writer)
 }
 
 #[cfg(feature = "async-tokio")]
 pub async fn tokio_async_write_boolean_csv_result<W: AsyncWrite + Unpin>(
-    mut write: W,
+    mut writer: W,
     value: bool,
 ) -> io::Result<W> {
-    write
+    writer
         .write_all(if value { b"true" } else { b"false" })
         .await?;
-    Ok(write)
+    Ok(writer)
 }
 
-pub struct ToWriteCsvSolutionsWriter<W: Write> {
-    inner: InnerCsvSolutionsWriter,
-    write: W,
+pub struct WriterCsvSolutionsSerializer<W: Write> {
+    inner: InnerCsvSolutionsSerializer,
+    writer: W,
     buffer: String,
 }
 
-impl<W: Write> ToWriteCsvSolutionsWriter<W> {
-    pub fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+impl<W: Write> WriterCsvSolutionsSerializer<W> {
+    pub fn start(mut writer: W, variables: Vec<Variable>) -> io::Result<Self> {
         let mut buffer = String::new();
-        let inner = InnerCsvSolutionsWriter::start(&mut buffer, variables);
-        write.write_all(buffer.as_bytes())?;
+        let inner = InnerCsvSolutionsSerializer::start(&mut buffer, variables);
+        writer.write_all(buffer.as_bytes())?;
         buffer.clear();
         Ok(Self {
             inner,
-            write,
+            writer,
             buffer,
         })
     }
 
-    pub fn write<'a>(
+    pub fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
-        self.write.write_all(self.buffer.as_bytes())?;
+        self.writer.write_all(self.buffer.as_bytes())?;
         self.buffer.clear();
         Ok(())
     }
 
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct ToTokioAsyncWriteCsvSolutionsWriter<W: AsyncWrite + Unpin> {
-    inner: InnerCsvSolutionsWriter,
-    write: W,
+pub struct TokioAsyncWriterCsvSolutionsSerializer<W: AsyncWrite + Unpin> {
+    inner: InnerCsvSolutionsSerializer,
+    writer: W,
     buffer: String,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteCsvSolutionsWriter<W> {
-    pub async fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterCsvSolutionsSerializer<W> {
+    pub async fn start(mut writer: W, variables: Vec<Variable>) -> io::Result<Self> {
         let mut buffer = String::new();
-        let inner = InnerCsvSolutionsWriter::start(&mut buffer, variables);
-        write.write_all(buffer.as_bytes()).await?;
+        let inner = InnerCsvSolutionsSerializer::start(&mut buffer, variables);
+        writer.write_all(buffer.as_bytes()).await?;
         buffer.clear();
         Ok(Self {
             inner,
-            write,
+            writer,
             buffer,
         })
     }
 
-    pub async fn write<'a>(
+    pub async fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
-        self.write.write_all(self.buffer.as_bytes()).await?;
+        self.writer.write_all(self.buffer.as_bytes()).await?;
         self.buffer.clear();
         Ok(())
     }
 
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
-struct InnerCsvSolutionsWriter {
+struct InnerCsvSolutionsSerializer {
     variables: Vec<Variable>,
 }
 
-impl InnerCsvSolutionsWriter {
+impl InnerCsvSolutionsSerializer {
     fn start(output: &mut String, variables: Vec<Variable>) -> Self {
         let mut start_vars = true;
         for variable in &variables {
@@ -180,81 +180,81 @@ fn write_escaped_csv_string(output: &mut String, s: &str) {
     }
 }
 
-pub struct ToWriteTsvSolutionsWriter<W: Write> {
-    inner: InnerTsvSolutionsWriter,
-    write: W,
+pub struct WriterTsvSolutionsSerializer<W: Write> {
+    inner: InnerTsvSolutionsSerializer,
+    writer: W,
     buffer: String,
 }
 
-impl<W: Write> ToWriteTsvSolutionsWriter<W> {
-    pub fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+impl<W: Write> WriterTsvSolutionsSerializer<W> {
+    pub fn start(mut writer: W, variables: Vec<Variable>) -> io::Result<Self> {
         let mut buffer = String::new();
-        let inner = InnerTsvSolutionsWriter::start(&mut buffer, variables);
-        write.write_all(buffer.as_bytes())?;
+        let inner = InnerTsvSolutionsSerializer::start(&mut buffer, variables);
+        writer.write_all(buffer.as_bytes())?;
         buffer.clear();
         Ok(Self {
             inner,
-            write,
+            writer,
             buffer,
         })
     }
 
-    pub fn write<'a>(
+    pub fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
-        self.write.write_all(self.buffer.as_bytes())?;
+        self.writer.write_all(self.buffer.as_bytes())?;
         self.buffer.clear();
         Ok(())
     }
 
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct ToTokioAsyncWriteTsvSolutionsWriter<W: AsyncWrite + Unpin> {
-    inner: InnerTsvSolutionsWriter,
-    write: W,
+pub struct TokioAsyncWriterTsvSolutionsSerializer<W: AsyncWrite + Unpin> {
+    inner: InnerTsvSolutionsSerializer,
+    writer: W,
     buffer: String,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteTsvSolutionsWriter<W> {
-    pub async fn start(mut write: W, variables: Vec<Variable>) -> io::Result<Self> {
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterTsvSolutionsSerializer<W> {
+    pub async fn start(mut writer: W, variables: Vec<Variable>) -> io::Result<Self> {
         let mut buffer = String::new();
-        let inner = InnerTsvSolutionsWriter::start(&mut buffer, variables);
-        write.write_all(buffer.as_bytes()).await?;
+        let inner = InnerTsvSolutionsSerializer::start(&mut buffer, variables);
+        writer.write_all(buffer.as_bytes()).await?;
         buffer.clear();
         Ok(Self {
             inner,
-            write,
+            writer,
             buffer,
         })
     }
 
-    pub async fn write<'a>(
+    pub async fn serialize<'a>(
         &mut self,
         solution: impl IntoIterator<Item = (VariableRef<'a>, TermRef<'a>)>,
     ) -> io::Result<()> {
         self.inner.write(&mut self.buffer, solution);
-        self.write.write_all(self.buffer.as_bytes()).await?;
+        self.writer.write_all(self.buffer.as_bytes()).await?;
         self.buffer.clear();
         Ok(())
     }
 
     pub fn finish(self) -> W {
-        self.write
+        self.writer
     }
 }
 
-struct InnerTsvSolutionsWriter {
+struct InnerTsvSolutionsSerializer {
     variables: Vec<Variable>,
 }
 
-impl InnerTsvSolutionsWriter {
+impl InnerTsvSolutionsSerializer {
     fn start(output: &mut String, variables: Vec<Variable>) -> Self {
         let mut start_vars = true;
         for variable in &variables {
@@ -425,27 +425,27 @@ fn is_turtle_double(value: &str) -> bool {
     (with_before || with_after) && !value.is_empty() && value.iter().all(u8::is_ascii_digit)
 }
 
-pub enum FromReadTsvQueryResultsReader<R: Read> {
+pub enum ReaderTsvQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromReadTsvSolutionsReader<R>,
+        solutions: ReaderTsvSolutionsParser<R>,
     },
     Boolean(bool),
 }
 
-impl<R: Read> FromReadTsvQueryResultsReader<R> {
-    pub fn read(mut read: R) -> Result<Self, QueryResultsParseError> {
-        let mut reader = LineReader::new();
+impl<R: Read> ReaderTsvQueryResultsParserOutput<R> {
+    pub fn read(mut reader: R) -> Result<Self, QueryResultsParseError> {
+        let mut line_reader = LineReader::new();
         let mut buffer = Vec::new();
-        let line = reader.next_line_from_read(&mut buffer, &mut read)?;
-        Ok(match inner_read_first_line(reader, line)? {
+        let line = line_reader.next_line_from_reader(&mut buffer, &mut reader)?;
+        Ok(match inner_read_first_line(line_reader, line)? {
             TsvInnerQueryResults::Solutions {
                 variables,
                 solutions,
             } => Self::Solutions {
                 variables,
-                solutions: FromReadTsvSolutionsReader {
-                    read,
+                solutions: ReaderTsvSolutionsParser {
+                    reader,
                     inner: solutions,
                     buffer,
                 },
@@ -455,47 +455,47 @@ impl<R: Read> FromReadTsvQueryResultsReader<R> {
     }
 }
 
-pub struct FromReadTsvSolutionsReader<R: Read> {
-    read: R,
-    inner: TsvInnerSolutionsReader,
+pub struct ReaderTsvSolutionsParser<R: Read> {
+    reader: R,
+    inner: TsvInnerSolutionsParser,
     buffer: Vec<u8>,
 }
 
-impl<R: Read> FromReadTsvSolutionsReader<R> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+impl<R: Read> ReaderTsvSolutionsParser<R> {
+    pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         let line = self
             .inner
-            .reader
-            .next_line_from_read(&mut self.buffer, &mut self.read)?;
-        Ok(self.inner.read_next(line)?)
+            .line_reader
+            .next_line_from_reader(&mut self.buffer, &mut self.reader)?;
+        Ok(self.inner.parse_next(line)?)
     }
 }
 
 #[cfg(feature = "async-tokio")]
-pub enum FromTokioAsyncReadTsvQueryResultsReader<R: AsyncRead + Unpin> {
+pub enum TokioAsyncReaderTsvQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromTokioAsyncReadTsvSolutionsReader<R>,
+        solutions: TokioAsyncReaderTsvSolutionsParser<R>,
     },
     Boolean(bool),
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadTsvQueryResultsReader<R> {
-    pub async fn read(mut read: R) -> Result<Self, QueryResultsParseError> {
-        let mut reader = LineReader::new();
+impl<R: AsyncRead + Unpin> TokioAsyncReaderTsvQueryResultsParserOutput<R> {
+    pub async fn read(mut reader: R) -> Result<Self, QueryResultsParseError> {
+        let mut line_reader = LineReader::new();
         let mut buffer = Vec::new();
-        let line = reader
-            .next_line_from_tokio_async_read(&mut buffer, &mut read)
+        let line = line_reader
+            .next_line_from_tokio_async_read(&mut buffer, &mut reader)
             .await?;
-        Ok(match inner_read_first_line(reader, line)? {
+        Ok(match inner_read_first_line(line_reader, line)? {
             TsvInnerQueryResults::Solutions {
                 variables,
                 solutions,
             } => Self::Solutions {
                 variables,
-                solutions: FromTokioAsyncReadTsvSolutionsReader {
-                    read,
+                solutions: TokioAsyncReaderTsvSolutionsParser {
+                    reader,
                     inner: solutions,
                     buffer,
                 },
@@ -506,33 +506,35 @@ impl<R: AsyncRead + Unpin> FromTokioAsyncReadTsvQueryResultsReader<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct FromTokioAsyncReadTsvSolutionsReader<R: AsyncRead + Unpin> {
-    read: R,
-    inner: TsvInnerSolutionsReader,
+pub struct TokioAsyncReaderTsvSolutionsParser<R: AsyncRead + Unpin> {
+    reader: R,
+    inner: TsvInnerSolutionsParser,
     buffer: Vec<u8>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin> FromTokioAsyncReadTsvSolutionsReader<R> {
-    pub async fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
+impl<R: AsyncRead + Unpin> TokioAsyncReaderTsvSolutionsParser<R> {
+    pub async fn parse_next(
+        &mut self,
+    ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         let line = self
             .inner
-            .reader
-            .next_line_from_tokio_async_read(&mut self.buffer, &mut self.read)
+            .line_reader
+            .next_line_from_tokio_async_read(&mut self.buffer, &mut self.reader)
             .await?;
-        Ok(self.inner.read_next(line)?)
+        Ok(self.inner.parse_next(line)?)
     }
 }
 
-pub enum FromSliceTsvQueryResultsReader<'a> {
+pub enum SliceTsvQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
-        solutions: FromSliceTsvSolutionsReader<'a>,
+        solutions: SliceTsvSolutionsParser<'a>,
     },
     Boolean(bool),
 }
 
-impl<'a> FromSliceTsvQueryResultsReader<'a> {
+impl<'a> SliceTsvQueryResultsParserOutput<'a> {
     pub fn read(slice: &'a [u8]) -> Result<Self, QueryResultsSyntaxError> {
         let mut reader = LineReader::new();
         let line = reader.next_line_from_slice(slice)?;
@@ -542,7 +544,7 @@ impl<'a> FromSliceTsvQueryResultsReader<'a> {
                 solutions,
             } => Self::Solutions {
                 variables,
-                solutions: FromSliceTsvSolutionsReader {
+                solutions: SliceTsvSolutionsParser {
                     slice,
                     inner: solutions,
                 },
@@ -552,22 +554,22 @@ impl<'a> FromSliceTsvQueryResultsReader<'a> {
     }
 }
 
-pub struct FromSliceTsvSolutionsReader<'a> {
+pub struct SliceTsvSolutionsParser<'a> {
     slice: &'a [u8],
-    inner: TsvInnerSolutionsReader,
+    inner: TsvInnerSolutionsParser,
 }
 
-impl<'a> FromSliceTsvSolutionsReader<'a> {
-    pub fn read_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
-        let line = self.inner.reader.next_line_from_slice(self.slice)?;
-        self.inner.read_next(line)
+impl<'a> SliceTsvSolutionsParser<'a> {
+    pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
+        let line = self.inner.line_reader.next_line_from_slice(self.slice)?;
+        self.inner.parse_next(line)
     }
 }
 
 enum TsvInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
-        solutions: TsvInnerSolutionsReader,
+        solutions: TsvInnerSolutionsParser,
     },
     Boolean(bool),
 }
@@ -604,18 +606,21 @@ fn inner_read_first_line(
     let column_len = variables.len();
     Ok(TsvInnerQueryResults::Solutions {
         variables,
-        solutions: TsvInnerSolutionsReader { reader, column_len },
+        solutions: TsvInnerSolutionsParser {
+            line_reader: reader,
+            column_len,
+        },
     })
 }
 
-struct TsvInnerSolutionsReader {
-    reader: LineReader,
+struct TsvInnerSolutionsParser {
+    line_reader: LineReader,
     column_len: usize,
 }
 
-impl TsvInnerSolutionsReader {
+impl TsvInnerSolutionsParser {
     #[allow(clippy::unwrap_in_result)]
-    pub fn read_next(
+    pub fn parse_next(
         &self,
         line: &str,
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
@@ -642,16 +647,16 @@ impl TsvInnerSolutionsReader {
                             error: e,
                             term: v.into(),
                             location: TextPosition {
-                                line: self.reader.line_count - 1,
+                                line: self.line_reader.line_count - 1,
                                 column: start_position_char.try_into().unwrap(),
-                                offset: self.reader.last_line_start
+                                offset: self.line_reader.last_line_start
                                     + u64::try_from(start_position_bytes).unwrap(),
                             }..TextPosition {
-                                line: self.reader.line_count - 1,
+                                line: self.line_reader.line_count - 1,
                                 column: (start_position_char + v.chars().count())
                                     .try_into()
                                     .unwrap(),
-                                offset: self.reader.last_line_start
+                                offset: self.line_reader.last_line_start
                                     + u64::try_from(start_position_bytes + v.len()).unwrap(),
                             },
                         })
@@ -668,18 +673,18 @@ impl TsvInnerSolutionsReader {
                 format!(
                     "This TSV files has {} columns but we found a row on line {} with {} columns: {}",
                     self.column_len,
-                    self.reader.line_count - 1,
+                    self.line_reader.line_count - 1,
                     elements.len(),
                     line
                 ),
                 TextPosition {
-                    line: self.reader.line_count - 1,
+                    line: self.line_reader.line_count - 1,
                     column: 0,
-                    offset: self.reader.last_line_start,
+                    offset: self.line_reader.last_line_start,
                 }..TextPosition {
-                    line: self.reader.line_count - 1,
+                    line: self.line_reader.line_count - 1,
                     column: line.chars().count().try_into().unwrap(),
-                    offset: self.reader.last_line_end,
+                    offset: self.line_reader.last_line_end,
                 },
             ))
         }
@@ -706,10 +711,10 @@ impl LineReader {
     }
 
     #[allow(clippy::unwrap_in_result)]
-    fn next_line_from_read<'a>(
+    fn next_line_from_reader<'a>(
         &mut self,
         buffer: &'a mut Vec<u8>,
-        read: &mut impl Read,
+        reader: &mut impl Read,
     ) -> Result<&'a str, QueryResultsParseError> {
         let line_end = loop {
             if let Some(eol) = memchr(b'\n', &buffer[self.buffer_start..self.buffer_end]) {
@@ -730,7 +735,7 @@ impl LineReader {
                 }
                 buffer.resize(self.buffer_end + 1024, b'\0');
             }
-            let read = read.read(&mut buffer[self.buffer_end..])?;
+            let read = reader.read(&mut buffer[self.buffer_end..])?;
             if read == 0 {
                 break self.buffer_end;
             }
@@ -751,7 +756,7 @@ impl LineReader {
     async fn next_line_from_tokio_async_read<'a>(
         &mut self,
         buffer: &'a mut Vec<u8>,
-        read: &mut (impl AsyncRead + Unpin),
+        reader: &mut (impl AsyncRead + Unpin),
     ) -> Result<&'a str, QueryResultsParseError> {
         let line_end = loop {
             if let Some(eol) = memchr(b'\n', &buffer[self.buffer_start..self.buffer_end]) {
@@ -772,7 +777,7 @@ impl LineReader {
                 }
                 buffer.resize(self.buffer_end + 1024, b'\0');
             }
-            let read = read.read(&mut buffer[self.buffer_end..]).await?;
+            let read = reader.read(&mut buffer[self.buffer_end..]).await?;
             if read == 0 {
                 break self.buffer_end;
             }
@@ -863,9 +868,9 @@ mod tests {
     fn test_csv_serialization() {
         let (variables, solutions) = build_example();
         let mut buffer = String::new();
-        let writer = InnerCsvSolutionsWriter::start(&mut buffer, variables.clone());
+        let serializer = InnerCsvSolutionsSerializer::start(&mut buffer, variables.clone());
         for solution in solutions {
-            writer.write(
+            serializer.write(
                 &mut buffer,
                 variables
                     .iter()
@@ -882,9 +887,9 @@ mod tests {
 
         // Write
         let mut buffer = String::new();
-        let writer = InnerTsvSolutionsWriter::start(&mut buffer, variables.clone());
+        let serializer = InnerTsvSolutionsSerializer::start(&mut buffer, variables.clone());
         for solution in &solutions {
-            writer.write(
+            serializer.write(
                 &mut buffer,
                 variables
                     .iter()
@@ -895,14 +900,14 @@ mod tests {
         assert_eq!(buffer, "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n");
 
         // Read
-        if let FromSliceTsvQueryResultsReader::Solutions {
+        if let SliceTsvQueryResultsParserOutput::Solutions {
             solutions: mut solutions_iter,
             variables: actual_variables,
-        } = FromSliceTsvQueryResultsReader::read(buffer.as_bytes())?
+        } = SliceTsvQueryResultsParserOutput::read(buffer.as_bytes())?
         {
             assert_eq!(actual_variables.as_slice(), variables.as_slice());
             let mut rows = Vec::new();
-            while let Some(row) = solutions_iter.read_next()? {
+            while let Some(row) = solutions_iter.parse_next()? {
                 rows.push(row);
             }
             assert_eq!(rows, solutions);
@@ -930,10 +935,10 @@ mod tests {
         let a_lot_of_strings = format!("?p\n{}\n", "<".repeat(100_000));
         bad_tsvs.push(&a_lot_of_strings);
         for bad_tsv in bad_tsvs {
-            if let Ok(FromReadTsvQueryResultsReader::Solutions { mut solutions, .. }) =
-                FromReadTsvQueryResultsReader::read(bad_tsv.as_bytes())
+            if let Ok(ReaderTsvQueryResultsParserOutput::Solutions { mut solutions, .. }) =
+                ReaderTsvQueryResultsParserOutput::read(bad_tsv.as_bytes())
             {
-                while let Ok(Some(_)) = solutions.read_next() {}
+                while let Ok(Some(_)) = solutions.parse_next() {}
             }
         }
     }
@@ -941,29 +946,29 @@ mod tests {
     #[test]
     fn test_no_columns_csv_serialization() {
         let mut buffer = String::new();
-        let writer = InnerCsvSolutionsWriter::start(&mut buffer, Vec::new());
-        writer.write(&mut buffer, []);
+        let serializer = InnerCsvSolutionsSerializer::start(&mut buffer, Vec::new());
+        serializer.write(&mut buffer, []);
         assert_eq!(buffer, "\r\n\r\n");
     }
 
     #[test]
     fn test_no_columns_tsv_serialization() {
         let mut buffer = String::new();
-        let writer = InnerTsvSolutionsWriter::start(&mut buffer, Vec::new());
-        writer.write(&mut buffer, []);
+        let serializer = InnerTsvSolutionsSerializer::start(&mut buffer, Vec::new());
+        serializer.write(&mut buffer, []);
         assert_eq!(buffer, "\n\n");
     }
 
     #[test]
     fn test_no_columns_tsv_parsing() -> io::Result<()> {
-        if let FromReadTsvQueryResultsReader::Solutions {
+        if let ReaderTsvQueryResultsParserOutput::Solutions {
             mut solutions,
             variables,
-        } = FromReadTsvQueryResultsReader::read(b"\n\n".as_slice())?
+        } = ReaderTsvQueryResultsParserOutput::read(b"\n\n".as_slice())?
         {
             assert_eq!(variables, Vec::<Variable>::new());
-            assert_eq!(solutions.read_next()?, Some(Vec::new()));
-            assert_eq!(solutions.read_next()?, None);
+            assert_eq!(solutions.parse_next()?, Some(Vec::new()));
+            assert_eq!(solutions.parse_next()?, None);
         } else {
             unreachable!()
         }
@@ -973,26 +978,26 @@ mod tests {
     #[test]
     fn test_no_results_csv_serialization() {
         let mut buffer = String::new();
-        InnerCsvSolutionsWriter::start(&mut buffer, vec![Variable::new_unchecked("a")]);
+        InnerCsvSolutionsSerializer::start(&mut buffer, vec![Variable::new_unchecked("a")]);
         assert_eq!(buffer, "a\r\n");
     }
 
     #[test]
     fn test_no_results_tsv_serialization() {
         let mut buffer = String::new();
-        InnerTsvSolutionsWriter::start(&mut buffer, vec![Variable::new_unchecked("a")]);
+        InnerTsvSolutionsSerializer::start(&mut buffer, vec![Variable::new_unchecked("a")]);
         assert_eq!(buffer, "?a\n");
     }
 
     #[test]
     fn test_no_results_tsv_parsing() -> io::Result<()> {
-        if let FromReadTsvQueryResultsReader::Solutions {
+        if let ReaderTsvQueryResultsParserOutput::Solutions {
             mut solutions,
             variables,
-        } = FromReadTsvQueryResultsReader::read(b"?a\n".as_slice())?
+        } = ReaderTsvQueryResultsParserOutput::read(b"?a\n".as_slice())?
         {
             assert_eq!(variables, vec![Variable::new_unchecked("a")]);
-            assert_eq!(solutions.read_next()?, None);
+            assert_eq!(solutions.parse_next()?, None);
         } else {
             unreachable!()
         }

@@ -4,7 +4,7 @@
 
 use crate::io::{DatasetFormat, GraphFormat};
 use crate::model::*;
-use oxrdfio::{FromReadQuadReader, RdfParseError, RdfParser};
+use oxrdfio::{RdfParseError, RdfParser, ReaderQuadParser};
 use std::io::Read;
 
 /// Parsers for RDF graph serialization formats.
@@ -71,7 +71,7 @@ impl GraphParser {
     /// Executes the parsing itself on a [`Read`] implementation and returns an iterator of triples.
     pub fn read_triples<R: Read>(self, reader: R) -> TripleReader<R> {
         TripleReader {
-            parser: self.inner.parse_read(reader),
+            parser: self.inner.for_reader(reader),
         }
     }
 }
@@ -95,7 +95,7 @@ impl GraphParser {
 /// ```
 #[must_use]
 pub struct TripleReader<R: Read> {
-    parser: FromReadQuadReader<R>,
+    parser: ReaderQuadParser<R>,
 }
 
 impl<R: Read> Iterator for TripleReader<R> {
@@ -165,7 +165,7 @@ impl DatasetParser {
     /// Executes the parsing itself on a [`Read`] implementation and returns an iterator of quads.
     pub fn read_quads<R: Read>(self, reader: R) -> QuadReader<R> {
         QuadReader {
-            parser: self.inner.parse_read(reader),
+            parser: self.inner.for_reader(reader),
         }
     }
 }
@@ -187,7 +187,7 @@ impl DatasetParser {
 /// ```
 #[must_use]
 pub struct QuadReader<R: Read> {
-    parser: FromReadQuadReader<R>,
+    parser: ReaderQuadParser<R>,
 }
 
 impl<R: Read> Iterator for QuadReader<R> {

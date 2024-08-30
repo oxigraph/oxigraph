@@ -18,20 +18,20 @@ use tokio::io::AsyncWrite;
 /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
 /// use oxrdfxml::RdfXmlSerializer;
 ///
-/// let mut writer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.serialize_to_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+/// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
-/// writer.write_triple(TripleRef::new(
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
-///     writer.finish()?.as_slice()
+///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
@@ -63,7 +63,7 @@ impl RdfXmlSerializer {
         Ok(self)
     }
 
-    /// Writes a RDF/XML file to a [`Write`] implementation.
+    /// Serializes a RDF/XML file to a [`Write`] implementation.
     ///
     /// This writer does unbuffered writes.
     ///
@@ -71,32 +71,32 @@ impl RdfXmlSerializer {
     /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
     /// use oxrdfxml::RdfXmlSerializer;
     ///
-    /// let mut writer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.serialize_to_write(Vec::new());
-    /// writer.write_triple(TripleRef::new(
+    /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// ))?;
-    /// writer.write_triple(TripleRef::new(
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://schema.org/name")?,
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     /// ))?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
-    ///     writer.finish()?.as_slice()
+    ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
-    pub fn serialize_to_write<W: Write>(self, write: W) -> ToWriteRdfXmlWriter<W> {
-        ToWriteRdfXmlWriter {
-            writer: Writer::new_with_indent(write, b'\t', 1),
+    pub fn for_writer<W: Write>(self, writer: W) -> WriterRdfXmlSerializer<W> {
+        WriterRdfXmlSerializer {
+            writer: Writer::new_with_indent(writer, b'\t', 1),
             inner: self.inner_writer(),
         }
     }
 
-    /// Writes a RDF/XML file to a [`AsyncWrite`] implementation.
+    /// Serializes a RDF/XML file to a [`AsyncWrite`] implementation.
     ///
     /// This writer does unbuffered writes.
     ///
@@ -106,32 +106,32 @@ impl RdfXmlSerializer {
     ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mut writer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.serialize_to_tokio_async_write(Vec::new());
-    /// writer.write_triple(TripleRef::new(
+    /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// )).await?;
-    /// writer.write_triple(TripleRef::new(
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://schema.org/name")?,
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     /// )).await?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
-    ///     writer.finish().await?.as_slice()
+    ///     serializer.finish().await?.as_slice()
     /// );
     /// # Ok(())
     /// # }
     /// ```
     #[allow(clippy::unused_self)]
     #[cfg(feature = "async-tokio")]
-    pub fn serialize_to_tokio_async_write<W: AsyncWrite + Unpin>(
+    pub fn for_tokio_async_writer<W: AsyncWrite + Unpin>(
         self,
-        write: W,
-    ) -> ToTokioAsyncWriteRdfXmlWriter<W> {
-        ToTokioAsyncWriteRdfXmlWriter {
-            writer: Writer::new_with_indent(write, b'\t', 1),
+        writer: W,
+    ) -> TokioAsyncWriterdfXmlSerializer<W> {
+        TokioAsyncWriterdfXmlSerializer {
+            writer: Writer::new_with_indent(writer, b'\t', 1),
             inner: self.inner_writer(),
         }
     }
@@ -149,41 +149,43 @@ impl RdfXmlSerializer {
     }
 }
 
-/// Writes a RDF/XML file to a [`Write`] implementation. Can be built using [`RdfXmlSerializer::serialize_to_write`].
+/// Serializes a RDF/XML file to a [`Write`] implementation.
+///
+/// Can be built using [`RdfXmlSerializer::for_writer`].
 ///
 /// ```
 /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
 /// use oxrdfxml::RdfXmlSerializer;
 ///
-/// let mut writer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.serialize_to_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+/// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
-/// writer.write_triple(TripleRef::new(
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
-///     writer.finish()?.as_slice()
+///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct ToWriteRdfXmlWriter<W: Write> {
+pub struct WriterRdfXmlSerializer<W: Write> {
     writer: Writer<W>,
     inner: InnerRdfXmlWriter,
 }
 
-impl<W: Write> ToWriteRdfXmlWriter<W> {
-    /// Writes an extra triple.
+impl<W: Write> WriterRdfXmlSerializer<W> {
+    /// Serializes an extra triple.
     #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
-    pub fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+    pub fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
         let mut buffer = Vec::new();
-        self.inner.write_triple(t, &mut buffer)?;
+        self.inner.serialize_triple(t, &mut buffer)?;
         self.flush_buffer(&mut buffer)
     }
 
@@ -203,7 +205,9 @@ impl<W: Write> ToWriteRdfXmlWriter<W> {
     }
 }
 
-/// Writes a RDF/XML file to a [`AsyncWrite`] implementation. Can be built using [`RdfXmlSerializer::serialize_to_tokio_async_write`].
+/// Serializes a RDF/XML file to a [`AsyncWrite`] implementation.
+///
+/// Can be built using [`RdfXmlSerializer::for_tokio_async_writer`].
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
@@ -211,38 +215,38 @@ impl<W: Write> ToWriteRdfXmlWriter<W> {
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut writer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.serialize_to_tokio_async_write(Vec::new());
-/// writer.write_triple(TripleRef::new(
+/// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// )).await?;
-/// writer.write_triple(TripleRef::new(
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 /// )).await?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
-///     writer.finish().await?.as_slice()
+///     serializer.finish().await?.as_slice()
 /// );
 /// # Ok(())
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct ToTokioAsyncWriteRdfXmlWriter<W: AsyncWrite + Unpin> {
+pub struct TokioAsyncWriterdfXmlSerializer<W: AsyncWrite + Unpin> {
     writer: Writer<W>,
     inner: InnerRdfXmlWriter,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> ToTokioAsyncWriteRdfXmlWriter<W> {
-    /// Writes an extra triple.
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterdfXmlSerializer<W> {
+    /// Serializes an extra triple.
     #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
-    pub async fn write_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
+    pub async fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
         let mut buffer = Vec::new();
-        self.inner.write_triple(t, &mut buffer)?;
+        self.inner.serialize_triple(t, &mut buffer)?;
         self.flush_buffer(&mut buffer).await
     }
 
@@ -273,7 +277,7 @@ pub struct InnerRdfXmlWriter {
 
 impl InnerRdfXmlWriter {
     #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
-    fn write_triple<'a>(
+    fn serialize_triple<'a>(
         &mut self,
         t: impl Into<TripleRef<'a>>,
         output: &mut Vec<Event<'a>>,

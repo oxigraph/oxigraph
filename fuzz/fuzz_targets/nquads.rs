@@ -16,24 +16,24 @@ fn parse<'a>(
     if unchecked {
         parser = parser.unchecked();
     }
-    let mut reader = parser.parse();
+    let mut parser = parser.low_level();
     for chunk in chunks {
-        reader.extend_from_slice(chunk);
-        while let Some(result) = reader.read_next() {
+        parser.extend_from_slice(chunk);
+        while let Some(result) = parser.parse_next() {
             match result {
                 Ok(quad) => quads.push(quad),
                 Err(error) => errors.push(error.to_string()),
             }
         }
     }
-    reader.end();
-    while let Some(result) = reader.read_next() {
+    parser.end();
+    while let Some(result) = parser.parse_next() {
         match result {
             Ok(quad) => quads.push(quad),
             Err(error) => errors.push(error.to_string()),
         }
     }
-    assert!(reader.is_end());
+    assert!(parser.is_end());
     (quads, errors)
 }
 
@@ -59,16 +59,16 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // We serialize
-    let mut writer = NQuadsSerializer::new().serialize_to_write(Vec::new());
+    let mut serializer = NQuadsSerializer::new().for_writer(Vec::new());
     for quad in &quads {
-        writer.write_quad(quad).unwrap();
+        serializer.serialize_quad(quad).unwrap();
     }
-    let new_serialization = writer.finish();
+    let new_serialization = serializer.finish();
 
     // We parse the serialization
     let new_quads = NQuadsParser::new()
         .with_quoted_triples()
-        .parse_slice(&new_serialization)
+        .for_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             format!(

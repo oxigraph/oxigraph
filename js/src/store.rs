@@ -323,9 +323,9 @@ impl JsStore {
         Ok(if no_transaction {
             self.store
                 .bulk_loader()
-                .load_from_read(parser, data.as_bytes())
+                .load_from_reader(parser, data.as_bytes())
         } else {
-            self.store.load_from_read(parser, data.as_bytes())
+            self.store.load_from_reader(parser, data.as_bytes())
         }
         .map_err(JsError::from)?)
     }
@@ -355,13 +355,13 @@ impl JsStore {
         }
 
         let buffer = if let Some(from_graph_name) = parsed_from_graph_name {
-            self.store.dump_graph_to_write(
+            self.store.dump_graph_to_writer(
                 &GraphName::try_from(from_graph_name)?,
                 format,
                 Vec::new(),
             )
         } else {
-            self.store.dump_to_write(format, Vec::new())
+            self.store.dump_to_writer(format, Vec::new())
         }
         .map_err(JsError::from)?;
         Ok(String::from_utf8(buffer).map_err(JsError::from)?)

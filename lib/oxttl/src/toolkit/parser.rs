@@ -71,7 +71,7 @@ impl<B: Deref<Target = [u8]>, RR: RuleRecognizer> Parser<B, RR> {
         self.state.is_none() && self.results.is_empty() && self.errors.is_empty()
     }
 
-    pub fn read_next(&mut self) -> Option<Result<RR::Output, TurtleSyntaxError>> {
+    pub fn parse_next(&mut self) -> Option<Result<RR::Output, TurtleSyntaxError>> {
         loop {
             if let Some(error) = self.errors.pop() {
                 return Some(Err(TurtleSyntaxError {
@@ -84,7 +84,7 @@ impl<B: Deref<Target = [u8]>, RR: RuleRecognizer> Parser<B, RR> {
             if let Some(result) = self.results.pop() {
                 return Some(Ok(result));
             }
-            if let Some(result) = self.lexer.read_next(RR::lexer_options(&self.context)) {
+            if let Some(result) = self.lexer.parse_next(RR::lexer_options(&self.context)) {
                 match result {
                     Ok(token) => {
                         self.state = self.state.take().map(|state| {
@@ -126,43 +126,49 @@ impl<RR: RuleRecognizer> Parser<Vec<u8>, RR> {
         self.lexer.extend_from_slice(other)
     }
 
-    pub fn parse_read<R: Read>(self, read: R) -> FromReadIterator<R, RR> {
-        FromReadIterator { read, parser: self }
+    pub fn for_reader<R: Read>(self, reader: R) -> ReaderIterator<R, RR> {
+        ReaderIterator {
+            reader,
+            parser: self,
+        }
     }
 
     #[cfg(feature = "async-tokio")]
-    pub fn parse_tokio_async_read<R: AsyncRead + Unpin>(
+    pub fn for_tokio_async_reader<R: AsyncRead + Unpin>(
         self,
-        read: R,
-    ) -> FromTokioAsyncReadIterator<R, RR> {
-        FromTokioAsyncReadIterator { read, parser: self }
+        reader: R,
+    ) -> TokioAsyncReaderIterator<R, RR> {
+        TokioAsyncReaderIterator {
+            reader,
+            parser: self,
+        }
     }
 }
 
 impl<'a, RR: RuleRecognizer> IntoIterator for Parser<&'a [u8], RR> {
     type Item = Result<RR::Output, TurtleSyntaxError>;
-    type IntoIter = FromSliceIterator<'a, RR>;
+    type IntoIter = SliceIterator<'a, RR>;
 
     fn into_iter(self) -> Self::IntoIter {
-        FromSliceIterator { parser: self }
+        SliceIterator { parser: self }
     }
 }
 
 #[allow(clippy::partial_pub_fields)]
-pub struct FromReadIterator<R: Read, RR: RuleRecognizer> {
-    read: R,
+pub struct ReaderIterator<R: Read, RR: RuleRecognizer> {
+    reader: R,
     pub parser: Parser<Vec<u8>, RR>,
 }
 
-impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
+impl<R: Read, RR: RuleRecognizer> Iterator for ReaderIterator<R, RR> {
     type Item = Result<RR::Output, TurtleParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.parser.is_end() {
-            if let Some(result) = self.parser.read_next() {
+            if let Some(result) = self.parser.parse_next() {
                 return Some(result.map_err(TurtleParseError::Syntax));
             }
-            if let Err(e) = self.parser.lexer.extend_from_read(&mut self.read) {
+            if let Err(e) = self.parser.lexer.extend_from_reader(&mut self.reader) {
                 return Some(Err(e.into()));
             }
         }
@@ -171,22 +177,22 @@ impl<R: Read, RR: RuleRecognizer> Iterator for FromReadIterator<R, RR> {
 }
 
 #[cfg(feature = "async-tokio")]
-pub struct FromTokioAsyncReadIterator<R: AsyncRead + Unpin, RR: RuleRecognizer> {
-    pub read: R,
+pub struct TokioAsyncReaderIterator<R: AsyncRead + Unpin, RR: RuleRecognizer> {
+    pub reader: R,
     pub parser: Parser<Vec<u8>, RR>,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<R: AsyncRead + Unpin, RR: RuleRecognizer> FromTokioAsyncReadIterator<R, RR> {
+impl<R: AsyncRead + Unpin, RR: RuleRecognizer> TokioAsyncReaderIterator<R, RR> {
     pub async fn next(&mut self) -> Option<Result<RR::Output, TurtleParseError>> {
         while !self.parser.is_end() {
-            if let Some(result) = self.parser.read_next() {
+            if let Some(result) = self.parser.parse_next() {
                 return Some(result.map_err(TurtleParseError::Syntax));
             }
             if let Err(e) = self
                 .parser
                 .lexer
-                .extend_from_tokio_async_read(&mut self.read)
+                .extend_from_tokio_async_read(&mut self.reader)
                 .await
             {
                 return Some(Err(e.into()));
@@ -196,14 +202,14 @@ impl<R: AsyncRead + Unpin, RR: RuleRecognizer> FromTokioAsyncReadIterator<R, RR>
     }
 }
 
-pub struct FromSliceIterator<'a, RR: RuleRecognizer> {
+pub struct SliceIterator<'a, RR: RuleRecognizer> {
     pub parser: Parser<&'a [u8], RR>,
 }
 
-impl<'a, RR: RuleRecognizer> Iterator for FromSliceIterator<'a, RR> {
+impl<'a, RR: RuleRecognizer> Iterator for SliceIterator<'a, RR> {
     type Item = Result<RR::Output, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.parser.read_next()
+        self.parser.parse_next()
     }
 }

@@ -27,7 +27,7 @@ let file = b"@base <http://example.com/> .
 
 let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
 let mut count = 0;
-for triple in TurtleParser::new().parse_read(file.as_ref()) {
+for triple in TurtleParser::new().for_reader(file.as_ref()) {
     let triple = triple.unwrap();
     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
         count += 1;

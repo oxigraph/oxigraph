@@ -2,8 +2,8 @@ use crate::io::{RdfFormat, RdfSerializer};
 use crate::model::*;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::results::{
-    FromReadQueryResultsReader, FromReadSolutionsReader, QueryResultsFormat,
-    QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
+    QueryResultsFormat, QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
+    ReaderQueryResultsParserOutput, ReaderSolutionsParser,
 };
 pub use sparesults::QuerySolution;
 use std::io::{Read, Write};
@@ -22,11 +22,11 @@ pub enum QueryResults {
 impl QueryResults {
     /// Reads a SPARQL query results serialization.
     pub fn read(
-        read: impl Read + 'static,
+        reader: impl Read + 'static,
         format: QueryResultsFormat,
     ) -> Result<Self, QueryResultsParseError> {
         Ok(QueryResultsParser::from_format(format)
-            .parse_read(read)?
+            .for_reader(reader)?
             .into())
     }
 
@@ -52,44 +52,44 @@ impl QueryResults {
     /// ```
     pub fn write<W: Write>(
         self,
-        write: W,
+        writer: W,
         format: QueryResultsFormat,
     ) -> Result<W, EvaluationError> {
         let serializer = QueryResultsSerializer::from_format(format);
         match self {
-            Self::Boolean(value) => serializer.serialize_boolean_to_write(write, value),
+            Self::Boolean(value) => serializer.serialize_boolean_to_writer(writer, value),
             Self::Solutions(solutions) => {
-                let mut writer = serializer
-                    .serialize_solutions_to_write(write, solutions.variables().to_vec())
+                let mut serializer = serializer
+                    .serialize_solutions_to_writer(writer, solutions.variables().to_vec())
                     .map_err(EvaluationError::ResultsSerialization)?;
                 for solution in solutions {
-                    writer
-                        .write(&solution?)
+                    serializer
+                        .serialize(&solution?)
                         .map_err(EvaluationError::ResultsSerialization)?;
                 }
-                writer.finish()
+                serializer.finish()
             }
             Self::Graph(triples) => {
                 let s = VariableRef::new_unchecked("subject");
                 let p = VariableRef::new_unchecked("predicate");
                 let o = VariableRef::new_unchecked("object");
-                let mut writer = serializer
-                    .serialize_solutions_to_write(
-                        write,
+                let mut serializer = serializer
+                    .serialize_solutions_to_writer(
+                        writer,
                         vec![s.into_owned(), p.into_owned(), o.into_owned()],
                     )
                     .map_err(EvaluationError::ResultsSerialization)?;
                 for triple in triples {
                     let triple = triple?;
-                    writer
-                        .write([
+                    serializer
+                        .serialize([
                             (s, &triple.subject.into()),
                             (p, &triple.predicate.into()),
                             (o, &triple.object),
                         ])
                         .map_err(EvaluationError::ResultsSerialization)?;
                 }
-                writer.finish()
+                serializer.finish()
             }
         }
         .map_err(EvaluationError::ResultsSerialization)
@@ -123,17 +123,17 @@ impl QueryResults {
     /// ```
     pub fn write_graph<W: Write>(
         self,
-        write: W,
+        writer: W,
         format: impl Into<RdfFormat>,
     ) -> Result<W, EvaluationError> {
         if let Self::Graph(triples) = self {
-            let mut writer = RdfSerializer::from_format(format.into()).serialize_to_write(write);
+            let mut serializer = RdfSerializer::from_format(format.into()).for_writer(writer);
             for triple in triples {
-                writer
-                    .write_triple(&triple?)
+                serializer
+                    .serialize_triple(&triple?)
                     .map_err(EvaluationError::ResultsSerialization)?;
             }
-            writer
+            serializer
                 .finish()
                 .map_err(EvaluationError::ResultsSerialization)
         } else {
@@ -149,11 +149,11 @@ impl From<QuerySolutionIter> for QueryResults {
     }
 }
 
-impl<R: Read + 'static> From<FromReadQueryResultsReader<R>> for QueryResults {
-    fn from(reader: FromReadQueryResultsReader<R>) -> Self {
+impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults {
+    fn from(reader: ReaderQueryResultsParserOutput<R>) -> Self {
         match reader {
-            FromReadQueryResultsReader::Solutions(s) => Self::Solutions(s.into()),
-            FromReadQueryResultsReader::Boolean(v) => Self::Boolean(v),
+            ReaderQueryResultsParserOutput::Solutions(s) => Self::Solutions(s.into()),
+            ReaderQueryResultsParserOutput::Boolean(v) => Self::Boolean(v),
         }
     }
 }
@@ -213,8 +213,8 @@ impl QuerySolutionIter {
     }
 }
 
-impl<R: Read + 'static> From<FromReadSolutionsReader<R>> for QuerySolutionIter {
-    fn from(reader: FromReadSolutionsReader<R>) -> Self {
+impl<R: Read + 'static> From<ReaderSolutionsParser<R>> for QuerySolutionIter {
+    fn from(reader: ReaderSolutionsParser<R>) -> Self {
         Self {
             variables: reader.variables().into(),
             iter: Box::new(reader.map(|t| t.map_err(EvaluationError::from))),
