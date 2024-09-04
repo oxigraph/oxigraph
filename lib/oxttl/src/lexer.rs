@@ -520,7 +520,7 @@ impl N3Lexer {
                                 str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
                             ));
                         }
-                    } else if i == 0 {
+                    } else if i == 2 {
                         return Some((
                             i,
                             Err((0..i, "A blank node ID should not be empty").into()),
@@ -1001,7 +1001,7 @@ impl N3Lexer {
         | '\u{10000}'..='\u{EFFFF}')
     }
 
-    // [158s]  PN_CHARS_U  ::=  PN_CHARS_BASE | '_' | ':'
+    // [158s]  PN_CHARS_U  ::=  PN_CHARS_BASE | '_'
     pub(super) fn is_possible_pn_chars_u(c: char) -> bool {
         Self::is_possible_pn_chars_base(c) || c == '_'
     }

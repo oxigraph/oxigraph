@@ -1,10 +1,10 @@
 use crate::vocab::xsd;
-use crate::{
-    BlankNode, BlankNodeIdParseError, IriParseError, LanguageTagParseError, Literal, NamedNode,
-    Term, Variable, VariableNameParseError,
-};
 #[cfg(feature = "rdf-star")]
-use crate::{Subject, Triple};
+use crate::Subject;
+use crate::{
+    BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
+    NamedNode, Quad, Term, Triple, Variable, VariableNameParseError,
+};
 use std::char;
 use std::str::{Chars, FromStr};
 
@@ -22,9 +22,10 @@ impl FromStr for NamedNode {
     /// use std::str::FromStr;
     ///
     /// assert_eq!(
-    ///     NamedNode::from_str("<http://example.com>").unwrap(),
-    ///     NamedNode::new("http://example.com").unwrap()
-    /// )
+    ///     NamedNode::from_str("<http://example.com>")?,
+    ///     NamedNode::new("http://example.com")?
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_named_node(s)?;
@@ -40,16 +41,17 @@ impl FromStr for NamedNode {
 impl FromStr for BlankNode {
     type Err = TermParseError;
 
-    /// Parses a blank node from its NTriples and Turtle serialization
+    /// Parses a blank node from its NTriples serialization
     ///
     /// ```
     /// use oxrdf::BlankNode;
     /// use std::str::FromStr;
     ///
     /// assert_eq!(
-    ///     BlankNode::from_str("_:ex").unwrap(),
-    ///     BlankNode::new("ex").unwrap()
-    /// )
+    ///     BlankNode::from_str("_:ex")?,
+    ///     BlankNode::new("ex")?
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_blank_node(s)?;
@@ -65,7 +67,7 @@ impl FromStr for BlankNode {
 impl FromStr for Literal {
     type Err = TermParseError;
 
-    /// Parses a literal from its NTriples or Turtle serialization
+    /// Parses a literal from its NTriples serialization
     ///
     /// ```
     /// use oxrdf::vocab::xsd;
@@ -73,36 +75,37 @@ impl FromStr for Literal {
     /// use std::str::FromStr;
     ///
     /// assert_eq!(
-    ///     Literal::from_str("\"ex\\n\"").unwrap(),
+    ///     Literal::from_str("\"ex\\n\"")?,
     ///     Literal::new_simple_literal("ex\n")
     /// );
     /// assert_eq!(
-    ///     Literal::from_str("\"ex\"@en").unwrap(),
-    ///     Literal::new_language_tagged_literal("ex", "en").unwrap()
+    ///     Literal::from_str("\"ex\"@en")?,
+    ///     Literal::new_language_tagged_literal("ex", "en")?
     /// );
     /// assert_eq!(
-    ///     Literal::from_str("\"2020\"^^<http://www.w3.org/2001/XMLSchema#gYear>").unwrap(),
+    ///     Literal::from_str("\"2020\"^^<http://www.w3.org/2001/XMLSchema#gYear>")?,
     ///     Literal::new_typed_literal(
     ///         "2020",
-    ///         NamedNode::new("http://www.w3.org/2001/XMLSchema#gYear").unwrap()
+    ///         NamedNode::new("http://www.w3.org/2001/XMLSchema#gYear")?
     ///     )
     /// );
     /// assert_eq!(
-    ///     Literal::from_str("true").unwrap(),
+    ///     Literal::from_str("true")?,
     ///     Literal::new_typed_literal("true", xsd::BOOLEAN)
     /// );
     /// assert_eq!(
-    ///     Literal::from_str("+122").unwrap(),
+    ///     Literal::from_str("+122")?,
     ///     Literal::new_typed_literal("+122", xsd::INTEGER)
     /// );
     /// assert_eq!(
-    ///     Literal::from_str("-122.23").unwrap(),
+    ///     Literal::from_str("-122.23")?,
     ///     Literal::new_typed_literal("-122.23", xsd::DECIMAL)
     /// );
     /// assert_eq!(
-    ///     Literal::from_str("-122e+1").unwrap(),
+    ///     Literal::from_str("-122e+1")?,
     ///     Literal::new_typed_literal("-122e+1", xsd::DOUBLE)
     /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_literal(s)?;
@@ -116,16 +119,17 @@ impl FromStr for Literal {
 impl FromStr for Term {
     type Err = TermParseError;
 
-    /// Parses a term from its NTriples or Turtle serialization
+    /// Parses a term from its NTriples serialization
     ///
     /// ```
     /// use oxrdf::*;
     /// use std::str::FromStr;
     ///
     /// assert_eq!(
-    ///     Term::from_str("\"ex\"").unwrap(),
+    ///     Term::from_str("\"ex\"")?,
     ///     Literal::new_simple_literal("ex").into()
     /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_term(s, 0)?;
@@ -133,6 +137,76 @@ impl FromStr for Term {
             return Err(Self::Err::msg("Invalid term serialization"));
         }
         Ok(term)
+    }
+}
+
+impl FromStr for Triple {
+    type Err = TermParseError;
+
+    /// Parses a triple from its NTriples serialization
+    ///
+    /// ```
+    /// use oxrdf::{NamedNode, BlankNode, Literal, Triple};
+    /// use std::str::FromStr;
+    ///
+    /// assert_eq!(
+    ///     Triple::from_str("_:a <http://example.com/p> \"o\" .")?,
+    ///     Triple::new(BlankNode::new("a")?, NamedNode::new("http://example.com/p")?, Literal::new_simple_literal("o"))
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (triple, left) = read_triple(s, 0)?;
+        if !matches!(left.trim(), "" | ".") {
+            return Err(Self::Err::msg("Invalid triple serialization"));
+        }
+        Ok(triple)
+    }
+}
+
+impl FromStr for Quad {
+    type Err = TermParseError;
+
+    /// Parses a triple from its NQuads serialization
+    ///
+    /// ```
+    /// use oxrdf::{NamedNode, BlankNode, Literal, Quad, GraphName};
+    /// use std::str::FromStr;
+    ///
+    /// assert_eq!(
+    ///     Quad::from_str("_:a <http://example.com/p> \"o\" .")?,
+    ///     Quad::new(BlankNode::new("a")?, NamedNode::new("http://example.com/p")?, Literal::new_simple_literal("o"), GraphName::DefaultGraph)
+    /// );
+    /// assert_eq!(
+    ///     Quad::from_str("_:a <http://example.com/p> \"o\" <http://example.com/g> .")?,
+    ///     Quad::new(BlankNode::new("a")?, NamedNode::new("http://example.com/p")?, Literal::new_simple_literal("o"), NamedNode::new("http://example.com/g")?)
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (triple, left) = read_triple(s, 0)?;
+        if matches!(left.trim(), "" | ".") {
+            return Ok(triple.in_graph(GraphName::DefaultGraph));
+        }
+        let (graph_name, left) = read_term(left, 0)?;
+        if !matches!(left.trim(), "" | ".") {
+            return Err(Self::Err::msg("Invalid triple serialization"));
+        }
+        Ok(triple.in_graph(match graph_name {
+            Term::NamedNode(graph_name) => GraphName::from(graph_name),
+            Term::BlankNode(graph_name) => GraphName::from(graph_name),
+            Term::Literal(_) => {
+                return Err(TermParseError::msg(
+                    "Literals are not allowed in graph name position",
+                ));
+            }
+            #[cfg(feature = "rdf-star")]
+            Term::Triple(_) => {
+                return Err(TermParseError::msg(
+                    "Triple terms are not allowed in graph name position",
+                ));
+            }
+        }))
     }
 }
 
@@ -146,9 +220,10 @@ impl FromStr for Variable {
     /// use std::str::FromStr;
     ///
     /// assert_eq!(
-    ///     Variable::from_str("$foo").unwrap(),
-    ///     Variable::new("foo").unwrap()
-    /// )
+    ///     Variable::from_str("$foo")?,
+    ///     Variable::new("foo")?
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with('?') && !s.starts_with('$') {
@@ -190,11 +265,19 @@ fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
 fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
     let s = s.trim();
     if let Some(remain) = s.strip_prefix("_:") {
-        let end = remain
+        let mut end = remain
             .find(|v: char| {
-                v.is_whitespace() || matches!(v, '<' | '?' | '$' | '"' | '\'' | '>' | '@' | '^')
+                v.is_whitespace()
+                    || matches!(v, '<' | '?' | '$' | '"' | '\'' | '>' | '@' | '^' | ':')
             })
             .unwrap_or(remain.len());
+        if let Some(pos) = remain[..end].find("..") {
+            end = pos;
+        }
+        if remain[..end].ends_with('.') {
+            // It can't end with '.'
+            end -= 1;
+        }
         let (value, remain) = remain.split_at(end);
         let term = BlankNode::new(value).map_err(|error| {
             TermParseError(TermParseErrorKind::BlankNode {
@@ -342,29 +425,10 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
     if let Some(remain) = s.strip_prefix("<<") {
         #[cfg(feature = "rdf-star")]
         {
-            let (subject, remain) = read_term(remain, number_of_recursive_calls + 1)?;
-            let (predicate, remain) = read_named_node(remain)?;
-            let (object, remain) = read_term(remain, number_of_recursive_calls + 1)?;
+            let (triple, remain) = read_triple(remain, number_of_recursive_calls + 1)?;
             let remain = remain.trim_start();
             if let Some(remain) = remain.strip_prefix(">>") {
-                Ok((
-                    Triple {
-                        subject: match subject {
-                            Term::NamedNode(s) => s.into(),
-                            Term::BlankNode(s) => s.into(),
-                            Term::Literal(_) => {
-                                return Err(TermParseError::msg(
-                                    "Literals are not allowed in subject position",
-                                ));
-                            }
-                            Term::Triple(s) => Subject::Triple(s),
-                        },
-                        predicate,
-                        object,
-                    }
-                    .into(),
-                    remain,
-                ))
+                Ok((triple.into(), remain))
             } else {
                 Err(TermParseError::msg(
                     "Nested triple serialization should be enclosed between << and >>",
@@ -385,6 +449,34 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
         let (term, remain) = read_literal(s)?;
         Ok((term.into(), remain))
     }
+}
+
+fn read_triple(
+    s: &str,
+    number_of_recursive_calls: usize,
+) -> Result<(Triple, &str), TermParseError> {
+    let s = s.trim();
+    let (subject, remain) = read_term(s, number_of_recursive_calls + 1)?;
+    let (predicate, remain) = read_named_node(remain)?;
+    let (object, remain) = read_term(remain, number_of_recursive_calls + 1)?;
+    Ok((
+        Triple {
+            subject: match subject {
+                Term::NamedNode(s) => s.into(),
+                Term::BlankNode(s) => s.into(),
+                Term::Literal(_) => {
+                    return Err(TermParseError::msg(
+                        "Literals are not allowed in subject position",
+                    ));
+                }
+                #[cfg(feature = "rdf-star")]
+                Term::Triple(s) => Subject::Triple(s),
+            },
+            predicate,
+            object,
+        },
+        remain,
+    ))
 }
 
 fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseError> {
