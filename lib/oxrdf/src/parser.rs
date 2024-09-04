@@ -192,8 +192,7 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
     if let Some(remain) = s.strip_prefix("_:") {
         let end = remain
             .find(|v: char| {
-                v.is_whitespace()
-                    || matches!(v, '<' | '_' | '?' | '$' | '"' | '\'' | '>' | '@' | '^')
+                v.is_whitespace() || matches!(v, '<' | '?' | '$' | '"' | '\'' | '>' | '@' | '^')
             })
             .unwrap_or(remain.len());
         let (value, remain) = remain.split_at(end);
