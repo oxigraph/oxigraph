@@ -1,5 +1,5 @@
 use crate::toolkit::error::{TurtleParseError, TurtleSyntaxError};
-use crate::toolkit::lexer::{Lexer, TokenRecognizer};
+use crate::toolkit::lexer::{Lexer, TokenOrLineJump, TokenRecognizer};
 use std::io::Read;
 use std::ops::Deref;
 #[cfg(feature = "async-tokio")]
@@ -14,7 +14,7 @@ pub trait RuleRecognizer: Sized {
 
     fn recognize_next(
         self,
-        token: <Self::TokenRecognizer as TokenRecognizer>::Token<'_>,
+        token: TokenOrLineJump<<Self::TokenRecognizer as TokenRecognizer>::Token<'_>>,
         context: &mut Self::Context,
         results: &mut Vec<Self::Output>,
         errors: &mut Vec<RuleRecognizerError>,

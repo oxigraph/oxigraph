@@ -1,7 +1,7 @@
 //! Shared parser implementation for N-Triples and N-Quads.
 
 use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
-use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError};
+use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 #[cfg(feature = "rdf-star")]
 use oxrdf::Triple;
@@ -33,6 +33,7 @@ enum NQuadsState {
     ExpectLiteralDatatype {
         value: String,
     },
+    ExpectLineJump,
     #[cfg(feature = "rdf-star")]
     AfterQuotedSubject,
     #[cfg(feature = "rdf-star")]
@@ -54,17 +55,26 @@ impl RuleRecognizer for NQuadsRecognizer {
 
     fn recognize_next(
         mut self,
-        token: N3Token<'_>,
+        token: TokenOrLineJump<N3Token<'_>>,
         context: &mut NQuadsRecognizerContext,
         results: &mut Vec<Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
-        if let Some(state) = self.stack.pop() {
-            match state {
-                NQuadsState::ExpectSubject => match token {
+        match self.stack.pop().unwrap_or(NQuadsState::ExpectSubject) {
+            NQuadsState::ExpectSubject => {
+                let TokenOrLineJump::Token(token) = token else {
+                    return if self.stack.is_empty() {
+                        self
+                    } else {
+                        self.error(
+                            errors,
+                            "line jumps are not allowed inside of quoted triples",
+                        )
+                    };
+                };
+                match token {
                     N3Token::IriRef(s) => {
-                        self.subjects
-                            .push(NamedNode::new_unchecked(s).into());
+                        self.subjects.push(NamedNode::new_unchecked(s).into());
                         self.stack.push(NQuadsState::ExpectPredicate);
                         self
                     }
@@ -83,11 +93,18 @@ impl RuleRecognizer for NQuadsRecognizer {
                         errors,
                         "The subject of a triple should be an IRI or a blank node, TOKEN found",
                     ),
-                },
-                NQuadsState::ExpectPredicate => match token {
+                }
+            }
+            NQuadsState::ExpectPredicate => {
+                let TokenOrLineJump::Token(token) = token else {
+                    return self.error(
+                        errors,
+                        "line jumps are not allowed in the middle of triples",
+                    );
+                };
+                match token {
                     N3Token::IriRef(p) => {
-                        self.predicates
-                            .push(NamedNode::new_unchecked(p));
+                        self.predicates.push(NamedNode::new_unchecked(p));
                         self.stack.push(NQuadsState::ExpectedObject);
                         self
                     }
@@ -95,142 +112,164 @@ impl RuleRecognizer for NQuadsRecognizer {
                         errors,
                         "The predicate of a triple should be an IRI, TOKEN found",
                     ),
-                },
-                NQuadsState::ExpectedObject => match token {
-                    N3Token::IriRef(o) => {
-                        self.objects
-                            .push(NamedNode::new_unchecked(o).into());
-                        self.stack
-                            .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
-                        self
-                    }
-                    N3Token::BlankNodeLabel(o) => {
-                        self.objects.push(BlankNode::new_unchecked(o).into());
-                        self.stack
-                            .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
-                        self
-                    }
-                    N3Token::String(value) => {
-                        self.stack
-                            .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value });
-                        self
-                    }
-                    #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
-                        self.stack.push(NQuadsState::AfterQuotedObject);
-                        self.stack.push(NQuadsState::ExpectSubject);
-                        self
-                    }
-                    _ => self.error(
+                }
+            }
+            NQuadsState::ExpectedObject => {
+                let TokenOrLineJump::Token(token) = token else {
+                    return self.error(
                         errors,
-                        "The object of a triple should be an IRI, a blank node or a literal, TOKEN found",
-                    ),
-                },
-                NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value } => match token {
-                    N3Token::LangTag(lang_tag) => {
-                        self.objects.push(
-                            Literal::new_language_tagged_literal_unchecked(
-                                value,
-                                lang_tag.to_ascii_lowercase(),
-                            )
-                            .into(),
-                        );
-                        self.stack
-                            .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
-                        self
+                        "line jumps are not allowed in the middle of triples",
+                    );
+                };
+                match token {
+                        N3Token::IriRef(o) => {
+                            self.objects
+                                .push(NamedNode::new_unchecked(o).into());
+                            self.stack
+                                .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
+                            self
+                        }
+                        N3Token::BlankNodeLabel(o) => {
+                            self.objects.push(BlankNode::new_unchecked(o).into());
+                            self.stack
+                                .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
+                            self
+                        }
+                        N3Token::String(value) => {
+                            self.stack
+                                .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value });
+                            self
+                        }
+                        #[cfg(feature = "rdf-star")]
+                        N3Token::Punctuation("<<") if context.with_quoted_triples => {
+                            self.stack.push(NQuadsState::AfterQuotedObject);
+                            self.stack.push(NQuadsState::ExpectSubject);
+                            self
+                        }
+                        _ => self.error(
+                            errors,
+                            "The object of a triple should be an IRI, a blank node or a literal, TOKEN found",
+                        ),
                     }
-                    N3Token::Punctuation("^^") => {
-                        self.stack
-                            .push(NQuadsState::ExpectLiteralDatatype { value });
-                        self
-                    }
-                    _ => {
-                        self.objects.push(Literal::new_simple_literal(value).into());
-                        self.stack
-                            .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
-                        self.recognize_next(token, context, results, errors)
-                    }
-                },
-                NQuadsState::ExpectLiteralDatatype { value } => match token {
+            }
+            NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value } => match token {
+                TokenOrLineJump::Token(N3Token::LangTag(lang_tag)) => {
+                    self.objects.push(
+                        Literal::new_language_tagged_literal_unchecked(
+                            value,
+                            lang_tag.to_ascii_lowercase(),
+                        )
+                        .into(),
+                    );
+                    self.stack
+                        .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
+                    self
+                }
+                TokenOrLineJump::Token(N3Token::Punctuation("^^")) => {
+                    self.stack
+                        .push(NQuadsState::ExpectLiteralDatatype { value });
+                    self
+                }
+                _ => {
+                    self.objects.push(Literal::new_simple_literal(value).into());
+                    self.stack
+                        .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
+                    self.recognize_next(token, context, results, errors)
+                }
+            },
+            NQuadsState::ExpectLiteralDatatype { value } => {
+                let TokenOrLineJump::Token(token) = token else {
+                    return self.error(
+                        errors,
+                        "line jumps are not allowed in the middle of triples",
+                    );
+                };
+                match token {
                     N3Token::IriRef(d) => {
                         self.objects.push(
-                            Literal::new_typed_literal(
-                                value,
-                                NamedNode::new_unchecked(d)
-                            )
-                            .into(),
+                            Literal::new_typed_literal(value, NamedNode::new_unchecked(d)).into(),
                         );
                         self.stack
                             .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                         self
                     }
                     _ => self.error(errors, "A literal datatype must be an IRI, found TOKEN"),
-                },
-                NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple => {
-                    if self.stack.is_empty() {
-                        match token {
-                            N3Token::IriRef(g) if context.with_graph_name => {
-                                self.emit_quad(
-                                    results,
-                                    NamedNode::new_unchecked(g).into(),
-                                );
-                                self.stack.push(NQuadsState::ExpectDot);
-                                self
-                            }
-                            N3Token::BlankNodeLabel(g) if context.with_graph_name => {
-                                self.emit_quad(results, BlankNode::new_unchecked(g).into());
-                                self.stack.push(NQuadsState::ExpectDot);
-                                self
-                            }
-                            _ => {
-                                self.emit_quad(results, GraphName::DefaultGraph);
-                                self.stack.push(NQuadsState::ExpectDot);
-                                self.recognize_next(token, context, results, errors)
-                            }
-                        }
-                    } else if token == N3Token::Punctuation(">>") {
-                        self
-                    } else {
-                        self.error(errors, "Expecting the end of a quoted triple '>>'")
-                    }
                 }
-                NQuadsState::ExpectDot => if let N3Token::Punctuation(".") = token {
-                    self.stack.push(NQuadsState::ExpectSubject);
+            }
+            NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple => {
+                if self.stack.is_empty() {
+                    match token {
+                        TokenOrLineJump::Token(N3Token::IriRef(g)) if context.with_graph_name => {
+                            self.emit_quad(results, NamedNode::new_unchecked(g).into());
+                            self.stack.push(NQuadsState::ExpectDot);
+                            self
+                        }
+                        TokenOrLineJump::Token(N3Token::BlankNodeLabel(g))
+                            if context.with_graph_name =>
+                        {
+                            self.emit_quad(results, BlankNode::new_unchecked(g).into());
+                            self.stack.push(NQuadsState::ExpectDot);
+                            self
+                        }
+                        _ => {
+                            self.emit_quad(results, GraphName::DefaultGraph);
+                            self.stack.push(NQuadsState::ExpectDot);
+                            self.recognize_next(token, context, results, errors)
+                        }
+                    }
+                } else if token == TokenOrLineJump::Token(N3Token::Punctuation(">>")) {
+                    self
+                } else {
+                    self.error(errors, "Expecting the end of a quoted triple '>>'")
+                }
+            }
+            NQuadsState::ExpectDot => {
+                let TokenOrLineJump::Token(token) = token else {
+                    return self.error(errors, "Quads should be followed by a dot");
+                };
+                if let N3Token::Punctuation(".") = token {
+                    self.stack.push(NQuadsState::ExpectLineJump);
                     self
                 } else {
                     errors.push("Quads should be followed by a dot".into());
-                    self.stack.push(NQuadsState::ExpectSubject);
-                    self.recognize_next(token, context, results, errors)
-                },
-                #[cfg(feature = "rdf-star")]
-                NQuadsState::AfterQuotedSubject => {
-                    let triple = Triple {
-                        subject: self.subjects.pop().unwrap(),
-                        predicate: self.predicates.pop().unwrap(),
-                        object: self.objects.pop().unwrap(),
-                    };
-                    self.subjects.push(triple.into());
-                    self.stack.push(NQuadsState::ExpectPredicate);
-                    self.recognize_next(token,context,  results, errors)
-                }
-                #[cfg(feature = "rdf-star")]
-                NQuadsState::AfterQuotedObject => {
-                    let triple = Triple {
-                        subject: self.subjects.pop().unwrap(),
-                        predicate: self.predicates.pop().unwrap(),
-                        object: self.objects.pop().unwrap(),
-                    };
-                    self.objects.push(triple.into());
-                    self.stack
-                        .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
-                    self.recognize_next(token, context, results, errors)
+                    self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                 }
             }
-        } else if token == N3Token::Punctuation(".") {
-            self.stack.push(NQuadsState::ExpectSubject);
-            self
-        } else {
-            self
+            NQuadsState::ExpectLineJump => {
+                let TokenOrLineJump::Token(token) = token else {
+                    return self;
+                };
+                errors.push(
+                    format!(
+                        "Only a single triple or quad can be written in a line, found {token:?}"
+                    )
+                    .into(),
+                );
+                self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
+            }
+            #[cfg(feature = "rdf-star")]
+            NQuadsState::AfterQuotedSubject => {
+                let triple = Triple {
+                    subject: self.subjects.pop().unwrap(),
+                    predicate: self.predicates.pop().unwrap(),
+                    object: self.objects.pop().unwrap(),
+                };
+                self.subjects.push(triple.into());
+                self.stack.push(NQuadsState::ExpectPredicate);
+                self.recognize_next(token, context, results, errors)
+            }
+            #[cfg(feature = "rdf-star")]
+            NQuadsState::AfterQuotedObject => {
+                let triple = Triple {
+                    subject: self.subjects.pop().unwrap(),
+                    predicate: self.predicates.pop().unwrap(),
+                    object: self.objects.pop().unwrap(),
+                };
+                self.objects.push(triple.into());
+                self.stack
+                    .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
+                self.recognize_next(token, context, results, errors)
+            }
         }
     }
 
@@ -241,7 +280,7 @@ impl RuleRecognizer for NQuadsRecognizer {
         errors: &mut Vec<RuleRecognizerError>,
     ) {
         match &*self.stack {
-            [NQuadsState::ExpectSubject] | [] => (),
+            [NQuadsState::ExpectSubject | NQuadsState::ExpectLineJump] | [] => (),
             [NQuadsState::ExpectDot] => errors.push("Triples should be followed by a dot".into()),
             [NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple] => {
                 self.emit_quad(results, GraphName::DefaultGraph);
@@ -277,7 +316,6 @@ impl NQuadsRecognizer {
                 is_ending,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
-                true,
                 Some(b"#"),
             ),
             Self {

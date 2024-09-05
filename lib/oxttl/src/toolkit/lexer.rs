@@ -22,6 +22,12 @@ pub trait TokenRecognizer {
     ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)>;
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum TokenOrLineJump<T> {
+    Token(T),
+    LineJump,
+}
+
 pub struct TokenRecognizerError {
     pub location: Range<usize>,
     pub message: String,
@@ -57,7 +63,6 @@ pub struct Lexer<B, R: TokenRecognizer> {
     is_ending: bool,
     min_buffer_size: usize,
     max_buffer_size: usize,
-    is_line_jump_whitespace: bool,
     line_comment_start: Option<&'static [u8]>,
 }
 
@@ -76,7 +81,6 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
         is_ending: bool,
         min_buffer_size: usize,
         max_buffer_size: usize,
-        is_line_jump_whitespace: bool,
         line_comment_start: Option<&'static [u8]>,
     ) -> Self {
         Self {
@@ -97,7 +101,6 @@ impl<B, R: TokenRecognizer> Lexer<B, R> {
             is_ending,
             min_buffer_size,
             max_buffer_size,
-            is_line_jump_whitespace,
             line_comment_start,
         }
     }
@@ -184,8 +187,11 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
     pub fn read_next(
         &mut self,
         options: &R::Options,
-    ) -> Option<Result<R::Token<'_>, TurtleSyntaxError>> {
-        self.skip_whitespaces_and_comments()?;
+    ) -> Option<Result<TokenOrLineJump<R::Token<'_>>, TurtleSyntaxError>> {
+        if self.skip_whitespaces_and_comments()? {
+            self.previous_position = self.position;
+            return Some(Ok(TokenOrLineJump::LineJump));
+        }
         self.previous_position = self.position;
         let Some((consumed, result)) = self.parser.recognize_next_token(
             &self.data[self.position.buffer_offset..],
@@ -208,18 +214,10 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                         u64::try_from(self.data.len() - self.position.buffer_offset).unwrap();
                     self.position.buffer_offset = self.data.len();
                     self.position.global_line += new_line_jumps;
-                    let new_position = TextPosition {
-                        line: self.position.global_line,
-                        column: Self::column_from_bytes(
-                            &self.data[self.position.line_start_buffer_offset..],
-                        ),
-                        offset: self.position.global_offset,
-                    };
                     let error = TurtleSyntaxError {
-                        location: new_position..new_position,
+                        location: self.last_token_location(),
                         message: "Unexpected end of file".into(),
                     };
-                    self.position.buffer_offset = self.data.len(); // We consume everything
                     Some(Err(error))
                 }
             } else {
@@ -245,10 +243,14 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
         self.position.buffer_offset += consumed;
         self.position.global_offset += u64::try_from(consumed).unwrap();
         self.position.global_line += new_line_jumps;
-        Some(result.map_err(|e| TurtleSyntaxError {
-            location: self.location_from_buffer_offset_range(e.location),
-            message: e.message,
-        }))
+        Some(
+            result
+                .map(TokenOrLineJump::Token)
+                .map_err(|e| TurtleSyntaxError {
+                    location: self.location_from_buffer_offset_range(e.location),
+                    message: e.message,
+                }),
+        )
     }
 
     pub fn location_from_buffer_offset_range(
@@ -288,19 +290,17 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
     }
 
     pub fn last_token_location(&self) -> Range<TextPosition> {
+        self.text_position_from_position(&self.previous_position)
+            ..self.text_position_from_position(&self.position)
+    }
+
+    fn text_position_from_position(&self, position: &Position) -> TextPosition {
         TextPosition {
-            line: self.previous_position.global_line,
+            line: position.global_line,
             column: Self::column_from_bytes(
-                &self.data[self.previous_position.line_start_buffer_offset
-                    ..self.previous_position.buffer_offset],
+                &self.data[position.line_start_buffer_offset..position.buffer_offset],
             ),
-            offset: self.previous_position.global_offset,
-        }..TextPosition {
-            line: self.position.global_line,
-            column: Self::column_from_bytes(
-                &self.data[self.position.line_start_buffer_offset..self.position.buffer_offset],
-            ),
-            offset: self.position.global_offset,
+            offset: position.global_offset,
         }
     }
 
@@ -315,92 +315,81 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
     }
 
     #[allow(clippy::unwrap_in_result)]
-    fn skip_whitespaces_and_comments(&mut self) -> Option<()> {
-        loop {
-            self.skip_whitespaces()?;
-
-            let buf = &self.data[self.position.buffer_offset..];
-            if let Some(line_comment_start) = self.line_comment_start {
-                if buf.starts_with(line_comment_start) {
-                    // Comment
-                    if let Some(end) = memchr2(b'\r', b'\n', &buf[line_comment_start.len()..]) {
-                        let mut end_position = line_comment_start.len() + end;
-                        if buf.get(end_position).copied() == Some(b'\r') {
-                            // We look for \n for Windows line end style
-                            if let Some(c) = buf.get(end_position + 1) {
-                                if *c == b'\n' {
-                                    end_position += 1;
-                                }
-                            } else if !self.is_ending {
-                                return None; // We need to read more
-                            }
-                        }
-                        let comment_size = end_position + 1;
-                        self.position.buffer_offset += comment_size;
-                        self.position.line_start_buffer_offset = self.position.buffer_offset;
-                        self.position.global_offset += u64::try_from(comment_size).unwrap();
-                        self.position.global_line += 1;
-                        continue;
-                    }
-                    if self.is_ending {
-                        self.position.buffer_offset = self.data.len(); // EOF
-                        return Some(());
-                    }
-                    return None; // We need more data
-                }
-            }
-            return Some(());
+    fn skip_whitespaces_and_comments(&mut self) -> Option<bool> {
+        if self.skip_whitespaces()? {
+            return Some(true);
         }
-    }
 
-    fn skip_whitespaces(&mut self) -> Option<()> {
-        if self.is_line_jump_whitespace {
-            let mut i = self.position.buffer_offset;
-            while let Some(c) = self.data.get(i) {
-                match c {
-                    b' ' | b'\t' => {
-                        self.position.buffer_offset += 1;
-                        self.position.global_offset += 1;
-                    }
-                    b'\r' => {
+        let buf = &self.data[self.position.buffer_offset..];
+        if let Some(line_comment_start) = self.line_comment_start {
+            if buf.starts_with(line_comment_start) {
+                // Comment
+                if let Some(end) = memchr2(b'\r', b'\n', &buf[line_comment_start.len()..]) {
+                    let mut end_position = line_comment_start.len() + end;
+                    if buf.get(end_position).copied() == Some(b'\r') {
                         // We look for \n for Windows line end style
-                        let mut increment: u8 = 1;
-                        if let Some(c) = self.data.get(i + 1) {
+                        if let Some(c) = buf.get(end_position + 1) {
                             if *c == b'\n' {
-                                increment += 1;
-                                i += 1;
+                                end_position += 1;
                             }
                         } else if !self.is_ending {
                             return None; // We need to read more
                         }
-                        self.position.buffer_offset += usize::from(increment);
-                        self.position.line_start_buffer_offset = self.position.buffer_offset;
-                        self.position.global_offset += u64::from(increment);
-                        self.position.global_line += 1;
                     }
-                    b'\n' => {
-                        self.position.buffer_offset += 1;
-                        self.position.line_start_buffer_offset = self.position.buffer_offset;
-                        self.position.global_offset += 1;
-                        self.position.global_line += 1;
-                    }
-                    _ => return Some(()),
+                    let comment_size = end_position + 1;
+                    self.position.buffer_offset += comment_size;
+                    self.position.line_start_buffer_offset = self.position.buffer_offset;
+                    self.position.global_offset += u64::try_from(comment_size).unwrap();
+                    self.position.global_line += 1;
+                    return Some(true);
                 }
-                i += 1;
-                // TODO: SIMD
-            }
-        } else {
-            for c in &self.data[self.position.buffer_offset..] {
-                if matches!(c, b' ' | b'\t') {
-                    self.position.buffer_offset += 1;
-                    self.position.global_offset += 1;
-                } else {
-                    return Some(());
+                if self.is_ending {
+                    self.position.buffer_offset = self.data.len(); // EOF
+                    return Some(false);
                 }
-                // TODO: SIMD
+                return None; // We need more data
             }
         }
-        Some(())
+        Some(false)
+    }
+
+    fn skip_whitespaces(&mut self) -> Option<bool> {
+        let mut i = self.position.buffer_offset;
+        while let Some(c) = self.data.get(i) {
+            match c {
+                b' ' | b'\t' => {
+                    self.position.buffer_offset += 1;
+                    self.position.global_offset += 1;
+                }
+                b'\r' => {
+                    // We look for \n for Windows line end style
+                    let mut increment: u8 = 1;
+                    if let Some(c) = self.data.get(i + 1) {
+                        if *c == b'\n' {
+                            increment += 1;
+                        }
+                    } else if !self.is_ending {
+                        return None; // We need to read more
+                    }
+                    self.position.buffer_offset += usize::from(increment);
+                    self.position.line_start_buffer_offset = self.position.buffer_offset;
+                    self.position.global_offset += u64::from(increment);
+                    self.position.global_line += 1;
+                    return Some(true);
+                }
+                b'\n' => {
+                    self.position.buffer_offset += 1;
+                    self.position.line_start_buffer_offset = self.position.buffer_offset;
+                    self.position.global_offset += 1;
+                    self.position.global_line += 1;
+                    return Some(true);
+                }
+                _ => return Some(false),
+            }
+            i += 1;
+            // TODO: SIMD
+        }
+        Some(false)
     }
 
     fn find_number_of_line_jumps_and_start_of_last_line(bytes: &[u8]) -> (u64, usize) {
