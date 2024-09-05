@@ -5,7 +5,7 @@ use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3T
 use crate::toolkit::FromTokioAsyncReadIterator;
 use crate::toolkit::{
     FromReadIterator, FromSliceIterator, Lexer, Parser, RuleRecognizer, RuleRecognizerError,
-    TurtleSyntaxError,
+    TokenOrLineJump, TurtleSyntaxError,
 };
 use crate::{TurtleParseError, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::{Iri, IriParseError};
@@ -878,11 +878,14 @@ impl RuleRecognizer for N3Recognizer {
 
     fn recognize_next(
         mut self,
-        token: N3Token<'_>,
+        token: TokenOrLineJump<N3Token<'_>>,
         context: &mut N3RecognizerContext,
         results: &mut Vec<N3Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
+        let TokenOrLineJump::Token(token) = token else {
+            return self;
+        };
         while let Some(rule) = self.stack.pop() {
             match rule {
                 // [1]  n3Doc            ::=  ( ( n3Statement ".") | sparqlDirective) *
@@ -1369,7 +1372,6 @@ impl N3Recognizer {
                 is_ending,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
-                true,
                 Some(b"#"),
             ),
             Self {

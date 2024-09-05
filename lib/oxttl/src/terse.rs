@@ -1,7 +1,7 @@
 //! Shared parser implementation for Turtle and TriG.
 
 use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
-use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError};
+use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
 use oxrdf::vocab::{rdf, xsd};
@@ -50,11 +50,14 @@ impl RuleRecognizer for TriGRecognizer {
 
     fn recognize_next(
         mut self,
-        token: N3Token<'_>,
+        token: TokenOrLineJump<N3Token<'_>>,
         context: &mut TriGRecognizerContext,
         results: &mut Vec<Quad>,
         errors: &mut Vec<RuleRecognizerError>,
     ) -> Self {
+        let TokenOrLineJump::Token(token) = token else {
+            return self;
+        };
         if let Some(rule) = self.stack.pop() {
             match rule {
                 // [1g] trigDoc      ::=  (directive | block)*
@@ -95,11 +98,21 @@ impl RuleRecognizer for TriGRecognizer {
                         }
                         N3Token::Punctuation("{") if context.with_graph_name => {
                             self.stack.push(TriGState::WrappedGraph);
-                            self.recognize_next(token, context, results, errors)
+                            self.recognize_next(
+                                TokenOrLineJump::Token(token),
+                                context,
+                                results,
+                                errors,
+                            )
                         }
                         _ => {
                             self.stack.push(TriGState::TriplesOrGraph);
-                            self.recognize_next(token, context, results, errors)
+                            self.recognize_next(
+                                TokenOrLineJump::Token(token),
+                                context,
+                                results,
+                                errors,
+                            )
                         }
                     }
                 }
@@ -109,7 +122,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     } else {
                         errors.push("A dot is expected at the end of statements".into());
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::BaseExpectIri => {
@@ -208,7 +221,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::ExpectDot);
                         self.stack.push(TriGState::PredicateObjectList);
                     }
-                    self.recognize_next(token, context, results, errors)
+                    self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                 }
                 TriGState::WrappedGraphBlankNodePropertyListCurrent => {
                     if token == N3Token::Punctuation("]") {
@@ -222,7 +235,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::ExpectDot);
                         self.stack.push(TriGState::SubjectBlankNodePropertyListEnd);
                         self.stack.push(TriGState::PredicateObjectList);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::SubjectBlankNodePropertyListEnd => {
@@ -234,15 +247,15 @@ impl RuleRecognizer for TriGRecognizer {
                         errors.push("blank node property lists should end with a ']'".into());
                         self.stack
                             .push(TriGState::SubjectBlankNodePropertyListAfter);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::SubjectBlankNodePropertyListAfter => {
                     if matches!(token, N3Token::Punctuation("." | "}")) {
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     } else {
                         self.stack.push(TriGState::PredicateObjectList);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::SubjectCollectionBeginning => {
@@ -256,7 +269,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_predicate.push(rdf::FIRST.into());
                         self.stack.push(TriGState::SubjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::SubjectCollectionPossibleEnd => {
@@ -277,7 +290,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_subject.push(new.into());
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 // [5g]  wrappedGraph  ::=  '{' triplesBlock? '}'
@@ -304,7 +317,12 @@ impl RuleRecognizer for TriGRecognizer {
                             errors.push(
                                 "A '}' or a '.' is expected at the end of a graph block".into(),
                             );
-                            self.recognize_next(token, context, results, errors)
+                            self.recognize_next(
+                                TokenOrLineJump::Token(token),
+                                context,
+                                results,
+                                errors,
+                            )
                         }
                     }
                 }
@@ -312,7 +330,8 @@ impl RuleRecognizer for TriGRecognizer {
                 // [10]  subject  ::=  iri | BlankNode | collection | quotedTriple
                 TriGState::Triples => match token {
                     N3Token::Punctuation("}") => {
-                        self.recognize_next(token, context, results, errors) // Early end
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
+                        // Early end
                     }
                     N3Token::Punctuation("[") => {
                         self.cur_subject.push(BlankNode::default().into());
@@ -371,7 +390,7 @@ impl RuleRecognizer for TriGRecognizer {
                     } else {
                         self.stack.push(TriGState::SubjectBlankNodePropertyListEnd);
                         self.stack.push(TriGState::PredicateObjectList);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 // [7g]  labelOrSubject  ::=  iri | BlankNode
@@ -419,7 +438,7 @@ impl RuleRecognizer for TriGRecognizer {
                     self.stack.push(TriGState::PredicateObjectListEnd);
                     self.stack.push(TriGState::ObjectsList);
                     self.stack.push(TriGState::Verb);
-                    self.recognize_next(token, context, results, errors)
+                    self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                 }
                 TriGState::PredicateObjectListEnd => {
                     self.cur_predicate.pop();
@@ -428,7 +447,7 @@ impl RuleRecognizer for TriGRecognizer {
                             .push(TriGState::PredicateObjectListPossibleContinuation);
                         self
                     } else {
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::PredicateObjectListPossibleContinuation => {
@@ -437,12 +456,12 @@ impl RuleRecognizer for TriGRecognizer {
                             .push(TriGState::PredicateObjectListPossibleContinuation);
                         self
                     } else if matches!(token, N3Token::Punctuation("." | "}" | "]")) {
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     } else {
                         self.stack.push(TriGState::PredicateObjectListEnd);
                         self.stack.push(TriGState::ObjectsList);
                         self.stack.push(TriGState::Verb);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 // [8]   objectList  ::=  object annotation? ( ',' object annotation? )*
@@ -450,7 +469,7 @@ impl RuleRecognizer for TriGRecognizer {
                 TriGState::ObjectsList => {
                     self.stack.push(TriGState::ObjectsListEnd);
                     self.stack.push(TriGState::Object);
-                    self.recognize_next(token, context, results, errors)
+                    self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                 }
                 TriGState::ObjectsListEnd => match token {
                     N3Token::Punctuation(",") => {
@@ -473,7 +492,7 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                     _ => {
                         self.cur_object.pop();
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 },
                 #[cfg(feature = "rdf-star")]
@@ -493,7 +512,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::Object);
                         self
                     } else {
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 // [9]   verb       ::=  predicate | 'a'
@@ -629,7 +648,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_subject.push(BlankNode::default().into());
                         self.stack.push(TriGState::ObjectBlankNodePropertyListEnd);
                         self.stack.push(TriGState::PredicateObjectList);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::ObjectBlankNodePropertyListEnd => {
@@ -654,7 +673,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_predicate.push(rdf::FIRST.into());
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::ObjectCollectionPossibleEnd => {
@@ -675,7 +694,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_subject.push(new.into());
                         self.stack.push(TriGState::ObjectCollectionPossibleEnd);
                         self.stack.push(TriGState::Object);
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 }
                 TriGState::LiteralPossibleSuffix { value, emit } => match token {
@@ -703,7 +722,7 @@ impl RuleRecognizer for TriGRecognizer {
                         if emit {
                             self.emit_quad(results);
                         }
-                        self.recognize_next(token, context, results, errors)
+                        self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 },
                 TriGState::LiteralExpectDatatype { value, emit } => match token {
@@ -739,7 +758,7 @@ impl RuleRecognizer for TriGRecognizer {
                     },
                     _ => self
                         .error(errors, "Expecting a datatype IRI after ^^, found TOKEN")
-                        .recognize_next(token, context, results, errors),
+                        .recognize_next(TokenOrLineJump::Token(token), context, results, errors),
                 },
                 // [27t]  quotedTriple  ::=  '<<' qtSubject verb qtObject '>>'
                 #[cfg(feature = "rdf-star")]
@@ -968,7 +987,6 @@ impl TriGRecognizer {
                 is_ending,
                 MIN_BUFFER_SIZE,
                 MAX_BUFFER_SIZE,
-                true,
                 Some(b"#"),
             ),
             Self {
