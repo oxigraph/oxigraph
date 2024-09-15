@@ -158,28 +158,36 @@ impl TestManifest {
                         .objects_for_subject_predicate(n, qt::GRAPH_DATA)
                         .chain(self.graph.objects_for_subject_predicate(n, ut::GRAPH_DATA))
                         .filter_map(|g| match g {
-                            TermRef::NamedNode(q) => Some((q.into_owned(), q.as_str().to_owned())),
+                            TermRef::NamedNode(q) => {
+                                Some(Ok((q.into_owned(), q.as_str().to_owned())))
+                            }
                             TermRef::BlankNode(node) => {
                                 if let Some(TermRef::NamedNode(graph)) =
                                     self.graph.object_for_subject_predicate(node, ut::GRAPH)
                                 {
-                                    if let Some(TermRef::Literal(name)) =
-                                        self.graph.object_for_subject_predicate(node, rdfs::LABEL)
-                                    {
-                                        Some((
-                                            NamedNode::new(name.value()).unwrap(),
-                                            graph.as_str().to_owned(),
-                                        ))
-                                    } else {
-                                        Some((graph.into_owned(), graph.as_str().to_owned()))
-                                    }
+                                    Some(Ok(
+                                        if let Some(TermRef::Literal(name)) = self
+                                            .graph
+                                            .object_for_subject_predicate(node, rdfs::LABEL)
+                                        {
+                                            (
+                                                match NamedNode::new(name.value()) {
+                                                    Ok(graph) => graph,
+                                                    Err(e) => return Some(Err(e)),
+                                                },
+                                                graph.as_str().to_owned(),
+                                            )
+                                        } else {
+                                            (graph.into_owned(), graph.as_str().to_owned())
+                                        },
+                                    ))
                                 } else {
                                     None
                                 }
                             }
                             _ => None,
                         })
-                        .collect();
+                        .collect::<Result<_, _>>()?;
                     let service_data = self
                         .graph
                         .objects_for_subject_predicate(n, qt::SERVICE_DATA)
@@ -225,28 +233,36 @@ impl TestManifest {
                     self.graph
                         .objects_for_subject_predicate(n, ut::GRAPH_DATA)
                         .filter_map(|g| match g {
-                            TermRef::NamedNode(q) => Some((q.into_owned(), q.as_str().to_owned())),
+                            TermRef::NamedNode(q) => {
+                                Some(Ok((q.into_owned(), q.as_str().to_owned())))
+                            }
                             TermRef::BlankNode(node) => {
                                 if let Some(TermRef::NamedNode(graph)) =
                                     self.graph.object_for_subject_predicate(node, ut::GRAPH)
                                 {
-                                    if let Some(TermRef::Literal(name)) =
-                                        self.graph.object_for_subject_predicate(node, rdfs::LABEL)
-                                    {
-                                        Some((
-                                            NamedNode::new(name.value()).unwrap(),
-                                            graph.as_str().to_owned(),
-                                        ))
-                                    } else {
-                                        Some((graph.into_owned(), graph.as_str().to_owned()))
-                                    }
+                                    Some(Ok(
+                                        if let Some(TermRef::Literal(name)) = self
+                                            .graph
+                                            .object_for_subject_predicate(node, rdfs::LABEL)
+                                        {
+                                            (
+                                                match NamedNode::new(name.value()) {
+                                                    Ok(graph) => graph,
+                                                    Err(e) => return Some(Err(e)),
+                                                },
+                                                graph.as_str().to_owned(),
+                                            )
+                                        } else {
+                                            (graph.into_owned(), graph.as_str().to_owned())
+                                        },
+                                    ))
                                 } else {
                                     None
                                 }
                             }
                             _ => None,
                         })
-                        .collect(),
+                        .collect::<Result<_, _>>()?,
                 ),
                 Some(_) => bail!("invalid result"),
                 None => (None, Vec::new()),

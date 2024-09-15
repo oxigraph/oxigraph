@@ -204,7 +204,7 @@ fn build_rocksdb() {
 
     for file in lib_sources {
         if file != "util/build_version.cc" {
-            config.file(&format!("rocksdb/{file}"));
+            config.file(format!("rocksdb/{file}"));
         }
     }
 

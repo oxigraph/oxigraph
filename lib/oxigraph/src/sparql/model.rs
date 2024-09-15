@@ -251,7 +251,17 @@ impl Iterator for QuerySolutionIter {
 /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QueryTripleIter {
-    pub(crate) iter: Box<dyn Iterator<Item = Result<Triple, EvaluationError>>>,
+    iter: Box<dyn Iterator<Item = Result<Triple, EvaluationError>>>,
+}
+
+impl QueryTripleIter {
+    pub(crate) fn new(
+        iter: impl Iterator<Item = Result<Triple, EvaluationError>> + 'static,
+    ) -> Self {
+        Self {
+            iter: Box::new(iter),
+        }
+    }
 }
 
 impl Iterator for QueryTripleIter {
@@ -268,11 +278,11 @@ impl Iterator for QueryTripleIter {
     }
 
     #[inline]
-    fn fold<Acc, G>(self, init: Acc, g: G) -> Acc
+    fn fold<Acc, G>(self, init: Acc, f: G) -> Acc
     where
         G: FnMut(Acc, Self::Item) -> Acc,
     {
-        self.iter.fold(init, g)
+        self.iter.fold(init, f)
     }
 }
 

@@ -267,10 +267,7 @@ impl fmt::Display for GraphUpdateOperation {
                 write!(
                     f,
                     "WHERE {{ {} }}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: None
-                    }
+                    SparqlGraphRootPattern::new(pattern, None)
                 )
             }
             Self::Load {

@@ -1,8 +1,6 @@
 //! Implementation of [SPARQL 1.1 Query Results CSV and TSV Formats](https://www.w3.org/TR/sparql11-results-csv-tsv/)
 
-use crate::error::{
-    QueryResultsParseError, QueryResultsSyntaxError, SyntaxErrorKind, TextPosition,
-};
+use crate::error::{QueryResultsParseError, QueryResultsSyntaxError, TextPosition};
 use memchr::memchr;
 use oxrdf::vocab::xsd;
 use oxrdf::*;
@@ -643,10 +641,10 @@ impl TsvInnerSolutionsParser {
                             .sum::<usize>();
                         let start_position_bytes =
                             line.split('\t').take(i).map(|c| c.len() + 1).sum::<usize>();
-                        QueryResultsSyntaxError(SyntaxErrorKind::Term {
-                            error: e,
-                            term: v.into(),
-                            location: TextPosition {
+                        QueryResultsSyntaxError::term(
+                            e,
+                            v.into(),
+                            TextPosition {
                                 line: self.line_reader.line_count - 1,
                                 column: start_position_char.try_into().unwrap(),
                                 offset: self.line_reader.last_line_start
@@ -659,7 +657,7 @@ impl TsvInnerSolutionsParser {
                                 offset: self.line_reader.last_line_start
                                     + u64::try_from(start_position_bytes + v.len()).unwrap(),
                             },
-                        })
+                        )
                     })?))
                 }
             })

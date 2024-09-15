@@ -59,10 +59,10 @@ impl From<quick_xml::escape::EscapeError> for QueryResultsParseError {
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct QueryResultsSyntaxError(#[from] pub(crate) SyntaxErrorKind);
+pub struct QueryResultsSyntaxError(#[from] SyntaxErrorKind);
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum SyntaxErrorKind {
+enum SyntaxErrorKind {
     #[error(transparent)]
     Json(#[from] json_event_parser::SyntaxError),
     #[error(transparent)]
@@ -83,11 +83,18 @@ pub(crate) enum SyntaxErrorKind {
 
 impl QueryResultsSyntaxError {
     /// Builds an error from a printable error message.
-    #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
         Self(SyntaxErrorKind::Msg {
             msg: msg.into(),
             location: None,
+        })
+    }
+
+    pub(crate) fn term(error: TermParseError, term: String, location: Range<TextPosition>) -> Self {
+        Self(SyntaxErrorKind::Term {
+            error,
+            term,
+            location,
         })
     }
 

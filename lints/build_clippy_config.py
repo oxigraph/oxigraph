@@ -4,7 +4,7 @@ from urllib.request import urlopen
 
 import tomlkit
 
-TARGET_VERSION = "1.79.0"
+TARGET_VERSION = "1.81.0"
 LINT_BLACKLIST = {
     "absolute_paths",  # TODO: might be nice
     "alloc_instead_of_core",

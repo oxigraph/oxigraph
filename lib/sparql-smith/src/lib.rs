@@ -1,4 +1,4 @@
-use arbitrary::{Arbitrary, Result, Unstructured};
+use arbitrary::{Arbitrary, Error, Result, Unstructured};
 use std::fmt;
 use std::iter::once;
 use std::ops::ControlFlow;
@@ -1049,8 +1049,8 @@ impl<'a> Arbitrary<'a> for InlineDataFull {
         u.arbitrary_loop(Some(0), Some(3), |u| {
             let mut row = Vec::with_capacity(vars.len());
             u.arbitrary_loop(
-                Some(vars.len().try_into().unwrap()),
-                Some(vars.len().try_into().unwrap()),
+                Some(vars.len().try_into().map_err(|_| Error::IncorrectFormat)?),
+                Some(vars.len().try_into().map_err(|_| Error::IncorrectFormat)?),
                 |u| {
                     row.push(u.arbitrary()?);
                     Ok(ControlFlow::Continue(()))

@@ -14,11 +14,18 @@ pub struct TextPosition {
 /// It is composed of a message and a byte range in the input.
 #[derive(Debug, thiserror::Error)]
 pub struct TurtleSyntaxError {
-    pub(super) location: Range<TextPosition>,
-    pub(super) message: String,
+    location: Range<TextPosition>,
+    message: String,
 }
 
 impl TurtleSyntaxError {
+    pub(crate) fn new(location: Range<TextPosition>, message: impl Into<String>) -> Self {
+        Self {
+            location,
+            message: message.into(),
+        }
+    }
+
     /// The location of the error inside of the file.
     #[inline]
     pub fn location(&self) -> Range<TextPosition> {

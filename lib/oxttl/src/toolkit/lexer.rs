@@ -18,7 +18,7 @@ pub trait TokenRecognizer {
         &mut self,
         data: &'a [u8],
         is_ending: bool,
-        config: &Self::Options,
+        options: &Self::Options,
     ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)>;
 }
 
@@ -214,10 +214,10 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                         u64::try_from(self.data.len() - self.position.buffer_offset).unwrap();
                     self.position.buffer_offset = self.data.len();
                     self.position.global_line += new_line_jumps;
-                    let error = TurtleSyntaxError {
-                        location: self.last_token_location(),
-                        message: "Unexpected end of file".into(),
-                    };
+                    let error = TurtleSyntaxError::new(
+                        self.last_token_location(),
+                        "Unexpected end of file",
+                    );
                     Some(Err(error))
                 }
             } else {
@@ -243,14 +243,12 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
         self.position.buffer_offset += consumed;
         self.position.global_offset += u64::try_from(consumed).unwrap();
         self.position.global_line += new_line_jumps;
-        Some(
-            result
-                .map(TokenOrLineJump::Token)
-                .map_err(|e| TurtleSyntaxError {
-                    location: self.location_from_buffer_offset_range(e.location),
-                    message: e.message,
-                }),
-        )
+        Some(result.map(TokenOrLineJump::Token).map_err(|e| {
+            TurtleSyntaxError::new(
+                self.location_from_buffer_offset_range(e.location),
+                e.message,
+            )
+        }))
     }
 
     pub fn location_from_buffer_offset_range(
