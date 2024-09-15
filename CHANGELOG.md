@@ -1,3 +1,21 @@
+## [0.4.0-rc.2] - 2024-09-15
+
+### Added
+- Rust: `Triple::from_str` and `Quad::from_str`.
+
+### Changed
+- SPARQL: fixes evaluation of `GRAPH ?g { ?s !(...) ?o }` property paths with `?g` and `?s` unbound and `?o` bound.
+- NTriples/NQuads: properly mandate that lines must contain at most a single triple/quad.
+- Turtle-like formats: do not allow the empty blank node identifier.
+- Rust: Big renaming in parsers and serializers to get an hopefully nicer API:
+  - Use `Parser` suffix instead of `Reader` for parsers.
+  - Use `Writer` suffix instead of `Serializer` for serializers.
+  - Rename `FromRead` to `Reader`, `FromTokioAsyncRead` to `TokioAsyncReader`, `FromSlice` to `Slice`, `ToWrite` to `Writer` and `ToTokioAsyncWrite` to `TokioAsyncWriter`.
+  - Rename `read_next` to `parse_next`.
+  - Rename `from_read` to `for_reader`, `to_write` to `for_writer`, `from_tokio_async_read` to `for_tokio_async_reader`, `to_tokio_async_write` to `for_tokio_async_writer`, `from_slice` to `for_slice`.
+- CLI: Allows to set `default-graph-uri` query argument even if the `--union-default-graph` CLI option is set.
+
+
 ## [0.4.0-rc.1] - 2024-08-25
 
 ### Added
