@@ -67,8 +67,8 @@ pub struct EmptyServiceHandler;
 impl ServiceHandler for EmptyServiceHandler {
     type Error = EvaluationError;
 
-    fn handle(&self, name: NamedNode, _: Query) -> Result<QueryResults, Self::Error> {
-        Err(EvaluationError::UnsupportedService(name))
+    fn handle(&self, service_name: NamedNode, _: Query) -> Result<QueryResults, Self::Error> {
+        Err(EvaluationError::UnsupportedService(service_name))
     }
 }
 

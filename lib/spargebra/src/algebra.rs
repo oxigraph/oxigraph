@@ -1032,8 +1032,14 @@ fn lookup_triple_pattern_variables<'a>(
 }
 
 pub(crate) struct SparqlGraphRootPattern<'a> {
-    pub(crate) pattern: &'a GraphPattern,
-    pub(crate) dataset: Option<&'a QueryDataset>,
+    pattern: &'a GraphPattern,
+    dataset: Option<&'a QueryDataset>,
+}
+
+impl<'a> SparqlGraphRootPattern<'a> {
+    pub fn new(pattern: &'a GraphPattern, dataset: Option<&'a QueryDataset>) -> Self {
+        Self { pattern, dataset }
+    }
 }
 
 impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {

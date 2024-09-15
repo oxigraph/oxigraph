@@ -197,10 +197,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     "{}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: dataset.as_ref()
-                    }
+                    SparqlGraphRootPattern::new(pattern, dataset.as_ref())
                 )
             }
             Self::Construct {
@@ -223,10 +220,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     " WHERE {{ {} }}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: None
-                    }
+                    SparqlGraphRootPattern::new(pattern, None)
                 )
             }
             Self::Describe {
@@ -244,10 +238,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     " WHERE {{ {} }}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: None
-                    }
+                    SparqlGraphRootPattern::new(pattern, None)
                 )
             }
             Self::Ask {
@@ -265,10 +256,7 @@ impl fmt::Display for Query {
                 write!(
                     f,
                     " WHERE {{ {} }}",
-                    SparqlGraphRootPattern {
-                        pattern,
-                        dataset: None
-                    }
+                    SparqlGraphRootPattern::new(pattern, None)
                 )
             }
         }

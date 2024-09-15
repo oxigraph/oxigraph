@@ -40,10 +40,10 @@ impl From<quick_xml::Error> for RdfXmlParseError {
 /// An error in the syntax of the parsed file.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct RdfXmlSyntaxError(#[from] pub(crate) SyntaxErrorKind);
+pub struct RdfXmlSyntaxError(#[from] SyntaxErrorKind);
 
 #[derive(Debug, thiserror::Error)]
-pub enum SyntaxErrorKind {
+enum SyntaxErrorKind {
     #[error(transparent)]
     Xml(#[from] quick_xml::Error),
     #[error("error while parsing IRI '{iri}': {error}")]
@@ -64,9 +64,16 @@ pub enum SyntaxErrorKind {
 
 impl RdfXmlSyntaxError {
     /// Builds an error from a printable error message.
-    #[inline]
     pub(crate) fn msg(msg: impl Into<String>) -> Self {
         Self(SyntaxErrorKind::Msg(msg.into()))
+    }
+
+    pub(crate) fn invalid_iri(iri: String, error: IriParseError) -> Self {
+        Self(SyntaxErrorKind::InvalidIri { iri, error })
+    }
+
+    pub(crate) fn invalid_language_tag(tag: String, error: LanguageTagParseError) -> Self {
+        Self(SyntaxErrorKind::InvalidLanguageTag { tag, error })
     }
 }
 

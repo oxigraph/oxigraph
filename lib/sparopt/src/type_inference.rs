@@ -421,14 +421,14 @@ impl VariableType {
 impl BitOr for VariableType {
     type Output = Self;
 
-    fn bitor(self, other: Self) -> Self {
+    fn bitor(self, rhs: Self) -> Self {
         Self {
-            undef: self.undef || other.undef,
-            named_node: self.named_node || other.named_node,
-            blank_node: self.blank_node || other.blank_node,
-            literal: self.literal || other.literal,
+            undef: self.undef || rhs.undef,
+            named_node: self.named_node || rhs.named_node,
+            blank_node: self.blank_node || rhs.blank_node,
+            literal: self.literal || rhs.literal,
             #[cfg(feature = "rdf-star")]
-            triple: self.triple || other.triple,
+            triple: self.triple || rhs.triple,
         }
     }
 }
@@ -437,22 +437,22 @@ impl BitAnd for VariableType {
     type Output = Self;
 
     #[allow(clippy::nonminimal_bool)]
-    fn bitand(self, other: Self) -> Self {
+    fn bitand(self, rhs: Self) -> Self {
         Self {
-            undef: self.undef && other.undef,
-            named_node: self.named_node && other.named_node
-                || (self.undef && other.named_node)
-                || (self.named_node && other.undef),
-            blank_node: self.blank_node && other.blank_node
-                || (self.undef && other.blank_node)
-                || (self.blank_node && other.undef),
-            literal: self.literal && other.literal
-                || (self.undef && other.literal)
-                || (self.literal && other.undef),
+            undef: self.undef && rhs.undef,
+            named_node: self.named_node && rhs.named_node
+                || (self.undef && rhs.named_node)
+                || (self.named_node && rhs.undef),
+            blank_node: self.blank_node && rhs.blank_node
+                || (self.undef && rhs.blank_node)
+                || (self.blank_node && rhs.undef),
+            literal: self.literal && rhs.literal
+                || (self.undef && rhs.literal)
+                || (self.literal && rhs.undef),
             #[cfg(feature = "rdf-star")]
-            triple: self.triple && other.triple
-                || (self.undef && other.triple)
-                || (self.triple && other.undef),
+            triple: self.triple && rhs.triple
+                || (self.undef && rhs.triple)
+                || (self.triple && rhs.undef),
         }
     }
 }

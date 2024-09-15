@@ -207,16 +207,14 @@ impl SimpleEvaluator {
             .collect();
         let from = EncodedTuple::with_capacity(variables.len());
         (
-            QueryResults::Graph(QueryTripleIter {
-                iter: Box::new(ConstructIterator {
-                    eval: self.clone(),
-                    iter: eval(from),
-                    template,
-                    buffered_results: Vec::default(),
-                    already_emitted_results: FxHashSet::default(),
-                    bnodes: Vec::default(),
-                }),
-            }),
+            QueryResults::Graph(QueryTripleIter::new(ConstructIterator {
+                eval: self.clone(),
+                iter: eval(from),
+                template,
+                buffered_results: Vec::default(),
+                already_emitted_results: FxHashSet::default(),
+                bnodes: Vec::default(),
+            })),
             stats,
         )
     }
@@ -229,15 +227,13 @@ impl SimpleEvaluator {
         let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
         let from = EncodedTuple::with_capacity(variables.len());
         (
-            QueryResults::Graph(QueryTripleIter {
-                iter: Box::new(DescribeIterator {
-                    eval: self.clone(),
-                    tuples_to_describe: eval(from),
-                    nodes_described: FxHashSet::default(),
-                    nodes_to_describe: Vec::default(),
-                    quads: Box::new(empty()),
-                }),
-            }),
+            QueryResults::Graph(QueryTripleIter::new(DescribeIterator {
+                eval: self.clone(),
+                tuples_to_describe: eval(from),
+                nodes_described: FxHashSet::default(),
+                nodes_to_describe: Vec::default(),
+                quads: Box::new(empty()),
+            })),
             stats,
         )
     }

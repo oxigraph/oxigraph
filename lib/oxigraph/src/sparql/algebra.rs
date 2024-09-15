@@ -29,6 +29,7 @@ use std::str::FromStr;
 /// );
 /// # Ok::<_, Box<dyn std::error::Error>>(())
 /// ```
+#[allow(clippy::field_scoped_visibility_modifiers)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Query {
     pub(super) inner: spargebra::Query,
@@ -118,6 +119,7 @@ impl From<spargebra::Query> for Query {
 /// assert_eq!(update.to_string().trim(), update_str);
 /// # Ok::<_, oxigraph::sparql::SparqlSyntaxError>(())
 /// ```
+#[allow(clippy::field_scoped_visibility_modifiers)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Update {
     pub(super) inner: spargebra::Update,

@@ -1315,8 +1315,8 @@ impl<'a> From<QuadRef<'a>> for Quad {
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("{term} can not be converted to a {target}")]
 pub struct TryFromTermError {
-    pub(crate) term: Term,
-    pub(crate) target: &'static str,
+    term: Term,
+    target: &'static str,
 }
 
 impl TryFromTermError {

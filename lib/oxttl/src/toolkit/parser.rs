@@ -74,12 +74,12 @@ impl<B: Deref<Target = [u8]>, RR: RuleRecognizer> Parser<B, RR> {
     pub fn parse_next(&mut self) -> Option<Result<RR::Output, TurtleSyntaxError>> {
         loop {
             if let Some(error) = self.errors.pop() {
-                return Some(Err(TurtleSyntaxError {
-                    location: self.lexer.last_token_location(),
-                    message: error
+                return Some(Err(TurtleSyntaxError::new(
+                    self.lexer.last_token_location(),
+                    error
                         .message
                         .replace("TOKEN", &self.lexer.last_token_source()),
-                }));
+                )));
             }
             if let Some(result) = self.results.pop() {
                 return Some(Ok(result));

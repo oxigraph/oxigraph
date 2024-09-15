@@ -1,4 +1,4 @@
-use crate::error::{RdfXmlParseError, RdfXmlSyntaxError, SyntaxErrorKind};
+use crate::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::utils::*;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
@@ -924,12 +924,7 @@ impl<R> InternalRdfXmlParser<R> {
                         tag
                     } else {
                         LanguageTag::parse(tag.to_ascii_lowercase())
-                            .map_err(|error| {
-                                RdfXmlSyntaxError(SyntaxErrorKind::InvalidLanguageTag {
-                                    tag,
-                                    error,
-                                })
-                            })?
+                            .map_err(|error| RdfXmlSyntaxError::invalid_language_tag(tag, error))?
                             .into_inner()
                     });
                 } else if attribute.key.as_ref() == b"xml:base" {
@@ -937,9 +932,8 @@ impl<R> InternalRdfXmlParser<R> {
                     base_iri = Some(if self.unchecked {
                         Iri::parse_unchecked(iri.clone())
                     } else {
-                        Iri::parse(iri.clone()).map_err(|error| {
-                            RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri { iri, error })
-                        })?
+                        Iri::parse(iri.clone())
+                            .map_err(|error| RdfXmlSyntaxError::invalid_iri(iri, error))?
                     })
                 } else {
                     // We ignore other xml attributes
@@ -1522,12 +1516,9 @@ impl<R> InternalRdfXmlParser<R> {
                 if self.unchecked {
                     base_iri.resolve_unchecked(&relative_iri)
                 } else {
-                    base_iri.resolve(&relative_iri).map_err(|error| {
-                        RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri {
-                            iri: relative_iri,
-                            error,
-                        })
-                    })?
+                    base_iri
+                        .resolve(&relative_iri)
+                        .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
                 }
                 .into_inner(),
             ))
@@ -1541,12 +1532,7 @@ impl<R> InternalRdfXmlParser<R> {
             relative_iri
         } else {
             Iri::parse(relative_iri.clone())
-                .map_err(|error| {
-                    RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri {
-                        iri: relative_iri,
-                        error,
-                    })
-                })?
+                .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
                 .into_inner()
         }))
     }
