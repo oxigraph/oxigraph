@@ -4408,7 +4408,7 @@ impl PathEvaluator {
                 let a = Rc::clone(a);
                 Box::new(self.eval_to_in_unknown_graph(b, end).flat_map_ok(
                     move |(middle, graph_name)| {
-                        eval.eval_from_in_graph(&a, &middle, &graph_name)
+                        eval.eval_to_in_graph(&a, &middle, &graph_name)
                             .map(move |start| Ok((start?, graph_name.clone())))
                     },
                 ))
