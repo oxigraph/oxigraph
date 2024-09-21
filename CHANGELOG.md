@@ -1,3 +1,9 @@
+## [0.4.0] - 2024-09-22
+
+### Changed
+- SPARQL: fixes evaluation of `GRAPH ?g { ?s <p1>/<p2> ?o }` property paths with `?g` and `?s` unbound and `?o` bound.
+
+
 ## [0.4.0-rc.2] - 2024-09-15
 
 ### Added
