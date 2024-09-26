@@ -194,6 +194,8 @@ It is also possible to provide some options in an object given as second argumen
 console.log(store.query("ASK { <s> ?p ?o }", {
   base_iri: "http://example.com/", // base IRI to resolve relative IRIs in the query
   use_default_graph_as_union: true, // the default graph in the query is the union of all the dataset graphs
+  default_graph: [oxigraph.defaultGraph(), oxigraph.namedNode("http://example.com")], // the default graph of the query is the union of the store default graph and the http://example.com graph
+  named_graphs: [oxigraph.namedNode("http://example.com"), oxigraph.blankNode("b")], // we restrict the available named graphs to the two listed
   results_format: "json", // the response will be serialized a string in the JSON format (media types like application/sparql-results+json also work)
 }));
 ```

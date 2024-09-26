@@ -10,6 +10,7 @@ import { webcrypto } from "node:crypto";
 vi.stubGlobal("crypto", webcrypto);
 
 const ex = dataModel.namedNode("http://example.com");
+const ex2 = dataModel.namedNode("http://example.com/2");
 const triple = dataModel.quad(
     dataModel.blankNode("s"),
     dataModel.namedNode("http://example.com/p"),
@@ -108,6 +109,33 @@ describe("Store", () => {
             const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
             const results = store.query("SELECT * WHERE { ?s ?p ?o }", {
                 use_default_graph_as_union: true,
+            }) as Map<string, Term>[];
+            assert.strictEqual(1, results.length);
+        });
+
+        it("SELECT with explicit default graph", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex, ex)]);
+            const results = store.query("SELECT * WHERE { ?s ?p ?o }", {
+                default_graph: ex,
+            }) as Map<string, Term>[];
+            assert.strictEqual(1, results.length);
+        });
+
+        it("SELECT with explicit default graph list", () => {
+            const store = new Store([dataModel.quad(ex, ex, ex), dataModel.quad(ex, ex, ex, ex)]);
+            const results = store.query("SELECT * WHERE { ?s ?p ?o }", {
+                default_graph: [dataModel.defaultGraph(), ex],
+            }) as Map<string, Term>[];
+            assert.strictEqual(2, results.length);
+        });
+
+        it("SELECT with explicit named graphs list", () => {
+            const store = new Store([
+                dataModel.quad(ex, ex, ex, ex),
+                dataModel.quad(ex, ex, ex, ex2),
+            ]);
+            const results = store.query("SELECT * WHERE { GRAPH ?g { ?s ?p ?o } }", {
+                named_graphs: [ex],
             }) as Map<string, Term>[];
             assert.strictEqual(1, results.length);
         });
