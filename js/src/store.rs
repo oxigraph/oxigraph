@@ -50,6 +50,8 @@ export class Store {
         options?: {
             base_iri?: NamedNode | string;
             results_format?: string;
+            default_graph?: BlankNode | DefaultGraph | NamedNode | Iterable<BlankNode | DefaultGraph | NamedNode>;
+            named_graphs?: Iterable<BlankNode | NamedNode>;
             use_default_graph_as_union?: boolean;
         }
     ): boolean | Map<string, Term>[] | Quad[] | string;
@@ -165,11 +167,41 @@ impl JsStore {
         let mut base_iri = None;
         let mut use_default_graph_as_union = false;
         let mut results_format = None;
+        let mut default_graph = None;
+        let mut named_graphs = None;
         if !options.is_undefined() {
             base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
+
+            let js_default_graph = Reflect::get(options, &JsValue::from_str("default_graph"))?;
+            default_graph = if js_default_graph.is_undefined() || js_default_graph.is_null() {
+                None
+            } else if let Some(iter) = try_iter(&js_default_graph)? {
+                Some(
+                    iter.map(|term| FROM_JS.with(|c| c.to_term(&term?))?.try_into())
+                        .collect::<Result<Vec<GraphName>, _>>()?,
+                )
+            } else {
+                Some(vec![FROM_JS
+                    .with(|c| c.to_term(&js_default_graph))?
+                    .try_into()?])
+            };
+
+            let js_named_graphs = Reflect::get(options, &JsValue::from_str("named_graphs"))?;
+            named_graphs = if js_named_graphs.is_null() || js_named_graphs.is_undefined() {
+                None
+            } else {
+                Some(
+                    try_iter(&Reflect::get(options, &JsValue::from_str("named_graphs"))?)?
+                        .ok_or_else(|| format_err!("named_graphs option must be iterable"))?
+                        .map(|term| FROM_JS.with(|c| c.to_term(&term?))?.try_into())
+                        .collect::<Result<Vec<NamedOrBlankNode>, _>>()?,
+                )
+            };
+
             use_default_graph_as_union =
                 Reflect::get(options, &JsValue::from_str("use_default_graph_as_union"))?
                     .is_truthy();
+
             let js_results_format = Reflect::get(options, &JsValue::from_str("results_format"))?;
             if !js_results_format.is_undefined() && !js_results_format.is_null() {
                 results_format = Some(
@@ -184,6 +216,13 @@ impl JsStore {
         if use_default_graph_as_union {
             query.dataset_mut().set_default_graph_as_union();
         }
+        if let Some(default_graph) = default_graph {
+            query.dataset_mut().set_default_graph(default_graph);
+        }
+        if let Some(named_graphs) = named_graphs {
+            query.dataset_mut().set_available_named_graphs(named_graphs);
+        }
+
         let results = self.store.query(query).map_err(JsError::from)?;
 
         Ok(match results {
