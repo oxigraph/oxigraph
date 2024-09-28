@@ -1,5 +1,6 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
 use crate::cli::{Args, Command};
+use crate::service_description::{generate_service_description, EndpointKind};
 use anyhow::{bail, ensure, Context};
 use clap::Parser;
 use flate2::read::MultiGzDecoder;
@@ -35,6 +36,7 @@ use std::{fmt, fs, str};
 use url::form_urlencoded;
 
 mod cli;
+mod service_description;
 
 const MAX_SPARQL_BODY_SIZE: u64 = 1024 * 1024 * 128; // 128MB
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
@@ -760,13 +762,26 @@ fn handle_request(
             .with_header(HeaderName::CONTENT_TYPE, "image/svg+xml")
             .unwrap()
             .with_body(LOGO)),
-        ("/query", "GET") => configure_and_evaluate_sparql_query(
-            &store,
-            &[url_query(request)],
-            None,
-            request,
-            union_default_graph,
-        ),
+        ("/query", "GET") => {
+            let query = url_query(request);
+            if query.is_empty() {
+                let format = rdf_content_negotiation(request)?;
+                let description =
+                    generate_service_description(format, EndpointKind::Query, union_default_graph);
+                Ok(Response::builder(Status::OK)
+                    .with_header(HeaderName::CONTENT_TYPE, format.media_type())
+                    .map_err(internal_server_error)?
+                    .with_body(description))
+            } else {
+                configure_and_evaluate_sparql_query(
+                    &store,
+                    &[url_query(request)],
+                    None,
+                    request,
+                    union_default_graph,
+                )
+            }
+        }
         ("/query", "POST") => {
             let content_type =
                 content_type(request).ok_or_else(|| bad_request("No Content-Type given"))?;
@@ -792,6 +807,18 @@ fn handle_request(
                 Err(unsupported_media_type(&content_type))
             }
         }
+        ("/update", "GET") => {
+            if read_only {
+                return Err(the_server_is_read_only());
+            }
+            let format = rdf_content_negotiation(request)?;
+            let description =
+                generate_service_description(format, EndpointKind::Update, union_default_graph);
+            Ok(Response::builder(Status::OK)
+                .with_header(HeaderName::CONTENT_TYPE, format.media_type())
+                .map_err(internal_server_error)?
+                .with_body(description))
+        }
         ("/update", "POST") => {
             if read_only {
                 return Err(the_server_is_read_only());
@@ -805,6 +832,7 @@ fn handle_request(
                     &[url_query(request)],
                     Some(update),
                     request,
+                    union_default_graph,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
                 let buffer = limited_body(request)?;
@@ -813,6 +841,7 @@ fn handle_request(
                     &[url_query(request), &buffer],
                     None,
                     request,
+                    union_default_graph,
                 )
             } else {
                 Err(unsupported_media_type(&content_type))
@@ -1192,6 +1221,7 @@ fn configure_and_evaluate_sparql_update(
     encoded: &[&[u8]],
     mut update: Option<String>,
     request: &Request,
+    default_use_default_graph_as_union: bool,
 ) -> Result<Response, HttpError> {
     let mut use_default_graph_as_union = false;
     let mut default_graph_uris = Vec::new();
@@ -1211,6 +1241,9 @@ fn configure_and_evaluate_sparql_update(
                 _ => (),
             }
         }
+    }
+    if default_graph_uris.is_empty() && named_graph_uris.is_empty() {
+        use_default_graph_as_union |= default_use_default_graph_as_union;
     }
     let update = update.ok_or_else(|| bad_request("You should set the 'update' parameter"))?;
     evaluate_sparql_update(
@@ -2334,10 +2367,10 @@ mod tests {
     }
 
     #[test]
-    fn get_without_query() -> Result<()> {
+    fn get_query_description() -> Result<()> {
         ServerTest::new()?.test_status(
             Request::builder(Method::GET, "http://localhost/query".parse()?).build(),
-            Status::BAD_REQUEST,
+            Status::OK,
         )
     }
 
@@ -2379,6 +2412,14 @@ mod tests {
             .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
             ?.with_body("SELECT * WHERE { SERVICE <https://dbpedia.org/sparql> { <http://dbpedia.org/resource/Paris> ?p ?o } }");
         ServerTest::new()?.test_status(request, Status::OK)
+    }
+
+    #[test]
+    fn get_update_description() -> Result<()> {
+        ServerTest::new()?.test_status(
+            Request::builder(Method::GET, "http://localhost/update".parse()?).build(),
+            Status::OK,
+        )
     }
 
     #[test]
