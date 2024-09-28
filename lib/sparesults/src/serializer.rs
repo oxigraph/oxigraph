@@ -326,7 +326,7 @@ impl<W: Write> WriterSolutionsSerializer<W> {
 }
 
 /// Allows writing query results into an [`AsyncWrite`] implementation.
-
+///
 /// Could be built using a [`QueryResultsSerializer`].
 ///
 /// <div class="warning">
