@@ -87,7 +87,7 @@ fuzz_target!(|data: &[u8]| {
         match str::from_utf8(&data_without_breaks)
             .map_err(|e| e.to_string())
             .and_then(|d| {
-                d.split('\n')
+                d.split(['\r', '\n'])
                     .filter(|l| !l.trim().is_empty())
                     .map(Quad::from_str)
                     .collect::<Result<Vec<_>, _>>()

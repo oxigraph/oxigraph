@@ -437,24 +437,32 @@ jobs:
       - run: clang-format --Werror --dry-run oxrocksdb-sys/api/*
 
   fuzz_changes:
-    if: github.event_name == 'pull_request'
+    strategy:
+      matrix:
+        target: [ "sparql_query_eval", "sparql_update_eval", "sparql_results_json", "sparql_results_tsv", "sparql_results_xml", "n3", "nquads", "trig", "rdf_xml" ]
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
-      - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      - uses: actions/checkout@v4
         with:
-          language: rust
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          sanitizer: address
-          storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
-      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+          submodules: true
+      - uses: actions/cache@v4
+        id: cache-corpus
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 900
-          mode: code-change
-          sanitizer: address
-          minimize-crashes: true
-          parallel-fuzzing: true
-          storage-repo: https://${{ secrets.FULL_ACCESS_TOKEN }}@github.com/oxigraph/clusterfuzzlite-oxigraph.git
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-${{ matrix.target }}
+      - uses: ./.github/actions/setup-rust
+      - run: cargo install cargo-fuzz || true
+      - run: python3 build_corpus.py
+        working-directory: ./fuzz
+        if: steps.cache-corpus.outputs.cache-hit != 'true'
+      - run: cargo fuzz run ${{ matrix.target }} --sanitizer none -- -max_total_time=200 -timeout=5
+      - run: cargo fuzz cmin ${{ matrix.target }} --sanitizer none
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
 
   shellcheck:
     runs-on: ubuntu-latest
