@@ -5,6 +5,7 @@ use crate::{
     BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
     NamedNode, Quad, Term, Triple, Variable, VariableNameParseError,
 };
+use std::borrow::Cow;
 use std::char;
 use std::str::{Chars, FromStr};
 
@@ -248,9 +249,31 @@ fn read_named_node(s: &str) -> Result<(NamedNode, &str), TermParseError> {
             .ok_or_else(|| TermParseError::msg("Named node serialization should end with a >"))?;
         let (value, remain) = remain.split_at(end);
         let remain = &remain[1..];
-        let term = NamedNode::new(value).map_err(|error| {
+        let value = if value.contains('\\') {
+            let mut escaped = String::with_capacity(value.len());
+            let mut chars = value.chars();
+            while let Some(c) = chars.next() {
+                if c == '\\' {
+                    match chars.next() {
+                        Some('u') => escaped.push(read_hexa_char(&mut chars, 4)?),
+                        Some('U') => escaped.push(read_hexa_char(&mut chars, 8)?),
+                        Some(c) => {
+                            escaped.push('\\');
+                            escaped.push(c);
+                        }
+                        None => escaped.push('\\'),
+                    }
+                } else {
+                    escaped.push(c);
+                }
+            }
+            Cow::Owned(escaped)
+        } else {
+            Cow::Borrowed(value)
+        };
+        let term = NamedNode::new(value.as_ref()).map_err(|error| {
             TermParseError(TermParseErrorKind::Iri {
-                value: value.to_owned(),
+                value: value.into_owned(),
                 error,
             })
         })?;
@@ -544,8 +567,12 @@ mod tests {
     #[test]
     fn triple_term_parsing() {
         assert_eq!(
-            Term::from_str("\"ex\"").unwrap(),
-            Literal::new_simple_literal("ex").into()
+            Term::from_str("\"ex\\u00E9\\U000000E9\"").unwrap(),
+            Literal::new_simple_literal("exéé").into()
+        );
+        assert_eq!(
+            Term::from_str("<http://example.com/\\u00E9\\U000000E9>").unwrap(),
+            NamedNode::new_unchecked("http://example.com/éé").into()
         );
         assert_eq!(
             Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(),
