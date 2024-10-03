@@ -353,7 +353,15 @@ impl InnerRdfXmlWriter {
                 } else if !literal.is_plain() {
                     property_open.push_attribute(("rdf:datatype", literal.datatype().as_str()));
                 }
-                Some(literal.value())
+                let value = literal.value();
+                let is_all_whitespace = value
+                    .bytes()
+                    .all(|c| matches!(c, b' ' | b'\t' | b'\n' | b'\r'));
+                if is_all_whitespace {
+                    // RDF/XML ignore empty values by default but not in Literal mode
+                    property_open.push_attribute(("rdf:parseType", "Literal"));
+                }
+                Some(value)
             }
             _ => {
                 return Err(io::Error::new(
