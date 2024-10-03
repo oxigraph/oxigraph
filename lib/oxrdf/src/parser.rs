@@ -301,7 +301,7 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
         while let Some(c) = chars.next() {
             match c {
                 '"' => {
-                    let remain = chars.as_str();
+                    let remain = chars.as_str().trim();
                     return if let Some(remain) = remain.strip_prefix('@') {
                         let end = remain
                             .find(|v| !matches!(v, 'a'..='z' | 'A'..='Z' | '-'))
