@@ -67,7 +67,7 @@ fuzz_target!(|data: &[u8]| {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             format!(
-                "Error on {:?} from {triples:?} based on {:?}: {e}",
+                "Error on '{}' from {triples:?} based on '{}': {e}",
                 String::from_utf8_lossy(&new_serialization),
                 String::from_utf8_lossy(data)
             )

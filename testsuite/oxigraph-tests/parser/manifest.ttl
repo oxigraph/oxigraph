@@ -20,6 +20,7 @@
         <#at_keywords_as_lang_tag>
         <#escaped_trailing_dot_ttl>
         <#escaped_trailing_dot_trig>
+        <#xml_multiple_objects>
 	) .
 
 <#no_end_line_jump>
@@ -102,3 +103,8 @@
 	mf:name "escaped dot at the end of a local name" ;
 	mf:action <escaped_trailing_dot.trig> ;
 	mf:result <escaped_trailing_dot.nq> .
+
+<#xml_multiple_objects>
+	rdf:type rdft:TestXMLNegativeSyntax ;
+	mf:name "both a string and a node as values of the same predicate" ;
+	mf:action <xml_multiple_objects.rdf> .
