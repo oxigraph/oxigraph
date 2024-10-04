@@ -11,6 +11,7 @@
 	    <#langtag>
 	    <#pn_local_escape>
 	    <#utf16_surrogates>
+	    <#string_line_jump>
 	) .
 
 <#iri>
@@ -36,3 +37,9 @@
 	mf:name "escaped UTF-16 surrogate pairs" ;
 	mf:action <utf16_surrogates.nt> ;
 	mf:result <utf16_surrogates_output.nt> .
+
+<#string_line_jump>
+	rdf:type ox:TestUncheckedTurtle ;
+	mf:name "line jump in string" ;
+	mf:action <string_line_jump.nt> ;
+	mf:result <string_line_jump_output.nt> .

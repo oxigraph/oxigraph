@@ -1,3 +1,5 @@
+#![allow(clippy::range_plus_one)]
+
 use crate::toolkit::{TokenRecognizer, TokenRecognizerError};
 use memchr::{memchr, memchr2};
 use oxilangtag::LanguageTag;
@@ -188,7 +190,6 @@ impl N3Lexer {
             i += end;
             match data[i] {
                 b'>' => {
-                    #[allow(clippy::range_plus_one)]
                     return Some((i + 1, self.parse_iri(string, 0..i + 1, options)));
                 }
                 b'\\' => {
@@ -583,7 +584,6 @@ impl N3Lexer {
                 .into_inner()
         }))
     }
-
     fn recognize_string(
         &self,
         data: &[u8],
@@ -594,7 +594,13 @@ impl N3Lexer {
         let mut string = String::new();
         let mut i = 1;
         loop {
-            let end = memchr2(delimiter, b'\\', &data[i..])?;
+            let mut end = memchr2(delimiter, b'\\', &data[i..])?;
+            if !self.unchecked {
+                // We check also line jumps
+                if let Some(line_jump_end) = memchr2(b'\n', b'\r', &data[i..i + end]) {
+                    end = line_jump_end;
+                }
+            }
             match str_from_utf8(&data[i..i + end], i..i + end) {
                 Ok(s) => string.push_str(s),
                 Err(e) => return Some((end, Err(e))),
@@ -617,6 +623,18 @@ impl N3Lexer {
                             return Some((i + end + 1, Err(e)));
                         }
                     }
+                }
+                b'\n' | b'\r' => {
+                    // We read until the end of string char
+                    let end = memchr(delimiter, &data[i..])?;
+                    return Some((
+                        i + end + 1,
+                        Err((
+                            i..i + 1,
+                            "Line jumps are not allowed in string literals, use \\n",
+                        )
+                            .into()),
+                    ));
                 }
                 _ => unreachable!(),
             }
