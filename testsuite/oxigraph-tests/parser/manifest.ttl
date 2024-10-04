@@ -20,6 +20,7 @@
         <#at_keywords_as_lang_tag>
         <#escaped_trailing_dot_ttl>
         <#escaped_trailing_dot_trig>
+        <#string_line_jump_ttl>
         <#xml_multiple_objects>
 	) .
 
@@ -103,6 +104,11 @@
 	mf:name "escaped dot at the end of a local name" ;
 	mf:action <escaped_trailing_dot.trig> ;
 	mf:result <escaped_trailing_dot.nq> .
+
+<#string_line_jump_ttl>
+	rdf:type rdft:TestTurtleNegativeSyntax ;
+	mf:name "line jump in string" ;
+	mf:action <string_line_jump.ttl> .
 
 <#xml_multiple_objects>
 	rdf:type rdft:TestXMLNegativeSyntax ;
