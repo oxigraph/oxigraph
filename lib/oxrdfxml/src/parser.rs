@@ -1220,10 +1220,19 @@ impl<R> InternalRdfXmlParser<R> {
         let text = event.unescape_with(|e| self.resolve_entity(e))?.to_string();
         match self.state.last_mut() {
             Some(RdfXmlState::PropertyElt { object, .. }) => {
-                if !event.iter().copied().all(is_whitespace) {
+                if is_object_defined(object) {
+                    if text.bytes().all(is_whitespace) {
+                        Ok(()) // whitespace anyway, we ignore
+                    } else {
+                        Err(
+                            RdfXmlSyntaxError::msg(format!("Unexpected text event: '{text}'"))
+                                .into(),
+                        )
+                    }
+                } else {
                     *object = Some(NodeOrText::Text(text));
+                    Ok(())
                 }
-                Ok(())
             }
             Some(RdfXmlState::ParseTypeLiteralPropertyElt { writer, .. }) => {
                 writer.write_event(Event::Text(BytesText::new(&text)))?;
@@ -1432,6 +1441,11 @@ impl<R> InternalRdfXmlParser<R> {
             }
             RdfXmlState::NodeElt { subject, .. } => match self.state.last_mut() {
                 Some(RdfXmlState::PropertyElt { object, .. }) => {
+                    if is_object_defined(object) {
+                        return Err(RdfXmlSyntaxError::msg(
+                            "Unexpected node, a text value is already present",
+                        ));
+                    }
                     *object = Some(NodeOrText::Node(subject))
                 }
                 Some(RdfXmlState::ParseTypeCollectionPropertyElt { objects, .. }) => {
@@ -1554,6 +1568,14 @@ fn is_name(name: &str) -> bool {
         return false;
     }
     c.all(is_name_char)
+}
+
+fn is_object_defined(object: &Option<NodeOrText>) -> bool {
+    match object {
+        Some(NodeOrText::Node(_)) => true,
+        Some(NodeOrText::Text(t)) => !t.bytes().all(is_whitespace),
+        None => false,
+    }
 }
 
 fn is_whitespace(c: u8) -> bool {
