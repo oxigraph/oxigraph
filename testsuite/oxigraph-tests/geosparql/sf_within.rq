@@ -1,0 +1,9 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?left ?right (geof:sfWithin(?left, ?right) AS ?result) WHERE {
+    VALUES (?left ?right) {
+        ("Point(1 2)"^^geo:wktLiteral "Polygon((0 0, 0 3, 3 3, 3 0))"^^geo:wktLiteral)
+        ("Point(1 4)"^^geo:wktLiteral "Polygon((0 0, 0 3, 3 3, 3 0))"^^geo:wktLiteral)
+    }
+}

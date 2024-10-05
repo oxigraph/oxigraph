@@ -19,11 +19,14 @@ doctest = false
 doc = false
 
 [features]
+default = ["geosparql"]
 abi3 = ["pyo3/abi3-py38"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
+geosparql = ["dep:spargeo"]
 
 [dependencies]
 pyo3 = { workspace = true, features = ["extension-module"] }
+spargeo = { workspace = true, optional = true }
 
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
 oxigraph = { workspace = true, features = ["http-client-native-tls"] }

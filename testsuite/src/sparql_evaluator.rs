@@ -11,6 +11,7 @@ use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
 use oxigraph::sparql::*;
 use oxigraph::store::Store;
+use spargeo::register_geosparql_functions;
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -138,6 +139,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     let query_file = test.query.as_deref().context("No action found")?;
     let options = QueryOptions::default()
         .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
+    let options = register_geosparql_functions(options);
     let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
         .context("Failure to parse query")?;
 

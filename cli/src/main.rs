@@ -16,6 +16,8 @@ use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
 use rayon_core::ThreadPoolBuilder;
+#[cfg(feature = "geosparql")]
+use spargeo::register_geosparql_functions;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{max, min};
@@ -278,7 +280,7 @@ pub fn main() -> anyhow::Result<()> {
             }
             let store = Store::open_read_only(location)?;
             let (results, explanation) =
-                store.explain_query_opt(query, QueryOptions::default(), stats)?;
+                store.explain_query_opt(query, default_query_options(), stats)?;
             let print_result = (|| {
                 match results? {
                     QueryResults::Solutions(solutions) => {
@@ -418,7 +420,7 @@ pub fn main() -> anyhow::Result<()> {
             };
             let update = Update::parse(&update, update_base.as_deref())?;
             let store = Store::open(location)?;
-            store.update(update)?;
+            store.update_opt(update, default_query_options())?;
             store.flush()?;
             Ok(())
         }
@@ -1162,7 +1164,9 @@ fn evaluate_sparql_query(
         );
     }
 
-    let results = store.query(query).map_err(internal_server_error)?;
+    let results = store
+        .query_opt(query, default_query_options())
+        .map_err(internal_server_error)?;
     match results {
         QueryResults::Solutions(solutions) => {
             let format = query_results_content_negotiation(request)?;
@@ -1214,6 +1218,15 @@ fn evaluate_sparql_query(
             )
         }
     }
+}
+
+fn default_query_options() -> QueryOptions {
+    let mut options = QueryOptions::default();
+    #[cfg(feature = "geosparql")]
+    {
+        options = register_geosparql_functions(options);
+    }
+    options
 }
 
 fn configure_and_evaluate_sparql_update(
@@ -1302,7 +1315,9 @@ fn evaluate_sparql_update(
             using.set_available_named_graphs(named_graph_uris.clone());
         }
     }
-    store.update(update).map_err(internal_server_error)?;
+    store
+        .update_opt(update, default_query_options())
+        .map_err(internal_server_error)?;
     Ok(Response::builder(Status::NO_CONTENT).build())
 }
 
@@ -1696,6 +1711,8 @@ mod tests {
             .arg("--no-default-features");
         #[cfg(feature = "rocksdb-pkg-config")]
         command.arg("--features").arg("rocksdb-pkg-config");
+        #[cfg(feature = "geosparql")]
+        command.arg("--features").arg("geosparql");
         command.arg("--");
         command
     }

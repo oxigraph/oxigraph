@@ -20,11 +20,12 @@ path = "src/main.rs"
 doc = false
 
 [features]
-default = ["native-tls"]
+default = ["native-tls", "geosparql"]
 native-tls = ["oxigraph/http-client-native-tls"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 rustls-native = ["oxigraph/http-client-rustls-native"]
 rustls-webpki = ["oxigraph/http-client-rustls-webpki"]
+geosparql = ["dep:spargeo"]
 
 [dependencies]
 anyhow.workspace = true
@@ -35,6 +36,7 @@ oxigraph.workspace = true
 oxiri.workspace = true
 rand.workspace = true
 rayon-core.workspace = true
+spargeo = { workspace = true, optional = true }
 url.workspace = true
 
 [dev-dependencies]

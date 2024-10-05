@@ -15,6 +15,8 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyBytes, PyTuple};
+#[cfg(feature = "geosparql")]
+use spargeo::register_geosparql_functions;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io;
@@ -77,6 +79,11 @@ pub fn query_options_from_python(
     custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
 ) -> QueryOptions {
     let mut options = QueryOptions::default();
+    #[cfg(feature = "geosparql")]
+    {
+        options = register_geosparql_functions(options);
+    }
+
     if let Some(custom_functions) = custom_functions {
         for (name, function) in custom_functions {
             options = options.with_custom_function(name.into(), move |args| {

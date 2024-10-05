@@ -147,7 +147,7 @@ jobs:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-8.0.0
       - run: bash .github/workflows/install_rocksdb.sh
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli --exclude spargeo
 
   test_linux_x86_64:
     runs-on: ubuntu-latest
