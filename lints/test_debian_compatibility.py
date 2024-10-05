@@ -11,8 +11,9 @@ ALLOWED_MISSING_PACKAGES = {
     "json-event-parser",
     "oxhttp",
     "oxiri",
-    "quick-xml",
     "rustc-hash",
+    "geo",
+    "wkt"
 }
 
 base_path = Path(__file__).parent.parent

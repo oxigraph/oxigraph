@@ -1,0 +1,36 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix :      <https://github.com/oxigraph/oxigraph/tests/sparql/manifest#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:    <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:    <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix ut:    <http://www.w3.org/2009/sparql/tests/test-update#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Oxigraph GeoSPARQL tests" ;
+    mf:entries
+    (
+        :wkt_default_spatial_reference_system
+        :sf_equals
+        :sf_contains
+        :sf_within
+    ) .
+
+:wkt_default_spatial_reference_system rdf:type mf:QueryEvaluationTest ;
+    mf:name "WKT without reference system are equal to one with the default (requirement 15)" ;
+    mf:action [ qt:query <wkt_default_spatial_reference_system.rq> ] ;
+    mf:result <wkt_default_spatial_reference_system.srx> .
+
+:sf_equals rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfEquals behaviors" ;
+    mf:action [ qt:query <sf_equals.rq> ] ;
+    mf:result <sf_equals.srx> .
+
+:sf_contains rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfContains behaviors" ;
+    mf:action [ qt:query <sf_contains.rq> ] ;
+    mf:result <sf_contains.srx> .
+
+:sf_within rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfWithin behaviors" ;
+    mf:action [ qt:query <sf_within.rq> ] ;
+    mf:result <sf_within.srx> .

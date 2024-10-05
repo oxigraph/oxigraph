@@ -1,0 +1,27 @@
+[package]
+name = "spargeo"
+version = "0.1.0"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["GeoSPARQL"]
+repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargeo"
+documentation = "https://docs.rs/spargeo"
+description = """
+Implementation of GeoSPARQL functions
+"""
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+geo.workspace = true
+geojson.workspace = true
+oxigraph.workspace = true
+wkt.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

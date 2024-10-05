@@ -61,3 +61,11 @@ fn oxigraph_optimizer_testsuite() -> Result<()> {
         &[],
     )
 }
+
+#[test]
+fn oxigraph_geosparql_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://github.com/oxigraph/oxigraph/tests/geosparql/manifest.ttl",
+        &[],
+    )
+}

@@ -1,0 +1,10 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?left ?right (geof:sfEquals(?left, ?right) AS ?result) WHERE {
+    VALUES (?left ?right) {
+        ("Point(-83.38 33.95)"^^geo:wktLiteral "Point(-83.38 33.95)"^^geo:wktLiteral)
+        ("Point(-83.38 33.95)"^^geo:wktLiteral "Point(0 1)"^^geo:wktLiteral)
+        ("Point(-83.38 33.95)"^^geo:wktLiteral """{"type": "Point", "coordinates": [-83.38,33.95]}"""^^geo:geoJSONLiteral)
+    }
+}
