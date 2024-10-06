@@ -89,6 +89,10 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
         |t| evaluate_eval_test(t, RdfFormat::NTriples, true, false),
     );
     evaluator.register(
+        "https://github.com/oxigraph/oxigraph/tests#TestNQuadRecovery",
+        |t| evaluate_eval_test(t, RdfFormat::NQuads, true, false),
+    );
+    evaluator.register(
         "https://github.com/oxigraph/oxigraph/tests#TestTurtleRecovery",
         |t| evaluate_eval_test(t, RdfFormat::Turtle, true, false),
     );
