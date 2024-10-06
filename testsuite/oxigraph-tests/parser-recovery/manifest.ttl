@@ -24,6 +24,7 @@
 	    <#missing_dot_at_end_of_triple_with_string_middle_ttl>
 	    <#missing_dot_at_end_of_triple_with_string_end_nt>
 	    <#missing_dot_at_end_of_triple_with_string_end_ttl>
+	    <#do_not_recover_on_wrong_subject_nq>
 	) .
 
 <#invalid_iri_nt>
@@ -127,3 +128,9 @@
 	mf:name "missing dot at the end of a triple" ;
 	mf:action <missing_dot_at_end_of_triple_with_string_end.nt> ;
 	mf:result <iri_string_spo.nt> .
+
+<#do_not_recover_on_wrong_subject_nq>
+	rdf:type ox:TestNQuadRecovery ;
+	mf:name "On wrong subject do not consider the predicate as an other candidate subject" ;
+	mf:action <do_not_recover_on_wrong_subject.nq> ;
+	mf:result <iri_spo.nt> .

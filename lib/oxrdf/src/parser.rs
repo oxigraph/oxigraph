@@ -568,11 +568,11 @@ mod tests {
     fn triple_term_parsing() {
         assert_eq!(
             Term::from_str("\"ex\\u00E9\\U000000E9\"").unwrap(),
-            Literal::new_simple_literal("exéé").into()
+            Literal::new_simple_literal("ex\u{e9}\u{e9}").into()
         );
         assert_eq!(
             Term::from_str("<http://example.com/\\u00E9\\U000000E9>").unwrap(),
-            NamedNode::new_unchecked("http://example.com/éé").into()
+            NamedNode::new_unchecked("http://example.com/\u{e9}\u{e9}").into()
         );
         assert_eq!(
             Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(),

@@ -102,9 +102,6 @@ fuzz_target!(|data: &[u8]| {
                 }
             }
             Err(e) => {
-                if errors.is_empty() {
-                    println!("{}", String::from_utf8_lossy(&data_without_breaks));
-                }
                 assert!(
                     !errors.is_empty(),
                     "Unexpected error from Quad::from_str: {e}"

@@ -34,6 +34,7 @@ enum NQuadsState {
         value: String,
     },
     ExpectLineJump,
+    RecoverToLineJump,
     #[cfg(feature = "rdf-star")]
     AfterQuotedSubject,
     #[cfg(feature = "rdf-star")]
@@ -47,6 +48,7 @@ impl RuleRecognizer for NQuadsRecognizer {
 
     fn error_recovery_state(mut self) -> Self {
         self.stack.clear();
+        self.stack.push(NQuadsState::RecoverToLineJump);
         self.subjects.clear();
         self.predicates.clear();
         self.objects.clear();
@@ -269,6 +271,12 @@ impl RuleRecognizer for NQuadsRecognizer {
                 self.stack
                     .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
                 self.recognize_next(token, context, results, errors)
+            }
+            NQuadsState::RecoverToLineJump => {
+                if token != TokenOrLineJump::LineJump {
+                    self.stack.push(NQuadsState::RecoverToLineJump);
+                }
+                self
             }
         }
     }
