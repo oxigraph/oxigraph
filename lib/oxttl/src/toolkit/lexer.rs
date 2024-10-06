@@ -346,6 +346,8 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
                     return Some(false);
                 }
                 return None; // We need more data
+            } else if !self.is_ending && buf.len() < line_comment_start.len() {
+                return None; // We need more data
             }
         }
         Some(false)
@@ -387,7 +389,7 @@ impl<B: Deref<Target = [u8]>, R: TokenRecognizer> Lexer<B, R> {
             i += 1;
             // TODO: SIMD
         }
-        Some(false)
+        self.is_ending.then_some(false) // We return None if there is not enough data
     }
 
     fn find_number_of_line_jumps_and_start_of_last_line(bytes: &[u8]) -> (u64, usize) {
