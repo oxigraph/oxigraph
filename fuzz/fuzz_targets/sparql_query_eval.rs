@@ -66,7 +66,7 @@ fn query_results_key(results: Result<QueryResults, EvaluationError>, is_reduced:
             triples.join("\n")
         }
         Ok(QueryResults::Boolean(bool)) => if bool { "true" } else { "" }.into(),
-        Err(_) => String::new(),
+        Err(e) => e.to_string(),
     }
 }
 

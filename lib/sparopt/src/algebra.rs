@@ -1005,9 +1005,6 @@ impl GraphPattern {
     }
 
     pub fn service(inner: Self, name: NamedNodePattern, silent: bool) -> Self {
-        if inner.is_empty() {
-            return Self::empty();
-        }
         Self::Service {
             inner: Box::new(inner),
             name,

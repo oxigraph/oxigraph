@@ -15,16 +15,6 @@ Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html
 
 This crate is intended to be a building piece for SPARQL implementations in Rust like [Oxigraph](https://oxigraph.org).
 
-The optimizer ensures that the rewritten query returns the exact same results as the input query.
-However, it might discard some errors.
-For example, the query:
-```sparql
-SELECT * WHERE { SERVICE <http://example.com/not-found> {} }
-```
-might get rewritten into:
-```sparql
-SELECT * WHERE {}
-```
 
 ## License
 
