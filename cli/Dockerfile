@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1-bookworm as builder
+FROM --platform=$BUILDPLATFORM rust:1-bookworm AS builder
 ARG BUILDARCH TARGETARCH
 RUN apt-get update && \
     apt-get install -y libclang-dev clang && \
@@ -19,7 +19,7 @@ RUN if [ "$BUILDARCH" != "$TARGETARCH" ] && [ "$TARGETARCH" = "arm64" ] ; \
         cargo build --release --no-default-features --features rustls-webpki ; \
     fi
 
-FROM --platform=$TARGETPLATFORM gcr.io/distroless/cc-debian12
+FROM gcr.io/distroless/cc-debian12
 COPY --from=builder /oxigraph/target/release/oxigraph /usr/local/bin/oxigraph
 ENTRYPOINT [ "/usr/local/bin/oxigraph" ]
 CMD [ "serve", "--location", "/data", "--bind", "0.0.0.0:7878" ]
