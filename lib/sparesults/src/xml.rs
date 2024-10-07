@@ -730,7 +730,7 @@ impl XmlInnerSolutionsParser {
             },
             Event::Text(event) => {
                 let data = event.unescape()?;
-                match self.state_stack.last().unwrap() {
+                match self.state_stack.last().unwrap_or(&State::Start) {
                     State::Uri => {
                         self.term = Some(
                             NamedNode::new(data.to_string())
