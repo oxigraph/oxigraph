@@ -131,12 +131,11 @@ pub fn infer_graph_pattern_types(
         } => {
             let parent_types = types.clone();
             let mut types = infer_graph_pattern_types(inner, types);
-            if let NamedNodePattern::Variable(v) = name {
-                types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
-            }
             if *silent {
                 // On failure, single empty solution
                 types.union_with(parent_types);
+            } else if let NamedNodePattern::Variable(v) = name {
+                types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
             }
             types
         }
