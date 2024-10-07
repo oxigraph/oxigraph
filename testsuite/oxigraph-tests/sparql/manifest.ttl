@@ -35,6 +35,7 @@
     :in_empty_error
     :small_iri_str
     :construct_semicolon_dot
+    :regex_variable
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -170,3 +171,8 @@
 :construct_semicolon_dot a mf:PositiveSyntaxTest ;
     mf:name "; followed by . in CONSTRUCT" ;
     mf:action <construct_semicolon_dot.rq> .
+
+:regex_variable rdf:type mf:QueryEvaluationTest ;
+    mf:name "regex works even if it is not a constant" ;
+    mf:action [ qt:query <regex_variable.rq> ] ;
+    mf:result  <regex_variable.srx> .
