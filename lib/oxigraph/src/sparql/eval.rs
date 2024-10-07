@@ -2325,7 +2325,7 @@ impl SimpleEvaluator {
                             })
                         } else {
                             let pattern = self.expression_evaluator(
-                                &parameters[0],
+                                &parameters[1],
                                 encoded_variables,
                                 stat_children,
                             );
