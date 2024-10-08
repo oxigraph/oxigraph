@@ -170,11 +170,23 @@ impl SimpleEvaluator {
         let mut variables = Vec::new();
         let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
         let from = EncodedTuple::with_capacity(variables.len());
+        // We apply the same table as the or operation:
+        // we return true if we get any valid tuple, an error if we get an error and false otherwise
+        let mut error = None;
+        for solution in eval(from) {
+            if let Err(e) = solution {
+                // We keep the first error
+                error.get_or_insert(e);
+            } else {
+                // We have found a valid tuple
+                return (Ok(QueryResults::Boolean(true)), stats);
+            }
+        }
         (
-            match eval(from).next() {
-                Some(Ok(_)) => Ok(QueryResults::Boolean(true)),
-                Some(Err(error)) => Err(error),
-                None => Ok(QueryResults::Boolean(false)),
+            if let Some(e) = error {
+                Err(e)
+            } else {
+                Ok(QueryResults::Boolean(false))
             },
             stats,
         )
