@@ -15,7 +15,7 @@ maturin develop --release
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
 maturin build --release --features abi3 --compatibility manylinux2014
 if [ %for_each_version% ]; then
-  for VERSION in 8 9 10 11 12; do
+  for VERSION in 8 9 10 11 12 13; do
     maturin build --release --interpreter "python3.$VERSION" --compatibility manylinux2014
   done
   for VERSION in 9 10; do
