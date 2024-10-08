@@ -612,7 +612,9 @@ impl XmlInnerSolutionsParser {
         event: Event<'_>,
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match event {
-            Event::Start(event) => match self.state_stack.last().unwrap() {
+            Event::Start(event) => match self.state_stack.last().ok_or_else(|| {
+                QueryResultsSyntaxError::msg("Extra XML is not allowed at the end of the document")
+            })? {
                 State::Start => {
                     if event.local_name().as_ref() == b"result" {
                         self.new_bindings = vec![None; self.mapping.len()];
@@ -730,8 +732,8 @@ impl XmlInnerSolutionsParser {
             },
             Event::Text(event) => {
                 let data = event.unescape()?;
-                match self.state_stack.last().unwrap_or(&State::Start) {
-                    State::Uri => {
+                match self.state_stack.last() {
+                    Some(State::Uri) => {
                         self.term = Some(
                             NamedNode::new(data.to_string())
                                 .map_err(|e| {
@@ -743,7 +745,7 @@ impl XmlInnerSolutionsParser {
                         );
                         Ok(None)
                     }
-                    State::BNode => {
+                    Some(State::BNode) => {
                         self.term = Some(
                             BlankNode::new(data.to_string())
                                 .map_err(|e| {
@@ -755,7 +757,7 @@ impl XmlInnerSolutionsParser {
                         );
                         Ok(None)
                     }
-                    State::Literal => {
+                    Some(State::Literal) => {
                         self.term = Some(
                             build_literal(data, self.lang.take(), self.datatype.take())?.into(),
                         );
@@ -767,7 +769,9 @@ impl XmlInnerSolutionsParser {
                     .into()),
                 }
             }
-            Event::End(_) => match self.state_stack.pop().unwrap() {
+            Event::End(_) => match self.state_stack.pop().ok_or_else(|| {
+                QueryResultsSyntaxError::msg("Extra XML is not allowed at the end of the document")
+            })? {
                 State::Start | State::Uri => Ok(None),
                 State::Result => Ok(Some(take(&mut self.new_bindings))),
                 State::Binding => {
