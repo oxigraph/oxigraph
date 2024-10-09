@@ -1,4 +1,7 @@
 ignore:
   - cli
+  - fuzz
   - js
+  - lib/sparql-smith
   - python
+  - testsuite
