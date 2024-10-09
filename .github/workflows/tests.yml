@@ -508,7 +508,12 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-llvm-cov }
-      - run: cargo llvm-cov --codecov --output-path codecov.json
+      - run: |
+          source <(cargo llvm-cov show-env --export-prefix)
+          export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
+          cargo llvm-cov clean --workspace
+          cargo test
+          cargo llvm-cov --no-run --codecov --output-path codecov.json
       - uses: codecov/codecov-action@v4
         with:
           files: codecov.json

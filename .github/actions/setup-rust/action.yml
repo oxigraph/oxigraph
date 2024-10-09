@@ -25,3 +25,4 @@ runs:
       shell: bash
       if: ${{ inputs.target }}
     - uses: Swatinem/rust-cache@v2
+      continue-on-error: true
