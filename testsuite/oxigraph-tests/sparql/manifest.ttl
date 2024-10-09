@@ -36,6 +36,10 @@
     :small_iri_str
     :construct_semicolon_dot
     :regex_variable
+    :ask_union_error_left
+    :ask_union_error_right
+    :ask_join_error_left
+    :ask_join_error_right
     ) .
 
 :small_unicode_escape_with_multibytes_char rdf:type mf:NegativeSyntaxTest ;
@@ -176,3 +180,23 @@
     mf:name "regex works even if it is not a constant" ;
     mf:action [ qt:query <regex_variable.rq> ] ;
     mf:result  <regex_variable.srx> .
+
+:ask_union_error_left rdf:type mf:QueryEvaluationTest ;
+    mf:name "ASK query with a UNION where left arg is an error and right arg is true" ;
+    mf:action [ qt:query <ask_union_error_left.rq> ] ;
+    mf:result  <true.srx> .
+
+:ask_union_error_right rdf:type mf:QueryEvaluationTest ;
+    mf:name "ASK query with a UNION where left arg is true and right arg is an error" ;
+    mf:action [ qt:query <ask_union_error_right.rq> ] ;
+    mf:result  <true.srx> .
+
+:ask_join_error_left rdf:type mf:QueryEvaluationTest ;
+    mf:name "ASK query with a join where left arg is an error and right arg is empty" ;
+    mf:action [ qt:query <ask_join_error_left.rq> ] ;
+    mf:result  <false.srx> .
+
+:ask_join_error_right rdf:type mf:QueryEvaluationTest ;
+    mf:name "ASK query with a join where left arg is empty and right arg is an error" ;
+    mf:action [ qt:query <ask_join_error_right.rq> ] ;
+    mf:result  <false.srx> .

@@ -33,7 +33,7 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::iter::{empty, once};
+use std::iter::{empty, once, Peekable};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{fmt, io, str};
@@ -600,7 +600,7 @@ impl SimpleEvaluator {
                             // Cartesian product
                             Rc::new(move |from| {
                                 let mut errors = Vec::default();
-                                let build_values = build(from.clone())
+                                let built_values = build(from.clone())
                                     .filter_map(|result| match result {
                                         Ok(result) => Some(result),
                                         Err(error) => {
@@ -609,9 +609,16 @@ impl SimpleEvaluator {
                                         }
                                     })
                                     .collect::<Vec<_>>();
+                                let mut probe_iter = probe(from).peekable();
+                                if built_values.is_empty() && errors.is_empty()
+                                    || probe_iter.peek().is_none()
+                                {
+                                    // One of the side is empty, we ignore errors from the other and returns empty
+                                    return Box::new(empty());
+                                }
                                 Box::new(CartesianProductJoinIterator {
-                                    probe_iter: probe(from),
-                                    built: build_values,
+                                    probe_iter,
+                                    built: built_values,
                                     buffered_results: errors,
                                 })
                             })
@@ -633,8 +640,15 @@ impl SimpleEvaluator {
                                         }
                                     }
                                 }));
+                                let mut probe_iter = probe(from).peekable();
+                                if built_values.is_empty() && errors.is_empty()
+                                    || probe_iter.peek().is_none()
+                                {
+                                    // One of the side is empty, we ignore errors from the other and returns empty
+                                    return Box::new(empty());
+                                }
                                 Box::new(HashJoinIterator {
-                                    probe_iter: probe(from),
+                                    probe_iter,
                                     built: built_values,
                                     buffered_results: errors,
                                 })
@@ -4737,7 +4751,7 @@ impl PathEvaluator {
 }
 
 struct CartesianProductJoinIterator {
-    probe_iter: EncodedTuplesIterator,
+    probe_iter: Peekable<EncodedTuplesIterator>,
     built: Vec<EncodedTuple>,
     buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
 }
@@ -4772,7 +4786,7 @@ impl Iterator for CartesianProductJoinIterator {
 }
 
 struct HashJoinIterator {
-    probe_iter: EncodedTuplesIterator,
+    probe_iter: Peekable<EncodedTuplesIterator>,
     built: EncodedTupleSet,
     buffered_results: Vec<Result<EncodedTuple, EvaluationError>>,
 }
@@ -5634,6 +5648,10 @@ impl EncodedTupleSet {
 
     fn len(&self) -> usize {
         self.len
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
