@@ -506,13 +506,25 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
+        with:
+          component: llvm-tools-preview
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-llvm-cov }
       - run: |
           source <(cargo llvm-cov show-env --export-prefix)
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           cargo llvm-cov clean --workspace
-          cargo test
+          cargo test --features oxrdfio/async-tokio,sparesults/async-tokio
+          pip install "maturin~=1.0"
+          maturin build -m python/Cargo.toml
+          pip install --no-index --find-links=target/wheels/ pyoxigraph
+          cd python/tests
+          python -m unittest
+          cd ../..
           cargo llvm-cov --no-run --codecov --output-path codecov.json
       - uses: codecov/codecov-action@v4
         with:
