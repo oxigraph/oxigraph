@@ -19,7 +19,8 @@ use std::io::{self, Write};
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut serializer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
+/// let mut serializer =
+///     GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
 /// serializer.write(&Triple {
 ///     subject: NamedNode::new("http://example.com/s")?.into(),
 ///     predicate: NamedNode::new("http://example.com/p")?,
@@ -67,7 +68,8 @@ impl GraphSerializer {
 /// use oxigraph::model::*;
 ///
 /// let mut buffer = Vec::new();
-/// let mut serializer = GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
+/// let mut serializer =
+///     GraphSerializer::from_format(GraphFormat::NTriples).triple_writer(&mut buffer);
 /// serializer.write(&Triple {
 ///     subject: NamedNode::new("http://example.com/s")?.into(),
 ///     predicate: NamedNode::new("http://example.com/p")?,

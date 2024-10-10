@@ -612,13 +612,14 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
+    /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_slice());
+    /// let mut parser =
+    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_slice());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
@@ -650,7 +651,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
+    /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;

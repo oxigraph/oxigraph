@@ -817,7 +817,7 @@ impl TriGSerializer {
     /// let mut serializer = TriGSerializer::new()
     ///     .with_prefix("schema", "http://schema.org/")?
     ///     .for_tokio_async_writer(Vec::new());
-    /// writer
+    /// serializer
     ///     .serialize_quad(QuadRef::new(
     ///         NamedNodeRef::new_unchecked("http://example.com#me"),
     ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
@@ -935,7 +935,7 @@ impl<W: Write> WriterTriGSerializer<W> {
 /// let mut serializer = TriGSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
 ///     .for_tokio_async_writer(Vec::new());
-/// writer
+/// serializer
 ///     .serialize_quad(QuadRef::new(
 ///         NamedNodeRef::new_unchecked("http://example.com#me"),
 ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),

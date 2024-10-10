@@ -48,10 +48,7 @@ impl FromStr for BlankNode {
     /// use oxrdf::BlankNode;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(
-    ///     BlankNode::from_str("_:ex")?,
-    ///     BlankNode::new("ex")?
-    /// );
+    /// assert_eq!(BlankNode::from_str("_:ex")?, BlankNode::new("ex")?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -147,12 +144,16 @@ impl FromStr for Triple {
     /// Parses a triple from its NTriples serialization
     ///
     /// ```
-    /// use oxrdf::{NamedNode, BlankNode, Literal, Triple};
+    /// use oxrdf::{BlankNode, Literal, NamedNode, Triple};
     /// use std::str::FromStr;
     ///
     /// assert_eq!(
     ///     Triple::from_str("_:a <http://example.com/p> \"o\" .")?,
-    ///     Triple::new(BlankNode::new("a")?, NamedNode::new("http://example.com/p")?, Literal::new_simple_literal("o"))
+    ///     Triple::new(
+    ///         BlankNode::new("a")?,
+    ///         NamedNode::new("http://example.com/p")?,
+    ///         Literal::new_simple_literal("o")
+    ///     )
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -171,16 +172,26 @@ impl FromStr for Quad {
     /// Parses a triple from its NQuads serialization
     ///
     /// ```
-    /// use oxrdf::{NamedNode, BlankNode, Literal, Quad, GraphName};
+    /// use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad};
     /// use std::str::FromStr;
     ///
     /// assert_eq!(
     ///     Quad::from_str("_:a <http://example.com/p> \"o\" .")?,
-    ///     Quad::new(BlankNode::new("a")?, NamedNode::new("http://example.com/p")?, Literal::new_simple_literal("o"), GraphName::DefaultGraph)
+    ///     Quad::new(
+    ///         BlankNode::new("a")?,
+    ///         NamedNode::new("http://example.com/p")?,
+    ///         Literal::new_simple_literal("o"),
+    ///         GraphName::DefaultGraph
+    ///     )
     /// );
     /// assert_eq!(
     ///     Quad::from_str("_:a <http://example.com/p> \"o\" <http://example.com/g> .")?,
-    ///     Quad::new(BlankNode::new("a")?, NamedNode::new("http://example.com/p")?, Literal::new_simple_literal("o"), NamedNode::new("http://example.com/g")?)
+    ///     Quad::new(
+    ///         BlankNode::new("a")?,
+    ///         NamedNode::new("http://example.com/p")?,
+    ///         Literal::new_simple_literal("o"),
+    ///         NamedNode::new("http://example.com/g")?
+    ///     )
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -220,10 +231,7 @@ impl FromStr for Variable {
     /// use oxrdf::Variable;
     /// use std::str::FromStr;
     ///
-    /// assert_eq!(
-    ///     Variable::from_str("$foo")?,
-    ///     Variable::new("foo")?
-    /// );
+    /// assert_eq!(Variable::from_str("$foo")?, Variable::new("foo")?);
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
