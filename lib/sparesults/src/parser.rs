@@ -284,7 +284,7 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
 /// use oxrdf::{Literal, Variable};
-/// use sparesults::{ReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 ///
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
@@ -358,7 +358,7 @@ impl<R: Read> ReaderSolutionsParser<R> {
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
     /// use oxrdf::Variable;
-    /// use sparesults::{ReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
+    /// use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
     ///
     /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
     /// if let ReaderQueryResultsParserOutput::Solutions(solutions) =
@@ -404,7 +404,7 @@ impl<R: Read> Iterator for ReaderSolutionsParser<R> {
 /// ```
 /// use oxrdf::{Literal, Variable};
 /// use sparesults::{
-///     TokioAsyncReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser,
+///     QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput,
 /// };
 ///
 /// # #[tokio::main(flavor = "current_thread")]
@@ -493,7 +493,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
     /// ```
     /// use oxrdf::Variable;
     /// use sparesults::{
-    ///     TokioAsyncReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser,
+    ///     QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput,
     /// };
     ///
     /// # #[tokio::main(flavor = "current_thread")]
@@ -540,7 +540,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
 /// use oxrdf::{Literal, Variable};
-/// use sparesults::{ReaderQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
+/// use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 ///
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
@@ -614,7 +614,7 @@ impl<'a> SliceSolutionsParser<'a> {
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
     /// use oxrdf::Variable;
-    /// use sparesults::{SliceQueryResultsParserOutput, QueryResultsFormat, QueryResultsParser};
+    /// use sparesults::{QueryResultsFormat, QueryResultsParser, SliceQueryResultsParserOutput};
     ///
     /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
     /// if let SliceQueryResultsParserOutput::Solutions(solutions) =

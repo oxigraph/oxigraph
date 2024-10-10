@@ -207,7 +207,7 @@ impl RdfSerializer {
     ///     object: NamedNode::new_unchecked("http://example.com/o").into(),
     ///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
     /// }).await?;
-    /// assert_eq!(serializer.finish().await?, "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
+    /// assert_eq!(serializer.finish().await?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
     /// # Ok(())
     /// # }
     /// ```
@@ -345,7 +345,7 @@ impl<W: Write> WriterQuadSerializer<W> {
 ///     object: NamedNode::new_unchecked("http://example.com/o").into(),
 ///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
 /// }).await?;
-/// assert_eq!(serializer.finish().await?, "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
+/// assert_eq!(serializer.finish().await?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
 /// # Ok(())
 /// # }
 /// ```
