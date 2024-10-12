@@ -1,3 +1,21 @@
+## [0.4.1] - 2024-10-13
+
+### Added
+- JS: add `default_graph` and `named_graphs` query options to set the default and named graphs.
+- HTTP server: return SPARQL service description on GET requests.
+
+### Changed
+- NTriples/NQuads error recovery: do not consider the predicate as a possible subject if the subject is invalid.
+- Turtle: prevent line jump in single quoted string (but not in unchecked/lenient mode).
+- Turtle: forbid invalid \u+123 escape sequences.
+- RDF/XML: only ignore possible literal values composed of whitespaces if an other object value is present.
+- SPARQL: fixes regex function evaluation when the regex is not set to a literal. 
+- SPARQL: ignore errors in joins if the other side of the join returns no results (the output would be no results anyway if the errors are fixed).
+- SPARQL: make ASK return true if the inner query is returning a valid tuple even if the inner query is also returning errors (fixing these errors would not change the ASK output).
+- SPARQL optimizer: do not attempt to optimize SERVICE (keep them, do not push filter in them...). This was leading to a lot of subtle behavior changes.
+- oxRDF parser: allow spaces between literal value and langtag/datatype, unicode escapes in URIs.
+
+
 ## [0.4.0] - 2024-09-22
 
 ### Changed
