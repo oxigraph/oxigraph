@@ -801,7 +801,7 @@ impl N3Lexer {
                     }
                 }
             },
-            b'U' => match Self::recognize_hex_char(&data[2..], 8, 'u', position) {
+            b'U' => match Self::recognize_hex_char(&data[2..], 8, 'U', position) {
                 Ok(c) => Some((9, Ok(c?))),
                 Err(e) => Some((9, Err(e))),
             },
@@ -832,17 +832,28 @@ impl N3Lexer {
     ) -> Result<Option<char>, TokenRecognizerError> {
         if data.len() < len {
             return Ok(None);
+        };
+        let mut codepoint = 0;
+        for i in 0..len {
+            let c = data[i];
+            codepoint = codepoint * 16
+                + u32::from(match c {
+                    b'0'..=b'9' => c - b'0',
+                    b'a'..=b'f' => c - b'a' + 10,
+                    b'A'..=b'F' => c - b'A' + 10,
+                    _ => {
+                        let val = str::from_utf8(&data[..len]).unwrap_or_default();
+                        return Err((
+                        position + i + 2..position + i + 3,
+                        format!(
+                            "The escape sequence '\\{escape_char}{val}' is not a valid hexadecimal string"
+                        ),
+                    ).into());
+                    }
+                });
         }
-        let val = str_from_utf8(&data[..len], position..position + len + 2)?;
-        let codepoint = u32::from_str_radix(val, 16).map_err(|e| {
-            (
-                position..position + len + 2,
-                format!(
-                    "The escape sequence '\\{escape_char}{val}' is not a valid hexadecimal string: {e}"
-                ),
-            )
-        })?;
         let c = char::from_u32(codepoint).ok_or_else(|| {
+            let val = str::from_utf8(&data[..len]).unwrap_or_default();
             (
                 position..position + len +2,
                 format!(
