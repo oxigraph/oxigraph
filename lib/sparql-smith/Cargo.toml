@@ -17,6 +17,7 @@ rust-version.workspace = true
 default = []
 limit-offset = []
 service = []
+unbound-service = ["service"]
 sep-0006 = []
 
 [lints]

@@ -1059,7 +1059,10 @@ impl fmt::Display for GraphGraphPattern {
 struct ServiceGraphPattern {
     // [59]  	ServiceGraphPattern	  ::=  	'SERVICE' 'SILENT'? VarOrIri GroupGraphPattern
     silent: bool,
+    #[cfg(feature = "unbound-service")]
     service: VarOrIri,
+    #[cfg(not(feature = "unbound-service"))]
+    service: Iri,
     inner: GroupGraphPattern,
 }
 
