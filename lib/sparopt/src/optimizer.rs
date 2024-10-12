@@ -165,11 +165,10 @@ impl Optimizer {
                     aggregates,
                 )
             }
-            GraphPattern::Service {
-                name,
-                inner,
-                silent,
-            } => GraphPattern::service(Self::normalize_pattern(*inner, input_types), name, silent),
+            GraphPattern::Service { .. } => {
+                // We leave this problem to the remote SPARQL endpoint
+                pattern
+            }
         }
     }
 
@@ -455,15 +454,11 @@ impl Optimizer {
             GraphPattern::OrderBy { inner, expression } => {
                 GraphPattern::order_by(Self::push_filters(*inner, filters, input_types), expression)
             }
-            GraphPattern::Service {
-                inner,
-                name,
-                silent,
-            } => GraphPattern::service(
-                Self::push_filters(*inner, filters, input_types),
-                name,
-                silent,
-            ),
+            GraphPattern::Service { .. } => {
+                // TODO: we can be smart and push some filters
+                // But we need to check the behavior of SILENT that can transform no results into a singleton
+                GraphPattern::filter(pattern, Expression::and_all(filters))
+            }
             GraphPattern::Group {
                 inner,
                 variables,
@@ -712,9 +707,9 @@ impl Optimizer {
             GraphPattern::OrderBy { inner, expression } => {
                 GraphPattern::order_by(Self::reorder_joins(*inner, input_types), expression)
             }
-            service @ GraphPattern::Service { .. } => {
+            GraphPattern::Service { .. } => {
                 // We don't do join reordering inside of SERVICE calls, we don't know about cardinalities
-                service
+                pattern
             }
             GraphPattern::Group {
                 inner,
