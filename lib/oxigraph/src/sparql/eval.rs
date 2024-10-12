@@ -609,11 +609,13 @@ impl SimpleEvaluator {
                                         }
                                     })
                                     .collect::<Vec<_>>();
+                                if built_values.is_empty() && errors.is_empty() {
+                                    // We don't bother to execute the other side
+                                    return Box::new(empty());
+                                }
                                 let mut probe_iter = probe(from).peekable();
-                                if built_values.is_empty() && errors.is_empty()
-                                    || probe_iter.peek().is_none()
-                                {
-                                    // One of the side is empty, we ignore errors from the other and returns empty
+                                if probe_iter.peek().is_none() {
+                                    // We know it's empty and can discard errors
                                     return Box::new(empty());
                                 }
                                 Box::new(CartesianProductJoinIterator {
@@ -788,7 +790,7 @@ impl SimpleEvaluator {
                                     }
                                 },
                             ));
-                            if right_values.is_empty() {
+                            if right_values.is_empty() && errors.is_empty() {
                                 return left(from);
                             }
                             Box::new(HashLeftJoinIterator {
