@@ -640,11 +640,13 @@ impl SimpleEvaluator {
                                         }
                                     }
                                 }));
+                                if built_values.is_empty() && errors.is_empty() {
+                                    // We don't bother to execute the other side
+                                    return Box::new(empty());
+                                }
                                 let mut probe_iter = probe(from).peekable();
-                                if built_values.is_empty() && errors.is_empty()
-                                    || probe_iter.peek().is_none()
-                                {
-                                    // One of the side is empty, we ignore errors from the other and returns empty
+                                if probe_iter.peek().is_none() {
+                                    // We know it's empty and can discard errors
                                     return Box::new(empty());
                                 }
                                 Box::new(HashJoinIterator {
@@ -710,6 +712,9 @@ impl SimpleEvaluator {
                             Rc::new(move |from| {
                                 let right: Vec<_> =
                                     right(from.clone()).filter_map(Result::ok).collect();
+                                if right.is_empty() {
+                                    return left(from);
+                                }
                                 Box::new(left(from).filter(move |left_tuple| {
                                     if let Ok(left_tuple) = left_tuple {
                                         !right.iter().any(|right_tuple| {
@@ -731,6 +736,9 @@ impl SimpleEvaluator {
                             Rc::new(move |from| {
                                 let mut right_values = EncodedTupleSet::new(keys.clone());
                                 right_values.extend(right(from.clone()).filter_map(Result::ok));
+                                if right_values.is_empty() {
+                                    return left(from);
+                                }
                                 Box::new(left(from).filter(move |left_tuple| {
                                     if let Ok(left_tuple) = left_tuple {
                                         !right_values.get(left_tuple).iter().any(|right_tuple| {
@@ -780,6 +788,9 @@ impl SimpleEvaluator {
                                     }
                                 },
                             ));
+                            if right_values.is_empty() {
+                                return left(from);
+                            }
                             Box::new(HashLeftJoinIterator {
                                 left_iter: left(from),
                                 right: right_values,
