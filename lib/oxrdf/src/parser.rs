@@ -462,7 +462,7 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
                 Ok((triple.into(), remain))
             } else {
                 Err(TermParseError::msg(
-                    "Nested triple serialization should be enclosed between << and >>",
+                    "Nested triple serialization must be enclosed between << and >>",
                 ))
             }
         }
@@ -520,9 +520,9 @@ fn read_hexa_char(input: &mut Chars<'_>, len: usize) -> Result<char, TermParseEr
                     'a'..='f' => u32::from(c) - u32::from('a') + 10,
                     'A'..='F' => u32::from(c) - u32::from('A') + 10,
                     _ => {
-                        return Err(TermParseError::msg(
-                            "Unexpected character in a unicode escape",
-                        ));
+                        return Err(TermParseError::msg(format!(
+                            "Unexpected character in a unicode escape: {c}"
+                        )));
                     }
                 }
         } else {
@@ -558,12 +558,12 @@ enum TermParseErrorKind {
         value: String,
     },
     #[error("{0}")]
-    Msg(&'static str),
+    Msg(String),
 }
 
 impl TermParseError {
-    pub(crate) fn msg(msg: &'static str) -> Self {
-        Self(TermParseErrorKind::Msg(msg))
+    pub(crate) fn msg(msg: impl Into<String>) -> Self {
+        Self(TermParseErrorKind::Msg(msg.into()))
     }
 }
 

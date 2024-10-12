@@ -22,6 +22,7 @@
         <#escaped_trailing_dot_trig>
         <#string_line_jump_ttl>
         <#xml_multiple_objects>
+        <#slightly_invalid_escape_sequence>
 	) .
 
 <#no_end_line_jump>
@@ -114,3 +115,8 @@
 	rdf:type rdft:TestXMLNegativeSyntax ;
 	mf:name "both a string and a node as values of the same predicate" ;
 	mf:action <xml_multiple_objects.rdf> .
+
+<#slightly_invalid_escape_sequence>
+	rdf:type rdft:TestTurtleNegativeSyntax ;
+	mf:name "+ sign at the start of escape sequences" ;
+	mf:action <slightly_invalid_escape_sequence.ttl> .
