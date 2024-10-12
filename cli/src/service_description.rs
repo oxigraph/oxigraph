@@ -12,6 +12,8 @@ mod sd {
     pub const DEFAULT_ENTAILMENT_REGIME: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "http://www.w3.org/ns/sparql-service-description#defaultEntailmentRegime",
     );
+    pub const ENDPOINT: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#endpoint");
     pub const FEATURE: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#feature");
     pub const RESULT_FORMAT: NamedNodeRef<'_> =
@@ -53,7 +55,17 @@ pub fn generate_service_description(
     let mut graph = Vec::new();
     let root = BlankNode::default();
     graph.push(TripleRef::new(&root, rdf::TYPE, sd::SERVICE));
-    // TODO: sd:ENDPOINT
+    if matches!(
+        format,
+        RdfFormat::Turtle | RdfFormat::TriG | RdfFormat::N3 | RdfFormat::RdfXml
+    ) {
+        // Hack: we use the default base IRI ie. the IRI from which the file is served
+        graph.push(TripleRef::new(
+            &root,
+            sd::ENDPOINT,
+            NamedNodeRef::new_unchecked(""),
+        ));
+    }
     for language in match kind {
         EndpointKind::Query => [sd::SPARQL_10_QUERY, sd::SPARQL_11_QUERY].as_slice(),
         EndpointKind::Update => [sd::SPARQL_11_UPDATE].as_slice(),
