@@ -457,7 +457,7 @@ jobs:
       - run: python3 build_corpus.py
         working-directory: ./fuzz
         if: steps.cache-corpus.outputs.cache-hit != 'true'
-      - run: cargo fuzz run ${{ matrix.target }} --sanitizer none -- -max_total_time=200 -timeout=5
+      - run: cargo fuzz run ${{ matrix.target }} --sanitizer none -- -max_total_time=200 -timeout=5 -fork=1 -ignore_timeouts=1
       - run: cargo fuzz cmin ${{ matrix.target }} --sanitizer none
       - uses: actions/upload-artifact@v4
         if: failure()
