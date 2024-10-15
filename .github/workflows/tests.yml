@@ -534,7 +534,7 @@ jobs:
           cd python/tests
           python -m unittest
           cd ../..
-          cargo llvm-cov --no-run --codecov --output-path codecov.json
+          cargo llvm-cov report --codecov --output-path codecov.json
       - uses: codecov/codecov-action@v4
         with:
           files: codecov.json
