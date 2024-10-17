@@ -3,10 +3,11 @@
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::rdf;
 use oxrdf::*;
-use quick_xml::escape::unescape;
+use quick_xml::escape::{escape, unescape};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::reader::Config;
 use quick_xml::{Decoder, Error, Reader, Writer};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, Read, Write};
 use std::mem::take;
@@ -198,7 +199,9 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
                 start.push_attribute(("datatype", literal.datatype().as_str()))
             }
             output.push(Event::Start(start));
-            output.push(Event::Text(BytesText::new(literal.value())));
+            output.push(Event::Text(BytesText::from_escaped(
+                escape_including_bound_whitespaces(literal.value()),
+            )));
             output.push(Event::End(BytesEnd::new("literal")));
         }
         #[cfg(feature = "rdf-star")]
@@ -910,6 +913,41 @@ fn build_literal(
             Literal::new_simple_literal(value)
         }),
     }
+}
+
+/// Escapes whitespaces at the beginning and the end to make sure they are not removed by parsers trimming text events.
+fn escape_including_bound_whitespaces(value: &str) -> Cow<'_, str> {
+    let trimmed = value.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '));
+    let trimmed_escaped = escape(trimmed);
+    if trimmed == value {
+        return trimmed_escaped;
+    }
+    let mut output =
+        String::with_capacity(trimmed_escaped.len() + (value.len() - trimmed.len()) * 5);
+    let mut prefix_len = 0;
+    for c in value.chars() {
+        match c {
+            '\t' => output.push_str("&#9;"),
+            '\n' => output.push_str("&#10;"),
+            '\r' => output.push_str("&#13;"),
+            ' ' => output.push_str("&#32;"),
+            _ => break,
+        }
+        prefix_len += 1;
+    }
+    output.push_str(&trimmed_escaped);
+    for c in value[prefix_len + trimmed.len()..].chars() {
+        match c {
+            '\t' => output.push_str("&#9;"),
+            '\n' => output.push_str("&#10;"),
+            '\r' => output.push_str("&#13;"),
+            ' ' => output.push_str("&#32;"),
+            _ => {
+                unreachable!("Unexpected {c} at the end of the string {value:?}")
+            }
+        }
+    }
+    output.into()
 }
 
 fn map_xml_error(error: Error) -> io::Error {
