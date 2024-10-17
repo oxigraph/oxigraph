@@ -167,10 +167,7 @@ impl RdfSerializer {
         self.inner = match self.inner {
             RdfSerializerKind::NQuads(s) => RdfSerializerKind::NQuads(s),
             RdfSerializerKind::NTriples(s) => RdfSerializerKind::NTriples(s),
-            RdfSerializerKind::RdfXml(s) => {
-                // TODO: implement
-                RdfSerializerKind::RdfXml(s)
-            }
+            RdfSerializerKind::RdfXml(s) => RdfSerializerKind::RdfXml(s.with_base_iri(base_iri)?),
             RdfSerializerKind::TriG(s) => RdfSerializerKind::TriG(s.with_base_iri(base_iri)?),
             RdfSerializerKind::Turtle(s) => RdfSerializerKind::Turtle(s.with_base_iri(base_iri)?),
         };

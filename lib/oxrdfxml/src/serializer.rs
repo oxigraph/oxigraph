@@ -41,6 +41,7 @@ use tokio::io::AsyncWrite;
 #[must_use]
 pub struct RdfXmlSerializer {
     prefixes: BTreeMap<String, String>,
+    base_iri: Option<Iri<String>>,
 }
 
 impl RdfXmlSerializer {
@@ -49,6 +50,7 @@ impl RdfXmlSerializer {
     pub fn new() -> Self {
         Self {
             prefixes: BTreeMap::new(),
+            base_iri: None,
         }
     }
 
@@ -64,6 +66,36 @@ impl RdfXmlSerializer {
         }
         self.prefixes
             .insert(prefix_name, Iri::parse(prefix_iri.into())?.into_inner());
+        Ok(self)
+    }
+
+    /// ```
+    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxrdfxml::RdfXmlSerializer;
+    ///
+    /// let mut serializer = RdfXmlSerializer::new()
+    ///     .with_base_iri("http://example.com")?
+    ///     .with_prefix("ex", "http://example.com/ns#")?
+    ///     .for_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
+    ///     NamedNodeRef::new("http://example.com#me")?,
+    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    /// ))?;
+    /// serializer.serialize_triple(TripleRef::new(
+    ///     NamedNodeRef::new("http://example.com#me")?,
+    ///     NamedNodeRef::new("http://example.com/ns#parent")?,
+    ///     NamedNodeRef::new("http://example.com#other")?,
+    /// ))?;
+    /// assert_eq!(
+    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xml:base=\"http://example.com\" xmlns:ex=\"http://example.com/ns#\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<ex:Person rdf:about=\"#me\">\n\t\t<ex:parent rdf:resource=\"#other\"/>\n\t</ex:Person>\n</rdf:RDF>",
+    ///     serializer.finish()?.as_slice()
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+        self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
     }
 
@@ -161,6 +193,7 @@ impl RdfXmlSerializer {
             current_resource_tag: None,
             custom_default_prefix,
             prefixes_by_iri: prefixes,
+            base_iri: self.base_iri,
         }
     }
 }
@@ -292,6 +325,7 @@ pub struct InnerRdfXmlWriter {
     current_resource_tag: Option<String>,
     custom_default_prefix: bool,
     prefixes_by_iri: BTreeMap<String, String>,
+    base_iri: Option<Iri<String>>,
 }
 
 impl InnerRdfXmlWriter {
@@ -333,9 +367,8 @@ impl InnerRdfXmlWriter {
                 (BytesStart::new("rdf:Description"), false)
             };
             match triple.subject {
-                SubjectRef::NamedNode(node) => {
-                    description_open.push_attribute(("rdf:about", node.as_str()))
-                }
+                SubjectRef::NamedNode(node) => description_open
+                    .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri))),
                 SubjectRef::BlankNode(node) => {
                     description_open.push_attribute(("rdf:nodeID", node.as_str()))
                 }
@@ -359,7 +392,8 @@ impl InnerRdfXmlWriter {
         }
         let content = match triple.object {
             TermRef::NamedNode(node) => {
-                property_open.push_attribute(("rdf:resource", node.as_str()));
+                property_open
+                    .push_attribute(("rdf:resource", relative_iri(node.as_str(), &self.base_iri)));
                 None
             }
             TermRef::BlankNode(node) => {
@@ -370,7 +404,10 @@ impl InnerRdfXmlWriter {
                 if let Some(language) = literal.language() {
                     property_open.push_attribute(("xml:lang", language));
                 } else if !literal.is_plain() {
-                    property_open.push_attribute(("rdf:datatype", literal.datatype().as_str()));
+                    property_open.push_attribute((
+                        "rdf:datatype",
+                        relative_iri(literal.datatype().as_str(), &self.base_iri),
+                    ));
                 }
                 Some(literal.value())
             }
@@ -394,6 +431,9 @@ impl InnerRdfXmlWriter {
     fn write_start(&self, output: &mut Vec<Event<'_>>) {
         output.push(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)));
         let mut rdf_open = BytesStart::new("rdf:RDF");
+        if let Some(base_iri) = &self.base_iri {
+            rdf_open.push_attribute(("xml:base", base_iri.as_str()));
+        }
         for (prefix_value, prefix_name) in &self.prefixes_by_iri {
             rdf_open.push_attribute((
                 if prefix_name.is_empty() {
@@ -472,6 +512,15 @@ fn split_iri(iri: &str) -> (&str, &str) {
     } else {
         (iri, "")
     }
+}
+
+fn relative_iri<'a>(iri: &'a str, base_iri: &Option<Iri<String>>) -> Cow<'a, str> {
+    if let Some(base_iri) = base_iri {
+        if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri)) {
+            return relative.into_inner().into();
+        }
+    }
+    iri.into()
 }
 
 #[cfg(test)]

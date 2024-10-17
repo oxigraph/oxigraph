@@ -2125,7 +2125,7 @@ mod tests {
     #[test]
     fn cli_convert_file() -> Result<()> {
         let input_file = NamedTempFile::new("input.ttl")?;
-        input_file.write_str("@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person ;\n\tschema:name \"Foo Bar\"@en .\n")?;
+        input_file.write_str("@prefix schema: <http://schema.org/> .\n<#me> a schema:Person ;\n\tschema:name \"Foo Bar\"@en .\n")?;
         let output_file = NamedTempFile::new("output.rdf")?;
         cli_command()
             .arg("convert")
@@ -2138,7 +2138,7 @@ mod tests {
             .assert()
             .success();
         output_file
-            .assert("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>");
+            .assert("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xml:base=\"http://example.com/\" xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>");
         Ok(())
     }
 
