@@ -834,6 +834,33 @@ impl TurtleSerializer {
         Ok(self)
     }
 
+    /// Adds a base IRI to the serialization.
+    ///
+    /// ```
+    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxttl::TurtleSerializer;
+    ///
+    /// let mut serializer = TurtleSerializer::new()
+    ///     .with_base_iri("http://example.com")?
+    ///     .with_prefix("ex", "http://example.com/ns#")?
+    ///     .for_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
+    ///     NamedNodeRef::new("http://example.com/me")?,
+    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    /// ))?;
+    /// assert_eq!(
+    ///     b"@base <http://example.com> .\n@prefix ex: </ns#> .\n</me> a ex:Person .\n",
+    ///     serializer.finish()?.as_slice()
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+        self.inner = self.inner.with_base_iri(base_iri)?;
+        Ok(self)
+    }
+
     /// Writes a Turtle file to a [`Write`] implementation.
     ///
     /// ```
