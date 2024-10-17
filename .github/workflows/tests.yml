@@ -440,7 +440,20 @@ jobs:
   fuzz_changes:
     strategy:
       matrix:
-        target: [ "sparql_query_eval", "sparql_update_eval", "sparql_results_json", "sparql_results_tsv", "sparql_results_xml", "n3", "nquads", "trig", "rdf_xml" ]
+        include:
+          - target: "sparql_query_eval"
+            build_args: "--features sparql-smith/service"
+            run_args: "-fork=1 -ignore_timeouts=1"
+          - target: "sparql_update_eval"
+            build_args: "--features rocksdb"
+            run_args: "-fork=1 -ignore_timeouts=1"
+          - target: "sparql_results_json"
+          - target: "sparql_results_tsv"
+          - target: "sparql_results_xml"
+          - target: "n3"
+          - target: "nquads"
+          - target: "trig"
+          - target: "rdf_xml"
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -457,8 +470,8 @@ jobs:
       - run: python3 build_corpus.py
         working-directory: ./fuzz
         if: steps.cache-corpus.outputs.cache-hit != 'true'
-      - run: cargo fuzz run ${{ matrix.target }} --sanitizer none -- -max_total_time=200 -timeout=5 -fork=1 -ignore_timeouts=1
-      - run: cargo fuzz cmin ${{ matrix.target }} --sanitizer none
+      - run: cargo fuzz run ${{ matrix.target }} --sanitizer none ${{ matrix.build_args }} -- -max_total_time=200 -timeout=5 ${{ matrix.run_args }}
+      - run: cargo fuzz cmin ${{ matrix.target }} --sanitizer none ${{ matrix.build_args }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
