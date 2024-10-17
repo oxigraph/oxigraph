@@ -9,7 +9,12 @@ use oxttl::{TriGParser, TriGSerializer};
 fn parse<'a>(
     chunks: impl IntoIterator<Item = &'a [u8]>,
     unchecked: bool,
-) -> (Vec<Quad>, Vec<String>, Vec<(String, String)>) {
+) -> (
+    Vec<Quad>,
+    Vec<String>,
+    Vec<(String, String)>,
+    Option<String>,
+) {
     let mut quads = Vec::new();
     let mut errors = Vec::new();
     let mut parser = TriGParser::new()
@@ -44,13 +49,21 @@ fn parse<'a>(
             .prefixes()
             .map(|(k, v)| (k.to_owned(), v.to_owned()))
             .collect(),
+        parser.base_iri().map(ToString::to_string),
     )
 }
 
-fn serialize_quads(quads: &[Quad], prefixes: Vec<(String, String)>) -> Vec<u8> {
+fn serialize_quads(
+    quads: &[Quad],
+    prefixes: Vec<(String, String)>,
+    base_iri: Option<String>,
+) -> Vec<u8> {
     let mut serializer = TriGSerializer::new();
     for (prefix_name, prefix_iri) in prefixes {
         serializer = serializer.with_prefix(prefix_name, prefix_iri).unwrap();
+    }
+    if let Some(base_iri) = base_iri {
+        serializer = serializer.with_base_iri(base_iri).unwrap();
     }
     let mut serializer = serializer.for_writer(Vec::new());
     for quad in quads {
@@ -61,9 +74,9 @@ fn serialize_quads(quads: &[Quad], prefixes: Vec<(String, String)>) -> Vec<u8> {
 
 fuzz_target!(|data: &[u8]| {
     // We parse with splitting
-    let (quads, errors, prefixes) = parse(data.split(|c| *c == 0xFF), false);
+    let (quads, errors, prefixes, base_iri) = parse(data.split(|c| *c == 0xFF), false);
     // We parse without splitting
-    let (quads_without_split, errors_without_split, _) = parse(
+    let (quads_without_split, errors_without_split, _, _) = parse(
         [data
             .iter()
             .copied()
@@ -72,7 +85,7 @@ fuzz_target!(|data: &[u8]| {
             .as_slice()],
         false,
     );
-    let (quads_unchecked, errors_unchecked, _) = parse(data.split(|c| *c == 0xFF), true);
+    let (quads_unchecked, errors_unchecked, _, _) = parse(data.split(|c| *c == 0xFF), true);
     if errors.is_empty() {
         assert!(errors_unchecked.is_empty());
     }
@@ -86,16 +99,16 @@ fuzz_target!(|data: &[u8]| {
             quads,
             quads_without_split,
             "With split:\n{}\nWithout split:\n{}",
-            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new())),
-            String::from_utf8_lossy(&serialize_quads(&quads_without_split, Vec::new()))
+            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+            String::from_utf8_lossy(&serialize_quads(&quads_without_split, Vec::new(), None))
         );
         if errors.is_empty() {
             assert_eq!(
                 quads,
                 quads_unchecked,
                 "Validating:\n{}\nUnchecked:\n{}",
-                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new())),
-                String::from_utf8_lossy(&serialize_quads(&quads_unchecked, Vec::new()))
+                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+                String::from_utf8_lossy(&serialize_quads(&quads_unchecked, Vec::new(), None))
             );
         }
     } else if bnodes_count <= 4 {
@@ -107,8 +120,8 @@ fuzz_target!(|data: &[u8]| {
             dataset_with_split,
             dataset_without_split,
             "With split:\n{}\nWithout split:\n{}",
-            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new())),
-            String::from_utf8_lossy(&serialize_quads(&quads_without_split, Vec::new()))
+            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+            String::from_utf8_lossy(&serialize_quads(&quads_without_split, Vec::new(), None))
         );
         if errors.is_empty() {
             let mut dataset_unchecked = quads_unchecked.iter().collect::<Dataset>();
@@ -117,15 +130,15 @@ fuzz_target!(|data: &[u8]| {
                 dataset_with_split,
                 dataset_unchecked,
                 "Validating:\n{}\nUnchecked:\n{}",
-                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new())),
-                String::from_utf8_lossy(&serialize_quads(&quads_unchecked, Vec::new()))
+                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+                String::from_utf8_lossy(&serialize_quads(&quads_unchecked, Vec::new(), None))
             );
         }
     }
     assert_eq!(errors, errors_without_split);
 
     // We serialize
-    let new_serialization = serialize_quads(&quads, prefixes);
+    let new_serialization = serialize_quads(&quads, prefixes, base_iri);
 
     // We parse the serialization
     let new_quads = TriGParser::new()

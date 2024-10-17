@@ -1276,9 +1276,9 @@ dependencies = [
 
 [[package]]
 name = "oxiri"
-version = "0.2.5"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1584efc0f222d0fc8f31e6c229b8fd93f69280aab398828f0dbce3957178a1ac"
+checksum = "3038e706f26b00e3981cd08bfd300dbe82f635ea95a263d492c6ccaeb3d1c582"
 
 [[package]]
 name = "oxrdf"
