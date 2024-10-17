@@ -24,5 +24,5 @@ fuzz_target!(|data: &[u8]| {
         }
     }
     assert!(parser.is_end());
-    //TODO: serialize
+    // TODO: serialize
 });
