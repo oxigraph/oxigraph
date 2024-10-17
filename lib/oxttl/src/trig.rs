@@ -11,6 +11,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
     GraphName, GraphNameRef, LiteralRef, NamedNode, NamedNodeRef, Quad, QuadRef, Subject, TermRef,
 };
+use std::borrow::Cow;
 use std::collections::hash_map::Iter;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -753,6 +754,7 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 #[derive(Default, Clone)]
 #[must_use]
 pub struct TriGSerializer {
+    base_iri: Option<Iri<String>>,
     prefixes: BTreeMap<String, String>,
 }
 
@@ -761,6 +763,7 @@ impl TriGSerializer {
     #[inline]
     pub fn new() -> Self {
         Self {
+            base_iri: None,
             prefixes: BTreeMap::new(),
         }
     }
@@ -775,6 +778,34 @@ impl TriGSerializer {
             Iri::parse(prefix_iri.into())?.into_inner(),
             prefix_name.into(),
         );
+        Ok(self)
+    }
+
+    /// Adds a base IRI to the serialization.
+    ///
+    /// ```
+    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxttl::TriGSerializer;
+    ///
+    /// let mut serializer = TriGSerializer::new()
+    ///     .with_base_iri("http://example.com")?
+    ///     .with_prefix("ex", "http://example.com/ns#")?
+    ///     .for_writer(Vec::new());
+    /// serializer.serialize_quad(QuadRef::new(
+    ///     NamedNodeRef::new("http://example.com/me")?,
+    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    ///     NamedNodeRef::new("http://example.com")?,
+    /// ))?;
+    /// assert_eq!(
+    ///     b"@base <http://example.com> .\n@prefix ex: </ns#> .\n<> {\n\t</me> a ex:Person .\n}\n",
+    ///     serializer.finish()?.as_slice()
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+        self.base_iri = Some(Iri::parse(base_iri.into())?);
         Ok(self)
     }
 
@@ -873,6 +904,7 @@ impl TriGSerializer {
     pub fn low_level(self) -> LowLevelTriGSerializer {
         LowLevelTriGSerializer {
             prefixes: self.prefixes,
+            base_iri: self.base_iri,
             prelude_written: false,
             current_graph_name: GraphName::DefaultGraph,
             current_subject_predicate: None,
@@ -1007,6 +1039,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
 /// ```
 pub struct LowLevelTriGSerializer {
     prefixes: BTreeMap<String, String>,
+    base_iri: Option<Iri<String>>,
     prelude_written: bool,
     current_graph_name: GraphName,
     current_subject_predicate: Option<(Subject, NamedNode)>,
@@ -1021,8 +1054,15 @@ impl LowLevelTriGSerializer {
     ) -> io::Result<()> {
         if !self.prelude_written {
             self.prelude_written = true;
+            if let Some(base_iri) = &self.base_iri {
+                writeln!(writer, "@base <{base_iri}> .")?;
+            }
             for (prefix_iri, prefix_name) in &self.prefixes {
-                writeln!(writer, "@prefix {prefix_name}: <{prefix_iri}> .")?;
+                writeln!(
+                    writer,
+                    "@prefix {prefix_name}: <{}> .",
+                    relative_iri(prefix_iri, &self.base_iri)
+                )?;
             }
         }
         let q = q.into();
@@ -1113,6 +1153,7 @@ impl LowLevelTriGSerializer {
         TurtlePredicate {
             named_node: named_node.into(),
             prefixes: &self.prefixes,
+            base_iri: &self.base_iri,
         }
     }
 
@@ -1120,6 +1161,7 @@ impl LowLevelTriGSerializer {
         TurtleTerm {
             term: term.into(),
             prefixes: &self.prefixes,
+            base_iri: &self.base_iri,
         }
     }
 
@@ -1138,6 +1180,7 @@ impl LowLevelTriGSerializer {
 struct TurtlePredicate<'a> {
     named_node: NamedNodeRef<'a>,
     prefixes: &'a BTreeMap<String, String>,
+    base_iri: &'a Option<Iri<String>>,
 }
 
 impl<'a> fmt::Display for TurtlePredicate<'a> {
@@ -1148,6 +1191,7 @@ impl<'a> fmt::Display for TurtlePredicate<'a> {
             TurtleTerm {
                 term: self.named_node.into(),
                 prefixes: self.prefixes,
+                base_iri: self.base_iri,
             }
             .fmt(f)
         }
@@ -1157,6 +1201,7 @@ impl<'a> fmt::Display for TurtlePredicate<'a> {
 struct TurtleTerm<'a> {
     term: TermRef<'a>,
     prefixes: &'a BTreeMap<String, String>,
+    base_iri: &'a Option<Iri<String>>,
 }
 
 impl<'a> fmt::Display for TurtleTerm<'a> {
@@ -1170,7 +1215,7 @@ impl<'a> fmt::Display for TurtleTerm<'a> {
                         }
                     }
                 }
-                write!(f, "{v}")
+                write!(f, "<{}>", relative_iri(v.as_str(), self.base_iri))
             }
             TermRef::BlankNode(v) => write!(f, "{v}"),
             TermRef::Literal(v) => {
@@ -1193,7 +1238,8 @@ impl<'a> fmt::Display for TurtleTerm<'a> {
                         LiteralRef::new_simple_literal(v.value()),
                         TurtleTerm {
                             term: v.datatype().into(),
-                            prefixes: self.prefixes
+                            prefixes: self.prefixes,
+                            base_iri: self.base_iri,
                         }
                     )
                 }
@@ -1205,20 +1251,32 @@ impl<'a> fmt::Display for TurtleTerm<'a> {
                     "<< {} {} {} >>",
                     TurtleTerm {
                         term: t.subject.as_ref().into(),
-                        prefixes: self.prefixes
+                        prefixes: self.prefixes,
+                        base_iri: self.base_iri,
                     },
                     TurtleTerm {
                         term: t.predicate.as_ref().into(),
-                        prefixes: self.prefixes
+                        prefixes: self.prefixes,
+                        base_iri: self.base_iri,
                     },
                     TurtleTerm {
                         term: t.object.as_ref(),
-                        prefixes: self.prefixes
+                        prefixes: self.prefixes,
+                        base_iri: self.base_iri,
                     }
                 )
             }
         }
     }
+}
+
+fn relative_iri<'a>(iri: &'a str, base_iri: &Option<Iri<String>>) -> Cow<'a, str> {
+    if let Some(base_iri) = base_iri {
+        if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri)) {
+            return relative.into_inner().into();
+        }
+    }
+    iri.into()
 }
 
 fn is_turtle_boolean(value: &str) -> bool {
