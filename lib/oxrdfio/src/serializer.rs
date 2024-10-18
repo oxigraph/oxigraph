@@ -140,6 +140,43 @@ impl RdfSerializer {
         Ok(self)
     }
 
+    /// If the format supports it, sets a base IRI.
+    ///
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::{NamedNodeRef, TripleRef};
+    /// use oxrdfio::{RdfFormat, RdfSerializer};
+    ///
+    /// let mut serializer = RdfSerializer::from_format(RdfFormat::Turtle)
+    ///     .with_base_iri("http://example.com")?
+    ///     .with_prefix("ex", "http://example.com/ns#")?
+    ///     .for_writer(Vec::new());
+    /// serializer.serialize_triple(TripleRef::new(
+    ///     NamedNodeRef::new("http://example.com/me")?,
+    ///     rdf::TYPE,
+    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    /// ))?;
+    /// assert_eq!(
+    ///     serializer.finish()?,
+    ///     b"@base <http://example.com> .\n@prefix ex: </ns#> .\n</me> a ex:Person .\n",
+    /// );
+    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+        self.inner = match self.inner {
+            RdfSerializerKind::NQuads(s) => RdfSerializerKind::NQuads(s),
+            RdfSerializerKind::NTriples(s) => RdfSerializerKind::NTriples(s),
+            RdfSerializerKind::RdfXml(s) => {
+                // TODO: implement
+                RdfSerializerKind::RdfXml(s)
+            }
+            RdfSerializerKind::TriG(s) => RdfSerializerKind::TriG(s.with_base_iri(base_iri)?),
+            RdfSerializerKind::Turtle(s) => RdfSerializerKind::Turtle(s.with_base_iri(base_iri)?),
+        };
+        Ok(self)
+    }
+
     /// Serializes to a [`Write`] implementation.
     ///
     /// <div class="warning">
