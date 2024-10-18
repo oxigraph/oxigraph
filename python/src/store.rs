@@ -1,19 +1,17 @@
-#![allow(clippy::needless_option_as_deref)]
-
 use crate::io::{
     lookup_rdf_format, map_parse_error, PyRdfFormatInput, PyReadable, PyReadableInput, PyWritable,
     PyWritableOutput,
 };
 use crate::model::*;
 use crate::sparql::*;
-use oxigraph::io::RdfParser;
+use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::GraphNameRef;
 use oxigraph::sparql::{QueryResults, Update};
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 /// RDF store.
@@ -468,9 +466,9 @@ impl PyStore {
         py.allow_threads(|| {
             let mut parser = RdfParser::from_format(format);
             if let Some(base_iri) = base_iri {
-                parser = parser
-                    .with_base_iri(base_iri)
-                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                parser = parser.with_base_iri(base_iri).map_err(|e| {
+                    PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
+                })?;
             }
             if let Some(to_graph_name) = to_graph_name {
                 parser = parser.with_default_graph(to_graph_name);
@@ -503,6 +501,10 @@ impl PyStore {
     /// :type format: RdfFormat or None, optional
     /// :param from_graph: the store graph from which dump the triples. Required if the serialization format does not support named graphs. If it does supports named graphs the full dataset is written.
     /// :type from_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :param prefixes: the prefixes used in the serialization if the format supports it.
+    /// :type prefixes: dict[str, str] or None, optional
+    /// :param base_iri: the base IRI used in the serialization if the format supports it.
+    /// :type base_iri: str or None, optional
     /// :return: :py:class:`bytes` with the serialization if the ``output`` parameter is :py:const:`None`, :py:const:`None` if ``output`` is set.
     /// :rtype: bytes or None
     /// :raises ValueError: if the format is not supported or the `from_graph` parameter is not given with a syntax not supporting named graphs.
@@ -517,16 +519,18 @@ impl PyStore {
     /// >>> store = Store()
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> output = io.BytesIO()
-    /// >>> store.dump(output, RdfFormat.TURTLE, from_graph=NamedNode("http://example.com/g"))
+    /// >>> store.dump(output, RdfFormat.TURTLE, from_graph=NamedNode("http://example.com/g"), prefixes={"ex": "http://example.com/"}, base_iri="http://example.com")
     /// >>> output.getvalue()
-    /// b'<http://example.com> <http://example.com/p> "1" .\n'
+    /// b'@base <http://example.com> .\n@prefix ex: </> .\n<> ex:p "1" .\n'
     #[allow(clippy::needless_pass_by_value)]
-    #[pyo3(signature = (output = None, format = None, *, from_graph = None))]
+    #[pyo3(signature = (output = None, format = None, *, from_graph = None, prefixes = None, base_iri = None))]
     fn dump<'py>(
         &self,
         output: Option<PyWritableOutput>,
         format: Option<PyRdfFormatInput>,
         from_graph: Option<PyGraphNameRef<'_>>,
+        prefixes: Option<BTreeMap<String, String>>,
+        base_iri: Option<&str>,
         py: Python<'py>,
     ) -> PyResult<Option<Bound<'py, PyBytes>>> {
         let from_graph_name = from_graph.as_ref().map(GraphNameRef::from);
@@ -534,11 +538,29 @@ impl PyStore {
             |output, file_path| {
                 py.allow_threads(|| {
                     let format = lookup_rdf_format(format, file_path.as_deref())?;
+                    let mut serializer = RdfSerializer::from_format(format);
+                    if let Some(prefixes) = prefixes {
+                        for (prefix_name, prefix_iri) in &prefixes {
+                            serializer =
+                                serializer
+                                    .with_prefix(prefix_name, prefix_iri)
+                                    .map_err(|e| {
+                                        PyValueError::new_err(format!(
+                                            "Invalid prefix {prefix_name} IRI '{prefix_iri}', {e}"
+                                        ))
+                                    })?;
+                        }
+                    }
+                    if let Some(base_iri) = base_iri {
+                        serializer = serializer.with_base_iri(base_iri).map_err(|e| {
+                            PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
+                        })?;
+                    }
                     if let Some(from_graph_name) = from_graph_name {
                         self.inner
-                            .dump_graph_to_writer(from_graph_name, format, output)
+                            .dump_graph_to_writer(from_graph_name, serializer, output)
                     } else {
-                        self.inner.dump_to_writer(format, output)
+                        self.inner.dump_to_writer(serializer, output)
                     }
                     .map_err(map_serializer_error)
                 })

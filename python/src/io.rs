@@ -1,5 +1,3 @@
-#![allow(clippy::needless_option_as_deref)]
-
 use crate::model::{PyQuad, PyTriple};
 use oxigraph::io::{RdfFormat, RdfParseError, RdfParser, RdfSerializer, ReaderQuadParser};
 use oxigraph::model::QuadRef;
@@ -68,7 +66,7 @@ pub fn parse(
     if let Some(base_iri) = base_iri {
         parser = parser
             .with_base_iri(base_iri)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            .map_err(|e| PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}")))?;
     }
     if without_named_graphs {
         parser = parser.without_named_graphs();
@@ -103,6 +101,10 @@ pub fn parse(
 /// :type output: typing.IO[bytes] or str or os.PathLike[str] or None, optional
 /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: RdfFormat or None, optional
+/// :param prefixes: the prefixes used in the serialization if the format supports it.
+/// :type prefixes: dict[str, str] or None, optional
+/// :param base_iri: the base IRI used in the serialization if the format supports it.
+/// :type base_iri: str or None, optional
 /// :return: :py:class:`bytes` with the serialization if the ``output`` parameter is :py:const:`None`, :py:const:`None` if ``output`` is set.
 /// :rtype: bytes or None
 /// :raises ValueError: if the format is not supported.
@@ -114,21 +116,40 @@ pub fn parse(
 ///
 /// >>> import io
 /// >>> output = io.BytesIO()
-/// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, RdfFormat.TURTLE)
+/// >>> serialize([Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'))], output, RdfFormat.TURTLE, prefixes={"ex": "http://example.com/"}, base_iri="http://example.com")
 /// >>> output.getvalue()
-/// b'<http://example.com> <http://example.com/p> "1" .\n'
+/// b'@base <http://example.com> .\n@prefix ex: </> .\n<> ex:p "1" .\n'
 #[pyfunction]
-#[pyo3(signature = (input, output = None, format = None))]
+#[pyo3(signature = (input, output = None, format = None, *, prefixes = None, base_iri = None))]
 pub fn serialize<'py>(
     input: &Bound<'py, PyAny>,
     output: Option<PyWritableOutput>,
     format: Option<PyRdfFormatInput>,
+    prefixes: Option<BTreeMap<String, String>>,
+    base_iri: Option<&str>,
     py: Python<'py>,
 ) -> PyResult<Option<Bound<'py, PyBytes>>> {
     PyWritable::do_write(
         |output, file_path| {
             let format = lookup_rdf_format(format, file_path.as_deref())?;
-            let mut serializer = RdfSerializer::from_format(format).for_writer(output);
+            let mut serializer = RdfSerializer::from_format(format);
+            if let Some(prefixes) = prefixes {
+                for (prefix_name, prefix_iri) in &prefixes {
+                    serializer = serializer
+                        .with_prefix(prefix_name, prefix_iri)
+                        .map_err(|e| {
+                            PyValueError::new_err(format!(
+                                "Invalid prefix {prefix_name} IRI '{prefix_iri}', {e}"
+                            ))
+                        })?;
+                }
+            }
+            if let Some(base_iri) = base_iri {
+                serializer = serializer.with_base_iri(base_iri).map_err(|e| {
+                    PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}"))
+                })?;
+            }
+            let mut serializer = serializer.for_writer(output);
             for i in input.iter()? {
                 let i = i?;
                 if let Ok(triple) = i.extract::<PyRef<'_, PyTriple>>() {
