@@ -435,6 +435,7 @@ pub fn main() -> anyhow::Result<()> {
             from_base,
             to_file,
             to_format,
+            to_base,
             lenient,
             from_graph,
             from_default_graph,
@@ -491,6 +492,7 @@ pub fn main() -> anyhow::Result<()> {
                     lenient,
                     &from_graph,
                     &to_graph,
+                    to_base.as_deref(),
                 )?),
                 (Some(from_file), None) => do_convert(
                     parser,
@@ -500,6 +502,7 @@ pub fn main() -> anyhow::Result<()> {
                     lenient,
                     &from_graph,
                     &to_graph,
+                    to_base.as_deref(),
                 )?
                 .flush(),
                 (None, Some(to_file)) => close_file_writer(do_convert(
@@ -510,6 +513,7 @@ pub fn main() -> anyhow::Result<()> {
                     lenient,
                     &from_graph,
                     &to_graph,
+                    to_base.as_deref(),
                 )?),
                 (None, None) => do_convert(
                     parser,
@@ -519,6 +523,7 @@ pub fn main() -> anyhow::Result<()> {
                     lenient,
                     &from_graph,
                     &to_graph,
+                    to_base.as_deref(),
                 )?
                 .flush(),
             }?;
@@ -576,9 +581,15 @@ fn do_convert<R: Read, W: Write>(
     lenient: bool,
     from_graph: &Option<GraphName>,
     default_graph: &GraphName,
+    to_base: Option<&str>,
 ) -> anyhow::Result<W> {
     let mut parser = parser.for_reader(reader);
-    let first = parser.next(); // We read the first element to get prefixes
+    let first = parser.next(); // We read the first element to get prefixes and the base IRI
+    if let Some(base_iri) = to_base.or_else(|| parser.base_iri()) {
+        serializer = serializer
+            .with_base_iri(base_iri)
+            .with_context(|| format!("Invalid base IRI: {base_iri}"))?;
+    }
     for (prefix_name, prefix_iri) in parser.prefixes() {
         serializer = serializer
             .with_prefix(prefix_name, prefix_iri)
@@ -2161,6 +2172,21 @@ mod tests {
             .write_stdin("@base <http://example.com/> . <s> <p> <o> . <g> { <sg> <pg> <og> . }")
             .assert()
             .stdout("<http://example.com/sg> <http://example.com/pg> <http://example.com/og> .\n");
+    }
+
+    #[test]
+    fn cli_convert_to_base() {
+        cli_command()
+            .arg("convert")
+            .arg("--from-format")
+            .arg("ttl")
+            .arg("--to-format")
+            .arg("ttl")
+            .arg("--to-base")
+            .arg("http://example.com")
+            .write_stdin("@base <http://example.com/> . <s> <p> <o> .")
+            .assert()
+            .stdout("@base <http://example.com> .\n</s> </p> </o> .\n");
     }
 
     #[test]

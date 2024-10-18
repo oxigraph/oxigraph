@@ -240,6 +240,9 @@ pub enum Command {
         /// By default the format is guessed from the target file extension.
         #[arg(long, required_unless_present = "to_file")]
         to_format: Option<String>,
+        /// Base IRI of the file to write
+        #[arg(long, value_hint = ValueHint::Url)]
+        to_base: Option<String>,
         /// Attempt to keep converting even if the data file is invalid
         #[arg(long)]
         lenient: bool,
