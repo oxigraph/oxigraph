@@ -9,6 +9,7 @@ use pyo3::prelude::*;
 use pyo3::pybacked::{PyBackedBytes, PyBackedStr};
 use pyo3::types::PyBytes;
 use std::cmp::max;
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
@@ -43,7 +44,7 @@ use std::sync::OnceLock;
 /// :param rename_blank_nodes: Renames the blank nodes identifiers from the ones set in the serialization to random ids. This allows to avoid identifier conflicts when merging graphs together.
 /// :type rename_blank_nodes: bool, optional
 /// :return: an iterator of RDF triples or quads depending on the format.
-/// :rtype: collections.abc.Iterator[Quad]
+/// :rtype: QuadParser
 /// :raises ValueError: if the format is not supported.
 /// :raises SyntaxError: if the provided data is invalid.
 /// :raises OSError: if a system error happens while reading the file.
@@ -60,7 +61,7 @@ pub fn parse(
     without_named_graphs: bool,
     rename_blank_nodes: bool,
     py: Python<'_>,
-) -> PyResult<PyObject> {
+) -> PyResult<PyQuadParser> {
     let input = PyReadable::from_args(&path, input, py)?;
     let format = lookup_rdf_format(format, path.as_deref())?;
     let mut parser = RdfParser::from_format(format);
@@ -75,11 +76,10 @@ pub fn parse(
     if rename_blank_nodes {
         parser = parser.rename_blank_nodes();
     }
-    Ok(PyQuadReader {
+    Ok(PyQuadParser {
         inner: parser.for_reader(input),
         file_path: path,
-    }
-    .into_py(py))
+    })
 }
 
 /// Serializes an RDF graph or dataset.
@@ -151,14 +151,58 @@ pub fn serialize<'py>(
     )
 }
 
-#[pyclass(name = "QuadReader", module = "pyoxigraph")]
-pub struct PyQuadReader {
+/// An iterator of :py:class:`Quad` returned by :py:func:`parse`.
+///
+/// >>> store = Store()
+/// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
+/// >>> quads = parse(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/")
+/// >>> next(quads)
+/// <Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>
+#[pyclass(name = "QuadParser", module = "pyoxigraph")]
+pub struct PyQuadParser {
     inner: ReaderQuadParser<PyReadable>,
     file_path: Option<PathBuf>,
 }
 
 #[pymethods]
-impl PyQuadReader {
+impl PyQuadParser {
+    /// The list of IRI prefixes considered at the current step of the parsing.
+    ///
+    /// This method returns a prefix name: prefix value dictionary.
+    /// It is empty at the beginning of the parsing and gets updated when prefixes are encountered.
+    /// It should be full at the end of the parsing
+    /// (but if a prefix is overridden, only the latest version will be returned).
+    ///
+    /// An empty dict is return if the format does not support prefixes.
+    ///
+    /// :rtype: dict[str, str]
+    ///
+    /// >>> quads = parse(input=b'@prefix ex: <http://example.com/> . ex:s ex:p ex:o .', format=RdfFormat.TURTLE)
+    /// >>> next(quads)
+    /// <Quad subject=<NamedNode value=http://example.com/s> predicate=<NamedNode value=http://example.com/p> object=<NamedNode value=http://example.com/o> graph_name=<DefaultGraph>>
+    /// >>> quads.prefixes
+    /// {'ex': 'http://example.com/'}
+    #[getter]
+    pub fn prefixes(&self) -> BTreeMap<&str, &str> {
+        self.inner.prefixes().collect()
+    }
+
+    /// The base IRI considered at the current step of the parsing.
+    ///
+    /// :py:const:`None` is returned if no base IRI is set or the format does not support base IRIs.
+    ///
+    /// :rtype: str or None
+    ///
+    /// >>> quads = parse(input=b'@base <http://example.com/> . <s> <p> <o> .', format=RdfFormat.TURTLE)
+    /// >>> next(quads)
+    /// <Quad subject=<NamedNode value=http://example.com/s> predicate=<NamedNode value=http://example.com/p> object=<NamedNode value=http://example.com/o> graph_name=<DefaultGraph>>
+    /// >>> quads.base_iri
+    /// 'http://example.com/'
+    #[getter]
+    pub fn base_iri(&self) -> Option<&str> {
+        self.inner.base_iri()
+    }
+
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
