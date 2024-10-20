@@ -158,9 +158,9 @@ pub fn serialize<'py>(
                     let quad = i.extract::<PyRef<'_, PyQuad>>()?;
                     let quad = QuadRef::from(&*quad);
                     if !quad.graph_name.is_default_graph() && !format.supports_datasets() {
-                        return Err(PyValueError::new_err(
-                            "The {format} format does not support named graphs",
-                        ));
+                        return Err(PyValueError::new_err(format!(
+                            "The {format} format does not support named graphs"
+                        )));
                     }
                     serializer.serialize_quad(quad)
                 }?;
