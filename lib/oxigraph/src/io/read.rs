@@ -59,7 +59,7 @@ impl GraphParser {
     ///
     /// assert_eq!(triples.len(), 1);
     /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
@@ -153,7 +153,7 @@ impl DatasetParser {
     ///
     /// assert_eq!(triples.len(), 1);
     /// assert_eq!(triples[0].subject.to_string(), "<http://example.com/s>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {

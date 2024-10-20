@@ -165,7 +165,7 @@ impl RdfParser {
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
@@ -195,7 +195,7 @@ impl RdfParser {
     ///
     /// assert_eq!(quads.len(), 1);
     /// assert_eq!(quads[0].graph_name.to_string(), "<http://example.com/g>");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_default_graph(mut self, default_graph: impl Into<GraphName>) -> Self {
@@ -239,7 +239,7 @@ impl RdfParser {
     ///     .for_reader(file.as_bytes())
     ///     .collect::<Result<Vec<_>, _>>()?;
     /// assert_ne!(result1, result2);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn rename_blank_nodes(mut self) -> Self {
@@ -305,10 +305,10 @@ impl RdfParser {
     /// Reads are buffered.
     ///
     /// ```
-    /// use oxrdfio::{RdfFormat, RdfParser};
-    ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
     /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
     /// let mut parser =
@@ -485,7 +485,7 @@ impl<R: Read> ReaderQuadParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
@@ -518,7 +518,7 @@ impl<R: Read> ReaderQuadParser<R> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         match &self.inner {
@@ -538,10 +538,10 @@ impl<R: Read> ReaderQuadParser<R> {
 /// Reads are buffered.
 ///
 /// ```
-/// use oxrdfio::{RdfFormat, RdfParser};
-///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
+/// use oxrdfio::{RdfFormat, RdfParser};
+///
 /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let mut parser =
@@ -609,10 +609,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     /// An empty iterator is return if the format does not support prefixes.
     ///
     /// ```
-    /// use oxrdfio::{RdfFormat, RdfParser};
-    ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -648,10 +648,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     /// `None` is returned if no base IRI is set or the format does not support base IRIs.
     ///
     /// ```
-    /// use oxrdfio::{RdfFormat, RdfParser};
-    ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -768,7 +768,7 @@ impl<'a> SliceQuadParser<'a> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
@@ -801,7 +801,7 @@ impl<'a> SliceQuadParser<'a> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         match &self.inner {

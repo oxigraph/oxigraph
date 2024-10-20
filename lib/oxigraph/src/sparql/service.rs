@@ -52,7 +52,7 @@ use std::time::Duration;
 /// )? {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub trait ServiceHandler: Send + Sync {
     /// The service evaluation error.

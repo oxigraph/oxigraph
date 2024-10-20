@@ -16,12 +16,13 @@ use tokio::io::AsyncWrite;
 ///
 /// ```
 /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
+/// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlSerializer;
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
 /// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// serializer.serialize_triple(TripleRef::new(
@@ -33,7 +34,7 @@ use tokio::io::AsyncWrite;
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
 ///     serializer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -69,12 +70,13 @@ impl RdfXmlSerializer {
     ///
     /// ```
     /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
+    /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlSerializer;
     ///
     /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
     /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// ))?;
     /// serializer.serialize_triple(TripleRef::new(
@@ -86,7 +88,7 @@ impl RdfXmlSerializer {
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
     ///     serializer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn for_writer<W: Write>(self, writer: W) -> WriterRdfXmlSerializer<W> {
@@ -101,15 +103,16 @@ impl RdfXmlSerializer {
     /// This writer does unbuffered writes.
     ///
     /// ```
-    /// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
-    /// use oxrdfxml::RdfXmlSerializer;
-    ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdfxml::RdfXmlSerializer;
+    ///
     /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
     /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// )).await?;
     /// serializer.serialize_triple(TripleRef::new(
@@ -155,12 +158,13 @@ impl RdfXmlSerializer {
 ///
 /// ```
 /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
+/// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlSerializer;
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
 /// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// serializer.serialize_triple(TripleRef::new(
@@ -172,7 +176,7 @@ impl RdfXmlSerializer {
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
 ///     serializer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct WriterRdfXmlSerializer<W: Write> {
@@ -210,15 +214,16 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 /// Can be built using [`RdfXmlSerializer::for_tokio_async_writer`].
 ///
 /// ```
-/// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
-/// use oxrdfxml::RdfXmlSerializer;
-///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
+/// use oxrdf::vocab::rdf;
+/// use oxrdfxml::RdfXmlSerializer;
+///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
 /// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// )).await?;
 /// serializer.serialize_triple(TripleRef::new(

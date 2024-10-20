@@ -1,3 +1,4 @@
+use oxigraph::model::vocab::rdf;
 use oxigraph::model::*;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
@@ -269,7 +270,7 @@ impl PyLiteral {
     ) -> PyResult<Self> {
         Ok(if let Some(language) = language {
             if let Some(datatype) = datatype {
-                if datatype.value() != "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" {
+                if datatype.value() != rdf::LANG_STRING.as_str() {
                     return Err(PyValueError::new_err(
                         "The literals with a language tag must use the rdf:langString datatype",
                     ));

@@ -45,7 +45,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -124,7 +124,7 @@ impl TriGParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderTriGParser<R> {
         ReaderTriGParser {
@@ -136,12 +136,12 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
     /// use oxttl::TriGParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -149,7 +149,7 @@ impl TriGParser {
     /// <bar> a schema:Person ;
     ///     schema:name "Bar" ."#;
     ///
-    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
@@ -196,7 +196,7 @@ impl TriGParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_slice(self, slice: &[u8]) -> SliceTriGParser<'_> {
         SliceTriGParser {
@@ -250,7 +250,7 @@ impl TriGParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn low_level(self) -> LowLevelTriGParser {
         LowLevelTriGParser {
@@ -294,7 +294,7 @@ impl TriGParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ReaderTriGParser<R: Read> {
@@ -324,7 +324,7 @@ impl<R: Read> ReaderTriGParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
         TriGPrefixesIter {
@@ -347,7 +347,7 @@ impl<R: Read> ReaderTriGParser<R> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -374,12 +374,12 @@ impl<R: Read> Iterator for ReaderTriGParser<R> {
 ///
 /// Count the number of people:
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
 /// use oxttl::TriGParser;
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxttl::TurtleParseError> {
 /// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
@@ -387,7 +387,7 @@ impl<R: Read> Iterator for ReaderTriGParser<R> {
 /// <bar> a schema:Person ;
 ///     schema:name "Bar" ."#;
 ///
-/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
@@ -420,10 +420,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::TriGParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -449,10 +449,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
     /// The base IRI considered at the current step of the parsing.
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::TriGParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -503,7 +503,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct SliceTriGParser<'a> {
@@ -533,7 +533,7 @@ impl<'a> SliceTriGParser<'a> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
         TriGPrefixesIter {
@@ -556,7 +556,7 @@ impl<'a> SliceTriGParser<'a> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -615,7 +615,7 @@ impl<'a> Iterator for SliceTriGParser<'a> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGParser {
     parser: Parser<Vec<u8>, TriGRecognizer>,
@@ -670,7 +670,7 @@ impl LowLevelTriGParser {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
         TriGPrefixesIter {
@@ -694,7 +694,7 @@ impl LowLevelTriGParser {
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser
@@ -734,6 +734,7 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGSerializer;
 ///
 /// let mut serializer = TriGSerializer::new()
@@ -741,7 +742,7 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 ///     .for_writer(Vec::new());
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     NamedNodeRef::new("http://example.com")?,
 /// ))?;
@@ -749,7 +750,7 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
 ///     serializer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -784,6 +785,7 @@ impl TriGSerializer {
     /// Adds a base IRI to the serialization.
     ///
     /// ```
+    /// use oxrdf::vocab::rdf;
     /// use oxrdf::{NamedNodeRef, QuadRef};
     /// use oxttl::TriGSerializer;
     ///
@@ -793,7 +795,7 @@ impl TriGSerializer {
     ///     .for_writer(Vec::new());
     /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com/me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://example.com/ns#Person")?,
     ///     NamedNodeRef::new("http://example.com")?,
     /// ))?;
@@ -801,7 +803,7 @@ impl TriGSerializer {
     ///     b"@base <http://example.com> .\n@prefix ex: </ns#> .\n<> {\n\t</me> a ex:Person .\n}\n",
     ///     serializer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
@@ -813,6 +815,7 @@ impl TriGSerializer {
     ///
     /// ```
     /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGSerializer;
     ///
     /// let mut serializer = TriGSerializer::new()
@@ -820,7 +823,7 @@ impl TriGSerializer {
     ///     .for_writer(Vec::new());
     /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     ///     NamedNodeRef::new("http://example.com")?,
     /// ))?;
@@ -828,7 +831,7 @@ impl TriGSerializer {
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
     ///     serializer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_writer<W: Write>(self, writer: W) -> WriterTriGSerializer<W> {
         WriterTriGSerializer {
@@ -840,20 +843,21 @@ impl TriGSerializer {
     /// Writes a TriG file to a [`AsyncWrite`] implementation.
     ///
     /// ```
-    /// use oxrdf::{NamedNodeRef, QuadRef};
-    /// use oxttl::TriGSerializer;
-    ///
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::vocab::rdf;
+    /// use oxttl::TriGSerializer;
+    ///
     /// let mut serializer = TriGSerializer::new()
     ///     .with_prefix("schema", "http://schema.org/")?
     ///     .for_tokio_async_writer(Vec::new());
     /// serializer
     ///     .serialize_quad(QuadRef::new(
-    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-    ///         NamedNodeRef::new_unchecked("http://example.com"),
+    ///         NamedNodeRef::new("http://example.com#me")?,
+    ///         rdf::TYPE,
+    ///         NamedNodeRef::new("http://schema.org/Person")?,
+    ///         NamedNodeRef::new("http://example.com")?,
     ///     ))
     ///     .await?;
     /// assert_eq!(
@@ -879,6 +883,7 @@ impl TriGSerializer {
     ///
     /// ```
     /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGSerializer;
     ///
     /// let mut buf = Vec::new();
@@ -888,7 +893,7 @@ impl TriGSerializer {
     /// serializer.serialize_quad(
     ///     QuadRef::new(
     ///         NamedNodeRef::new("http://example.com#me")?,
-    ///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///         rdf::TYPE,
     ///         NamedNodeRef::new("http://schema.org/Person")?,
     ///         NamedNodeRef::new("http://example.com")?,
     ///     ),
@@ -899,7 +904,7 @@ impl TriGSerializer {
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
     ///     buf.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn low_level(self) -> LowLevelTriGSerializer {
         LowLevelTriGSerializer {
@@ -918,6 +923,7 @@ impl TriGSerializer {
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGSerializer;
 ///
 /// let mut serializer = TriGSerializer::new()
@@ -925,7 +931,7 @@ impl TriGSerializer {
 ///     .for_writer(Vec::new());
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     NamedNodeRef::new("http://example.com")?,
 /// ))?;
@@ -933,7 +939,7 @@ impl TriGSerializer {
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
 ///     serializer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct WriterTriGSerializer<W: Write> {
@@ -959,20 +965,21 @@ impl<W: Write> WriterTriGSerializer<W> {
 /// Can be built using [`TriGSerializer::for_tokio_async_writer`].
 ///
 /// ```
-/// use oxrdf::{NamedNodeRef, QuadRef};
-/// use oxttl::TriGSerializer;
-///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
+/// use oxttl::TriGSerializer;
+///
 /// let mut serializer = TriGSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
 ///     .for_tokio_async_writer(Vec::new());
 /// serializer
 ///     .serialize_quad(QuadRef::new(
-///         NamedNodeRef::new_unchecked("http://example.com#me"),
-///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-///         NamedNodeRef::new_unchecked("http://example.com"),
+///         NamedNodeRef::new("http://example.com#me")?,
+///         rdf::TYPE,
+///         NamedNodeRef::new("http://schema.org/Person")?,
+///         NamedNodeRef::new("http://example.com")?,
 ///     ))
 ///     .await?;
 /// assert_eq!(
@@ -1015,6 +1022,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGSerializer;
 ///
 /// let mut buf = Vec::new();
@@ -1024,7 +1032,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
 /// serializer.serialize_quad(
 ///     QuadRef::new(
 ///         NamedNodeRef::new("http://example.com#me")?,
-///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///         rdf::TYPE,
 ///         NamedNodeRef::new("http://schema.org/Person")?,
 ///         NamedNodeRef::new("http://example.com")?,
 ///     ),
@@ -1035,7 +1043,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com> {\n\t<http://example.com#me> a schema:Person .\n}\n",
 ///     buf.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGSerializer {
     prefixes: BTreeMap<String, String>,

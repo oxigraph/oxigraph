@@ -32,7 +32,7 @@ use std::io::{self, Write};
 ///     buffer.as_slice(),
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[deprecated(note = "use RdfSerializer instead", since = "0.4.0")]
 pub struct GraphSerializer {
@@ -81,7 +81,7 @@ impl GraphSerializer {
 ///     buffer.as_slice(),
 ///     "<http://example.com/s> <http://example.com/p> <http://example.com/o> .\n".as_bytes()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct TripleWriter<W: Write> {
@@ -121,7 +121,7 @@ impl<W: Write> TripleWriter<W> {
 /// serializer.finish()?;
 ///
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[deprecated(note = "use RdfSerializer instead", since = "0.4.0")]
 pub struct DatasetSerializer {
@@ -167,7 +167,7 @@ impl DatasetSerializer {
 /// serializer.finish()?;
 ///
 /// assert_eq!(buffer.as_slice(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n".as_bytes());
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct QuadWriter<W: Write> {

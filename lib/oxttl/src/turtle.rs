@@ -44,7 +44,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -123,7 +123,7 @@ impl TurtleParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderTurtleParser<R> {
         ReaderTurtleParser {
@@ -135,12 +135,12 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
     /// use oxttl::TurtleParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -148,7 +148,7 @@ impl TurtleParser {
     /// <bar> a schema:Person ;
     ///     schema:name "Bar" ."#;
     ///
-    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = TurtleParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
@@ -195,7 +195,7 @@ impl TurtleParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_slice(self, slice: &[u8]) -> SliceTurtleParser<'_> {
         SliceTurtleParser {
@@ -249,7 +249,7 @@ impl TurtleParser {
     ///     })
     ///     .sum();
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn split_slice_for_parallel_parsing(
         mut self,
@@ -311,7 +311,7 @@ impl TurtleParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn low_level(self) -> LowLevelTurtleParser {
         LowLevelTurtleParser {
@@ -355,7 +355,7 @@ impl TurtleParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ReaderTurtleParser<R: Read> {
@@ -385,7 +385,7 @@ impl<R: Read> ReaderTurtleParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
         TurtlePrefixesIter {
@@ -408,7 +408,7 @@ impl<R: Read> ReaderTurtleParser<R> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -435,12 +435,12 @@ impl<R: Read> Iterator for ReaderTurtleParser<R> {
 ///
 /// Count the number of people:
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
 /// use oxttl::TurtleParser;
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxttl::TurtleParseError> {
 /// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
@@ -448,7 +448,7 @@ impl<R: Read> Iterator for ReaderTurtleParser<R> {
 /// <bar> a schema:Person ;
 ///     schema:name "Bar" ."#;
 ///
-/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = TurtleParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
@@ -481,10 +481,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTurtleParser<R> {
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::TurtleParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -510,10 +510,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTurtleParser<R> {
     /// The base IRI considered at the current step of the parsing.
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::TurtleParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -564,7 +564,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTurtleParser<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct SliceTurtleParser<'a> {
@@ -594,7 +594,7 @@ impl<'a> SliceTurtleParser<'a> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
         TurtlePrefixesIter {
@@ -617,7 +617,7 @@ impl<'a> SliceTurtleParser<'a> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -676,7 +676,7 @@ impl<'a> Iterator for SliceTurtleParser<'a> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTurtleParser {
     parser: Parser<Vec<u8>, TriGRecognizer>,
@@ -731,7 +731,7 @@ impl LowLevelTurtleParser {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
         TurtlePrefixesIter {
@@ -755,7 +755,7 @@ impl LowLevelTurtleParser {
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser
@@ -794,6 +794,7 @@ impl<'a> Iterator for TurtlePrefixesIter<'a> {
 /// Support for [Turtle-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#turtle-star) is available behind the `rdf-star` feature.
 ///
 /// ```
+/// use oxrdf::vocab::rdf;
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
@@ -802,14 +803,14 @@ impl<'a> Iterator for TurtlePrefixesIter<'a> {
 ///     .for_writer(Vec::new());
 /// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     serializer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -837,6 +838,7 @@ impl TurtleSerializer {
     /// Adds a base IRI to the serialization.
     ///
     /// ```
+    /// use oxrdf::vocab::rdf;
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
     ///
@@ -846,14 +848,14 @@ impl TurtleSerializer {
     ///     .for_writer(Vec::new());
     /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com/me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://example.com/ns#Person")?,
     /// ))?;
     /// assert_eq!(
     ///     b"@base <http://example.com> .\n@prefix ex: </ns#> .\n</me> a ex:Person .\n",
     ///     serializer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
@@ -864,6 +866,7 @@ impl TurtleSerializer {
     /// Writes a Turtle file to a [`Write`] implementation.
     ///
     /// ```
+    /// use oxrdf::vocab::rdf;
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
     ///
@@ -872,14 +875,14 @@ impl TurtleSerializer {
     ///     .for_writer(Vec::new());
     /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     /// ))?;
     /// assert_eq!(
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
     ///     serializer.finish()?.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_writer<W: Write>(self, writer: W) -> WriterTurtleSerializer<W> {
         WriterTurtleSerializer {
@@ -890,19 +893,20 @@ impl TurtleSerializer {
     /// Writes a Turtle file to a [`AsyncWrite`] implementation.
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use oxrdf::vocab::rdf;
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(),Box<dyn std::error::Error>> {
     /// let mut serializer = TurtleSerializer::new()
     ///     .with_prefix("schema", "http://schema.org/")?
     ///     .for_tokio_async_writer(Vec::new());
     /// serializer
     ///     .serialize_triple(TripleRef::new(
-    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+    ///         NamedNodeRef::new("http://example.com#me")?,
+    ///         rdf::TYPE,
+    ///         NamedNodeRef::new("http://schema.org/Person")?,
     ///     ))
     ///     .await?;
     /// assert_eq!(
@@ -925,6 +929,7 @@ impl TurtleSerializer {
     /// Builds a low-level Turtle writer.
     ///
     /// ```
+    /// use oxrdf::vocab::rdf;
     /// use oxrdf::{NamedNodeRef, TripleRef};
     /// use oxttl::TurtleSerializer;
     ///
@@ -935,7 +940,7 @@ impl TurtleSerializer {
     /// serializer.serialize_triple(
     ///     TripleRef::new(
     ///         NamedNodeRef::new("http://example.com#me")?,
-    ///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///         rdf::TYPE,
     ///         NamedNodeRef::new("http://schema.org/Person")?,
     ///     ),
     ///     &mut buf,
@@ -945,7 +950,7 @@ impl TurtleSerializer {
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
     ///     buf.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn low_level(self) -> LowLevelTurtleSerializer {
         LowLevelTurtleSerializer {
@@ -959,6 +964,7 @@ impl TurtleSerializer {
 /// Can be built using [`TurtleSerializer::for_writer`].
 ///
 /// ```
+/// use oxrdf::vocab::rdf;
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
@@ -967,14 +973,14 @@ impl TurtleSerializer {
 ///     .for_writer(Vec::new());
 /// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 /// ))?;
 /// assert_eq!(
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     serializer.finish()?.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct WriterTurtleSerializer<W: Write> {
@@ -999,19 +1005,20 @@ impl<W: Write> WriterTurtleSerializer<W> {
 /// Can be built using [`TurtleSerializer::for_tokio_async_writer`].
 ///
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use oxrdf::vocab::rdf;
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let mut serializer = TurtleSerializer::new()
 ///     .with_prefix("schema", "http://schema.org/")?
 ///     .for_tokio_async_writer(Vec::new());
 /// serializer
 ///     .serialize_triple(TripleRef::new(
-///         NamedNodeRef::new_unchecked("http://example.com#me"),
-///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
+///         NamedNodeRef::new("http://example.com#me")?,
+///         rdf::TYPE,
+///         NamedNodeRef::new("http://schema.org/Person")?,
 ///     ))
 ///     .await?;
 /// assert_eq!(
@@ -1047,6 +1054,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTurtleSerializer<W> {
 /// Can be built using [`TurtleSerializer::low_level`].
 ///
 /// ```
+/// use oxrdf::vocab::rdf;
 /// use oxrdf::{NamedNodeRef, TripleRef};
 /// use oxttl::TurtleSerializer;
 ///
@@ -1057,7 +1065,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTurtleSerializer<W> {
 /// serializer.serialize_triple(
 ///     TripleRef::new(
 ///         NamedNodeRef::new("http://example.com#me")?,
-///         NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///         rdf::TYPE,
 ///         NamedNodeRef::new("http://schema.org/Person")?,
 ///     ),
 ///     &mut buf,
@@ -1067,7 +1075,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTurtleSerializer<W> {
 ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com#me> a schema:Person .\n",
 ///     buf.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTurtleSerializer {
     inner: LowLevelTriGSerializer,
