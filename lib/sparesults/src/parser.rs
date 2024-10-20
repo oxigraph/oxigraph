@@ -46,12 +46,12 @@ use tokio::io::AsyncRead;
 /// }
 /// // solutions
 /// if let ReaderQueryResultsParserOutput::Solutions(solutions) = json_parser.for_reader(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
-///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+///     assert_eq!(solutions.variables(), &[Variable::new("foo")?, Variable::new("bar")?]);
 ///     for solution in solutions {
-///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new("foo")?, &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 #[derive(Clone)]
@@ -84,12 +84,12 @@ impl QueryResultsParser {
     ///
     /// // solutions
     /// if let ReaderQueryResultsParserOutput::Solutions(solutions) = xml_parser.for_reader(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#.as_slice())? {
-    ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+    ///     assert_eq!(solutions.variables(), &[Variable::new("foo")?, Variable::new("bar")?]);
     ///     for solution in solutions {
-    ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+    ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new("foo")?, &Literal::from("test").into())]);
     ///     }
     /// }
-    /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_reader<R: Read>(
         self,
@@ -144,11 +144,11 @@ impl QueryResultsParser {
     ///
     /// Example in XML (the API is the same for JSON and TSV):
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use sparesults::{QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput};
     /// use oxrdf::{Literal, Variable};
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), sparesults::QueryResultsParseError> {
     /// let xml_parser = QueryResultsParser::from_format(QueryResultsFormat::Xml);
     ///
     /// // boolean
@@ -158,9 +158,9 @@ impl QueryResultsParser {
     ///
     /// // solutions
     /// if let TokioAsyncReaderQueryResultsParserOutput::Solutions(mut solutions) = xml_parser.for_tokio_async_reader(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#.as_slice()).await? {
-    ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+    ///     assert_eq!(solutions.variables(), &[Variable::new("foo")?, Variable::new("bar")?]);
     ///     while let Some(solution) = solutions.next().await {
-    ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+    ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new("foo")?, &Literal::from("test").into())]);
     ///     }
     /// }
     /// # Ok(())
@@ -224,12 +224,12 @@ impl QueryResultsParser {
     ///
     /// // solutions
     /// if let SliceQueryResultsParserOutput::Solutions(solutions) = xml_parser.for_slice(br#"<sparql xmlns="http://www.w3.org/2005/sparql-results#"><head><variable name="foo"/><variable name="bar"/></head><results><result><binding name="foo"><literal>test</literal></binding></result></results></sparql>"#)? {
-    ///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+    ///     assert_eq!(solutions.variables(), &[Variable::new("foo")?, Variable::new("bar")?]);
     ///     for solution in solutions {
-    ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+    ///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new("foo")?, &Literal::from("test").into())]);
     ///     }
     /// }
-    /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_slice(
         self,
@@ -301,22 +301,16 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 /// {
 ///     assert_eq!(
 ///         solutions.variables(),
-///         &[
-///             Variable::new_unchecked("foo"),
-///             Variable::new_unchecked("bar")
-///         ]
+///         &[Variable::new("foo")?, Variable::new("bar")?]
 ///     );
 ///     for solution in solutions {
 ///         assert_eq!(
 ///             solution?.iter().collect::<Vec<_>>(),
-///             vec![(
-///                 &Variable::new_unchecked("foo"),
-///                 &Literal::from("test").into()
-///             )]
+///             vec![(&Variable::new("foo")?, &Literal::from("test").into())]
 ///         );
 ///     }
 /// }
-/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub enum ReaderQueryResultsParserOutput<R: Read> {
     Solutions(ReaderSolutionsParser<R>),
@@ -334,12 +328,12 @@ pub enum ReaderQueryResultsParserOutput<R: Read> {
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 /// if let ReaderQueryResultsParserOutput::Solutions(solutions) = json_parser.for_reader(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice())? {
-///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+///     assert_eq!(solutions.variables(), &[Variable::new("foo")?, Variable::new("bar")?]);
 ///     for solution in solutions {
-///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new("foo")?, &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct ReaderSolutionsParser<R: Read> {
     variables: Arc<[Variable]>,
@@ -366,13 +360,10 @@ impl<R: Read> ReaderSolutionsParser<R> {
     /// {
     ///     assert_eq!(
     ///         solutions.variables(),
-    ///         &[
-    ///             Variable::new_unchecked("foo"),
-    ///             Variable::new_unchecked("bar")
-    ///         ]
+    ///         &[Variable::new("foo")?, Variable::new("bar")?]
     ///     );
     /// }
-    /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
@@ -402,13 +393,13 @@ impl<R: Read> Iterator for ReaderSolutionsParser<R> {
 ///
 /// Example in TSV (the API is the same for JSON and XML):
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdf::{Literal, Variable};
 /// use sparesults::{
 ///     QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput,
 /// };
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), sparesults::QueryResultsParseError> {
 /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
 ///
 /// // boolean
@@ -427,18 +418,12 @@ impl<R: Read> Iterator for ReaderSolutionsParser<R> {
 /// {
 ///     assert_eq!(
 ///         solutions.variables(),
-///         &[
-///             Variable::new_unchecked("foo"),
-///             Variable::new_unchecked("bar")
-///         ]
+///         &[Variable::new("foo")?, Variable::new("bar")?]
 ///     );
 ///     while let Some(solution) = solutions.next().await {
 ///         assert_eq!(
 ///             solution?.iter().collect::<Vec<_>>(),
-///             vec![(
-///                 &Variable::new_unchecked("foo"),
-///                 &Literal::from("test").into()
-///             )]
+///             vec![(&Variable::new("foo")?, &Literal::from("test").into())]
 ///         );
 ///     }
 /// }
@@ -457,16 +442,16 @@ pub enum TokioAsyncReaderQueryResultsParserOutput<R: AsyncRead + Unpin> {
 ///
 /// Example in JSON (the API is the same for XML and TSV):
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use sparesults::{QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput};
 /// use oxrdf::{Literal, Variable};
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), sparesults::QueryResultsParseError> {
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 /// if let TokioAsyncReaderQueryResultsParserOutput::Solutions(mut solutions) = json_parser.for_tokio_async_reader(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#.as_slice()).await? {
-///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+///     assert_eq!(solutions.variables(), &[Variable::new("foo")?, Variable::new("bar")?]);
 ///     while let Some(solution) = solutions.next().await {
-///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new("foo")?, &Literal::from("test").into())]);
 ///     }
 /// }
 /// # Ok(())
@@ -491,13 +476,13 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
     ///
     /// Example in TSV (the API is the same for JSON and XML):
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdf::Variable;
     /// use sparesults::{
     ///     QueryResultsFormat, QueryResultsParser, TokioAsyncReaderQueryResultsParserOutput,
     /// };
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), sparesults::QueryResultsParseError> {
     /// let tsv_parser = QueryResultsParser::from_format(QueryResultsFormat::Tsv);
     /// if let TokioAsyncReaderQueryResultsParserOutput::Solutions(solutions) = tsv_parser
     ///     .for_tokio_async_reader(b"?foo\t?bar\n\"ex1\"\t\"ex2\"".as_slice())
@@ -505,10 +490,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
     /// {
     ///     assert_eq!(
     ///         solutions.variables(),
-    ///         &[
-    ///             Variable::new_unchecked("foo"),
-    ///             Variable::new_unchecked("bar")
-    ///         ]
+    ///         &[Variable::new("foo")?, Variable::new("bar")?]
     ///     );
     /// }
     /// # Ok(())
@@ -557,22 +539,16 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
 /// {
 ///     assert_eq!(
 ///         solutions.variables(),
-///         &[
-///             Variable::new_unchecked("foo"),
-///             Variable::new_unchecked("bar")
-///         ]
+///         &[Variable::new("foo")?, Variable::new("bar")?]
 ///     );
 ///     for solution in solutions {
 ///         assert_eq!(
 ///             solution?.iter().collect::<Vec<_>>(),
-///             vec![(
-///                 &Variable::new_unchecked("foo"),
-///                 &Literal::from("test").into()
-///             )]
+///             vec![(&Variable::new("foo")?, &Literal::from("test").into())]
 ///         );
 ///     }
 /// }
-/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub enum SliceQueryResultsParserOutput<'a> {
     Solutions(SliceSolutionsParser<'a>),
@@ -590,12 +566,12 @@ pub enum SliceQueryResultsParserOutput<'a> {
 ///
 /// let json_parser = QueryResultsParser::from_format(QueryResultsFormat::Json);
 /// if let SliceQueryResultsParserOutput::Solutions(solutions) = json_parser.for_slice(br#"{"head":{"vars":["foo","bar"]},"results":{"bindings":[{"foo":{"type":"literal","value":"test"}}]}}"#)? {
-///     assert_eq!(solutions.variables(), &[Variable::new_unchecked("foo"), Variable::new_unchecked("bar")]);
+///     assert_eq!(solutions.variables(), &[Variable::new("foo")?, Variable::new("bar")?]);
 ///     for solution in solutions {
-///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new_unchecked("foo"), &Literal::from("test").into())]);
+///         assert_eq!(solution?.iter().collect::<Vec<_>>(), vec![(&Variable::new("foo")?, &Literal::from("test").into())]);
 ///     }
 /// }
-/// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct SliceSolutionsParser<'a> {
     variables: Arc<[Variable]>,
@@ -622,13 +598,10 @@ impl<'a> SliceSolutionsParser<'a> {
     /// {
     ///     assert_eq!(
     ///         solutions.variables(),
-    ///         &[
-    ///             Variable::new_unchecked("foo"),
-    ///             Variable::new_unchecked("bar")
-    ///         ]
+    ///         &[Variable::new("foo")?, Variable::new("bar")?]
     ///     );
     /// }
-    /// # Result::<(),sparesults::QueryResultsParseError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {

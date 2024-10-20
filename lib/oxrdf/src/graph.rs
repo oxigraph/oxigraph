@@ -20,7 +20,7 @@
 //!     graph.to_string(),
 //!     "<http://example.com> <http://example.com> <http://example.com> .\n"
 //! );
-//! # Result::<_,Box<dyn std::error::Error>>::Ok(())
+//! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
 //!
 //! See also [`Dataset`] if you want to get support of multiple RDF graphs at the same time.
@@ -51,7 +51,7 @@ use std::fmt;
 /// // simple filter
 /// let results: Vec<_> = graph.triples_for_subject(ex).collect();
 /// assert_eq!(vec![triple], results);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Debug, Default, Clone)]
 pub struct Graph {
@@ -207,7 +207,7 @@ impl Graph {
     /// graph1.canonicalize(CanonicalizationAlgorithm::Unstable);
     /// graph2.canonicalize(CanonicalizationAlgorithm::Unstable);
     /// assert_eq!(graph1, graph2);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     ///
     /// <div class="warning">Blank node ids depends on the current shape of the graph. Adding a new quad might change the ids of a lot of blank nodes.

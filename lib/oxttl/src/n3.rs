@@ -204,7 +204,7 @@ impl From<Quad> for N3Quad {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -275,7 +275,7 @@ impl N3Parser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderN3Parser<R> {
         ReaderN3Parser {
@@ -287,12 +287,12 @@ impl N3Parser {
     ///
     /// Count the number of people:
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNode;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -301,7 +301,7 @@ impl N3Parser {
     ///     schema:name "Bar" ."#;
     ///
     /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
-    /// let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
+    /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
     /// let mut count = 0;
     /// let mut parser = N3Parser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
@@ -328,6 +328,7 @@ impl N3Parser {
     ///
     /// Count the number of people:
     /// ```
+    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNode;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
@@ -338,9 +339,7 @@ impl N3Parser {
     /// <bar> a schema:Person ;
     ///     schema:name "Bar" ."#;
     ///
-    /// let rdf_type = N3Term::NamedNode(NamedNode::new(
-    ///     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-    /// )?);
+    /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
     /// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
     /// let mut count = 0;
     /// for triple in N3Parser::new().for_slice(file) {
@@ -350,7 +349,7 @@ impl N3Parser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_slice(self, slice: &[u8]) -> SliceN3Parser<'_> {
         SliceN3Parser {
@@ -396,7 +395,7 @@ impl N3Parser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn low_level(self) -> LowLevelN3Parser {
         LowLevelN3Parser {
@@ -438,7 +437,7 @@ impl N3Parser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ReaderN3Parser<R: Read> {
@@ -468,7 +467,7 @@ impl<R: Read> ReaderN3Parser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> N3PrefixesIter<'_> {
         N3PrefixesIter {
@@ -491,7 +490,7 @@ impl<R: Read> ReaderN3Parser<R> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -518,12 +517,12 @@ impl<R: Read> Iterator for ReaderN3Parser<R> {
 ///
 /// Count the number of people:
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNode;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxttl::TurtleParseError> {
 /// let file = br#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
@@ -532,7 +531,7 @@ impl<R: Read> Iterator for ReaderN3Parser<R> {
 ///     schema:name "Bar" ."#;
 ///
 /// let rdf_type = N3Term::NamedNode(rdf::TYPE.into_owned());
-/// let schema_person = N3Term::NamedNode(NamedNode::new_unchecked("http://schema.org/Person"));
+/// let schema_person = N3Term::NamedNode(NamedNode::new("http://schema.org/Person")?);
 /// let mut count = 0;
 /// let mut parser = N3Parser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
@@ -565,10 +564,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderN3Parser<R> {
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::N3Parser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -594,10 +593,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderN3Parser<R> {
     /// The base IRI considered at the current step of the parsing.
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::N3Parser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
@@ -649,7 +648,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderN3Parser<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct SliceN3Parser<'a> {
@@ -679,7 +678,7 @@ impl<'a> SliceN3Parser<'a> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> N3PrefixesIter<'_> {
         N3PrefixesIter {
@@ -702,7 +701,7 @@ impl<'a> SliceN3Parser<'a> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.inner
@@ -762,7 +761,7 @@ impl<'a> Iterator for SliceN3Parser<'a> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelN3Parser {
     parser: Parser<Vec<u8>, N3Recognizer>,
@@ -817,7 +816,7 @@ impl LowLevelN3Parser {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> N3PrefixesIter<'_> {
         N3PrefixesIter {
@@ -841,7 +840,7 @@ impl LowLevelN3Parser {
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         self.parser

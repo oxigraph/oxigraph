@@ -49,7 +49,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -108,7 +108,7 @@ impl RdfXmlParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderRdfXmlParser<R> {
         ReaderRdfXmlParser {
@@ -122,12 +122,12 @@ impl RdfXmlParser {
     ///
     /// Count the number of people:
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
     /// let file = br#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///   <rdf:Description rdf:about="http://example.com/foo">
@@ -137,7 +137,7 @@ impl RdfXmlParser {
     ///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
@@ -188,7 +188,7 @@ impl RdfXmlParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_slice(self, slice: &[u8]) -> SliceRdfXmlParser<'_> {
         SliceRdfXmlParser {
@@ -243,7 +243,7 @@ impl RdfXmlParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ReaderRdfXmlParser<R: Read> {
@@ -299,7 +299,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     ///         ("schema", "http://schema.org/")
     ///     ]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
@@ -325,7 +325,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         Some(self.parser.state.last()?.base_iri()?.as_str())
@@ -352,12 +352,12 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 ///
 /// Count the number of people:
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
 /// use oxrdfxml::RdfXmlParser;
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
 /// let file = br#"<?xml version="1.0"?>
 /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
 ///   <rdf:Description rdf:about="http://example.com/foo">
@@ -367,7 +367,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 ///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
 /// </rdf:RDF>"#;
 ///
-/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
@@ -411,10 +411,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
     /// let file = br#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///  <rdf:Description rdf:about="http://example.com/foo">
@@ -448,10 +448,10 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// The base IRI considered at the current step of the parsing.
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxrdfxml::RdfXmlParseError> {
     /// let file = br#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
     ///  <rdf:Description rdf:about="foo">
@@ -515,7 +515,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct SliceRdfXmlParser<'a> {
@@ -572,7 +572,7 @@ impl<'a> SliceRdfXmlParser<'a> {
     ///         ("schema", "http://schema.org/")
     ///     ]
     /// ); // There are now prefixes
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
@@ -598,7 +598,7 @@ impl<'a> SliceRdfXmlParser<'a> {
     ///
     /// parser.next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         Some(self.parser.state.last()?.base_iri()?.as_str())

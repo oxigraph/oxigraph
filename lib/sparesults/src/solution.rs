@@ -14,9 +14,10 @@ use std::sync::Arc;
 /// use sparesults::QuerySolution;
 /// use oxrdf::{Variable, Literal};
 ///
-/// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
+/// let solution = QuerySolution::from((vec![Variable::new("foo")?, Variable::new("bar")?], vec![Some(Literal::from(1).into()), None]));
 /// assert_eq!(solution.get("foo"), Some(&Literal::from(1).into())); // Get the value of the variable ?foo if it exists (here yes).
 /// assert_eq!(solution.get(1), None); // Get the value of the second column if it exists (here no).
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QuerySolution {
     variables: Arc<[Variable]>,
@@ -30,9 +31,10 @@ impl QuerySolution {
     /// use sparesults::QuerySolution;
     /// use oxrdf::{Variable, Literal};
     ///
-    /// let solution = QuerySolution::from((vec![Variable::new_unchecked("foo"), Variable::new_unchecked("bar")], vec![Some(Literal::from(1).into()), None]));
+    /// let solution = QuerySolution::from((vec![Variable::new("foo")?, Variable::new("bar")?], vec![Some(Literal::from(1).into()), None]));
     /// assert_eq!(solution.get("foo"), Some(&Literal::from(1).into())); // Get the value of the variable ?foo if it exists (here yes).
     /// assert_eq!(solution.get(1), None); // Get the value of the second column if it exists (here no).
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn get(&self, index: impl VariableSolutionIndex) -> Option<&Term> {
@@ -48,13 +50,11 @@ impl QuerySolution {
     /// use sparesults::QuerySolution;
     ///
     /// let solution = QuerySolution::from((
-    ///     vec![
-    ///         Variable::new_unchecked("foo"),
-    ///         Variable::new_unchecked("bar"),
-    ///     ],
+    ///     vec![Variable::new("foo")?, Variable::new("bar")?],
     ///     vec![Some(Literal::from(1).into()), None],
     /// ));
     /// assert_eq!(solution.len(), 2);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn len(&self) -> usize {
@@ -68,22 +68,17 @@ impl QuerySolution {
     /// use sparesults::QuerySolution;
     ///
     /// let solution = QuerySolution::from((
-    ///     vec![
-    ///         Variable::new_unchecked("foo"),
-    ///         Variable::new_unchecked("bar"),
-    ///     ],
+    ///     vec![Variable::new("foo")?, Variable::new("bar")?],
     ///     vec![Some(Literal::from(1).into()), None],
     /// ));
     /// assert!(!solution.is_empty());
     ///
     /// let empty_solution = QuerySolution::from((
-    ///     vec![
-    ///         Variable::new_unchecked("foo"),
-    ///         Variable::new_unchecked("bar"),
-    ///     ],
+    ///     vec![Variable::new("foo")?, Variable::new("bar")?],
     ///     vec![None, None],
     /// ));
     /// assert!(empty_solution.is_empty());
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
@@ -97,16 +92,14 @@ impl QuerySolution {
     /// use sparesults::QuerySolution;
     ///
     /// let solution = QuerySolution::from((
-    ///     vec![
-    ///         Variable::new_unchecked("foo"),
-    ///         Variable::new_unchecked("bar"),
-    ///     ],
+    ///     vec![Variable::new("foo")?, Variable::new("bar")?],
     ///     vec![Some(Literal::from(1).into()), None],
     /// ));
     /// assert_eq!(
     ///     solution.iter().collect::<Vec<_>>(),
-    ///     vec![(&Variable::new_unchecked("foo"), &Literal::from(1).into())]
+    ///     vec![(&Variable::new("foo")?, &Literal::from(1).into())]
     /// );
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (&Variable, &Term)> {
@@ -120,13 +113,11 @@ impl QuerySolution {
     /// use sparesults::QuerySolution;
     ///
     /// let solution = QuerySolution::from((
-    ///     vec![
-    ///         Variable::new_unchecked("foo"),
-    ///         Variable::new_unchecked("bar"),
-    ///     ],
+    ///     vec![Variable::new("foo")?, Variable::new("bar")?],
     ///     vec![Some(Literal::from(1).into()), None],
     /// ));
     /// assert_eq!(solution.values(), &[Some(Literal::from(1).into()), None]);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn values(&self) -> &[Option<Term>] {
@@ -140,19 +131,14 @@ impl QuerySolution {
     /// use sparesults::QuerySolution;
     ///
     /// let solution = QuerySolution::from((
-    ///     vec![
-    ///         Variable::new_unchecked("foo"),
-    ///         Variable::new_unchecked("bar"),
-    ///     ],
+    ///     vec![Variable::new("foo")?, Variable::new("bar")?],
     ///     vec![Some(Literal::from(1).into()), None],
     /// ));
     /// assert_eq!(
     ///     solution.variables(),
-    ///     &[
-    ///         Variable::new_unchecked("foo"),
-    ///         Variable::new_unchecked("bar")
-    ///     ]
+    ///     &[Variable::new("foo")?, Variable::new("bar")?]
     /// );
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
@@ -263,16 +249,14 @@ impl fmt::Debug for QuerySolution {
 /// use sparesults::QuerySolution;
 ///
 /// let solution = QuerySolution::from((
-///     vec![
-///         Variable::new_unchecked("foo"),
-///         Variable::new_unchecked("bar"),
-///     ],
+///     vec![Variable::new("foo")?, Variable::new("bar")?],
 ///     vec![Some(Literal::from(1).into()), None],
 /// ));
 /// assert_eq!(
 ///     solution.iter().collect::<Vec<_>>(),
-///     vec![(&Variable::new_unchecked("foo"), &Literal::from(1).into())]
+///     vec![(&Variable::new("foo")?, &Literal::from(1).into())]
 /// );
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct Iter<'a> {
     inner: Zip<std::slice::Iter<'a, Variable>, std::slice::Iter<'a, Option<Term>>>,

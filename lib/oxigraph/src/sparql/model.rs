@@ -48,7 +48,7 @@ impl QueryResults {
     ///     results.write(Vec::new(), QueryResultsFormat::Json)?,
     ///     r#"{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"}}]}}"#.as_bytes()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write<W: Write>(
         self,
@@ -119,7 +119,7 @@ impl QueryResults {
     ///     results.write_graph(Vec::new(), RdfFormat::NTriples)?,
     ///     graph.as_bytes()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn write_graph<W: Write>(
         self,
@@ -170,7 +170,7 @@ impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults
 ///         println!("{:?}", solution?.get("s"));
 ///     }
 /// }
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QuerySolutionIter {
     variables: Arc<[Variable]>,
@@ -205,7 +205,7 @@ impl QuerySolutionIter {
     ///         &[Variable::new("s")?, Variable::new("o")?]
     ///     );
     /// }
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
@@ -248,7 +248,7 @@ impl Iterator for QuerySolutionIter {
 ///         println!("{}", triple?);
 ///     }
 /// }
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QueryTripleIter {
     iter: Box<dyn Iterator<Item = Result<Triple, EvaluationError>>>,

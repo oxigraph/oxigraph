@@ -43,7 +43,7 @@ use tokio::io::AsyncWrite;
 ///    graph_name: NamedNode::new("http://example.com/g")?.into()
 /// })?;
 /// assert_eq!(serializer.finish()?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 #[derive(Clone)]
@@ -116,7 +116,7 @@ impl RdfSerializer {
     ///     serializer.finish()?,
     ///     b"@prefix schema: <http://schema.org/> .\n<http://example.com/s> a schema:Person .\n"
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[inline]
     pub fn with_prefix(
@@ -199,7 +199,7 @@ impl RdfSerializer {
     ///    graph_name: NamedNode::new("http://example.com/g")?.into()
     /// })?;
     /// assert_eq!(serializer.finish()?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_writer<W: Write>(self, writer: W) -> WriterQuadSerializer<W> {
         WriterQuadSerializer {
@@ -232,17 +232,17 @@ impl RdfSerializer {
     /// This writer does unbuffered writes. You might want to use [`BufWriter`](tokio::io::BufWriter) to avoid that.</div>
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdfio::{RdfFormat, RdfSerializer};
     /// use oxrdf::{Quad, NamedNode};
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> std::io::Result<()> {
     /// let mut serializer = RdfSerializer::from_format(RdfFormat::NQuads).for_tokio_async_writer(Vec::new());
     /// serializer.serialize_quad(&Quad {
-    ///     subject: NamedNode::new_unchecked("http://example.com/s").into(),
-    ///     predicate: NamedNode::new_unchecked("http://example.com/p"),
-    ///     object: NamedNode::new_unchecked("http://example.com/o").into(),
-    ///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
+    ///     subject: NamedNode::new("http://example.com/s")?.into(),
+    ///     predicate: NamedNode::new("http://example.com/p")?,
+    ///     object: NamedNode::new("http://example.com/o")?.into(),
+    ///     graph_name: NamedNode::new("http://example.com/g")?.into()
     /// }).await?;
     /// assert_eq!(serializer.finish().await?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
     /// # Ok(())
@@ -305,7 +305,7 @@ impl From<RdfFormat> for RdfSerializer {
 ///    graph_name: NamedNode::new("http://example.com/g")?.into(),
 /// })?;
 /// assert_eq!(serializer.finish()?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct WriterQuadSerializer<W: Write> {
@@ -370,17 +370,17 @@ impl<W: Write> WriterQuadSerializer<W> {
 /// This writer does unbuffered writes. You might want to use [`BufWriter`](io::BufWriter) to avoid that.</div>
 ///
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdfio::{RdfFormat, RdfSerializer};
 /// use oxrdf::{Quad, NamedNode};
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> std::io::Result<()> {
 /// let mut serializer = RdfSerializer::from_format(RdfFormat::NQuads).for_tokio_async_writer(Vec::new());
 /// serializer.serialize_quad(&Quad {
-///     subject: NamedNode::new_unchecked("http://example.com/s").into(),
-///     predicate: NamedNode::new_unchecked("http://example.com/p"),
-///     object: NamedNode::new_unchecked("http://example.com/o").into(),
-///     graph_name: NamedNode::new_unchecked("http://example.com/g").into()
+///     subject: NamedNode::new("http://example.com/s")?.into(),
+///     predicate: NamedNode::new("http://example.com/p")?,
+///     object: NamedNode::new("http://example.com/o")?.into(),
+///     graph_name: NamedNode::new("http://example.com/g")?.into()
 /// }).await?;
 /// assert_eq!(serializer.finish().await?, b"<http://example.com/s> <http://example.com/p> <http://example.com/o> <http://example.com/g> .\n");
 /// # Ok(())

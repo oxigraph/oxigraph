@@ -1242,9 +1242,9 @@ impl<'a> Transaction<'a> {
     /// })?;
     ///
     /// // we inspect the store contents
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
-    /// # Result::<_,oxigraph::store::LoaderError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[deprecated(note = "use Transaction.load_from_reader instead", since = "0.4.0")]
     pub fn load_graph(

@@ -35,7 +35,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -92,7 +92,7 @@ impl NQuadsParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderNQuadsParser<R> {
         ReaderNQuadsParser {
@@ -104,17 +104,17 @@ impl NQuadsParser {
     ///
     /// Count the number of people:
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxttl::NQuadsParser;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), oxttl::TurtleParseError> {
     /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
     ///
-    /// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// let mut parser = NQuadsParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
@@ -158,7 +158,7 @@ impl NQuadsParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_slice(self, slice: &[u8]) -> SliceNQuadsParser<'_> {
         SliceNQuadsParser {
@@ -206,7 +206,7 @@ impl NQuadsParser {
     ///     })
     ///     .sum();
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn split_slice_for_parallel_parsing<'a>(
         &self,
@@ -254,7 +254,7 @@ impl NQuadsParser {
     ///     }
     /// }
     /// assert_eq!(2, count);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn low_level(self) -> LowLevelNQuadsParser {
@@ -294,7 +294,7 @@ impl NQuadsParser {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct ReaderNQuadsParser<R: Read> {
@@ -315,17 +315,17 @@ impl<R: Read> Iterator for ReaderNQuadsParser<R> {
 ///
 /// Count the number of people:
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::NQuadsParser;
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> Result<(), oxttl::TurtleParseError> {
 /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
 ///
-/// let schema_person = NamedNodeRef::new_unchecked("http://schema.org/Person");
+/// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
 /// let mut parser = NQuadsParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
@@ -375,7 +375,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderNQuadsParser<R> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct SliceNQuadsParser<'a> {
@@ -426,7 +426,7 @@ impl<'a> Iterator for SliceNQuadsParser<'a> {
 ///     }
 /// }
 /// assert_eq!(2, count);
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelNQuadsParser {
     parser: Parser<Vec<u8>, NQuadsRecognizer>,
@@ -465,12 +465,13 @@ impl LowLevelNQuadsParser {
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
 /// use oxttl::NQuadsSerializer;
 ///
 /// let mut serializer = NQuadsSerializer::new().for_writer(Vec::new());
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     NamedNodeRef::new("http://example.com")?,
 /// ))?;
@@ -478,7 +479,7 @@ impl LowLevelNQuadsParser {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
 ///     serializer.finish().as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
@@ -496,12 +497,13 @@ impl NQuadsSerializer {
     ///
     /// ```
     /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::NQuadsSerializer;
     ///
     /// let mut serializer = NQuadsSerializer::new().for_writer(Vec::new());
     /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     ///     NamedNodeRef::new("http://example.com")?,
     /// ))?;
@@ -509,7 +511,7 @@ impl NQuadsSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
     ///     serializer.finish().as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn for_writer<W: Write>(self, writer: W) -> WriterNQuadsSerializer<W> {
         WriterNQuadsSerializer {
@@ -521,22 +523,23 @@ impl NQuadsSerializer {
     /// Writes a N-Quads file to a [`AsyncWrite`] implementation.
     ///
     /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdf::{NamedNodeRef, QuadRef};
     /// use oxttl::NQuadsSerializer;
+    /// use oxrdf::vocab::rdf;
     ///
-    /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> std::io::Result<()> {
-    ///     let mut serializer = NQuadsSerializer::new().for_tokio_async_writer(Vec::new());
-    ///     serializer.serialize_quad(QuadRef::new(
-    ///         NamedNodeRef::new_unchecked("http://example.com#me"),
-    ///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-    ///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-    ///         NamedNodeRef::new_unchecked("http://example.com"),
-    ///     )).await?;
-    ///     assert_eq!(
-    ///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
-    ///         serializer.finish().as_slice()
-    ///     );
+    /// let mut serializer = NQuadsSerializer::new().for_tokio_async_writer(Vec::new());
+    /// serializer.serialize_quad(QuadRef::new(
+    ///     NamedNodeRef::new("http://example.com#me")?,
+    ///     rdf::TYPE,
+    ///     NamedNodeRef::new("http://schema.org/Person")?,
+    ///     NamedNodeRef::new("http://example.com")?,
+    /// )).await?;
+    /// assert_eq!(
+    ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
+    ///     serializer.finish().as_slice()
+    /// );
     /// # Ok(())
     /// # }
     /// ```
@@ -556,13 +559,14 @@ impl NQuadsSerializer {
     ///
     /// ```
     /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::NQuadsSerializer;
     ///
     /// let mut buf = Vec::new();
     /// let mut serializer = NQuadsSerializer::new().low_level();
     /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     ///     NamedNodeRef::new("http://example.com")?,
     /// ), &mut buf)?;
@@ -570,7 +574,7 @@ impl NQuadsSerializer {
     ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
     ///     buf.as_slice()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[allow(clippy::unused_self)]
     pub fn low_level(self) -> LowLevelNQuadsSerializer {
@@ -584,12 +588,13 @@ impl NQuadsSerializer {
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
 /// use oxttl::NQuadsSerializer;
 ///
 /// let mut serializer = NQuadsSerializer::new().for_writer(Vec::new());
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     NamedNodeRef::new("http://example.com")?,
 /// ))?;
@@ -597,7 +602,7 @@ impl NQuadsSerializer {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
 ///     serializer.finish().as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
 pub struct WriterNQuadsSerializer<W: Write> {
@@ -622,22 +627,23 @@ impl<W: Write> WriterNQuadsSerializer<W> {
 /// Can be built using [`NQuadsSerializer::for_tokio_async_writer`].
 ///
 /// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
 /// use oxttl::NQuadsSerializer;
 ///
-/// # #[tokio::main(flavor = "current_thread")]
-/// # async fn main() -> std::io::Result<()> {
-///     let mut serializer = NQuadsSerializer::new().for_tokio_async_writer(Vec::new());
-///     serializer.serialize_quad(QuadRef::new(
-///         NamedNodeRef::new_unchecked("http://example.com#me"),
-///         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-///         NamedNodeRef::new_unchecked("http://schema.org/Person"),
-///         NamedNodeRef::new_unchecked("http://example.com"),
-///     )).await?;
-///     assert_eq!(
-///         b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
-///         serializer.finish().as_slice()
-///     );
+/// let mut serializer = NQuadsSerializer::new().for_tokio_async_writer(Vec::new());
+/// serializer.serialize_quad(QuadRef::new(
+///     NamedNodeRef::new("http://example.com#me")?,
+///     rdf::TYPE,
+///     NamedNodeRef::new("http://schema.org/Person")?,
+///     NamedNodeRef::new("http://example.com")?,
+/// )).await?;
+/// assert_eq!(
+///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
+///     serializer.finish().as_slice()
+/// );
 /// # Ok(())
 /// # }
 /// ```
@@ -671,13 +677,14 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterNQuadsSerializer<W> {
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
+/// use oxrdf::vocab::rdf;
 /// use oxttl::NQuadsSerializer;
 ///
 /// let mut buf = Vec::new();
 /// let mut serializer = NQuadsSerializer::new().low_level();
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     NamedNodeRef::new("http://example.com")?,
 /// ), &mut buf)?;
@@ -685,7 +692,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterNQuadsSerializer<W> {
 ///     b"<http://example.com#me> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> <http://example.com> .\n",
 ///     buf.as_slice()
 /// );
-/// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+/// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[allow(clippy::empty_structs_with_brackets)]
 pub struct LowLevelNQuadsSerializer {}

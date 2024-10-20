@@ -26,7 +26,7 @@ impl FromStr for NamedNode {
     ///     NamedNode::from_str("<http://example.com>")?,
     ///     NamedNode::new("http://example.com")?
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_named_node(s)?;
@@ -49,7 +49,7 @@ impl FromStr for BlankNode {
     /// use std::str::FromStr;
     ///
     /// assert_eq!(BlankNode::from_str("_:ex")?, BlankNode::new("ex")?);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_blank_node(s)?;
@@ -103,7 +103,7 @@ impl FromStr for Literal {
     ///     Literal::from_str("-122e+1")?,
     ///     Literal::new_typed_literal("-122e+1", xsd::DOUBLE)
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_literal(s)?;
@@ -127,7 +127,7 @@ impl FromStr for Term {
     ///     Term::from_str("\"ex\"")?,
     ///     Literal::new_simple_literal("ex").into()
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (term, left) = read_term(s, 0)?;
@@ -155,7 +155,7 @@ impl FromStr for Triple {
     ///         Literal::new_simple_literal("o")
     ///     )
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (triple, left) = read_triple(s, 0)?;
@@ -193,7 +193,7 @@ impl FromStr for Quad {
     ///         NamedNode::new("http://example.com/g")?
     ///     )
     /// );
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (triple, left) = read_triple(s, 0)?;
@@ -232,7 +232,7 @@ impl FromStr for Variable {
     /// use std::str::FromStr;
     ///
     /// assert_eq!(Variable::from_str("$foo")?, Variable::new("foo")?);
-    /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with('?') && !s.starts_with('$') {
