@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+    <head>
+        <variable name="left"/>
+        <variable name="right"/>
+        <variable name="result"/>
+    </head>
+    <results>
+        <result>
+            <binding name="left">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Polygon((0 0, 0 3, 3 3, 3 0))</literal>
+            </binding>
+            <binding name="right">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Polygon((1 1, 1 4, 4 4, 4 1))</literal>
+            </binding>
+            <binding name="result">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal>
+            </binding>
+        </result>
+        <result>
+            <binding name="left">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Polygon((0 0, 0 3, 3 3, 3 0))</literal>
+            </binding>
+            <binding name="right">
+                <literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">Polygon((0 0, 0 3, 3 3, 3 0))</literal>
+            </binding>
+            <binding name="result">
+                <literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal>
+            </binding>
+        </result>
+    </results>
+</sparql>

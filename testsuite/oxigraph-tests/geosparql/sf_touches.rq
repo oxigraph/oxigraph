@@ -1,0 +1,9 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?left ?right (geof:sfTouches(?left, ?right) AS ?result) WHERE {
+    VALUES (?left ?right) {
+        ("Polygon((0 0, 0 3, 3 3, 3 0))"^^geo:wktLiteral "Linestring(0 3, 3 3)"^^geo:wktLiteral)
+        ("Polygon((0 0, 0 3, 3 3, 3 0))"^^geo:wktLiteral "Linestring(0 0, 3 3)"^^geo:wktLiteral)
+    }
+}
