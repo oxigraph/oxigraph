@@ -1,0 +1,9 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?left ?right (geof:sfOverlaps(?left, ?right) AS ?result) WHERE {
+    VALUES (?left ?right) {
+        ("Polygon((0 0, 0 3, 3 3, 3 0))"^^geo:wktLiteral "Polygon((1 1, 1 4, 4 4, 4 1))"^^geo:wktLiteral)
+        ("Polygon((0 0, 0 3, 3 3, 3 0))"^^geo:wktLiteral "Polygon((0 0, 0 3, 3 3, 3 0))"^^geo:wktLiteral)
+    }
+}

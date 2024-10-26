@@ -10,8 +10,12 @@
     mf:entries
     (
         :wkt_default_spatial_reference_system
-        :sf_equals
         :sf_contains
+        :sf_crosses
+        :sf_disjoint
+        :sf_equals
+        :sf_overlaps
+        :sf_touches
         :sf_within
     ) .
 
@@ -20,15 +24,35 @@
     mf:action [ qt:query <wkt_default_spatial_reference_system.rq> ] ;
     mf:result <wkt_default_spatial_reference_system.srx> .
 
+:sf_contains rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfContains behaviors" ;
+    mf:action [ qt:query <sf_contains.rq> ] ;
+    mf:result <sf_contains.srx> .
+
+:sf_crosses rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfCrosses behaviors" ;
+    mf:action [ qt:query <sf_crosses.rq> ] ;
+    mf:result <sf_crosses.srx> .
+
+:sf_disjoint rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfDisjoint behaviors" ;
+    mf:action [ qt:query <sf_disjoint.rq> ] ;
+    mf:result <sf_disjoint.srx> .
+
 :sf_equals rdf:type mf:QueryEvaluationTest ;
     mf:name "sfEquals behaviors" ;
     mf:action [ qt:query <sf_equals.rq> ] ;
     mf:result <sf_equals.srx> .
 
-:sf_contains rdf:type mf:QueryEvaluationTest ;
-    mf:name "sfContains behaviors" ;
-    mf:action [ qt:query <sf_contains.rq> ] ;
-    mf:result <sf_contains.srx> .
+:sf_overlaps rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfOverlaps behaviors" ;
+    mf:action [ qt:query <sf_overlaps.rq> ] ;
+    mf:result <sf_overlaps.srx> .
+
+:sf_touches rdf:type mf:QueryEvaluationTest ;
+    mf:name "sfTouches behaviors" ;
+    mf:action [ qt:query <sf_touches.rq> ] ;
+    mf:result <sf_touches.srx> .
 
 :sf_within rdf:type mf:QueryEvaluationTest ;
     mf:name "sfWithin behaviors" ;

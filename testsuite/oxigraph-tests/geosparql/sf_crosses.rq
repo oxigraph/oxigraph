@@ -1,0 +1,9 @@
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+
+SELECT ?left ?right (geof:sfCrosses(?left, ?right) AS ?result) WHERE {
+    VALUES (?left ?right) {
+        ("linestring(4 5, 5 4)"^^geo:wktLiteral "polygon((3 3, 3 5, 5 5, 5 3, 3 3))"^^geo:wktLiteral)
+        ("linestring(2 2, 6 6)"^^geo:wktLiteral "polygon((3 3, 3 5, 5 5, 5 3, 3 3))"^^geo:wktLiteral)
+    }
+}
