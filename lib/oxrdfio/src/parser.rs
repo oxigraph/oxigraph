@@ -170,7 +170,7 @@ impl RdfParser {
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
-            RdfParserKind::N3(p) => RdfParserKind::N3(p),
+            RdfParserKind::N3(p) => RdfParserKind::N3(p.with_base_iri(base_iri)?),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p),
             RdfParserKind::RdfXml(p) => RdfParserKind::RdfXml(p.with_base_iri(base_iri)?),
