@@ -1218,7 +1218,9 @@ impl<'a> fmt::Display for TurtleTerm<'a> {
             TermRef::NamedNode(v) => {
                 for (prefix_iri, prefix_name) in self.prefixes {
                     if let Some(local_name) = v.as_str().strip_prefix(prefix_iri) {
-                        if let Some(escaped_local_name) = escape_local_name(local_name) {
+                        if local_name.is_empty() {
+                            return write!(f, "{prefix_name}:");
+                        } else if let Some(escaped_local_name) = escape_local_name(local_name) {
                             return write!(f, "{prefix_name}:{escaped_local_name}");
                         }
                     }
@@ -1438,6 +1440,12 @@ mod tests {
         serializer.serialize_quad(QuadRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
             NamedNodeRef::new_unchecked("http://example.com/p"),
+            NamedNodeRef::new_unchecked("http://example.com/"),
+            NamedNodeRef::new_unchecked("http://example.com/g"),
+        ))?;
+        serializer.serialize_quad(QuadRef::new(
+            NamedNodeRef::new_unchecked("http://example.com/s"),
+            NamedNodeRef::new_unchecked("http://example.com/p"),
             LiteralRef::new_simple_literal("foo"),
             NamedNodeRef::new_unchecked("http://example.com/g"),
         ))?;
@@ -1467,7 +1475,7 @@ mod tests {
         ))?;
         assert_eq!(
             String::from_utf8(serializer.finish()?).unwrap(),
-            "@prefix ex: <http://example.com/> .\nex:g {\n\tex:s ex:p ex:o\\. , <http://example.com/o{o}> , \"foo\" ;\n\t\tex:p2 \"foo\"@en .\n\t_:b ex:p2 _:b2 .\n}\n_:b ex:p2 true .\nex:g2 {\n\t_:b <http://example.org/p2> false .\n}\n"
+            "@prefix ex: <http://example.com/> .\nex:g {\n\tex:s ex:p ex:o\\. , <http://example.com/o{o}> , ex: , \"foo\" ;\n\t\tex:p2 \"foo\"@en .\n\t_:b ex:p2 _:b2 .\n}\n_:b ex:p2 true .\nex:g2 {\n\t_:b <http://example.org/p2> false .\n}\n"
         );
         Ok(())
     }
