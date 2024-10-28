@@ -13,7 +13,8 @@ ALLOWED_MISSING_PACKAGES = {
     "oxiri",
     "rustc-hash",
     "geo",
-    "wkt"
+    "wkt",
+    "quick-xml"
 }
 
 base_path = Path(__file__).parent.parent
