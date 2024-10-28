@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io;
 use std::io::Write;
+#[cfg(feature = "async-tokio")]
 use std::sync::Arc;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncWrite;
@@ -203,7 +204,7 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 
     fn flush_buffer(&mut self, buffer: &mut Vec<Event<'_>>) -> io::Result<()> {
         for event in buffer.drain(0..) {
-            self.writer.write_event(event).map_err(map_err)?;
+            self.writer.write_event(event)?;
         }
         Ok(())
     }
@@ -426,6 +427,7 @@ impl InnerRdfXmlWriter {
     }
 }
 
+#[cfg(feature = "async-tokio")]
 fn map_err(error: quick_xml::Error) -> io::Error {
     if let quick_xml::Error::Io(error) = error {
         Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))

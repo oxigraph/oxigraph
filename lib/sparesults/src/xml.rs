@@ -11,6 +11,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::{self, BufReader, Read, Write};
 use std::mem::take;
+#[cfg(feature = "async-tokio")]
 use std::sync::Arc;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite, BufReader as AsyncBufReader};
@@ -18,7 +19,7 @@ use tokio::io::{AsyncRead, AsyncWrite, BufReader as AsyncBufReader};
 pub fn write_boolean_xml_result<W: Write>(writer: W, value: bool) -> io::Result<W> {
     let mut writer = Writer::new(writer);
     for event in inner_write_boolean_xml_result(value) {
-        writer.write_event(event).map_err(map_xml_error)?;
+        writer.write_event(event)?;
     }
     Ok(writer.into_inner())
 }
@@ -86,7 +87,7 @@ impl<W: Write> WriterXmlSolutionsSerializer<W> {
 
     fn do_write(writer: &mut Writer<W>, output: Vec<Event<'_>>) -> io::Result<()> {
         for event in output {
-            writer.write_event(event).map_err(map_xml_error)?;
+            writer.write_event(event)?;
         }
         Ok(())
     }
@@ -950,6 +951,7 @@ fn escape_including_bound_whitespaces(value: &str) -> Cow<'_, str> {
     output.into()
 }
 
+#[cfg(feature = "async-tokio")]
 fn map_xml_error(error: Error) -> io::Error {
     match error {
         Error::Io(error) => {
