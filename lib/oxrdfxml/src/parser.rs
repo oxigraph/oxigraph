@@ -305,6 +305,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.prefixes(),
             decoder: self.parser.reader.decoder(),
+            unchecked: self.parser.unchecked,
         }
     }
 
@@ -442,6 +443,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.prefixes(),
             decoder: self.parser.reader.decoder(),
+            unchecked: self.parser.unchecked,
         }
     }
 
@@ -578,6 +580,7 @@ impl<'a> SliceRdfXmlParser<'a> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.prefixes(),
             decoder: self.parser.reader.decoder(),
+            unchecked: self.parser.unchecked,
         }
     }
 
@@ -625,6 +628,7 @@ impl<'a> SliceRdfXmlParser<'a> {
 pub struct RdfXmlPrefixesIter<'a> {
     inner: PrefixIter<'a>,
     decoder: Decoder,
+    unchecked: bool,
 }
 
 impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
@@ -644,6 +648,9 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                         let Ok(Cow::Borrowed(name)) = unescape_with(name, |_| None) else {
                             continue;
                         };
+                        if !self.unchecked && !is_nc_name(name) {
+                            continue; // We don't return invalid prefixes
+                        }
                         name
                     }
                 },
@@ -654,6 +661,9 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                     let Ok(Cow::Borrowed(value)) = unescape_with(value, |_| None) else {
                         continue;
                     };
+                    if !self.unchecked && Iri::parse(value).is_err() {
+                        continue; // We don't return invalid prefixes
+                    }
                     value
                 },
             ));
@@ -1554,20 +1564,6 @@ impl<R> InternalRdfXmlParser<R> {
     fn resolve_entity(&self, e: &str) -> Option<&str> {
         resolve_xml_entity(e).or_else(|| self.custom_entities.get(e).map(String::as_str))
     }
-}
-
-fn is_nc_name(name: &str) -> bool {
-    // Name - (Char* ':' Char*)
-    is_name(name) && name.chars().all(|c| c != ':')
-}
-
-fn is_name(name: &str) -> bool {
-    // NameStartChar (NameChar)*
-    let mut c = name.chars();
-    if !c.next().map_or(false, is_name_start_char) {
-        return false;
-    }
-    c.all(is_name_char)
 }
 
 fn is_object_defined(object: &Option<NodeOrText>) -> bool {
