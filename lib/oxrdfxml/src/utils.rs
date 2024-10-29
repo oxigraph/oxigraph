@@ -1,3 +1,17 @@
+pub fn is_name(name: &str) -> bool {
+    // NameStartChar (NameChar)*
+    let mut c = name.chars();
+    if !c.next().map_or(false, is_name_start_char) {
+        return false;
+    }
+    c.all(is_name_char)
+}
+
+pub fn is_nc_name(name: &str) -> bool {
+    // Name - (Char* ':' Char*)
+    is_name(name) && !name.contains(':')
+}
+
 pub fn is_name_start_char(c: char) -> bool {
     // ":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF]
     matches!(c,
