@@ -58,10 +58,12 @@ impl RdfXmlSerializer {
         prefix_name: impl Into<String>,
         prefix_iri: impl Into<String>,
     ) -> Result<Self, IriParseError> {
-        self.prefixes.insert(
-            Iri::parse(prefix_iri.into())?.into_inner(),
-            prefix_name.into(),
-        );
+        let prefix_name = prefix_name.into();
+        if prefix_name == "oxprefix" {
+            return Ok(self); // It is reserved
+        }
+        self.prefixes
+            .insert(prefix_name, Iri::parse(prefix_iri.into())?.into_inner());
         Ok(self)
     }
 
@@ -141,14 +143,24 @@ impl RdfXmlSerializer {
     }
 
     fn inner_writer(mut self) -> InnerRdfXmlWriter {
-        self.prefixes.insert(
+        // Makes sure rdf is the proper prefix, by first removing it
+        self.prefixes.remove("rdf");
+        let custom_default_prefix = self.prefixes.contains_key("");
+        // The serializer want to have the URL first, we swap
+        let mut prefixes = self
+            .prefixes
+            .into_iter()
+            .map(|(key, value)| (value, key))
+            .collect::<BTreeMap<_, _>>();
+        prefixes.insert(
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#".into(),
             "rdf".into(),
         );
         InnerRdfXmlWriter {
             current_subject: None,
             current_resource_tag: None,
-            prefixes: self.prefixes,
+            custom_default_prefix,
+            prefixes_by_iri: prefixes,
         }
     }
 }
@@ -278,7 +290,8 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterdfXmlSerializer<W> {
 pub struct InnerRdfXmlWriter {
     current_subject: Option<Subject>,
     current_resource_tag: Option<String>,
-    prefixes: BTreeMap<String, String>,
+    custom_default_prefix: bool,
+    prefixes_by_iri: BTreeMap<String, String>,
 }
 
 impl InnerRdfXmlWriter {
@@ -381,9 +394,14 @@ impl InnerRdfXmlWriter {
     fn write_start(&self, output: &mut Vec<Event<'_>>) {
         output.push(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)));
         let mut rdf_open = BytesStart::new("rdf:RDF");
-        for (prefix_value, prefix_name) in &self.prefixes {
+        for (prefix_value, prefix_name) in &self.prefixes_by_iri {
             rdf_open.push_attribute((
-                format!("xmlns:{prefix_name}").as_str(),
+                if prefix_name.is_empty() {
+                    "xmlns".into()
+                } else {
+                    format!("xmlns:{prefix_name}")
+                }
+                .as_str(),
                 prefix_value.as_str(),
             ));
         }
@@ -408,7 +426,7 @@ impl InnerRdfXmlWriter {
         uri: NamedNodeRef<'a>,
     ) -> (Cow<'a, str>, Option<(&'a str, &'a str)>) {
         let (prop_prefix, prop_value) = split_iri(uri.as_str());
-        if let Some(prop_prefix) = self.prefixes.get(prop_prefix) {
+        if let Some(prop_prefix) = self.prefixes_by_iri.get(prop_prefix) {
             (
                 if prop_prefix.is_empty() {
                     Cow::Borrowed(prop_value)
@@ -419,10 +437,14 @@ impl InnerRdfXmlWriter {
             )
         } else if prop_prefix == "http://www.w3.org/2000/xmlns/" {
             (Cow::Owned(format!("xmlns:{prop_value}")), None)
-        } else if prop_value.is_empty() {
-            (Cow::Borrowed("p:"), Some(("xmlns:p", prop_prefix)))
-        } else {
+        } else if !prop_value.is_empty() && !self.custom_default_prefix {
             (Cow::Borrowed(prop_value), Some(("xmlns", prop_prefix)))
+        } else {
+            // TODO: does not work on recursive elements
+            (
+                Cow::Owned(format!("oxprefix:{prop_value}")),
+                Some(("xmlns:oxprefix", prop_prefix)),
+            )
         }
     }
 }
@@ -453,8 +475,10 @@ fn split_iri(iri: &str) -> (&str, &str) {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn test_split_iri() {
@@ -468,5 +492,35 @@ mod tests {
             ("http://schema.org#", "foo")
         );
         assert_eq!(split_iri("urn:isbn:foo"), ("urn:isbn:", "foo"));
+    }
+
+    #[test]
+    fn test_custom_rdf_ns() -> Result<(), Box<dyn Error>> {
+        let output = RdfXmlSerializer::new()
+            .with_prefix("rdf", "http://example.com/")?
+            .for_writer(Vec::new())
+            .finish()?;
+        assert_eq!(output, b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n</rdf:RDF>");
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_empty_ns() -> Result<(), Box<dyn Error>> {
+        let mut serializer = RdfXmlSerializer::new()
+            .with_prefix("", "http://example.com/")?
+            .for_writer(Vec::new());
+        serializer.serialize_triple(TripleRef::new(
+            NamedNodeRef::new("http://example.com/s")?,
+            rdf::TYPE,
+            NamedNodeRef::new("http://example.org/o")?,
+        ))?;
+        serializer.serialize_triple(TripleRef::new(
+            NamedNodeRef::new("http://example.com/s")?,
+            NamedNodeRef::new("http://example.com/p")?,
+            NamedNodeRef::new("http://example.com/o2")?,
+        ))?;
+        let output = serializer.finish()?;
+        assert_eq!(String::from_utf8_lossy(&output), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns=\"http://example.com/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<oxprefix:o xmlns:oxprefix=\"http://example.org/\" rdf:about=\"http://example.com/s\">\n\t\t<p rdf:resource=\"http://example.com/o2\"/>\n\t</oxprefix:o>\n</rdf:RDF>");
+        Ok(())
     }
 }
