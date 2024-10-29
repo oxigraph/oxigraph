@@ -5,20 +5,28 @@ use oxrdf::graph::CanonicalizationAlgorithm;
 use oxrdf::{Graph, Subject, Term, Triple};
 use oxrdfxml::{RdfXmlParser, RdfXmlSerializer};
 
-fn parse(data: &[u8], unchecked: bool) -> (Vec<Triple>, Vec<String>) {
+fn parse(data: &[u8], unchecked: bool) -> (Vec<Triple>, Vec<String>, Vec<(String, String)>) {
     let mut triples = Vec::new();
     let mut errors = Vec::new();
     let mut parser = RdfXmlParser::new();
     if unchecked {
         parser = parser.unchecked();
     }
-    for result in parser.for_slice(data) {
+    let mut parser = parser.for_slice(data);
+    for result in &mut parser {
         match result {
             Ok(triple) => triples.push(triple),
             Err(error) => errors.push(error.to_string()),
         }
     }
-    (triples, errors)
+    (
+        triples,
+        errors,
+        parser
+            .prefixes()
+            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+            .collect(),
+    )
 }
 
 fn count_triple_blank_nodes(triple: &Triple) -> usize {
@@ -35,11 +43,11 @@ fn count_triple_blank_nodes(triple: &Triple) -> usize {
 
 fuzz_target!(|data: &[u8]| {
     // We parse
-    let (triples, errors) = parse(data, false);
+    let (triples, errors, prefixes) = parse(data, false);
 
     // We test also unchecked if valid
     if errors.is_empty() {
-        let (triples_unchecked, errors_unchecked) = parse(data, true);
+        let (triples_unchecked, errors_unchecked, _) = parse(data, true);
         assert!(errors_unchecked.is_empty());
 
         let bnodes_count = triples.iter().map(count_triple_blank_nodes).sum::<usize>();
@@ -55,7 +63,11 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // We serialize
-    let mut serializer = RdfXmlSerializer::new().for_writer(Vec::new());
+    let mut serializer = RdfXmlSerializer::new();
+    for (prefix_name, prefix_iri) in prefixes {
+        serializer = serializer.with_prefix(prefix_name, prefix_iri).unwrap();
+    }
+    let mut serializer = serializer.for_writer(Vec::new());
     for triple in &triples {
         serializer.serialize_triple(triple).unwrap();
     }
