@@ -1,4 +1,5 @@
 import copy
+import math
 import pickle
 import sys
 import unittest
@@ -15,6 +16,8 @@ from pyoxigraph import (
 
 XSD_STRING = NamedNode("http://www.w3.org/2001/XMLSchema#string")
 XSD_INTEGER = NamedNode("http://www.w3.org/2001/XMLSchema#integer")
+XSD_DOUBLE = NamedNode("http://www.w3.org/2001/XMLSchema#double")
+XSD_BOOLEAN = NamedNode("http://www.w3.org/2001/XMLSchema#boolean")
 RDF_LANG_STRING = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
 
 
@@ -101,6 +104,17 @@ class TestLiteral(unittest.TestCase):
 
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).value, "foo")
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).datatype, XSD_INTEGER)
+
+        self.assertEqual(Literal(True), Literal("true", datatype=XSD_BOOLEAN))  # noqa: FBT003
+        self.assertEqual(Literal(False), Literal("false", datatype=XSD_BOOLEAN))  # noqa: FBT003
+
+        self.assertEqual(Literal(0), Literal("0", datatype=XSD_INTEGER))
+        self.assertEqual(Literal(1), Literal("1", datatype=XSD_INTEGER))
+
+        self.assertEqual(Literal(0.1), Literal("0.1", datatype=XSD_DOUBLE))
+        self.assertEqual(Literal(math.inf), Literal("INF", datatype=XSD_DOUBLE))
+        self.assertEqual(Literal(-math.inf), Literal("-INF", datatype=XSD_DOUBLE))
+        self.assertEqual(Literal(-math.nan), Literal("NaN", datatype=XSD_DOUBLE))
 
     def test_string(self) -> None:
         self.assertEqual(str(Literal("foo")), '"foo"')
