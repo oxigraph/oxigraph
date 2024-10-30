@@ -1,8 +1,8 @@
-use oxigraph::model::vocab::rdf;
+use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{PyDict, PyLong, PyTuple};
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
@@ -220,7 +220,7 @@ impl PyBlankNode {
 /// An RDF `literal <https://www.w3.org/TR/rdf11-concepts/#dfn-literal>`_.
 ///
 /// :param value: the literal value or `lexical form <https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form>`_.
-/// :type value: str
+/// :type value: str or int or float or bool
 /// :param datatype: the literal `datatype IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri>`_.
 /// :type datatype: NamedNode or None, optional
 /// :param language: the literal `language tag <https://www.w3.org/TR/rdf11-concepts/#dfn-language-tag>`_.
@@ -234,6 +234,8 @@ impl PyBlankNode {
 /// >>> str(Literal('example', language='en'))
 /// '"example"@en'
 /// >>> str(Literal('11', datatype=NamedNode('http://www.w3.org/2001/XMLSchema#integer')))
+/// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
+/// >>> str(Literal(11))
 /// '"11"^^<http://www.w3.org/2001/XMLSchema#integer>'
 #[pyclass(frozen, name = "Literal", module = "pyoxigraph", eq, hash)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -264,7 +266,7 @@ impl PyLiteral {
     #[new]
     #[pyo3(signature = (value, *, datatype = None, language = None))]
     fn new(
-        value: String,
+        value: &Bound<'_, PyAny>,
         datatype: Option<PyNamedNode>,
         language: Option<String>,
     ) -> PyResult<Self> {
@@ -276,12 +278,22 @@ impl PyLiteral {
                     ));
                 }
             }
-            Literal::new_language_tagged_literal(value, language)
+            Literal::new_language_tagged_literal(value.extract::<String>()?, language)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?
         } else if let Some(datatype) = datatype {
-            Literal::new_typed_literal(value, datatype)
+            Literal::new_typed_literal(value.extract::<String>()?, datatype)
+        } else if let Ok(value) = value.extract::<String>() {
+            value.into()
+        } else if let Ok(value) = value.extract::<bool>() {
+            value.into()
+        } else if let Ok(value) = value.extract::<Bound<'_, PyLong>>() {
+            Literal::new_typed_literal(value.to_string(), xsd::INTEGER)
+        } else if let Ok(value) = value.extract::<f64>() {
+            value.into()
         } else {
-            Literal::new_simple_literal(value)
+            return Err(PyValueError::new_err(
+                "The literal value must be a str, an int, a float or a bool",
+            ));
         }
         .into())
     }
