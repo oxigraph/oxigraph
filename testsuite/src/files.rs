@@ -5,22 +5,22 @@ use oxttl::n3::N3Quad;
 use oxttl::N3Parser;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::Path;
 
 pub fn read_file(url: &str) -> Result<impl Read> {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push(if url.starts_with("https://w3c.github.io/") {
-        url.replace("https://w3c.github.io/", "")
-    } else if url.starts_with("https://github.com/oxigraph/oxigraph/tests/") {
-        url.replace(
-            "https://github.com/oxigraph/oxigraph/tests/",
-            "oxigraph-tests/",
-        )
-    } else if url.starts_with("http://drobilla.net/sw/serd/test/") {
-        url.replace("http://drobilla.net/sw/serd/test/", "serd-tests/")
-    } else {
-        bail!("Not supported url for file: {url}")
-    });
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(if url.starts_with("https://w3c.github.io/") {
+            url.replace("https://w3c.github.io/", "")
+        } else if url.starts_with("https://github.com/oxigraph/oxigraph/tests/") {
+            url.replace(
+                "https://github.com/oxigraph/oxigraph/tests/",
+                "oxigraph-tests/",
+            )
+        } else if url.starts_with("http://drobilla.net/sw/serd/test/") {
+            url.replace("http://drobilla.net/sw/serd/test/", "serd-tests/")
+        } else {
+            bail!("Not supported url for file: {url}")
+        });
     File::open(&path).with_context(|| format!("Failed to read {}", path.display()))
 }
 
