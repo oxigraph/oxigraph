@@ -1,3 +1,20 @@
+## [0.4.2] - 2024-10-31
+
+### Added
+- `spargeo` crate providing [GeoSPARQL simple features query functions](https://docs.ogc.org/is/22-047r1/22-047r1.html#req_geometry-topology-extension_sf-query-functions).
+  They are enabled by default in Oxigraph CLI and Oxigraph Python bindings.
+- Turtle, TriG and RDF/XML: allow to set a base IRI during serialization.
+- Python: exposes prefixes and base IRI after parsing.
+- Python: allows to give to `Literal` constructor a `int`, `float` or `bool`.
+
+### Changed
+- SPARQL XML query results: escape whitespaces at the extremities of values to make sure they are not trimmed.
+- Turtle: fixes support of empty local name.
+- N3: properly inject the base IRI before parsing.
+- RDF/XML do not return invalid prefixes after parsing.
+- RDF/XML: properly deduplicate prefixes during serialization and fixes prefix conflicts.
+
+
 ## [0.4.1] - 2024-10-13
 
 ### Added
