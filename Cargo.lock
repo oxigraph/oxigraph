@@ -1187,7 +1187,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "codspeed-criterion-compat",
  "dashmap",
@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1241,7 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1282,7 +1282,7 @@ checksum = "3038e706f26b00e3981cd08bfd300dbe82f635ea95a263d492c6ccaeb3d1c582"
 
 [[package]]
 name = "oxrdf"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1293,7 +1293,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfio"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "oxrdf",
  "oxrdfxml",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfxml"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1316,7 +1316,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "bindgen",
  "cc",
@@ -1334,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "oxttl"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "memchr",
  "oxilangtag",
@@ -1566,7 +1566,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -1941,7 +1941,7 @@ dependencies = [
 
 [[package]]
 name = "sparesults"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "json-event-parser",
  "memchr",
@@ -1953,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1975,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "sparopt"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "oxrdf",
  "rand",
