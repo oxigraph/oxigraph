@@ -14,8 +14,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - run: rustup update
-      shell: bash
     - run: rustup default ${{ inputs.version }}
       shell: bash
     - run: rustup component add ${{ inputs.component }}
@@ -26,3 +24,9 @@ runs:
       if: ${{ inputs.target }}
     - uses: Swatinem/rust-cache@v2
       continue-on-error: true
+      with:
+        cache-on-failure: true
+        key: ${{ github.job }}-${{ toJSON(matrix) }}
+        workspaces: |
+          . -> target
+          fuzz -> target

@@ -32,7 +32,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.81.0
+          version: 1.82.0
           component: clippy
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxsdatatypes
@@ -73,7 +73,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.81.0
+          version: 1.82.0
           target: wasm32-unknown-unknown
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown -- -D warnings -D clippy::all
@@ -87,7 +87,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.81.0
+          version: 1.82.0
           target: wasm32-wasi
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-wasi -- -D warnings -D clippy::all
@@ -103,7 +103,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.81.0
+          version: 1.82.0
           target: wasm32-unknown-emscripten
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-emscripten -- -D warnings -D clippy::all
@@ -119,7 +119,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.81.0
+          version: 1.82.0
           target: wasm32-unknown-unknown
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --features getrandom/custom --features oxsdatatypes/custom-now -- -D warnings -D clippy::all
@@ -275,7 +275,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.81.0
+          version: 1.82.0
       - run: cargo doc
         env:
           RUSTDOCFLAGS: -D warnings
@@ -464,7 +464,9 @@ jobs:
         id: cache-corpus
         with:
           path: fuzz/corpus/${{ matrix.target }}
-          key: fuzz-${{ matrix.target }}
+          key: fuzz-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-${{ matrix.target }}
       - uses: ./.github/actions/setup-rust
       - run: cargo install cargo-fuzz || true
       - run: python3 build_corpus.py
