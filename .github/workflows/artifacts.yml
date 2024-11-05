@@ -143,6 +143,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - uses: ./.github/actions/setup-rust
       - uses: docker/setup-qemu-action@v3
         with:
           platforms: linux/${{ matrix.architecture }}
@@ -166,6 +167,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - uses: ./.github/actions/setup-rust
       - uses: docker/setup-qemu-action@v3
         with:
           platforms: linux/${{ matrix.architecture }}
