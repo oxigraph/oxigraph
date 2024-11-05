@@ -526,7 +526,7 @@ pub struct SliceRdfXmlParser<'a> {
     reader_buffer: Vec<u8>,
 }
 
-impl<'a> Iterator for SliceRdfXmlParser<'a> {
+impl Iterator for SliceRdfXmlParser<'_> {
     type Item = Result<Triple, RdfXmlSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -544,7 +544,7 @@ impl<'a> Iterator for SliceRdfXmlParser<'a> {
     }
 }
 
-impl<'a> SliceRdfXmlParser<'a> {
+impl SliceRdfXmlParser<'_> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.

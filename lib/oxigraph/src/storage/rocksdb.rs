@@ -788,7 +788,7 @@ pub struct RocksDbStorageWriter<'a> {
     storage: &'a RocksDbStorage,
 }
 
-impl<'a> RocksDbStorageWriter<'a> {
+impl RocksDbStorageWriter<'_> {
     pub fn reader(&self) -> RocksDbStorageReader {
         RocksDbStorageReader {
             reader: self.transaction.reader(),

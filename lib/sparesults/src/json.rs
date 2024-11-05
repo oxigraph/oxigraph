@@ -371,7 +371,7 @@ pub struct SliceJsonSolutionsParser<'a> {
     json_reader: FromBufferJsonReader<'a>,
 }
 
-impl<'a> SliceJsonSolutionsParser<'a> {
+impl SliceJsonSolutionsParser<'_> {
     pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {

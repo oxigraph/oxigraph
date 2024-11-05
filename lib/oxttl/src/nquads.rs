@@ -382,7 +382,7 @@ pub struct SliceNQuadsParser<'a> {
     inner: SliceIterator<'a, NQuadsRecognizer>,
 }
 
-impl<'a> Iterator for SliceNQuadsParser<'a> {
+impl Iterator for SliceNQuadsParser<'_> {
     type Item = Result<Quad, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {

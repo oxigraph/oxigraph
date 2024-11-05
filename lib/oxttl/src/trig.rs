@@ -510,7 +510,7 @@ pub struct SliceTriGParser<'a> {
     inner: SliceIterator<'a, TriGRecognizer>,
 }
 
-impl<'a> SliceTriGParser<'a> {
+impl SliceTriGParser<'_> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -569,7 +569,7 @@ impl<'a> SliceTriGParser<'a> {
     }
 }
 
-impl<'a> Iterator for SliceTriGParser<'a> {
+impl Iterator for SliceTriGParser<'_> {
     type Item = Result<Quad, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1191,7 +1191,7 @@ struct TurtlePredicate<'a> {
     base_iri: &'a Option<Iri<String>>,
 }
 
-impl<'a> fmt::Display for TurtlePredicate<'a> {
+impl fmt::Display for TurtlePredicate<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.named_node == rdf::TYPE {
             f.write_str("a")
@@ -1212,7 +1212,7 @@ struct TurtleTerm<'a> {
     base_iri: &'a Option<Iri<String>>,
 }
 
-impl<'a> fmt::Display for TurtleTerm<'a> {
+impl fmt::Display for TurtleTerm<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.term {
             TermRef::NamedNode(v) => {

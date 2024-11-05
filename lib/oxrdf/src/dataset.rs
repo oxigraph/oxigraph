@@ -1311,7 +1311,7 @@ impl<'a> IntoIterator for GraphView<'a> {
     }
 }
 
-impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
+impl<'a> IntoIterator for &GraphView<'a> {
     type Item = TripleRef<'a>;
     type IntoIter = GraphViewIter<'a>;
 
@@ -1320,7 +1320,7 @@ impl<'a, 'b> IntoIterator for &'b GraphView<'a> {
     }
 }
 
-impl<'a> fmt::Display for GraphView<'a> {
+impl fmt::Display for GraphView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self {
             writeln!(f, "{t} .")?;
@@ -1497,7 +1497,7 @@ impl<'a> GraphViewMut<'a> {
     }
 }
 
-impl<'a> Extend<Triple> for GraphViewMut<'a> {
+impl Extend<Triple> for GraphViewMut<'_> {
     fn extend<I: IntoIterator<Item = Triple>>(&mut self, iter: I) {
         for t in iter {
             self.insert(&t);
@@ -1505,7 +1505,7 @@ impl<'a> Extend<Triple> for GraphViewMut<'a> {
     }
 }
 
-impl<'a, 'b, T: Into<TripleRef<'b>>> Extend<T> for GraphViewMut<'a> {
+impl<'b, T: Into<TripleRef<'b>>> Extend<T> for GraphViewMut<'_> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for t in iter {
             self.insert(t);
@@ -1522,7 +1522,7 @@ impl<'a> IntoIterator for &'a GraphViewMut<'a> {
     }
 }
 
-impl<'a> fmt::Display for GraphViewMut<'a> {
+impl fmt::Display for GraphViewMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in self {
             writeln!(f, "{t}")?;

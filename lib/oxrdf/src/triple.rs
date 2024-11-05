@@ -73,7 +73,7 @@ pub enum NamedOrBlankNodeRef<'a> {
     BlankNode(BlankNodeRef<'a>),
 }
 
-impl<'a> NamedOrBlankNodeRef<'a> {
+impl NamedOrBlankNodeRef<'_> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
         match self {
@@ -273,7 +273,7 @@ pub enum SubjectRef<'a> {
     Triple(&'a Triple),
 }
 
-impl<'a> SubjectRef<'a> {
+impl SubjectRef<'_> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
         matches!(self, Self::NamedNode(_))
@@ -613,7 +613,7 @@ pub enum TermRef<'a> {
     Triple(&'a Triple),
 }
 
-impl<'a> TermRef<'a> {
+impl TermRef<'_> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
         matches!(self, Self::NamedNode(_))
@@ -1037,7 +1037,7 @@ pub enum GraphNameRef<'a> {
     DefaultGraph,
 }
 
-impl<'a> GraphNameRef<'a> {
+impl GraphNameRef<'_> {
     #[inline]
     pub fn is_named_node(&self) -> bool {
         matches!(self, Self::NamedNode(_))
