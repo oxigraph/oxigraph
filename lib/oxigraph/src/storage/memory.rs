@@ -457,7 +457,7 @@ pub struct MemoryStorageWriter<'a> {
     transaction_id: usize,
 }
 
-impl<'a> MemoryStorageWriter<'a> {
+impl MemoryStorageWriter<'_> {
     pub fn reader(&self) -> MemoryStorageReader {
         MemoryStorageReader {
             storage: self.storage.clone(),

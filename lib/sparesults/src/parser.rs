@@ -584,7 +584,7 @@ enum SliceSolutionsParserKind<'a> {
     Tsv(SliceTsvSolutionsParser<'a>),
 }
 
-impl<'a> SliceSolutionsParser<'a> {
+impl SliceSolutionsParser<'_> {
     /// Ordered list of the declared variables at the beginning of the results.
     ///
     /// Example in TSV (the API is the same for JSON and XML):
@@ -609,7 +609,7 @@ impl<'a> SliceSolutionsParser<'a> {
     }
 }
 
-impl<'a> Iterator for SliceSolutionsParser<'a> {
+impl Iterator for SliceSolutionsParser<'_> {
     type Item = Result<QuerySolution, QueryResultsSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {

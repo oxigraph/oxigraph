@@ -655,7 +655,7 @@ pub struct SliceN3Parser<'a> {
     inner: SliceIterator<'a, N3Recognizer>,
 }
 
-impl<'a> SliceN3Parser<'a> {
+impl SliceN3Parser<'_> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -714,7 +714,7 @@ impl<'a> SliceN3Parser<'a> {
     }
 }
 
-impl<'a> Iterator for SliceN3Parser<'a> {
+impl Iterator for SliceN3Parser<'_> {
     type Item = Result<N3Quad, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {

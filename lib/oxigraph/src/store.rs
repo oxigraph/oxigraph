@@ -988,7 +988,7 @@ pub struct Transaction<'a> {
     writer: StorageWriter<'a>,
 }
 
-impl<'a> Transaction<'a> {
+impl Transaction<'_> {
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
     ///
     /// Usage example:

@@ -571,7 +571,7 @@ pub struct SliceTurtleParser<'a> {
     inner: SliceIterator<'a, TriGRecognizer>,
 }
 
-impl<'a> SliceTurtleParser<'a> {
+impl SliceTurtleParser<'_> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
@@ -630,7 +630,7 @@ impl<'a> SliceTurtleParser<'a> {
     }
 }
 
-impl<'a> Iterator for SliceTurtleParser<'a> {
+impl Iterator for SliceTurtleParser<'_> {
     type Item = Result<Triple, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {

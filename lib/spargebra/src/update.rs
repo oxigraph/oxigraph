@@ -75,7 +75,7 @@ impl FromStr for Update {
     }
 }
 
-impl<'a> TryFrom<&'a str> for Update {
+impl TryFrom<&str> for Update {
     type Error = SparqlSyntaxError;
 
     fn try_from(update: &str) -> Result<Self, Self::Error> {
@@ -83,7 +83,7 @@ impl<'a> TryFrom<&'a str> for Update {
     }
 }
 
-impl<'a> TryFrom<&'a String> for Update {
+impl TryFrom<&String> for Update {
     type Error = SparqlSyntaxError;
 
     fn try_from(update: &String) -> Result<Self, Self::Error> {

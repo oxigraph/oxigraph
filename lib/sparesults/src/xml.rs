@@ -411,7 +411,7 @@ pub struct SliceXmlSolutionsParser<'a> {
     reader_buffer: Vec<u8>,
 }
 
-impl<'a> SliceXmlSolutionsParser<'a> {
+impl SliceXmlSolutionsParser<'_> {
     pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         self.do_parse_next().map_err(|e| match e {
             QueryResultsParseError::Syntax(e) => e,

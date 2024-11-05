@@ -1042,7 +1042,7 @@ impl<'a> SparqlGraphRootPattern<'a> {
     }
 }
 
-impl<'a> fmt::Display for SparqlGraphRootPattern<'a> {
+impl fmt::Display for SparqlGraphRootPattern<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut distinct = false;
         let mut reduced = false;

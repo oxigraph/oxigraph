@@ -368,7 +368,7 @@ impl<'a> RdfListIterator<'a> {
     }
 }
 
-impl<'a> Iterator for RdfListIterator<'a> {
+impl Iterator for RdfListIterator<'_> {
     type Item = Term;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -293,7 +293,7 @@ enum StorageWriterKind<'a> {
 }
 
 #[allow(clippy::unnecessary_wraps)]
-impl<'a> StorageWriter<'a> {
+impl StorageWriter<'_> {
     pub fn reader(&self) -> StorageReader {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]

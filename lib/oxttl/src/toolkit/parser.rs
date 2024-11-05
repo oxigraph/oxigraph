@@ -206,7 +206,7 @@ pub struct SliceIterator<'a, RR: RuleRecognizer> {
     pub parser: Parser<&'a [u8], RR>,
 }
 
-impl<'a, RR: RuleRecognizer> Iterator for SliceIterator<'a, RR> {
+impl<RR: RuleRecognizer> Iterator for SliceIterator<'_, RR> {
     type Item = Result<RR::Output, TurtleSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {

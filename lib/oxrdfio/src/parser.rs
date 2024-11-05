@@ -710,7 +710,7 @@ enum SliceQuadParserKind<'a> {
     Turtle(SliceTurtleParser<'a>),
 }
 
-impl<'a> Iterator for SliceQuadParser<'a> {
+impl Iterator for SliceQuadParser<'_> {
     type Item = Result<Quad, RdfSyntaxError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -743,7 +743,7 @@ impl<'a> Iterator for SliceQuadParser<'a> {
     }
 }
 
-impl<'a> SliceQuadParser<'a> {
+impl SliceQuadParser<'_> {
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.

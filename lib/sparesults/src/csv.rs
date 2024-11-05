@@ -557,7 +557,7 @@ pub struct SliceTsvSolutionsParser<'a> {
     inner: TsvInnerSolutionsParser,
 }
 
-impl<'a> SliceTsvSolutionsParser<'a> {
+impl SliceTsvSolutionsParser<'_> {
     pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         let line = self.inner.line_reader.next_line_from_slice(self.slice)?;
         self.inner.parse_next(line)
