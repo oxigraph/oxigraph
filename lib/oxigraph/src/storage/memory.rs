@@ -14,7 +14,7 @@ use std::error::Error;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::mem::transmute;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 /// In-memory storage working with MVCC
 ///
@@ -30,15 +30,15 @@ pub struct MemoryStorage {
 
 struct Content {
     quad_set: DashSet<Arc<QuadListNode>, BuildHasherDefault<FxHasher>>,
-    last_quad: RwLock<Option<Arc<QuadListNode>>>,
+    last_quad: RwLock<Option<Weak<QuadListNode>>>,
     last_quad_by_subject:
-        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+        DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
     last_quad_by_predicate:
-        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+        DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
     last_quad_by_object:
-        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+        DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
     last_quad_by_graph_name:
-        DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+        DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
     graphs: DashMap<EncodedTerm, VersionRange>,
 }
 
@@ -174,13 +174,13 @@ impl MemoryStorageReader {
         graph_name: Option<&EncodedTerm>,
     ) -> QuadIterator {
         fn get_start_and_count(
-            map: &DashMap<EncodedTerm, (Arc<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
+            map: &DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
             term: Option<&EncodedTerm>,
-        ) -> (Option<Arc<QuadListNode>>, u64) {
+        ) -> (Option<Weak<QuadListNode>>, u64) {
             let Some(term) = term else {
                 return (None, u64::MAX);
             };
-            map.view(term, |_, (node, count)| (Some(Arc::clone(node)), *count))
+            map.view(term, |_, (node, count)| (Some(Weak::clone(node)), *count))
                 .unwrap_or_default()
         }
 
@@ -273,7 +273,7 @@ impl MemoryStorageReader {
         // last quad chain
         let mut next = self.storage.content.last_quad.read().unwrap().clone();
         let mut count_last_quad = 0;
-        while let Some(current) = next.take() {
+        while let Some(current) = next.take().and_then(|c| c.upgrade()) {
             count_last_quad += 1;
             if !self
                 .storage
@@ -307,9 +307,9 @@ impl MemoryStorageReader {
         // By subject chain
         let mut count_last_by_subject = 0;
         for entry in &self.storage.content.last_quad_by_subject {
-            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut next = Some(Weak::clone(&entry.value().0));
             let mut element_count = 0;
-            while let Some(current) = next.take() {
+            while let Some(current) = next.take().and_then(|n| n.upgrade()) {
                 element_count += 1;
                 if current.quad.subject != *entry.key() {
                     return Err(CorruptionError::new("Quad in wrong list").into());
@@ -339,9 +339,9 @@ impl MemoryStorageReader {
         // By predicate chains
         let mut count_last_by_predicate = 0;
         for entry in &self.storage.content.last_quad_by_predicate {
-            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut next = Some(Weak::clone(&entry.value().0));
             let mut element_count = 0;
-            while let Some(current) = next.take() {
+            while let Some(current) = next.take().and_then(|n| n.upgrade()) {
                 element_count += 1;
                 if current.quad.predicate != *entry.key() {
                     return Err(CorruptionError::new("Quad in wrong list").into());
@@ -371,9 +371,9 @@ impl MemoryStorageReader {
         // By object chains
         let mut count_last_by_object = 0;
         for entry in &self.storage.content.last_quad_by_object {
-            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut next = Some(Weak::clone(&entry.value().0));
             let mut element_count = 0;
-            while let Some(current) = next.take() {
+            while let Some(current) = next.take().and_then(|n| n.upgrade()) {
                 element_count += 1;
                 if current.quad.object != *entry.key() {
                     return Err(CorruptionError::new("Quad in wrong list").into());
@@ -403,9 +403,9 @@ impl MemoryStorageReader {
         // By graph_name chains
         let mut count_last_by_graph_name = 0;
         for entry in &self.storage.content.last_quad_by_graph_name {
-            let mut next = Some(Arc::clone(&entry.value().0));
+            let mut next = Some(Weak::clone(&entry.value().0));
             let mut element_count = 0;
-            while let Some(current) = next.take() {
+            while let Some(current) = next.take().and_then(|n| n.upgrade()) {
                 element_count += 1;
                 if current.quad.graph_name != *entry.key() {
                     return Err(CorruptionError::new("Quad in wrong list").into());
@@ -499,61 +499,61 @@ impl MemoryStorageWriter<'_> {
                     .storage
                     .content
                     .last_quad_by_subject
-                    .view(&encoded.subject, |_, (node, _)| Arc::clone(node)),
+                    .view(&encoded.subject, |_, (node, _)| Weak::clone(node)),
                 previous_predicate: self
                     .storage
                     .content
                     .last_quad_by_predicate
-                    .view(&encoded.predicate, |_, (node, _)| Arc::clone(node)),
+                    .view(&encoded.predicate, |_, (node, _)| Weak::clone(node)),
                 previous_object: self
                     .storage
                     .content
                     .last_quad_by_object
-                    .view(&encoded.object, |_, (node, _)| Arc::clone(node)),
+                    .view(&encoded.object, |_, (node, _)| Weak::clone(node)),
                 previous_graph_name: self
                     .storage
                     .content
                     .last_quad_by_graph_name
-                    .view(&encoded.graph_name, |_, (node, _)| Arc::clone(node)),
+                    .view(&encoded.graph_name, |_, (node, _)| Weak::clone(node)),
             });
             self.storage.content.quad_set.insert(Arc::clone(&node));
-            *self.storage.content.last_quad.write().unwrap() = Some(Arc::clone(&node));
+            *self.storage.content.last_quad.write().unwrap() = Some(Arc::downgrade(&node));
             self.storage
                 .content
                 .last_quad_by_subject
                 .entry(encoded.subject.clone())
                 .and_modify(|(e, count)| {
-                    *e = Arc::clone(&node);
+                    *e = Arc::downgrade(&node);
                     *count += 1;
                 })
-                .or_insert_with(|| (Arc::clone(&node), 1));
+                .or_insert_with(|| (Arc::downgrade(&node), 1));
             self.storage
                 .content
                 .last_quad_by_predicate
                 .entry(encoded.predicate.clone())
                 .and_modify(|(e, count)| {
-                    *e = Arc::clone(&node);
+                    *e = Arc::downgrade(&node);
                     *count += 1;
                 })
-                .or_insert_with(|| (Arc::clone(&node), 1));
+                .or_insert_with(|| (Arc::downgrade(&node), 1));
             self.storage
                 .content
                 .last_quad_by_object
                 .entry(encoded.object.clone())
                 .and_modify(|(e, count)| {
-                    *e = Arc::clone(&node);
+                    *e = Arc::downgrade(&node);
                     *count += 1;
                 })
-                .or_insert_with(|| (Arc::clone(&node), 1));
+                .or_insert_with(|| (Arc::downgrade(&node), 1));
             self.storage
                 .content
                 .last_quad_by_graph_name
                 .entry(encoded.graph_name.clone())
                 .and_modify(|(e, count)| {
-                    *e = Arc::clone(&node);
+                    *e = Arc::downgrade(&node);
                     *count += 1;
                 })
-                .or_insert_with(|| (Arc::clone(&node), 1));
+                .or_insert_with(|| (Arc::downgrade(&node), 1));
 
             self.insert_term(quad.subject.into(), &encoded.subject);
             self.insert_term(quad.predicate.into(), &encoded.predicate);
@@ -648,8 +648,8 @@ impl MemoryStorageWriter<'_> {
             .storage
             .content
             .last_quad_by_graph_name
-            .view(graph_name, |_, (node, _)| Arc::clone(node));
-        while let Some(current) = next.take() {
+            .view(graph_name, |_, (node, _)| Weak::clone(node));
+        while let Some(current) = next.take().and_then(|c| c.upgrade()) {
             if current.range.lock().unwrap().remove(self.transaction_id) {
                 self.log.push(LogEntry::QuadNode(Arc::clone(&current)));
             }
@@ -716,7 +716,7 @@ impl MemoryStorageWriter<'_> {
 
 pub struct QuadIterator {
     reader: MemoryStorageReader,
-    current: Option<Arc<QuadListNode>>,
+    current: Option<Weak<QuadListNode>>,
     kind: QuadIteratorKind,
     expect_subject: Option<EncodedTerm>,
     expect_predicate: Option<EncodedTerm>,
@@ -738,7 +738,7 @@ impl Iterator for QuadIterator {
 
     fn next(&mut self) -> Option<EncodedQuad> {
         loop {
-            let current = self.current.take()?;
+            let current = self.current.take()?.upgrade()?;
             self.current = match self.kind {
                 QuadIteratorKind::All => current.previous.clone(),
                 QuadIteratorKind::Subject => current.previous_subject.clone(),
@@ -844,11 +844,11 @@ enum LogEntry {
 struct QuadListNode {
     quad: EncodedQuad,
     range: Mutex<VersionRange>,
-    previous: Option<Arc<Self>>,
-    previous_subject: Option<Arc<Self>>,
-    previous_predicate: Option<Arc<Self>>,
-    previous_object: Option<Arc<Self>>,
-    previous_graph_name: Option<Arc<Self>>,
+    previous: Option<Weak<Self>>,
+    previous_subject: Option<Weak<Self>>,
+    previous_predicate: Option<Weak<Self>>,
+    previous_object: Option<Weak<Self>>,
+    previous_graph_name: Option<Weak<Self>>,
 }
 
 impl PartialEq for QuadListNode {
