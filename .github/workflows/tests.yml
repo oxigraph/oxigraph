@@ -203,7 +203,7 @@ jobs:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions && cargo update -p libm --precise 0.2.8
-      - run: cargo test
+      - run: cargo test --workspace --exclude sparql-smith
 
   test_linux_latest:
     runs-on: ubuntu-latest
