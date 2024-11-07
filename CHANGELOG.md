@@ -1,3 +1,11 @@
+## [0.4.3] - 2024-11-07
+
+### Changed
+- Fixes segfaults on `Store` drop when using the memory backend on large datasets (drop was doing too many recursive call leading to a stack overflow).
+- Upgrades RocksDB to 9.7.4.
+- Allows `thiserror` 2.0 and `geo` 0.29.
+
+
 ## [0.4.2] - 2024-10-31
 
 ### Added
