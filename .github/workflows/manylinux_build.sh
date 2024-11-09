@@ -6,11 +6,10 @@ curl https://static.rust-lang.org/rustup/dist/%arch%-unknown-linux-gnu/rustup-in
 chmod +x rustup-init
 ./rustup-init -y --profile minimal
 source "$HOME/.cargo/env"
-export PATH="${PATH}:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin:/opt/python/cp39-cp39/bin:/opt/python/cp310-cp310/bin:/opt/python/cp311-cp311/bin"
 cd python
-python3.12 -m venv venv
+python3.13 -m venv venv
 source venv/bin/activate
-pip install -r requirements.dev.txt
+pip install -r requirements.build.txt
 maturin develop --release
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
 maturin build --release --features abi3 --compatibility manylinux2014
