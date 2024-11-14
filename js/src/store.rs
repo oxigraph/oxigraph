@@ -4,8 +4,10 @@ use js_sys::{try_iter, Array, Map, Reflect};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
-use oxigraph::sparql::{Query, QueryResults, Update};
+use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
 use oxigraph::store::Store;
+#[cfg(feature = "geosparql")]
+use spargeo::register_geosparql_functions;
 use wasm_bindgen::prelude::*;
 
 // We skip_typescript on specific wasm_bindgen macros and provide custom TypeScript types for parts of this module in order to have narrower types
@@ -223,7 +225,16 @@ impl JsStore {
             query.dataset_mut().set_available_named_graphs(named_graphs);
         }
 
-        let results = self.store.query(query).map_err(JsError::from)?;
+        let mut options = QueryOptions::default();
+        #[cfg(feature = "geosparql")]
+        {
+            options = register_geosparql_functions(options);
+        }
+
+        let results = self
+            .store
+            .query_opt(query, options)
+            .map_err(JsError::from)?;
 
         Ok(match results {
             QueryResults::Solutions(solutions) => {
@@ -304,7 +315,17 @@ impl JsStore {
         }
 
         let update = Update::parse(update, base_iri.as_deref()).map_err(JsError::from)?;
-        Ok(self.store.update(update).map_err(JsError::from)?)
+
+        let mut options = QueryOptions::default();
+        #[cfg(feature = "geosparql")]
+        {
+            options = register_geosparql_functions(options);
+        }
+
+        Ok(self
+            .store
+            .update_opt(update, options)
+            .map_err(JsError::from)?)
     }
 
     pub fn load(
