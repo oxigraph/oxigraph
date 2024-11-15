@@ -33,7 +33,7 @@ impl PyDataset {
     fn new(quads: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         let mut inner = Dataset::new();
         if let Some(quads) = quads {
-            for quad in quads.iter()? {
+            for quad in quads.try_iter()? {
                 inner.insert(&*quad?.extract::<PyRef<'_, PyQuad>>()?);
             }
         }

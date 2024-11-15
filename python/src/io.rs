@@ -5,10 +5,9 @@ use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::pybacked::{PyBackedBytes, PyBackedStr};
-use pyo3::types::PyBytes;
 use std::cmp::max;
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
+use std::ffi::{CString, OsStr};
 use std::fs::File;
 use std::io::{self, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -128,7 +127,7 @@ pub fn serialize<'py>(
     prefixes: Option<BTreeMap<String, String>>,
     base_iri: Option<&str>,
     py: Python<'py>,
-) -> PyResult<Option<Bound<'py, PyBytes>>> {
+) -> PyResult<Option<Vec<u8>>> {
     PyWritable::do_write(
         |output, file_path| {
             let format = lookup_rdf_format(format, file_path.as_deref())?;
@@ -150,7 +149,7 @@ pub fn serialize<'py>(
                 })?;
             }
             let mut serializer = serializer.for_writer(output);
-            for i in input.iter()? {
+            for i in input.try_iter()? {
                 let i = i?;
                 if let Ok(triple) = i.extract::<PyRef<'_, PyTriple>>() {
                     serializer.serialize_triple(&*triple)
@@ -479,7 +478,7 @@ impl PyWritable {
         write: impl FnOnce(BufWriter<Self>, Option<PathBuf>) -> PyResult<BufWriter<Self>>,
         output: Option<PyWritableOutput>,
         py: Python<'_>,
-    ) -> PyResult<Option<Bound<'_, PyBytes>>> {
+    ) -> PyResult<Option<Vec<u8>>> {
         let (output, file_path) = match output {
             Some(PyWritableOutput::Path(file_path)) => (
                 Self::File(py.allow_threads(|| File::create(&file_path))?),
@@ -492,9 +491,9 @@ impl PyWritable {
         py.allow_threads(|| serializer.into_inner())?.close(py)
     }
 
-    fn close(self, py: Python<'_>) -> PyResult<Option<Bound<'_, PyBytes>>> {
+    fn close(self, py: Python<'_>) -> PyResult<Option<Vec<u8>>> {
         match self {
-            Self::Bytes(bytes) => Ok(Some(PyBytes::new_bound(py, &bytes))),
+            Self::Bytes(bytes) => Ok(Some(bytes)),
             Self::File(mut file) => {
                 py.allow_threads(|| {
                     file.flush()?;
@@ -565,7 +564,7 @@ impl Write for PyIo {
             Ok(self
                 .0
                 .bind(py)
-                .call_method1(intern!(py, "write"), (PyBytes::new_bound(py, buf),))?
+                .call_method1(intern!(py, "write"), (buf,))?
                 .extract::<usize>()?)
         })
     }
@@ -664,6 +663,11 @@ pub fn python_version() -> (u8, u8) {
 
 pub fn deprecation_warning(message: &str) -> PyResult<()> {
     Python::with_gil(|py| {
-        PyErr::warn_bound(py, &py.get_type_bound::<PyDeprecationWarning>(), message, 0)
+        PyErr::warn(
+            py,
+            &py.get_type::<PyDeprecationWarning>(),
+            CString::new(message)?.as_c_str(),
+            0,
+        )
     })
 }
