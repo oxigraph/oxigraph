@@ -2,7 +2,7 @@ use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyLong, PyTuple};
+use pyo3::types::{PyDict, PyInt, PyTuple};
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
@@ -286,7 +286,7 @@ impl PyLiteral {
             value.into()
         } else if let Ok(value) = value.extract::<bool>() {
             value.into()
-        } else if let Ok(value) = value.extract::<Bound<'_, PyLong>>() {
+        } else if let Ok(value) = value.extract::<Bound<'_, PyInt>>() {
             Literal::new_typed_literal(value.to_string(), xsd::INTEGER)
         } else if let Ok(value) = value.extract::<f64>() {
             value.into()
@@ -348,11 +348,11 @@ impl PyLiteral {
         &'a self,
         py: Python<'py>,
     ) -> PyResult<((&'a str,), Bound<'py, PyDict>)> {
-        let kwargs = PyDict::new_bound(py);
+        let kwargs = PyDict::new(py);
         if let Some(language) = self.language() {
             kwargs.set_item("language", language)?;
         } else {
-            kwargs.set_item("datatype", self.datatype().into_py(py))?;
+            kwargs.set_item("datatype", self.datatype())?;
         }
         Ok(((self.value(),), kwargs))
     }
@@ -403,7 +403,7 @@ impl PyDefaultGraph {
 
     /// :rtype: typing.Any
     fn __getnewargs__<'py>(&self, py: Python<'py>) -> Bound<'py, PyTuple> {
-        PyTuple::empty_bound(py)
+        PyTuple::empty(py)
     }
 
     /// :rtype: DefaultGraph
@@ -419,7 +419,7 @@ impl PyDefaultGraph {
     }
 }
 
-#[derive(FromPyObject)]
+#[derive(FromPyObject, IntoPyObject)]
 pub enum PyNamedOrBlankNode {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
@@ -443,16 +443,7 @@ impl From<NamedOrBlankNode> for PyNamedOrBlankNode {
     }
 }
 
-impl IntoPy<PyObject> for PyNamedOrBlankNode {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            Self::NamedNode(node) => node.into_py(py),
-            Self::BlankNode(node) => node.into_py(py),
-        }
-    }
-}
-
-#[derive(FromPyObject)]
+#[derive(FromPyObject, IntoPyObject)]
 pub enum PySubject {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
@@ -479,17 +470,7 @@ impl From<Subject> for PySubject {
     }
 }
 
-impl IntoPy<PyObject> for PySubject {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            Self::NamedNode(node) => node.into_py(py),
-            Self::BlankNode(node) => node.into_py(py),
-            Self::Triple(triple) => triple.into_py(py),
-        }
-    }
-}
-
-#[derive(FromPyObject)]
+#[derive(FromPyObject, IntoPyObject)]
 pub enum PyTerm {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
@@ -515,17 +496,6 @@ impl From<Term> for PyTerm {
             Term::BlankNode(node) => Self::BlankNode(node.into()),
             Term::Literal(literal) => Self::Literal(literal.into()),
             Term::Triple(triple) => Self::Triple(triple.as_ref().clone().into()),
-        }
-    }
-}
-
-impl IntoPy<PyObject> for PyTerm {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            Self::NamedNode(node) => node.into_py(py),
-            Self::BlankNode(node) => node.into_py(py),
-            Self::Literal(literal) => literal.into_py(py),
-            Self::Triple(triple) => triple.into_py(py),
         }
     }
 }
@@ -677,7 +647,7 @@ impl PyTriple {
     }
 }
 
-#[derive(FromPyObject)]
+#[derive(FromPyObject, IntoPyObject)]
 pub enum PyGraphName {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
@@ -700,16 +670,6 @@ impl From<GraphName> for PyGraphName {
             GraphName::NamedNode(node) => Self::NamedNode(node.into()),
             GraphName::BlankNode(node) => Self::BlankNode(node.into()),
             GraphName::DefaultGraph => Self::DefaultGraph(PyDefaultGraph::new()),
-        }
-    }
-}
-
-impl IntoPy<PyObject> for PyGraphName {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            Self::NamedNode(node) => node.into_py(py),
-            Self::BlankNode(node) => node.into_py(py),
-            Self::DefaultGraph(node) => node.into_py(py),
         }
     }
 }
@@ -852,12 +812,14 @@ impl PyQuad {
         4
     }
 
-    fn __getitem__(&self, input: usize, py: Python<'_>) -> PyResult<PyObject> {
+    fn __getitem__<'a>(&self, input: usize, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         match input {
-            0 => Ok(PySubject::from(self.inner.subject.clone()).into_py(py)),
-            1 => Ok(PyNamedNode::from(self.inner.predicate.clone()).into_py(py)),
-            2 => Ok(PyTerm::from(self.inner.object.clone()).into_py(py)),
-            3 => Ok(PyGraphName::from(self.inner.graph_name.clone()).into_py(py)),
+            0 => PySubject::from(self.inner.subject.clone()).into_pyobject(py),
+            1 => Ok(PyNamedNode::from(self.inner.predicate.clone())
+                .into_pyobject(py)?
+                .into_any()),
+            2 => PyTerm::from(self.inner.object.clone()).into_pyobject(py),
+            3 => PyGraphName::from(self.inner.graph_name.clone()).into_pyobject(py),
             _ => Err(PyIndexError::new_err("A quad has only 4 elements")),
         }
     }
@@ -1050,12 +1012,6 @@ impl<'a> From<&'a PyTermRef<'a>> for TermRef<'a> {
     }
 }
 
-impl<'a> From<&'a PyTermRef<'a>> for Term {
-    fn from(value: &'a PyTermRef<'a>) -> Self {
-        TermRef::from(value).into()
-    }
-}
-
 #[derive(FromPyObject)]
 pub enum PyGraphNameRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
@@ -1152,12 +1108,12 @@ impl QuadComponentsIter {
         slf
     }
 
-    fn __next__(&mut self, py: Python<'_>) -> Option<PyObject> {
+    fn __next__<'a>(&mut self, py: Python<'a>) -> Option<PyResult<Bound<'a, PyAny>>> {
         self.inner.next().map(move |t| {
             if let Some(t) = t {
-                PyTerm::from(t).into_py(py)
+                PyTerm::from(t).into_pyobject(py)
             } else {
-                PyDefaultGraph {}.into_py(py)
+                Ok(PyDefaultGraph {}.into_pyobject(py)?.into_any())
             }
         })
     }

@@ -14,7 +14,7 @@ use oxigraph::sparql::{
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
-use pyo3::types::{PyBytes, PyTuple};
+use pyo3::types::PyTuple;
 #[cfg(feature = "geosparql")]
 use spargeo::register_geosparql_functions;
 use std::collections::HashMap;
@@ -46,7 +46,7 @@ pub fn parse_query(
     }
 
     if let Some(default_graph) = default_graph {
-        if let Ok(default_graphs) = default_graph.iter() {
+        if let Ok(default_graphs) = default_graph.try_iter() {
             query.dataset_mut().set_default_graph(
                 default_graphs
                     .map(|graph| Ok(graph?.extract::<PyGraphName>()?.into()))
@@ -66,7 +66,7 @@ pub fn parse_query(
     if let Some(named_graphs) = named_graphs {
         query.dataset_mut().set_available_named_graphs(
             named_graphs
-                .iter()?
+                .try_iter()?
                 .map(|graph| Ok(graph?.extract::<PyNamedOrBlankNode>()?.into()))
                 .collect::<PyResult<_>>()?,
         )
@@ -92,10 +92,8 @@ pub fn query_options_from_python(
                         function
                             .call1(
                                 py,
-                                PyTuple::new_bound(
-                                    py,
-                                    args.iter().map(|t| PyTerm::from(t.clone()).into_py(py)),
-                                ),
+                                PyTuple::new(py, args.iter().map(|t| PyTerm::from(t.clone())))
+                                    .ok()?,
                             )
                             .ok()?
                             .extract::<Option<PyTerm>>(py)
@@ -109,18 +107,23 @@ pub fn query_options_from_python(
     options
 }
 
-pub fn query_results_to_python(py: Python<'_>, results: QueryResults) -> PyObject {
-    match results {
+pub fn query_results_to_python(
+    py: Python<'_>,
+    results: QueryResults,
+) -> PyResult<Bound<'_, PyAny>> {
+    Ok(match results {
         QueryResults::Solutions(inner) => PyQuerySolutions {
             inner: PyQuerySolutionsVariant::Query(UngilQuerySolutionIter(inner)),
         }
-        .into_py(py),
+        .into_pyobject(py)?
+        .into_any(),
         QueryResults::Graph(inner) => PyQueryTriples {
             inner: UngilQueryTripleIter(inner),
         }
-        .into_py(py),
-        QueryResults::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
-    }
+        .into_pyobject(py)?
+        .into_any(),
+        QueryResults::Boolean(inner) => PyQueryBoolean { inner }.into_pyobject(py)?.into_any(),
+    })
 }
 
 /// Tuple associating variables and terms that are the result of a SPARQL ``SELECT`` query.
@@ -283,12 +286,12 @@ impl PyQuerySolutions {
     /// >>> results.serialize(format=QueryResultsFormat.JSON)
     /// b'{"head":{"vars":["s","p","o"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"},"p":{"type":"uri","value":"http://example.com/p"},"o":{"type":"literal","value":"1"}}]}}'
     #[pyo3(signature = (output = None, format = None))]
-    fn serialize<'py>(
+    fn serialize(
         &mut self,
         output: Option<PyWritableOutput>,
         format: Option<PyQueryResultsFormatInput>,
-        py: Python<'py>,
-    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        py: Python<'_>,
+    ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
@@ -389,12 +392,12 @@ impl PyQueryBoolean {
     /// >>> results.serialize(format=QueryResultsFormat.JSON)
     /// b'{"head":{},"boolean":true}'
     #[pyo3(signature = (output = None, format = None))]
-    fn serialize<'py>(
+    fn serialize(
         &self,
         output: Option<PyWritableOutput>,
         format: Option<PyQueryResultsFormatInput>,
-        py: Python<'py>,
-    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        py: Python<'_>,
+    ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
@@ -465,12 +468,12 @@ impl PyQueryTriples {
     /// >>> results.serialize(format=RdfFormat.N_TRIPLES)
     /// b'<http://example.com> <http://example.com/p> "1" .\n'
     #[pyo3(signature = (output = None, format = None))]
-    fn serialize<'py>(
+    fn serialize(
         &mut self,
         output: Option<PyWritableOutput>,
         format: Option<PyRdfFormatInput>,
-        py: Python<'py>,
-    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        py: Python<'_>,
+    ) -> PyResult<Option<Vec<u8>>> {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_rdf_format(format, file_path.as_deref())?;
@@ -535,7 +538,7 @@ pub fn parse_query_results(
     format: Option<PyQueryResultsFormatInput>,
     path: Option<PathBuf>,
     py: Python<'_>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'_, PyAny>> {
     let input = PyReadable::from_args(&path, input, py)?;
     let format = lookup_query_results_format(format, path.as_deref())?;
     let results = QueryResultsParser::from_format(format)
@@ -548,8 +551,11 @@ pub fn parse_query_results(
                 file_path: path,
             },
         }
-        .into_py(py),
-        ReaderQueryResultsParserOutput::Boolean(inner) => PyQueryBoolean { inner }.into_py(py),
+        .into_pyobject(py)?
+        .into_any(),
+        ReaderQueryResultsParserOutput::Boolean(inner) => {
+            PyQueryBoolean { inner }.into_pyobject(py)?.into_any()
+        }
     })
 }
 

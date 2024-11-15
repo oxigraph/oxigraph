@@ -10,7 +10,6 @@ use oxigraph::sparql::{QueryResults, Update};
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
@@ -125,7 +124,7 @@ impl PyStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     fn extend(&self, quads: &Bound<'_, PyAny>, py: Python<'_>) -> PyResult<()> {
         let quads = quads
-            .iter()?
+            .try_iter()?
             .map(|q| q?.extract())
             .collect::<PyResult<Vec<PyQuad>>>()?;
         py.allow_threads(|| {
@@ -153,7 +152,7 @@ impl PyStore {
         self.inner
             .bulk_loader()
             .load_ok_quads::<PyErr, PythonOrStorageError>(
-                quads.iter()?.map(|q| q?.extract::<PyQuad>()),
+                quads.try_iter()?.map(|q| q?.extract::<PyQuad>()),
             )?;
         Ok(())
     }
@@ -255,7 +254,7 @@ impl PyStore {
     /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
     #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, custom_functions = None))]
-    fn query(
+    fn query<'py>(
         &self,
         query: &str,
         base_iri: Option<&str>,
@@ -263,8 +262,8 @@ impl PyStore {
         default_graph: Option<&Bound<'_, PyAny>>,
         named_graphs: Option<&Bound<'_, PyAny>>,
         custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
-        py: Python<'_>,
-    ) -> PyResult<PyObject> {
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         pub struct UngilQueryResults(QueryResults);
 
         #[allow(unsafe_code)]
@@ -284,7 +283,7 @@ impl PyStore {
             .allow_threads(|| Ok(UngilQueryResults(self.inner.query_opt(query, options)?)))
             .map_err(map_evaluation_error)?
             .0;
-        Ok(query_results_to_python(py, results))
+        query_results_to_python(py, results)
     }
 
     /// Executes a `SPARQL 1.1 update <https://www.w3.org/TR/sparql11-update/>`_.
@@ -524,15 +523,15 @@ impl PyStore {
     /// b'@base <http://example.com> .\n@prefix ex: </> .\n<> ex:p "1" .\n'
     #[allow(clippy::needless_pass_by_value)]
     #[pyo3(signature = (output = None, format = None, *, from_graph = None, prefixes = None, base_iri = None))]
-    fn dump<'py>(
+    fn dump(
         &self,
         output: Option<PyWritableOutput>,
         format: Option<PyRdfFormatInput>,
         from_graph: Option<PyGraphNameRef<'_>>,
         prefixes: Option<BTreeMap<String, String>>,
         base_iri: Option<&str>,
-        py: Python<'py>,
-    ) -> PyResult<Option<Bound<'py, PyBytes>>> {
+        py: Python<'_>,
+    ) -> PyResult<Option<Vec<u8>>> {
         let from_graph_name = from_graph.as_ref().map(GraphNameRef::from);
         PyWritable::do_write(
             |output, file_path| {
