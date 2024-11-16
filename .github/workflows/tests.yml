@@ -79,7 +79,7 @@ jobs:
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown -- -D warnings -D clippy::all
         working-directory: ./js
 
-  clippy_wasi:
+  clippy_wasip1:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,11 +88,11 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           version: 1.82.0
-          target: wasm32-wasi
+          target: wasm32-wasip1
           component: clippy
-      - run: cargo clippy --lib --tests --target wasm32-wasi -- -D warnings -D clippy::all
+      - run: cargo clippy --lib --tests --target wasm32-wasip1 -- -D warnings -D clippy::all
         working-directory: ./lib/oxigraph
-      - run: cargo clippy --target wasm32-wasi --features abi3 --no-default-features -- -D warnings -D clippy::all
+      - run: cargo clippy --target wasm32-wasip1 --features abi3 --no-default-features -- -D warnings -D clippy::all
         working-directory: ./python
 
   clippy_wasm_emscripten:
@@ -254,7 +254,7 @@ jobs:
       - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: cargo test
 
-  test_wasi:
+  test_wasip1:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -262,7 +262,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          target: wasm32-wasi
+          target: wasm32-wasip1
       - uses: taiki-e/install-action@v2
         with: { tool: "wasmtime,cargo-wasi" }
       - run: cargo wasi test --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
