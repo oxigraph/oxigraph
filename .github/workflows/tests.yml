@@ -550,7 +550,7 @@ jobs:
           python -m unittest
           cd ../..
           cargo llvm-cov report --codecov --output-path codecov.json
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v5
         with:
           files: codecov.json
           flags: rust
