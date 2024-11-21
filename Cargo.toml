@@ -20,7 +20,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.3"
+version = "0.4.4"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
@@ -76,11 +76,11 @@ wkt = "0.11"
 zstd = ">=0.12, <0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.4.3", path = "lib/oxigraph" }
+oxigraph = { version = "=0.4.4", path = "lib/oxigraph" }
 oxrdf = { version = "=0.2.3", path = "lib/oxrdf" }
 oxrdfio = { version = "=0.1.3", path = "lib/oxrdfio" }
 oxrdfxml = { version = "=0.1.3", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.4.3", path = "./oxrocksdb-sys" }
+oxrocksdb-sys = { version = "=0.4.4", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "=0.2.1", path = "lib/oxsdatatypes" }
 oxttl = { version = "=0.1.3", path = "lib/oxttl" }
 spargebra = { version = "=0.3.3", path = "lib/spargebra" }

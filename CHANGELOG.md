@@ -1,3 +1,10 @@
+## [0.4.4] - 2024-11-21
+
+### Added
+- Integrates geosparql in the CLI Docker image and the JS bindings.
+- Python: support for 3.13 free-threaded builds.
+
+
 ## [0.4.3] - 2024-11-07
 
 ### Changed
