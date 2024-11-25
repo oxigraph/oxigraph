@@ -29,6 +29,7 @@ use sparopt::algebra::{
     AggregateExpression, Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm,
     MinusAlgorithm, OrderExpression,
 };
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
@@ -3147,25 +3148,29 @@ fn compile_static_pattern_if_exists(
 }
 
 pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
-    let mut regex_builder = RegexBuilder::new(pattern);
+    let mut pattern = Cow::Borrowed(pattern);
+    let flags = flags.unwrap_or_default();
+    if flags.contains('q') {
+        pattern = regex::escape(&pattern).into();
+    }
+    let mut regex_builder = RegexBuilder::new(&pattern);
     regex_builder.size_limit(REGEX_SIZE_LIMIT);
-    if let Some(flags) = flags {
-        for flag in flags.chars() {
-            match flag {
-                's' => {
-                    regex_builder.dot_matches_new_line(true);
-                }
-                'm' => {
-                    regex_builder.multi_line(true);
-                }
-                'i' => {
-                    regex_builder.case_insensitive(true);
-                }
-                'x' => {
-                    regex_builder.ignore_whitespace(true);
-                }
-                _ => (), // TODO: implement q
+    for flag in flags.chars() {
+        match flag {
+            's' => {
+                regex_builder.dot_matches_new_line(true);
             }
+            'm' => {
+                regex_builder.multi_line(true);
+            }
+            'i' => {
+                regex_builder.case_insensitive(true);
+            }
+            'x' => {
+                regex_builder.ignore_whitespace(true);
+            }
+            'q' => (),        // Already supported
+            _ => return None, // invalid option
         }
     }
     regex_builder.build().ok()
