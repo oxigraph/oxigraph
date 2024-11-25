@@ -267,7 +267,7 @@ impl QuadIter {
 /// The following algorithms are supported:
 ///
 /// * :py:attr:`CanonicalizationAlgorithm.UNSTABLE`: an unstable algorithm preferred by PyOxigraph.
-#[pyclass(name = "CanonicalizationAlgorithm", module = "pyoxigraph")]
+#[pyclass(frozen, name = "CanonicalizationAlgorithm", module = "pyoxigraph")]
 #[derive(Clone)]
 pub struct PyCanonicalizationAlgorithm {
     inner: CanonicalizationAlgorithm,

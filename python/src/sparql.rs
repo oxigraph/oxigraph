@@ -223,6 +223,7 @@ impl SolutionValueIter {
 pub struct PyQuerySolutions {
     inner: PyQuerySolutionsVariant,
 }
+
 enum PyQuerySolutionsVariant {
     Query(UngilQuerySolutionIter),
     Reader {
