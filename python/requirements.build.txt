@@ -1,2 +1,2 @@
 maturin~=1.0
-ruff~=0.7.0
+ruff~=0.8.0
