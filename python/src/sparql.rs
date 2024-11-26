@@ -15,6 +15,7 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyTuple;
+use pyo3::IntoPyObjectExt;
 #[cfg(feature = "geosparql")]
 use spargeo::register_geosparql_functions;
 use std::collections::HashMap;
@@ -111,19 +112,17 @@ pub fn query_results_to_python(
     py: Python<'_>,
     results: QueryResults,
 ) -> PyResult<Bound<'_, PyAny>> {
-    Ok(match results {
+    match results {
         QueryResults::Solutions(inner) => PyQuerySolutions {
             inner: PyQuerySolutionsVariant::Query(UngilQuerySolutionIter(inner)),
         }
-        .into_pyobject(py)?
-        .into_any(),
+        .into_bound_py_any(py),
         QueryResults::Graph(inner) => PyQueryTriples {
             inner: UngilQueryTripleIter(inner),
         }
-        .into_pyobject(py)?
-        .into_any(),
-        QueryResults::Boolean(inner) => PyQueryBoolean { inner }.into_pyobject(py)?.into_any(),
-    })
+        .into_bound_py_any(py),
+        QueryResults::Boolean(inner) => PyQueryBoolean { inner }.into_bound_py_any(py),
+    }
 }
 
 /// Tuple associating variables and terms that are the result of a SPARQL ``SELECT`` query.
@@ -545,19 +544,18 @@ pub fn parse_query_results(
     let results = QueryResultsParser::from_format(format)
         .for_reader(input)
         .map_err(|e| map_query_results_parse_error(e, path.clone()))?;
-    Ok(match results {
+    match results {
         ReaderQueryResultsParserOutput::Solutions(iter) => PyQuerySolutions {
             inner: PyQuerySolutionsVariant::Reader {
                 iter,
                 file_path: path,
             },
         }
-        .into_pyobject(py)?
-        .into_any(),
+        .into_bound_py_any(py),
         ReaderQueryResultsParserOutput::Boolean(inner) => {
-            PyQueryBoolean { inner }.into_pyobject(py)?.into_any()
+            PyQueryBoolean { inner }.into_bound_py_any(py)
         }
-    })
+    }
 }
 
 /// `SPARQL query <https://www.w3.org/TR/sparql11-query/>`_ results serialization formats.

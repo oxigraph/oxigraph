@@ -3,6 +3,7 @@ use oxigraph::model::*;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyTuple};
+use pyo3::IntoPyObjectExt;
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
@@ -814,12 +815,10 @@ impl PyQuad {
 
     fn __getitem__<'a>(&self, input: usize, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         match input {
-            0 => PySubject::from(self.inner.subject.clone()).into_pyobject(py),
-            1 => Ok(PyNamedNode::from(self.inner.predicate.clone())
-                .into_pyobject(py)?
-                .into_any()),
-            2 => PyTerm::from(self.inner.object.clone()).into_pyobject(py),
-            3 => PyGraphName::from(self.inner.graph_name.clone()).into_pyobject(py),
+            0 => PySubject::from(self.inner.subject.clone()).into_bound_py_any(py),
+            1 => PyNamedNode::from(self.inner.predicate.clone()).into_bound_py_any(py),
+            2 => PyTerm::from(self.inner.object.clone()).into_bound_py_any(py),
+            3 => PyGraphName::from(self.inner.graph_name.clone()).into_bound_py_any(py),
             _ => Err(PyIndexError::new_err("A quad has only 4 elements")),
         }
     }
@@ -1111,9 +1110,9 @@ impl QuadComponentsIter {
     fn __next__<'a>(&mut self, py: Python<'a>) -> Option<PyResult<Bound<'a, PyAny>>> {
         self.inner.next().map(move |t| {
             if let Some(t) = t {
-                PyTerm::from(t).into_pyobject(py)
+                PyTerm::from(t).into_bound_py_any(py)
             } else {
-                Ok(PyDefaultGraph {}.into_pyobject(py)?.into_any())
+                PyDefaultGraph {}.into_bound_py_any(py)
             }
         })
     }
