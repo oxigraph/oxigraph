@@ -1,7 +1,7 @@
 pub fn is_name(name: &str) -> bool {
     // NameStartChar (NameChar)*
     let mut c = name.chars();
-    if !c.next().map_or(false, is_name_start_char) {
+    if !c.next().is_some_and(is_name_start_char) {
         return false;
     }
     c.all(is_name_char)

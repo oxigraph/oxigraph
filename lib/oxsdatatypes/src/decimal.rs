@@ -476,7 +476,7 @@ impl FromStr for Decimal {
         };
 
         let mut value = 0_i128;
-        let with_before_dot = input.first().map_or(false, u8::is_ascii_digit);
+        let with_before_dot = input.first().is_some_and(u8::is_ascii_digit);
         while let Some(c) = input.first() {
             if c.is_ascii_digit() {
                 value = value

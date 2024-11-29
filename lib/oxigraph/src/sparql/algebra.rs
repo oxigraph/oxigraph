@@ -248,7 +248,7 @@ impl QueryDataset {
     pub fn is_default_dataset(&self) -> bool {
         self.default
             .as_ref()
-            .map_or(false, |t| t == &[GraphName::DefaultGraph])
+            .is_some_and(|t| t == &[GraphName::DefaultGraph])
             && self.named.is_none()
     }
 
