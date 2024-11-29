@@ -59,7 +59,6 @@ fn build_rocksdb_api(includes: &[PathBuf]) {
 }
 
 #[cfg(not(feature = "pkg-config"))]
-
 fn build_rocksdb() {
     let target = var("TARGET").unwrap();
 

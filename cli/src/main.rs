@@ -177,7 +177,7 @@ pub fn main() -> anyhow::Result<()> {
                                     }
                                 };
                                 if let Err(error) = {
-                                    if file.extension().map_or(false, |e| e == OsStr::new("gz")) {
+                                    if file.extension().is_some_and(|e| e == OsStr::new("gz")) {
                                         bulk_load(
                                             &loader,
                                             MultiGzDecoder::new(fp),

@@ -377,7 +377,7 @@ fn is_turtle_decimal(value: &str) -> bool {
     } else if let Some(v) = value.strip_prefix(b"-") {
         value = v;
     }
-    while value.first().map_or(false, u8::is_ascii_digit) {
+    while value.first().is_some_and(u8::is_ascii_digit) {
         value = &value[1..];
     }
     let Some(value) = value.strip_prefix(b".") else {
@@ -396,14 +396,14 @@ fn is_turtle_double(value: &str) -> bool {
         value = v;
     }
     let mut with_before = false;
-    while value.first().map_or(false, u8::is_ascii_digit) {
+    while value.first().is_some_and(u8::is_ascii_digit) {
         value = &value[1..];
         with_before = true;
     }
     let mut with_after = false;
     if let Some(v) = value.strip_prefix(b".") {
         value = v;
-        while value.first().map_or(false, u8::is_ascii_digit) {
+        while value.first().is_some_and(u8::is_ascii_digit) {
             value = &value[1..];
             with_after = true;
         }

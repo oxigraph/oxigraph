@@ -163,7 +163,7 @@ impl MemoryStorageReader {
             .content
             .quad_set
             .get(quad)
-            .map_or(false, |node| self.is_node_in_range(&node))
+            .is_some_and(|node| self.is_node_in_range(&node))
     }
 
     pub fn quads_for_pattern(
@@ -257,7 +257,7 @@ impl MemoryStorageReader {
             .content
             .graphs
             .get(graph_name)
-            .map_or(false, |range| self.is_in_range(&range))
+            .is_some_and(|range| self.is_in_range(&range))
     }
 
     pub fn contains_str(&self, key: &StrHash) -> bool {
@@ -280,7 +280,7 @@ impl MemoryStorageReader {
                 .content
                 .quad_set
                 .get(&current.quad)
-                .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                .is_some_and(|e| Arc::ptr_eq(&e, &current))
             {
                 return Err(
                     CorruptionError::new("Quad in previous chain but not in quad set").into(),
@@ -319,7 +319,7 @@ impl MemoryStorageReader {
                     .content
                     .quad_set
                     .get(&current.quad)
-                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                    .is_some_and(|e| Arc::ptr_eq(&e, &current))
                 {
                     return Err(
                         CorruptionError::new("Quad in previous chain but not in quad set").into(),
@@ -351,7 +351,7 @@ impl MemoryStorageReader {
                     .content
                     .quad_set
                     .get(&current.quad)
-                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                    .is_some_and(|e| Arc::ptr_eq(&e, &current))
                 {
                     return Err(
                         CorruptionError::new("Quad in previous chain but not in quad set").into(),
@@ -383,7 +383,7 @@ impl MemoryStorageReader {
                     .content
                     .quad_set
                     .get(&current.quad)
-                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                    .is_some_and(|e| Arc::ptr_eq(&e, &current))
                 {
                     return Err(
                         CorruptionError::new("Quad in previous chain but not in quad set").into(),
@@ -415,7 +415,7 @@ impl MemoryStorageReader {
                     .content
                     .quad_set
                     .get(&current.quad)
-                    .map_or(false, |e| Arc::ptr_eq(&e, &current))
+                    .is_some_and(|e| Arc::ptr_eq(&e, &current))
                 {
                     return Err(
                         CorruptionError::new("Quad in previous chain but not in quad set").into(),
@@ -682,9 +682,7 @@ impl MemoryStorageWriter<'_> {
             .content
             .graphs
             .get_mut(graph_name)
-            .map_or(false, |mut entry| {
-                entry.value_mut().remove(self.transaction_id)
-            });
+            .is_some_and(|mut entry| entry.value_mut().remove(self.transaction_id));
         if removed {
             self.log.push(LogEntry::Graph(graph_name.clone()));
         }

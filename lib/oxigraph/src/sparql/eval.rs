@@ -58,7 +58,7 @@ impl EncodedTuple {
     }
 
     pub fn contains(&self, index: usize) -> bool {
-        self.inner.get(index).map_or(false, Option::is_some)
+        self.inner.get(index).is_some_and(Option::is_some)
     }
 
     pub fn get(&self, index: usize) -> Option<&EncodedTerm> {

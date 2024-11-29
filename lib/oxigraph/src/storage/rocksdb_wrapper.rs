@@ -522,12 +522,11 @@ impl Db {
                     while let Some(e) = error.source() {
                         error = e;
                     }
-                    let is_conflict_error =
-                        error.downcast_ref::<ErrorStatus>().map_or(false, |e| {
-                            e.0.code == rocksdb_status_code_t_rocksdb_status_code_busy
-                                || e.0.code == rocksdb_status_code_t_rocksdb_status_code_timed_out
-                                || e.0.code == rocksdb_status_code_t_rocksdb_status_code_try_again
-                        });
+                    let is_conflict_error = error.downcast_ref::<ErrorStatus>().is_some_and(|e| {
+                        e.0.code == rocksdb_status_code_t_rocksdb_status_code_busy
+                            || e.0.code == rocksdb_status_code_t_rocksdb_status_code_timed_out
+                            || e.0.code == rocksdb_status_code_t_rocksdb_status_code_try_again
+                    });
                     if is_conflict_error {
                         // We give a chance to the OS to do something else before retrying in order to help avoiding another conflict
                         yield_now();
