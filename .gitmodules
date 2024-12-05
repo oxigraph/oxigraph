@@ -9,7 +9,7 @@
 	url = https://github.com/Tpt/bsbm-tools.git
 [submodule "oxrocksdb-sys/rocksdb"]
 	path = oxrocksdb-sys/rocksdb
-	url = https://github.com/oxigraph/rocksdb.git
+	url = https://github.com/facebook/rocksdb.git
 [submodule "oxrocksdb-sys/lz4"]
 	path = oxrocksdb-sys/lz4
 	url = https://github.com/lz4/lz4.git

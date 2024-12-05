@@ -115,6 +115,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - run: bash trim_rocksdb.sh
+        working-directory: ./oxrocksdb-sys
       - uses: ./.github/actions/setup-rust
       - uses: actions/setup-python@v5
         with:
@@ -344,6 +346,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - run: bash trim_rocksdb.sh
+        working-directory: ./oxrocksdb-sys
       - run: rustup update
       - run: cargo login $CRATES_IO_TOKEN
         env:
@@ -415,8 +419,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - run: bash trim_rocksdb.sh
+        working-directory: ./oxrocksdb-sys
       - run: |
-          rm -rf .git bench fuzz
+          rm -rf .git **/.git bench fuzz
           zip -r oxigraph_${{ github.event.release.tag_name }}.zip .
           tar -czf /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
           mv /tmp/oxigraph_${{ github.event.release.tag_name }}.tar.gz .
