@@ -171,14 +171,23 @@ impl<R: TokenRecognizer> Lexer<Vec<u8>, R> {
 
     fn shrink_data(&mut self) {
         if self.position.line_start_buffer_offset > 0 {
-            self.data
-                .copy_within(self.position.line_start_buffer_offset.., 0);
-            self.data
-                .truncate(self.data.len() - self.position.line_start_buffer_offset);
-            self.position.buffer_offset -= self.position.line_start_buffer_offset;
-            self.position.line_start_buffer_offset = 0;
-            self.previous_position = self.position;
+            self.shrink_data_by(self.position.line_start_buffer_offset);
         }
+        if self.position.buffer_offset > self.max_buffer_size / 2 {
+            // We really need to shrink, let's forget about error quality
+            self.shrink_data_by(self.position.buffer_offset);
+        }
+    }
+
+    fn shrink_data_by(&mut self, shift_amount: usize) {
+        self.data.copy_within(shift_amount.., 0);
+        self.data.truncate(self.data.len() - shift_amount);
+        self.position.buffer_offset -= shift_amount;
+        self.position.line_start_buffer_offset = self
+            .position
+            .line_start_buffer_offset
+            .saturating_sub(shift_amount);
+        self.previous_position = self.position;
     }
 }
 
