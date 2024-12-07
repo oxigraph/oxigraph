@@ -1,10 +1,11 @@
-use crate::model::TermRef;
-use crate::sparql::algebra::QueryDataset;
-use crate::sparql::EvaluationError;
+use crate::sparql::QueryDataset;
 use crate::storage::numeric_encoder::{
-    insert_term, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
+    insert_term, Decoder, EncodedTerm, EncodedTriple, StrHash, StrHashHasher, StrLookup,
 };
-use crate::storage::{StorageError, StorageReader};
+use crate::storage::{CorruptionError, StorageError, StorageReader};
+use oxrdf::Term;
+use oxsdatatypes::Boolean;
+use spareval::{ExpressionTerm, ExpressionTriple, InternalQuad, QueryableDataset};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -34,33 +35,60 @@ impl DatasetView {
         }
     }
 
-    fn store_encoded_quads_for_pattern(
-        &self,
-        subject: Option<&EncodedTerm>,
-        predicate: Option<&EncodedTerm>,
-        object: Option<&EncodedTerm>,
-        graph_name: Option<&EncodedTerm>,
-    ) -> impl Iterator<Item = Result<EncodedQuad, EvaluationError>> + 'static {
-        self.reader
-            .quads_for_pattern(subject, predicate, object, graph_name)
-            .map(|t| t.map_err(Into::into))
+    pub fn insert_str(&self, key: &StrHash, value: &str) {
+        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
+            if !matches!(self.reader.contains_str(key), Ok(true)) {
+                e.insert(value.to_owned());
+            }
+        }
     }
+}
 
-    #[allow(clippy::needless_collect)]
-    pub fn encoded_quads_for_pattern(
+impl QueryableDataset for DatasetView {
+    type InternalTerm = EncodedTerm;
+    type Error = StorageError;
+
+    fn internal_quads_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
-        graph_name: Option<&EncodedTerm>,
-    ) -> Box<dyn Iterator<Item = Result<EncodedQuad, EvaluationError>>> {
+        graph_name: Option<Option<&EncodedTerm>>,
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, StorageError>>> {
         if let Some(graph_name) = graph_name {
-            if graph_name.is_default_graph() {
-                if let Some(default_graph_graphs) = &self.dataset.default {
-                    if default_graph_graphs.len() == 1 {
-                        // Single graph optimization
-                        Box::new(
-                            self.store_encoded_quads_for_pattern(
+            if let Some(graph_name) = graph_name {
+                if self
+                    .dataset
+                    .named
+                    .as_ref()
+                    .map_or(true, |d| d.contains(graph_name))
+                {
+                    Box::new(
+                        self.reader
+                            .quads_for_pattern(subject, predicate, object, Some(graph_name))
+                            .map(|quad| {
+                                let quad = quad?;
+                                Ok(InternalQuad {
+                                    subject: quad.subject,
+                                    predicate: quad.predicate,
+                                    object: quad.object,
+                                    graph_name: if quad.graph_name.is_default_graph() {
+                                        None
+                                    } else {
+                                        Some(quad.graph_name)
+                                    },
+                                })
+                            }),
+                    )
+                } else {
+                    Box::new(empty())
+                }
+            } else if let Some(default_graph_graphs) = &self.dataset.default {
+                if default_graph_graphs.len() == 1 {
+                    // Single graph optimization
+                    Box::new(
+                        self.reader
+                            .quads_for_pattern(
                                 subject,
                                 predicate,
                                 object,
@@ -68,106 +96,199 @@ impl DatasetView {
                             )
                             .map(|quad| {
                                 let quad = quad?;
-                                Ok(EncodedQuad::new(
-                                    quad.subject,
-                                    quad.predicate,
-                                    quad.object,
-                                    EncodedTerm::DefaultGraph,
-                                ))
-                            }),
-                        )
-                    } else {
-                        let iters = default_graph_graphs
-                            .iter()
-                            .map(|graph_name| {
-                                self.store_encoded_quads_for_pattern(
-                                    subject,
-                                    predicate,
-                                    object,
-                                    Some(graph_name),
-                                )
-                            })
-                            .collect::<Vec<_>>();
-                        Box::new(iters.into_iter().flatten().map(|quad| {
-                            let quad = quad?;
-                            Ok(EncodedQuad::new(
-                                quad.subject,
-                                quad.predicate,
-                                quad.object,
-                                EncodedTerm::DefaultGraph,
-                            ))
-                        }))
-                    }
-                } else {
-                    Box::new(
-                        self.store_encoded_quads_for_pattern(subject, predicate, object, None)
-                            .map(|quad| {
-                                let quad = quad?;
-                                Ok(EncodedQuad::new(
-                                    quad.subject,
-                                    quad.predicate,
-                                    quad.object,
-                                    EncodedTerm::DefaultGraph,
-                                ))
+                                Ok(InternalQuad {
+                                    subject: quad.subject,
+                                    predicate: quad.predicate,
+                                    object: quad.object,
+                                    graph_name: None,
+                                })
                             }),
                     )
+                } else {
+                    let iters = default_graph_graphs
+                        .iter()
+                        .map(|graph_name| {
+                            self.reader.quads_for_pattern(
+                                subject,
+                                predicate,
+                                object,
+                                Some(graph_name),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    Box::new(iters.into_iter().flatten().map(|quad| {
+                        let quad = quad?;
+                        Ok(InternalQuad {
+                            subject: quad.subject,
+                            predicate: quad.predicate,
+                            object: quad.object,
+                            graph_name: None,
+                        })
+                    }))
                 }
-            } else if self
-                .dataset
-                .named
-                .as_ref()
-                .map_or(true, |d| d.contains(graph_name))
-            {
-                Box::new(self.store_encoded_quads_for_pattern(
-                    subject,
-                    predicate,
-                    object,
-                    Some(graph_name),
-                ))
             } else {
-                Box::new(empty())
+                Box::new(
+                    self.reader
+                        .quads_for_pattern(subject, predicate, object, None)
+                        .map(|quad| {
+                            let quad = quad?;
+                            Ok(InternalQuad {
+                                subject: quad.subject,
+                                predicate: quad.predicate,
+                                object: quad.object,
+                                graph_name: None,
+                            })
+                        }),
+                )
             }
         } else if let Some(named_graphs) = &self.dataset.named {
             let iters = named_graphs
                 .iter()
                 .map(|graph_name| {
-                    self.store_encoded_quads_for_pattern(
-                        subject,
-                        predicate,
-                        object,
-                        Some(graph_name),
-                    )
+                    self.reader
+                        .quads_for_pattern(subject, predicate, object, Some(graph_name))
                 })
                 .collect::<Vec<_>>();
-            Box::new(iters.into_iter().flatten())
+            Box::new(iters.into_iter().flatten().map(|quad| {
+                let quad = quad?;
+                Ok(InternalQuad {
+                    subject: quad.subject,
+                    predicate: quad.predicate,
+                    object: quad.object,
+                    graph_name: if quad.graph_name.is_default_graph() {
+                        None
+                    } else {
+                        Some(quad.graph_name)
+                    },
+                })
+            }))
         } else {
             Box::new(
-                self.store_encoded_quads_for_pattern(subject, predicate, object, None)
-                    .filter(|quad| match quad {
-                        Err(_) => true,
-                        Ok(quad) => !quad.graph_name.is_default_graph(),
+                self.reader
+                    .quads_for_pattern(subject, predicate, object, None)
+                    .filter_map(|quad| {
+                        let quad = match quad {
+                            Ok(quad) => quad,
+                            Err(e) => return Some(Err(e)),
+                        };
+                        Some(Ok(InternalQuad {
+                            subject: quad.subject,
+                            predicate: quad.predicate,
+                            object: quad.object,
+                            graph_name: if quad.graph_name.is_default_graph() {
+                                return None;
+                            } else {
+                                Some(quad.graph_name)
+                            },
+                        }))
                     }),
             )
         }
     }
 
-    pub fn encode_term<'a>(&self, term: impl Into<TermRef<'a>>) -> EncodedTerm {
-        let term = term.into();
-        let encoded = term.into();
-        insert_term(term, &encoded, &mut |key, value| {
+    fn internalize_term(&self, term: Term) -> Result<EncodedTerm, StorageError> {
+        let encoded = term.as_ref().into();
+        insert_term(term.as_ref(), &encoded, &mut |key, value| {
             self.insert_str(key, value);
             Ok(())
-        })
-        .unwrap();
-        encoded
+        })?;
+        Ok(encoded)
     }
 
-    pub fn insert_str(&self, key: &StrHash, value: &str) {
-        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
-            if !matches!(self.reader.contains_str(key), Ok(true)) {
-                e.insert(value.to_owned());
+    fn externalize_term(&self, term: EncodedTerm) -> Result<Term, StorageError> {
+        self.decode_term(&term)
+    }
+
+    fn externalize_expression_term(
+        &self,
+        term: EncodedTerm,
+    ) -> Result<ExpressionTerm, StorageError> {
+        Ok(match term {
+            EncodedTerm::DefaultGraph => {
+                return Err(CorruptionError::new("Unexpected default graph").into())
             }
-        }
+            EncodedTerm::BooleanLiteral(value) => ExpressionTerm::BooleanLiteral(value),
+            EncodedTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(value),
+            EncodedTerm::DoubleLiteral(value) => ExpressionTerm::DoubleLiteral(value),
+            EncodedTerm::IntegerLiteral(value) => ExpressionTerm::IntegerLiteral(value),
+            EncodedTerm::DecimalLiteral(value) => ExpressionTerm::DecimalLiteral(value),
+            EncodedTerm::DateTimeLiteral(value) => ExpressionTerm::DateTimeLiteral(value),
+            EncodedTerm::TimeLiteral(value) => ExpressionTerm::TimeLiteral(value),
+            EncodedTerm::DateLiteral(value) => ExpressionTerm::DateLiteral(value),
+            EncodedTerm::GYearMonthLiteral(value) => ExpressionTerm::GYearMonthLiteral(value),
+            EncodedTerm::GYearLiteral(value) => ExpressionTerm::GYearLiteral(value),
+            EncodedTerm::GMonthDayLiteral(value) => ExpressionTerm::GMonthDayLiteral(value),
+            EncodedTerm::GDayLiteral(value) => ExpressionTerm::GDayLiteral(value),
+            EncodedTerm::GMonthLiteral(value) => ExpressionTerm::GMonthLiteral(value),
+            EncodedTerm::DurationLiteral(value) => ExpressionTerm::DurationLiteral(value),
+            EncodedTerm::YearMonthDurationLiteral(value) => {
+                ExpressionTerm::YearMonthDurationLiteral(value)
+            }
+            EncodedTerm::DayTimeDurationLiteral(value) => {
+                ExpressionTerm::DayTimeDurationLiteral(value)
+            }
+            EncodedTerm::Triple(t) => ExpressionTriple::new(
+                self.externalize_expression_term(t.subject.clone())?,
+                self.externalize_expression_term(t.predicate.clone())?,
+                self.externalize_expression_term(t.object.clone())?,
+            )
+            .ok_or_else(|| CorruptionError::msg("Invalid RDF-star triple term in the storage"))?
+            .into(),
+            _ => self.decode_term(&term)?.into(), // No escape
+        })
+    }
+
+    fn internalize_expression_term(
+        &self,
+        term: ExpressionTerm,
+    ) -> Result<EncodedTerm, StorageError> {
+        Ok(match term {
+            ExpressionTerm::BooleanLiteral(value) => EncodedTerm::BooleanLiteral(value),
+            ExpressionTerm::FloatLiteral(value) => EncodedTerm::FloatLiteral(value),
+            ExpressionTerm::DoubleLiteral(value) => EncodedTerm::DoubleLiteral(value),
+            ExpressionTerm::IntegerLiteral(value) => EncodedTerm::IntegerLiteral(value),
+            ExpressionTerm::DecimalLiteral(value) => EncodedTerm::DecimalLiteral(value),
+            ExpressionTerm::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
+            ExpressionTerm::TimeLiteral(value) => EncodedTerm::TimeLiteral(value),
+            ExpressionTerm::DateLiteral(value) => EncodedTerm::DateLiteral(value),
+            ExpressionTerm::GYearMonthLiteral(value) => EncodedTerm::GYearMonthLiteral(value),
+            ExpressionTerm::GYearLiteral(value) => EncodedTerm::GYearLiteral(value),
+            ExpressionTerm::GMonthDayLiteral(value) => EncodedTerm::GMonthDayLiteral(value),
+            ExpressionTerm::GDayLiteral(value) => EncodedTerm::GDayLiteral(value),
+            ExpressionTerm::GMonthLiteral(value) => EncodedTerm::GMonthLiteral(value),
+            ExpressionTerm::DurationLiteral(value) => EncodedTerm::DurationLiteral(value),
+            ExpressionTerm::YearMonthDurationLiteral(value) => {
+                EncodedTerm::YearMonthDurationLiteral(value)
+            }
+            ExpressionTerm::DayTimeDurationLiteral(value) => {
+                EncodedTerm::DayTimeDurationLiteral(value)
+            }
+            ExpressionTerm::Triple(t) => EncodedTriple {
+                subject: self.internalize_expression_term(t.subject.into())?,
+                predicate: self.internalize_expression_term(t.predicate.into())?,
+                object: self.internalize_expression_term(t.object)?,
+            }
+            .into(),
+            _ => self.internalize_term(term.into())?, // No fast path
+        })
+    }
+
+    fn internal_term_effective_boolean_value(
+        &self,
+        term: EncodedTerm,
+    ) -> Result<Option<bool>, StorageError> {
+        Ok(match term {
+            EncodedTerm::BooleanLiteral(value) => Some(value.into()),
+            EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
+            EncodedTerm::BigStringLiteral { .. } => {
+                Some(false) // A big literal can't be empty
+            }
+            EncodedTerm::FloatLiteral(value) => Some(Boolean::from(value).into()),
+            EncodedTerm::DoubleLiteral(value) => Some(Boolean::from(value).into()),
+            EncodedTerm::IntegerLiteral(value) => Some(Boolean::from(value).into()),
+            EncodedTerm::DecimalLiteral(value) => Some(Boolean::from(value).into()),
+            _ => None,
+        })
     }
 }
 

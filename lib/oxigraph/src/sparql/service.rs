@@ -4,6 +4,11 @@ use crate::sparql::error::EvaluationError;
 use crate::sparql::http::Client;
 use crate::sparql::model::QueryResults;
 use crate::sparql::results::QueryResultsFormat;
+use crate::sparql::QueryDataset;
+use oxiri::Iri;
+use sparesults::{QueryResultsParser, ReaderQueryResultsParserOutput};
+use spareval::{DefaultServiceHandler, QueryEvaluationError, QuerySolutionIter};
+use spargebra::algebra::GraphPattern;
 use std::error::Error;
 use std::time::Duration;
 
@@ -62,33 +67,56 @@ pub trait ServiceHandler: Send + Sync {
     fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error>;
 }
 
+pub struct WrappedDefaultServiceHandler<H: ServiceHandler>(pub H);
+
+impl<H: ServiceHandler> DefaultServiceHandler for WrappedDefaultServiceHandler<H> {
+    type Error = QueryEvaluationError;
+
+    fn handle(
+        &self,
+        service_name: NamedNode,
+        pattern: GraphPattern,
+        base_iri: Option<String>,
+    ) -> Result<QuerySolutionIter, Self::Error> {
+        let QueryResults::Solutions(solutions) = self
+            .0
+            .handle(
+                service_name,
+                Query {
+                    inner: spargebra::Query::Select {
+                        dataset: None,
+                        pattern,
+                        base_iri: base_iri
+                            .map(Iri::parse)
+                            .transpose()
+                            .map_err(|e| QueryEvaluationError::Service(Box::new(e)))?,
+                    },
+                    dataset: QueryDataset::new(),
+                },
+            )
+            .map_err(|e| QueryEvaluationError::Service(Box::new(e)))?
+        else {
+            return Err(QueryEvaluationError::Service(
+                "Only query solutions are supported in services".into(),
+            ));
+        };
+        Ok(solutions.into())
+    }
+}
+
 pub struct EmptyServiceHandler;
 
-impl ServiceHandler for EmptyServiceHandler {
-    type Error = EvaluationError;
+impl DefaultServiceHandler for EmptyServiceHandler {
+    type Error = QueryEvaluationError;
 
-    fn handle(&self, service_name: NamedNode, _: Query) -> Result<QueryResults, Self::Error> {
-        Err(EvaluationError::UnsupportedService(service_name))
-    }
-}
+    fn handle(
+        &self,
+        service_name: NamedNode,
 
-pub struct ErrorConversionServiceHandler<S: ServiceHandler> {
-    handler: S,
-}
-
-impl<S: ServiceHandler> ErrorConversionServiceHandler<S> {
-    pub fn wrap(handler: S) -> Self {
-        Self { handler }
-    }
-}
-
-impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
-    type Error = EvaluationError;
-
-    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error> {
-        self.handler
-            .handle(service_name, query)
-            .map_err(|e| EvaluationError::Service(Box::new(e)))
+        _: GraphPattern,
+        _: Option<String>,
+    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+        Err(QueryEvaluationError::UnsupportedService(service_name))
     }
 }
 
@@ -104,21 +132,43 @@ impl SimpleServiceHandler {
     }
 }
 
-impl ServiceHandler for SimpleServiceHandler {
+impl DefaultServiceHandler for SimpleServiceHandler {
     type Error = EvaluationError;
 
-    fn handle(&self, service_name: NamedNode, query: Query) -> Result<QueryResults, Self::Error> {
+    fn handle(
+        &self,
+        service_name: NamedNode,
+        pattern: GraphPattern,
+        base_iri: Option<String>,
+    ) -> Result<QuerySolutionIter, Self::Error> {
         let (content_type, body) = self
             .client
             .post(
                 service_name.as_str(),
-                query.to_string().into_bytes(),
+                spargebra::Query::Select {
+                    dataset: None,
+                    pattern,
+                    base_iri: base_iri
+                        .map(Iri::parse)
+                        .transpose()
+                        .map_err(|e| EvaluationError::Service(Box::new(e)))?,
+                }
+                .to_string()
+                .into_bytes(),
                 "application/sparql-query",
                 "application/sparql-results+json, application/sparql-results+xml",
             )
             .map_err(|e| EvaluationError::Service(Box::new(e)))?;
         let format = QueryResultsFormat::from_media_type(&content_type)
             .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?;
-        Ok(QueryResults::read(body, format)?)
+        let ReaderQueryResultsParserOutput::Solutions(reader) =
+            QueryResultsParser::from_format(format).for_reader(body)?
+        else {
+            return Err(EvaluationError::ServiceDoesNotReturnSolutions);
+        };
+        Ok(QuerySolutionIter::new(
+            reader.variables().into(),
+            Box::new(reader.map(|t| t.map_err(|e| QueryEvaluationError::Service(Box::new(e))))),
+        ))
     }
 }
