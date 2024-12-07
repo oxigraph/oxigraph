@@ -3,8 +3,6 @@
 //! The root type for SPARQL queries is [`Query`] and the root type for updates is [`Update`].
 
 use crate::model::*;
-use crate::sparql::eval::Timer;
-use oxsdatatypes::DayTimeDuration;
 use spargebra::GraphUpdateOperation;
 use std::fmt;
 use std::str::FromStr;
@@ -34,7 +32,6 @@ use std::str::FromStr;
 pub struct Query {
     pub(super) inner: spargebra::Query,
     pub(super) dataset: QueryDataset,
-    pub(super) parsing_duration: Option<DayTimeDuration>,
 }
 
 impl Query {
@@ -43,12 +40,10 @@ impl Query {
         query: &str,
         base_iri: Option<&str>,
     ) -> Result<Self, spargebra::SparqlSyntaxError> {
-        let start = Timer::now();
         let query = Self::from(spargebra::Query::parse(query, base_iri)?);
         Ok(Self {
             dataset: query.dataset,
             inner: query.inner,
-            parsing_duration: start.elapsed(),
         })
     }
 
@@ -103,7 +98,6 @@ impl From<spargebra::Query> for Query {
                 | spargebra::Query::Ask { dataset, .. } => dataset,
             }),
             inner: query,
-            parsing_duration: None,
         }
     }
 }
