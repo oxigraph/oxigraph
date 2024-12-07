@@ -6,6 +6,10 @@ use crate::sparql::results::{
     ReaderQueryResultsParserOutput, ReaderSolutionsParser,
 };
 pub use sparesults::QuerySolution;
+use spareval::{
+    QueryEvaluationError, QuerySolutionIter as EvalQuerySolutionIter,
+    QueryTripleIter as EvalQueryTripleIter,
+};
 use std::io::{Read, Write};
 use std::sync::Arc;
 
@@ -173,8 +177,7 @@ impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QuerySolutionIter {
-    variables: Arc<[Variable]>,
-    iter: Box<dyn Iterator<Item = Result<QuerySolution, EvaluationError>>>,
+    inner: EvalQuerySolutionIter,
 }
 
 impl QuerySolutionIter {
@@ -185,9 +188,12 @@ impl QuerySolutionIter {
         iter: impl Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
     ) -> Self {
         Self {
-            variables: Arc::clone(&variables),
-            iter: Box::new(
-                iter.map(move |t| t.map(|values| (Arc::clone(&variables), values).into())),
+            inner: EvalQuerySolutionIter::new(
+                Arc::clone(&variables),
+                Box::new(iter.map(move |t| match t {
+                    Ok(values) => Ok((Arc::clone(&variables), values).into()),
+                    Err(e) => Err(QueryEvaluationError::Service(Box::new(e))),
+                })),
             ),
         }
     }
@@ -209,15 +215,31 @@ impl QuerySolutionIter {
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
-        &self.variables
+        self.inner.variables()
+    }
+}
+
+impl From<EvalQuerySolutionIter> for QuerySolutionIter {
+    #[inline]
+    fn from(inner: EvalQuerySolutionIter) -> Self {
+        Self { inner }
+    }
+}
+
+impl From<QuerySolutionIter> for EvalQuerySolutionIter {
+    #[inline]
+    fn from(iter: QuerySolutionIter) -> Self {
+        iter.inner
     }
 }
 
 impl<R: Read + 'static> From<ReaderSolutionsParser<R>> for QuerySolutionIter {
     fn from(reader: ReaderSolutionsParser<R>) -> Self {
         Self {
-            variables: reader.variables().into(),
-            iter: Box::new(reader.map(|t| t.map_err(EvaluationError::from))),
+            inner: EvalQuerySolutionIter::new(
+                reader.variables().into(),
+                Box::new(reader.map(|t| t.map_err(|e| QueryEvaluationError::Service(Box::new(e))))),
+            ),
         }
     }
 }
@@ -227,12 +249,12 @@ impl Iterator for QuerySolutionIter {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        Some(self.inner.next()?.map_err(Into::into))
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+        self.inner.size_hint()
     }
 }
 
@@ -251,16 +273,20 @@ impl Iterator for QuerySolutionIter {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QueryTripleIter {
-    iter: Box<dyn Iterator<Item = Result<Triple, EvaluationError>>>,
+    inner: EvalQueryTripleIter,
 }
 
-impl QueryTripleIter {
-    pub(crate) fn new(
-        iter: impl Iterator<Item = Result<Triple, EvaluationError>> + 'static,
-    ) -> Self {
-        Self {
-            iter: Box::new(iter),
-        }
+impl From<EvalQueryTripleIter> for QueryTripleIter {
+    #[inline]
+    fn from(inner: EvalQueryTripleIter) -> Self {
+        Self { inner }
+    }
+}
+
+impl From<QueryTripleIter> for EvalQueryTripleIter {
+    #[inline]
+    fn from(iter: QueryTripleIter) -> Self {
+        iter.inner
     }
 }
 
@@ -269,20 +295,12 @@ impl Iterator for QueryTripleIter {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        Some(self.inner.next()?.map_err(Into::into))
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-
-    #[inline]
-    fn fold<Acc, G>(self, init: Acc, f: G) -> Acc
-    where
-        G: FnMut(Acc, Self::Item) -> Acc,
-    {
-        self.iter.fold(init, f)
+        self.inner.size_hint()
     }
 }
 

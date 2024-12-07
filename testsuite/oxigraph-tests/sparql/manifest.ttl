@@ -18,7 +18,6 @@
     :describe_where
     :describe_cbd
     :ask_with_from
-    :group_concat_with_null
     :single_not_exists
     :property_list_path
     :values_in_filter_exists
@@ -82,14 +81,6 @@
 :ask_with_from rdf:type mf:PositiveSyntaxTest ;
     mf:name "ASK with FROM" ;
     mf:action <ask_from.rq> .
-
-:group_concat_with_null rdf:type mf:QueryEvaluationTest ;
-    mf:name "GROUP_CONCAT with NULL" ;
-    rdfs:comment    "GROUP_CONCAT should ignore null values" ;
-    mf:action
-         [ qt:query  <group_concat_with_null.rq> ;
-           qt:data   <group_concat_with_null.ttl> ] ;
-    mf:result  <group_concat_with_null.srx> .
 
 :single_not_exists rdf:type mf:QueryEvaluationTest ;
     mf:name "query with only a FILTER NOT EXISTS" ;

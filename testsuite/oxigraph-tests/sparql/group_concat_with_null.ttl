@@ -1,4 +1,0 @@
-@prefix : <http://www.example.org/> .
-
-:a a :ex ; :opt "value" .
-:b a :ex .

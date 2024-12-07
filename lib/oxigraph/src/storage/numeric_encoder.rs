@@ -45,7 +45,7 @@ impl Hash for StrHash {
 
 #[derive(Debug, Clone)]
 pub enum EncodedTerm {
-    DefaultGraph,
+    DefaultGraph, // TODO: do we still need it?
     NamedNode {
         iri_id: StrHash,
     },

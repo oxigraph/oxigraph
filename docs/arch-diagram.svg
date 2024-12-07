@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="624" height="384" class="svgbob">
+<svg xmlns="http://www.w3.org/2000/svg" width="624" height="448" class="svgbob">
     <style>.svgbob line, .svgbob path, .svgbob circle, .svgbob rect, .svgbob polygon {
         stroke: black;
         stroke-width: 2;
@@ -91,9 +91,10 @@
             <circle cx="4" cy="4" r="3" class="bg_filled"></circle>
         </marker>
     </defs>
-    <rect class="backdrop" x="0" y="0" width="624" height="384"></rect>
+    <rect class="backdrop" x="0" y="0" width="624" height="448"></rect>
     <rect x="4" y="8" width="152" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="18" y="28">oxigraph CLI</text>
+    <text x="18" y="28">oxigraph</text>
+    <text x="90" y="28">CLI</text>
     <rect x="244" y="8" width="136" height="32" class="solid nofill p" rx="0"></rect>
     <text x="258" y="28">pyoxigraph</text>
     <rect x="468" y="8" width="144" height="32" class="solid nofill j" rx="0"></rect>
@@ -101,20 +102,27 @@
     <text x="554" y="28">JS</text>
     <rect x="4" y="72" width="608" height="32" class="solid nofill r" rx="0"></rect>
     <text x="18" y="92">oxigraph</text>
+    <path d="M 96,80 A 16,16 0,0,0 96,96" class="nofill"></path>
+    <text x="98" y="92">Rust</text>
+    <path d="M 128,80 A 16,16 0,0,1 128,96" class="nofill"></path>
     <rect x="68" y="136" width="232" height="32" class="solid nofill r" rx="0"></rect>
     <text x="82" y="156">oxrdfio</text>
-    <rect x="348" y="136" width="112" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="362" y="156">sparopt</text>
-    <rect x="68" y="200" width="96" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="82" y="220">oxttl</text>
-    <rect x="180" y="200" width="120" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="194" y="220">oxrdfxml</text>
-    <rect x="316" y="200" width="144" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="330" y="220">spargebra</text>
-    <rect x="476" y="200" width="136" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="490" y="220">sparesults</text>
-    <rect x="36" y="264" width="576" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="50" y="284">oxrdf</text>
-    <rect x="4" y="328" width="152" height="32" class="solid nofill r" rx="0"></rect>
-    <text x="18" y="348">oxsdatatypes</text>
+    <rect x="316" y="136" width="232" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="330" y="156">spareval</text>
+    <rect x="68" y="200" width="232" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="82" y="220">oxrdfio</text>
+    <rect x="348" y="200" width="112" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="362" y="220">sparopt</text>
+    <rect x="68" y="264" width="96" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="82" y="284">oxttl</text>
+    <rect x="180" y="264" width="120" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="194" y="284">oxrdfxml</text>
+    <rect x="316" y="264" width="144" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="330" y="284">spargebra</text>
+    <rect x="476" y="264" width="136" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="490" y="284">sparesults</text>
+    <rect x="36" y="328" width="576" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="50" y="348">oxrdf</text>
+    <rect x="4" y="392" width="152" height="32" class="solid nofill r" rx="0"></rect>
+    <text x="18" y="412">oxsdatatypes</text>
 </svg>

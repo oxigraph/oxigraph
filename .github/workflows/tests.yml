@@ -54,6 +54,14 @@ jobs:
         working-directory: ./lib/spargebra
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/sparopt
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/spareval
+      - run: cargo clippy --all-targets --features rdf-star -- -D warnings -D clippy::all
+        working-directory: ./lib/spareval
+      - run: cargo clippy --all-targets --features sep-0002 -- -D warnings -D clippy::all
+        working-directory: ./lib/spareval
+      - run: cargo clippy --all-targets --features sep-0006 -- -D warnings -D clippy::all
+        working-directory: ./lib/spareval
       - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
         working-directory: ./lib/oxigraph
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
@@ -147,7 +155,7 @@ jobs:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-8.0.0
       - run: bash .github/workflows/install_rocksdb.sh
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli --exclude spargeo
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli --exclude spareval
 
   test_linux_x86_64:
     runs-on: ubuntu-latest
@@ -184,6 +192,8 @@ jobs:
         working-directory: ./lib/spargebra
       - run: cargo test --target i686-unknown-linux-gnu --all-features
         working-directory: ./lib/sparopt
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/spareval
       - run: cargo test --target i686-unknown-linux-gnu --features http-client-rustls-native
         working-directory: ./lib/oxigraph
       - run: cargo test --target i686-unknown-linux-gnu

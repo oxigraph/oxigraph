@@ -5,7 +5,6 @@
 mod algebra;
 mod dataset;
 mod error;
-mod eval;
 mod http;
 mod model;
 pub mod results;
@@ -16,23 +15,16 @@ use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
-use crate::sparql::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 pub use crate::sparql::service::ServiceHandler;
-use crate::sparql::service::{EmptyServiceHandler, ErrorConversionServiceHandler};
+use crate::sparql::service::{EmptyServiceHandler, WrappedDefaultServiceHandler};
 pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::StorageReader;
-use json_event_parser::{JsonEvent, ToWriteJsonWriter};
 pub use oxrdf::{Variable, VariableNameParseError};
-use oxsdatatypes::{DayTimeDuration, Float};
+use spareval::QueryEvaluator;
+pub use spareval::QueryExplanation;
 pub use spargebra::SparqlSyntaxError;
-use sparopt::algebra::GraphPattern;
-use sparopt::Optimizer;
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Duration;
-use std::{fmt, io};
 
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn evaluate_query(
@@ -43,90 +35,16 @@ pub(crate) fn evaluate_query(
 ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
     let query = query.try_into().map_err(Into::into)?;
     let dataset = DatasetView::new(reader, &query.dataset);
-    let start_planning = Timer::now();
-    let (results, plan_node_with_stats, planning_duration) = match query.inner {
-        spargebra::Query::Select {
-            pattern, base_iri, ..
-        } => {
-            let mut pattern = GraphPattern::from(&pattern);
-            if !options.without_optimizations {
-                pattern = Optimizer::optimize_graph_pattern(pattern);
-            }
-            let planning_duration = start_planning.elapsed();
-            let (results, explanation) = SimpleEvaluator::new(
-                Rc::new(dataset),
-                base_iri.map(Rc::new),
-                options.service_handler(),
-                Arc::new(options.custom_functions),
-                run_stats,
-            )
-            .evaluate_select(&pattern);
-            (Ok(results), explanation, planning_duration)
-        }
-        spargebra::Query::Ask {
-            pattern, base_iri, ..
-        } => {
-            let mut pattern = GraphPattern::from(&pattern);
-            if !options.without_optimizations {
-                pattern = Optimizer::optimize_graph_pattern(pattern);
-            }
-            let planning_duration = start_planning.elapsed();
-            let (results, explanation) = SimpleEvaluator::new(
-                Rc::new(dataset),
-                base_iri.map(Rc::new),
-                options.service_handler(),
-                Arc::new(options.custom_functions),
-                run_stats,
-            )
-            .evaluate_ask(&pattern);
-            (results, explanation, planning_duration)
-        }
-        spargebra::Query::Construct {
-            template,
-            pattern,
-            base_iri,
-            ..
-        } => {
-            let mut pattern = GraphPattern::from(&pattern);
-            if !options.without_optimizations {
-                pattern = Optimizer::optimize_graph_pattern(pattern);
-            }
-            let planning_duration = start_planning.elapsed();
-            let (results, explanation) = SimpleEvaluator::new(
-                Rc::new(dataset),
-                base_iri.map(Rc::new),
-                options.service_handler(),
-                Arc::new(options.custom_functions),
-                run_stats,
-            )
-            .evaluate_construct(&pattern, &template);
-            (Ok(results), explanation, planning_duration)
-        }
-        spargebra::Query::Describe {
-            pattern, base_iri, ..
-        } => {
-            let mut pattern = GraphPattern::from(&pattern);
-            if !options.without_optimizations {
-                pattern = Optimizer::optimize_graph_pattern(pattern);
-            }
-            let planning_duration = start_planning.elapsed();
-            let (results, explanation) = SimpleEvaluator::new(
-                Rc::new(dataset),
-                base_iri.map(Rc::new),
-                options.service_handler(),
-                Arc::new(options.custom_functions),
-                run_stats,
-            )
-            .evaluate_describe(&pattern);
-            (Ok(results), explanation, planning_duration)
-        }
-    };
-    let explanation = QueryExplanation {
-        inner: plan_node_with_stats,
-        with_stats: run_stats,
-        parsing_duration: query.parsing_duration,
-        planning_duration,
-    };
+    let mut evaluator = options.into_evaluator();
+    if run_stats {
+        evaluator = evaluator.compute_statistics();
+    }
+    let (results, explanation) = evaluator.explain(dataset, &query.inner);
+    let results = results.map_err(Into::into).map(|results| match results {
+        spareval::QueryResults::Solutions(iter) => QueryResults::Solutions(iter.into()),
+        spareval::QueryResults::Boolean(value) => QueryResults::Boolean(value),
+        spareval::QueryResults::Graph(iter) => QueryResults::Graph(iter.into()),
+    });
     Ok((results, explanation))
 }
 
@@ -148,26 +66,21 @@ pub(crate) fn evaluate_query(
 /// )?;
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct QueryOptions {
-    service_handler: Option<Arc<dyn ServiceHandler<Error = EvaluationError>>>,
-    custom_functions: CustomFunctionRegistry,
     http_timeout: Option<Duration>,
     http_redirection_limit: usize,
-    without_optimizations: bool,
+    inner: QueryEvaluator,
 }
-
-pub(crate) type CustomFunctionRegistry =
-    HashMap<NamedNode, Arc<dyn (Fn(&[Term]) -> Option<Term>) + Send + Sync>>;
 
 impl QueryOptions {
     /// Use a given [`ServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
     #[inline]
     #[must_use]
     pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
-        self.service_handler = Some(Arc::new(ErrorConversionServiceHandler::wrap(
-            service_handler,
-        )));
+        self.inner = self
+            .inner
+            .with_default_service_handler(WrappedDefaultServiceHandler(service_handler));
         self
     }
 
@@ -175,7 +88,7 @@ impl QueryOptions {
     #[inline]
     #[must_use]
     pub fn without_service_handler(mut self) -> Self {
-        self.service_handler = Some(Arc::new(EmptyServiceHandler));
+        self.inner = self.inner.with_default_service_handler(EmptyServiceHandler);
         self
     }
 
@@ -197,6 +110,18 @@ impl QueryOptions {
     pub fn with_http_redirection_limit(mut self, redirection_limit: usize) -> Self {
         self.http_redirection_limit = redirection_limit;
         self
+    }
+
+    fn into_evaluator(mut self) -> QueryEvaluator {
+        if !self.inner.has_default_service_handler() {
+            self.inner =
+                self.inner
+                    .with_default_service_handler(service::SimpleServiceHandler::new(
+                        self.http_timeout,
+                        self.http_redirection_limit,
+                    ))
+        }
+        self.inner
     }
 
     /// Adds a custom SPARQL evaluation function.
@@ -230,29 +155,36 @@ impl QueryOptions {
         name: NamedNode,
         evaluator: impl Fn(&[Term]) -> Option<Term> + Send + Sync + 'static,
     ) -> Self {
-        self.custom_functions.insert(name, Arc::new(evaluator));
+        self.inner = self.inner.with_custom_function(name, evaluator);
         self
-    }
-
-    fn service_handler(&self) -> Arc<dyn ServiceHandler<Error = EvaluationError>> {
-        self.service_handler.clone().unwrap_or_else(|| {
-            if cfg!(feature = "http-client") {
-                Arc::new(service::SimpleServiceHandler::new(
-                    self.http_timeout,
-                    self.http_redirection_limit,
-                ))
-            } else {
-                Arc::new(EmptyServiceHandler)
-            }
-        })
     }
 
     #[doc(hidden)]
     #[inline]
     #[must_use]
     pub fn without_optimizations(mut self) -> Self {
-        self.without_optimizations = true;
+        self.inner = self.inner.without_optimizations();
         self
+    }
+}
+
+impl Default for QueryOptions {
+    fn default() -> Self {
+        let mut options = Self {
+            http_timeout: None,
+            http_redirection_limit: 0,
+            inner: QueryEvaluator::new(),
+        };
+        if cfg!(feature = "http-client") {
+            options.inner =
+                options
+                    .inner
+                    .with_default_service_handler(service::SimpleServiceHandler::new(
+                        options.http_timeout,
+                        options.http_redirection_limit,
+                    ));
+        }
+        options
     }
 }
 
@@ -266,57 +198,5 @@ impl From<QueryOptions> for UpdateOptions {
     #[inline]
     fn from(query_options: QueryOptions) -> Self {
         Self { query_options }
-    }
-}
-
-/// The explanation of a query.
-#[derive(Clone)]
-pub struct QueryExplanation {
-    inner: Rc<EvalNodeWithStats>,
-    with_stats: bool,
-    parsing_duration: Option<DayTimeDuration>,
-    planning_duration: Option<DayTimeDuration>,
-}
-
-impl QueryExplanation {
-    /// Writes the explanation as JSON.
-    pub fn write_in_json(&self, writer: impl io::Write) -> io::Result<()> {
-        let mut writer = ToWriteJsonWriter::new(writer);
-        writer.write_event(JsonEvent::StartObject)?;
-        if let Some(parsing_duration) = self.parsing_duration {
-            writer.write_event(JsonEvent::ObjectKey("parsing duration in seconds".into()))?;
-            writer.write_event(JsonEvent::Number(
-                parsing_duration.as_seconds().to_string().into(),
-            ))?;
-        }
-        if let Some(planning_duration) = self.planning_duration {
-            writer.write_event(JsonEvent::ObjectKey("planning duration in seconds".into()))?;
-            writer.write_event(JsonEvent::Number(
-                planning_duration.as_seconds().to_string().into(),
-            ))?;
-        }
-        writer.write_event(JsonEvent::ObjectKey("plan".into()))?;
-        self.inner.json_node(&mut writer, self.with_stats)?;
-        writer.write_event(JsonEvent::EndObject)
-    }
-}
-
-impl fmt::Debug for QueryExplanation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut obj = f.debug_struct("QueryExplanation");
-        if let Some(parsing_duration) = self.parsing_duration {
-            obj.field(
-                "parsing duration in seconds",
-                &f32::from(Float::from(parsing_duration.as_seconds())),
-            );
-        }
-        if let Some(planning_duration) = self.planning_duration {
-            obj.field(
-                "planning duration in seconds",
-                &f32::from(Float::from(planning_duration.as_seconds())),
-            );
-        }
-        obj.field("tree", &self.inner);
-        obj.finish_non_exhaustive()
     }
 }
