@@ -57,6 +57,16 @@ impl TryFrom<Subject> for GroundSubject {
         }
     }
 }
+impl From<GroundSubject> for Subject {
+    #[inline]
+    fn from(subject: GroundSubject) -> Self {
+        match subject {
+            GroundSubject::NamedNode(t) => t.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundSubject::Triple(t) => Triple::from(*t).into(),
+        }
+    }
+}
 
 impl TryFrom<GroundTerm> for GroundSubject {
     type Error = ();
@@ -136,6 +146,18 @@ impl TryFrom<Term> for GroundTerm {
     }
 }
 
+impl From<GroundTerm> for Term {
+    #[inline]
+    fn from(term: GroundTerm) -> Self {
+        match term {
+            GroundTerm::NamedNode(t) => t.into(),
+            GroundTerm::Literal(l) => l.into(),
+            #[cfg(feature = "rdf-star")]
+            GroundTerm::Triple(t) => Triple::from(*t).into(),
+        }
+    }
+}
+
 /// A [RDF triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) without blank nodes.
 ///
 /// The default string formatter is returning a N-Quads representation.
@@ -178,6 +200,17 @@ impl TryFrom<Triple> for GroundTriple {
             predicate: triple.predicate,
             object: triple.object.try_into()?,
         })
+    }
+}
+
+impl From<GroundTriple> for Triple {
+    #[inline]
+    fn from(triple: GroundTriple) -> Self {
+        Self {
+            subject: triple.subject.into(),
+            predicate: triple.predicate,
+            object: triple.object.into(),
+        }
     }
 }
 
