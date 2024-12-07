@@ -2,24 +2,21 @@ use crate::io::{RdfFormat, RdfParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::dataset::DatasetView;
-use crate::sparql::eval::{EncodedTuple, SimpleEvaluator};
 use crate::sparql::http::Client;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
-use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 use crate::storage::StorageWriter;
 use oxiri::Iri;
 use rustc_hash::FxHashMap;
+use sparesults::QuerySolution;
+use spareval::{QueryEvaluator, QueryResults};
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
     BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundSubject,
     GroundTerm, GroundTermPattern, GroundTriple, GroundTriplePattern, NamedNode, NamedNodePattern,
-    Quad, QuadPattern, Subject, Term, TermPattern, Triple, TriplePattern, Variable,
+    Quad, QuadPattern, Subject, Term, TermPattern, Triple, TriplePattern,
 };
-use spargebra::GraphUpdateOperation;
-use sparopt::Optimizer;
+use spargebra::{GraphUpdateOperation, Query};
 use std::io;
-use std::rc::Rc;
-use std::sync::Arc;
 
 pub fn evaluate_update<'a, 'b: 'a>(
     transaction: &'a mut StorageWriter<'b>,
@@ -28,8 +25,8 @@ pub fn evaluate_update<'a, 'b: 'a>(
 ) -> Result<(), EvaluationError> {
     SimpleUpdateEvaluator {
         transaction,
-        base_iri: update.inner.base_iri.clone().map(Rc::new),
-        options: options.clone(),
+        base_iri: update.inner.base_iri.clone(),
+        query_evaluator: options.query_options.clone().into_evaluator(),
         client: Client::new(
             options.query_options.http_timeout,
             options.query_options.http_redirection_limit,
@@ -40,8 +37,8 @@ pub fn evaluate_update<'a, 'b: 'a>(
 
 struct SimpleUpdateEvaluator<'a, 'b> {
     transaction: &'a mut StorageWriter<'b>,
-    base_iri: Option<Rc<Iri<String>>>,
-    options: UpdateOptions,
+    base_iri: Option<Iri<String>>,
+    query_evaluator: QueryEvaluator,
     client: Client,
 }
 
@@ -121,35 +118,28 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         using: &QueryDataset,
         algebra: &GraphPattern,
     ) -> Result<(), EvaluationError> {
-        let dataset = Rc::new(DatasetView::new(self.transaction.reader(), using));
-        let mut pattern = sparopt::algebra::GraphPattern::from(algebra);
-        if !self.options.query_options.without_optimizations {
-            pattern = Optimizer::optimize_graph_pattern(pattern);
-        }
-        let evaluator = SimpleEvaluator::new(
-            Rc::clone(&dataset),
-            self.base_iri.clone(),
-            self.options.query_options.service_handler(),
-            Arc::new(self.options.query_options.custom_functions.clone()),
-            false,
-        );
-        let mut variables = Vec::new();
+        let QueryResults::Solutions(solutions) = self.query_evaluator.clone().execute(
+            DatasetView::new(self.transaction.reader(), using),
+            &Query::Select {
+                dataset: None,
+                pattern: algebra.clone(),
+                base_iri: self.base_iri.clone(),
+            },
+        )?
+        else {
+            unreachable!("We provided a SELECT query, we must get back solutions")
+        };
+
         let mut bnodes = FxHashMap::default();
-        let (eval, _) = evaluator.graph_pattern_evaluator(&pattern, &mut variables);
-        let tuples =
-            eval(EncodedTuple::with_capacity(variables.len())).collect::<Result<Vec<_>, _>>()?; // TODO: would be much better to stream
-        for tuple in tuples {
+        for solution in solutions {
+            let solution = solution?;
             for quad in delete {
-                if let Some(quad) =
-                    Self::convert_ground_quad_pattern(quad, &variables, &tuple, &dataset)?
-                {
+                if let Some(quad) = Self::fill_ground_quad_pattern(quad, &solution) {
                     self.transaction.remove(quad.as_ref())?;
                 }
             }
             for quad in insert {
-                if let Some(quad) =
-                    Self::convert_quad_pattern(quad, &variables, &tuple, &dataset, &mut bnodes)?
-                {
+                if let Some(quad) = Self::fill_quad_pattern(quad, &solution, &mut bnodes) {
                     self.transaction.insert(quad.as_ref())?;
                 }
             }
@@ -317,248 +307,128 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
-    fn convert_quad_pattern(
+    fn fill_quad_pattern(
         quad: &QuadPattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
+        solution: &QuerySolution,
         bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-    ) -> Result<Option<OxQuad>, EvaluationError> {
-        Ok(Some(OxQuad {
-            subject: match Self::convert_term_or_var(
-                &quad.subject,
-                variables,
-                values,
-                dataset,
-                bnodes,
-            )? {
-                Some(Term::NamedNode(node)) => node.into(),
-                Some(Term::BlankNode(node)) => node.into(),
-                Some(Term::Triple(triple)) => triple.into(),
-                Some(Term::Literal(_)) | None => return Ok(None),
+    ) -> Option<OxQuad> {
+        Some(OxQuad {
+            subject: match Self::fill_term_or_var(&quad.subject, solution, bnodes)? {
+                Term::NamedNode(node) => node.into(),
+                Term::BlankNode(node) => node.into(),
+                Term::Triple(triple) => triple.into(),
+                Term::Literal(_) => return None,
             },
-            predicate: if let Some(predicate) =
-                Self::convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
-            {
-                predicate
-            } else {
-                return Ok(None);
-            },
-            object: if let Some(object) =
-                Self::convert_term_or_var(&quad.object, variables, values, dataset, bnodes)?
-            {
-                object
-            } else {
-                return Ok(None);
-            },
-            graph_name: if let Some(graph_name) =
-                Self::convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
-            {
-                graph_name
-            } else {
-                return Ok(None);
-            },
-        }))
+            predicate: Self::fill_named_node_or_var(&quad.predicate, solution)?,
+            object: Self::fill_term_or_var(&quad.object, solution, bnodes)?,
+            graph_name: Self::fill_graph_name_or_var(&quad.graph_name, solution)?,
+        })
     }
 
-    fn convert_term_or_var(
+    fn fill_term_or_var(
         term: &TermPattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
+        solution: &QuerySolution,
         bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-    ) -> Result<Option<Term>, EvaluationError> {
-        Ok(match term {
-            TermPattern::NamedNode(term) => Some(term.clone().into()),
-            TermPattern::BlankNode(bnode) => Some(Self::convert_blank_node(bnode, bnodes).into()),
-            TermPattern::Literal(term) => Some(term.clone().into()),
+    ) -> Option<Term> {
+        Some(match term {
+            TermPattern::NamedNode(term) => term.clone().into(),
+            TermPattern::BlankNode(bnode) => Self::convert_blank_node(bnode, bnodes).into(),
+            TermPattern::Literal(term) => term.clone().into(),
             TermPattern::Triple(triple) => {
-                Self::convert_triple_pattern(triple, variables, values, dataset, bnodes)?
-                    .map(Into::into)
+                Self::fill_triple_pattern(triple, solution, bnodes)?.into()
             }
-            TermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
-                .map(|node| dataset.decode_term(&node))
-                .transpose()?,
+            TermPattern::Variable(v) => solution.get(v)?.clone(),
         })
     }
 
-    fn convert_named_node_or_var(
+    fn fill_named_node_or_var(
         term: &NamedNodePattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
-    ) -> Result<Option<NamedNode>, EvaluationError> {
-        Ok(match term {
-            NamedNodePattern::NamedNode(term) => Some(term.clone()),
-            NamedNodePattern::Variable(v) => Self::lookup_variable(v, variables, values)
-                .map(|node| dataset.decode_named_node(&node))
-                .transpose()?,
-        })
-    }
-
-    fn convert_graph_name_or_var(
-        term: &GraphNamePattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
-    ) -> Result<Option<OxGraphName>, EvaluationError> {
-        match term {
-            GraphNamePattern::NamedNode(term) => Ok(Some(term.clone().into())),
-            GraphNamePattern::DefaultGraph => Ok(Some(OxGraphName::DefaultGraph)),
-            GraphNamePattern::Variable(v) => Self::lookup_variable(v, variables, values)
-                .map(|node| {
-                    Ok(if node == EncodedTerm::DefaultGraph {
-                        OxGraphName::DefaultGraph
-                    } else {
-                        dataset.decode_named_node(&node)?.into()
-                    })
-                })
-                .transpose(),
-        }
-    }
-
-    fn convert_triple_pattern(
-        triple: &TriplePattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
-        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-    ) -> Result<Option<Triple>, EvaluationError> {
-        Ok(Some(Triple {
-            subject: match Self::convert_term_or_var(
-                &triple.subject,
-                variables,
-                values,
-                dataset,
-                bnodes,
-            )? {
-                Some(Term::NamedNode(node)) => node.into(),
-                Some(Term::BlankNode(node)) => node.into(),
-                Some(Term::Triple(triple)) => triple.into(),
-                Some(Term::Literal(_)) | None => return Ok(None),
-            },
-            predicate: if let Some(predicate) =
-                Self::convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
-            {
-                predicate
-            } else {
-                return Ok(None);
-            },
-            object: if let Some(object) =
-                Self::convert_term_or_var(&triple.object, variables, values, dataset, bnodes)?
-            {
-                object
-            } else {
-                return Ok(None);
-            },
-        }))
-    }
-
-    fn convert_ground_quad_pattern(
-        quad: &GroundQuadPattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
-    ) -> Result<Option<OxQuad>, EvaluationError> {
-        Ok(Some(OxQuad {
-            subject: match Self::convert_ground_term_or_var(
-                &quad.subject,
-                variables,
-                values,
-                dataset,
-            )? {
-                Some(Term::NamedNode(node)) => node.into(),
-                Some(Term::BlankNode(node)) => node.into(),
-                Some(Term::Triple(triple)) => triple.into(),
-                Some(Term::Literal(_)) | None => return Ok(None),
-            },
-            predicate: if let Some(predicate) =
-                Self::convert_named_node_or_var(&quad.predicate, variables, values, dataset)?
-            {
-                predicate
-            } else {
-                return Ok(None);
-            },
-            object: if let Some(object) =
-                Self::convert_ground_term_or_var(&quad.object, variables, values, dataset)?
-            {
-                object
-            } else {
-                return Ok(None);
-            },
-            graph_name: if let Some(graph_name) =
-                Self::convert_graph_name_or_var(&quad.graph_name, variables, values, dataset)?
-            {
-                graph_name
-            } else {
-                return Ok(None);
-            },
-        }))
-    }
-
-    fn convert_ground_term_or_var(
-        term: &GroundTermPattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
-    ) -> Result<Option<Term>, EvaluationError> {
-        Ok(match term {
-            GroundTermPattern::NamedNode(term) => Some(term.clone().into()),
-            GroundTermPattern::Literal(term) => Some(term.clone().into()),
-            GroundTermPattern::Triple(triple) => {
-                Self::convert_ground_triple_pattern(triple, variables, values, dataset)?
-                    .map(Into::into)
+        solution: &QuerySolution,
+    ) -> Option<NamedNode> {
+        Some(match term {
+            NamedNodePattern::NamedNode(term) => term.clone(),
+            NamedNodePattern::Variable(v) => {
+                if let Term::NamedNode(s) = solution.get(v)? {
+                    s.clone()
+                } else {
+                    return None;
+                }
             }
-            GroundTermPattern::Variable(v) => Self::lookup_variable(v, variables, values)
-                .map(|node| dataset.decode_term(&node))
-                .transpose()?,
         })
     }
 
-    fn convert_ground_triple_pattern(
-        triple: &GroundTriplePattern,
-        variables: &[Variable],
-        values: &EncodedTuple,
-        dataset: &DatasetView,
-    ) -> Result<Option<Triple>, EvaluationError> {
-        Ok(Some(Triple {
-            subject: match Self::convert_ground_term_or_var(
-                &triple.subject,
-                variables,
-                values,
-                dataset,
-            )? {
-                Some(Term::NamedNode(node)) => node.into(),
-                Some(Term::BlankNode(node)) => node.into(),
-                Some(Term::Triple(triple)) => triple.into(),
-                Some(Term::Literal(_)) | None => return Ok(None),
+    fn fill_graph_name_or_var(
+        term: &GraphNamePattern,
+        solution: &QuerySolution,
+    ) -> Option<OxGraphName> {
+        Some(match term {
+            GraphNamePattern::NamedNode(term) => term.clone().into(),
+            GraphNamePattern::DefaultGraph => OxGraphName::DefaultGraph,
+            GraphNamePattern::Variable(v) => match solution.get(v)? {
+                Term::NamedNode(node) => node.clone().into(),
+                Term::BlankNode(node) => node.clone().into(),
+                Term::Triple(_) | Term::Literal(_) => return None,
             },
-            predicate: if let Some(predicate) =
-                Self::convert_named_node_or_var(&triple.predicate, variables, values, dataset)?
-            {
-                predicate
-            } else {
-                return Ok(None);
-            },
-            object: if let Some(object) =
-                Self::convert_ground_term_or_var(&triple.object, variables, values, dataset)?
-            {
-                object
-            } else {
-                return Ok(None);
-            },
-        }))
+        })
     }
 
-    fn lookup_variable(
-        v: &Variable,
-        variables: &[Variable],
-        values: &EncodedTuple,
-    ) -> Option<EncodedTerm> {
-        variables
-            .iter()
-            .position(|v2| v == v2)
-            .and_then(|i| values.get(i))
-            .cloned()
+    fn fill_triple_pattern(
+        triple: &TriplePattern,
+        solution: &QuerySolution,
+        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
+    ) -> Option<Triple> {
+        Some(Triple {
+            subject: match Self::fill_term_or_var(&triple.subject, solution, bnodes)? {
+                Term::NamedNode(node) => node.into(),
+                Term::BlankNode(node) => node.into(),
+                Term::Triple(triple) => triple.into(),
+                Term::Literal(_) => return None,
+            },
+            predicate: Self::fill_named_node_or_var(&triple.predicate, solution)?,
+            object: Self::fill_term_or_var(&triple.object, solution, bnodes)?,
+        })
+    }
+    fn fill_ground_quad_pattern(
+        quad: &GroundQuadPattern,
+        solution: &QuerySolution,
+    ) -> Option<OxQuad> {
+        Some(OxQuad {
+            subject: match Self::fill_ground_term_or_var(&quad.subject, solution)? {
+                Term::NamedNode(node) => node.into(),
+                Term::BlankNode(node) => node.into(),
+                Term::Triple(triple) => triple.into(),
+                Term::Literal(_) => return None,
+            },
+            predicate: Self::fill_named_node_or_var(&quad.predicate, solution)?,
+            object: Self::fill_ground_term_or_var(&quad.object, solution)?,
+            graph_name: Self::fill_graph_name_or_var(&quad.graph_name, solution)?,
+        })
+    }
+
+    fn fill_ground_term_or_var(term: &GroundTermPattern, solution: &QuerySolution) -> Option<Term> {
+        Some(match term {
+            GroundTermPattern::NamedNode(term) => term.clone().into(),
+            GroundTermPattern::Literal(term) => term.clone().into(),
+            GroundTermPattern::Triple(triple) => {
+                Self::fill_ground_triple_pattern(triple, solution)?.into()
+            }
+            GroundTermPattern::Variable(v) => solution.get(v)?.clone(),
+        })
+    }
+
+    fn fill_ground_triple_pattern(
+        triple: &GroundTriplePattern,
+        solution: &QuerySolution,
+    ) -> Option<Triple> {
+        Some(Triple {
+            subject: match Self::fill_ground_term_or_var(&triple.subject, solution)? {
+                Term::NamedNode(node) => node.into(),
+                Term::BlankNode(node) => node.into(),
+                Term::Triple(triple) => triple.into(),
+                Term::Literal(_) => return None,
+            },
+            predicate: Self::fill_named_node_or_var(&triple.predicate, solution)?,
+            object: Self::fill_ground_term_or_var(&triple.object, solution)?,
+        })
     }
 }

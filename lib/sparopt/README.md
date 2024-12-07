@@ -13,7 +13,9 @@ It relies on the output of [spargebra](https://crates.io/crates/spargebra).
 
 Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#sparql-star) is also available behind the `rdf-star` feature.
 
-This crate is intended to be a building piece for SPARQL implementations in Rust like [Oxigraph](https://oxigraph.org).
+This crate is intended
+to be a building piece for SPARQL implementations in Rust like [spareval](https://crates.io/crates/spareval)
+used by [oxigraph](https://oxigraph.org).
 
 The optimizer ensures that the rewritten query returns the exact same results as the input query.
 However, it might discard some errors.

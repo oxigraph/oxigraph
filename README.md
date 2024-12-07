@@ -28,25 +28,26 @@ Oxigraph implements the following specifications:
 
 It is split into multiple parts:
 
-- [The database written as a Rust library](https://crates.io/crates/oxigraph). Its source code is in the `lib` directory.
+- [The database written as a Rust library](./lib/oxigraph). Its source code is in the `lib` directory.
   [![Latest Version](https://img.shields.io/crates/v/oxigraph.svg)](https://crates.io/crates/oxigraph)
   [![Released API docs](https://docs.rs/oxigraph/badge.svg)](https://docs.rs/oxigraph)
-- [`pyoxigraph` that exposes Oxigraph to the Python world](https://pyoxigraph.readthedocs.io/). Its source code is in the `python` directory. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
-- [JavaScript bindings for Oxigraph](https://www.npmjs.com/package/oxigraph). WebAssembly is used to package Oxigraph into a NodeJS compatible NPM package. Its source code is in the `js` directory.
+- [`pyoxigraph` that exposes Oxigraph to the Python world](./python). Its source code is in the `python` directory. [![PyPI](https://img.shields.io/pypi/v/pyoxigraph)](https://pypi.org/project/pyoxigraph/)
+- [JavaScript bindings for Oxigraph](./js). WebAssembly is used to package Oxigraph into a NodeJS compatible NPM package. Its source code is in the `js` directory.
   [![npm](https://img.shields.io/npm/v/oxigraph)](https://www.npmjs.com/package/oxigraph)
-- [Oxigraph binary](https://crates.io/crates/oxigraph-cli) that provides a standalone command-line tool allowing to manipulate RDF data and spawn a a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code is in the `cli` directory.
+- [Oxigraph binary](./cli) that provides a standalone command-line tool allowing to manipulate RDF data and spawn a a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code is in the `cli` directory.
   Note that it was previously named [Oxigraph server](https://crates.io/crates/oxigraph-server).
   [![Latest Version](https://img.shields.io/crates/v/oxigraph-cli.svg)](https://crates.io/crates/oxigraph-cli)
 
 Also, some parts of Oxigraph are available as standalone Rust crates:
-* [`oxrdf`](https://crates.io/crates/oxrdf), datastructures encoding RDF basic concepts (the [`oxigraph::model`](crate::model) module).
-* [`oxrdfio`](https://crates.io/crates/oxrdfio), a unified parser and serializer API for RDF formats (the [`oxigraph::io`](crate::io) module). It itself relies on:
-  * [`oxttl`](https://crates.io/crates/oxttl), N-Triple, N-Quad, Turtle, TriG and N3 parsing and serialization.
-  * [`oxrdfxml`](https://crates.io/crates/oxrdfxml), RDF/XML parsing and serialization.
-* [`spargebra`](https://crates.io/crates/spargebra), a SPARQL parser.
-* [`sparesults`](https://crates.io/crates/sparesults), parsers and serializers for SPARQL result formats.
-* [`sparopt`](https://crates.io/crates/sparesults), a SPARQL optimizer.
-* [`oxsdatatypes`](https://crates.io/crates/oxsdatatypes), an implementation of some XML Schema datatypes.
+* [`oxrdf`](./lib/oxrdf), datastructures encoding RDF basic concepts (the [`oxigraph::model`](crate::model) module).
+* [`oxrdfio`](./lib/oxrdfio), a unified parser and serializer API for RDF formats (the [`oxigraph::io`](crate::io) module). It itself relies on:
+  * [`oxttl`](./lib/oxttl), N-Triple, N-Quad, Turtle, TriG and N3 parsing and serialization.
+  * [`oxrdfxml`](./lib/oxrdfxml), RDF/XML parsing and serialization.
+* [`spareval`](./lib/spareval), a SPARQL evaluator.
+* [`spargebra`](./lib/spargebra), a SPARQL parser.
+* [`sparesults`](./lib/sparesults), parsers and serializers for SPARQL result formats.
+* [`sparopt`](./lib/sparopt), a SPARQL optimizer.
+* [`oxsdatatypes`](./lib/oxsdatatypes), an implementation of some XML Schema datatypes.
 
 The library layers in Oxigraph. The elements above depend on the elements below:
 ![Oxigraph libraries architecture diagram](./docs/arch-diagram.svg)

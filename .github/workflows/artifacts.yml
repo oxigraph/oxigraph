@@ -380,6 +380,9 @@ jobs:
         working-directory: ./lib/sparopt
         continue-on-error: true
       - run: cargo publish
+        working-directory: ./lib/spareval
+        continue-on-error: true
+      - run: cargo publish
         working-directory: ./lib/sparql-smith
         continue-on-error: true
       - run: cargo publish
