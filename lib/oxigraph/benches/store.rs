@@ -103,8 +103,19 @@ fn do_bulk_load(store: &Store, data: &[u8]) {
 }
 
 fn store_query_and_update(c: &mut Criterion) {
-    let data = read_data("explore-1000.nt.zst");
-    let operations = bsbm_sparql_operation()
+    for (data_size, request_count, without_opts) in [(1_000, 300, true), (1_500, 30, false)] {
+        do_store_query_and_update(c, data_size, request_count, without_opts)
+    }
+}
+
+fn do_store_query_and_update(
+    c: &mut Criterion,
+    data_size: usize,
+    request_count: usize,
+    without_ops: bool,
+) {
+    let data = read_data(&format!("explore-{data_size}.nt.zst"));
+    let operations = bsbm_sparql_operation(request_count)
         .into_iter()
         .map(|op| match op {
             RawOperation::Query(q) => Operation::Query(Query::parse(&q, None).unwrap()),
@@ -124,40 +135,50 @@ fn store_query_and_update(c: &mut Criterion) {
     {
         let memory_store = Store::new().unwrap();
         do_bulk_load(&memory_store, &data);
-        group.bench_function("BSBM explore 1000 query in memory", |b| {
+        group.bench_function(format!("BSBM explore {data_size} query in memory"), |b| {
             b.iter(|| run_operation(&memory_store, &query_operations, true))
         });
+        if without_ops {
+            group.bench_function(
+                format!("BSBM explore {data_size} query in memory without optimizations"),
+                |b| b.iter(|| run_operation(&memory_store, &query_operations, false)),
+            );
+        }
         group.bench_function(
-            "BSBM explore 1000 query in memory without optimizations",
-            |b| b.iter(|| run_operation(&memory_store, &query_operations, false)),
+            format!("BSBM explore {data_size} queryAndUpdate in memory"),
+            |b| b.iter(|| run_operation(&memory_store, &operations, true)),
         );
-        group.bench_function("BSBM explore 1000 queryAndUpdate in memory", |b| {
-            b.iter(|| run_operation(&memory_store, &operations, true))
-        });
-        group.bench_function(
-            "BSBM explore 1000 queryAndUpdate in memory without optimizations",
-            |b| b.iter(|| run_operation(&memory_store, &operations, false)),
-        );
+        if without_ops {
+            group.bench_function(
+                format!("BSBM explore {data_size} queryAndUpdate in memory without optimizations"),
+                |b| b.iter(|| run_operation(&memory_store, &operations, false)),
+            );
+        }
     }
 
     {
         let path = TempDir::default();
         let disk_store = Store::open(&path).unwrap();
         do_bulk_load(&disk_store, &data);
-        group.bench_function("BSBM explore 1000 query on disk", |b| {
+        group.bench_function(format!("BSBM explore {data_size} query on disk"), |b| {
             b.iter(|| run_operation(&disk_store, &query_operations, true))
         });
+        if without_ops {
+            group.bench_function(
+                format!("BSBM explore {data_size} query on disk without optimizations"),
+                |b| b.iter(|| run_operation(&disk_store, &query_operations, false)),
+            );
+        }
         group.bench_function(
-            "BSBM explore 1000 query on disk without optimizations",
-            |b| b.iter(|| run_operation(&disk_store, &query_operations, false)),
+            format!("BSBM explore {data_size} queryAndUpdate on disk"),
+            |b| b.iter(|| run_operation(&disk_store, &operations, true)),
         );
-        group.bench_function("BSBM explore 1000 queryAndUpdate on disk", |b| {
-            b.iter(|| run_operation(&disk_store, &operations, true))
-        });
-        group.bench_function(
-            "BSBM explore 1000 queryAndUpdate on disk without optimizations",
-            |b| b.iter(|| run_operation(&disk_store, &operations, false)),
-        );
+        if without_ops {
+            group.bench_function(
+                format!("BSBM explore {data_size} queryAndUpdate on disk without optimizations"),
+                |b| b.iter(|| run_operation(&disk_store, &operations, false)),
+            );
+        }
     }
 }
 
@@ -187,7 +208,7 @@ fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
 }
 
 fn sparql_parsing(c: &mut Criterion) {
-    let operations = bsbm_sparql_operation();
+    let operations = bsbm_sparql_operation(300);
     let mut group = c.benchmark_group("sparql parsing");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(
@@ -242,12 +263,12 @@ fn read_data(file: &str) -> Vec<u8> {
     buf
 }
 
-fn bsbm_sparql_operation() -> Vec<RawOperation> {
+fn bsbm_sparql_operation(limit: usize) -> Vec<RawOperation> {
     String::from_utf8(read_data("mix-exploreAndUpdate-1000.tsv.zst"))
         .unwrap()
         .lines()
         .rev()
-        .take(300) // We take only 10 groups
+        .take(limit) // We take only 10 groups
         .map(|l| {
             let mut parts = l.trim().split('\t');
             let kind = parts.next().unwrap();
