@@ -2,7 +2,8 @@ use crate::io::RdfParseError;
 use crate::model::NamedNode;
 use crate::sparql::results::QueryResultsParseError as ResultsParseError;
 use crate::sparql::SparqlSyntaxError;
-use crate::storage::StorageError;
+use crate::store::{CorruptionError, StorageError};
+use spareval::QueryEvaluationError;
 use std::convert::Infallible;
 use std::error::Error;
 use std::io;
@@ -25,7 +26,7 @@ pub enum EvaluationError {
     ResultsParsing(#[from] ResultsParseError),
     /// An error returned during results serialization.
     #[error(transparent)]
-    ResultsSerialization(#[from] io::Error),
+    ResultsSerialization(io::Error),
     /// Error during `SERVICE` evaluation
     #[error("{0}")]
     Service(#[source] Box<dyn Error + Send + Sync + 'static>),
@@ -50,12 +51,33 @@ pub enum EvaluationError {
     /// The results are not a RDF graph
     #[error("The query results are not a RDF graph")]
     NotAGraph,
+    #[doc(hidden)]
+    #[error(transparent)]
+    Unexpected(Box<dyn Error + Send + Sync>),
 }
 
 impl From<Infallible> for EvaluationError {
     #[inline]
     fn from(error: Infallible) -> Self {
         match error {}
+    }
+}
+
+impl From<QueryEvaluationError> for EvaluationError {
+    fn from(error: QueryEvaluationError) -> Self {
+        match error {
+            QueryEvaluationError::Dataset(error) => match error.downcast() {
+                Ok(error) => Self::Storage(*error),
+                Err(error) => Self::Unexpected(error),
+            },
+            QueryEvaluationError::Service(error) => Self::Service(error),
+            QueryEvaluationError::UnexpectedDefaultGraph => Self::Storage(
+                CorruptionError::new("Unexpected default graph in SPARQL results").into(),
+            ),
+            e => Self::Storage(
+                CorruptionError::new(format!("Unsupported SPARQL evaluation error: {e}")).into(),
+            ),
+        }
     }
 }
 
@@ -68,10 +90,12 @@ impl From<EvaluationError> for io::Error {
             EvaluationError::ResultsParsing(error) => error.into(),
             EvaluationError::ResultsSerialization(error) => error,
             EvaluationError::Storage(error) => error.into(),
-            EvaluationError::Service(error) => match error.downcast() {
-                Ok(error) => *error,
-                Err(error) => Self::other(error),
-            },
+            EvaluationError::Service(error) | EvaluationError::Unexpected(error) => {
+                match error.downcast() {
+                    Ok(error) => *error,
+                    Err(error) => Self::other(error),
+                }
+            }
             EvaluationError::GraphAlreadyExists(_)
             | EvaluationError::GraphDoesNotExist(_)
             | EvaluationError::UnboundService
