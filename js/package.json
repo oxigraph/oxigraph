@@ -11,7 +11,7 @@
         "@types/node": "^18",
         "@types/rdfjs__data-model": "^2.0.8",
         "fzstd": "^0.1.1",
-        "typescript": "~5.6",
+        "typescript": "~5.7",
         "vitest": "^2.0.2",
         "wasm-pack": "^0.13.0"
     },
