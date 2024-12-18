@@ -1249,7 +1249,7 @@ impl<R> InternalRdfXmlParser<R> {
                 Ok(())
             }
             _ => {
-                if event.iter().copied().all(is_whitespace) {
+                if text.bytes().all(is_whitespace) {
                     Ok(())
                 } else {
                     Err(RdfXmlSyntaxError::msg(format!("Unexpected text event: '{text}'")).into())
