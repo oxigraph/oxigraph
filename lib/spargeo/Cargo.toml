@@ -1,6 +1,6 @@
 [package]
 name = "spargeo"
-version = "0.1.1"
+version = "0.1.2"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
