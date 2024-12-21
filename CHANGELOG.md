@@ -1,3 +1,14 @@
+## [0.4.5] - 2024-12-21
+
+### Added
+- SPARQL: support for the 'q' regular expression option.
+
+### Changed
+- Turtle: do not buffer everything if there is no line jump in the file.
+- RDF/XML: fixes decoding of escaped whitespaces.
+- Bump RocksDB to 9.9.3.
+
+
 ## [0.4.4] - 2024-11-21
 
 ### Added
