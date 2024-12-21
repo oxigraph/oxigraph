@@ -65,12 +65,32 @@ BUILTINS: Dict[str, Union[None, Tuple[List[ast.expr], ast.expr]]] = {
 
 def module_stubs(module: Any) -> ast.Module:
     types_to_import = {"typing"}
+    constants: List[ast.stmt] = []
     classes: List[ast.stmt] = []
     functions: List[ast.stmt] = []
     for member_name, member_value in inspect.getmembers(module):
         element_path = [module.__name__, member_name]
-        if member_name.startswith("__"):
+        if member_name in (
+            "__builtins__",
+            "__cached__",
+            "__file__",
+            "__loader__",
+            "__path__",
+            "__spec__",
+            "__doc__",
+            "__name__",
+            "__package__",
+        ) or inspect.ismodule(member_value):
             pass
+        elif member_name == "__all__":
+            constants.insert(
+                0,
+                ast.Assign(
+                    targets=[ast.Name(id=member_name, ctx=ast.Store())],
+                    value=ast.Constant(member_value),
+                    lineno=0,
+                ),
+            )
         elif inspect.isclass(member_value):
             classes.append(class_stubs(member_name, member_value, element_path, types_to_import))
         elif inspect.isbuiltin(member_value):
@@ -84,9 +104,20 @@ def module_stubs(module: Any) -> ast.Module:
                 )
             )
         else:
-            logging.warning(f"Unsupported root construction {member_name}")
+            value_type = type(member_value)
+            t = value_type.__qualname__
+            if value_type.__module__ != "builtins":
+                t = f"{value_type.__module__}.{t}"
+            constants.append(
+                ast.AnnAssign(
+                    target=ast.Name(id=member_name, ctx=ast.Store()),
+                    annotation=path_to_type(t),
+                    value=ast.Constant(...),
+                    simple=1,
+                )
+            )
     return ast.Module(
-        body=[ast.Import(names=[ast.alias(name=t)]) for t in sorted(types_to_import)] + classes + functions,
+        body=[ast.Import(names=[ast.alias(name=t)]) for t in sorted(types_to_import)] + constants + classes + functions,
         type_ignores=[],
     )
 
