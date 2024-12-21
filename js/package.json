@@ -8,7 +8,7 @@
         "@rdfjs/data-model": "^2.0.1",
         "@tsconfig/node18": "^18.2.4",
         "@tsconfig/strictest": "^2.0.5",
-        "@types/node": "^18",
+        "@types/node": "^22",
         "@types/rdfjs__data-model": "^2.0.8",
         "fzstd": "^0.1.1",
         "typescript": "~5.7",
