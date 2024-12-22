@@ -154,6 +154,7 @@ jobs:
       - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' && matrix.architecture == 'x86_64' || '' }}/g' > .github/workflows/manylinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
         if: github.event_name == 'release' || matrix.architecture == 'x86_64'
+        timeout-minutes: 300
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_${{ matrix.architecture }}_linux_gnu
@@ -178,6 +179,7 @@ jobs:
       - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' && matrix.architecture == 'x86_64' || '' }}/g' > .github/workflows/musllinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/musllinux_1_2_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
         if: github.event_name == 'release' || matrix.architecture == 'x86_64'
+        timeout-minutes: 300
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_${{ matrix.architecture }}_linux_musl
