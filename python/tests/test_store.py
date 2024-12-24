@@ -211,6 +211,21 @@ class TestStore(unittest.TestCase):
         self.assertEqual(solution["c"], Literal("http://foohttp://bar"))
         self.assertIsNone(solution["f"], None)
 
+    def test_select_query_with_substitution(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        store.add(Quad(bar, bar, baz))
+        solutions: Any = store.query(
+            "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+            substitutions={
+                Variable("s"): foo,
+            },
+        )
+        self.assertIsInstance(solutions, QuerySolutions)
+        all_solutions = list(solutions)
+        self.assertEqual(len(all_solutions), 1)
+        self.assertEqual(all_solutions[0]["s"], foo)
+
     def test_select_query_dump(self) -> None:
         store = Store()
         store.add(Quad(foo, bar, baz))

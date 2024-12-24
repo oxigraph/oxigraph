@@ -18,7 +18,7 @@ pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTrip
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
 use json_event_parser::{JsonEvent, ToWriteJsonWriter};
-use oxrdf::{NamedNode, Term};
+use oxrdf::{NamedNode, Term, Variable};
 use oxsdatatypes::{DayTimeDuration, Float};
 use spargebra::Query;
 use sparopt::algebra::GraphPattern;
@@ -79,10 +79,58 @@ impl QueryEvaluator {
         self.explain(dataset, query).0
     }
 
+    /// Executes a SPARQL query while substituting some variables with the given values.
+    ///
+    /// Substitution follows [RDF-dev SEP-0007](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0007/sep-0007.md).
+    ///
+    /// ```
+    /// use oxrdf::{Dataset, GraphName, NamedNode, Quad, Variable};
+    /// use spareval::{QueryEvaluator, QueryResults};
+    /// use spargebra::Query;
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let dataset = Dataset::from_iter([Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     GraphName::DefaultGraph,
+    /// )]);
+    /// let query = Query::parse("SELECT * WHERE { ?s ?p ?o }", None)?;
+    /// let results = QueryEvaluator::new().execute_with_substituted_variables(
+    ///     dataset,
+    ///     &query,
+    ///     [(Variable::new("s")?, ex.clone().into())],
+    /// );
+    /// if let QueryResults::Solutions(solutions) = results? {
+    ///     let solutions = solutions.collect::<Result<Vec<_>, _>>()?;
+    ///     assert_eq!(solutions.len(), 1);
+    ///     assert_eq!(solutions[0]["s"], ex.into());
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn execute_with_substituted_variables(
+        &self,
+        dataset: impl QueryableDataset,
+        query: &Query,
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Result<QueryResults, QueryEvaluationError> {
+        self.explain_with_substituted_variables(dataset, query, substitutions)
+            .0
+    }
+
     pub fn explain(
         &self,
         dataset: impl QueryableDataset,
         query: &Query,
+    ) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
+        self.explain_with_substituted_variables(dataset, query, [])
+    }
+
+    pub fn explain_with_substituted_variables(
+        &self,
+        dataset: impl QueryableDataset,
+        query: &Query,
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
         let start_planning = Timer::now();
         let (results, plan_node_with_stats, planning_duration) = match query {
@@ -101,9 +149,9 @@ impl QueryEvaluator {
                     Rc::new(self.custom_functions.clone()),
                     self.run_stats,
                 )
-                .evaluate_select(&pattern);
+                .evaluate_select(&pattern, substitutions);
                 (
-                    Ok(QueryResults::Solutions(results)),
+                    results.map(QueryResults::Solutions),
                     explanation,
                     planning_duration,
                 )
@@ -123,7 +171,7 @@ impl QueryEvaluator {
                     Rc::new(self.custom_functions.clone()),
                     self.run_stats,
                 )
-                .evaluate_ask(&pattern);
+                .evaluate_ask(&pattern, substitutions);
                 (
                     results.map(QueryResults::Boolean),
                     explanation,
@@ -148,9 +196,9 @@ impl QueryEvaluator {
                     Rc::new(self.custom_functions.clone()),
                     self.run_stats,
                 )
-                .evaluate_construct(&pattern, template);
+                .evaluate_construct(&pattern, template, substitutions);
                 (
-                    Ok(QueryResults::Graph(results)),
+                    results.map(QueryResults::Graph),
                     explanation,
                     planning_duration,
                 )
@@ -170,9 +218,9 @@ impl QueryEvaluator {
                     Rc::new(self.custom_functions.clone()),
                     self.run_stats,
                 )
-                .evaluate_describe(&pattern);
+                .evaluate_describe(&pattern, substitutions);
                 (
-                    Ok(QueryResults::Graph(results)),
+                    results.map(QueryResults::Graph),
                     explanation,
                     planning_duration,
                 )

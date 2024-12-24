@@ -243,12 +243,23 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
     pub fn evaluate_select(
         &self,
         pattern: &GraphPattern,
-    ) -> (QuerySolutionIter, Rc<EvalNodeWithStats>) {
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> (
+        Result<QuerySolutionIter, QueryEvaluationError>,
+        Rc<EvalNodeWithStats>,
+    ) {
         let mut variables = Vec::new();
         let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
-        let from = InternalTuple::with_capacity(variables.len());
+        let from = match encode_initial_bindings(&self.dataset, &variables, substitutions) {
+            Ok(from) => from,
+            Err(e) => return (Err(e), stats),
+        };
         (
-            decode_bindings(self.dataset.clone(), eval(from), Arc::from(variables)),
+            Ok(decode_bindings(
+                self.dataset.clone(),
+                eval(from),
+                Arc::from(variables),
+            )),
             stats,
         )
     }
@@ -256,10 +267,14 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
     pub fn evaluate_ask(
         &self,
         pattern: &GraphPattern,
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (Result<bool, QueryEvaluationError>, Rc<EvalNodeWithStats>) {
         let mut variables = Vec::new();
         let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
-        let from = InternalTuple::with_capacity(variables.len());
+        let from = match encode_initial_bindings(&self.dataset, &variables, substitutions) {
+            Ok(from) => from,
+            Err(e) => return (Err(e), stats),
+        };
         // We apply the same table as the or operation:
         // we return true if we get any valid tuple, an error if we get an error and false otherwise
         let mut error = None;
@@ -286,7 +301,11 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         &self,
         pattern: &GraphPattern,
         template: &[TriplePattern],
-    ) -> (QueryTripleIter, Rc<EvalNodeWithStats>) {
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> (
+        Result<QueryTripleIter, QueryEvaluationError>,
+        Rc<EvalNodeWithStats>,
+    ) {
         let mut variables = Vec::new();
         let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
         let mut bnodes = Vec::new();
@@ -311,16 +330,19 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                 })
             })
             .collect();
-        let from = InternalTuple::with_capacity(variables.len());
+        let from = match encode_initial_bindings(&self.dataset, &variables, substitutions) {
+            Ok(from) => from,
+            Err(e) => return (Err(e), stats),
+        };
         (
-            QueryTripleIter::new(ConstructIterator {
+            Ok(QueryTripleIter::new(ConstructIterator {
                 eval: self.clone(),
                 iter: eval(from),
                 template,
                 buffered_results: Vec::default(),
                 already_emitted_results: FxHashSet::default(),
                 bnodes: Vec::default(),
-            }),
+            })),
             stats,
         )
     }
@@ -328,18 +350,25 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
     pub fn evaluate_describe(
         &self,
         pattern: &GraphPattern,
-    ) -> (QueryTripleIter, Rc<EvalNodeWithStats>) {
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> (
+        Result<QueryTripleIter, QueryEvaluationError>,
+        Rc<EvalNodeWithStats>,
+    ) {
         let mut variables = Vec::new();
         let (eval, stats) = self.graph_pattern_evaluator(pattern, &mut variables);
-        let from = InternalTuple::with_capacity(variables.len());
+        let from = match encode_initial_bindings(&self.dataset, &variables, substitutions) {
+            Ok(from) => from,
+            Err(e) => return (Err(e), stats),
+        };
         (
-            QueryTripleIter::new(DescribeIterator {
+            Ok(QueryTripleIter::new(DescribeIterator {
                 eval: self.clone(),
                 tuples_to_describe: eval(from),
                 nodes_described: FxHashSet::default(),
                 nodes_to_describe: Vec::default(),
                 quads: Box::new(empty()),
-            }),
+            })),
             stats,
         )
     }
@@ -3508,10 +3537,31 @@ fn encode_bindings<D: QueryableDataset>(
                 &variables,
                 dataset.internalize_term(term.clone())?,
                 &mut encoded_terms,
-            )
+            );
         }
         Ok(encoded_terms)
     }))
+}
+
+fn encode_initial_bindings<D: QueryableDataset>(
+    dataset: &EvalDataset<D>,
+    variables: &[Variable],
+    values: impl IntoIterator<Item = (Variable, Term)>,
+) -> Result<InternalTuple<D>, QueryEvaluationError> {
+    let mut encoded_terms = InternalTuple::with_capacity(variables.len());
+    for (variable, term) in values {
+        if !put_variable_value(
+            &variable,
+            variables,
+            dataset.internalize_term(term)?,
+            &mut encoded_terms,
+        ) {
+            return Err(QueryEvaluationError::NotExistingSubstitutedVariable(
+                variable,
+            ));
+        }
+    }
+    Ok(encoded_terms)
 }
 
 fn put_variable_value<D: QueryableDataset>(
@@ -3519,13 +3569,14 @@ fn put_variable_value<D: QueryableDataset>(
     variables: &[Variable],
     value: D::InternalTerm,
     tuple: &mut InternalTuple<D>,
-) {
+) -> bool {
     for (i, v) in variables.iter().enumerate() {
         if selector == v {
             tuple.set(i, value);
-            break;
+            return true;
         }
     }
+    false
 }
 
 enum AccumulatorWrapper<D: QueryableDataset> {
