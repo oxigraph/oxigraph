@@ -32,6 +32,7 @@ pub(crate) fn evaluate_query(
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     options: QueryOptions,
     run_stats: bool,
+    substitutions: impl IntoIterator<Item = (Variable, Term)>,
 ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
     let query = query.try_into().map_err(Into::into)?;
     let dataset = DatasetView::new(reader, &query.dataset);
@@ -39,12 +40,9 @@ pub(crate) fn evaluate_query(
     if run_stats {
         evaluator = evaluator.compute_statistics();
     }
-    let (results, explanation) = evaluator.explain(dataset, &query.inner);
-    let results = results.map_err(Into::into).map(|results| match results {
-        spareval::QueryResults::Solutions(iter) => QueryResults::Solutions(iter.into()),
-        spareval::QueryResults::Boolean(value) => QueryResults::Boolean(value),
-        spareval::QueryResults::Graph(iter) => QueryResults::Graph(iter.into()),
-    });
+    let (results, explanation) =
+        evaluator.explain_with_substituted_variables(dataset, &query.inner, substitutions);
+    let results = results.map_err(Into::into).map(Into::into);
     Ok((results, explanation))
 }
 

@@ -7,8 +7,8 @@ use crate::sparql::results::{
 };
 pub use sparesults::QuerySolution;
 use spareval::{
-    QueryEvaluationError, QuerySolutionIter as EvalQuerySolutionIter,
-    QueryTripleIter as EvalQueryTripleIter,
+    QueryEvaluationError, QueryResults as EvalQueryResults,
+    QuerySolutionIter as EvalQuerySolutionIter, QueryTripleIter as EvalQueryTripleIter,
 };
 use std::io::{Read, Write};
 use std::sync::Arc;
@@ -142,6 +142,17 @@ impl QueryResults {
                 .map_err(EvaluationError::ResultsSerialization)
         } else {
             Err(EvaluationError::NotAGraph)
+        }
+    }
+}
+
+impl From<EvalQueryResults> for QueryResults {
+    #[inline]
+    fn from(results: EvalQueryResults) -> Self {
+        match results {
+            EvalQueryResults::Solutions(iter) => Self::Solutions(iter.into()),
+            EvalQueryResults::Boolean(value) => Self::Boolean(value),
+            EvalQueryResults::Graph(iter) => Self::Graph(iter.into()),
         }
     }
 }

@@ -1,4 +1,4 @@
-use oxrdf::{NamedNode, Term};
+use oxrdf::{NamedNode, Term, Variable};
 use std::convert::Infallible;
 use std::error::Error;
 
@@ -12,6 +12,9 @@ pub enum QueryEvaluationError {
     /// Error during `SERVICE` evaluation
     #[error("{0}")]
     Service(#[source] Box<dyn Error + Send + Sync>),
+    /// If a variable present in the given initial bindings is not present in the `SELECT` part of the query
+    #[error("The SPARQL query does not has variable {0} in its SELECT projection")]
+    NotExistingInitialBindingVariable(Variable),
     /// Error if the dataset returns the default graph even if a named graph is expected
     #[error("The SPARQL dataset returned the default graph even if a named graph is expected")]
     UnexpectedDefaultGraph,

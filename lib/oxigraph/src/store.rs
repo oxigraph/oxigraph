@@ -176,6 +176,44 @@ impl Store {
         results
     }
 
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options while substituting some variables with the given values.
+    ///
+    /// Substitution follows [RDF-dev SEP-0007](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0007/sep-0007.md).
+    ///
+    /// Usage example with a custom function serializing terms to N-Triples:
+    /// ```
+    /// use oxigraph::model::{Literal, Variable};
+    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// if let QueryResults::Solutions(mut solutions) = store.query_opt_with_substituted_variables(
+    ///     "SELECT ?v WHERE {}",
+    ///     QueryOptions::default(),
+    ///     [(Variable::new("v")?, Literal::from(1).into())],
+    /// )? {
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("v"),
+    ///         Some(&Literal::from(1).into())
+    ///     );
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn query_opt_with_substituted_variables(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        options: QueryOptions,
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Result<QueryResults, EvaluationError> {
+        let (results, _) = self.explain_query_opt_with_substituted_variables(
+            query,
+            options,
+            false,
+            substitutions,
+        )?;
+        results
+    }
+
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options and
     /// returns a query explanation with some statistics (if enabled with the `with_stats` parameter).
     ///
@@ -205,7 +243,50 @@ impl Store {
         options: QueryOptions,
         with_stats: bool,
     ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
-        evaluate_query(self.storage.snapshot(), query, options, with_stats)
+        self.explain_query_opt_with_substituted_variables(query, options, with_stats, [])
+    }
+
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options and
+    /// returns a query explanation with some statistics (if enabled with the `with_stats` parameter).
+    ///
+    /// <div class="warning">If you want to compute statistics you need to exhaust the results iterator before having a look at them.</div>
+    ///
+    /// Usage example serialising the explanation with statistics in JSON:
+    /// ```
+    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::store::Store;
+    /// use oxrdf::{Literal, Variable};
+    ///
+    /// let store = Store::new()?;
+    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) = store
+    ///     .explain_query_opt_with_substituted_variables(
+    ///         "SELECT ?s WHERE {}",
+    ///         QueryOptions::default(),
+    ///         true,
+    ///         [(Variable::new("s")?, Literal::from(1).into())],
+    ///     )?
+    /// {
+    ///     // We make sure to have read all the solutions
+    ///     for _ in solutions {}
+    ///     let mut buf = Vec::new();
+    ///     explanation.write_in_json(&mut buf)?;
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn explain_query_opt_with_substituted_variables(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        options: QueryOptions,
+        with_stats: bool,
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
+        evaluate_query(
+            self.storage.snapshot(),
+            query,
+            options,
+            with_stats,
+            substitutions,
+        )
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -1064,7 +1145,7 @@ impl Transaction<'_> {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        let (results, _) = evaluate_query(self.writer.reader(), query, options, false)?;
+        let (results, _) = evaluate_query(self.writer.reader(), query, options, false, [])?;
         results
     }
 
