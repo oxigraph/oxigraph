@@ -524,6 +524,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: "js/package.json"
+      - run: wget https://github.com/Tpt/bsbm-tools/releases/download/v0.2/explore-1500.nt.zst
+        working-directory: ./lib/oxigraph
       - run: npm install
         working-directory: ./js
       - run: cargo codspeed build -p oxigraph --features http-client-native-tls
