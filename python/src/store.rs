@@ -226,6 +226,8 @@ impl PyStore {
     /// :type default_graph: NamedNode or BlankNode or DefaultGraph or list[NamedNode or BlankNode or DefaultGraph] or None, optional
     /// :param named_graphs: list of the named graphs that could be used in SPARQL `GRAPH` clause. By default, all the store named graphs are available.
     /// :type named_graphs: list[NamedNode or BlankNode] or None, optional
+    /// :param substitutions: dictionary of values variables should be substituted with. Substitution follows `RDF-dev SEP-0007 <https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0007/sep-0007.md>`_.
+    /// :type substitutions: dict[Variable, NamedNode or BlankNode or Literal or Triple] or None, optional
     /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions takes for input some :py:class:`Term`s and return a :py:class:`Term` or :py:const:`None`.
     /// :type custom_functions: dict[NamedNode, typing.Callable[[NamedNode or BlankNode or Literal or Triple, ...], NamedNode or BlankNode or Literal or Triple or None]] or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
@@ -253,7 +255,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
-    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, custom_functions = None))]
+    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None))]
     fn query<'py>(
         &self,
         query: &str,
@@ -261,6 +263,7 @@ impl PyStore {
         use_default_graph_as_union: bool,
         default_graph: Option<&Bound<'_, PyAny>>,
         named_graphs: Option<&Bound<'_, PyAny>>,
+        substitutions: Option<HashMap<PyVariable, PyTerm>>,
         custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
@@ -279,8 +282,20 @@ impl PyStore {
             py,
         )?;
         let options = query_options_from_python(custom_functions);
+        let substitutions = substitutions
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()));
         let results = py
-            .allow_threads(|| Ok(UngilQueryResults(self.inner.query_opt(query, options)?)))
+            .allow_threads(|| {
+                Ok(UngilQueryResults(
+                    self.inner.query_opt_with_substituted_variables(
+                        query,
+                        options,
+                        substitutions,
+                    )?,
+                ))
+            })
             .map_err(map_evaluation_error)?
             .0;
         query_results_to_python(py, results)
