@@ -4,7 +4,9 @@ use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 use crate::error::QueryEvaluationError;
 use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
-use crate::CustomFunctionRegistry;
+use crate::{
+    Accumulator as CustomAccumulator, CustomAggregateFunctionRegistry, CustomFunctionRegistry,
+};
 use json_event_parser::{JsonEvent, ToWriteJsonWriter};
 use md5::{Digest, Md5};
 use oxiri::Iri;
@@ -217,6 +219,7 @@ pub struct SimpleEvaluator<D: QueryableDataset> {
     now: DateTime,
     service_handler: Rc<ServiceHandlerRegistry>,
     custom_functions: Rc<CustomFunctionRegistry>,
+    custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
     run_stats: bool,
 }
 
@@ -226,6 +229,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         base_iri: Option<Rc<Iri<String>>>,
         service_handler: Rc<ServiceHandlerRegistry>,
         custom_functions: Rc<CustomFunctionRegistry>,
+        custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
         run_stats: bool,
     ) -> Self {
         Self {
@@ -236,6 +240,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
             now: DateTime::now(),
             service_handler,
             custom_functions,
+            custom_aggregate_functions,
             run_stats,
         }
     }
@@ -1518,27 +1523,13 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
     ) -> Box<dyn Fn() -> AccumulatorWrapper<D>> {
-        match expression {
-            AggregateExpression::CountSolutions { distinct } => {
-                if *distinct {
-                    Box::new(move || AccumulatorWrapper::CountDistinctTuple {
-                        count: 0,
-                        seen: FxHashSet::default(),
-                    })
-                } else {
-                    Box::new(move || AccumulatorWrapper::CountTuple { count: 0 })
-                }
-            }
-            AggregateExpression::FunctionCall {
-                name,
-                distinct,
-                expr,
-            } => match name {
-                AggregateFunction::Count => {
+        match &expression.name {
+            AggregateFunction::Count => {
+                if let Some(arg) = expression.args.first() {
                     if let Some(evaluator) =
-                        self.internal_expression_evaluator(expr, encoded_variables, stat_children)
+                        self.internal_expression_evaluator(arg, encoded_variables, stat_children)
                     {
-                        return if *distinct {
+                        return if expression.distinct {
                             Box::new(move || AccumulatorWrapper::CountDistinctInternal {
                                 evaluator: Rc::clone(&evaluator),
                                 seen: FxHashSet::default(),
@@ -1551,9 +1542,12 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             })
                         };
                     }
-                    let evaluator =
-                        self.expression_evaluator(expr, encoded_variables, stat_children);
-                    if *distinct {
+                    let evaluator = self.expression_evaluator(
+                        &expression.args[0],
+                        encoded_variables,
+                        stat_children,
+                    );
+                    if expression.distinct {
                         Box::new(move || AccumulatorWrapper::DistinctExpression {
                             evaluator: Rc::clone(&evaluator),
                             seen: FxHashSet::default(),
@@ -1565,102 +1559,149 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             accumulator: Some(Box::new(CountAccumulator::default())),
                         })
                     }
+                } else if expression.distinct {
+                    Box::new(move || AccumulatorWrapper::CountDistinctTuple {
+                        count: 0,
+                        seen: FxHashSet::default(),
+                    })
+                } else {
+                    Box::new(move || AccumulatorWrapper::CountTuple { count: 0 })
                 }
-                AggregateFunction::Sum => {
-                    let evaluator =
-                        self.expression_evaluator(expr, encoded_variables, stat_children);
-                    if *distinct {
-                        Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Rc::clone(&evaluator),
-                            seen: FxHashSet::default(),
-                            accumulator: Some(Box::new(SumAccumulator::default())),
-                        })
-                    } else {
-                        Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Rc::clone(&evaluator),
-                            accumulator: Some(Box::new(SumAccumulator::default())),
-                        })
-                    }
-                }
-                AggregateFunction::Min => {
-                    let evaluator =
-                        self.expression_evaluator(expr, encoded_variables, stat_children);
-                    if *distinct {
-                        Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Rc::clone(&evaluator),
-                            seen: FxHashSet::default(),
-                            accumulator: Some(Box::new(MinAccumulator::default())),
-                        })
-                    } else {
-                        Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Rc::clone(&evaluator),
-                            accumulator: Some(Box::new(MinAccumulator::default())),
-                        })
-                    }
-                }
-                AggregateFunction::Max => {
-                    let evaluator =
-                        self.expression_evaluator(expr, encoded_variables, stat_children);
-                    if *distinct {
-                        Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Rc::clone(&evaluator),
-                            seen: FxHashSet::default(),
-                            accumulator: Some(Box::new(MaxAccumulator::default())),
-                        })
-                    } else {
-                        Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Rc::clone(&evaluator),
-                            accumulator: Some(Box::new(MaxAccumulator::default())),
-                        })
-                    }
-                }
-                AggregateFunction::Avg => {
-                    let evaluator =
-                        self.expression_evaluator(expr, encoded_variables, stat_children);
-                    if *distinct {
-                        Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Rc::clone(&evaluator),
-                            seen: FxHashSet::default(),
-                            accumulator: Some(Box::new(AvgAccumulator::default())),
-                        })
-                    } else {
-                        Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Rc::clone(&evaluator),
-                            accumulator: Some(Box::new(AvgAccumulator::default())),
-                        })
-                    }
-                }
-                AggregateFunction::Sample => {
-                    let evaluator =
-                        self.expression_evaluator(expr, encoded_variables, stat_children);
-                    Box::new(move || AccumulatorWrapper::Sample {
+            }
+            AggregateFunction::Sum => {
+                let evaluator = self.expression_evaluator(
+                    &expression.args[0],
+                    encoded_variables,
+                    stat_children,
+                );
+                if expression.distinct {
+                    Box::new(move || AccumulatorWrapper::DistinctExpression {
                         evaluator: Rc::clone(&evaluator),
-                        value: None,
+                        seen: FxHashSet::default(),
+                        accumulator: Some(Box::new(SumAccumulator::default())),
+                    })
+                } else {
+                    Box::new(move || AccumulatorWrapper::Expression {
+                        evaluator: Rc::clone(&evaluator),
+                        accumulator: Some(Box::new(SumAccumulator::default())),
                     })
                 }
-                AggregateFunction::GroupConcat { separator } => {
-                    let separator = Rc::from(separator.as_deref().unwrap_or(" "));
-                    let evaluator =
-                        self.expression_evaluator(expr, encoded_variables, stat_children);
-                    if *distinct {
-                        Box::new(move || AccumulatorWrapper::DistinctExpression {
-                            evaluator: Rc::clone(&evaluator),
-                            seen: FxHashSet::default(),
-                            accumulator: Some(Box::new(GroupConcatAccumulator::new(Rc::clone(
-                                &separator,
-                            )))),
-                        })
-                    } else {
-                        Box::new(move || AccumulatorWrapper::Expression {
-                            evaluator: Rc::clone(&evaluator),
-                            accumulator: Some(Box::new(GroupConcatAccumulator::new(Rc::clone(
-                                &separator,
-                            )))),
-                        })
-                    }
+            }
+            AggregateFunction::Min => {
+                let evaluator = self.expression_evaluator(
+                    &expression.args[0],
+                    encoded_variables,
+                    stat_children,
+                );
+                if expression.distinct {
+                    Box::new(move || AccumulatorWrapper::DistinctExpression {
+                        evaluator: Rc::clone(&evaluator),
+                        seen: FxHashSet::default(),
+                        accumulator: Some(Box::new(MinAccumulator::default())),
+                    })
+                } else {
+                    Box::new(move || AccumulatorWrapper::Expression {
+                        evaluator: Rc::clone(&evaluator),
+                        accumulator: Some(Box::new(MinAccumulator::default())),
+                    })
                 }
-                AggregateFunction::Custom(_) => Box::new(move || AccumulatorWrapper::Failing),
-            },
+            }
+            AggregateFunction::Max => {
+                let evaluator = self.expression_evaluator(
+                    &expression.args[0],
+                    encoded_variables,
+                    stat_children,
+                );
+                if expression.distinct {
+                    Box::new(move || AccumulatorWrapper::DistinctExpression {
+                        evaluator: Rc::clone(&evaluator),
+                        seen: FxHashSet::default(),
+                        accumulator: Some(Box::new(MaxAccumulator::default())),
+                    })
+                } else {
+                    Box::new(move || AccumulatorWrapper::Expression {
+                        evaluator: Rc::clone(&evaluator),
+                        accumulator: Some(Box::new(MaxAccumulator::default())),
+                    })
+                }
+            }
+            AggregateFunction::Avg => {
+                let evaluator = self.expression_evaluator(
+                    &expression.args[0],
+                    encoded_variables,
+                    stat_children,
+                );
+                if expression.distinct {
+                    Box::new(move || AccumulatorWrapper::DistinctExpression {
+                        evaluator: Rc::clone(&evaluator),
+                        seen: FxHashSet::default(),
+                        accumulator: Some(Box::new(AvgAccumulator::default())),
+                    })
+                } else {
+                    Box::new(move || AccumulatorWrapper::Expression {
+                        evaluator: Rc::clone(&evaluator),
+                        accumulator: Some(Box::new(AvgAccumulator::default())),
+                    })
+                }
+            }
+            AggregateFunction::Sample => {
+                let evaluator = self.expression_evaluator(
+                    &expression.args[0],
+                    encoded_variables,
+                    stat_children,
+                );
+                Box::new(move || AccumulatorWrapper::Sample {
+                    evaluator: Rc::clone(&evaluator),
+                    value: None,
+                })
+            }
+            AggregateFunction::GroupConcat { separator } => {
+                let separator = Rc::from(separator.as_deref().unwrap_or(" "));
+                let evaluator = self.expression_evaluator(
+                    &expression.args[0],
+                    encoded_variables,
+                    stat_children,
+                );
+                if expression.distinct {
+                    Box::new(move || AccumulatorWrapper::DistinctExpression {
+                        evaluator: Rc::clone(&evaluator),
+                        seen: FxHashSet::default(),
+                        accumulator: Some(Box::new(GroupConcatAccumulator::new(Rc::clone(
+                            &separator,
+                        )))),
+                    })
+                } else {
+                    Box::new(move || AccumulatorWrapper::Expression {
+                        evaluator: Rc::clone(&evaluator),
+                        accumulator: Some(Box::new(GroupConcatAccumulator::new(Rc::clone(
+                            &separator,
+                        )))),
+                    })
+                }
+            }
+            AggregateFunction::Custom(function_name) => {
+                let Some(function) = self.custom_aggregate_functions.get(function_name).cloned()
+                else {
+                    return Box::new(|| AccumulatorWrapper::Failing);
+                };
+                let evaluator = self.expression_evaluator(
+                    &expression.args[0],
+                    encoded_variables,
+                    stat_children,
+                );
+                if expression.distinct {
+                    Box::new(move || AccumulatorWrapper::DistinctExpression {
+                        evaluator: Rc::clone(&evaluator),
+                        seen: FxHashSet::default(),
+                        accumulator: Some(Box::new(function())),
+                    })
+                } else {
+                    Box::new(move || AccumulatorWrapper::Expression {
+                        evaluator: Rc::clone(&evaluator),
+                        accumulator: Some(Box::new(function())),
+                    })
+                }
+            }
         }
     }
 
@@ -3390,6 +3431,7 @@ impl<D: QueryableDataset> Clone for SimpleEvaluator<D> {
             now: self.now,
             service_handler: Rc::clone(&self.service_handler),
             custom_functions: Rc::clone(&self.custom_functions),
+            custom_aggregate_functions: Rc::clone(&self.custom_aggregate_functions),
             run_stats: self.run_stats,
         }
     }
@@ -3838,6 +3880,16 @@ impl Accumulator for GroupConcatAccumulator {
         self.concat
             .take()
             .map(|result| build_plain_literal(result, self.language.take().flatten()))
+    }
+}
+
+impl Accumulator for Box<dyn CustomAccumulator> {
+    fn add(&mut self, element: ExpressionTerm) {
+        self.as_mut().add(element.into())
+    }
+
+    fn finish(&mut self) -> Option<ExpressionTerm> {
+        Some(self.as_mut().finish()?.into())
     }
 }
 

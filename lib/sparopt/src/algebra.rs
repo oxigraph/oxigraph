@@ -1534,15 +1534,10 @@ impl Default for MinusAlgorithm {
 
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum AggregateExpression {
-    CountSolutions {
-        distinct: bool,
-    },
-    FunctionCall {
-        name: AggregateFunction,
-        expr: Expression,
-        distinct: bool,
-    },
+pub struct AggregateExpression {
+    pub name: AggregateFunction,
+    pub args: Vec<Expression>,
+    pub distinct: bool,
 }
 
 impl AggregateExpression {
@@ -1550,38 +1545,24 @@ impl AggregateExpression {
         expression: &AlAggregateExpression,
         graph_name: Option<&NamedNodePattern>,
     ) -> Self {
-        match expression {
-            AlAggregateExpression::CountSolutions { distinct } => Self::CountSolutions {
-                distinct: *distinct,
-            },
-            AlAggregateExpression::FunctionCall {
-                name,
-                expr,
-                distinct,
-            } => Self::FunctionCall {
-                name: name.clone(),
-                expr: Expression::from_sparql_algebra(expr, graph_name),
-                distinct: *distinct,
-            },
+        Self {
+            name: expression.name.clone(),
+            args: expression
+                .args
+                .iter()
+                .map(|expr| Expression::from_sparql_algebra(expr, graph_name))
+                .collect(),
+            distinct: expression.distinct,
         }
     }
 }
 
 impl From<&AggregateExpression> for AlAggregateExpression {
     fn from(expression: &AggregateExpression) -> Self {
-        match expression {
-            AggregateExpression::CountSolutions { distinct } => Self::CountSolutions {
-                distinct: *distinct,
-            },
-            AggregateExpression::FunctionCall {
-                name,
-                expr,
-                distinct,
-            } => Self::FunctionCall {
-                name: name.clone(),
-                expr: expr.into(),
-                distinct: *distinct,
-            },
+        Self {
+            name: expression.name.clone(),
+            args: expression.args.iter().map(Into::into).collect(),
+            distinct: expression.distinct,
         }
     }
 }

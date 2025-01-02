@@ -1321,13 +1321,19 @@ parser! {
 
         rule Constraint() -> Expression = BrackettedExpression() / FunctionCall() / BuiltInCall()
 
-        rule FunctionCall() -> Expression = f: iri() _ a: ArgList() {
-            Expression::FunctionCall(Function::Custom(f), a)
+        rule FunctionCall() -> Expression = f: iri() _ a: ArgList() {?
+            let (args, distinct) = a;
+            Ok(if distinct {
+                state.new_aggregation(AggregateExpression { name: AggregateFunction::Custom(f), args, distinct: true })?.into()
+            } else {
+                Expression::FunctionCall(Function::Custom(f), args)
+            })
         }
 
-        rule ArgList() -> Vec<Expression> =
-            "(" _ e:ArgList_item() **<1,> ("," _) _ ")" { e } /
-            NIL() { Vec::new() }
+        rule ArgList() -> (Vec<Expression>, bool) =
+            "(" _ i("DISTINCT") _ e:ArgList_item() **<1,> ("," _) _ ")" { (e, true) } /
+            "(" _ e:ArgList_item() **<1,> ("," _) _ ")" { (e, false) } /
+            NIL() { (Vec::new(), false) }
         rule ArgList_item() -> Expression = e:Expression() _ { e }
 
         rule ExpressionList() -> Vec<Expression> =
@@ -1891,32 +1897,35 @@ parser! {
         rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
 
         rule Aggregate() -> AggregateExpression =
-            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: true } } /
-            i("COUNT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: true } } /
-            i("COUNT") _ "(" _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: false } } /
-            i("COUNT") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Count, expr, distinct: false } } /
-            i("SUM") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: true } } /
-            i("SUM") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sum, expr, distinct: false } } /
-            i("MIN") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: true } } /
-            i("MIN") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Min, expr, distinct: false } } /
-            i("MAX") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: true } } /
-            i("MAX") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Max, expr, distinct: false } } /
-            i("AVG") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: true } } /
-            i("AVG") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Avg, expr, distinct: false } } /
-            i("SAMPLE") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr, distinct: true } } /
-            i("SAMPLE") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Sample, expr, distinct: false } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: Some(s) }, expr, distinct: true } } /
-            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: true } } /
-            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: Some(s) }, expr, distinct: true } } /
-            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: false } } /
-            name:iri() _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: true } } /
-            name:iri() _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: false } }
+            i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression { name: AggregateFunction::Count, args: Vec::new(), distinct: true } } /
+            i("COUNT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Count, args: vec![expr], distinct: true } } /
+            i("COUNT") _ "(" _ "*" _ ")" { AggregateExpression { name: AggregateFunction::Count, args: Vec::new(), distinct: false } } /
+            i("COUNT") _ "(" _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Count, args: vec![expr], distinct: false } } /
+            i("SUM") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Sum, args: vec![expr], distinct: true } } /
+            i("SUM") _ "(" _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Sum, args: vec![expr], distinct: false } } /
+            i("MIN") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Min, args: vec![expr], distinct: true } } /
+            i("MIN") _ "(" _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Min, args: vec![expr], distinct: false } } /
+            i("MAX") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Max, args: vec![expr], distinct: true } } /
+            i("MAX") _ "(" _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Max, args: vec![expr], distinct: false } } /
+            i("AVG") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Avg, args: vec![expr], distinct: true } } /
+            i("AVG") _ "(" _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Avg, args: vec![expr], distinct: false } } /
+            i("SAMPLE") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Sample, args: vec![expr], distinct: true } } /
+            i("SAMPLE") _ "(" _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::Sample, args: vec![expr], distinct: false } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression { name: AggregateFunction::GroupConcat { separator: Some(s) }, args: vec![expr], distinct: true } } /
+            i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::GroupConcat { separator: None }, args: vec![expr], distinct: true } } /
+            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression { name: AggregateFunction::GroupConcat { separator: Some(s) }, args: vec![expr], distinct: true } } /
+            i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ")" { AggregateExpression { name: AggregateFunction::GroupConcat { separator: None }, args: vec![expr], distinct: false } }
 
-        rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {
-            match a {
-                Some(a) => Expression::FunctionCall(Function::Custom(i), a),
-                None => i.into()
-            }
+        rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {?
+            Ok(if let Some((args, distinct)) = a {
+                if distinct {
+                    state.new_aggregation(AggregateExpression { name: AggregateFunction::Custom(i), args, distinct: true })?.into()
+                } else {
+                    Expression::FunctionCall(Function::Custom(i), args)
+                }
+            } else {
+                i.into()
+            })
         }
 
         rule RDFLiteral() -> Literal =

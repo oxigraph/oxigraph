@@ -85,26 +85,24 @@ pub fn query_options_from_python(
         options = register_geosparql_functions(options);
     }
 
-    if let Some(custom_functions) = custom_functions {
-        for (name, function) in custom_functions {
-            options = options.with_custom_function(name.into(), move |args| {
-                Python::with_gil(|py| {
-                    Some(
-                        function
-                            .call1(
-                                py,
-                                PyTuple::new(py, args.iter().map(|t| PyTerm::from(t.clone())))
-                                    .ok()?,
-                            )
-                            .ok()?
-                            .extract::<Option<PyTerm>>(py)
-                            .ok()??
-                            .into(),
-                    )
-                })
+    for (name, function) in custom_functions.unwrap_or_default() {
+        options = options.with_custom_function(name.into(), move |args| {
+            Python::with_gil(|py| {
+                Some(
+                    function
+                        .call1(
+                            py,
+                            PyTuple::new(py, args.iter().map(|t| PyTerm::from(t.clone()))).ok()?,
+                        )
+                        .ok()?
+                        .extract::<Option<PyTerm>>(py)
+                        .ok()??
+                        .into(),
+                )
             })
-        }
+        })
     }
+
     options
 }
 

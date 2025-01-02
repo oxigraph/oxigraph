@@ -1118,107 +1118,63 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
 }
 
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
+///
+/// We encode `COUNT(*)` like `COUNT()` (no args
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum AggregateExpression {
-    /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
-    CountSolutions { distinct: bool },
-    FunctionCall {
-        name: AggregateFunction,
-        expr: Expression,
-        distinct: bool,
-    },
+pub struct AggregateExpression {
+    pub name: AggregateFunction,
+    pub args: Vec<Expression>,
+    pub distinct: bool,
 }
 
 impl AggregateExpression {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub(crate) fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
-        match self {
-            Self::CountSolutions { distinct } => {
-                f.write_str("(count")?;
-                if *distinct {
-                    f.write_str(" distinct")?;
-                }
-                f.write_str(")")
-            }
-            Self::FunctionCall {
-                name:
-                    AggregateFunction::GroupConcat {
-                        separator: Some(separator),
-                    },
-                expr,
-                distinct,
-            } => {
-                f.write_str("(group_concat ")?;
-                if *distinct {
-                    f.write_str("distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                write!(f, " {})", LiteralRef::new_simple_literal(separator))
-            }
-            Self::FunctionCall {
-                name,
-                expr,
-                distinct,
-            } => {
-                f.write_str("(")?;
-                name.fmt_sse(f)?;
-                f.write_str(" ")?;
-                if *distinct {
-                    f.write_str("distinct ")?;
-                }
-                expr.fmt_sse(f)?;
-                f.write_str(")")
-            }
+        f.write_str("(")?;
+        self.name.fmt_sse(f)?;
+        f.write_str(" ")?;
+        if self.distinct {
+            f.write_str("distinct ")?;
         }
+        for arg in &self.args {
+            arg.fmt_sse(f)?;
+        }
+        if let AggregateFunction::GroupConcat {
+            separator: Some(separator),
+        } = &self.name
+        {
+            write!(f, " {}", LiteralRef::new_simple_literal(separator))?;
+        }
+        f.write_str(")")
     }
 }
 
 impl fmt::Display for AggregateExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::CountSolutions { distinct } => {
-                if *distinct {
-                    f.write_str("COUNT(DISTINCT *)")
-                } else {
-                    f.write_str("COUNT(*)")
-                }
-            }
-            Self::FunctionCall {
-                name:
-                    AggregateFunction::GroupConcat {
-                        separator: Some(separator),
-                    },
-                expr,
-                distinct,
-            } => {
-                if *distinct {
-                    write!(
-                        f,
-                        "GROUP_CONCAT(DISTINCT {}; SEPARATOR = {})",
-                        expr,
-                        LiteralRef::new_simple_literal(separator)
-                    )
-                } else {
-                    write!(
-                        f,
-                        "GROUP_CONCAT({}; SEPARATOR = {})",
-                        expr,
-                        LiteralRef::new_simple_literal(separator)
-                    )
-                }
-            }
-            Self::FunctionCall {
-                name,
-                expr,
-                distinct,
-            } => {
-                if *distinct {
-                    write!(f, "{name}(DISTINCT {expr})")
-                } else {
-                    write!(f, "{name}({expr})")
-                }
-            }
+        write!(f, "{}(", self.name)?;
+        if self.distinct {
+            write!(f, "DISTINCT ")?;
         }
+        if self.name == AggregateFunction::Count && self.args.is_empty() {
+            write!(f, "*")?;
+        }
+        for (i, arg) in self.args.iter().enumerate() {
+            if i > 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{arg}")?;
+        }
+        if let AggregateFunction::GroupConcat {
+            separator: Some(separator),
+        } = &self.name
+        {
+            write!(
+                f,
+                "; SEPARATOR = {}",
+                LiteralRef::new_simple_literal(separator)
+            )?;
+        }
+        write!(f, ")")
     }
 }
 

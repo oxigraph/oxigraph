@@ -60,6 +60,7 @@ use std::{fmt, io};
 pub struct QueryEvaluator {
     service_handler: ServiceHandlerRegistry,
     custom_functions: CustomFunctionRegistry,
+    custom_aggregate_functions: CustomAggregateFunctionRegistry,
     without_optimizations: bool,
     run_stats: bool,
 }
@@ -99,6 +100,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_select(&pattern);
@@ -121,6 +123,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_ask(&pattern);
@@ -146,6 +149,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_construct(&pattern, template);
@@ -168,6 +172,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_describe(&pattern);
@@ -256,6 +261,56 @@ impl QueryEvaluator {
         self
     }
 
+    /// Adds a custom SPARQL aggregate evaluation function.
+    ///
+    /// Example with a function returning the last element of the group:
+    /// ```
+    /// use oxrdf::{Dataset, Literal, NamedNode, Term};
+    /// use spareval::{Accumulator, QueryEvaluator, QueryResults};
+    /// use spargebra::Query;
+    ///
+    /// struct LastAccumulator {
+    ///     value: Option<Term>,
+    /// }
+    ///
+    /// impl Accumulator for LastAccumulator {
+    ///     fn add(&mut self, element: Term) {
+    ///         self.value = Some(element);
+    ///     }
+    ///
+    ///     fn finish(&mut self) -> Option<Term> {
+    ///         self.value.take()
+    ///     }
+    /// }
+    ///
+    /// let evaluator = QueryEvaluator::new()
+    ///     .with_custom_aggregate_function(NamedNode::new("http://example.com/last")?, || {
+    ///         Box::new(LastAccumulator { value: None })
+    ///     });
+    /// let query = Query::parse(
+    ///     "SELECT (<http://example.com/last>(?v) AS ?last) WHERE { VALUES ?v { 1 2 } }",
+    ///     None,
+    /// )?;
+    /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("last"),
+    ///         Some(&Literal::from(2).into())
+    ///     );
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn with_custom_aggregate_function(
+        mut self,
+        name: NamedNode,
+        evaluator: impl Fn() -> Box<dyn Accumulator> + Send + Sync + 'static,
+    ) -> Self {
+        self.custom_aggregate_functions
+            .insert(name, Arc::new(evaluator));
+        self
+    }
+
     /// Disables query optimizations and runs the query as it is.
     #[inline]
     #[must_use]
@@ -275,6 +330,14 @@ impl QueryEvaluator {
 
 pub(crate) type CustomFunctionRegistry =
     HashMap<NamedNode, Arc<dyn (Fn(&[Term]) -> Option<Term>) + Send + Sync>>;
+pub(crate) type CustomAggregateFunctionRegistry =
+    HashMap<NamedNode, Arc<dyn (Fn() -> Box<dyn Accumulator>) + Send + Sync>>;
+
+pub trait Accumulator: Send + Sync {
+    fn add(&mut self, element: Term);
+
+    fn finish(&mut self) -> Option<Term>;
+}
 
 /// The explanation of a query.
 #[derive(Clone)]
