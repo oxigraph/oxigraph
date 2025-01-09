@@ -2,7 +2,10 @@ use crate::{DateTime, Decimal};
 use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
+#[cfg(not(feature = "custom-duration"))]
 use std::time::Duration as StdDuration;
+#[cfg(feature = "custom-duration")]
+use crate::StdDuration;
 
 /// [XML Schema `duration` datatype](https://www.w3.org/TR/xmlschema11-2/#duration)
 ///

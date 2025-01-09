@@ -11,6 +11,11 @@ mod double;
 mod duration;
 mod float;
 mod integer;
+#[cfg(feature = "custom-duration")]
+mod std_duration;
+
+#[cfg(feature = "custom-duration")]
+pub use self::std_duration::Duration as StdDuration;
 
 pub use self::boolean::Boolean;
 pub use self::date_time::{
