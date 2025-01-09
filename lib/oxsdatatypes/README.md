@@ -48,6 +48,10 @@ Currently:
 - For `wasm32-unknown-unknown` if the `js` feature is enabled the `Date.now()` ECMAScript API is used.
 - For all other targets `SystemTime::now()` is used.
 
+### Disabling `std:time::Duration` coercions
+
+If you are running in an environment where `std::time` is unavailable, you will need to enable the `no-duration-coercion` flag. This will remove duration coercions and allow this package to build without using `std::time`.
+
 ## License
 
 This project is licensed under either of
