@@ -1462,7 +1462,9 @@ dependencies = [
  "clap",
  "codspeed-criterion-compat",
  "oxigraph",
+ "oxiri",
  "oxttl",
+ "spareval",
  "spargebra",
  "spargeo",
  "sparopt",
@@ -2193,6 +2195,7 @@ dependencies = [
  "geo",
  "geojson",
  "oxigraph",
+ "spareval",
  "wkt",
 ]
 

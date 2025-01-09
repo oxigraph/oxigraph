@@ -5,12 +5,13 @@ use std::ops::ControlFlow;
 
 pub const DATA_TRIG: &str = "
 @prefix : <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 :1 :2 :3 , :4 ;
-   :5 true , 1 , 1.0 , 1e0 .
+   :5 true , 1 , '1'^^xsd:decimal , '1'^^xsd:double .
 
 :3 :2 :4 ;
-   :5 false , 0 , 0.0 , 0e0 .
+   :5 false , 0 , '0'^^xsd:decimal , '0'^^xsd:double .
 
 :1 {
     :1 :2 :3 , 'foo' .
@@ -27,7 +28,7 @@ pub const DATA_TRIG: &str = "
 
 const NUMBER_OF_NAMED_NODES: u8 = 5;
 const NUMBER_OF_VARIABLES: u8 = 4;
-const LITERALS: [&str; 56] = [
+const LITERALS: [&str; 54] = [
     "\"foo\"",
     "\"foo\"^^<http://www.w3.org/2001/XMLSchema#string>",
     "\"foo\"@en",
@@ -35,15 +36,15 @@ const LITERALS: [&str; 56] = [
     "true",
     "false",
     "0",
-    "0.0",
-    "0e0",
-    "-0e0",
+    "\"0\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
+    "\"0\"^^<http://www.w3.org/2001/XMLSchema#double>",
+    "\"-0\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "1",
-    "1.0",
-    "1e0",
+    "\"1\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
+    "\"1\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "-1",
-    "-1.0",
-    "-1e0",
+    "\"-1\"^^<http://www.w3.org/2001/XMLSchema#decimal>",
+    "\"-1\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "\"INF\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "\"-INF\"^^<http://www.w3.org/2001/XMLSchema#double>",
     "\"NaN\"^^<http://www.w3.org/2001/XMLSchema#double>",
@@ -61,7 +62,6 @@ const LITERALS: [&str; 56] = [
     "\"PT1S\"^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>",
     "\"2020-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
     "\"2020-01-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
-    "\"2020-01-01T24:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
     "\"2020-01-01T01:00:00.1-14:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
     "\"2020-01-01T02:00:00.2+14:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
     "\"2020-01-01T03:00:00.3-10:30\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
@@ -74,7 +74,6 @@ const LITERALS: [&str; 56] = [
     "\"2020-01-01+10:30\"^^<http://www.w3.org/2001/XMLSchema#date>",
     "\"00:00:00\"^^<http://www.w3.org/2001/XMLSchema#time>",
     "\"00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#time>",
-    "\"24:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#time>",
     "\"01:00:00.1-14:00\"^^<http://www.w3.org/2001/XMLSchema#time>",
     "\"02:00:00.2+14:00\"^^<http://www.w3.org/2001/XMLSchema#time>",
     "\"03:00:00.3-10:30\"^^<http://www.w3.org/2001/XMLSchema#time>",
