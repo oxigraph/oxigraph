@@ -16,7 +16,7 @@ rust-version.workspace = true
 [features]
 js = ["js-sys"]
 custom-now = []
-no-duration-coercion = []
+no-duration-coercion = ["custom-now"]
 
 [dependencies]
 thiserror.workspace = true
