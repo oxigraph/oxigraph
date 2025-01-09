@@ -1888,6 +1888,7 @@ fn since_unix_epoch() -> Duration {
     feature = "custom-now",
     all(feature = "js", target_family = "wasm", target_os = "unknown")
 )))]
+#[cfg(not(feature = "no-duration-coercion"))]
 fn since_unix_epoch() -> Duration {
     use std::time::SystemTime;
 
