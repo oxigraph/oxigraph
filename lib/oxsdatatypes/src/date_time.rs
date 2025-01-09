@@ -1862,12 +1862,7 @@ impl Timestamp {
 #[cfg(feature = "custom-now")]
 #[allow(unsafe_code)]
 pub fn since_unix_epoch() -> Duration {
-    extern "Rust" {
-        fn custom_ox_now() -> Duration;
-    }
-
-    // SAFETY: Must be defined, if not compilation fails
-    unsafe { custom_ox_now() }
+    DayTimeDuration::new(0).into()
 }
 
 #[cfg(all(
@@ -1888,7 +1883,6 @@ fn since_unix_epoch() -> Duration {
     feature = "custom-now",
     all(feature = "js", target_family = "wasm", target_os = "unknown")
 )))]
-#[cfg(not(feature = "no-duration-coercion"))]
 fn since_unix_epoch() -> Duration {
     use std::time::SystemTime;
 
