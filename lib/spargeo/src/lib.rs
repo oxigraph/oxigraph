@@ -8,12 +8,29 @@ use geo::{Geometry, Relate};
 use geojson::GeoJson;
 use oxigraph::model::{Literal, NamedNodeRef, Term};
 use oxigraph::sparql::QueryOptions;
+use spareval::QueryEvaluator;
 use std::str::FromStr;
 use wkt::TryFromWkt;
 
 /// Registers GeoSPARQL extension functions in the [`QueryOptions`]
 pub fn register_geosparql_functions(options: QueryOptions) -> QueryOptions {
     options
+        .with_custom_function(geosparql_functions::SF_EQUALS.into(), geof_sf_equals)
+        .with_custom_function(geosparql_functions::SF_DISJOINT.into(), geof_sf_disjoint)
+        .with_custom_function(
+            geosparql_functions::SF_INTERSECTS.into(),
+            geof_sf_intersects,
+        )
+        .with_custom_function(geosparql_functions::SF_TOUCHES.into(), geof_sf_touches)
+        .with_custom_function(geosparql_functions::SF_CROSSES.into(), geof_sf_crosses)
+        .with_custom_function(geosparql_functions::SF_WITHIN.into(), geof_sf_within)
+        .with_custom_function(geosparql_functions::SF_CONTAINS.into(), geof_sf_contains)
+        .with_custom_function(geosparql_functions::SF_OVERLAPS.into(), geof_sf_overlaps)
+}
+
+/// Registers GeoSPARQL extension functions in the [`QueryEvaluator`]
+pub fn add_geosparql_functions(evaluator: QueryEvaluator) -> QueryEvaluator {
+    evaluator
         .with_custom_function(geosparql_functions::SF_EQUALS.into(), geof_sf_equals)
         .with_custom_function(geosparql_functions::SF_DISJOINT.into(), geof_sf_disjoint)
         .with_custom_function(

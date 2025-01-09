@@ -6,12 +6,19 @@ use crate::vocab::*;
 use anyhow::{bail, ensure, Context, Error, Result};
 use oxigraph::io::RdfParser;
 use oxigraph::model::dataset::CanonicalizationAlgorithm;
-use oxigraph::model::vocab::*;
-use oxigraph::model::*;
+use oxigraph::model::vocab::rdf;
+use oxigraph::model::{
+    BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, Literal, LiteralRef,
+    NamedNode, Term, TermRef, Triple, TripleRef, Variable,
+};
 use oxigraph::sparql::results::QueryResultsFormat;
-use oxigraph::sparql::*;
+use oxigraph::sparql::{QueryResults, Update};
 use oxigraph::store::Store;
-use spargeo::register_geosparql_functions;
+use oxiri::Iri;
+use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
+use spargebra::algebra::GraphPattern;
+use spargebra::Query;
+use spargeo::add_geosparql_functions;
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -129,17 +136,14 @@ fn evaluate_negative_result_syntax_test(test: &Test, format: QueryResultsFormat)
 }
 
 fn evaluate_evaluation_test(test: &Test) -> Result<()> {
-    let store = Store::new()?;
+    let mut dataset = Dataset::new();
     if let Some(data) = &test.data {
-        load_to_store(data, &store, GraphName::DefaultGraph)?;
+        load_to_dataset(data, &mut dataset, GraphName::DefaultGraph)?;
     }
     for (name, value) in &test.graph_data {
-        load_to_store(value, &store, name.clone())?;
+        load_to_dataset(value, &mut dataset, name.clone())?;
     }
     let query_file = test.query.as_deref().context("No action found")?;
-    let options = QueryOptions::default()
-        .with_service_handler(StaticServiceHandler::new(&test.service_data)?);
-    let options = register_geosparql_functions(options);
     let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
         .context("Failure to parse query")?;
 
@@ -147,19 +151,19 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     Query::parse(&query.to_string(), None)
         .with_context(|| format!("Failure to deserialize \"{query}\""))?;
 
+    let evaluator = QueryEvaluator::new()
+        .with_default_service_handler(StaticServiceHandler::new(&test.service_data)?);
+    let evaluator = add_geosparql_functions(evaluator);
+
     // FROM and FROM NAMED support. We make sure the data is in the store
-    if !query.dataset().is_default_dataset() {
-        for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
-            let GraphName::NamedNode(graph_name) = graph_name else {
-                bail!("Invalid FROM in query {query}");
-            };
-            load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+    if let Some(query_dataset) = query.dataset() {
+        for graph_name in &query_dataset.default {
+            load_to_dataset(graph_name.as_str(), &mut dataset, GraphName::DefaultGraph)?;
         }
-        for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
-            let NamedOrBlankNode::NamedNode(graph_name) = graph_name else {
-                bail!("Invalid FROM NAMED in query {query}");
-            };
-            load_to_store(graph_name.as_str(), &store, graph_name.as_ref())?;
+        if let Some(named_graphs) = &query_dataset.named {
+            for graph_name in named_graphs {
+                load_to_dataset(graph_name.as_str(), &mut dataset, graph_name.clone())?;
+            }
         }
     }
 
@@ -172,21 +176,19 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     };
 
     for with_query_optimizer in [true, false] {
-        let mut options = options.clone();
+        let mut evaluator = evaluator.clone();
         if !with_query_optimizer {
-            options = options.without_optimizations();
+            evaluator = evaluator.without_optimizations();
         }
-        let actual_results = store
-            .query_opt(query.clone(), options)
-            .context("Failure to execute query")?;
-        let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)?;
+        let actual_results = evaluator.execute(dataset.clone(), &query)?;
+        let actual_results =
+            StaticQueryResults::from_query_results(actual_results.into(), with_order)
+                .with_context(|| format!("Error when executing {query}"))?;
 
         ensure!(
             are_query_results_isomorphic(&expected_results, &actual_results),
-            "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{}\n",
+            "Not isomorphic results.\n{}\nParsed query:\n{query}\nData:\n{dataset}\n",
             results_diff(expected_results, actual_results),
-            Query::parse(&read_file_to_string(query_file)?, Some(query_file)).unwrap(),
-            store
         );
     }
     Ok(())
@@ -262,7 +264,7 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
 
 #[derive(Clone)]
 struct StaticServiceHandler {
-    services: Arc<HashMap<NamedNode, Store>>,
+    services: Arc<HashMap<NamedNode, Dataset>>,
 }
 
 impl StaticServiceHandler {
@@ -273,9 +275,8 @@ impl StaticServiceHandler {
                     .iter()
                     .map(|(name, data)| {
                         let name = NamedNode::new(name)?;
-                        let store = Store::new()?;
-                        load_to_store(data, &store, GraphName::DefaultGraph)?;
-                        Ok((name, store))
+                        let dataset = load_dataset(data, guess_rdf_format(data)?, false, false)?;
+                        Ok((name, dataset))
                     })
                     .collect::<Result<_>>()?,
             ),
@@ -283,26 +284,45 @@ impl StaticServiceHandler {
     }
 }
 
-impl ServiceHandler for StaticServiceHandler {
-    type Error = EvaluationError;
+impl DefaultServiceHandler for StaticServiceHandler {
+    type Error = QueryEvaluationError;
 
     fn handle(
         &self,
         service_name: NamedNode,
-        query: Query,
-    ) -> std::result::Result<QueryResults, EvaluationError> {
-        self.services
-            .get(&service_name)
-            .ok_or_else(|| {
-                EvaluationError::Service(Box::new(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Service {service_name} not found"),
-                )))
-            })?
-            .query_opt(
-                query,
-                QueryOptions::default().with_service_handler(self.clone()),
-            )
+        pattern: GraphPattern,
+        base_iri: Option<String>,
+    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+        let dataset = self.services.get(&service_name).ok_or_else(|| {
+            QueryEvaluationError::Service(Box::new(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Service {service_name} not found"),
+            )))
+        })?;
+
+        let evaluator = QueryEvaluator::new().with_default_service_handler(StaticServiceHandler {
+            services: Arc::clone(&self.services),
+        });
+        let spareval::QueryResults::Solutions(iter) = evaluator.execute(
+            dataset.clone(),
+            &Query::Select {
+                dataset: None,
+                pattern,
+                base_iri: base_iri.map(Iri::parse).transpose().map_err(|e| {
+                    QueryEvaluationError::Service(Box::new(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Invalid base IRI: {e}"),
+                    )))
+                })?,
+            },
+        )?
+        else {
+            return Err(QueryEvaluationError::Service(Box::new(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Expecting solutions",
+            ))));
+        };
+        Ok(iter)
     }
 }
 
@@ -335,7 +355,7 @@ fn to_graph(result: QueryResults, with_order: bool) -> Result<Graph> {
                 let solution = solution?;
                 let solution_id = BlankNode::default();
                 graph.insert(TripleRef::new(&result_set, rs::SOLUTION, &solution_id));
-                for (variable, value) in solution.iter() {
+                for (variable, value) in &solution {
                     let binding = BlankNode::default();
                     graph.insert(TripleRef::new(&solution_id, rs::BINDING, &binding));
                     graph.insert(TripleRef::new(&binding, rs::VALUE, value));
@@ -656,11 +676,27 @@ fn load_to_store(url: &str, store: &Store, to_graph_name: impl Into<GraphName>) 
     Ok(())
 }
 
+fn load_to_dataset(
+    url: &str,
+    dataset: &mut Dataset,
+    to_graph_name: impl Into<GraphName>,
+) -> Result<()> {
+    dataset.extend(
+        &RdfParser::from_format(guess_rdf_format(url)?)
+            .with_base_iri(url)?
+            .with_default_graph(to_graph_name)
+            .rename_blank_nodes()
+            .for_reader(read_file(url)?)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    Ok(())
+}
+
 fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
     let actual = (&Optimizer::optimize_graph_pattern(
-        (&if let spargebra::Query::Select { pattern, .. } =
-            spargebra::Query::parse(&read_file_to_string(action)?, Some(action))?
+        (&if let Query::Select { pattern, .. } =
+            Query::parse(&read_file_to_string(action)?, Some(action))?
         {
             pattern
         } else {
@@ -670,9 +706,9 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     ))
         .into();
     let result = test.result.as_ref().context("No tests result found")?;
-    let spargebra::Query::Select {
+    let Query::Select {
         pattern: expected, ..
-    } = spargebra::Query::parse(&read_file_to_string(result)?, Some(result))?
+    } = Query::parse(&read_file_to_string(result)?, Some(result))?
     else {
         bail!("Only SELECT queries are supported in query sparql-optimization tests")
     };
@@ -680,13 +716,13 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
         expected == actual,
         "Not equal queries.\nDiff:\n{}\n",
         format_diff(
-            &spargebra::Query::Select {
+            &Query::Select {
                 pattern: expected,
                 dataset: None,
                 base_iri: None
             }
             .to_sse(),
-            &spargebra::Query::Select {
+            &Query::Select {
                 pattern: actual,
                 dataset: None,
                 base_iri: None

@@ -1,12 +1,16 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use oxigraph::io::RdfFormat;
+use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{Graph, NamedNode};
 use oxigraph::sparql::{EvaluationError, Query, QueryOptions, QueryResults, ServiceHandler};
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
+use oxiri::Iri;
+use oxrdf::Dataset;
+use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator};
+use spargebra::algebra::{GraphPattern, QueryDataset};
 use std::sync::OnceLock;
 
 fuzz_target!(|data: sparql_smith::Query| {
@@ -19,16 +23,32 @@ fuzz_target!(|data: sparql_smith::Query| {
         store
     });
 
+    static DATASET: OnceLock<Dataset> = OnceLock::new();
+    let dataset = DATASET.get_or_init(|| {
+        RdfParser::from(RdfFormat::TriG)
+            .for_slice(sparql_smith::DATA_TRIG.as_bytes())
+            .collect::<Result<_, _>>()
+            .unwrap()
+    });
+
     let query_str = data.to_string();
-    if let Ok(query) = Query::parse(&query_str, None) {
+    if let Ok(query) = spargebra::Query::parse(&query_str, None) {
         let options = QueryOptions::default().with_service_handler(StoreServiceHandler {
             store: store.clone(),
         });
-        let with_opt = store.query_opt(query.clone(), options.clone());
-        let without_opt = store.query_opt(query, options.without_optimizations());
+        let with_opt = store.query_opt(Query::from(query.clone()), options.clone());
+        let without_opt = QueryEvaluator::new()
+            .without_optimizations()
+            .with_default_service_handler(DatasetServiceHandler {
+                dataset: dataset.clone(),
+            })
+            .execute(dataset.clone(), &query);
         assert_eq!(
             query_results_key(with_opt, query_str.contains(" REDUCED ")),
-            query_results_key(without_opt, query_str.contains(" REDUCED "))
+            query_results_key(
+                without_opt.map(Into::into).map_err(Into::into),
+                query_str.contains(" REDUCED ")
+            )
         )
     }
 });
@@ -93,5 +113,49 @@ impl ServiceHandler for StoreServiceHandler {
             query,
             QueryOptions::default().with_service_handler(self.clone()),
         )
+    }
+}
+
+#[derive(Clone)]
+struct DatasetServiceHandler {
+    dataset: Dataset,
+}
+
+impl DefaultServiceHandler for DatasetServiceHandler {
+    type Error = QueryEvaluationError;
+
+    fn handle(
+        &self,
+        service_name: NamedNode,
+        pattern: GraphPattern,
+        base_iri: Option<String>,
+    ) -> Result<spareval::QuerySolutionIter, QueryEvaluationError> {
+        if self
+            .dataset
+            .quads_for_graph_name(&service_name)
+            .next()
+            .is_none()
+        {
+            return Err(QueryEvaluationError::Service("Graph does not exist".into()));
+        }
+
+        let evaluator = QueryEvaluator::new().with_default_service_handler(DatasetServiceHandler {
+            dataset: self.dataset.clone(),
+        });
+        let spareval::QueryResults::Solutions(iter) = evaluator.execute(
+            self.dataset.clone(),
+            &spargebra::Query::Select {
+                dataset: Some(QueryDataset {
+                    default: vec![service_name],
+                    named: None,
+                }),
+                pattern,
+                base_iri: base_iri.map(|iri| Iri::parse(iri).unwrap()),
+            },
+        )?
+        else {
+            panic!()
+        };
+        Ok(iter)
     }
 }

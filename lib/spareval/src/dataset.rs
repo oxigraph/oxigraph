@@ -139,7 +139,8 @@ impl QueryableDataset for Dataset {
                 .filter(|q| {
                     predicate.map_or(true, |t| t == q.predicate)
                         && object.map_or(true, |t| t == q.object)
-                        && graph_name.map_or(true, |t| t == q.graph_name)
+                        && graph_name
+                            .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
                 })
                 .map(quad_to_result)
                 .collect()
@@ -147,13 +148,17 @@ impl QueryableDataset for Dataset {
             self.quads_for_object(object)
                 .filter(|q| {
                     predicate.map_or(true, |t| t == q.predicate)
-                        && graph_name.map_or(true, |t| t == q.graph_name)
+                        && graph_name
+                            .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
                 })
                 .map(quad_to_result)
                 .collect()
         } else if let Some(predicate) = predicate {
             self.quads_for_predicate(predicate)
-                .filter(|q| graph_name.map_or(true, |t| t == q.graph_name))
+                .filter(|q| {
+                    graph_name
+                        .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
+                })
                 .map(quad_to_result)
                 .collect()
         } else if let Some(graph_name) = graph_name {
@@ -161,7 +166,10 @@ impl QueryableDataset for Dataset {
                 .map(quad_to_result)
                 .collect()
         } else {
-            self.iter().map(quad_to_result).collect()
+            self.iter()
+                .filter(|q| !q.graph_name.is_default_graph())
+                .map(quad_to_result)
+                .collect()
         };
         Box::new(quads.into_iter())
     }

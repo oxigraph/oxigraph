@@ -67,6 +67,36 @@ impl Query {
         parse_query(query, base_iri)
     }
 
+    #[inline]
+    pub fn dataset(&self) -> Option<&QueryDataset> {
+        match self {
+            Query::Select { dataset, .. }
+            | Query::Construct { dataset, .. }
+            | Query::Describe { dataset, .. }
+            | Query::Ask { dataset, .. } => dataset.as_ref(),
+        }
+    }
+
+    #[inline]
+    pub fn dataset_mut(&mut self) -> Option<&mut QueryDataset> {
+        match self {
+            Query::Select { dataset, .. }
+            | Query::Construct { dataset, .. }
+            | Query::Describe { dataset, .. }
+            | Query::Ask { dataset, .. } => dataset.as_mut(),
+        }
+    }
+
+    #[inline]
+    pub fn base_iri(&self) -> Option<&Iri<String>> {
+        match self {
+            Query::Select { base_iri, .. }
+            | Query::Construct { base_iri, .. }
+            | Query::Describe { base_iri, .. }
+            | Query::Ask { base_iri, .. } => base_iri.as_ref(),
+        }
+    }
+
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     pub fn to_sse(&self) -> String {
         let mut buffer = String::new();
