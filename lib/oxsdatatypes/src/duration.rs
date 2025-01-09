@@ -2,10 +2,8 @@ use crate::{DateTime, Decimal};
 use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
-#[cfg(not(feature = "custom-duration"))]
+#[cfg(not(feature = "no-duration-coercion"))]
 use std::time::Duration as StdDuration;
-#[cfg(feature = "custom-duration")]
-use crate::StdDuration;
 
 /// [XML Schema `duration` datatype](https://www.w3.org/TR/xmlschema11-2/#duration)
 ///
@@ -173,6 +171,7 @@ impl Duration {
     }
 }
 
+#[cfg(not(feature = "no-duration-coercion"))]
 impl TryFrom<StdDuration> for Duration {
     type Error = DurationOverflowError;
 
@@ -590,6 +589,7 @@ impl TryFrom<Duration> for DayTimeDuration {
     }
 }
 
+#[cfg(not(feature = "no-duration-coercion"))]
 impl TryFrom<StdDuration> for DayTimeDuration {
     type Error = DurationOverflowError;
 
@@ -605,6 +605,7 @@ impl TryFrom<StdDuration> for DayTimeDuration {
     }
 }
 
+#[cfg(not(feature = "no-duration-coercion"))]
 impl TryFrom<DayTimeDuration> for StdDuration {
     type Error = DurationOverflowError;
 
@@ -1023,6 +1024,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "no-duration-coercion"))]
     fn from_std() -> Result<(), DurationOverflowError> {
         assert_eq!(
             Duration::try_from(StdDuration::new(10, 10))?.to_string(),
@@ -1032,6 +1034,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "no-duration-coercion"))]
     fn to_std() -> Result<(), Box<dyn Error>> {
         let duration = StdDuration::try_from(DayTimeDuration::from_str("PT10.00000001S")?)?;
         assert_eq!(duration.as_secs(), 10);
