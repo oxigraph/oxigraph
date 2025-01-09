@@ -1862,7 +1862,12 @@ impl Timestamp {
 #[cfg(feature = "custom-now")]
 #[allow(unsafe_code)]
 pub fn since_unix_epoch() -> Duration {
-    DayTimeDuration::new(0).into()
+    extern "Rust" {
+        fn custom_ox_now() -> Duration;
+    }
+
+    // SAFETY: Must be defined, if not compilation fails
+    unsafe { custom_ox_now() }
 }
 
 #[cfg(all(
