@@ -869,10 +869,10 @@ impl GraphPattern {
             Some(false) => Self::empty(),
             None => match inner {
                 Self::Filter {
-                    inner,
+                    inner: nested_inner,
                     expression: e2,
                 } => Self::Filter {
-                    inner,
+                    inner: nested_inner,
                     expression: expression & e2,
                 },
                 _ => Self::Filter {

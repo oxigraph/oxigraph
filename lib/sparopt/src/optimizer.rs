@@ -334,12 +334,12 @@ impl Optimizer {
                 let left = Self::push_filters(*left, left_filters, input_types);
                 let right = Self::push_filters(*right, right_filters, &left_types);
                 if let GraphPattern::Filter {
-                    inner: right,
+                    inner: inner_right,
                     expression,
                 } = right
                 {
                     // We prefer to have filter out of the lateral rather than inside the right part
-                    GraphPattern::filter(GraphPattern::lateral(left, *right), expression)
+                    GraphPattern::filter(GraphPattern::lateral(left, *inner_right), expression)
                 } else {
                     GraphPattern::lateral(left, right)
                 }

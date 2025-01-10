@@ -102,7 +102,7 @@ impl<R: Read> Iterator for TripleReader<R> {
     type Item = Result<Triple, RdfParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.parser.next()?.map(Into::into).map_err(Into::into))
+        Some(self.parser.next()?.map(Into::into))
     }
 }
 
@@ -194,6 +194,6 @@ impl<R: Read> Iterator for QuadReader<R> {
     type Item = Result<Quad, RdfParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.parser.next()?.map_err(Into::into))
+        self.parser.next()
     }
 }

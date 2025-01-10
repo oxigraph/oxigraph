@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 #[macro_export]
 macro_rules! format_err {
     ($msg:literal $(,)?) => {
-        ::wasm_bindgen::JsValue::from(::js_sys::Error::new($msg))
+        ::wasm_bindgen::JsValue::from(::js_sys::Error::new(&format!($msg)))
     };
     ($fmt:literal, $($arg:tt)*) => {
         ::wasm_bindgen::JsValue::from(::js_sys::Error::new(&format!($fmt, $($arg)*)))

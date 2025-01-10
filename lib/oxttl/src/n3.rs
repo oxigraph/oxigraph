@@ -554,7 +554,7 @@ pub struct TokioAsyncReaderN3Parser<R: AsyncRead + Unpin> {
 impl<R: AsyncRead + Unpin> TokioAsyncReaderN3Parser<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<N3Quad, TurtleParseError>> {
-        Some(self.inner.next().await?.map(Into::into))
+        self.inner.next().await
     }
 
     /// The list of IRI prefixes considered at the current step of the parsing.

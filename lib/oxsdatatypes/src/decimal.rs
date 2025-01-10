@@ -13,7 +13,7 @@ const DECIMAL_PART_POW_MINUS_ONE: i128 = 100_000_000_000_000_000;
 ///
 /// It stores the value in a [`i128`] integer after multiplying it by 10¹⁸.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash, Default)]
-#[repr(packed(8))]
+#[repr(Rust, packed(8))]
 pub struct Decimal {
     value: i128, // value * 10^18
 }
