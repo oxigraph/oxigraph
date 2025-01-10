@@ -4129,16 +4129,16 @@ fn partial_cmp_literals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Orderi
             }
         }
         ExpressionTerm::LangStringLiteral {
-            value: a,
+            value: va,
             language: la,
         } => {
             if let ExpressionTerm::LangStringLiteral {
-                value: b,
+                value: vb,
                 language: lb,
             } = b
             {
                 if la == lb {
-                    a.partial_cmp(b)
+                    va.partial_cmp(vb)
                 } else {
                     None
                 }

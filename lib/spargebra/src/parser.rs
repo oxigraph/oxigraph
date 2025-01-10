@@ -1460,7 +1460,7 @@ parser! {
         }
         rule PropertyListPathNotEmpty_item_content() -> FocusedTripleOrPathPattern<(VariableOrPropertyPath,Vec<AnnotatedTermPath>)> = p:(VerbPath() / VerbSimple()) _ o:ObjectListPath() _ {
             FocusedTripleOrPathPattern {
-                focus: (p, o.focus.into_iter().map(AnnotatedTermPath::from).collect()),
+                focus: (p, o.focus),
                 patterns: o.patterns
             }
         }

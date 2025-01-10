@@ -348,7 +348,7 @@ pub struct TokioAsyncReaderNQuadsParser<R: AsyncRead + Unpin> {
 impl<R: AsyncRead + Unpin> TokioAsyncReaderNQuadsParser<R> {
     /// Reads the next triple or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Quad, TurtleParseError>> {
-        Some(self.inner.next().await?.map(Into::into))
+        self.inner.next().await
     }
 }
 

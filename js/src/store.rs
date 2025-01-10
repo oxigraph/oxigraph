@@ -360,7 +360,7 @@ impl JsStore {
                 Reflect::get(options, &JsValue::from_str("no_transaction"))?.is_truthy();
         }
         let format = format
-            .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.load(my_content, {format: 'nt'}"))?;
+            .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.load(my_content, {{format: 'nt'}}"))?;
         if let Some(base_iri) = convert_base_iri(base_iri)? {
             console_warn!("The base_iri should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', base_iri: 'http//example.com'}})");
             parsed_base_iri = Some(base_iri);
@@ -408,7 +408,7 @@ impl JsStore {
             parsed_from_graph_name = FROM_JS.with(|c| c.to_optional_term(&from_graph_name_js))?;
         }
         let format = format
-            .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({format: 'nt'}"))?;
+            .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({{format: 'nt'}}"))?;
         if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
             console_warn!("The source graph name should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt', from_graph_name: 'http//example.com'}})");
             parsed_from_graph_name = Some(from_graph_name);
