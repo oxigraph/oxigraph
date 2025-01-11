@@ -46,11 +46,8 @@ Currently:
   }
   ```
 - For `wasm32-unknown-unknown` if the `js` feature is enabled the `Date.now()` ECMAScript API is used.
+- For `zkvm` there is no access to IO functions so the function returns start of unix time (Jan 1, 1970)
 - For all other targets `SystemTime::now()` is used.
-
-### Disabling `std:time::Duration` coercions
-
-If you are running in an environment where `std::time` is unavailable, you will need to enable the `omit-duration-coercion` flag. This will remove duration coercions and allow this package to build without using `std::time`.
 
 ## License
 

@@ -1871,6 +1871,14 @@ pub fn since_unix_epoch() -> Duration {
 }
 
 #[cfg(all(
+    not(feature = "custom-now"),
+    target_os = "zkvm"
+))]
+fn since_unix_epoch() -> Duration {
+    DayTimeDuration::new(0).into()
+}
+
+#[cfg(all(
     feature = "js",
     not(feature = "custom-now"),
     target_family = "wasm",
@@ -1886,6 +1894,7 @@ fn since_unix_epoch() -> Duration {
 
 #[cfg(not(any(
     feature = "custom-now",
+    target_os = "zkvm",
     all(feature = "js", target_family = "wasm", target_os = "unknown")
 )))]
 fn since_unix_epoch() -> Duration {
