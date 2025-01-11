@@ -1,3 +1,14 @@
+## [0.4.6] - 2025-01-11
+
+### Added
+- `spareval` crate that provides a stand-alone SPARQL evaluator without dependency on Oxigraph storage systems.
+- Rust/Python: the API now allows to substitute variables with value before evaluating a query.
+  Substitution follows  [RDF-dev SEP-0007](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0007/sep-0007.md).
+
+### Changed
+- Bump RocksDB to 9.10.0.
+
+
 ## [0.4.5] - 2024-12-21
 
 ### Added
@@ -7,6 +18,7 @@
 - Turtle: do not buffer everything if there is no line jump in the file.
 - RDF/XML: fixes decoding of escaped whitespaces.
 - Bump RocksDB to 9.9.3.
+- Allow compilation on zkvm by removing the dependency on `std::time` for this platform.
 
 
 ## [0.4.4] - 2024-11-21
