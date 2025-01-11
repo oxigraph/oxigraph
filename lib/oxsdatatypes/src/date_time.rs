@@ -1870,10 +1870,7 @@ pub fn since_unix_epoch() -> Duration {
     unsafe { custom_ox_now() }
 }
 
-#[cfg(all(
-    not(feature = "custom-now"),
-    target_os = "zkvm"
-))]
+#[cfg(all(not(feature = "custom-now"), target_os = "zkvm"))]
 fn since_unix_epoch() -> Duration {
     DayTimeDuration::new(0).into()
 }
