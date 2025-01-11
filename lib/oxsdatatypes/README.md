@@ -46,6 +46,7 @@ Currently:
   }
   ```
 - For `wasm32-unknown-unknown` if the `js` feature is enabled the `Date.now()` ECMAScript API is used.
+- For `zkvm` there is no access to IO functions so the function returns start of unix time (Jan 1, 1970)
 - For all other targets `SystemTime::now()` is used.
 
 ## License
