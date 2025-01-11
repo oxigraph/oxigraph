@@ -1,5 +1,5 @@
 -r requirements.build.txt
 furo
 mypy~=1.0
-sphinx~=7.0
+sphinx>=7.0,<9.0
 sphinx-lint~=1.0
