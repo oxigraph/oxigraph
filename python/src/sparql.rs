@@ -187,6 +187,18 @@ impl PyQuerySolution {
             inner: self.inner.values().to_vec().into_iter(),
         }
     }
+
+    /// :rtype: QuerySolution
+    fn __copy__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    /// :type memo: typing.Any
+    /// :rtype: QuerySolution
+    #[allow(unused_variables)]
+    fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
+        slf
+    }
 }
 
 #[derive(FromPyObject)]
