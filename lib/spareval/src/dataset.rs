@@ -8,6 +8,7 @@ use oxsdatatypes::{Boolean, DateTime, Decimal, Double, Float, Integer};
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, YearMonthDuration};
 #[cfg(feature = "calendar-ext")]
 use oxsdatatypes::{GDay, GMonth, GMonthDay, GYear, GYearMonth};
+use rustc_hash::FxHashSet;
 use std::convert::Infallible;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
@@ -35,6 +36,43 @@ pub trait QueryableDataset: Sized + 'static {
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
     ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, Self::Error>>>; // TODO: consider `impl`
+
+    /// Fetches the list of dataset named graphs
+    fn internal_named_graphs(
+        &self,
+    ) -> Box<dyn Iterator<Item = Result<Self::InternalTerm, Self::Error>>> {
+        // TODO: consider `impl`
+        let mut error = None;
+        let graph_names = self
+            .internal_quads_for_pattern(None, None, None, None)
+            .filter_map(|r| match r {
+                Ok(r) => Some(r.graph_name?),
+                Err(e) => {
+                    error = Some(e);
+                    None
+                }
+            })
+            .collect::<FxHashSet<_>>();
+
+        Box::new(
+            error
+                .map(Err)
+                .into_iter()
+                .chain(graph_names.into_iter().map(Ok)),
+        )
+    }
+
+    /// Returns if the dataset contains a given named graph
+    fn contains_internal_graph_name(
+        &self,
+        graph_name: &Self::InternalTerm,
+    ) -> Result<bool, Self::Error> {
+        Ok(self
+            .internal_quads_for_pattern(None, None, None, Some(Some(graph_name)))
+            .next()
+            .transpose()?
+            .is_some())
+    }
 
     /// Builds an internal term from the [`Term`] struct
     fn internalize_term(&self, term: Term) -> Result<Self::InternalTerm, Self::Error>;

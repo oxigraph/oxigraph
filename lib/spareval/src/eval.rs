@@ -58,6 +58,23 @@ impl<D: QueryableDataset> EvalDataset<D> {
             .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
     }
 
+    fn internal_named_graphs(
+        &self,
+    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> {
+        self.dataset
+            .internal_named_graphs()
+            .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
+    }
+
+    fn contains_internal_graph_name(
+        &self,
+        graph_name: &D::InternalTerm,
+    ) -> Result<bool, QueryEvaluationError> {
+        self.dataset
+            .contains_internal_graph_name(graph_name)
+            .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
+    }
+
     fn internalize_term(&self, term: Term) -> Result<D::InternalTerm, QueryEvaluationError> {
         self.dataset
             .internalize_term(term)
@@ -951,6 +968,57 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                     .filter_map(Result::transpose),
                             )
                         }
+                    }
+                })
+            }
+            GraphPattern::Graph { graph_name } => {
+                let graph_name_selector = match TupleSelector::from_named_node_pattern(
+                    graph_name,
+                    encoded_variables,
+                    &self.dataset,
+                ) {
+                    Ok(selector) => selector,
+                    Err(e) => return error_evaluator(e),
+                };
+                let dataset = self.dataset.clone();
+                Rc::new(move |from| {
+                    let input_graph_name = match graph_name_selector.get_pattern_value(
+                        &from,
+                        #[cfg(feature = "rdf-star")]
+                        &dataset,
+                    ) {
+                        Ok(value) => value,
+                        Err(e) => return Box::new(once(Err(e))),
+                    };
+                    if let Some(input_graph_name) = input_graph_name {
+                        match dataset.contains_internal_graph_name(&input_graph_name) {
+                            Ok(true) => Box::new(once(Ok(from))),
+                            Ok(false) => Box::new(empty()),
+                            Err(e) => Box::new(once(Err(e))),
+                        }
+                    } else {
+                        let graph_name_selector = graph_name_selector.clone();
+                        #[cfg(feature = "rdf-star")]
+                        let dataset = dataset.clone();
+                        Box::new(
+                            dataset
+                                .internal_named_graphs()
+                                .map(move |graph_name| {
+                                    let graph_name = graph_name?;
+                                    let mut new_tuple = from.clone();
+                                    if !put_pattern_value(
+                                        &graph_name_selector,
+                                        graph_name,
+                                        &mut new_tuple,
+                                        #[cfg(feature = "rdf-star")]
+                                        &dataset,
+                                    )? {
+                                        return Ok(None);
+                                    }
+                                    Ok(Some(new_tuple))
+                                })
+                                .filter_map(Result::transpose),
+                        )
                     }
                 })
             }
@@ -6308,6 +6376,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
             "Filter({})",
             spargebra::algebra::Expression::from(expression)
         ),
+        GraphPattern::Graph { graph_name } => format!("Graph({graph_name})"),
         GraphPattern::Group {
             variables,
             aggregates,

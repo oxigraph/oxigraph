@@ -649,6 +649,11 @@ pub enum GraphPattern {
         object: GroundTermPattern,
         graph_name: Option<NamedNodePattern>,
     },
+    /// Graph check
+    ///
+    /// Can yield all named graph like in `GRAPH ?g {}`
+    /// or only check if a graph exist like in `GRAPH ex:g {}`
+    Graph { graph_name: NamedNodePattern },
     /// [Join](https://www.w3.org/TR/sparql11-query/#defn_algJoin).
     Join {
         left: Box<Self>,
@@ -1046,6 +1051,11 @@ impl GraphPattern {
                     callback(v);
                 }
             }
+            Self::Graph { graph_name } => {
+                if let NamedNodePattern::Variable(v) = graph_name {
+                    callback(v);
+                }
+            }
             Self::Filter { inner, expression } => {
                 expression.lookup_used_variables(callback);
                 inner.lookup_used_variables(callback);
@@ -1131,7 +1141,15 @@ impl GraphPattern {
                     right: Box::new(b),
                     algorithm: JoinAlgorithm::default(),
                 })
-                .unwrap_or_else(Self::empty_singleton),
+                .unwrap_or_else(|| {
+                    if let Some(graph_name) = graph_name {
+                        Self::Graph {
+                            graph_name: graph_name.clone(),
+                        }
+                    } else {
+                        Self::empty_singleton()
+                    }
+                }),
             AlGraphPattern::Path {
                 subject,
                 path,
@@ -1361,6 +1379,12 @@ impl From<&GraphPattern> for AlGraphPattern {
                     pattern
                 }
             }
+            GraphPattern::Graph { graph_name } => Self::Graph {
+                inner: Box::new(AlGraphPattern::Bgp {
+                    patterns: Vec::new(),
+                }),
+                name: graph_name.clone(),
+            },
             GraphPattern::Join { left, right, .. } => {
                 match (left.as_ref().into(), right.as_ref().into()) {
                     (Self::Bgp { patterns: mut left }, Self::Bgp { patterns: right }) => {
