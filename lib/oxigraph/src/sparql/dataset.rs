@@ -186,6 +186,14 @@ impl QueryableDataset for DatasetView {
         }
     }
 
+    fn internal_named_graphs(&self) -> Box<dyn Iterator<Item = Result<EncodedTerm, StorageError>>> {
+        Box::new(self.reader.named_graphs())
+    }
+
+    fn contains_internal_graph_name(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
+        self.reader.contains_named_graph(graph_name)
+    }
+
     fn internalize_term(&self, term: Term) -> Result<EncodedTerm, StorageError> {
         let encoded = term.as_ref().into();
         insert_term(term.as_ref(), &encoded, &mut |key, value| {

@@ -39,6 +39,12 @@ pub fn infer_graph_pattern_types(
             }
             types
         }
+        GraphPattern::Graph { graph_name } => {
+            if let NamedNodePattern::Variable(v) = graph_name {
+                types.intersect_variable_with(v.clone(), VariableType::NAMED_NODE)
+            }
+            types
+        }
         GraphPattern::Join { left, right, .. } => {
             let mut output_types = infer_graph_pattern_types(left, types.clone());
             output_types.intersect_with(infer_graph_pattern_types(right, types));

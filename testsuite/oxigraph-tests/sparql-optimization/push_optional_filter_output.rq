@@ -1,5 +1,5 @@
 SELECT ?s ?o WHERE {
     ?s a ?t .
-    LATERAL { VALUES () {()} OPTIONAL { { ?s ?p ?o FILTER(1 = ?o) } UNION { ?s ?p ?o2 FILTER(1 = ?o) } } }
+    LATERAL { VALUES () {()} OPTIONAL { { ?s ?p ?o2 FILTER(1 = ?o) } UNION { ?s ?p ?o FILTER(1 = ?o) } } }
     LATERAL { VALUES () {()} OPTIONAL { { ?s ?p ?o } UNION { ?s ?p2 ?o2 } FILTER(?t = ?o) } }
 }

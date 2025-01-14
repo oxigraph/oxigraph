@@ -86,7 +86,7 @@ oxttl = { version = "=0.1.5", path = "lib/oxttl" }
 spargebra = { version = "=0.3.4", path = "lib/spargebra" }
 spargeo = { version = "=0.1.3", path = "lib/spargeo" }
 sparesults = { version = "=0.2.4", path = "lib/sparesults" }
-sparopt = { version = "=0.1.4", path = "lib/sparopt" }
+sparopt = { version = "=0.2.0", path = "lib/sparopt" }
 spareval = { version = "=0.1.0", path = "lib/spareval" }
 
 [workspace.lints.rust]

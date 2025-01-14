@@ -43,6 +43,7 @@ impl Optimizer {
                 object,
                 graph_name,
             },
+            GraphPattern::Graph { graph_name } => GraphPattern::Graph { graph_name },
             GraphPattern::Join {
                 left,
                 right,
@@ -280,6 +281,7 @@ impl Optimizer {
         match pattern {
             GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
+            | GraphPattern::Graph { .. }
             | GraphPattern::Values { .. } => {
                 GraphPattern::filter(pattern, Expression::and_all(filters))
             }
@@ -478,7 +480,8 @@ impl Optimizer {
         match pattern {
             GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
-            | GraphPattern::Values { .. } => pattern,
+            | GraphPattern::Values { .. }
+            | GraphPattern::Graph { .. } => pattern,
             GraphPattern::Join { left, right, .. } => {
                 // We flatten the join operation
                 let mut to_reorder = Vec::new();
@@ -733,7 +736,8 @@ fn is_fit_for_for_loop_join(
     match pattern {
         GraphPattern::Values { .. }
         | GraphPattern::QuadPattern { .. }
-        | GraphPattern::Path { .. } => true,
+        | GraphPattern::Path { .. }
+        | GraphPattern::Graph { .. } => true,
         #[cfg(feature = "sep-0006")]
         GraphPattern::Lateral { left, right } => {
             is_fit_for_for_loop_join(left, global_input_types, entry_types)
@@ -908,6 +912,13 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             path,
             is_term_pattern_bound(object, input_types),
         ),
+        GraphPattern::Graph { graph_name } => {
+            if is_named_node_pattern_bound(graph_name, input_types) {
+                100
+            } else {
+                1
+            }
+        }
         GraphPattern::Join {
             left,
             right,
