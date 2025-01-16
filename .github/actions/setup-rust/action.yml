@@ -14,6 +14,9 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - run: which rustup || sudo DEBIAN_FRONTEND=noninteractive apt-get -y install rustup
+      shell: bash
+      if: runner.os == 'Linux'
     - run: rustup default ${{ inputs.version }}
       shell: bash
     - run: rustup component add ${{ inputs.component }}

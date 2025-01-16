@@ -135,54 +135,60 @@ jobs:
           name: pyoxigraph_sdist
           path: target/wheels/*.tar.gz
 
-  wheel_linux:
+  wheel_linux_x86_64:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        architecture: [ "x86_64", "aarch64" ]
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/${{ matrix.architecture }}
-        if: github.event_name == 'release' && matrix.architecture != 'x86_64'
-      - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' && matrix.architecture == 'x86_64' || '' }}/g' > .github/workflows/manylinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
-        if: github.event_name == 'release' || matrix.architecture == 'x86_64'
-        timeout-minutes: 300
+      - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || ''}}/g' > .github/workflows/manylinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: pyoxigraph_${{ matrix.architecture }}_linux_gnu
+          name: pyoxigraph_x86_64_linux_gnu
           path: target/wheels/*.whl
 
-  wheel_linux_musl:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        architecture: [ "x86_64", "aarch64" ]
-    continue-on-error: true
+  wheel_linux_aarch64:
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/${{ matrix.architecture }}
-        if: github.event_name == 'release' && matrix.architecture != 'x86_64'
-      - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/${{ matrix.architecture }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' && matrix.architecture == 'x86_64' || '' }}/g' > .github/workflows/musllinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.architecture }} quay.io/pypa/musllinux_1_2_${{ matrix.architecture }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
-        if: github.event_name == 'release' || matrix.architecture == 'x86_64'
-        timeout-minutes: 300
+      - run: sed 's/%arch%/aarch64/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/manylinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux2014_aarch64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: pyoxigraph_${{ matrix.architecture }}_linux_musl
+          name: pyoxigraph_aarch64_linux_gnu
+          path: target/wheels/*.whl
+
+  wheel_linux_musl_x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - run: sed 's/%arch%/x86_64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/musllinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/musllinux_1_2_x86_64 /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyoxigraph_x86_64_linux_musl
+          path: target/wheels/*.whl
+
+  wheel_linux_musl_aarch64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - run: sed 's/%arch%/aarch64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/musllinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/aarch64 quay.io/pypa/musllinux_1_2_aarch64 /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyoxigraph_aarch64_linux_musl
           path: target/wheels/*.whl
 
   wheel_mac:
@@ -261,8 +267,10 @@ jobs:
       - python_sdist
       - wheel_windows
       - wheel_mac
-      - wheel_linux
-      - wheel_linux_musl
+      - wheel_linux_x86_64
+      - wheel_linux_aarch64
+      - wheel_linux_musl_x86_64
+      - wheel_linux_musl_aarch64
     steps:
       - uses: actions/download-artifact@v4
         with:
