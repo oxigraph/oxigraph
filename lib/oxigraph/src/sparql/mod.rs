@@ -3,7 +3,7 @@
 //! Stores execute SPARQL. See [`Store`](crate::store::Store::query()) for an example.
 
 mod algebra;
-mod dataset;
+pub mod dataset;
 mod error;
 mod http;
 mod model;
@@ -13,7 +13,7 @@ mod update;
 
 use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
-use crate::sparql::dataset::DatasetView;
+use crate::sparql::dataset::{DatasetView, HDTDatasetView};
 pub use crate::sparql::error::EvaluationError;
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 pub use crate::sparql::service::ServiceHandler;
@@ -25,6 +25,24 @@ use spareval::QueryEvaluator;
 pub use spareval::QueryExplanation;
 pub use spargebra::SparqlSyntaxError;
 use std::time::Duration;
+
+pub fn evaluate_hdt_query(
+    dataset: HDTDatasetView,
+    query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+    options: QueryOptions,
+    run_stats: bool,
+    substitutions: impl IntoIterator<Item = (Variable, Term)>,
+) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
+    let query = query.try_into().map_err(Into::into)?;
+    let mut evaluator = options.into_evaluator();
+    if run_stats {
+        evaluator = evaluator.compute_statistics();
+    }
+    let (results, explanation) =
+        evaluator.explain_with_substituted_variables(dataset, &query.inner, substitutions);
+    let results = results.map_err(Into::into).map(Into::into);
+    Ok((results, explanation))
+}
 
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn evaluate_query(

@@ -15,6 +15,7 @@ members = [
     "lib/sparopt",
     "lib/sparql-smith",
     "oxrocksdb-sys",
+    "oxhdt-sys",
     "python",
     "testsuite"
 ]
@@ -296,6 +297,3 @@ lto = true
 codegen-units = 1
 strip = "debuginfo"
 panic = "abort"
-
-[profile.release.package.oxigraph-js]
-opt-level = "z"

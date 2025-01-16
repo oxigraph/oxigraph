@@ -251,7 +251,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     Ok(())
 }
 
-fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
+pub fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
     if let Some(format) = url
         .rsplit_once('.')
         .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))
@@ -378,7 +378,7 @@ fn to_graph(result: QueryResults, with_order: bool) -> Result<Graph> {
     })
 }
 
-fn are_query_results_isomorphic(
+pub fn are_query_results_isomorphic(
     expected: &StaticQueryResults,
     actual: &StaticQueryResults,
 ) -> bool {
@@ -461,7 +461,7 @@ fn compare_terms<'a>(
 }
 
 #[allow(clippy::large_enum_variant)]
-enum StaticQueryResults {
+pub enum StaticQueryResults {
     Graph(Graph),
     Solutions {
         variables: Vec<Variable>,
@@ -472,7 +472,7 @@ enum StaticQueryResults {
 }
 
 impl StaticQueryResults {
-    fn from_query_results(results: QueryResults, with_order: bool) -> Result<Self> {
+    pub fn from_query_results(results: QueryResults, with_order: bool) -> Result<Self> {
         Self::from_graph(&to_graph(results, with_order)?)
     }
 
