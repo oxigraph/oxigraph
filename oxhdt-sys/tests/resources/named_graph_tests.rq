@@ -1,0 +1,15 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX dawgt: <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#>
+PREFIX mf: <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#>
+PREFIX qt: <http://www.w3.org/2001/sw/DataAccess/tests/test-query#>
+
+# List of tests that use named graphs and need to be ignored for HDT,
+# which does not support named graphs.
+SELECT DISTINCT ?test ?test_name
+WHERE {
+  ?test mf:name ?test_name .
+  ?test mf:action ?test_action .
+  ?test_action qt:graphData ?test_graph_data .
+}
+ORDER BY ?test_name
