@@ -3,14 +3,14 @@
 use libfuzzer_sys::fuzz_target;
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
-use oxigraph::model::{Graph, NamedNode};
+use oxigraph::model::{Dataset, Graph, NamedNode};
 use oxigraph::sparql::{EvaluationError, Query, QueryOptions, QueryResults, ServiceHandler};
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
-use oxrdf::Dataset;
+use oxrdf::{GraphNameRef, QuadRef};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator};
-use spargebra::algebra::{GraphPattern, QueryDataset};
+use spargebra::algebra::GraphPattern;
 use std::sync::OnceLock;
 
 fuzz_target!(|data: sparql_smith::Query| {
@@ -139,16 +139,29 @@ impl DefaultServiceHandler for DatasetServiceHandler {
             return Err(QueryEvaluationError::Service("Graph does not exist".into()));
         }
 
+        let dataset = self
+            .dataset
+            .iter()
+            .flat_map(|q| {
+                if q.graph_name.is_default_graph() {
+                    vec![]
+                } else if q.graph_name == service_name.as_ref().into() {
+                    vec![
+                        QuadRef::new(q.subject, q.predicate, q.object, GraphNameRef::DefaultGraph),
+                        q,
+                    ]
+                } else {
+                    vec![q]
+                }
+            })
+            .collect::<Dataset>();
         let evaluator = QueryEvaluator::new().with_default_service_handler(DatasetServiceHandler {
-            dataset: self.dataset.clone(),
+            dataset: dataset.clone(),
         });
         let spareval::QueryResults::Solutions(iter) = evaluator.execute(
-            self.dataset.clone(),
+            dataset,
             &spargebra::Query::Select {
-                dataset: Some(QueryDataset {
-                    default: vec![service_name],
-                    named: None,
-                }),
+                dataset: None,
                 pattern,
                 base_iri: base_iri.map(|iri| Iri::parse(iri).unwrap()),
             },
