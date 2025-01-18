@@ -1125,6 +1125,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 right_evaluator: Rc::clone(&right),
                                 left_iter: left(from),
                                 current_right: Box::new(empty()),
+                                left_tuple_to_yield: None,
                             })
                         });
                     }
@@ -5682,6 +5683,7 @@ struct ForLoopLeftJoinIterator<D: QueryableDataset> {
     right_evaluator: Rc<dyn Fn(InternalTuple<D>) -> InternalTuplesIterator<D>>,
     left_iter: InternalTuplesIterator<D>,
     current_right: InternalTuplesIterator<D>,
+    left_tuple_to_yield: Option<InternalTuple<D>>,
 }
 
 #[cfg(feature = "sep-0006")]
@@ -5689,18 +5691,23 @@ impl<D: QueryableDataset> Iterator for ForLoopLeftJoinIterator<D> {
     type Item = Result<InternalTuple<D>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(tuple) = self.current_right.next() {
-            return Some(tuple);
-        }
-        let left_tuple = match self.left_iter.next()? {
-            Ok(left_tuple) => left_tuple,
-            Err(error) => return Some(Err(error)),
-        };
-        self.current_right = (self.right_evaluator)(left_tuple.clone());
-        if let Some(right_tuple) = self.current_right.next() {
-            Some(right_tuple)
-        } else {
-            Some(Ok(left_tuple))
+        loop {
+            if let Some(tuple) = self.current_right.next() {
+                if tuple.is_ok() {
+                    // No need to yield left, we have a tuple combined with right
+                    self.left_tuple_to_yield = None;
+                }
+                return Some(tuple);
+            }
+            if let Some(left_tuple) = self.left_tuple_to_yield.take() {
+                return Some(Ok(left_tuple));
+            }
+            let left_tuple = match self.left_iter.next()? {
+                Ok(left_tuple) => left_tuple,
+                Err(error) => return Some(Err(error)),
+            };
+            self.current_right = (self.right_evaluator)(left_tuple.clone());
+            self.left_tuple_to_yield = Some(left_tuple);
         }
     }
 }
