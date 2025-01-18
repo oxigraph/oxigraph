@@ -286,7 +286,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           version: 1.82.0
-      - run: cargo doc
+      - run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
 
@@ -478,6 +478,8 @@ jobs:
           restore-keys: |
             fuzz-${{ matrix.target }}
       - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ${{ matrix.target }}
       - run: cargo install cargo-fuzz || true
       - run: python3 build_corpus.py
         working-directory: ./fuzz
