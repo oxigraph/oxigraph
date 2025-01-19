@@ -535,6 +535,16 @@ jobs:
           run: cargo codspeed run && npm run --prefix js bench
           token: ${{ secrets.CODSPEED_TOKEN }}
 
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - run: cargo bench --features http-client-native-tls
+        working-directory: ./lib/oxigraph
+
   codecov:
     runs-on: ubuntu-latest
     steps:
