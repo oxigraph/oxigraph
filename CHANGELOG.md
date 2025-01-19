@@ -1,3 +1,11 @@
+## [0.4.7] - 2025-01-19
+
+### Changed
+- SPARQL: `GRAPH ?g {}` now properly returns all named graph in the queried dataset.
+- SPARQL: `ASK { OPTIONAL { X }}` now properly returns true even if `X` raises an error.
+- `sparopt`: breaking 0.2 release because of the introduction of a `Graph` algebra node to support `GRAPH ?g {}` syntax.
+
+
 ## [0.4.6] - 2025-01-11
 
 ### Added
