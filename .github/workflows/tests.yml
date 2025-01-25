@@ -470,13 +470,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: cache-corpus
         with:
           path: fuzz/corpus/${{ matrix.target }}
-          key: fuzz-${{ matrix.target }}-${{ github.run_id }}
-          restore-keys: |
-            fuzz-${{ matrix.target }}
+          key: fuzz-${{ matrix.target }}
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ${{ matrix.target }}
@@ -486,6 +484,11 @@ jobs:
         if: steps.cache-corpus.outputs.cache-hit != 'true'
       - run: cargo fuzz run ${{ matrix.target }} --sanitizer none ${{ matrix.build_args }} -- -max_total_time=200 -timeout=5 ${{ matrix.run_args }}
       - run: cargo fuzz cmin ${{ matrix.target }} --sanitizer none ${{ matrix.build_args }}
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
