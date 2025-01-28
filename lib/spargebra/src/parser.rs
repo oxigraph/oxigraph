@@ -1797,6 +1797,10 @@ parser! {
             i("STR") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Str, vec![e]) } /
             i("LANG") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Lang, vec![e]) } /
             i("LANGMATCHES") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::LangMatches, vec![a, b]) } /
+            i("LANGDIR") "(" _ e:Expression() _ ")" {?
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::LangDir, vec![e]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The LANGDIR function is only available in SPARQL 1.2")}
+            } /
             i("DATATYPE") _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Datatype, vec![e]) } /
             i("BOUND") _ "(" _ v:Var() _ ")" { Expression::Bound(v) } /
             (i("IRI") / i("URI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::Iri, vec![e]) } /
@@ -1838,12 +1842,24 @@ parser! {
             i("COALESCE") e:ExpressionList() { Expression::Coalesce(e) } /
             i("IF") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::If(Box::new(a), Box::new(b), Box::new(c)) } /
             i("STRLANG") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrLang, vec![a, b]) }  /
+            i("STRLANGDIR") "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" {?
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::StrLangDir, vec![a, b, c]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The STRLANGDIR function is only available in SPARQL 1.2")}
+            } /
             i("STRDT") _ "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::FunctionCall(Function::StrDt, vec![a, b]) } /
             i("sameTerm") "(" _ a:Expression() _ "," _ b:Expression() _ ")" { Expression::SameTerm(Box::new(a), Box::new(b)) } /
             (i("isIRI") / i("isURI")) _ "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsIri, vec![e]) } /
             i("isBLANK") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsBlank, vec![e]) } /
             i("isLITERAL") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsLiteral, vec![e]) } /
             i("isNUMERIC") "(" _ e:Expression() _ ")" { Expression::FunctionCall(Function::IsNumeric, vec![e]) } /
+            i("hasLang") "(" _ e:Expression() _ ")" {?
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::HasLang, vec![e]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The hasLang function is only available in SPARQL 1.2")}
+            } /
+            i("hasLangDir") "(" _ e:Expression() _ ")" {?
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::HasLangDir, vec![e]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The hasLangDir function is only available in SPARQL 1.2")}
+            } /
             RegexExpression() /
             ExistsFunc() /
             NotExistsFunc() /
@@ -1869,7 +1885,7 @@ parser! {
             } /
             i("ADJUST") "("  _ a:Expression() _ "," _ b:Expression() _ ")" {?
                 #[cfg(feature = "sep-0002")]{Ok(Expression::FunctionCall(Function::Adjust, vec![a, b]))}
-                #[cfg(not(feature = "sep-0002"))]{Err("The ADJUST function is only available in SPARQL 1.2 SEP 0002")}
+                #[cfg(not(feature = "sep-0002"))]{Err("The ADJUST function is only available in SPARQL-dev SEP 0002")}
             }
 
         rule RegexExpression() -> Expression =
@@ -1921,7 +1937,18 @@ parser! {
 
         rule RDFLiteral() -> Literal =
             value:String() _ "^^" _ datatype:iri() { Literal::new_typed_literal(value, datatype) } /
-            value:String() _ language:LANGTAG() { Literal::new_language_tagged_literal_unchecked(value, language.into_inner()) } /
+            value:String() _ language_and_base_direction:LANGDIR() {?
+                let (language, base_direction) = language_and_base_direction;
+                #[cfg(feature = "sparql-12")]
+                if let Some(is_ltr) = base_direction {
+                    return Ok(Literal::new_directional_language_tagged_literal_unchecked(value, language.into_inner(), if is_ltr { oxrdf::BaseDirection::Ltr } else { oxrdf::BaseDirection::Rtl }))
+                }
+                #[cfg(not(feature = "sparql-12"))]
+                if base_direction.is_some() {
+                    return Err("Literal base directions are only supported in SPARQL 1.2")
+                }
+                Ok(Literal::new_language_tagged_literal_unchecked(value, language.into_inner()))
+            } /
             value:String() { Literal::new_simple_literal(value) }
 
         rule NumericLiteral() -> Literal  = NumericLiteralUnsigned() / NumericLiteralPositive() / NumericLiteralNegative()
@@ -1998,8 +2025,15 @@ parser! {
 
         rule VAR2() -> &'input str = "$" v:$(VARNAME()) { v }
 
-        rule LANGTAG() -> LanguageTag<String> = "@" l:$(['a' ..= 'z' | 'A' ..= 'Z']+ ("-" ['a' ..= 'z' | 'A' ..= 'Z' | '0' ..= '9']+)*) {?
-            LanguageTag::parse(l.to_ascii_lowercase()).map_err(|_| "language tag parsing failed")
+        rule LANGDIR() -> (LanguageTag<String>, Option<bool>) = "@" l:$(['a' ..= 'z' | 'A' ..= 'Z']+ ("-" ['a' ..= 'z' | 'A' ..= 'Z' | '0' ..= '9']+)*) d:$("--" ['a' ..= 'z' | 'A' ..= 'Z']+)? {?
+            Ok((
+                LanguageTag::parse(l.to_ascii_lowercase()).map_err(|_| "language tag parsing failed")?,
+                d.map(|d| match d {
+                    "--ltr" => Ok(true),
+                    "--rtl" => Ok(false),
+                    _ => Err("the only base directions allowed are 'rtl' and 'ltr'")
+                }).transpose()?
+            ))
         }
 
         rule INTEGER() = ['0'..='9']+

@@ -9,7 +9,7 @@ use json_event_parser::{JsonEvent, ToWriteJsonWriter};
 use md5::{Digest, Md5};
 use oxiri::Iri;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, Literal, NamedNode, Term, Triple, Variable};
+use oxrdf::{BaseDirection, BlankNode, Literal, NamedNode, Term, Triple, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, Duration, Time, TimezoneOffset, YearMonthDuration};
 use oxsdatatypes::{DateTime, DayTimeDuration, Decimal, Double, Float, Integer};
@@ -1904,7 +1904,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     for child in &*children {
                         match child(tuple) {
                             Some(true) => return Some(true.into()),
-                            Some(false) => continue,
+                            Some(false) => (),
                             None => error = true,
                         }
                     }
@@ -1930,7 +1930,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     let mut error = false;
                     for child in &*children {
                         match child(tuple) {
-                            Some(true) => continue,
+                            Some(true) => (),
                             Some(false) => return Some(false.into()),
                             None => error = true,
                         }
@@ -2299,6 +2299,8 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     Rc::new(move |tuple| {
                         Some(ExpressionTerm::StringLiteral(match e(tuple)? {
                             ExpressionTerm::LangStringLiteral { language, .. } => language,
+                            #[cfg(feature = "sparql-12")]
+                            ExpressionTerm::DirLangStringLiteral { language, .. } => language,
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                                 return None
                             }
@@ -2342,6 +2344,27 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         )
                     })
                 }
+                #[cfg(feature = "sparql-12")]
+                Function::LangDir => {
+                    let e =
+                        self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
+                    Rc::new(move |tuple| {
+                        Some(ExpressionTerm::StringLiteral(match e(tuple)? {
+                            ExpressionTerm::DirLangStringLiteral { base_direction, .. } => {
+                                match base_direction {
+                                    BaseDirection::Ltr => "ltr".into(),
+                                    BaseDirection::Rtl => "rtl".into(),
+                                }
+                            }
+                            ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
+                                return None
+                            }
+                            #[cfg(feature = "rdf-star")]
+                            ExpressionTerm::Triple(_) => return None,
+                            _ => String::new(),
+                        }))
+                    })
+                }
                 Function::Datatype => {
                     let e =
                         self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
@@ -2349,6 +2372,10 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         Some(ExpressionTerm::NamedNode(match e(tuple)? {
                             ExpressionTerm::StringLiteral(_) => xsd::STRING.into(),
                             ExpressionTerm::LangStringLiteral { .. } => rdf::LANG_STRING.into(),
+                            #[cfg(feature = "sparql-12")]
+                            ExpressionTerm::DirLangStringLiteral { .. } => {
+                                rdf::DIR_LANG_STRING.into()
+                            }
                             ExpressionTerm::BooleanLiteral(_) => xsd::BOOLEAN.into(),
                             ExpressionTerm::IntegerLiteral(_) => xsd::INTEGER.into(),
                             ExpressionTerm::DecimalLiteral(_) => xsd::DECIMAL.into(),
@@ -3020,6 +3047,43 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         )
                     })
                 }
+                #[cfg(feature = "sparql-12")]
+                Function::StrLangDir => {
+                    let lexical_form =
+                        self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
+                    let lang_tag =
+                        self.expression_evaluator(&parameters[1], encoded_variables, stat_children);
+                    let base_direction =
+                        self.expression_evaluator(&parameters[2], encoded_variables, stat_children);
+                    Rc::new(move |tuple| {
+                        let ExpressionTerm::StringLiteral(value) = lexical_form(tuple)? else {
+                            return None;
+                        };
+                        let ExpressionTerm::StringLiteral(language) = lang_tag(tuple)? else {
+                            return None;
+                        };
+                        let ExpressionTerm::StringLiteral(base_direction) = base_direction(tuple)?
+                        else {
+                            return None;
+                        };
+                        let base_direction = match base_direction.as_str() {
+                            "ltr" => BaseDirection::Ltr,
+                            "rtl" => BaseDirection::Rtl,
+                            _ => return None,
+                        };
+                        Some(
+                            Term::from(
+                                Literal::new_directional_language_tagged_literal(
+                                    value,
+                                    language,
+                                    base_direction,
+                                )
+                                .ok()?,
+                            )
+                            .into(),
+                        )
+                    })
+                }
                 Function::StrDt => {
                     let lexical_form =
                         self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
@@ -3080,6 +3144,31 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                     | ExpressionTerm::DoubleLiteral(_)
                             )
                             .into(),
+                        )
+                    })
+                }
+                #[cfg(feature = "sparql-12")]
+                Function::HasLang => {
+                    let e =
+                        self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
+                    Rc::new(move |tuple| {
+                        Some(
+                            matches!(
+                                e(tuple)?,
+                                ExpressionTerm::LangStringLiteral { .. }
+                                    | ExpressionTerm::DirLangStringLiteral { .. }
+                            )
+                            .into(),
+                        )
+                    })
+                }
+                #[cfg(feature = "sparql-12")]
+                Function::HasLangDir => {
+                    let e =
+                        self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
+                    Rc::new(move |tuple| {
+                        Some(
+                            matches!(e(tuple)?, ExpressionTerm::DirLangStringLiteral { .. }).into(),
                         )
                     })
                 }
@@ -3994,6 +4083,8 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
         ExpressionTerm::NamedNode(_)
         | ExpressionTerm::BlankNode(_)
         | ExpressionTerm::LangStringLiteral { .. } => Some(a == b),
+        #[cfg(feature = "sparql-12")]
+        ExpressionTerm::DirLangStringLiteral { .. } => Some(a == b),
         ExpressionTerm::StringLiteral(a) => match b {
             ExpressionTerm::StringLiteral(b) => Some(a == b),
             ExpressionTerm::OtherTypedLiteral { .. } => None,
@@ -4004,6 +4095,8 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             ExpressionTerm::NamedNode(_)
             | ExpressionTerm::BlankNode(_)
             | ExpressionTerm::LangStringLiteral { .. } => Some(false),
+            #[cfg(feature = "sparql-12")]
+            ExpressionTerm::DirLangStringLiteral { .. } => Some(false),
             #[cfg(feature = "rdf-star")]
             ExpressionTerm::Triple(_) => Some(false),
             _ => None,
@@ -4258,6 +4351,27 @@ fn partial_cmp_literals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Orderi
             } = b
             {
                 if la == lb {
+                    va.partial_cmp(vb)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        #[cfg(feature = "sparql-12")]
+        ExpressionTerm::DirLangStringLiteral {
+            value: va,
+            language: la,
+            base_direction: da,
+        } => {
+            if let ExpressionTerm::DirLangStringLiteral {
+                value: vb,
+                language: lb,
+                base_direction: db,
+            } = b
+            {
+                if la == lb && da == db {
                     va.partial_cmp(vb)
                 } else {
                     None

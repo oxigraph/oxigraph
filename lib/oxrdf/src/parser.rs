@@ -1,4 +1,6 @@
 use crate::vocab::xsd;
+#[cfg(feature = "rdf-12")]
+use crate::BaseDirection;
 #[cfg(feature = "rdf-star")]
 use crate::Subject;
 use crate::{
@@ -338,6 +340,24 @@ fn read_literal(s: &str) -> Result<(Literal, &str), TermParseError> {
                             .find(|v| !matches!(v, 'a'..='z' | 'A'..='Z' | '-'))
                             .unwrap_or(remain.len());
                         let (language, remain) = remain.split_at(end);
+                        #[cfg(feature = "rdf-12")]
+                        if let Some((language, base_direction)) = language.split_once("--") {
+                            return Ok((
+                                Literal::new_directional_language_tagged_literal(value, language, match base_direction {
+                                    "ltr" => BaseDirection::Ltr,
+                                    "rtl" => BaseDirection::Rtl,
+                                    _ => return Err(TermParseError(TermParseErrorKind::Msg(format!("The only two possible base directions are 'rtl' and 'ltr', found '{base_direction}'"))))
+                                }).map_err(
+                                    |error| {
+                                        TermParseError(TermParseErrorKind::LanguageTag {
+                                            value: language.to_owned(),
+                                            error,
+                                        })
+                                    },
+                                )?,
+                                remain,
+                            ));
+                        }
                         Ok((
                             Literal::new_language_tagged_literal(value, language).map_err(
                                 |error| {

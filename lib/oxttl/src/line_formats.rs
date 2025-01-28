@@ -155,11 +155,36 @@ impl RuleRecognizer for NQuadsRecognizer {
                     }
             }
             NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value } => match token {
-                TokenOrLineJump::Token(N3Token::LangTag(lang_tag)) => {
+                #[cfg(feature = "rdf-12")]
+                TokenOrLineJump::Token(N3Token::LangTag {
+                    language,
+                    base_direction,
+                }) => {
+                    self.objects.push(
+                        if let Some(base_direction) = base_direction {
+                            Literal::new_directional_language_tagged_literal_unchecked(
+                                value,
+                                language.to_ascii_lowercase(),
+                                base_direction,
+                            )
+                        } else {
+                            Literal::new_language_tagged_literal_unchecked(
+                                value,
+                                language.to_ascii_lowercase(),
+                            )
+                        }
+                        .into(),
+                    );
+                    self.stack
+                        .push(NQuadsState::ExpectPossibleGraphOrEndOfQuotedTriple);
+                    self
+                }
+                #[cfg(not(feature = "rdf-12"))]
+                TokenOrLineJump::Token(N3Token::LangTag { language }) => {
                     self.objects.push(
                         Literal::new_language_tagged_literal_unchecked(
                             value,
-                            lang_tag.to_ascii_lowercase(),
+                            language.to_ascii_lowercase(),
                         )
                         .into(),
                     );

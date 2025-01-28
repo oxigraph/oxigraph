@@ -16,6 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = ["sparopt/rdf-star", "sparesults/rdf-star"]
+sparql-12 = ["sparopt/sparql-12", "sparesults/sparql-12"]
 sep-0002 = ["sparopt/sep-0002"]
 sep-0006 = ["sparopt/sep-0006"]
 calendar-ext = ["sep-0002"] # Extended calendar arithmetic: gYear, gYearMonth, gMonth, gMonthDay, gDay

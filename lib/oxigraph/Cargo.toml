@@ -25,6 +25,7 @@ http-client-rustls-webpki = ["http-client", "oxhttp/rustls-ring-webpki"]
 http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
+rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
 
 [dependencies]
 dashmap.workspace = true
