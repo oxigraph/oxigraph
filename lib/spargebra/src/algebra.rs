@@ -376,6 +376,14 @@ pub enum Function {
     Object,
     #[cfg(feature = "rdf-star")]
     IsTriple,
+    #[cfg(feature = "sparql-12")]
+    LangDir,
+    #[cfg(feature = "sparql-12")]
+    HasLang,
+    #[cfg(feature = "sparql-12")]
+    HasLangDir,
+    #[cfg(feature = "sparql-12")]
+    StrLangDir,
     #[cfg(feature = "sep-0002")]
     Adjust,
     Custom(NamedNode),
@@ -441,6 +449,14 @@ impl Function {
             Self::Object => f.write_str("object"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => f.write_str("istriple"),
+            #[cfg(feature = "sparql-12")]
+            Function::LangDir => f.write_str("langdir"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLang => f.write_str("haslang"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLangDir => f.write_str("haslangdir"),
+            #[cfg(feature = "sparql-12")]
+            Function::StrLangDir => f.write_str("strlangdir"),
             #[cfg(feature = "sep-0002")]
             Self::Adjust => f.write_str("adjust"),
             Self::Custom(iri) => write!(f, "{iri}"),
@@ -507,6 +523,14 @@ impl fmt::Display for Function {
             Self::Object => f.write_str("OBJECT"),
             #[cfg(feature = "rdf-star")]
             Self::IsTriple => f.write_str("isTRIPLE"),
+            #[cfg(feature = "sparql-12")]
+            Function::LangDir => f.write_str("LANGDIR"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLang => f.write_str("hasLANG"),
+            #[cfg(feature = "sparql-12")]
+            Function::HasLangDir => f.write_str("hasLANGDIR"),
+            #[cfg(feature = "sparql-12")]
+            Function::StrLangDir => f.write_str("STRLANGDIR"),
             #[cfg(feature = "sep-0002")]
             Self::Adjust => f.write_str("ADJUST"),
             Self::Custom(iri) => iri.fmt(f),

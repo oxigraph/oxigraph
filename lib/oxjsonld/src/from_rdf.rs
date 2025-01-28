@@ -3,6 +3,8 @@ use json_event_parser::TokioAsyncWriterJsonSerializer;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::xsd;
+#[cfg(feature = "rdf-12")]
+use oxrdf::BaseDirection;
 use oxrdf::{
     GraphName, GraphNameRef, NamedNode, NamedOrBlankNodeRef, QuadRef, Subject, SubjectRef, TermRef,
 };
@@ -481,6 +483,17 @@ impl InnerJsonLdWriter {
                 if let Some(language) = literal.language() {
                     output.push(JsonEvent::ObjectKey("@language".into()));
                     output.push(JsonEvent::String(language.into()));
+                    #[cfg(feature = "rdf-12")]
+                    if let Some(direction) = literal.direction() {
+                        output.push(JsonEvent::ObjectKey("@direction".into()));
+                        output.push(JsonEvent::String(
+                            match direction {
+                                BaseDirection::Ltr => "ltr",
+                                BaseDirection::Rtl => "rtl",
+                            }
+                            .into(),
+                        ));
+                    }
                 } else if literal.datatype() != xsd::STRING {
                     output.push(JsonEvent::ObjectKey("@type".into()));
                     output.push(JsonEvent::String(Self::type_value(

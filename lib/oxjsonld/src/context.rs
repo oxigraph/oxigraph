@@ -35,7 +35,7 @@ pub struct JsonLdContext {
     pub original_base_url: Option<Iri<String>>,
     pub vocabulary_mapping: Option<String>,
     pub default_language: Option<String>,
-    pub default_base_direction: Option<&'static str>,
+    pub default_direction: Option<&'static str>,
     pub term_definitions: HashMap<String, JsonLdTermDefinition>,
     pub previous_context: Option<Box<JsonLdContext>>,
 }
@@ -47,7 +47,7 @@ impl JsonLdContext {
             original_base_url,
             vocabulary_mapping: None,
             default_language: None,
-            default_base_direction: None,
+            default_direction: None,
             term_definitions: HashMap::new(),
             previous_context: None,
         }
@@ -403,12 +403,12 @@ impl JsonLdContextProcessor {
                 match value {
                     // 5.10.3)
                     JsonNode::Null => {
-                        result.default_base_direction = None;
+                        result.default_direction = None;
                     }
                     // 5.10.4)
                     JsonNode::String(value) => match value.as_str() {
-                        "ltr" => result.default_base_direction = Some("ltr"),
-                        "rtl" => result.default_base_direction = Some("rtl"),
+                        "ltr" => result.default_direction = Some("ltr"),
+                        "rtl" => result.default_direction = Some("rtl"),
                         _ => errors.push(JsonLdSyntaxError::msg_and_code(
                             format!("@direction value must be 'ltr' or 'rtl', found '{value}'"),
                             JsonLdErrorCode::InvalidBaseDirection,

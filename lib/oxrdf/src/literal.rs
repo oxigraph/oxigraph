@@ -39,8 +39,20 @@ pub struct Literal(LiteralContent);
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 enum LiteralContent {
     String(String),
-    LanguageTaggedString { value: String, language: String },
-    TypedLiteral { value: String, datatype: NamedNode },
+    LanguageTaggedString {
+        value: String,
+        language: String,
+    },
+    #[cfg(feature = "rdf-12")]
+    DirectionalLanguageTaggedString {
+        value: String,
+        language: String,
+        direction: BaseDirection,
+    },
+    TypedLiteral {
+        value: String,
+        datatype: NamedNode,
+    },
 }
 
 impl Literal {
@@ -94,6 +106,44 @@ impl Literal {
         })
     }
 
+    /// Builds an RDF [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string).
+    #[cfg(feature = "rdf-12")]
+    #[inline]
+    pub fn new_directional_language_tagged_literal(
+        value: impl Into<String>,
+        language: impl Into<String>,
+        direction: BaseDirection,
+    ) -> Result<Self, LanguageTagParseError> {
+        let mut language = language.into();
+        language.make_ascii_lowercase();
+        Ok(Self::new_directional_language_tagged_literal_unchecked(
+            value,
+            LanguageTag::parse(language)?.into_inner(),
+            direction,
+        ))
+    }
+
+    /// Builds an RDF [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string).
+    ///
+    /// It is the responsibility of the caller to check that `language`
+    /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
+    /// and is lowercase.
+    ///
+    /// [`Literal::new_language_tagged_literal()`] is a safe version of this constructor and should be used for untrusted data.
+    #[cfg(feature = "rdf-12")]
+    #[inline]
+    pub fn new_directional_language_tagged_literal_unchecked(
+        value: impl Into<String>,
+        language: impl Into<String>,
+        direction: BaseDirection,
+    ) -> Self {
+        Self(LiteralContent::DirectionalLanguageTaggedString {
+            value: value.into(),
+            language: language.into(),
+            direction,
+        })
+    }
+
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form).
     #[inline]
     pub fn value(&self) -> &str {
@@ -136,6 +186,16 @@ impl Literal {
             LiteralContent::LanguageTaggedString { value, language } => {
                 LiteralRefContent::LanguageTaggedString { value, language }
             }
+            #[cfg(feature = "rdf-12")]
+            LiteralContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => LiteralRefContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction: *direction,
+            },
             LiteralContent::TypedLiteral { value, datatype } => LiteralRefContent::TypedLiteral {
                 value,
                 datatype: datatype.as_ref(),
@@ -143,7 +203,33 @@ impl Literal {
         })
     }
 
+    /// Extract components from this literal (value, datatype, language tag and base direction).
+    #[cfg(feature = "rdf-12")]
+    #[inline]
+    pub fn destruct(
+        self,
+    ) -> (
+        String,
+        Option<NamedNode>,
+        Option<String>,
+        Option<BaseDirection>,
+    ) {
+        match self.0 {
+            LiteralContent::String(s) => (s, None, None, None),
+            LiteralContent::LanguageTaggedString { value, language } => {
+                (value, None, Some(language), None)
+            }
+            LiteralContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => (value, None, Some(language), Some(direction)),
+            LiteralContent::TypedLiteral { value, datatype } => (value, Some(datatype), None, None),
+        }
+    }
+
     /// Extract components from this literal (value, datatype and language tag).
+    #[cfg(not(feature = "rdf-12"))]
     #[inline]
     pub fn destruct(self) -> (String, Option<NamedNode>, Option<String>) {
         match self.0 {
@@ -451,6 +537,12 @@ enum LiteralRefContent<'a> {
         value: &'a str,
         language: &'a str,
     },
+    #[cfg(feature = "rdf-12")]
+    DirectionalLanguageTaggedString {
+        value: &'a str,
+        language: &'a str,
+        direction: BaseDirection,
+    },
     TypedLiteral {
         value: &'a str,
         datatype: NamedNodeRef<'a>,
@@ -487,6 +579,27 @@ impl<'a> LiteralRef<'a> {
         LiteralRef(LiteralRefContent::LanguageTaggedString { value, language })
     }
 
+    /// Builds an RDF [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string).
+    ///
+    /// It is the responsibility of the caller to check that `language`
+    /// is valid [BCP47](https://tools.ietf.org/html/bcp47) language tag,
+    /// and is lowercase.
+    ///
+    /// [`Literal::new_directional_language_tagged_literal()`] is a safe version of this constructor and should be used for untrusted data.
+    #[cfg(feature = "rdf-12")]
+    #[inline]
+    pub const fn new_directional_language_tagged_literal_unchecked(
+        value: &'a str,
+        language: &'a str,
+        direction: BaseDirection,
+    ) -> Self {
+        LiteralRef(LiteralRefContent::DirectionalLanguageTaggedString {
+            value,
+            language,
+            direction,
+        })
+    }
+
     /// The literal [lexical form](https://www.w3.org/TR/rdf11-concepts/#dfn-lexical-form)
     #[inline]
     pub const fn value(self) -> &'a str {
@@ -494,6 +607,8 @@ impl<'a> LiteralRef<'a> {
             LiteralRefContent::String(value)
             | LiteralRefContent::LanguageTaggedString { value, .. }
             | LiteralRefContent::TypedLiteral { value, .. } => value,
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString { value, .. } => value,
         }
     }
 
@@ -505,6 +620,20 @@ impl<'a> LiteralRef<'a> {
     pub const fn language(self) -> Option<&'a str> {
         match self.0 {
             LiteralRefContent::LanguageTaggedString { language, .. } => Some(language),
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString { language, .. } => Some(language),
+            _ => None,
+        }
+    }
+
+    /// The literal [base direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction) if it is a [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction).
+    ///
+    /// The two possible base directions are left-to-right (`ltr`) and right-to-left (`rtl`).
+    #[cfg(feature = "rdf-12")]
+    #[inline]
+    pub const fn direction(self) -> Option<BaseDirection> {
+        match self.0 {
+            LiteralRefContent::DirectionalLanguageTaggedString { direction, .. } => Some(direction),
             _ => None,
         }
     }
@@ -518,6 +647,8 @@ impl<'a> LiteralRef<'a> {
         match self.0 {
             LiteralRefContent::String(_) => xsd::STRING,
             LiteralRefContent::LanguageTaggedString { .. } => rdf::LANG_STRING,
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString { .. } => rdf::DIR_LANG_STRING,
             LiteralRefContent::TypedLiteral { datatype, .. } => datatype,
         }
     }
@@ -545,6 +676,16 @@ impl<'a> LiteralRef<'a> {
                     language: language.to_owned(),
                 }
             }
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => LiteralContent::DirectionalLanguageTaggedString {
+                value: value.to_owned(),
+                language: language.to_owned(),
+                direction,
+            },
             LiteralRefContent::TypedLiteral { value, datatype } => LiteralContent::TypedLiteral {
                 value: value.to_owned(),
                 datatype: datatype.into_owned(),
@@ -553,6 +694,7 @@ impl<'a> LiteralRef<'a> {
     }
 
     /// Extract components from this literal
+    #[cfg(not(feature = "rdf-12"))]
     #[inline]
     #[deprecated(note = "Use directly .value(), .datatype() and .language()")]
     pub const fn destruct(self) -> (&'a str, Option<NamedNodeRef<'a>>, Option<&'a str>) {
@@ -574,6 +716,15 @@ impl fmt::Display for LiteralRef<'_> {
             LiteralRefContent::LanguageTaggedString { value, language } => {
                 print_quoted_str(value, f)?;
                 write!(f, "@{language}")
+            }
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => {
+                print_quoted_str(value, f)?;
+                write!(f, "@{language}--{direction}")
             }
             LiteralRefContent::TypedLiteral { value, datatype } => {
                 print_quoted_str(value, f)?;
@@ -637,6 +788,29 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')
 }
 
+/// A [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string) [base-direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction)
+#[cfg(feature = "rdf-12")]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum BaseDirection {
+    /// the initial text direction is set to left-to-right
+    #[cfg_attr(feature = "serde", serde(rename = "ltr"))]
+    Ltr,
+    /// the initial text direction is set to right-to-left
+    #[cfg_attr(feature = "serde", serde(rename = "rtl"))]
+    Rtl,
+}
+
+#[cfg(feature = "rdf-12")]
+impl fmt::Display for BaseDirection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Ltr => "ltr",
+            Self::Rtl => "rtl",
+        })
+    }
+}
+
 #[cfg(feature = "serde")]
 impl Serialize for Literal {
     #[inline]
@@ -656,6 +830,9 @@ impl Serialize for LiteralRef<'_> {
             value: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             language: Option<&'a str>,
+            #[cfg(feature = "rdf-12")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            direction: Option<BaseDirection>,
             #[serde(skip_serializing_if = "Option::is_none")]
             datatype: Option<&'a str>,
         }
@@ -663,16 +840,33 @@ impl Serialize for LiteralRef<'_> {
             LiteralRefContent::String(value) => Value {
                 value,
                 language: None,
+                #[cfg(feature = "rdf-12")]
+                direction: None,
                 datatype: None,
             },
             LiteralRefContent::LanguageTaggedString { value, language } => Value {
                 value,
                 language: Some(language),
+                #[cfg(feature = "rdf-12")]
+                direction: None,
+                datatype: None,
+            },
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => Value {
+                value,
+                language: Some(language),
+                direction: Some(direction),
                 datatype: None,
             },
             LiteralRefContent::TypedLiteral { value, datatype } => Value {
                 value,
                 language: None,
+                #[cfg(feature = "rdf-12")]
+                direction: None,
                 datatype: Some(datatype.as_str()),
             },
         }
@@ -692,25 +886,33 @@ impl<'de> Deserialize<'de> for Literal {
         struct Value {
             value: String,
             language: Option<String>,
+            #[cfg(feature = "rdf-12")]
+            direction: Option<BaseDirection>,
             datatype: Option<String>,
         }
         let Value {
             value,
             language,
+            #[cfg(feature = "rdf-12")]
+            direction,
             datatype,
         } = Value::deserialize(deserializer)?;
-        match (datatype, language) {
-            (Some(datatype), None) => Ok(Literal::new_typed_literal(
+        if let Some(language) = language {
+            #[cfg(feature = "rdf-12")]
+            if let Some(direction) = direction {
+                return Literal::new_directional_language_tagged_literal(
+                    value, language, direction,
+                )
+                .map_err(de::Error::custom);
+            }
+            Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
+        } else if let Some(datatype) = datatype {
+            Ok(Literal::new_typed_literal(
                 value,
                 NamedNode::new(datatype).map_err(de::Error::custom)?,
-            )),
-            (None, Some(language)) => {
-                Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
-            }
-            (None, None) => Ok(Literal::new_simple_literal(value)),
-            (Some(_), Some(_)) => Err(de::Error::custom(
-                "Invalid literal format: Literal can only have one of datatype or language",
-            )),
+            ))
+        } else {
+            Ok(Literal::new_simple_literal(value))
         }
     }
 }

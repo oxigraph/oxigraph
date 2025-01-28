@@ -1,3 +1,5 @@
+#[cfg(feature = "sparql-12")]
+use oxrdf::BaseDirection;
 use oxrdf::{
     BlankNode, Dataset, GraphNameRef, Literal, NamedNode, QuadRef, SubjectRef, Term, TermRef,
 };
@@ -240,6 +242,12 @@ pub enum ExpressionTerm {
         value: String,
         language: String,
     },
+    #[cfg(feature = "sparql-12")]
+    DirLangStringLiteral {
+        value: String,
+        language: String,
+        direction: BaseDirection,
+    },
     BooleanLiteral(Boolean),
     IntegerLiteral(Integer),
     DecimalLiteral(Decimal),
@@ -346,6 +354,12 @@ impl Hash for ExpressionTerm {
             ExpressionTerm::BlankNode(v) => v.hash(state),
             ExpressionTerm::StringLiteral(v) => v.hash(state),
             ExpressionTerm::LangStringLiteral { value, language } => (value, language).hash(state),
+            #[cfg(feature = "sparql-12")]
+            ExpressionTerm::DirLangStringLiteral {
+                value,
+                language,
+                direction,
+            } => (value, language, direction).hash(state),
             ExpressionTerm::BooleanLiteral(v) => v.hash(state),
             ExpressionTerm::IntegerLiteral(v) => v.hash(state),
             ExpressionTerm::DecimalLiteral(v) => v.hash(state),
@@ -386,14 +400,37 @@ impl From<Term> for ExpressionTerm {
             Term::NamedNode(t) => Self::NamedNode(t),
             Term::BlankNode(t) => Self::BlankNode(t),
             Term::Literal(t) => {
-                let (value, datatype, language) = t.destruct();
-                if let Some(language) = language {
-                    Self::LangStringLiteral { value, language }
-                } else if let Some(datatype) = datatype {
-                    parse_typed_literal(&value, datatype.as_str())
-                        .unwrap_or(Self::OtherTypedLiteral { value, datatype })
-                } else {
-                    Self::StringLiteral(value)
+                #[cfg(feature = "sparql-12")]
+                {
+                    let (value, datatype, language, direction) = t.destruct();
+                    if let Some(language) = language {
+                        if let Some(direction) = direction {
+                            Self::DirLangStringLiteral {
+                                value,
+                                language,
+                                direction,
+                            }
+                        } else {
+                            Self::LangStringLiteral { value, language }
+                        }
+                    } else if let Some(datatype) = datatype {
+                        parse_typed_literal(&value, datatype.as_str())
+                            .unwrap_or(Self::OtherTypedLiteral { value, datatype })
+                    } else {
+                        Self::StringLiteral(value)
+                    }
+                }
+                #[cfg(not(feature = "sparql-12"))]
+                {
+                    let (value, datatype, language) = t.destruct();
+                    if let Some(language) = language {
+                        Self::LangStringLiteral { value, language }
+                    } else if let Some(datatype) = datatype {
+                        parse_typed_literal(&value, datatype.as_str())
+                            .unwrap_or(Self::OtherTypedLiteral { value, datatype })
+                    } else {
+                        Self::StringLiteral(value)
+                    }
                 }
             }
             #[cfg(feature = "rdf-star")]
@@ -412,6 +449,15 @@ impl From<ExpressionTerm> for Term {
             ExpressionTerm::LangStringLiteral { value, language } => {
                 Literal::new_language_tagged_literal_unchecked(value, language).into()
             }
+            #[cfg(feature = "sparql-12")]
+            ExpressionTerm::DirLangStringLiteral {
+                value,
+                language,
+                direction,
+            } => Literal::new_directional_language_tagged_literal_unchecked(
+                value, language, direction,
+            )
+            .into(),
             ExpressionTerm::BooleanLiteral(value) => Literal::from(value).into(),
             ExpressionTerm::IntegerLiteral(value) => Literal::from(value).into(),
             ExpressionTerm::DecimalLiteral(value) => Literal::from(value).into(),

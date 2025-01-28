@@ -78,6 +78,46 @@ pub enum EncodedTerm {
         value_id: StrHash,
         language_id: StrHash,
     },
+    #[cfg(feature = "rdf-12")]
+    LtrSmallSmallDirLangStringLiteral {
+        value: SmallString,
+        language: SmallString,
+    },
+    #[cfg(feature = "rdf-12")]
+    LtrSmallBigDirLangStringLiteral {
+        value: SmallString,
+        language_id: StrHash,
+    },
+    #[cfg(feature = "rdf-12")]
+    LtrBigSmallDirLangStringLiteral {
+        value_id: StrHash,
+        language: SmallString,
+    },
+    #[cfg(feature = "rdf-12")]
+    LtrBigBigDirLangStringLiteral {
+        value_id: StrHash,
+        language_id: StrHash,
+    },
+    #[cfg(feature = "rdf-12")]
+    RtlSmallSmallDirLangStringLiteral {
+        value: SmallString,
+        language: SmallString,
+    },
+    #[cfg(feature = "rdf-12")]
+    RtlSmallBigDirLangStringLiteral {
+        value: SmallString,
+        language_id: StrHash,
+    },
+    #[cfg(feature = "rdf-12")]
+    RtlBigSmallDirLangStringLiteral {
+        value_id: StrHash,
+        language: SmallString,
+    },
+    #[cfg(feature = "rdf-12")]
+    RtlBigBigDirLangStringLiteral {
+        value_id: StrHash,
+        language_id: StrHash,
+    },
     SmallTypedLiteral {
         value: SmallString,
         datatype_id: StrHash,
@@ -170,6 +210,94 @@ impl PartialEq for EncodedTerm {
                         language_id: language_id_b,
                     },
                 ) => value_id_a == value_id_b && language_id_a == language_id_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::LtrSmallSmallDirLangStringLiteral {
+                        value: value_a,
+                        language: language_a,
+                    },
+                    Self::LtrSmallSmallDirLangStringLiteral {
+                        value: value_b,
+                        language: language_b,
+                    },
+                ) => value_a == value_b && language_a == language_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::LtrSmallBigDirLangStringLiteral {
+                        value: value_a,
+                        language_id: language_id_a,
+                    },
+                    Self::LtrSmallBigDirLangStringLiteral {
+                        value: value_b,
+                        language_id: language_id_b,
+                    },
+                ) => value_a == value_b && language_id_a == language_id_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::LtrBigSmallDirLangStringLiteral {
+                        value_id: value_id_a,
+                        language: language_a,
+                    },
+                    Self::LtrBigSmallDirLangStringLiteral {
+                        value_id: value_id_b,
+                        language: language_b,
+                    },
+                ) => value_id_a == value_id_b && language_a == language_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::LtrBigBigDirLangStringLiteral {
+                        value_id: value_id_a,
+                        language_id: language_id_a,
+                    },
+                    Self::LtrBigBigDirLangStringLiteral {
+                        value_id: value_id_b,
+                        language_id: language_id_b,
+                    },
+                ) => value_id_a == value_id_b && language_id_a == language_id_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::RtlSmallSmallDirLangStringLiteral {
+                        value: value_a,
+                        language: language_a,
+                    },
+                    Self::RtlSmallSmallDirLangStringLiteral {
+                        value: value_b,
+                        language: language_b,
+                    },
+                ) => value_a == value_b && language_a == language_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::RtlSmallBigDirLangStringLiteral {
+                        value: value_a,
+                        language_id: language_id_a,
+                    },
+                    Self::RtlSmallBigDirLangStringLiteral {
+                        value: value_b,
+                        language_id: language_id_b,
+                    },
+                ) => value_a == value_b && language_id_a == language_id_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::RtlBigSmallDirLangStringLiteral {
+                        value_id: value_id_a,
+                        language: language_a,
+                    },
+                    Self::RtlBigSmallDirLangStringLiteral {
+                        value_id: value_id_b,
+                        language: language_b,
+                    },
+                ) => value_id_a == value_id_b && language_a == language_b,
+                #[cfg(feature = "rdf-12")]
+                (
+                    Self::RtlBigBigDirLangStringLiteral {
+                        value_id: value_id_a,
+                        language_id: language_id_a,
+                    },
+                    Self::RtlBigBigDirLangStringLiteral {
+                        value_id: value_id_b,
+                        language_id: language_id_b,
+                    },
+                ) => value_id_a == value_id_b && language_id_a == language_id_b,
                 (
                     Self::SmallTypedLiteral {
                         value: value_a,
@@ -243,6 +371,52 @@ impl Hash for EncodedTerm {
                 language.hash(state);
             }
             Self::BigBigLangStringLiteral {
+                value_id,
+                language_id,
+            } => {
+                value_id.hash(state);
+                language_id.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::LtrSmallSmallDirLangStringLiteral { value, language } => {
+                value.hash(state);
+                language.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::LtrSmallBigDirLangStringLiteral { value, language_id } => {
+                value.hash(state);
+                language_id.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::LtrBigSmallDirLangStringLiteral { value_id, language } => {
+                value_id.hash(state);
+                language.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::LtrBigBigDirLangStringLiteral {
+                value_id,
+                language_id,
+            } => {
+                value_id.hash(state);
+                language_id.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::RtlSmallSmallDirLangStringLiteral { value, language } => {
+                value.hash(state);
+                language.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::RtlSmallBigDirLangStringLiteral { value, language_id } => {
+                value.hash(state);
+                language_id.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::RtlBigSmallDirLangStringLiteral { value_id, language } => {
+                value_id.hash(state);
+                language.hash(state);
+            }
+            #[cfg(feature = "rdf-12")]
+            Self::RtlBigBigDirLangStringLiteral {
                 value_id,
                 language_id,
             } => {
@@ -343,6 +517,57 @@ impl From<LiteralRef<'_>> for EncodedTerm {
                     }
                 })
             }
+            #[cfg(feature = "rdf-12")]
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString" => literal
+                .language()
+                .and_then(|l| Some((l, literal.direction()?)))
+                .map(|(language, direction)| {
+                    if let Ok(value) = SmallString::try_from(value) {
+                        if let Ok(language) = SmallString::try_from(language) {
+                            match direction {
+                                BaseDirection::Ltr => {
+                                    Self::LtrSmallSmallDirLangStringLiteral { value, language }
+                                }
+                                BaseDirection::Rtl => {
+                                    Self::RtlSmallSmallDirLangStringLiteral { value, language }
+                                }
+                            }
+                        } else {
+                            match direction {
+                                BaseDirection::Ltr => Self::LtrSmallBigDirLangStringLiteral {
+                                    value,
+                                    language_id: StrHash::new(language),
+                                },
+                                BaseDirection::Rtl => Self::RtlSmallBigDirLangStringLiteral {
+                                    value,
+                                    language_id: StrHash::new(language),
+                                },
+                            }
+                        }
+                    } else if let Ok(language) = SmallString::try_from(language) {
+                        match direction {
+                            BaseDirection::Ltr => Self::LtrBigSmallDirLangStringLiteral {
+                                value_id: StrHash::new(value),
+                                language,
+                            },
+                            BaseDirection::Rtl => Self::RtlBigSmallDirLangStringLiteral {
+                                value_id: StrHash::new(value),
+                                language,
+                            },
+                        }
+                    } else {
+                        match direction {
+                            BaseDirection::Ltr => Self::LtrBigBigDirLangStringLiteral {
+                                value_id: StrHash::new(value),
+                                language_id: StrHash::new(language),
+                            },
+                            BaseDirection::Rtl => Self::RtlBigBigDirLangStringLiteral {
+                                value_id: StrHash::new(value),
+                                language_id: StrHash::new(language),
+                            },
+                        }
+                    }
+                }),
             "http://www.w3.org/2001/XMLSchema#boolean" => parse_boolean_str(value),
             "http://www.w3.org/2001/XMLSchema#string" => {
                 Some(if let Ok(value) = SmallString::try_from(value) {
@@ -565,6 +790,36 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
                     Err(CorruptionError::from_encoded_term(encoded, &term).into())
                 }
             }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlBigSmallDirLangStringLiteral { value_id, .. }
+            | EncodedTerm::LtrBigSmallDirLangStringLiteral { value_id, .. } => {
+                insert_str(value_id, literal.value())
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlSmallBigDirLangStringLiteral { language_id, .. }
+            | EncodedTerm::LtrSmallBigDirLangStringLiteral { language_id, .. } => {
+                if let Some(language) = literal.language() {
+                    insert_str(language_id, language)
+                } else {
+                    Err(CorruptionError::from_encoded_term(encoded, &term).into())
+                }
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlBigBigDirLangStringLiteral {
+                value_id,
+                language_id,
+            }
+            | EncodedTerm::LtrBigBigDirLangStringLiteral {
+                value_id,
+                language_id,
+            } => {
+                insert_str(value_id, literal.value())?;
+                if let Some(language) = literal.language() {
+                    insert_str(language_id, language)
+                } else {
+                    Err(CorruptionError::from_encoded_term(encoded, &term).into())
+                }
+            }
             EncodedTerm::SmallTypedLiteral { datatype_id, .. } => {
                 insert_str(datatype_id, literal.datatype().as_str())
             }
@@ -593,6 +848,9 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
             | EncodedTerm::DurationLiteral(..)
             | EncodedTerm::YearMonthDurationLiteral(..)
             | EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlSmallSmallDirLangStringLiteral { .. }
+            | EncodedTerm::LtrSmallSmallDirLangStringLiteral { .. } => Ok(()),
             _ => Err(CorruptionError::from_encoded_term(encoded, &term).into()),
         },
         #[cfg(feature = "rdf-star")]
@@ -813,6 +1071,80 @@ impl<S: StrLookup> Decoder for S {
             } => Ok(Literal::new_language_tagged_literal_unchecked(
                 get_required_str(self, value_id)?,
                 get_required_str(self, language_id)?,
+            )
+            .into()),
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::LtrSmallSmallDirLangStringLiteral { value, language } => {
+                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                    *value,
+                    *language,
+                    BaseDirection::Ltr,
+                )
+                .into())
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::LtrSmallBigDirLangStringLiteral { value, language_id } => {
+                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                    *value,
+                    get_required_str(self, language_id)?,
+                    BaseDirection::Ltr,
+                )
+                .into())
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::LtrBigSmallDirLangStringLiteral { value_id, language } => {
+                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                    get_required_str(self, value_id)?,
+                    *language,
+                    BaseDirection::Ltr,
+                )
+                .into())
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::LtrBigBigDirLangStringLiteral {
+                value_id,
+                language_id,
+            } => Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                get_required_str(self, value_id)?,
+                get_required_str(self, language_id)?,
+                BaseDirection::Ltr,
+            )
+            .into()),
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlSmallSmallDirLangStringLiteral { value, language } => {
+                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                    *value,
+                    *language,
+                    BaseDirection::Rtl,
+                )
+                .into())
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlSmallBigDirLangStringLiteral { value, language_id } => {
+                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                    *value,
+                    get_required_str(self, language_id)?,
+                    BaseDirection::Rtl,
+                )
+                .into())
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlBigSmallDirLangStringLiteral { value_id, language } => {
+                Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                    get_required_str(self, value_id)?,
+                    *language,
+                    BaseDirection::Rtl,
+                )
+                .into())
+            }
+            #[cfg(feature = "rdf-12")]
+            EncodedTerm::RtlBigBigDirLangStringLiteral {
+                value_id,
+                language_id,
+            } => Ok(Literal::new_directional_language_tagged_literal_unchecked(
+                get_required_str(self, value_id)?,
+                get_required_str(self, language_id)?,
+                BaseDirection::Rtl,
             )
             .into()),
             EncodedTerm::SmallTypedLiteral { value, datatype_id } => {
