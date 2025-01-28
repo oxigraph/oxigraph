@@ -254,6 +254,11 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
             | Function::Regex,
             _,
         ) => VariableType::LITERAL | VariableType::UNDEF,
+        #[cfg(feature = "sparql-12")]
+        Expression::FunctionCall(
+            Function::LangDir | Function::StrLangDir | Function::HasLang | Function::HasLangDir,
+            _,
+        ) => VariableType::LITERAL | VariableType::UNDEF,
         #[cfg(feature = "sep-0002")]
         Expression::FunctionCall(Function::Adjust, _) => {
             VariableType::LITERAL | VariableType::UNDEF

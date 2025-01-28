@@ -12,7 +12,7 @@ publish = false
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 json-event-parser.workspace = true
-oxigraph = { workspace = true, features = ["rdf-star"] }
+oxigraph = { workspace = true, features = ["rdf-star", "rdf-12"] }
 oxiri.workspace = true
 oxjsonld.workspace = true
 oxttl.workspace = true

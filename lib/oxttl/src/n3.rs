@@ -920,12 +920,12 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::PrefixExpectPrefix);
                             return self;
                         }
-                        N3Token::LangTag("prefix") => {
+                        N3Token::LangTag { language: "prefix", #[cfg(feature = "rdf-12")] direction: None } => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::PrefixExpectPrefix);
                             return self;
                         }
-                        N3Token::LangTag("base") => {
+                        N3Token::LangTag { language: "base" , #[cfg(feature = "rdf-12")] direction: None } => {
                             self.stack.push(N3State::N3DocExpectDot);
                             self.stack.push(N3State::BaseExpectIri);
                             return self;
@@ -1259,8 +1259,12 @@ impl RuleRecognizer for N3Recognizer {
                 }
                 N3State::LiteralPossibleSuffix { value } => {
                     match token {
-                        N3Token::LangTag(lang) => {
-                            self.terms.push(Literal::new_language_tagged_literal_unchecked(value, lang.to_ascii_lowercase()).into());
+                        N3Token::LangTag { language ,  #[cfg(feature = "rdf-12")]direction } => {
+                            #[cfg(feature = "rdf-12")]
+                            if direction.is_some() {
+                                return self.error(errors,"rdf:dirLangString is not supported in N3");
+                            }
+                            self.terms.push(Literal::new_language_tagged_literal_unchecked(value, language.to_ascii_lowercase()).into());
                             return self;
                         }
                         N3Token::Punctuation("^^") => {
@@ -1310,12 +1314,12 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::PrefixExpectPrefix);
                             return self;
                         }
-                        N3Token::LangTag("prefix") => {
+                        N3Token::LangTag { language: "prefix", #[cfg(feature = "rdf-12")] direction: None } => {
                             self.stack.push(N3State::FormulaContentExpectDot);
                             self.stack.push(N3State::PrefixExpectPrefix);
                             return self;
                         }
-                        N3Token::LangTag("base") => {
+                        N3Token::LangTag { language: "base" , #[cfg(feature = "rdf-12")] direction: None } => {
                             self.stack.push(N3State::FormulaContentExpectDot);
                             self.stack.push(N3State::BaseExpectIri);
                             return self;

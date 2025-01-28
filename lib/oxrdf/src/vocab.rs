@@ -10,13 +10,20 @@ pub mod rdf {
     /// The class of unordered containers.
     pub const BAG: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#Bag");
+    /// The class of language-tagged string literal values with a base direction.
+    #[cfg(feature = "rdf-12")]
+    pub const DIR_LANG_STRING: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString");
     /// The first item in the subject RDF list.
     pub const FIRST: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#first");
     /// The class of HTML literal values.
     pub const HTML: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#HTML");
-    /// The class of language-tagged string literal values.
+    /// The datatype of RDF literals storing JSON content.
+    #[cfg(feature = "rdf-12")]
+    pub const JSON: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON");
     pub const LANG_STRING: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString");
     /// The class of RDF lists.

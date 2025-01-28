@@ -18,6 +18,8 @@ pub mod vocab;
 pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
 pub use crate::dataset::Dataset;
 pub use crate::graph::Graph;
+#[cfg(feature = "rdf-12")]
+pub use crate::literal::BaseDirection;
 pub use crate::literal::{Literal, LiteralRef};
 pub use crate::named_node::{NamedNode, NamedNodeRef};
 pub use crate::parser::TermParseError;

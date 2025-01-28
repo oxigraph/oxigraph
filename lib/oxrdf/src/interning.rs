@@ -179,6 +179,12 @@ pub enum InternedLiteral {
         value_id: Key,
         language_id: Key,
     },
+    #[cfg(feature = "rdf-12")]
+    DirectionalLanguageTaggedString {
+        value_id: Key,
+        language_id: Key,
+        is_ltr: bool,
+    },
     TypedLiteral {
         value_id: Key,
         datatype: InternedNamedNode,
@@ -189,9 +195,18 @@ impl InternedLiteral {
     pub fn encoded_into(literal: LiteralRef<'_>, interner: &mut Interner) -> Self {
         let value_id = interner.get_or_intern(literal.value());
         if let Some(language) = literal.language() {
+            let language_id = interner.get_or_intern(language);
+            #[cfg(feature = "rdf-12")]
+            if let Some(direction) = literal.direction() {
+                return Self::DirectionalLanguageTaggedString {
+                    value_id,
+                    language_id,
+                    is_ltr: direction == BaseDirection::Ltr,
+                };
+            }
             Self::LanguageTaggedString {
                 value_id,
-                language_id: interner.get_or_intern(language),
+                language_id,
             }
         } else if literal.datatype() == xsd::STRING {
             Self::String { value_id }
@@ -206,9 +221,24 @@ impl InternedLiteral {
     pub fn encoded_from(literal: LiteralRef<'_>, interner: &Interner) -> Option<Self> {
         let value_id = interner.get(literal.value())?;
         Some(if let Some(language) = literal.language() {
+            let language_id = interner.get(language)?;
+            #[cfg(feature = "rdf-12")]
+            if let Some(direction) = literal.direction() {
+                Self::DirectionalLanguageTaggedString {
+                    value_id,
+                    language_id,
+                    is_ltr: direction == BaseDirection::Ltr,
+                }
+            } else {
+                Self::LanguageTaggedString {
+                    value_id,
+                    language_id,
+                }
+            }
+            #[cfg(not(feature = "rdf-12"))]
             Self::LanguageTaggedString {
                 value_id,
-                language_id: interner.get(language)?,
+                language_id,
             }
         } else if literal.datatype() == xsd::STRING {
             Self::String { value_id }
@@ -232,6 +262,20 @@ impl InternedLiteral {
                 interner.resolve(*value_id),
                 interner.resolve(*language_id),
             ),
+            #[cfg(feature = "rdf-12")]
+            Self::DirectionalLanguageTaggedString {
+                value_id,
+                language_id,
+                is_ltr,
+            } => LiteralRef::new_directional_language_tagged_literal_unchecked(
+                interner.resolve(*value_id),
+                interner.resolve(*language_id),
+                if *is_ltr {
+                    BaseDirection::Ltr
+                } else {
+                    BaseDirection::Rtl
+                },
+            ),
             Self::TypedLiteral { value_id, datatype } => LiteralRef::new_typed_literal(
                 interner.resolve(*value_id),
                 datatype.decode_from(interner),
@@ -250,6 +294,20 @@ impl InternedLiteral {
             } => Self::LanguageTaggedString {
                 value_id: *value_id,
                 language_id: language_id.next(),
+            },
+            #[cfg(feature = "rdf-12")]
+            Self::DirectionalLanguageTaggedString {
+                value_id,
+                language_id,
+                is_ltr,
+            } => Self::DirectionalLanguageTaggedString {
+                value_id: *value_id,
+                language_id: if *is_ltr {
+                    language_id.next()
+                } else {
+                    *language_id
+                },
+                is_ltr: !*is_ltr,
             },
             Self::TypedLiteral { value_id, datatype } => Self::TypedLiteral {
                 value_id: *value_id,

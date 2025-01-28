@@ -22,8 +22,6 @@ fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-star-03",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-star-bnode-1",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-star-nested-1",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-langdir-1",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-langdir-2",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-star-bad-09",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-star-bad-reified-1",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-star-bad-reified-2",
@@ -36,11 +34,7 @@ fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
 fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-quads/syntax/manifest.ttl",
-        &[
-            // TODO: RDF 1.2
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-quads/syntax#nquads-base-1",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-quads/syntax#nquads-base-2",
-        ],
+        &[],
     )
 }
 
@@ -49,7 +43,7 @@ fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
 fn rdf12_n_triples_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/c14n/manifest.ttl",
-        &["https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/c14n#dirlangtagged_string"],
+        &[],
     )
 }
 
@@ -76,8 +70,6 @@ fn rdf12_turtle_syntax_w3c_testsuite() -> Result<()> {
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax/manifest.ttl",
         &[
             // TODO: RDF 1.2
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#nt-ttl-base-1",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#nt-ttl-base-2",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle-star-3",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle-star-4",
             "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle-star-inside-3",
@@ -132,10 +124,7 @@ fn rdf11_trig_w3c_testsuite() -> Result<()> {
 fn rdf12_trig_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-trig/syntax/manifest.ttl",
-        &[
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-trig/syntax#trig-base-1",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-trig/syntax#trig-base-2",
-        ],
+        &[],
     )
 }
 

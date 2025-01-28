@@ -14,6 +14,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = []
+rdf-12 = []
 serde = ["dep:serde"]
 
 [dependencies]
