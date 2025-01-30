@@ -23,6 +23,7 @@
         <#string_line_jump_ttl>
         <#xml_multiple_objects>
         <#slightly_invalid_escape_sequence>
+        <#decimal_dot_vs_triple_dot>
 	) .
 
 <#no_end_line_jump>
@@ -120,3 +121,9 @@
 	rdf:type rdft:TestTurtleNegativeSyntax ;
 	mf:name "+ sign at the start of escape sequences" ;
 	mf:action <slightly_invalid_escape_sequence.ttl> .
+
+<#decimal_dot_vs_triple_dot>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "1. is not a decimal but 1 then a dot" ;
+	mf:action <decimal_dot_vs_triple_dot.ttl> ;
+	mf:result <decimal_dot_vs_triple_dot.nt> .
