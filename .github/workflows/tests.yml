@@ -274,8 +274,10 @@ jobs:
         with:
           target: wasm32-wasip1
       - uses: taiki-e/install-action@v2
-        with: { tool: "wasmtime,cargo-wasi" }
-      - run: cargo wasi test --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
+        with: { tool: "wasmtime" }
+      - run: cargo test --target wasm32-wasip1 --workspace --exclude oxigraph-js --exclude oxigraph-cli --exclude oxigraph-testsuite --exclude oxrocksdb-sys --exclude pyoxigraph
+        env:
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run
 
   rustdoc:
     runs-on: ubuntu-latest
