@@ -1340,7 +1340,7 @@ fn store_target(request: &Request) -> Result<Option<NamedGraphName>, HttpError> 
             match k.as_ref() {
                 "graph" => graph = Some(v.into_owned()),
                 "default" => default = true,
-                _ => continue,
+                _ => (),
             }
         }
         if let Some(graph) = graph {

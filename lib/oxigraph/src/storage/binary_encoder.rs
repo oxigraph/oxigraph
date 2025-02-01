@@ -4,6 +4,7 @@ use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
 use std::io::Read;
 use std::mem::size_of;
+use std::sync::Arc;
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 pub const LATEST_STORAGE_VERSION: u64 = 1;
@@ -310,89 +311,100 @@ impl<R: Read> TermReader for R {
                     value_id: StrHash::from_be_bytes(buffer),
                 })
             }
-            TYPE_BOOLEAN_LITERAL_TRUE => Ok(true.into()),
-            TYPE_BOOLEAN_LITERAL_FALSE => Ok(false.into()),
+            TYPE_BOOLEAN_LITERAL_TRUE => Ok(EncodedTerm::BooleanLiteral(true.into())),
+            TYPE_BOOLEAN_LITERAL_FALSE => Ok(EncodedTerm::BooleanLiteral(false.into())),
             TYPE_FLOAT_LITERAL => {
                 let mut buffer = [0; 4];
                 self.read_exact(&mut buffer)?;
-                Ok(Float::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::FloatLiteral(Float::from_be_bytes(buffer)))
             }
             TYPE_DOUBLE_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(Double::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::DoubleLiteral(Double::from_be_bytes(buffer)))
             }
             TYPE_INTEGER_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(Integer::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::IntegerLiteral(Integer::from_be_bytes(buffer)))
             }
             TYPE_DECIMAL_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(Decimal::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::DecimalLiteral(Decimal::from_be_bytes(buffer)))
             }
             TYPE_DATE_TIME_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(DateTime::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::DateTimeLiteral(DateTime::from_be_bytes(
+                    buffer,
+                )))
             }
             TYPE_TIME_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(Time::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::TimeLiteral(Time::from_be_bytes(buffer)))
             }
             TYPE_DATE_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(Date::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::DateLiteral(Date::from_be_bytes(buffer)))
             }
             TYPE_G_YEAR_MONTH_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(GYearMonth::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::GYearMonthLiteral(GYearMonth::from_be_bytes(
+                    buffer,
+                )))
             }
             TYPE_G_YEAR_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(GYear::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::GYearLiteral(GYear::from_be_bytes(buffer)))
             }
             TYPE_G_MONTH_DAY_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(GMonthDay::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::GMonthDayLiteral(GMonthDay::from_be_bytes(
+                    buffer,
+                )))
             }
             TYPE_G_DAY_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(GDay::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::GDayLiteral(GDay::from_be_bytes(buffer)))
             }
             TYPE_G_MONTH_LITERAL => {
                 let mut buffer = [0; 18];
                 self.read_exact(&mut buffer)?;
-                Ok(GMonth::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::GMonthLiteral(GMonth::from_be_bytes(buffer)))
             }
             TYPE_DURATION_LITERAL => {
                 let mut buffer = [0; 24];
                 self.read_exact(&mut buffer)?;
-                Ok(Duration::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::DurationLiteral(Duration::from_be_bytes(
+                    buffer,
+                )))
             }
             TYPE_YEAR_MONTH_DURATION_LITERAL => {
                 let mut buffer = [0; 8];
                 self.read_exact(&mut buffer)?;
-                Ok(YearMonthDuration::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::YearMonthDurationLiteral(
+                    YearMonthDuration::from_be_bytes(buffer),
+                ))
             }
             TYPE_DAY_TIME_DURATION_LITERAL => {
                 let mut buffer = [0; 16];
                 self.read_exact(&mut buffer)?;
-                Ok(DayTimeDuration::from_be_bytes(buffer).into())
+                Ok(EncodedTerm::DayTimeDurationLiteral(
+                    DayTimeDuration::from_be_bytes(buffer),
+                ))
             }
-            TYPE_TRIPLE => Ok(EncodedTriple {
+            TYPE_TRIPLE => Ok(EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.read_term()?,
                 predicate: self.read_term()?,
                 object: self.read_term()?,
-            }
-            .into()),
+            }))),
             _ => Err(CorruptionError::msg("the term buffer has an invalid type id").into()),
         }
     }
@@ -684,8 +696,11 @@ mod tests {
             Literal::new_simple_literal("literal").into(),
             BlankNode::new_unchecked("foo-literal-thisisaverylargestringliteral").into(),
             Literal::from(true).into(),
-            Literal::from(1.2).into(),
+            Literal::from(false).into(),
             Literal::from(1).into(),
+            Literal::from(Decimal::from(1)).into(),
+            Literal::from(1.2_f32).into(),
+            Literal::from(1.2_f64).into(),
             Literal::from("foo-string").into(),
             Literal::new_language_tagged_literal_unchecked("foo-fr", "fr").into(),
             Literal::new_language_tagged_literal_unchecked(
