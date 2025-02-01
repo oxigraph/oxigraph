@@ -1904,7 +1904,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     for child in &*children {
                         match child(tuple) {
                             Some(true) => return Some(true.into()),
-                            Some(false) => continue,
+                            Some(false) => (),
                             None => error = true,
                         }
                     }
@@ -1930,7 +1930,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     let mut error = false;
                     for child in &*children {
                         match child(tuple) {
-                            Some(true) => continue,
+                            Some(true) => (),
                             Some(false) => return Some(false.into()),
                             None => error = true,
                         }

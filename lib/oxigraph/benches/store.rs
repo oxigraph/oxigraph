@@ -257,7 +257,7 @@ criterion_main!(parse, store);
 
 fn read_bz2_data(url: &str) -> Vec<u8> {
     let url = Url::parse(url).unwrap();
-    let file_name = url.path_segments().unwrap().last().unwrap().to_owned();
+    let file_name = url.path_segments().unwrap().next_back().unwrap().to_owned();
     if !Path::new(&file_name).exists() {
         let client = oxhttp::Client::new().with_redirection_limit(5);
         let request = Request::builder(Method::GET, url.clone()).build();

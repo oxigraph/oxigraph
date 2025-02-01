@@ -11,6 +11,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
+use std::sync::Arc;
 
 pub struct DatasetView {
     reader: StorageReader,
@@ -271,12 +272,11 @@ impl QueryableDataset for DatasetView {
             ExpressionTerm::DayTimeDurationLiteral(value) => {
                 EncodedTerm::DayTimeDurationLiteral(value)
             }
-            ExpressionTerm::Triple(t) => EncodedTriple {
+            ExpressionTerm::Triple(t) => EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.internalize_expression_term(t.subject.into())?,
                 predicate: self.internalize_expression_term(t.predicate.into())?,
                 object: self.internalize_expression_term(t.object)?,
-            }
-            .into(),
+            })),
             _ => self.internalize_term(term.into())?, // No fast path
         })
     }
