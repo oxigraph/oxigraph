@@ -1,5 +1,6 @@
-use serde::{Deserialize, Deserializer, Serialize};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize};
 use crate::blank_node::BlankNode;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
@@ -154,12 +155,13 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
 }
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 pub enum Subject {
-    #[serde(rename = "uri")]
+    #[cfg_attr(feature = "serde", serde(rename = "uri"))]
     NamedNode(NamedNode),
-    #[serde(rename = "bnode")]
+    #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNode),
     #[cfg(feature = "rdf-star")]
     Triple(Box<Triple>),
@@ -388,15 +390,16 @@ impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
 /// An owned RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 pub enum Term {
-    #[serde(rename = "uri")]
+    #[cfg_attr(feature = "serde", serde(rename = "uri"))]
     NamedNode(NamedNode),
-    #[serde(rename = "bnode")]
+    #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNode),
     Literal(Literal),
-    #[cfg(feature = "rdf-star")]
+    #[cfg_attr(feature = "serde", cfg(feature = "rdf-star"))]
     Triple(Box<Triple>),
 }
 
@@ -787,20 +790,22 @@ impl<'a> From<TermRef<'a>> for Term {
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
-    #[serde(serialize_with = "subject_serialise", deserialize_with = "subject_deserialize")]
+    #[cfg_attr(feature = "serde", serde(serialize_with = "subject_serialise", deserialize_with = "subject_deserialize"))]
     pub subject: Subject,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
-    #[serde(serialize_with = "predicate_serialise", deserialize_with = "predicate_deserialize")]
+    #[cfg_attr(feature = "serde", serde(serialize_with = "predicate_serialise", deserialize_with = "predicate_deserialize"))]
     pub predicate: NamedNode,
 
     /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
     pub object: Term,
 }
 
+#[cfg(feature = "serde")]
 fn predicate_serialise<S>(predicate: &NamedNode, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -809,6 +814,7 @@ where
     Term::serialize(&term, serializer)
 }
 
+#[cfg(feature = "serde")]
 fn predicate_deserialize<'de, D>(deserializer: D) -> Result<NamedNode, D::Error>
 where
     D: Deserializer<'de>,
@@ -816,6 +822,7 @@ where
     Term::deserialize(deserializer).and_then(|term| NamedNode::try_from(term).map_err(serde::de::Error::custom))
 }
 
+#[cfg(feature = "serde")]
 fn subject_serialise<S>(subject: &Subject, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -824,6 +831,7 @@ where
     Term::serialize(&term, serializer)
 }
 
+#[cfg(feature = "serde")]
 fn subject_deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
@@ -1371,6 +1379,7 @@ impl TryFromTermError {
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
+    #[cfg(feature = "serde")]
     use serde_json::json;
 
     use super::*;
@@ -1432,6 +1441,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serde_term_namednode() -> Result<(), serde_json::Error> {
         let term = Term::NamedNode(NamedNode::new_unchecked("http://example.com/s"));
         let jsn = serde_json::to_string(&term)?;
@@ -1449,6 +1459,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serde_term_literal() -> Result<(), serde_json::Error> {
         let term = Term::Literal(Literal::new_simple_literal("foo"));
         let jsn = serde_json::to_string(&term)?;
@@ -1466,6 +1477,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serde_term_bnode() -> Result<(), serde_json::Error> {
         let term = Term::BlankNode(BlankNode::new("foo").unwrap());
         let jsn = serde_json::to_string(&term)?;
@@ -1483,6 +1495,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serde() -> Result<(), serde_json::Error> {
         let triple = Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
@@ -1529,6 +1542,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     #[cfg(feature = "rdf-star")]
     fn serde_star() -> Result<(), serde_json::Error> {
         

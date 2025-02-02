@@ -3,8 +3,8 @@ use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
-use serde::ser::SerializeMap;
-use serde::{Deserialize, Serialize, de::Deserializer, ser::Serializer};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize, de::Deserializer, ser::{Serializer, SerializeMap}};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -33,26 +33,29 @@ use std::fmt::Write;
 /// );
 /// # Result::<_, LanguageTagParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Literal(LiteralContent);
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
 enum LiteralContent {
     LanguageTaggedString {
         value: String,
-        #[serde(rename = "xml:lang")]
+        #[cfg_attr(feature = "serde", serde(rename = "xml:lang"))]
         language: String,
     },
     TypedLiteral {
         value: String,
-        #[serde(serialize_with = "get_iri", deserialize_with="set_iri")]
+        #[cfg_attr(feature = "serde", serde(serialize_with = "get_iri", deserialize_with="set_iri"))]
         datatype: NamedNode,
     },
-    #[serde(serialize_with = "serialize_string_variant", deserialize_with = "deserialize_string_variant")]
+    #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_string_variant", deserialize_with = "deserialize_string_variant"))]
     String(String),
 }
 
+#[cfg(feature = "serde")]
 fn serialize_string_variant<S>(s: &String, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -63,6 +66,7 @@ where
     map.end()
 }
 
+#[cfg(feature = "serde")]
 fn get_iri<S>(iri: &NamedNode, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -70,6 +74,7 @@ where
     serializer.serialize_str(&iri.as_str())
 }
 
+#[cfg(feature = "serde")]
 fn set_iri<'de, D>(deserializer: D) -> Result<NamedNode, D::Error>
 where
     D: Deserializer<'de>,
@@ -78,6 +83,7 @@ where
     Ok(NamedNode::new_unchecked(iri))
 }
 
+#[cfg(feature = "serde")]
 fn deserialize_string_variant<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
@@ -719,6 +725,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn test_serde() {
         let j = serde_json::to_string(&Literal::new_simple_literal("foo")).unwrap();
 

@@ -16,6 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = []
+serde = []
 
 [dependencies]
 oxilangtag.workspace = true
