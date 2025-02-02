@@ -16,6 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = ["oxrdf/rdf-star"]
+sparql-12 = ["oxrdf/rdf-12"]
 async-tokio = ["dep:tokio", "quick-xml/async-tokio", "json-event-parser/async-tokio"]
 
 [dependencies]

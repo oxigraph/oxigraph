@@ -79,12 +79,20 @@ impl RuleRecognizer for TriGRecognizer {
                             self.stack.push(TriGState::PrefixExpectPrefix);
                             self
                         }
-                        N3Token::LangTag("prefix") => {
+                        N3Token::LangTag {
+                            language: "prefix",
+                            #[cfg(feature = "rdf-12")]
+                                base_direction: None,
+                        } => {
                             self.stack.push(TriGState::ExpectDot);
                             self.stack.push(TriGState::PrefixExpectPrefix);
                             self
                         }
-                        N3Token::LangTag("base") => {
+                        N3Token::LangTag {
+                            language: "base",
+                            #[cfg(feature = "rdf-12")]
+                                base_direction: None,
+                        } => {
                             self.stack.push(TriGState::ExpectDot);
                             self.stack.push(TriGState::BaseExpectIri);
                             self
@@ -698,11 +706,37 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                 }
                 TriGState::LiteralPossibleSuffix { value, emit } => match token {
-                    N3Token::LangTag(lang) => {
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::LangTag {
+                        language,
+                        base_direction,
+                    } => {
+                        self.cur_object.push(
+                            if let Some(base_direction) = base_direction {
+                                Literal::new_directional_language_tagged_literal_unchecked(
+                                    value,
+                                    language.to_ascii_lowercase(),
+                                    base_direction,
+                                )
+                            } else {
+                                Literal::new_language_tagged_literal_unchecked(
+                                    value,
+                                    language.to_ascii_lowercase(),
+                                )
+                            }
+                            .into(),
+                        );
+                        if emit {
+                            self.emit_quad(results);
+                        }
+                        self
+                    }
+                    #[cfg(not(feature = "rdf-12"))]
+                    N3Token::LangTag { language } => {
                         self.cur_object.push(
                             Literal::new_language_tagged_literal_unchecked(
                                 value,
-                                lang.to_ascii_lowercase(),
+                                language.to_ascii_lowercase(),
                             )
                             .into(),
                         );

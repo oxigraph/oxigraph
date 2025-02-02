@@ -311,6 +311,13 @@ fn write_tsv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
                 write_tsv_quoted_str(output, value);
                 output.push('@');
                 output.push_str(language);
+                #[cfg(feature = "sparql-12")]
+                if let Some(base_direction) = literal.base_direction() {
+                    output.push_str(match base_direction {
+                        BaseDirection::Ltr => "--ltr",
+                        BaseDirection::Rtl => "--rtl",
+                    })
+                }
             } else {
                 match literal.datatype() {
                     xsd::BOOLEAN if is_turtle_boolean(value) => output.push_str(value),
@@ -858,6 +865,18 @@ mod tests {
                     None,
                     Some(Literal::new_simple_literal("escape,\t\r\n").into()),
                 ],
+                #[cfg(feature = "sparql-12")]
+                vec![
+                    None,
+                    Some(
+                        Literal::new_directional_language_tagged_literal_unchecked(
+                            "String-with-dir",
+                            "en",
+                            BaseDirection::Ltr,
+                        )
+                        .into(),
+                    ),
+                ],
             ],
         )
     }
@@ -876,7 +895,13 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             );
         }
-        assert_eq!(buffer, "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"\r\n");
+        #[cfg_attr(not(feature = "sparql-12"), allow(unused_mut))]
+        let mut expected = "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"\r\n".to_owned();
+        #[cfg(feature = "sparql-12")]
+        {
+            expected.push_str(",String-with-dir\r\n")
+        }
+        assert_eq!(buffer, expected);
     }
 
     #[test]
@@ -895,7 +920,13 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             );
         }
-        assert_eq!(buffer, "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n");
+        #[cfg_attr(not(feature = "sparql-12"), allow(unused_mut))]
+        let mut expected = "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n".to_owned();
+        #[cfg(feature = "sparql-12")]
+        {
+            expected.push_str("\t\"String-with-dir\"@en--ltr\n")
+        }
+        assert_eq!(buffer, expected);
 
         // Read
         if let SliceTsvQueryResultsParserOutput::Solutions {

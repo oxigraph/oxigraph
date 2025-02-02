@@ -1,7 +1,7 @@
 //! Implementation of [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/)
 
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
-use oxrdf::vocab::rdf;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
 use quick_xml::escape::{escape, unescape};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
@@ -196,7 +196,20 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
             let mut start = BytesStart::new("literal");
             if let Some(language) = literal.language() {
                 start.push_attribute(("xml:lang", language));
-            } else if !literal.is_plain() {
+                #[cfg(feature = "sparql-12")]
+                if let Some(base_direction) = literal.base_direction() {
+                    start.push_attribute((
+                        "its:dir",
+                        match base_direction {
+                            BaseDirection::Ltr => "ltr",
+                            BaseDirection::Rtl => "rtl",
+                        },
+                    ));
+                    // TODO: put it in the root?
+                    start.push_attribute(("xmlns:its", "http://www.w3.org/2005/11/its"));
+                    start.push_attribute(("its:version", "2.0"));
+                }
+            } else if literal.datatype() != xsd::STRING {
                 start.push_attribute(("datatype", literal.datatype().as_str()))
             }
             output.push(Event::Start(start));
@@ -528,6 +541,8 @@ impl XmlInnerQueryResultsParser {
                                 current_var: None,
                                 term: None,
                                 lang: None,
+                                #[cfg(feature = "sparql-12")]
+                                base_direction:None,
                                 datatype: None,
                                 subject_stack: Vec::new(),
                                 predicate_stack: Vec::new(),
@@ -603,6 +618,8 @@ struct XmlInnerSolutionsParser {
     current_var: Option<String>,
     term: Option<Term>,
     lang: Option<String>,
+    #[cfg(feature = "sparql-12")]
+    base_direction: Option<String>,
     datatype: Option<NamedNode>,
     subject_stack: Vec<Term>,
     predicate_stack: Vec<Term>,
@@ -686,6 +703,12 @@ impl XmlInnerSolutionsParser {
                                         ))
                                     })?);
                             }
+                            #[cfg(feature = "sparql-12")]
+                            if attr.key.as_ref() == b"its:dir" {
+                                self.base_direction = Some(
+                                    unescape(&self.decoder.decode(&attr.value)?)?.into_owned(),
+                                );
+                            }
                         }
                         self.state_stack.push(State::Literal);
                         Ok(None)
@@ -763,7 +786,14 @@ impl XmlInnerSolutionsParser {
                     }
                     Some(State::Literal) => {
                         self.term = Some(
-                            build_literal(data, self.lang.take(), self.datatype.take())?.into(),
+                            build_literal(
+                                data,
+                                self.lang.take(),
+                                #[cfg(feature = "sparql-12")]
+                                self.base_direction.take(),
+                                self.datatype.take(),
+                            )?
+                            .into(),
                         );
                         Ok(None)
                     }
@@ -823,8 +853,16 @@ impl XmlInnerSolutionsParser {
                 State::Literal => {
                     if self.term.is_none() {
                         // We default to the empty literal
-                        self.term =
-                            Some(build_literal("", self.lang.take(), self.datatype.take())?.into())
+                        self.term = Some(
+                            build_literal(
+                                "",
+                                self.lang.take(),
+                                #[cfg(feature = "sparql-12")]
+                                self.base_direction.take(),
+                                self.datatype.take(),
+                            )?
+                            .into(),
+                        )
                     }
                     Ok(None)
                 }
@@ -892,27 +930,58 @@ impl XmlInnerSolutionsParser {
 fn build_literal(
     value: impl Into<String>,
     lang: Option<String>,
+    #[cfg(feature = "sparql-12")] base_direction: Option<String>,
     datatype: Option<NamedNode>,
-) -> Result<Literal, QueryResultsParseError> {
-    match lang {
-        Some(lang) => {
+) -> Result<Literal, QueryResultsSyntaxError> {
+    if let Some(lang) = lang {
+        #[cfg(feature = "sparql-12")]
+        if let Some(base_direction) = base_direction {
             if let Some(datatype) = datatype {
-                if datatype.as_ref() != rdf::LANG_STRING {
+                if datatype.as_ref() != rdf::DIR_LANG_STRING {
                     return Err(QueryResultsSyntaxError::msg(format!(
-                        "xml:lang value '{lang}' provided with the datatype {datatype}"
-                    ))
-                    .into());
+                        "its:dir value '{base_direction}' provided with the datatype {datatype}"
+                    )));
                 }
             }
-            Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
-                QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}")).into()
-            })
+            return Literal::new_directional_language_tagged_literal(
+                value,
+                &lang,
+                match base_direction.as_str() {
+                    "ltr" => BaseDirection::Ltr,
+                    "rtl" => BaseDirection::Rtl,
+                    _ => {
+                        return Err(QueryResultsSyntaxError::msg(format!(
+                            "Invalid its:dir value '{base_direction}', expecting 'ltr' or 'rtl'"
+                        )))
+                    }
+                },
+            )
+            .map_err(|e| {
+                QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
+            });
         }
-        None => Ok(if let Some(datatype) = datatype {
+        if let Some(datatype) = datatype {
+            if datatype.as_ref() != rdf::LANG_STRING {
+                return Err(QueryResultsSyntaxError::msg(format!(
+                    "xml:lang value '{lang}' provided with the datatype {datatype}"
+                )));
+            }
+        }
+        Literal::new_language_tagged_literal(value, &lang).map_err(|e| {
+            QueryResultsSyntaxError::msg(format!("Invalid xml:lang value '{lang}': {e}"))
+        })
+    } else {
+        #[cfg(feature = "sparql-12")]
+        if base_direction.is_some() {
+            return Err(QueryResultsSyntaxError::msg(
+                "its:dir can only be present alongside xml:lang",
+            ));
+        }
+        Ok(if let Some(datatype) = datatype {
             Literal::new_typed_literal(value, datatype)
         } else {
             Literal::new_simple_literal(value)
-        }),
+        })
     }
 }
 
