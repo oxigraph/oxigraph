@@ -7,6 +7,7 @@ use oxsdatatypes::*;
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::mem::discriminant;
 use std::str;
 use std::sync::Arc;
 
@@ -105,110 +106,111 @@ pub enum EncodedTerm {
 
 impl PartialEq for EncodedTerm {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::DefaultGraph, Self::DefaultGraph) => true,
-            (Self::NamedNode { iri_id: iri_id_a }, Self::NamedNode { iri_id: iri_id_b }) => {
-                iri_id_a == iri_id_b
+        discriminant(self) == discriminant(other)
+            && match (self, other) {
+                (Self::DefaultGraph, Self::DefaultGraph) => true,
+                (Self::NamedNode { iri_id: iri_id_a }, Self::NamedNode { iri_id: iri_id_b }) => {
+                    iri_id_a == iri_id_b
+                }
+                (Self::NumericalBlankNode { id: id_a }, Self::NumericalBlankNode { id: id_b }) => {
+                    id_a == id_b
+                }
+                (Self::SmallBlankNode(id_a), Self::SmallBlankNode(id_b)) => id_a == id_b,
+                (Self::BigBlankNode { id_id: id_a }, Self::BigBlankNode { id_id: id_b }) => {
+                    id_a == id_b
+                }
+                (Self::SmallStringLiteral(a), Self::SmallStringLiteral(b)) => a == b,
+                (
+                    Self::BigStringLiteral {
+                        value_id: value_id_a,
+                    },
+                    Self::BigStringLiteral {
+                        value_id: value_id_b,
+                    },
+                ) => value_id_a == value_id_b,
+                (
+                    Self::SmallSmallLangStringLiteral {
+                        value: value_a,
+                        language: language_a,
+                    },
+                    Self::SmallSmallLangStringLiteral {
+                        value: value_b,
+                        language: language_b,
+                    },
+                ) => value_a == value_b && language_a == language_b,
+                (
+                    Self::SmallBigLangStringLiteral {
+                        value: value_a,
+                        language_id: language_id_a,
+                    },
+                    Self::SmallBigLangStringLiteral {
+                        value: value_b,
+                        language_id: language_id_b,
+                    },
+                ) => value_a == value_b && language_id_a == language_id_b,
+                (
+                    Self::BigSmallLangStringLiteral {
+                        value_id: value_id_a,
+                        language: language_a,
+                    },
+                    Self::BigSmallLangStringLiteral {
+                        value_id: value_id_b,
+                        language: language_b,
+                    },
+                ) => value_id_a == value_id_b && language_a == language_b,
+                (
+                    Self::BigBigLangStringLiteral {
+                        value_id: value_id_a,
+                        language_id: language_id_a,
+                    },
+                    Self::BigBigLangStringLiteral {
+                        value_id: value_id_b,
+                        language_id: language_id_b,
+                    },
+                ) => value_id_a == value_id_b && language_id_a == language_id_b,
+                (
+                    Self::SmallTypedLiteral {
+                        value: value_a,
+                        datatype_id: datatype_id_a,
+                    },
+                    Self::SmallTypedLiteral {
+                        value: value_b,
+                        datatype_id: datatype_id_b,
+                    },
+                ) => value_a == value_b && datatype_id_a == datatype_id_b,
+                (
+                    Self::BigTypedLiteral {
+                        value_id: value_id_a,
+                        datatype_id: datatype_id_a,
+                    },
+                    Self::BigTypedLiteral {
+                        value_id: value_id_b,
+                        datatype_id: datatype_id_b,
+                    },
+                ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
+                (Self::BooleanLiteral(a), Self::BooleanLiteral(b)) => a == b,
+                (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a.is_identical_with(*b),
+                (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a.is_identical_with(*b),
+                (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a.is_identical_with(*b),
+                (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a.is_identical_with(*b),
+                (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a.is_identical_with(*b),
+                (Self::TimeLiteral(a), Self::TimeLiteral(b)) => a.is_identical_with(*b),
+                (Self::DateLiteral(a), Self::DateLiteral(b)) => a.is_identical_with(*b),
+                (Self::GYearMonthLiteral(a), Self::GYearMonthLiteral(b)) => a.is_identical_with(*b),
+                (Self::GYearLiteral(a), Self::GYearLiteral(b)) => a.is_identical_with(*b),
+                (Self::GMonthDayLiteral(a), Self::GMonthDayLiteral(b)) => a.is_identical_with(*b),
+                (Self::GMonthLiteral(a), Self::GMonthLiteral(b)) => a.is_identical_with(*b),
+                (Self::GDayLiteral(a), Self::GDayLiteral(b)) => a.is_identical_with(*b),
+                (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a.is_identical_with(*b),
+                (Self::YearMonthDurationLiteral(a), Self::YearMonthDurationLiteral(b)) => {
+                    a.is_identical_with(*b)
+                }
+                (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => {
+                    a.is_identical_with(*b)
+                }
+                (Self::Triple(a), Self::Triple(b)) => a == b,
+                (_, _) => unreachable!(),
             }
-            (Self::NumericalBlankNode { id: id_a }, Self::NumericalBlankNode { id: id_b }) => {
-                id_a == id_b
-            }
-            (Self::SmallBlankNode(id_a), Self::SmallBlankNode(id_b)) => id_a == id_b,
-            (Self::BigBlankNode { id_id: id_a }, Self::BigBlankNode { id_id: id_b }) => {
-                id_a == id_b
-            }
-            (Self::SmallStringLiteral(a), Self::SmallStringLiteral(b)) => a == b,
-            (
-                Self::BigStringLiteral {
-                    value_id: value_id_a,
-                },
-                Self::BigStringLiteral {
-                    value_id: value_id_b,
-                },
-            ) => value_id_a == value_id_b,
-            (
-                Self::SmallSmallLangStringLiteral {
-                    value: value_a,
-                    language: language_a,
-                },
-                Self::SmallSmallLangStringLiteral {
-                    value: value_b,
-                    language: language_b,
-                },
-            ) => value_a == value_b && language_a == language_b,
-            (
-                Self::SmallBigLangStringLiteral {
-                    value: value_a,
-                    language_id: language_id_a,
-                },
-                Self::SmallBigLangStringLiteral {
-                    value: value_b,
-                    language_id: language_id_b,
-                },
-            ) => value_a == value_b && language_id_a == language_id_b,
-            (
-                Self::BigSmallLangStringLiteral {
-                    value_id: value_id_a,
-                    language: language_a,
-                },
-                Self::BigSmallLangStringLiteral {
-                    value_id: value_id_b,
-                    language: language_b,
-                },
-            ) => value_id_a == value_id_b && language_a == language_b,
-            (
-                Self::BigBigLangStringLiteral {
-                    value_id: value_id_a,
-                    language_id: language_id_a,
-                },
-                Self::BigBigLangStringLiteral {
-                    value_id: value_id_b,
-                    language_id: language_id_b,
-                },
-            ) => value_id_a == value_id_b && language_id_a == language_id_b,
-            (
-                Self::SmallTypedLiteral {
-                    value: value_a,
-                    datatype_id: datatype_id_a,
-                },
-                Self::SmallTypedLiteral {
-                    value: value_b,
-                    datatype_id: datatype_id_b,
-                },
-            ) => value_a == value_b && datatype_id_a == datatype_id_b,
-            (
-                Self::BigTypedLiteral {
-                    value_id: value_id_a,
-                    datatype_id: datatype_id_a,
-                },
-                Self::BigTypedLiteral {
-                    value_id: value_id_b,
-                    datatype_id: datatype_id_b,
-                },
-            ) => value_id_a == value_id_b && datatype_id_a == datatype_id_b,
-            (Self::BooleanLiteral(a), Self::BooleanLiteral(b)) => a == b,
-            (Self::FloatLiteral(a), Self::FloatLiteral(b)) => a.is_identical_with(*b),
-            (Self::DoubleLiteral(a), Self::DoubleLiteral(b)) => a.is_identical_with(*b),
-            (Self::IntegerLiteral(a), Self::IntegerLiteral(b)) => a.is_identical_with(*b),
-            (Self::DecimalLiteral(a), Self::DecimalLiteral(b)) => a.is_identical_with(*b),
-            (Self::DateTimeLiteral(a), Self::DateTimeLiteral(b)) => a.is_identical_with(*b),
-            (Self::TimeLiteral(a), Self::TimeLiteral(b)) => a.is_identical_with(*b),
-            (Self::DateLiteral(a), Self::DateLiteral(b)) => a.is_identical_with(*b),
-            (Self::GYearMonthLiteral(a), Self::GYearMonthLiteral(b)) => a.is_identical_with(*b),
-            (Self::GYearLiteral(a), Self::GYearLiteral(b)) => a.is_identical_with(*b),
-            (Self::GMonthDayLiteral(a), Self::GMonthDayLiteral(b)) => a.is_identical_with(*b),
-            (Self::GMonthLiteral(a), Self::GMonthLiteral(b)) => a.is_identical_with(*b),
-            (Self::GDayLiteral(a), Self::GDayLiteral(b)) => a.is_identical_with(*b),
-            (Self::DurationLiteral(a), Self::DurationLiteral(b)) => a.is_identical_with(*b),
-            (Self::YearMonthDurationLiteral(a), Self::YearMonthDurationLiteral(b)) => {
-                a.is_identical_with(*b)
-            }
-            (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => {
-                a.is_identical_with(*b)
-            }
-            (Self::Triple(a), Self::Triple(b)) => a == b,
-            (_, _) => false,
-        }
     }
 }
 
@@ -216,6 +218,7 @@ impl Eq for EncodedTerm {}
 
 impl Hash for EncodedTerm {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        discriminant(self).hash(state);
         match self {
             Self::NamedNode { iri_id } => iri_id.hash(state),
             Self::NumericalBlankNode { id } => id.hash(state),
