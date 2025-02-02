@@ -4,7 +4,11 @@ use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize, de::Deserializer, ser::{Serializer, SerializeMap}};
+use serde::{
+    de::Deserializer,
+    ser::{SerializeMap, Serializer},
+    Deserialize, Serialize,
+};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -48,10 +52,19 @@ enum LiteralContent {
     },
     TypedLiteral {
         value: String,
-        #[cfg_attr(feature = "serde", serde(serialize_with = "get_iri", deserialize_with="set_iri"))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(serialize_with = "get_iri", deserialize_with = "set_iri")
+        )]
         datatype: NamedNode,
     },
-    #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_string_variant", deserialize_with = "deserialize_string_variant"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            serialize_with = "serialize_string_variant",
+            deserialize_with = "deserialize_string_variant"
+        )
+    )]
     String(String),
 }
 
@@ -737,7 +750,10 @@ mod tests {
 
         let j = serde_json::to_string(&Literal::new_typed_literal("true", xsd::BOOLEAN)).unwrap();
 
-        assert_eq!("{\"value\":\"true\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}", j);
+        assert_eq!(
+            "{\"value\":\"true\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",
+            j
+        );
 
         let mut de = serde_json::Deserializer::from_str(&j);
         let node: Literal = Deserialize::deserialize(&mut de).unwrap();

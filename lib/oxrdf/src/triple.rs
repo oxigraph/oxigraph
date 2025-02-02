@@ -1,10 +1,9 @@
-
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize};
 use crate::blank_node::BlankNode;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
 use crate::{BlankNodeRef, LiteralRef, NamedNodeRef};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
@@ -794,11 +793,23 @@ impl<'a> From<TermRef<'a>> for Term {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
-    #[cfg_attr(feature = "serde", serde(serialize_with = "subject_serialise", deserialize_with = "subject_deserialize"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            serialize_with = "subject_serialise",
+            deserialize_with = "subject_deserialize"
+        )
+    )]
     pub subject: Subject,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
-    #[cfg_attr(feature = "serde", serde(serialize_with = "predicate_serialise", deserialize_with = "predicate_deserialize"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            serialize_with = "predicate_serialise",
+            deserialize_with = "predicate_deserialize"
+        )
+    )]
     pub predicate: NamedNode,
 
     /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
@@ -819,7 +830,8 @@ fn predicate_deserialize<'de, D>(deserializer: D) -> Result<NamedNode, D::Error>
 where
     D: Deserializer<'de>,
 {
-    Term::deserialize(deserializer).and_then(|term| NamedNode::try_from(term).map_err(serde::de::Error::custom))
+    Term::deserialize(deserializer)
+        .and_then(|term| NamedNode::try_from(term).map_err(serde::de::Error::custom))
 }
 
 #[cfg(feature = "serde")]
@@ -837,7 +849,8 @@ where
     D: Deserializer<'de>,
     T: TryFrom<Term, Error = TryFromTermError>,
 {
-    Term::deserialize(deserializer).and_then(|term| T::try_from(term).map_err(serde::de::Error::custom))
+    Term::deserialize(deserializer)
+        .and_then(|term| T::try_from(term).map_err(serde::de::Error::custom))
 }
 
 impl Triple {
@@ -1545,7 +1558,6 @@ mod tests {
     #[cfg(feature = "serde")]
     #[cfg(feature = "rdf-star")]
     fn serde_star() -> Result<(), serde_json::Error> {
-        
         let triple = Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),

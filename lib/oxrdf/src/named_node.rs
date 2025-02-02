@@ -19,7 +19,7 @@ use std::fmt;
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NamedNode {
-    #[cfg_attr(feature = "serde", serde(rename="value"))]
+    #[cfg_attr(feature = "serde", serde(rename = "value"))]
     iri: String,
 }
 
@@ -251,6 +251,9 @@ mod tests {
         let deserialized = NamedNode::deserialize(&mut de);
 
         assert!(deserialized.is_ok());
-        assert_eq!(deserialized.unwrap(), NamedNode::new("http://example.org/").unwrap());
+        assert_eq!(
+            deserialized.unwrap(),
+            NamedNode::new("http://example.org/").unwrap()
+        );
     }
 }
