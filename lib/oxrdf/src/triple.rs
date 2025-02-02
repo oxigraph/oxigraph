@@ -1432,7 +1432,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_term() -> Result<(), serde_json::Error> {
+    fn serde_term_namednode() -> Result<(), serde_json::Error> {
         let term = Term::NamedNode(NamedNode::new_unchecked("http://example.com/s"));
         let jsn = serde_json::to_string(&term)?;
         assert_eq!(
@@ -1440,6 +1440,40 @@ mod tests {
             json!({
                 "type": "uri",
                 "value": "http://example.com/s"
+            })
+            .to_string()
+        );
+        let deserialized: Term = serde_json::from_str(&jsn)?;
+        assert_eq!(deserialized, term);
+        Ok(())
+    }
+
+    #[test]
+    fn serde_term_literal() -> Result<(), serde_json::Error> {
+        let term = Term::Literal(Literal::new_simple_literal("foo"));
+        let jsn = serde_json::to_string(&term)?;
+        assert_eq!(
+            jsn,
+            json!({
+                "type": "literal",
+                "value": "foo"
+            })
+            .to_string()
+        );
+        let deserialized: Term = serde_json::from_str(&jsn)?;
+        assert_eq!(deserialized, term);
+        Ok(())
+    }
+
+    #[test]
+    fn serde_term_bnode() -> Result<(), serde_json::Error> {
+        let term = Term::BlankNode(BlankNode::new("foo").unwrap());
+        let jsn = serde_json::to_string(&term)?;
+        assert_eq!(
+            jsn,
+            json!({
+                "type": "bnode",
+                "value": "foo"
             })
             .to_string()
         );
@@ -1480,10 +1514,10 @@ mod tests {
         let triple = Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
             NamedNode::new_unchecked("http://example.com/p"),
-            BlankNode::new_unchecked("foo"),
+            BlankNode::new("foo").unwrap(),
         );
 
-        let jsn = serde_json::to_string(&triple)?;
+        let jsn = serde_json::to_string(&triple).unwrap();
         assert_eq!(
             jsn,
             r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"bnode","value":"foo"}}"#
