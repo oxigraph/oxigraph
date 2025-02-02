@@ -242,7 +242,6 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
-    use super::*;
 
     #[test]
     #[cfg(feature = "serde")]

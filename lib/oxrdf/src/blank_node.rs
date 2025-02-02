@@ -2,6 +2,7 @@
 use rand::random;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
 use serde_json::json;
 use std::io::Write;
 use std::{fmt, str};
@@ -381,6 +382,7 @@ pub struct BlankNodeIdParseError;
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
+    #[cfg(feature = "serde")]
     use crate::Term;
 
     use super::*;
