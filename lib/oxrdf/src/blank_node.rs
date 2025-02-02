@@ -1,5 +1,6 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::{fmt, str};
 
@@ -118,6 +119,21 @@ impl Default for BlankNode {
                 });
             }
         }
+    }
+}
+
+impl Serialize for BlankNode {
+    #[inline]
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_ref().to_string().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BlankNode {
+    #[inline]
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let id = String::deserialize(deserializer)?;
+        Ok(BlankNode::new(id).map_err(serde::de::Error::custom)?)
     }
 }
 
@@ -413,5 +429,17 @@ mod tests {
         assert_eq!(size_of::<BlankNodeRef<'_>>(), 32);
         assert_eq!(align_of::<BlankNode>(), 8);
         assert_eq!(align_of::<BlankNodeRef<'_>>(), 8);
+    }
+
+    #[test]
+    fn test_serde() {
+        let b = BlankNode::new_from_unique_id(0x42);
+        let json = serde_json::to_string(&b).unwrap();
+        assert_eq!(json, "\"_:42\"");
+        let b2: BlankNode = serde_json::from_str(&json).unwrap();
+
+        // WARNING: this a lossy process as blank nodes will always
+        // be reconstructed as named
+        assert_eq!(b2, BlankNode::new("_:42").unwrap());
     }
 }
