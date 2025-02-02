@@ -1,5 +1,6 @@
 use oxiri::{Iri, IriParseError};
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde::Deserialize;
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -15,9 +16,10 @@ use std::fmt;
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NamedNode {
-    #[serde(rename="value")]
+    #[cfg_attr(feature = "serde", serde(rename="value"))]
     iri: String,
 }
 
@@ -243,6 +245,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "serde")]
     fn as_str_partial() {
         let j = serde_json::to_string(&NamedNode::new("http://example.org/").unwrap()).unwrap();
         let mut de = serde_json::Deserializer::from_str(&j);

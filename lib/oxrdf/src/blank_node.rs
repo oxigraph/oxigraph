@@ -1,5 +1,6 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::io::Write;
@@ -123,6 +124,7 @@ impl Default for BlankNode {
     }
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for BlankNode {
     #[inline]
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -130,11 +132,13 @@ impl Serialize for BlankNode {
     }
 }
 
+#[cfg(feature = "serde")]
 #[derive(Deserialize)]
 struct Bnodetype {
     value: String,
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for BlankNode {
     #[inline]
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -440,6 +444,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn test_serde() {
         let b = BlankNode::new_from_unique_id(0x42);
         let json = serde_json::to_string(&b).unwrap();
@@ -458,6 +463,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn test_serde_term() {
         let b: Term = BlankNode::new("foo").unwrap().into();
         let json = serde_json::to_string(&b).unwrap();
