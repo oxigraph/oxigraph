@@ -399,7 +399,7 @@ pub enum Term {
     #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNode),
     Literal(Literal),
-    #[cfg_attr(feature = "serde", cfg(feature = "rdf-star"))]
+    #[cfg(feature = "rdf-star")]
     Triple(Box<Triple>),
 }
 
