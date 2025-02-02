@@ -1,4 +1,5 @@
 use oxiri::{Iri, IriParseError};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -14,8 +15,9 @@ use std::fmt;
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash, Serialize, Deserialize)]
 pub struct NamedNode {
+    #[serde(rename="value")]
     iri: String,
 }
 
@@ -232,5 +234,21 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
         Self {
             iri: iri.into_inner(),
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn as_str_partial() {
+        let j = serde_json::to_string(&NamedNode::new("http://example.org/").unwrap()).unwrap();
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let deserialized = NamedNode::deserialize(&mut de);
+
+        assert!(deserialized.is_ok());
+        assert_eq!(deserialized.unwrap(), NamedNode::new("http://example.org/").unwrap());
     }
 }

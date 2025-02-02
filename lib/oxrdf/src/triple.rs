@@ -1,3 +1,5 @@
+use serde::{Deserialize, Deserializer, Serialize};
+
 use crate::blank_node::BlankNode;
 use crate::literal::Literal;
 use crate::named_node::NamedNode;
@@ -152,9 +154,12 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
 }
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum Subject {
+    #[serde(rename = "uri")]
     NamedNode(NamedNode),
+    #[serde(rename = "bnode")]
     BlankNode(BlankNode),
     #[cfg(feature = "rdf-star")]
     Triple(Box<Triple>),
@@ -383,9 +388,12 @@ impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
 /// An owned RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum Term {
+    #[serde(rename = "uri")]
     NamedNode(NamedNode),
+    #[serde(rename = "bnode")]
     BlankNode(BlankNode),
     Literal(Literal),
     #[cfg(feature = "rdf-star")]
@@ -779,16 +787,49 @@ impl<'a> From<TermRef<'a>> for Term {
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
+    #[serde(serialize_with = "subject_serialise", deserialize_with = "subject_deserialize")]
     pub subject: Subject,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
+    #[serde(serialize_with = "predicate_serialise", deserialize_with = "predicate_deserialize")]
     pub predicate: NamedNode,
 
     /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
     pub object: Term,
+}
+
+fn predicate_serialise<S>(predicate: &NamedNode, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let term: Term = Term::from(predicate.clone());
+    Term::serialize(&term, serializer)
+}
+
+fn predicate_deserialize<'de, D>(deserializer: D) -> Result<NamedNode, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Term::deserialize(deserializer).and_then(|term| NamedNode::try_from(term).map_err(serde::de::Error::custom))
+}
+
+fn subject_serialise<S>(subject: &Subject, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let term: Term = Term::from(subject.clone());
+    Term::serialize(&term, serializer)
+}
+
+fn subject_deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: TryFrom<Term, Error = TryFromTermError>,
+{
+    Term::deserialize(deserializer).and_then(|term| T::try_from(term).map_err(serde::de::Error::custom))
 }
 
 impl Triple {
@@ -1330,6 +1371,8 @@ impl TryFromTermError {
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     #[test]
@@ -1366,6 +1409,113 @@ mod tests {
             .into_term(),
             Term::from(Literal::new_simple_literal("foo"))
         );
+        Ok(())
+    }
+
+    #[test]
+    fn quad_new() -> Result<(), TryFromTermError> {
+        assert_eq!(
+            Quad::new(
+                NamedNode::new_unchecked("http://example.com/s"),
+                NamedNode::new_unchecked("http://example.com/p"),
+                NamedNode::new_unchecked("http://example.com/o"),
+                NamedNode::new_unchecked("http://example.com/g"),
+            ),
+            Quad::new(
+                NamedNode::new_unchecked("http://example.com/s"),
+                NamedNode::new_unchecked("http://example.com/p"),
+                NamedNode::new_unchecked("http://example.com/o"),
+                NamedNode::new_unchecked("http://example.com/g"),
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn serde_term() -> Result<(), serde_json::Error> {
+        let term = Term::NamedNode(NamedNode::new_unchecked("http://example.com/s"));
+        let jsn = serde_json::to_string(&term)?;
+        assert_eq!(
+            jsn,
+            json!({
+                "type": "uri",
+                "value": "http://example.com/s"
+            })
+            .to_string()
+        );
+        let deserialized: Term = serde_json::from_str(&jsn)?;
+        assert_eq!(deserialized, term);
+        Ok(())
+    }
+
+    #[test]
+    fn serde() -> Result<(), serde_json::Error> {
+        let triple = Triple::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/o"),
+        );
+        let jsn = serde_json::to_string(&triple)?;
+        assert_eq!(
+            jsn,
+            r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"uri","value":"http://example.com/o"}}"#
+        );
+        let deserialized: Triple = serde_json::from_str(&jsn)?;
+        assert_eq!(deserialized, triple);
+
+        // Test triples with all possible combinations of terms
+        let triple = Triple::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            Literal::new_simple_literal("foo"),
+        );
+        let jsn = serde_json::to_string(&triple)?;
+        assert_eq!(
+            jsn,
+            r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"literal","value":"foo"}}"#
+        );
+        let deserialized: Triple = serde_json::from_str(&jsn)?;
+        assert_eq!(deserialized, triple);
+
+        let triple = Triple::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            BlankNode::new_unchecked("foo"),
+        );
+
+        let jsn = serde_json::to_string(&triple)?;
+        assert_eq!(
+            jsn,
+            r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"bnode","value":"foo"}}"#
+        );
+        let deserialized: Triple = serde_json::from_str(&jsn)?;
+        assert_eq!(deserialized, triple);
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rdf-star")]
+    fn serde_star() -> Result<(), serde_json::Error> {
+        
+        let triple = Triple::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            Term::Triple(Box::new(Triple::new(
+                NamedNode::new_unchecked("http://example.com/s"),
+                NamedNode::new_unchecked("http://example.com/p"),
+                NamedNode::new_unchecked("http://example.com/o"),
+            ))),
+        );
+
+        let jsn = serde_json::to_string(&triple)?;
+        assert_eq!(
+            jsn,
+            r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"uri","value":"http://example.com/o"}}}"#
+        );
+        let deserialized: Triple = serde_json::from_str(&jsn)?;
+        assert_eq!(deserialized, triple);
+
         Ok(())
     }
 }
