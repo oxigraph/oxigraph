@@ -1,6 +1,7 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::io::Write;
 use std::{fmt, str};
 
@@ -125,15 +126,20 @@ impl Default for BlankNode {
 impl Serialize for BlankNode {
     #[inline]
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.as_ref().to_string().serialize(serializer)
+        json!({ "value": self.as_str() }).serialize(serializer)
     }
+}
+
+#[derive(Deserialize)]
+struct Bnodetype {
+    value: String,
 }
 
 impl<'de> Deserialize<'de> for BlankNode {
     #[inline]
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let id = String::deserialize(deserializer)?;
-        Ok(BlankNode::new(id).map_err(serde::de::Error::custom)?)
+        let bnode = Bnodetype::deserialize(deserializer)?;
+        Ok(BlankNode::new(bnode.value).map_err(serde::de::Error::custom)?)
     }
 }
 
@@ -435,11 +441,26 @@ mod tests {
     fn test_serde() {
         let b = BlankNode::new_from_unique_id(0x42);
         let json = serde_json::to_string(&b).unwrap();
-        assert_eq!(json, "\"_:42\"");
+        assert_eq!(json, "{\"value\":\"42\"}");
         let b2: BlankNode = serde_json::from_str(&json).unwrap();
 
         // WARNING: this a lossy process as blank nodes will always
         // be reconstructed as named
-        assert_eq!(b2, BlankNode::new("_:42").unwrap());
+        assert_eq!(b2, BlankNode::new("42").unwrap());
+
+        let b = BlankNode::new("a").unwrap();
+        let json = serde_json::to_string(&b).unwrap();
+        assert_eq!(json, "{\"value\":\"a\"}");
+        let b2: BlankNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(b2, b);
     }
+
+    // #[test]
+    // fn test_serde_term() {
+    //     let b: Term = BlankNode::new("foo").unwrap().into();
+    //     let json = serde_json::to_string(&b).unwrap();
+    //     assert_eq!(json, "\"foo\"");
+    //     let b2: BlankNode = serde_json::from_str(&json).unwrap();
+    //     assert_eq!(b2, BlankNode::new("foo").unwrap());
+    // }
 }
