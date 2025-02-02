@@ -1435,25 +1435,6 @@ mod tests {
     }
 
     #[test]
-    fn quad_new() -> Result<(), TryFromTermError> {
-        assert_eq!(
-            Quad::new(
-                NamedNode::new_unchecked("http://example.com/s"),
-                NamedNode::new_unchecked("http://example.com/p"),
-                NamedNode::new_unchecked("http://example.com/o"),
-                NamedNode::new_unchecked("http://example.com/g"),
-            ),
-            Quad::new(
-                NamedNode::new_unchecked("http://example.com/s"),
-                NamedNode::new_unchecked("http://example.com/p"),
-                NamedNode::new_unchecked("http://example.com/o"),
-                NamedNode::new_unchecked("http://example.com/g"),
-            )
-        );
-        Ok(())
-    }
-
-    #[test]
     #[cfg(feature = "serde")]
     fn serde_term_namednode() -> Result<(), serde_json::Error> {
         let term = Term::NamedNode(NamedNode::new_unchecked("http://example.com/s"));
