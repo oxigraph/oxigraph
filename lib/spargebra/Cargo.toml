@@ -16,6 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = ["oxrdf/rdf-star"]
+sparql-12 = ["oxrdf/rdf-12"]
 sep-0002 = []
 sep-0006 = []
 

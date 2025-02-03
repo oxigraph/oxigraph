@@ -1230,28 +1230,43 @@ impl fmt::Display for TurtleTerm<'_> {
             TermRef::BlankNode(v) => write!(f, "{v}"),
             TermRef::Literal(v) => {
                 let value = v.value();
-                let inline = match v.datatype() {
-                    xsd::BOOLEAN => is_turtle_boolean(value),
-                    xsd::INTEGER => is_turtle_integer(value),
-                    xsd::DECIMAL => is_turtle_decimal(value),
-                    xsd::DOUBLE => is_turtle_double(value),
-                    _ => false,
+                let is_plain = {
+                    #[cfg(feature = "rdf-12")]
+                    {
+                        matches!(
+                            v.datatype(),
+                            xsd::STRING | rdf::LANG_STRING | rdf::DIR_LANG_STRING
+                        )
+                    }
+                    #[cfg(not(feature = "rdf-12"))]
+                    {
+                        matches!(v.datatype(), xsd::STRING | rdf::LANG_STRING)
+                    }
                 };
-                if inline {
-                    f.write_str(value)
-                } else if v.is_plain() {
+                if is_plain {
                     write!(f, "{v}")
                 } else {
-                    write!(
-                        f,
-                        "{}^^{}",
-                        LiteralRef::new_simple_literal(v.value()),
-                        TurtleTerm {
-                            term: v.datatype().into(),
-                            prefixes: self.prefixes,
-                            base_iri: self.base_iri,
-                        }
-                    )
+                    let inline = match v.datatype() {
+                        xsd::BOOLEAN => is_turtle_boolean(value),
+                        xsd::INTEGER => is_turtle_integer(value),
+                        xsd::DECIMAL => is_turtle_decimal(value),
+                        xsd::DOUBLE => is_turtle_double(value),
+                        _ => false,
+                    };
+                    if inline {
+                        f.write_str(value)
+                    } else {
+                        write!(
+                            f,
+                            "{}^^{}",
+                            LiteralRef::new_simple_literal(v.value()),
+                            TurtleTerm {
+                                term: v.datatype().into(),
+                                prefixes: self.prefixes,
+                                base_iri: self.base_iri,
+                            }
+                        )
+                    }
                 }
             }
             #[cfg(feature = "rdf-star")]

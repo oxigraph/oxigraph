@@ -66,6 +66,8 @@ jobs:
         working-directory: ./lib/oxigraph
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxigraph
+      - run: cargo clippy --all-targets --features rdf-12 -- -D warnings -D clippy::all
+        working-directory: ./lib/oxigraph
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./python
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
@@ -164,7 +166,7 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: cargo test
+      - run: cargo test --features rdf-12
 
   test_linux_i686:
     runs-on: ubuntu-latest

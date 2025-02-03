@@ -4,6 +4,8 @@ use crate::toolkit::{TokenRecognizer, TokenRecognizerError};
 use memchr::{memchr, memchr2};
 use oxilangtag::LanguageTag;
 use oxiri::Iri;
+#[cfg(feature = "rdf-12")]
+use oxrdf::BaseDirection;
 use oxrdf::NamedNode;
 use std::borrow::Cow;
 use std::cmp::min;
@@ -25,7 +27,11 @@ pub enum N3Token<'a> {
     Integer(&'a str),
     Decimal(&'a str),
     Double(&'a str),
-    LangTag(&'a str),
+    LangTag {
+        language: &'a str,
+        #[cfg(feature = "rdf-12")]
+        base_direction: Option<BaseDirection>,
+    },
     Punctuation(&'a str),
     PlainKeyword(&'a str),
 }
@@ -549,7 +555,7 @@ impl N3Lexer {
         &self,
         data: &'a [u8],
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
-        // [144s]  LANGTAG  ::=  '@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)*
+        // [39] 	LANG_DIR 	::= 	'@' [a-zA-Z]+ ('-' [a-zA-Z0-9]+)* ('--' [a-zA-Z]+)?
         let mut is_last_block_empty = true;
         for (i, c) in data[1..].iter().enumerate() {
             if c.is_ascii_alphabetic() {
@@ -560,11 +566,27 @@ impl N3Lexer {
                     Err((1..2, "A language code should always start with a letter").into()),
                 ));
             } else if is_last_block_empty {
-                return Some((i, self.parse_lang_tag(&data[1..i], 1..i - 1)));
+                if *c != b'-' {
+                    return Some((i, self.parse_lang_tag(&data[1..i], None, 1..i - 1)));
+                }
+                // We start with '--', we are in a direction
+                let after_dir = i
+                    + 2
+                    + data[i + 2..]
+                        .iter()
+                        .take_while(|c| c.is_ascii_alphabetic())
+                        .count();
+                if after_dir == data.len() {
+                    return None; // Read everything
+                }
+                return Some((
+                    after_dir,
+                    self.parse_lang_tag(&data[1..i], Some(&data[i + 2..after_dir]), 1..after_dir),
+                ));
             } else if *c == b'-' {
                 is_last_block_empty = true;
             } else {
-                return Some((i + 1, self.parse_lang_tag(&data[1..=i], 1..i)));
+                return Some((i + 1, self.parse_lang_tag(&data[1..=i], None, 1..i)));
             }
         }
         None
@@ -573,16 +595,46 @@ impl N3Lexer {
     fn parse_lang_tag<'a>(
         &self,
         lang_tag: &'a [u8],
+        base_direction: Option<&'a [u8]>,
         position: Range<usize>,
     ) -> Result<N3Token<'a>, TokenRecognizerError> {
+        #[cfg(not(feature = "rdf-12"))]
+        if let Some(base_direction) = base_direction {
+            return Err((
+                position.end - base_direction.len()..position.end,
+                "Literal base direction are only allowed in RDF 1.2",
+            )
+                .into());
+        }
+
         let lang_tag = str_from_utf8(lang_tag, position.clone())?;
-        Ok(N3Token::LangTag(if self.unchecked {
-            lang_tag
-        } else {
-            LanguageTag::parse(lang_tag)
-                .map_err(|e| (position.clone(), e.to_string()))?
-                .into_inner()
-        }))
+        Ok(N3Token::LangTag {
+            language: if self.unchecked {
+                lang_tag
+            } else {
+                LanguageTag::parse(lang_tag)
+                    .map_err(|e| (position.clone(), e.to_string()))?
+                    .into_inner()
+            },
+            #[cfg(feature = "rdf-12")]
+            base_direction: base_direction
+                .map(|base_direction| {
+                    Ok(match base_direction {
+                        b"ltr" => BaseDirection::Ltr,
+                        b"rtl" => BaseDirection::Rtl,
+                        _ => {
+                            return Err((
+                                position.end - base_direction.len()..position.end,
+                                format!(
+                                    "The allowed base directions are --ltr and --rtl, found --{}",
+                                    String::from_utf8_lossy(base_direction)
+                                ),
+                            ))
+                        }
+                    })
+                })
+                .transpose()?,
+        })
     }
     fn recognize_string(
         &self,

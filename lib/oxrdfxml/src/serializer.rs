@@ -1,6 +1,6 @@
 use crate::utils::*;
 use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::rdf;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNodeRef, Subject, SubjectRef, TermRef, TripleRef};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
@@ -403,7 +403,7 @@ impl InnerRdfXmlWriter {
             TermRef::Literal(literal) => {
                 if let Some(language) = literal.language() {
                     property_open.push_attribute(("xml:lang", language));
-                } else if !literal.is_plain() {
+                } else if literal.datatype() != xsd::STRING {
                     property_open.push_attribute((
                         "rdf:datatype",
                         relative_iri(literal.datatype().as_str(), &self.base_iri),

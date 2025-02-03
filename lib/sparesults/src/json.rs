@@ -4,7 +4,7 @@ use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use json_event_parser::{FromBufferJsonReader, FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::{FromTokioAsyncReadJsonReader, ToTokioAsyncWriteJsonWriter};
-use oxrdf::vocab::rdf;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
@@ -195,7 +195,18 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
             if let Some(language) = literal.language() {
                 output.push(JsonEvent::ObjectKey("xml:lang".into()));
                 output.push(JsonEvent::String(language.into()));
-            } else if !literal.is_plain() {
+                #[cfg(feature = "sparql-12")]
+                if let Some(base_direction) = literal.base_direction() {
+                    output.push(JsonEvent::ObjectKey("its:dir".into()));
+                    output.push(JsonEvent::String(
+                        match base_direction {
+                            BaseDirection::Ltr => "ltr",
+                            BaseDirection::Rtl => "rtl",
+                        }
+                        .into(),
+                    ));
+                }
+            } else if literal.datatype() != xsd::STRING {
                 output.push(JsonEvent::ObjectKey("datatype".into()));
                 output.push(JsonEvent::String(literal.datatype().as_str().into()));
             }
@@ -842,6 +853,8 @@ struct JsonInnerTermReader {
     term_type: Option<TermType>,
     value: Option<String>,
     lang: Option<String>,
+    #[cfg(feature = "sparql-12")]
+    base_direction: Option<String>,
     datatype: Option<NamedNode>,
     #[cfg(feature = "rdf-star")]
     subject: Option<Term>,
@@ -859,6 +872,8 @@ enum JsonInnerTermReaderState {
     TermType,
     Value,
     Lang,
+    #[cfg(feature = "sparql-12")]
+    BaseDirection,
     Datatype,
     #[cfg(feature = "rdf-star")]
     InValue,
@@ -879,6 +894,7 @@ enum TermType {
 }
 
 impl JsonInnerTermReader {
+    #[allow(clippy::collapsible_else_if)]
     fn read_event(
         &mut self,
         event: JsonEvent<'_>,
@@ -901,6 +917,8 @@ impl JsonInnerTermReader {
                         "value" => JsonInnerTermReaderState::Value,
                         "datatype" => JsonInnerTermReaderState::Datatype,
                         "xml:lang" => JsonInnerTermReaderState::Lang,
+                        #[cfg(feature = "sparql-12")]
+                        "its:dir" => JsonInnerTermReaderState::BaseDirection,
                         _ => {
                             return Err(QueryResultsSyntaxError::msg(format!(
                                 "Unsupported term key: {object_key}"
@@ -943,30 +961,56 @@ impl JsonInnerTermReader {
                                     "literal serialization should have a 'value' key",
                                 )
                             })?;
-                            Ok(Some(match self.lang.take() {
-                                    Some(lang) => {
-                                        if let Some(datatype) = &self.datatype {
-                                            if datatype.as_ref() != rdf::LANG_STRING {
-                                                return Err(QueryResultsSyntaxError::msg(format!(
-                                                    "xml:lang value '{lang}' provided with the datatype {datatype}"
-                                                )));
-                                            }
-                                        }
-                                        Literal::new_language_tagged_literal(value, &*lang)
-                                            .map_err(|e| {
-                                                QueryResultsSyntaxError::msg(format!(
-                                                    "Invalid xml:lang value '{lang}': {e}"
-                                                ))
-                                            })?
-                                    }
-                                    None => {
-                                        if let Some(datatype) = self.datatype.take() {
-                                            Literal::new_typed_literal(value, datatype)
-                                        } else {
-                                            Literal::new_simple_literal(value)
+                            Ok(Some(if let Some(lang) = self.lang.take() {
+                                #[cfg(feature = "sparql-12")]
+                                if let Some(base_direction) = self.base_direction.take() {
+                                    if let Some(datatype) = &self.datatype {
+                                        if datatype.as_ref() != rdf::DIR_LANG_STRING {
+                                            return Err(QueryResultsSyntaxError::msg(format!(
+                                                "xml:lang value '{lang}' and its:dir value '{base_direction}' provided with the datatype {datatype}"
+                                            )));
                                         }
                                     }
-                                }.into()))
+                                    return Ok(Some(Literal::new_directional_language_tagged_literal(
+                                        value,
+                                        &lang,
+                                        match base_direction.as_str() {
+                                            "ltr" => BaseDirection::Ltr,
+                                            "rtl" => BaseDirection::Rtl,
+                                            _ => return Err(QueryResultsSyntaxError::msg(format!(
+                                                "Invalid its:dir value '{base_direction}', expecting 'ltr' or 'rtl'"
+                                            )))
+                                        }
+                                    ).map_err(|e| {
+                                        QueryResultsSyntaxError::msg(format!(
+                                            "Invalid xml:lang value '{lang}': {e}"
+                                        ))
+                                    })?.into()))
+                                }
+                                if let Some(datatype) = &self.datatype {
+                                    if datatype.as_ref() != rdf::LANG_STRING {
+                                        return Err(QueryResultsSyntaxError::msg(format!(
+                                            "xml:lang value '{lang}' provided with the datatype {datatype}"
+                                        )));
+                                    }
+                                }
+                                Literal::new_language_tagged_literal(value, &lang)
+                                    .map_err(|e| {
+                                        QueryResultsSyntaxError::msg(format!(
+                                            "Invalid xml:lang value '{lang}': {e}"
+                                        ))
+                                    })?
+                            } else {
+                                #[cfg(feature = "sparql-12")]
+                                if self.base_direction.take().is_some() {
+                                    return Err(QueryResultsSyntaxError::msg("its:dir can only be present alongside xml:lang"))
+                                }
+                                if let Some(datatype) = self.datatype.take() {
+                                    Literal::new_typed_literal(value, datatype)
+                                } else {
+                                    Literal::new_simple_literal(value)
+                                }
+                            }.into()))
                         }
                         #[cfg(feature = "rdf-star")]
                         Some(TermType::Triple) => Ok(Some(
@@ -1061,6 +1105,20 @@ impl JsonInnerTermReader {
                     Ok(None)
                 } else {
                     Err(QueryResultsSyntaxError::msg("Term lang must be strings"))
+                };
+                self.state = JsonInnerTermReaderState::Middle;
+
+                result
+            }
+            #[cfg(feature = "sparql-12")]
+            JsonInnerTermReaderState::BaseDirection => {
+                let result = if let JsonEvent::String(value) = event {
+                    self.base_direction = Some(value.into_owned());
+                    Ok(None)
+                } else {
+                    Err(QueryResultsSyntaxError::msg(
+                        "Term base directions must be strings",
+                    ))
                 };
                 self.state = JsonInnerTermReaderState::Middle;
 
