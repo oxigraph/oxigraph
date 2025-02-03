@@ -1,6 +1,6 @@
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "serde")]
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -16,8 +16,8 @@ use std::fmt;
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
     #[cfg_attr(feature = "serde", serde(rename = "value"))]
     iri: String,
