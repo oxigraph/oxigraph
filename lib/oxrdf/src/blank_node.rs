@@ -1,5 +1,9 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_json::json;
 use std::io::Write;
 use std::{fmt, str};
 
@@ -118,6 +122,29 @@ impl Default for BlankNode {
                 });
             }
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for BlankNode {
+    #[inline]
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        json!({ "value": self.as_str() }).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(Deserialize)]
+struct Bnodetype {
+    value: String,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for BlankNode {
+    #[inline]
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let bnode = Bnodetype::deserialize(deserializer)?;
+        Ok(BlankNode::new(bnode.value).map_err(serde::de::Error::custom)?)
     }
 }
 
@@ -355,6 +382,9 @@ pub struct BlankNodeIdParseError;
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
+    #[cfg(feature = "serde")]
+    use crate::Term;
+
     use super::*;
     #[cfg(not(target_family = "wasm"))]
     use std::mem::{align_of, size_of};
@@ -413,5 +443,34 @@ mod tests {
         assert_eq!(size_of::<BlankNodeRef<'_>>(), 32);
         assert_eq!(align_of::<BlankNode>(), 8);
         assert_eq!(align_of::<BlankNodeRef<'_>>(), 8);
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        let b = BlankNode::new_from_unique_id(0x42);
+        let json = serde_json::to_string(&b).unwrap();
+        assert_eq!(json, "{\"value\":\"42\"}");
+        let b2: BlankNode = serde_json::from_str(&json).unwrap();
+
+        // WARNING: this a lossy process as blank nodes will always
+        // be reconstructed as named
+        assert_eq!(b2, BlankNode::new("42").unwrap());
+
+        let b = BlankNode::new("a").unwrap();
+        let json = serde_json::to_string(&b).unwrap();
+        assert_eq!(json, "{\"value\":\"a\"}");
+        let b2: BlankNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(b2, b);
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde_term() {
+        let b: Term = BlankNode::new("foo").unwrap().into();
+        let json = serde_json::to_string(&b).unwrap();
+        assert_eq!(json, "{\"type\":\"bnode\",\"value\":\"foo\"}");
+        let b2: BlankNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(b2, BlankNode::new("foo").unwrap());
     }
 }

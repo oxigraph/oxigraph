@@ -3,6 +3,12 @@ use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
+#[cfg(feature = "serde")]
+use serde::{
+    de::Deserializer,
+    ser::{SerializeMap, Serializer},
+    Deserialize, Serialize,
+};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -32,13 +38,78 @@ use std::fmt::Write;
 /// # Result::<_, LanguageTagParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Literal(LiteralContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
 enum LiteralContent {
+    LanguageTaggedString {
+        value: String,
+        #[cfg_attr(feature = "serde", serde(rename = "xml:lang"))]
+        language: String,
+    },
+    TypedLiteral {
+        value: String,
+        #[cfg_attr(
+            feature = "serde",
+            serde(serialize_with = "get_iri", deserialize_with = "set_iri")
+        )]
+        datatype: NamedNode,
+    },
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            serialize_with = "serialize_string_variant",
+            deserialize_with = "deserialize_string_variant"
+        )
+    )]
     String(String),
-    LanguageTaggedString { value: String, language: String },
-    TypedLiteral { value: String, datatype: NamedNode },
+}
+
+#[cfg(feature = "serde")]
+fn serialize_string_variant<S>(s: &String, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Create an object with a single key "value".
+    let mut map = serializer.serialize_map(Some(1))?;
+    map.serialize_entry("value", s)?;
+    map.end()
+}
+
+#[cfg(feature = "serde")]
+fn get_iri<S>(iri: &NamedNode, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&iri.as_str())
+}
+
+#[cfg(feature = "serde")]
+fn set_iri<'de, D>(deserializer: D) -> Result<NamedNode, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let iri = String::deserialize(deserializer)?;
+    Ok(NamedNode::new_unchecked(iri))
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_string_variant<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // We'll define a small struct for exactly the shape { "value": String }
+    #[derive(Deserialize)]
+    struct ValueWrapper {
+        value: String,
+    }
+
+    // Attempt to deserialize into that struct
+    let wrapper = ValueWrapper::deserialize(deserializer)?;
+    Ok(wrapper.value)
 }
 
 impl Literal {
@@ -664,5 +735,28 @@ mod tests {
         assert_eq!("-INF", Literal::from(f64::NEG_INFINITY).value());
         assert_eq!("NaN", Literal::from(f32::NAN).value());
         assert_eq!("NaN", Literal::from(f64::NAN).value());
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        let j = serde_json::to_string(&Literal::new_simple_literal("foo")).unwrap();
+
+        assert_eq!("{\"value\":\"foo\"}", j);
+
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
+        assert_eq!(node, Literal::new_simple_literal("foo"));
+
+        let j = serde_json::to_string(&Literal::new_typed_literal("true", xsd::BOOLEAN)).unwrap();
+
+        assert_eq!(
+            "{\"value\":\"true\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",
+            j
+        );
+
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
+        assert_eq!(node, Literal::new_typed_literal("true", xsd::BOOLEAN));
     }
 }

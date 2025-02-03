@@ -16,6 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = []
+serde = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 oxilangtag.workspace = true
@@ -23,6 +24,8 @@ oxiri.workspace = true
 oxsdatatypes = { workspace = true, optional = true }
 rand.workspace = true
 thiserror.workspace = true
+serde = { version = "1.0.217", optional = true, features = ["derive"] }
+serde_json = { version = "1.0.138", optional = true }
 
 [lints]
 workspace = true
