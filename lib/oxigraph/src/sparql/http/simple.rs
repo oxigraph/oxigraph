@@ -1,4 +1,5 @@
-use oxhttp::model::{Body, HeaderName, Method, Request};
+use oxhttp::model::header::{ACCEPT, CONTENT_TYPE};
+use oxhttp::model::{Body, Method, Request};
 use std::io::{Error, ErrorKind, Read, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,13 +24,14 @@ impl Client {
     }
 
     pub fn get(&self, url: &str, accept: &'static str) -> Result<(String, impl Read)> {
-        let request = Request::builder(Method::GET, url.parse().map_err(invalid_input_error)?)
-            .with_header(HeaderName::ACCEPT, accept)
-            .map_err(invalid_input_error)?
-            .build();
+        let request = Request::builder()
+            .uri(url)
+            .header(ACCEPT, accept)
+            .body(())
+            .map_err(invalid_input_error)?;
         let response = self.client.request(request)?;
         let status = response.status();
-        if !status.is_successful() {
+        if !status.is_success() {
             return Err(Error::other(format!(
                 "Error {} returned by {} with payload:\n{}",
                 status,
@@ -38,7 +40,8 @@ impl Client {
             )));
         }
         let content_type = response
-            .header(&HeaderName::CONTENT_TYPE)
+            .headers()
+            .get(CONTENT_TYPE)
             .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {url}")))?
             .to_str()
             .map_err(invalid_data_error)?
@@ -53,15 +56,16 @@ impl Client {
         content_type: &'static str,
         accept: &'static str,
     ) -> Result<(String, Body)> {
-        let request = Request::builder(Method::POST, url.parse().map_err(invalid_input_error)?)
-            .with_header(HeaderName::ACCEPT, accept)
-            .map_err(invalid_input_error)?
-            .with_header(HeaderName::CONTENT_TYPE, content_type)
-            .map_err(invalid_input_error)?
-            .with_body(payload);
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(url)
+            .header(ACCEPT, accept)
+            .header(CONTENT_TYPE, content_type)
+            .body(payload)
+            .map_err(invalid_input_error)?;
         let response = self.client.request(request)?;
         let status = response.status();
-        if !status.is_successful() {
+        if !status.is_success() {
             return Err(Error::other(format!(
                 "Error {} returned by {} with payload:\n{}",
                 status,
@@ -70,7 +74,8 @@ impl Client {
             )));
         }
         let content_type = response
-            .header(&HeaderName::CONTENT_TYPE)
+            .headers()
+            .get(CONTENT_TYPE)
             .ok_or_else(|| invalid_data_error(format!("No Content-Type returned by {url}")))?
             .to_str()
             .map_err(invalid_data_error)?
