@@ -1,6 +1,6 @@
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
