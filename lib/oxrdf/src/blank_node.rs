@@ -453,9 +453,14 @@ mod tests {
         assert_eq!(json, "{\"value\":\"42\"}");
         let b2: BlankNode = serde_json::from_str(&json).unwrap();
 
-        // WARNING: this a lossy process as blank nodes will always
-        // be reconstructed as named
         assert_eq!(b2, BlankNode::new("42").unwrap());
+
+        match b2 {
+            BlankNode(BlankNodeContent::Anonymous(id)) => {
+                assert_eq!(id, "42");
+            }
+            _ => panic!("Expected anonymous blank node"),
+        }
 
         let b = BlankNode::new("a").unwrap();
         let json = serde_json::to_string(&b).unwrap();
