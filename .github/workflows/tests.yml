@@ -169,6 +169,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
       - run: cargo test
+      - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo test --all-features
 
   test_linux_i686:
