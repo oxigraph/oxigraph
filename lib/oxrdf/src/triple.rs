@@ -1552,7 +1552,7 @@ mod tests {
         let jsn = serde_json::to_string(&triple)?;
         assert_eq!(
             jsn,
-            r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"uri","value":"http://example.com/o"}}}"#
+            r#"{"subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"triple","subject":{"type":"uri","value":"http://example.com/s"},"predicate":{"type":"uri","value":"http://example.com/p"},"object":{"type":"uri","value":"http://example.com/o"}}}"#
         );
         let deserialized: Triple = serde_json::from_str(&jsn)?;
         assert_eq!(deserialized, triple);

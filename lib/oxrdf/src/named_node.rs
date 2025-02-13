@@ -242,6 +242,7 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
+    use super::*;
 
     #[test]
     #[cfg(feature = "serde")]
@@ -254,6 +255,14 @@ mod tests {
         assert_eq!(
             deserialized.unwrap(),
             NamedNode::new("http://example.org/").unwrap()
+        );
+    }
+
+    #[test]
+    fn named_node_construction() {
+        assert_eq!(
+            "http://example.org/",
+            NamedNode::new("http://example.org/").unwrap().iri
         );
     }
 }
