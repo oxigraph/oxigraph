@@ -157,8 +157,12 @@ jobs:
       - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli --exclude spareval
 
-  test_linux_x86_64:
-    runs-on: ubuntu-latest
+  test_os:
+    strategy:
+      matrix:
+        os-version: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os-version }}
+    name: Test on ${{ matrix.os-version }}
     steps:
       - uses: actions/checkout@v4
         with:
