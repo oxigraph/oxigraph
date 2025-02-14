@@ -308,14 +308,14 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: '**/requirements.dev.txt'
-      - run: pip install -r python/requirements.dev.txt
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "**/requirements**.txt"
+      - run: uv pip install -r python/requirements.dev.txt
       - run: maturin build -m python/Cargo.toml
-      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python -m unittest
         working-directory: ./python/tests
@@ -347,15 +347,15 @@ jobs:
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.8"
-          cache: pip
-          cache-dependency-path: '**/requirements.dev.txt'
-      - run: pip install -r python/requirements.dev.txt
+          enable-cache: true
+          cache-dependency-glob: "**/requirements**.txt"
+      - run: uv pip install -r python/requirements.dev.txt
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
       - run: maturin build -m python/Cargo.toml
-      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python -m unittest
         working-directory: ./python/tests
@@ -367,14 +367,14 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: "pypy3.10"
-          cache: pip
-          cache-dependency-path: '**/requirements.dev.txt'
-      - run: pip install -r python/requirements.dev.txt
+          enable-cache: true
+          cache-dependency-glob: "**/requirements**.txt"
+      - run: uv pip install -r python/requirements.dev.txt
       - run: maturin build -m python/Cargo.toml
-      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python -m unittest
         working-directory: ./python/tests
@@ -386,14 +386,13 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: '**/requirements.dev.txt'
-      - run: pip install "maturin~=1.0"
-      - run: maturin build -m python/Cargo.toml
-      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "**/requirements**.txt"
+      - run: uv run --with "maturin~=1.0" maturin build -m python/Cargo.toml
+      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python -m unittest
         working-directory: ./python/tests
@@ -540,10 +539,11 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           component: llvm-tools-preview
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "**/requirements**.txt"
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-llvm-cov }
       - run: |
@@ -551,11 +551,10 @@ jobs:
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           cargo llvm-cov clean --workspace
           cargo test --features oxrdfio/async-tokio,sparesults/async-tokio
-          pip install "maturin~=1.0"
-          maturin build -m python/Cargo.toml
-          pip install --no-index --find-links=target/wheels/ pyoxigraph
+          uv run --with "maturin~=1.0" maturin build -m python/Cargo.toml
+          uv pip install --no-index --find-links=target/wheels/ pyoxigraph
           cd python/tests
-          python -m unittest
+          uv run -m unittest
           cd ../..
           cargo llvm-cov report --codecov --output-path codecov.json
       - uses: codecov/codecov-action@v5
