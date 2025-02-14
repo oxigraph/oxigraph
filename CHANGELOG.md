@@ -1,3 +1,10 @@
+## [0.4.8] - 2025-02-14
+
+### Changed
+- SPARQL: Fixes a bug in `sameTerm` implementation on `xsd:decimal`.
+- Turtle: fixes a parsing ambiguity when a file ends with an integer then a concatenated dot eg. `11.`.
+
+
 ## [0.4.7] - 2025-01-19
 
 ### Changed
