@@ -1,5 +1,7 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, de, de::Visitor, de::MapAccess, Serialize, Serializer, ser::SerializeStruct};
 use std::io::Write;
 use std::{fmt, str};
 
@@ -118,6 +120,49 @@ impl Default for BlankNode {
                 });
             }
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for BlankNode {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("Value", 1)?;
+        state.serialize_field("value", &self.as_str())?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for BlankNode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BlankNodeVisitor;
+
+        impl<'de> Visitor<'de> for BlankNodeVisitor {
+            type Value = BlankNode;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("struct Value")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<BlankNode, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let key = map.next_key::<&str>()?;
+                if key != Some("value") {
+                    if let Some(val) = key {
+                        return Err(de::Error::unknown_field(val, &["value"]));
+                    }
+                    return Err(de::Error::missing_field("value"));
+                }
+                Ok(BlankNode::new(map.next_value::<&str>()?).map_err(de::Error::custom)?)
+            }
+        }
+
+        deserializer.deserialize_struct("Value", &["value"], BlankNodeVisitor)
     }
 }
 
@@ -358,6 +403,8 @@ mod tests {
     use super::*;
     #[cfg(not(target_family = "wasm"))]
     use std::mem::{align_of, size_of};
+    #[cfg(feature = "serde")]
+    use serde_json;
 
     #[test]
     fn as_str_partial() {
@@ -414,4 +461,45 @@ mod tests {
         assert_eq!(align_of::<BlankNode>(), 8);
         assert_eq!(align_of::<BlankNodeRef<'_>>(), 8);
     }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        let b = BlankNode::new_from_unique_id(0x42);
+        let json = serde_json::to_string(&b).unwrap();
+        assert_eq!(json, "{\"value\":\"42\"}");
+        let b2: BlankNode = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(b2, BlankNode::new("42").unwrap());
+
+        match b2 {
+            BlankNode(BlankNodeContent::Anonymous { str: _, id }) => {
+                assert_eq!(id, 0x42u128.to_ne_bytes());
+            }
+            _ => panic!("Expected anonymous blank node"),
+        }
+
+        let b = BlankNode::new("a").unwrap();
+        let json = serde_json::to_string(&b).unwrap();
+        assert_eq!(json, "{\"value\":\"a\"}");
+        let b2: BlankNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(b2, b);
+
+        let b3: Result<BlankNode, serde_json::Error> = serde_json::from_str::<BlankNode>(&"{\"art\":\"r\", \"value\":\"a\", \"noise\":\"t\"}");
+        assert!(b3.is_err());
+
+        let b4: Result<BlankNode, serde_json::Error> = serde_json::from_str::<BlankNode>(&"{\"art\":\"r\"}");
+        assert!(b4.is_err());
+    }
+
+    // TODO: Make sure this test exists in the term file
+    // #[test]
+    // #[cfg(feature = "serde")]
+    // fn test_serde_term() {
+    //     let b: Term = BlankNode::new("foo").unwrap().into();
+    //     let json = serde_json::to_string(&b).unwrap();
+    //     assert_eq!(json, "{\"type\":\"bnode\",\"value\":\"foo\"}");
+    //     let b2: BlankNode = serde_json::from_str(&json).unwrap();
+    //     assert_eq!(b2, BlankNode::new("foo").unwrap());
+    // }
 }
