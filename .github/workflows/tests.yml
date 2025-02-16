@@ -172,6 +172,19 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - run: cargo test
 
+  test_features:
+    strategy:
+      matrix:
+        features: [ "serde" ]
+        os: [ "linux", "windows", "macos" ]
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - run: cargo test --features ${{ matrix.features }}
+
   test_linux_i686:
     runs-on: ubuntu-latest
     steps:

@@ -1,7 +1,10 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, de, de::Visitor, de::MapAccess, Serialize, Serializer, ser::SerializeStruct};
+use serde::{
+    de, de::MapAccess, de::Visitor, ser::SerializeStruct, Deserialize, Deserializer, Serialize,
+    Serializer,
+};
 use std::io::Write;
 use std::{fmt, str};
 
@@ -401,10 +404,10 @@ pub struct BlankNodeIdParseError;
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
-    #[cfg(not(target_family = "wasm"))]
-    use std::mem::{align_of, size_of};
     #[cfg(feature = "serde")]
     use serde_json;
+    #[cfg(not(target_family = "wasm"))]
+    use std::mem::{align_of, size_of};
 
     #[test]
     fn as_str_partial() {
@@ -485,10 +488,12 @@ mod tests {
         let b2: BlankNode = serde_json::from_str(&json).unwrap();
         assert_eq!(b2, b);
 
-        let b3: Result<BlankNode, serde_json::Error> = serde_json::from_str::<BlankNode>(&"{\"art\":\"r\", \"value\":\"a\", \"noise\":\"t\"}");
+        let b3: Result<BlankNode, serde_json::Error> =
+            serde_json::from_str::<BlankNode>(&"{\"art\":\"r\", \"value\":\"a\", \"noise\":\"t\"}");
         assert!(b3.is_err());
 
-        let b4: Result<BlankNode, serde_json::Error> = serde_json::from_str::<BlankNode>(&"{\"art\":\"r\"}");
+        let b4: Result<BlankNode, serde_json::Error> =
+            serde_json::from_str::<BlankNode>(&"{\"art\":\"r\"}");
         assert!(b4.is_err());
     }
 
