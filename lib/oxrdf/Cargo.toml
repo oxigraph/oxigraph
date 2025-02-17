@@ -16,7 +16,7 @@ rust-version.workspace = true
 [features]
 default = []
 rdf-star = []
-serde = []
+serde = ["dep:serde"]
 
 [dependencies]
 oxilangtag.workspace = true
@@ -24,7 +24,7 @@ oxiri.workspace = true
 oxsdatatypes = { workspace = true, optional = true }
 rand.workspace = true
 thiserror.workspace = true
-serde = { version = "1.0.217", features = ["derive"] }
+serde = { version = "1.0.217", features = ["derive"], optional = true}
 
 [dev-dependencies]
 # Ideally this would be an optional dependency, used only when the `serde` feature is enabled.
