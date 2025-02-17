@@ -175,7 +175,7 @@ jobs:
   test_features:
     strategy:
       matrix:
-        features: [ "serde" ]
+        features: [ "serde", "rdf-star", "serde rdf-star" ]
         os: [ "linux", "windows", "macos" ]
     runs-on: ${{ matrix.os }}-latest
     steps:
