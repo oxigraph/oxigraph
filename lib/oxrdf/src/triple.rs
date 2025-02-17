@@ -848,7 +848,10 @@ where
                     "type" => {
                         let value = map.next_value::<&str>()?;
                         if value != "uri" {
-                            return Err(de::Error::invalid_value(de::Unexpected::Str(value), &"uri"));
+                            return Err(de::Error::invalid_value(
+                                de::Unexpected::Str(value),
+                                &"uri",
+                            ));
                         }
                     }
                     "value" => {
@@ -862,8 +865,7 @@ where
                     }
                 }
             }
-            iri
-                .map(|iri| NamedNode::new_unchecked(iri))
+            iri.map(|iri| NamedNode::new_unchecked(iri))
                 .ok_or_else(|| de::Error::missing_field("value"))
         }
     }
@@ -954,7 +956,6 @@ pub struct TripleRef<'a> {
     pub subject: SubjectRef<'a>,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
-    
     pub predicate: NamedNodeRef<'a>,
 
     /// The [object](https://www.w3.org/TR/rdf11-concepts/#dfn-object) of this triple.
