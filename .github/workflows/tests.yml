@@ -157,8 +157,12 @@ jobs:
       - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli --exclude spareval
 
-  test_linux_x86_64:
-    runs-on: ubuntu-latest
+  test_os:
+    strategy:
+      matrix:
+        os-version: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os-version }}
+    name: Test on ${{ matrix.os-version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -253,16 +257,6 @@ jobs:
           key: ${{ runner.os }}-rocksdb-8.0.0
       - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo test --tests --features oxrocksdb-sys/pkg-config
-
-  test_windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup-rust
-      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: cargo test
 
   test_wasip1:
     runs-on: ubuntu-latest
