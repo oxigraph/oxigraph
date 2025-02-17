@@ -4,7 +4,13 @@ use crate::service_description::{generate_service_description, EndpointKind};
 use anyhow::{bail, ensure, Context};
 use clap::Parser;
 use flate2::read::MultiGzDecoder;
-use oxhttp::model::{Body, HeaderName, HeaderValue, Method, Request, Response, Status};
+use oxhttp::model::header::{
+    ACCEPT, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
+    ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD,
+    CONTENT_TYPE, LOCATION, ORIGIN,
+};
+use oxhttp::model::uri::PathAndQuery;
+use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
 use oxhttp::Server;
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{
@@ -691,100 +697,88 @@ fn serve(
 }
 
 fn cors_middleware(
-    on_request: impl Fn(&mut Request) -> Response + Send + Sync + 'static,
-) -> impl Fn(&mut Request) -> Response + Send + Sync + 'static {
-    let origin = HeaderName::from_str("Origin").unwrap();
-    let access_control_allow_origin = HeaderName::from_str("Access-Control-Allow-Origin").unwrap();
-    let access_control_request_method =
-        HeaderName::from_str("Access-Control-Request-Method").unwrap();
-    let access_control_allow_method = HeaderName::from_str("Access-Control-Allow-Methods").unwrap();
-    let access_control_request_headers =
-        HeaderName::from_str("Access-Control-Request-Headers").unwrap();
-    let access_control_allow_headers =
-        HeaderName::from_str("Access-Control-Allow-Headers").unwrap();
-    let star = HeaderValue::from_str("*").unwrap();
+    on_request: impl Fn(&mut Request<Body>) -> Response<Body> + Send + Sync + 'static,
+) -> impl Fn(&mut Request<Body>) -> Response<Body> + Send + Sync + 'static {
     move |request| {
         if *request.method() == Method::OPTIONS {
-            let mut response = Response::builder(Status::NO_CONTENT);
-            if request.header(&origin).is_some() {
-                response
-                    .headers_mut()
-                    .append(access_control_allow_origin.clone(), star.clone());
+            let mut response = Response::builder().status(StatusCode::NO_CONTENT);
+            let request_headers = request.headers();
+            if request_headers.get(ORIGIN).is_some() {
+                response = response.header(
+                    ACCESS_CONTROL_ALLOW_ORIGIN.clone(),
+                    HeaderValue::from_static("*"),
+                );
             }
-            if let Some(method) = request.header(&access_control_request_method) {
-                response
-                    .headers_mut()
-                    .append(access_control_allow_method.clone(), method.clone());
+            if let Some(method) = request_headers.get(ACCESS_CONTROL_REQUEST_METHOD) {
+                response = response.header(ACCESS_CONTROL_ALLOW_METHODS, method.clone());
             }
-            if let Some(headers) = request.header(&access_control_request_headers) {
-                response
-                    .headers_mut()
-                    .append(access_control_allow_headers.clone(), headers.clone());
+            if let Some(headers) = request_headers.get(ACCESS_CONTROL_REQUEST_HEADERS) {
+                response = response.header(ACCESS_CONTROL_ALLOW_HEADERS, headers.clone());
             }
-            response.build()
+            response.body(Body::empty()).unwrap()
         } else {
             let mut response = on_request(request);
-            if request.header(&origin).is_some() {
+            if request.headers().get(ORIGIN).is_some() {
                 response
                     .headers_mut()
-                    .append(access_control_allow_origin.clone(), star.clone());
+                    .append(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
             }
             response
         }
     }
 }
 
-type HttpError = (Status, String);
+type HttpError = (StatusCode, String);
 
 fn handle_request(
-    request: &mut Request,
+    request: &mut Request<Body>,
     store: Store,
     read_only: bool,
     union_default_graph: bool,
-) -> Result<Response, HttpError> {
-    match (request.url().path(), request.method().as_ref()) {
-        ("/", "HEAD") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "text/html")
-            .unwrap()
-            .build()),
-        ("/", "GET") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "text/html")
-            .unwrap()
-            .with_body(HTML_ROOT_PAGE)),
-        ("/yasgui.min.css", "HEAD") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "text/css")
-            .unwrap()
-            .build()),
-        ("/yasgui.min.css", "GET") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "text/css")
-            .unwrap()
-            .with_body(YASGUI_CSS)),
-        ("/yasgui.min.js", "HEAD") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "application/javascript")
-            .unwrap()
-            .build()),
-        ("/yasgui.min.js", "GET") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "application/javascript")
-            .unwrap()
-            .with_body(YASGUI_JS)),
-        ("/logo.svg", "HEAD") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "image/svg+xml")
-            .unwrap()
-            .build()),
-        ("/logo.svg", "GET") => Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, "image/svg+xml")
-            .unwrap()
-            .with_body(LOGO)),
+) -> Result<Response<Body>, HttpError> {
+    match (request.uri().path(), request.method().as_ref()) {
+        ("/", "HEAD") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "text/html")
+            .body(Body::empty())
+            .unwrap()),
+        ("/", "GET") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "text/html")
+            .body(HTML_ROOT_PAGE.into())
+            .unwrap()),
+        ("/yasgui.min.css", "HEAD") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "text/css")
+            .body(Body::empty())
+            .unwrap()),
+        ("/yasgui.min.css", "GET") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "text/css")
+            .body(YASGUI_CSS.into())
+            .unwrap()),
+        ("/yasgui.min.js", "HEAD") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "application/javascript")
+            .body(Body::empty())
+            .unwrap()),
+        ("/yasgui.min.js", "GET") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "application/javascript")
+            .body(YASGUI_JS.into())
+            .unwrap()),
+        ("/logo.svg", "HEAD") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "image/svg+xml")
+            .body(Body::empty())
+            .unwrap()),
+        ("/logo.svg", "GET") => Ok(Response::builder()
+            .header(CONTENT_TYPE, "image/svg+xml")
+            .body(LOGO.into())
+            .unwrap()),
         ("/query", "GET") => {
             let query = url_query(request);
             if query.is_empty() {
                 let format = rdf_content_negotiation(request)?;
                 let description =
                     generate_service_description(format, EndpointKind::Query, union_default_graph);
-                Ok(Response::builder(Status::OK)
-                    .with_header(HeaderName::CONTENT_TYPE, format.media_type())
-                    .map_err(internal_server_error)?
-                    .with_body(description))
+                Ok(Response::builder()
+                    .header(CONTENT_TYPE, format.media_type())
+                    .body(description.into())
+                    .unwrap())
             } else {
                 configure_and_evaluate_sparql_query(
                     &store,
@@ -827,10 +821,10 @@ fn handle_request(
             let format = rdf_content_negotiation(request)?;
             let description =
                 generate_service_description(format, EndpointKind::Update, union_default_graph);
-            Ok(Response::builder(Status::OK)
-                .with_header(HeaderName::CONTENT_TYPE, format.media_type())
-                .map_err(internal_server_error)?
-                .with_body(description))
+            Ok(Response::builder()
+                .header(CONTENT_TYPE, format.media_type())
+                .body(description.into())
+                .unwrap())
         }
         ("/update", "POST") => {
             if read_only {
@@ -943,18 +937,23 @@ fn handle_request(
                     }
                 };
                 web_load_graph(&store, request, format, &GraphName::from(target))?;
-                Ok(Response::builder(if new {
-                    Status::CREATED
-                } else {
-                    Status::NO_CONTENT
-                })
-                .build())
+                Ok(Response::builder()
+                    .status(if new {
+                        StatusCode::CREATED
+                    } else {
+                        StatusCode::NO_CONTENT
+                    })
+                    .body(Body::empty())
+                    .unwrap())
             } else {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 store.clear().map_err(internal_server_error)?;
                 web_load_dataset(&store, request, format)?;
-                Ok(Response::builder(Status::NO_CONTENT).build())
+                Ok(Response::builder()
+                    .status(StatusCode::NO_CONTENT)
+                    .body(Body::empty())
+                    .unwrap())
             }
         }
         (path, "DELETE") if path.starts_with("/store") => {
@@ -976,7 +975,7 @@ fn handle_request(
                                 .map_err(internal_server_error)?;
                         } else {
                             return Err((
-                                Status::NOT_FOUND,
+                                StatusCode::NOT_FOUND,
                                 format!("The graph {target} does not exists"),
                             ));
                         }
@@ -985,7 +984,10 @@ fn handle_request(
             } else {
                 store.clear().map_err(internal_server_error)?;
             }
-            Ok(Response::builder(Status::NO_CONTENT).build())
+            Ok(Response::builder()
+                .status(StatusCode::NO_CONTENT)
+                .body(Body::empty())
+                .unwrap())
         }
         (path, "POST") if path.starts_with("/store") => {
             if read_only {
@@ -998,26 +1000,32 @@ fn handle_request(
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 let new = assert_that_graph_exists(&store, &target).is_ok();
                 web_load_graph(&store, request, format, &GraphName::from(target))?;
-                Ok(Response::builder(if new {
-                    Status::CREATED
-                } else {
-                    Status::NO_CONTENT
-                })
-                .build())
+                Ok(Response::builder()
+                    .status(if new {
+                        StatusCode::CREATED
+                    } else {
+                        StatusCode::NO_CONTENT
+                    })
+                    .body(Body::empty())
+                    .unwrap())
             } else {
                 let format = RdfFormat::from_media_type(&content_type)
                     .ok_or_else(|| unsupported_media_type(&content_type))?;
                 if format.supports_datasets() {
                     web_load_dataset(&store, request, format)?;
-                    Ok(Response::builder(Status::NO_CONTENT).build())
+                    Ok(Response::builder()
+                        .status(StatusCode::NO_CONTENT)
+                        .body(Body::empty())
+                        .unwrap())
                 } else {
                     let graph =
                         resolve_with_base(request, &format!("/store/{:x}", random::<u128>()))?;
                     web_load_graph(&store, request, format, &graph.clone().into())?;
-                    Ok(Response::builder(Status::CREATED)
-                        .with_header(HeaderName::LOCATION, graph.into_string())
-                        .unwrap()
-                        .build())
+                    Ok(Response::builder()
+                        .status(StatusCode::CREATED)
+                        .header(LOCATION, graph.into_string())
+                        .body(Body::empty())
+                        .unwrap())
                 }
             }
         }
@@ -1025,27 +1033,36 @@ fn handle_request(
             if let Some(target) = store_target(request)? {
                 assert_that_graph_exists(&store, &target)?;
             }
-            Ok(Response::builder(Status::OK).build())
+            Ok(Response::builder().body(Body::empty()).unwrap())
         }
         _ => Err((
-            Status::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             format!(
                 "{} {} is not supported by this server",
                 request.method(),
-                request.url().path()
+                request.uri().path()
             ),
         )),
     }
 }
 
-fn base_url(request: &Request) -> String {
-    let mut url = request.url().clone();
-    url.set_query(None);
-    url.set_fragment(None);
-    url.into()
+fn base_url(request: &Request<Body>) -> String {
+    let uri = request.uri();
+    if uri.query().is_some() {
+        // We remove the query
+        let mut parts = uri.clone().into_parts();
+        if let Some(path_and_query) = &mut parts.path_and_query {
+            if path_and_query.query().is_some() {
+                *path_and_query = PathAndQuery::try_from(path_and_query.path()).unwrap();
+            }
+        };
+        Uri::from_parts(parts).unwrap().to_string()
+    } else {
+        uri.to_string()
+    }
 }
 
-fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode, HttpError> {
+fn resolve_with_base(request: &Request<Body>, url: &str) -> Result<NamedNode, HttpError> {
     Ok(Iri::parse(base_url(request))
         .map_err(bad_request)?
         .resolve(url)
@@ -1053,24 +1070,22 @@ fn resolve_with_base(request: &Request, url: &str) -> Result<NamedNode, HttpErro
         .into())
 }
 
-fn url_query(request: &Request) -> &[u8] {
-    request.url().query().unwrap_or("").as_bytes()
+fn url_query(request: &Request<Body>) -> &[u8] {
+    request.uri().query().unwrap_or_default().as_bytes()
 }
 
-fn url_query_parameter<'a>(request: &'a Request, param: &str) -> Option<Cow<'a, str>> {
-    request
-        .url()
-        .query_pairs()
+fn url_query_parameter<'a>(request: &'a Request<Body>, param: &str) -> Option<Cow<'a, str>> {
+    form_urlencoded::parse(url_query(request))
         .find(|(k, _)| k == param)
         .map(|(_, v)| v)
 }
 
-fn limited_string_body(request: &mut Request) -> Result<String, HttpError> {
+fn limited_string_body(request: &mut Request<Body>) -> Result<String, HttpError> {
     String::from_utf8(limited_body(request)?)
         .map_err(|e| bad_request(format!("Invalid UTF-8 body: {e}")))
 }
 
-fn limited_body(request: &mut Request) -> Result<Vec<u8>, HttpError> {
+fn limited_body(request: &mut Request<Body>) -> Result<Vec<u8>, HttpError> {
     let body = request.body_mut();
     if let Some(body_len) = body.len() {
         if body_len > MAX_SPARQL_BODY_SIZE {
@@ -1105,9 +1120,9 @@ fn configure_and_evaluate_sparql_query(
     store: &Store,
     encoded: &[&[u8]],
     mut query: Option<String>,
-    request: &Request,
+    request: &Request<Body>,
     default_use_default_graph_as_union: bool,
-) -> Result<Response, HttpError> {
+) -> Result<Response<Body>, HttpError> {
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
     let mut use_default_graph_as_union = false;
@@ -1147,8 +1162,8 @@ fn evaluate_sparql_query(
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
-    request: &Request,
-) -> Result<Response, HttpError> {
+    request: &Request<Body>,
+) -> Result<Response<Body>, HttpError> {
     let mut query = Query::parse(query, Some(&base_url(request))).map_err(bad_request)?;
 
     if use_default_graph_as_union {
@@ -1207,10 +1222,10 @@ fn evaluate_sparql_query(
             QueryResultsSerializer::from_format(format)
                 .serialize_boolean_to_writer(&mut body, result)
                 .map_err(internal_server_error)?;
-            Ok(Response::builder(Status::OK)
-                .with_header(HeaderName::CONTENT_TYPE, format.media_type())
-                .unwrap()
-                .with_body(body))
+            Ok(Response::builder()
+                .header(CONTENT_TYPE, format.media_type())
+                .body(body.into())
+                .unwrap())
         }
         QueryResults::Graph(triples) => {
             let format = rdf_content_negotiation(request)?;
@@ -1244,9 +1259,9 @@ fn configure_and_evaluate_sparql_update(
     store: &Store,
     encoded: &[&[u8]],
     mut update: Option<String>,
-    request: &Request,
+    request: &Request<Body>,
     default_use_default_graph_as_union: bool,
-) -> Result<Response, HttpError> {
+) -> Result<Response<Body>, HttpError> {
     let mut use_default_graph_as_union = false;
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
@@ -1286,8 +1301,8 @@ fn evaluate_sparql_update(
     use_default_graph_as_union: bool,
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
-    request: &Request,
-) -> Result<Response, HttpError> {
+    request: &Request<Body>,
+) -> Result<Response<Body>, HttpError> {
     let mut update =
         Update::parse(update, Some(base_url(request).as_str())).map_err(bad_request)?;
 
@@ -1329,22 +1344,16 @@ fn evaluate_sparql_update(
     store
         .update_opt(update, default_query_options())
         .map_err(internal_server_error)?;
-    Ok(Response::builder(Status::NO_CONTENT).build())
+    Ok(Response::builder()
+        .status(StatusCode::NO_CONTENT)
+        .body(Body::empty())
+        .unwrap())
 }
 
-fn store_target(request: &Request) -> Result<Option<NamedGraphName>, HttpError> {
-    if request.url().path() == "/store" {
-        let mut graph = None;
-        let mut default = false;
-        for (k, v) in request.url().query_pairs() {
-            match k.as_ref() {
-                "graph" => graph = Some(v.into_owned()),
-                "default" => default = true,
-                _ => (),
-            }
-        }
-        if let Some(graph) = graph {
-            if default {
+fn store_target(request: &Request<Body>) -> Result<Option<NamedGraphName>, HttpError> {
+    if request.uri().path() == "/store" {
+        if let Some(graph) = url_query_parameter(request, "graph") {
+            if url_query_parameter(request, "default").is_some() {
                 Err(bad_request(
                     "Both graph and default parameters should not be set at the same time",
                 ))
@@ -1353,7 +1362,7 @@ fn store_target(request: &Request) -> Result<Option<NamedGraphName>, HttpError> 
                     request, &graph,
                 )?)))
             }
-        } else if default {
+        } else if url_query_parameter(request, "default").is_some() {
             Ok(Some(NamedGraphName::DefaultGraph))
         } else {
             Ok(None)
@@ -1375,7 +1384,7 @@ fn assert_that_graph_exists(store: &Store, target: &NamedGraphName) -> Result<()
         Ok(())
     } else {
         Err((
-            Status::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             format!(
                 "The graph {} does not exists",
                 GraphName::from(target.clone())
@@ -1399,7 +1408,7 @@ impl From<NamedGraphName> for GraphName {
     }
 }
 
-fn rdf_content_negotiation(request: &Request) -> Result<RdfFormat, HttpError> {
+fn rdf_content_negotiation(request: &Request<Body>) -> Result<RdfFormat, HttpError> {
     content_negotiation(
         request,
         RdfFormat::from_media_type,
@@ -1412,7 +1421,9 @@ fn rdf_content_negotiation(request: &Request) -> Result<RdfFormat, HttpError> {
     )
 }
 
-fn query_results_content_negotiation(request: &Request) -> Result<QueryResultsFormat, HttpError> {
+fn query_results_content_negotiation(
+    request: &Request<Body>,
+) -> Result<QueryResultsFormat, HttpError> {
     content_negotiation(
         request,
         QueryResultsFormat::from_media_type,
@@ -1426,18 +1437,19 @@ fn query_results_content_negotiation(request: &Request) -> Result<QueryResultsFo
 }
 
 fn content_negotiation<F: Copy>(
-    request: &Request,
+    request: &Request<Body>,
     parse: impl Fn(&str) -> Option<F>,
     default: F,
     default_by_base: &[(&str, F)],
     example: &str,
 ) -> Result<F, HttpError> {
-    let default_value = HeaderValue::default();
     let header = request
-        .header(&HeaderName::ACCEPT)
-        .unwrap_or(&default_value)
-        .to_str()
-        .map_err(|_| bad_request("The Accept header should be a valid ASCII string"))?;
+        .headers()
+        .get(ACCEPT)
+        .map(|h| h.to_str())
+        .transpose()
+        .map_err(|_| bad_request("The Accept header should be a valid ASCII string"))?
+        .unwrap_or_default();
 
     if header.is_empty() {
         return Ok(default);
@@ -1488,14 +1500,14 @@ fn content_negotiation<F: Copy>(
 
     result.ok_or_else(|| {
         (
-            Status::NOT_ACCEPTABLE,
+            StatusCode::NOT_ACCEPTABLE,
             format!("The accept header does not provide any accepted format like {example}"),
         )
     })
 }
 
-fn content_type(request: &Request) -> Option<String> {
-    let value = request.header(&HeaderName::CONTENT_TYPE)?.to_str().ok()?;
+fn content_type(request: &Request<Body>) -> Option<String> {
+    let value = request.headers().get(CONTENT_TYPE)?.to_str().ok()?;
     Some(
         value
             .split_once(';')
@@ -1507,7 +1519,7 @@ fn content_type(request: &Request) -> Option<String> {
 
 fn web_load_graph(
     store: &Store,
-    request: &mut Request,
+    request: &mut Request<Body>,
     format: RdfFormat,
     to_graph_name: &GraphName,
 ) -> Result<(), HttpError> {
@@ -1535,7 +1547,7 @@ fn web_load_graph(
 
 fn web_load_dataset(
     store: &Store,
-    request: &mut Request,
+    request: &mut Request<Body>,
     format: RdfFormat,
 ) -> Result<(), HttpError> {
     let mut parser = RdfParser::from_format(format);
@@ -1550,7 +1562,7 @@ fn web_load_dataset(
     .map_err(loader_to_http_error)
 }
 
-fn web_bulk_loader(store: &Store, request: &Request) -> BulkLoader {
+fn web_bulk_loader(store: &Store, request: &Request<Body>) -> BulkLoader {
     let start = Instant::now();
     let mut loader = store.bulk_loader().on_progress(move |size| {
         let elapsed = start.elapsed();
@@ -1570,31 +1582,32 @@ fn web_bulk_loader(store: &Store, request: &Request) -> BulkLoader {
     loader
 }
 
-fn error(status: Status, message: impl fmt::Display) -> Response {
-    Response::builder(status)
-        .with_header(HeaderName::CONTENT_TYPE, "text/plain; charset=utf-8")
+fn error(status: StatusCode, message: impl fmt::Display) -> Response<Body> {
+    Response::builder()
+        .status(status)
+        .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+        .body(message.to_string().into())
         .unwrap()
-        .with_body(message.to_string())
 }
 
 fn bad_request(message: impl fmt::Display) -> HttpError {
-    (Status::BAD_REQUEST, message.to_string())
+    (StatusCode::BAD_REQUEST, message.to_string())
 }
 
 fn the_server_is_read_only() -> HttpError {
-    (Status::FORBIDDEN, "The server is read-only".into())
+    (StatusCode::FORBIDDEN, "The server is read-only".into())
 }
 
 fn unsupported_media_type(content_type: &str) -> HttpError {
     (
-        Status::UNSUPPORTED_MEDIA_TYPE,
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
         format!("No supported content Content-Type given: {content_type}"),
     )
 }
 
 fn internal_server_error(message: impl fmt::Display) -> HttpError {
     eprintln!("Internal server error: {message}");
-    (Status::INTERNAL_SERVER_ERROR, message.to_string())
+    (StatusCode::INTERNAL_SERVER_ERROR, message.to_string())
 }
 
 fn loader_to_http_error(e: LoaderError) -> HttpError {
@@ -1618,21 +1631,21 @@ impl<O: 'static, U: (Fn(O) -> io::Result<Option<O>>) + 'static> ReadForWrite<O, 
         initial_state_builder: impl FnOnce(ReadForWriteWriter) -> io::Result<O>,
         add_more_data: U,
         content_type: &'static str,
-    ) -> Result<Response, HttpError> {
+    ) -> Result<Response<Body>, HttpError> {
         let buffer = Rc::new(RefCell::new(Vec::new()));
         let state = initial_state_builder(ReadForWriteWriter {
             buffer: Rc::clone(&buffer),
         })
         .map_err(internal_server_error)?;
-        Ok(Response::builder(Status::OK)
-            .with_header(HeaderName::CONTENT_TYPE, content_type)
-            .map_err(internal_server_error)?
-            .with_body(Body::from_read(Self {
+        Response::builder()
+            .header(CONTENT_TYPE, content_type)
+            .body(Body::from_read(Self {
                 buffer,
                 position: 0,
                 add_more_data,
                 state: Some(state),
-            })))
+            }))
+            .map_err(internal_server_error)
     }
 }
 
@@ -1709,6 +1722,7 @@ mod tests {
     use assert_fs::{NamedTempFile, TempDir};
     use flate2::write::GzEncoder;
     use flate2::Compression;
+    use oxhttp::model::header::ACCEPT;
     use predicates::prelude::*;
     use std::fs::remove_dir_all;
     use std::io::read_to_string;
@@ -2192,51 +2206,58 @@ mod tests {
     #[test]
     fn get_ui() -> Result<()> {
         ServerTest::new()?.test_status(
-            Request::builder(Method::GET, "http://localhost/".parse()?).build(),
-            Status::OK,
+            Request::builder().uri("http://localhost/").body(())?,
+            StatusCode::OK,
         )
     }
 
     #[test]
     fn post_dataset_file() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/store".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/trig")?
-            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
-        ServerTest::new()?.test_status(request, Status::NO_CONTENT)
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store")
+            .header(CONTENT_TYPE, "application/trig")
+            .body("<http://example.com> <http://example.com> <http://example.com> .")?;
+        ServerTest::new()?.test_status(request, StatusCode::NO_CONTENT)
     }
 
     #[test]
     fn post_wrong_file() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/store".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/trig")?
-            .with_body("<http://example.com>");
-        ServerTest::new()?.test_status(request, Status::BAD_REQUEST)
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store")
+            .header(CONTENT_TYPE, "application/trig")
+            .body("<http://example.com>")?;
+        ServerTest::new()?.test_status(request, StatusCode::BAD_REQUEST)
     }
 
     #[test]
     fn post_unsupported_file() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/store".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/foo")?
-            .build();
-        ServerTest::new()?.test_status(request, Status::UNSUPPORTED_MEDIA_TYPE)
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store")
+            .header(CONTENT_TYPE, "text/foo")
+            .body(())?;
+        ServerTest::new()?.test_status(request, StatusCode::UNSUPPORTED_MEDIA_TYPE)
     }
 
     #[test]
     fn get_query() -> Result<()> {
         let server = ServerTest::new()?;
 
-        let request = Request::builder(Method::POST, "http://localhost/store".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/trig")?
-            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store")
+            .header(CONTENT_TYPE, "application/trig")
+            .body("<http://example.com> <http://example.com> <http://example.com> .")?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/csv")?
-        .build();
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/csv")
+            .body(())?;
         server.test_body(
             request,
             "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
@@ -2245,13 +2266,12 @@ mod tests {
 
     #[test]
     fn get_query_accept_star() -> Result<()> {
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "*/*")?
-        .build();
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "*/*")
+            .body(())?;
         ServerTest::new()?.test_body(
             request,
             r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
@@ -2260,13 +2280,12 @@ mod tests {
 
     #[test]
     fn get_query_accept_substar() -> Result<()> {
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/*")?
-        .build();
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/*")
+            .body(())?;
         ServerTest::new()?.test_body(
             request,
             r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
@@ -2275,16 +2294,12 @@ mod tests {
 
     #[test]
     fn get_query_accept_good() -> Result<()> {
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(
-            HeaderName::ACCEPT,
-            "application/sparql-results+json;charset=utf-8",
-        )?
-        .build();
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "application/sparql-results+json;charset=utf-8")
+            .body(())?;
         ServerTest::new()?.test_body(
             request,
             r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
@@ -2293,25 +2308,23 @@ mod tests {
 
     #[test]
     fn get_query_accept_bad() -> Result<()> {
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "application/foo")?
-        .build();
-        ServerTest::new()?.test_status(request, Status::NOT_ACCEPTABLE)
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "application/foo")
+            .body(())?;
+        ServerTest::new()?.test_status(request, StatusCode::NOT_ACCEPTABLE)
     }
 
     #[test]
     fn get_query_accept_explicit_priority() -> Result<()> {
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/foo;q=0.5 , text/json ; q = 0.7")?
-        .build();
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/foo;q=0.5 , text/json ; q = 0.7")
+            .body(())?;
         ServerTest::new()?.test_body(
             request,
             r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
@@ -2320,13 +2333,12 @@ mod tests {
 
     #[test]
     fn get_query_accept_implicit_priority() -> Result<()> {
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/json,text/foo")?
-        .build();
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/json,text/foo")
+            .body(())?;
         ServerTest::new()?.test_body(
             request,
             r#"{"head":{"vars":["s","p","o"]},"results":{"bindings":[]}}"#,
@@ -2334,21 +2346,22 @@ mod tests {
     }
     #[test]
     fn get_query_accept_implicit_and_explicit_priority() -> Result<()> {
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}"
-                .parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/foo;q=0.9,text/csv")?
-        .build();
+        let request = Request::builder()
+            .uri(
+                "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}",
+            )
+            .header(ACCEPT, "text/foo;q=0.9,text/csv")
+            .body(())?;
         ServerTest::new()?.test_body(request, "s,p,o\r\n")
     }
 
     #[test]
     fn get_bad_query() -> Result<()> {
         ServerTest::new()?.test_status(
-            Request::builder(Method::GET, "http://localhost/query?query=SELECT".parse()?).build(),
-            Status::BAD_REQUEST,
+            Request::builder()
+                .uri("http://localhost/query?query=SELECT")
+                .body(())?,
+            StatusCode::BAD_REQUEST,
         )
     }
 
@@ -2356,19 +2369,17 @@ mod tests {
     fn get_query_union_graph() -> Result<()> {
         let server = ServerTest::new()?;
 
-        let request = Request::builder(Method::PUT, "http://localhost/store/1".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
-        server.test_status(request, Status::CREATED)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/1")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("<http://example.com> <http://example.com> <http://example.com> .")?;
+        server.test_status(request, StatusCode::CREATED)?;
 
-        let request = Request::builder(
-            Method::GET,
+        let request =Request::builder().uri(
             "http://localhost/query?query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph"
-                .parse()
-                ?,
-        ).with_header(HeaderName::ACCEPT, "text/csv")
-            ?
-            .build();
+        ).header(ACCEPT, "text/csv")
+            .body(())?;
         server.test_body(
             request,
             "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
@@ -2379,21 +2390,19 @@ mod tests {
     fn get_query_union_graph_in_url_and_urlencoded() -> Result<()> {
         let server = ServerTest::new()?;
 
-        let request = Request::builder(Method::PUT, "http://localhost/store/1".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-            .with_body("<http://example.com> <http://example.com> <http://example.com> .");
-        server.test_status(request, Status::CREATED)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/1")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("<http://example.com> <http://example.com> <http://example.com> .")?;
+        server.test_status(request, StatusCode::CREATED)?;
 
-        let request = Request::builder(
-            Method::POST,
-            "http://localhost/query?union-default-graph".parse()?,
-        )
-        .with_header(
-            HeaderName::CONTENT_TYPE,
-            "application/x-www-form-urlencoded",
-        )?
-        .with_header(HeaderName::ACCEPT, "text/csv")?
-        .with_body("query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}");
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query?union-default-graph")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(ACCEPT, "text/csv")
+            .body("query=SELECT%20?s%20?p%20?o%20WHERE%20{%20?s%20?p%20?o%20}")?;
         server.test_body(
             request,
             "s,p,o\r\nhttp://example.com,http://example.com,http://example.com\r\n",
@@ -2402,97 +2411,107 @@ mod tests {
 
     #[test]
     fn get_query_union_graph_and_default_graph() -> Result<()> {
-        ServerTest::new()?.test_status(Request::builder(
-            Method::GET,
-            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph&default-graph-uri=http://example.com".parse()
-                ?,
-        ).build(), Status::BAD_REQUEST)
+        ServerTest::new()?.test_status(Request::builder().uri(
+            "http://localhost/query?query=SELECT%20*%20WHERE%20{%20?s%20?p%20?o%20}&union-default-graph&default-graph-uri=http://example.com",
+        ).body(())?, StatusCode::BAD_REQUEST)
     }
 
     #[test]
     fn get_query_description() -> Result<()> {
         ServerTest::new()?.test_status(
-            Request::builder(Method::GET, "http://localhost/query".parse()?).build(),
-            Status::OK,
+            Request::builder().uri("http://localhost/query").body(())?,
+            StatusCode::OK,
         )
     }
 
     #[test]
     fn post_query() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/query".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")?
-            .with_body("SELECT * WHERE { ?s ?p ?o }");
-        ServerTest::new()?.test_status(request, Status::OK)
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query")
+            .header(CONTENT_TYPE, "application/sparql-query")
+            .body("SELECT * WHERE { ?s ?p ?o }")?;
+        ServerTest::new()?.test_status(request, StatusCode::OK)
     }
 
     #[test]
     fn post_bad_query() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/query".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")?
-            .with_body("SELECT");
-        ServerTest::new()?.test_status(request, Status::BAD_REQUEST)
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query")
+            .header(CONTENT_TYPE, "application/sparql-query")
+            .body("SELECT")?;
+        ServerTest::new()?.test_status(request, StatusCode::BAD_REQUEST)
     }
 
     #[test]
     fn post_unknown_query() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/query".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-todo")?
-            .with_body("SELECT");
-        ServerTest::new()?.test_status(request, Status::UNSUPPORTED_MEDIA_TYPE)
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/query")
+            .header(CONTENT_TYPE, "application/sparql-todo")
+            .body("SELECT")?;
+        ServerTest::new()?.test_status(request, StatusCode::UNSUPPORTED_MEDIA_TYPE)
     }
 
     #[test]
     fn post_federated_query_wikidata() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/query".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
-            ?.with_body("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> { <https://en.wikipedia.org/wiki/Paris> ?p ?o } }");
-        ServerTest::new()?.test_status(request, Status::OK)
+        let request = Request::builder().method(Method::POST).uri("http://localhost/query")
+            .header(CONTENT_TYPE, "application/sparql-query")
+            .body("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> { <https://en.wikipedia.org/wiki/Paris> ?p ?o } }")?;
+        ServerTest::new()?.test_status(request, StatusCode::OK)
     }
 
     #[test]
     fn post_federated_query_dbpedia() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/query".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-query")
-            ?.with_body("SELECT * WHERE { SERVICE <https://dbpedia.org/sparql> { <http://dbpedia.org/resource/Paris> ?p ?o } }");
-        ServerTest::new()?.test_status(request, Status::OK)
+        let request = Request::builder().method(Method::POST).uri("http://localhost/query")
+            .header(CONTENT_TYPE, "application/sparql-query")
+            .body("SELECT * WHERE { SERVICE <https://dbpedia.org/sparql> { <http://dbpedia.org/resource/Paris> ?p ?o } }")?;
+        ServerTest::new()?.test_status(request, StatusCode::OK)
     }
 
     #[test]
     fn get_update_description() -> Result<()> {
         ServerTest::new()?.test_status(
-            Request::builder(Method::GET, "http://localhost/update".parse()?).build(),
-            Status::OK,
+            Request::builder().uri("http://localhost/update").body(())?,
+            StatusCode::OK,
         )
     }
 
     #[test]
     fn post_update() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/update".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-update")?
-            .with_body(
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/update")
+            .header(CONTENT_TYPE, "application/sparql-update")
+            .body(
                 "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
-            );
-        ServerTest::new()?.test_status(request, Status::NO_CONTENT)
+            )?;
+        ServerTest::new()?.test_status(request, StatusCode::NO_CONTENT)
     }
 
     #[test]
     fn post_bad_update() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/update".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-update")?
-            .with_body("INSERT");
-        ServerTest::new()?.test_status(request, Status::BAD_REQUEST)
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/update")
+            .header(CONTENT_TYPE, "application/sparql-update")
+            .body("INSERT")?;
+        ServerTest::new()?.test_status(request, StatusCode::BAD_REQUEST)
     }
 
     #[test]
     fn post_update_read_only() -> Result<()> {
-        let request = Request::builder(Method::POST, "http://localhost/update".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/sparql-update")?
-            .with_body(
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/update")
+            .header(CONTENT_TYPE, "application/sparql-update")
+            .body(
                 "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
-            );
+            )?;
         ServerTest::check_status(
             ServerTest::new()?.exec_read_only(request),
-            Status::FORBIDDEN,
+            StatusCode::FORBIDDEN,
         )
     }
 
@@ -2501,32 +2520,27 @@ mod tests {
         let server = ServerTest::new()?;
 
         // PUT
-        let request = Request::builder(
-            Method::PUT,
-            "http://localhost/store?graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-        .with_body("<http://example.com> <http://example.com> <http://example.com> .");
-        server.test_status(request, Status::CREATED)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store?graph=http://example.com")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("<http://example.com> <http://example.com> <http://example.com> .")?;
+        server.test_status(request, StatusCode::CREATED)?;
 
         // GET good URI
         server.test_status(
-            Request::builder(
-                Method::GET,
-                "http://localhost/store?graph=http://example.com".parse()?,
-            )
-            .build(),
-            Status::OK,
+            Request::builder()
+                .uri("http://localhost/store?graph=http://example.com")
+                .body(())?,
+            StatusCode::OK,
         )?;
 
         // GET bad URI
         server.test_status(
-            Request::builder(
-                Method::GET,
-                "http://localhost/store?graph=http://example.com/".parse()?,
-            )
-            .build(),
-            Status::NOT_FOUND,
+            Request::builder()
+                .uri("http://localhost/store?graph=http://example.com/")
+                .body(())?,
+            StatusCode::NOT_FOUND,
         )
     }
 
@@ -2535,42 +2549,36 @@ mod tests {
         let server = ServerTest::new()?;
 
         // POST
-        let request = Request::builder(
-            Method::POST,
-            "http://localhost/store?graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-        .with_body("<> <http://example.com/p> <http://example.com/o1> .");
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store?graph=http://example.com")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("<> <http://example.com/p> <http://example.com/o1> .")?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "application/n-triples")?
-        .build();
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=http://example.com")
+            .header(ACCEPT, "application/n-triples")
+            .body(())?;
         server.test_body(
             request,
             "<http://example.com> <http://example.com/p> <http://example.com/o1> .\n",
         )?;
 
         // PUT
-        let request = Request::builder(
-            Method::PUT,
-            "http://localhost/store?graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-        .with_body("<> <http://example.com/p> <http://example.com/o2> .");
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store?graph=http://example.com")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("<> <http://example.com/p> <http://example.com/o2> .")?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "application/n-triples")?
-        .build();
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=http://example.com")
+            .header(ACCEPT, "application/n-triples")
+            .body(())?;
         server.test_body(
             request,
             "<http://example.com> <http://example.com/p> <http://example.com/o2> .\n",
@@ -2584,9 +2592,11 @@ mod tests {
         let server = ServerTest::new()?;
 
         // PUT - Initial state
-        let request = Request::builder(Method::PUT, "http://localhost/store/person/1.ttl".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .with_body(
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/person/1.ttl")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(
                 r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -2597,34 +2607,40 @@ mod tests {
         v:fn "John Doe"
     ].
 "#,
-            );
-        server.test_status(request, Status::CREATED)?;
+            )?;
+        server.test_status(request, StatusCode::CREATED)?;
 
         // GET of PUT - Initial state
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=/store/person/1.ttl".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/turtle")?
-        .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=/store/person/1.ttl")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // HEAD on an existing graph
         server.test_status(
-            Request::builder(Method::HEAD, "http://localhost/store/person/1.ttl".parse()?).build(),
-            Status::OK,
+            Request::builder()
+                .method(Method::HEAD)
+                .uri("http://localhost/store/person/1.ttl")
+                .body(())?,
+            StatusCode::OK,
         )?;
 
         // HEAD on a non-existing graph
         server.test_status(
-            Request::builder(Method::HEAD, "http://localhost/store/person/4.ttl".parse()?).build(),
-            Status::NOT_FOUND,
+            Request::builder()
+                .method(Method::HEAD)
+                .uri("http://localhost/store/person/4.ttl")
+                .body(())?,
+            StatusCode::NOT_FOUND,
         )?;
 
         // PUT - graph already in store
-        let request = Request::builder(Method::PUT, "http://localhost/store/person/1.ttl".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .with_body(
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/person/1.ttl")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(
                 r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -2635,19 +2651,22 @@ mod tests {
         v:fn "Jane Doe"
     ].
 "#,
-            );
-        server.test_status(request, Status::NO_CONTENT)?;
+            )?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET of PUT - graph already in store
-        let request = Request::builder(Method::GET, "http://localhost/store/person/1.ttl".parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store/person/1.ttl")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // PUT - default graph
-        let request = Request::builder(Method::PUT, "http://localhost/store?default".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .with_body(
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store?default")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(
                 r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -2658,37 +2677,45 @@ mod tests {
         v:given-name "Alice"
     ] .
 "#,
-            );
-        server.test_status(request, Status::NO_CONTENT)?; // The default graph always exists in Oxigraph
+            )?;
+        server.test_status(request, StatusCode::NO_CONTENT)?; // The default graph always exists in Oxigraph
 
         // GET of PUT - default graph
-        let request = Request::builder(Method::GET, "http://localhost/store?default".parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store?default")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // PUT - mismatched payload
-        let request = Request::builder(Method::PUT, "http://localhost/store/person/1.ttl".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .with_body("@prefix foo");
-        server.test_status(request, Status::BAD_REQUEST)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/person/1.ttl")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body("@prefix foo")?;
+        server.test_status(request, StatusCode::BAD_REQUEST)?;
 
         // PUT - empty graph
-        let request = Request::builder(Method::PUT, "http://localhost/store/person/2.ttl".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .build();
-        server.test_status(request, Status::CREATED)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/person/2.ttl")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(())?;
+        server.test_status(request, StatusCode::CREATED)?;
 
         // GET of PUT - empty graph
-        let request = Request::builder(Method::GET, "http://localhost/store/person/2.ttl".parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store/person/2.ttl")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // PUT - replace empty graph
-        let request = Request::builder(Method::PUT, "http://localhost/store/person/2.ttl".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .with_body(
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/person/2.ttl")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(
                 r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -2699,54 +2726,59 @@ mod tests {
         v:given-name "Alice"
     ] .
 "#,
-            );
-        server.test_status(request, Status::NO_CONTENT)?;
+            )?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET of replacement for empty graph
-        let request = Request::builder(Method::GET, "http://localhost/store/person/2.ttl".parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store/person/2.ttl")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // DELETE - existing graph
         server.test_status(
-            Request::builder(
-                Method::DELETE,
-                "http://localhost/store/person/2.ttl".parse()?,
-            )
-            .build(),
-            Status::NO_CONTENT,
+            Request::builder()
+                .method(Method::DELETE)
+                .uri("http://localhost/store/person/2.ttl")
+                .body(())?,
+            StatusCode::NO_CONTENT,
         )?;
 
         // GET of DELETE - existing graph
         server.test_status(
-            Request::builder(Method::GET, "http://localhost/store/person/2.ttl".parse()?).build(),
-            Status::NOT_FOUND,
+            Request::builder()
+                .uri("http://localhost/store/person/2.ttl")
+                .body(())?,
+            StatusCode::NOT_FOUND,
         )?;
 
         // DELETE - non-existent graph
         server.test_status(
-            Request::builder(
-                Method::DELETE,
-                "http://localhost/store/person/2.ttl".parse()?,
-            )
-            .build(),
-            Status::NOT_FOUND,
+            Request::builder()
+                .method(Method::DELETE)
+                .uri("http://localhost/store/person/2.ttl")
+                .body(())?,
+            StatusCode::NOT_FOUND,
         )?;
 
         // POST - existing graph
-        let request = Request::builder(Method::PUT, "http://localhost/store/person/1.ttl".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .build();
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/person/1.ttl")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(())?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // TODO: POST - multipart/form-data
         // TODO: GET of POST - multipart/form-data
 
         // POST - create new graph
-        let request = Request::builder(Method::POST, "http://localhost/store".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .with_body(
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(
                 r#"
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix v: <http://www.w3.org/2006/vcard/ns#> .
@@ -2757,28 +2789,32 @@ mod tests {
         v:given-name "Alice"
     ] .
 "#,
-            );
+            )?;
         let response = server.exec(request);
-        assert_eq!(response.status(), Status::CREATED);
-        let location = response.header(&HeaderName::LOCATION).unwrap().to_str()?;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let location = response.headers().get(LOCATION).unwrap().to_str()?;
 
         // GET of POST - create new graph
-        let request = Request::builder(Method::GET, location.parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri(location)
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // POST - empty graph to existing graph
-        let request = Request::builder(Method::PUT, location.parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-            .build();
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri(location)
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(())?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET of POST - after noop
-        let request = Request::builder(Method::GET, location.parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)
+        let request = Request::builder()
+            .uri(location)
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)
     }
 
     #[test]
@@ -2791,79 +2827,71 @@ mod tests {
 <http://$HOST$/$GRAPHSTORE$/person/1> a foaf:Person . foo";
 
         // POST
-        let request = Request::builder(
-            Method::POST,
-            "http://localhost/store/person/1.ttl?no_transaction&lenient".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-        .with_body(invalid_data);
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store/person/1.ttl?no_transaction&lenient")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(invalid_data)?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET of POST
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=/store/person/1.ttl".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/turtle")?
-        .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=/store/person/1.ttl")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // POST dataset
-        let request = Request::builder(
-            Method::POST,
-            "http://localhost/store?lenient&no_transaction".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "application/trig; charset=utf-8")?
-        .with_body(invalid_data);
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store?lenient&no_transaction")
+            .header(CONTENT_TYPE, "application/trig; charset=utf-8")
+            .body(invalid_data)?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET of POST dataset
-        let request = Request::builder(Method::GET, "http://localhost/store?default".parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store?default")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // PUT
-        let request = Request::builder(
-            Method::PUT,
-            "http://localhost/store/person/1.ttl?lenient&no_transaction".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "text/turtle; charset=utf-8")?
-        .with_body(invalid_data);
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store/person/1.ttl?lenient&no_transaction")
+            .header(CONTENT_TYPE, "text/turtle; charset=utf-8")
+            .body(invalid_data)?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET of PUT - Initial state
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=/store/person/1.ttl".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/turtle")?
-        .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=/store/person/1.ttl")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // PUT dataset
-        let request = Request::builder(
-            Method::PUT,
-            "http://localhost/store?lenient&no_transaction".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "application/trig; charset=utf-8")?
-        .with_body(invalid_data);
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::PUT)
+            .uri("http://localhost/store?lenient&no_transaction")
+            .header(CONTENT_TYPE, "application/trig; charset=utf-8")
+            .body(invalid_data)?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET of PUT dataset
-        let request = Request::builder(Method::GET, "http://localhost/store?default".parse()?)
-            .with_header(HeaderName::ACCEPT, "text/turtle")?
-            .build();
-        server.test_status(request, Status::OK)?;
+        let request = Request::builder()
+            .uri("http://localhost/store?default")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::OK)?;
 
         // GET of PUT dataset - replacement
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=/store/person/1.ttl".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "text/turtle")?
-        .build();
-        server.test_status(request, Status::NOT_FOUND)
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=/store/person/1.ttl")
+            .header(ACCEPT, "text/turtle")
+            .body(())?;
+        server.test_status(request, StatusCode::NOT_FOUND)
     }
 
     #[test]
@@ -2871,57 +2899,54 @@ mod tests {
         let server = ServerTest::new()?;
 
         // POST
-        let request = Request::builder(
-            Method::POST,
-            "http://localhost/store?lenient&graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-        .with_body("< s> < p> \"\\uD83D\\uDC68\" .");
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store?lenient&graph=http://example.com")
+            .header(CONTENT_TYPE, "text/turtle")
+            .body("< s> < p> \"\\uD83D\\uDC68\" .")?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "application/n-triples")?
-        .build();
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=http://example.com")
+            .header(ACCEPT, "application/n-triples")
+            .body(())?;
         server.test_body(
             request,
             "<http://example.com/ s> <http://example.com/ p> \"\u{1f468}\" .\n",
         )?;
 
         // PUT
-        let request = Request::builder(
-            Method::PUT,
-            "http://localhost/store?lenient&graph=http://example.com".parse()?,
+        let request = Request::builder().method(Method::PUT).uri(
+            "http://localhost/store?lenient&graph=http://example.com",
         )
-        .with_header(HeaderName::CONTENT_TYPE, "text/turtle")?
-        .with_body("< s> < p> \"\\uD83D\\uDC68\\u200D\\uD83D\\uDC69\\u200D\\uD83D\\uDC67\\u200D\\uD83D\\uDC67\" .");
-        server.test_status(request, Status::NO_CONTENT)?;
+        .header(CONTENT_TYPE, "text/turtle")
+        .body("< s> < p> \"\\uD83D\\uDC68\\u200D\\uD83D\\uDC69\\u200D\\uD83D\\uDC67\\u200D\\uD83D\\uDC67\" .")?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET
-        let request = Request::builder(
-            Method::GET,
-            "http://localhost/store?graph=http://example.com".parse()?,
-        )
-        .with_header(HeaderName::ACCEPT, "application/n-triples")?
-        .build();
+        let request = Request::builder()
+            .uri("http://localhost/store?graph=http://example.com")
+            .header(ACCEPT, "application/n-triples")
+            .body(())?;
         server.test_body(
             request,
             "<http://example.com/ s> <http://example.com/ p> \"\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f467}\" .\n",
         )?;
 
         // POST dataset
-        let request = Request::builder(Method::POST, "http://localhost/store?lenient".parse()?)
-            .with_header(HeaderName::CONTENT_TYPE, "application/trig")?
-            .with_body("<s> <p> \"\"@abcdefghijklmn .");
-        server.test_status(request, Status::NO_CONTENT)?;
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("http://localhost/store?lenient")
+            .header(CONTENT_TYPE, "application/trig")
+            .body("<s> <p> \"\"@abcdefghijklmn .")?;
+        server.test_status(request, StatusCode::NO_CONTENT)?;
 
         // GET
-        let request = Request::builder(Method::GET, "http://localhost/store".parse()?)
-            .with_header(HeaderName::ACCEPT, "application/n-quads")?
-            .build();
+        let request = Request::builder()
+            .uri("http://localhost/store")
+            .header(ACCEPT, "application/n-quads")
+            .body(())?;
         server.test_body(request, "<s> <p> \"\"@abcdefghijklmn .\n<http://example.com/ s> <http://example.com/ p> \"\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f467}\" <http://example.com> .\n")
     }
 
@@ -2936,30 +2961,44 @@ mod tests {
             })
         }
 
-        fn exec(&self, mut request: Request) -> Response {
-            handle_request(&mut request, self.store.clone(), false, false)
-                .unwrap_or_else(|(status, message)| error(status, message))
+        fn exec(&self, request: Request<impl Into<Body>>) -> Response<Body> {
+            handle_request(
+                &mut request.map(Into::into),
+                self.store.clone(),
+                false,
+                false,
+            )
+            .unwrap_or_else(|(status, message)| error(status, message))
         }
 
-        fn exec_read_only(&self, mut request: Request) -> Response {
-            handle_request(&mut request, self.store.clone(), true, false)
-                .unwrap_or_else(|(status, message)| error(status, message))
+        fn exec_read_only(&self, request: Request<impl Into<Body>>) -> Response<Body> {
+            handle_request(
+                &mut request.map(Into::into),
+                self.store.clone(),
+                true,
+                false,
+            )
+            .unwrap_or_else(|(status, message)| error(status, message))
         }
 
-        fn test_status(&self, request: Request, expected_status: Status) -> Result<()> {
+        fn test_status(
+            &self,
+            request: Request<impl Into<Body>>,
+            expected_status: StatusCode,
+        ) -> Result<()> {
             Self::check_status(self.exec(request), expected_status)
         }
 
-        fn check_status(mut response: Response, expected_status: Status) -> Result<()> {
+        fn check_status(mut response: Response<Body>, expected_status: StatusCode) -> Result<()> {
             let body = read_to_string(response.body_mut())?;
             assert_eq!(response.status(), expected_status, "Error message: {body}");
             Ok(())
         }
 
-        fn test_body(&self, request: Request, expected_body: &str) -> Result<()> {
+        fn test_body(&self, request: Request<impl Into<Body>>, expected_body: &str) -> Result<()> {
             let mut response = self.exec(request);
             let body = read_to_string(response.body_mut())?;
-            assert_eq!(response.status(), Status::OK, "Error message: {body}");
+            assert_eq!(response.status(), StatusCode::OK, "Error message: {body}");
             assert_eq!(&body, expected_body);
             Ok(())
         }

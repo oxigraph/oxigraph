@@ -2,7 +2,7 @@
 
 use bzip2::read::MultiBzDecoder;
 use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion, Throughput};
-use oxhttp::model::{Method, Request, Status, Url};
+use oxhttp::model::{Request, Uri};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
 use oxigraph::store::Store;
@@ -12,6 +12,7 @@ use std::fs::{remove_dir_all, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::str;
+use std::str::FromStr;
 
 fn parse_nt(c: &mut Criterion) {
     let data = read_bz2_data("https://zenodo.org/records/12663333/files/dataset-1000.nt.bz2");
@@ -256,13 +257,13 @@ criterion_group!(store, sparql_parsing, store_query_and_update, store_load);
 criterion_main!(parse, store);
 
 fn read_bz2_data(url: &str) -> Vec<u8> {
-    let url = Url::parse(url).unwrap();
-    let file_name = url.path_segments().unwrap().next_back().unwrap().to_owned();
+    let url = Uri::from_str(url).unwrap();
+    let file_name = url.path().split('/').next_back().unwrap().to_owned();
     if !Path::new(&file_name).exists() {
         let client = oxhttp::Client::new().with_redirection_limit(5);
-        let request = Request::builder(Method::GET, url.clone()).build();
+        let request = Request::builder().uri(&url).body(()).unwrap();
         let response = client.request(request).unwrap();
-        assert_eq!(response.status(), Status::OK, "{url}");
+        assert!(response.status().is_success(), "{url}");
         std::io::copy(
             &mut response.into_body(),
             &mut File::create(&file_name).unwrap(),
