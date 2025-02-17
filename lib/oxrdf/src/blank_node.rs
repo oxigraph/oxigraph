@@ -129,9 +129,32 @@ impl Default for BlankNode {
 #[cfg(feature = "serde")]
 impl Serialize for BlankNode {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Value", 1)?;
+        let mut state = serializer.serialize_struct("BlankNode", 1)?;
         state.serialize_field("value", &self.as_str())?;
         state.end()
+    }
+}
+#[cfg(feature = "serde")]
+struct BlankNodeVisitor;
+
+#[cfg(feature = "serde")]
+impl<'de> Visitor<'de> for BlankNodeVisitor {
+    type Value = BlankNode;
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("struct Value")
+    }
+    fn visit_map<V>(self, mut map: V) -> Result<BlankNode, V::Error>
+    where
+        V: MapAccess<'de>,
+    {
+        let key = map.next_key::<&str>()?;
+        if key != Some("value") {
+            if let Some(val) = key {
+                return Err(de::Error::unknown_field(val, &["value"]));
+            }
+            return Err(de::Error::missing_field("value"));
+        }
+        Ok(BlankNode::new(map.next_value::<&str>()?).map_err(de::Error::custom)?)
     }
 }
 
@@ -141,31 +164,7 @@ impl<'de> Deserialize<'de> for BlankNode {
     where
         D: Deserializer<'de>,
     {
-        struct BlankNodeVisitor;
-
-        impl<'de> Visitor<'de> for BlankNodeVisitor {
-            type Value = BlankNode;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("struct Value")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<BlankNode, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let key = map.next_key::<&str>()?;
-                if key != Some("value") {
-                    if let Some(val) = key {
-                        return Err(de::Error::unknown_field(val, &["value"]));
-                    }
-                    return Err(de::Error::missing_field("value"));
-                }
-                Ok(BlankNode::new(map.next_value::<&str>()?).map_err(de::Error::custom)?)
-            }
-        }
-
-        deserializer.deserialize_struct("Value", &["value"], BlankNodeVisitor)
+        deserializer.deserialize_struct("BlankNode", &["value"], BlankNodeVisitor)
     }
 }
 
@@ -496,15 +495,4 @@ mod tests {
             serde_json::from_str::<BlankNode>(&"{\"art\":\"r\"}");
         assert!(b4.is_err());
     }
-
-    // TODO: Make sure this test exists in the term file
-    // #[test]
-    // #[cfg(feature = "serde")]
-    // fn test_serde_term() {
-    //     let b: Term = BlankNode::new("foo").unwrap().into();
-    //     let json = serde_json::to_string(&b).unwrap();
-    //     assert_eq!(json, "{\"type\":\"bnode\",\"value\":\"foo\"}");
-    //     let b2: BlankNode = serde_json::from_str(&json).unwrap();
-    //     assert_eq!(b2, BlankNode::new("foo").unwrap());
-    // }
 }

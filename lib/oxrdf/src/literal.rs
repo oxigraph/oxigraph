@@ -3,6 +3,11 @@ use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
+#[cfg(feature = "serde")]
+use serde::{
+    de, de::MapAccess, de::Visitor, ser::SerializeStruct, Deserialize, Deserializer, Serialize,
+    Serializer,
+};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -156,6 +161,100 @@ impl fmt::Display for Literal {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for Literal {
+    #[inline]
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map: <S as Serializer>::SerializeStruct;
+        match self {
+            Self(LiteralContent::String(value)) => {
+                map = serializer.serialize_struct("Literal", 1)?;
+                map.serialize_field("value", value)?;
+            }
+            Self(LiteralContent::LanguageTaggedString { value, language }) => {
+                map = serializer.serialize_struct("Literal", 2)?;
+                map.serialize_field("value", value)?;
+                map.serialize_field("language", language)?;
+            }
+            Self(LiteralContent::TypedLiteral { value, datatype }) => {
+                map = serializer.serialize_struct("Literal", 2)?;
+                map.serialize_field("value", value)?;
+                map.serialize_field("datatype", datatype.as_str())?;
+            }
+        };
+        map.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+struct LiteralVisitor;
+
+#[cfg(feature = "serde")]
+impl<'de> Visitor<'de> for LiteralVisitor {
+    type Value = Literal;
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("struct Literal")
+    }
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let mut value: Option<&str> = None;
+        let mut datatype: Option<&str> = None;
+        let mut language: Option<&str> = None;
+        while let Some(key) = map.next_key()? {
+            match key {
+                "value" => {
+                    if value.is_some() {
+                        return Err(de::Error::duplicate_field("value"));
+                    }
+                    value = Some(map.next_value()?);
+                }
+                "datatype" => {
+                    if datatype.is_some() {
+                        return Err(de::Error::duplicate_field("datatype"));
+                    }
+                    datatype = Some(map.next_value()?);
+                }
+                "language" => {
+                    if language.is_some() {
+                        return Err(de::Error::duplicate_field("language"));
+                    }
+                    language = Some(map.next_value()?);
+                }
+                _ => {
+                    return Err(de::Error::unknown_field(
+                        key,
+                        &["value", "datatype", "language"],
+                    ));
+                }
+            }
+        }
+        match (value, datatype, language) {
+            (Some(value), Some(datatype), None) => Ok(Literal::new_typed_literal(
+                value,
+                NamedNode::new_unchecked(datatype),
+            )),
+            (Some(value), None, Some(language)) => {
+                Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
+            }
+            (Some(value), None, None) => Ok(Literal::new_simple_literal(value)),
+            _ => Err(de::Error::missing_field("value")),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for Literal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_struct(
+            "Literal",
+            &["value", "datatype", "language"],
+            LiteralVisitor,
+        )
     }
 }
 
@@ -664,5 +763,27 @@ mod tests {
         assert_eq!("-INF", Literal::from(f64::NEG_INFINITY).value());
         assert_eq!("NaN", Literal::from(f32::NAN).value());
         assert_eq!("NaN", Literal::from(f64::NAN).value());
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        let j = serde_json::to_string(&Literal::new_simple_literal("foo")).unwrap();
+        assert_eq!("{\"value\":\"foo\"}", j);
+
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
+        assert_eq!(node, Literal::new_simple_literal("foo"));
+
+        let j = serde_json::to_string(&Literal::new_typed_literal("true", xsd::BOOLEAN)).unwrap();
+
+        assert_eq!(
+            "{\"value\":\"true\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",
+            j
+        );
+
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
+        assert_eq!(node, Literal::new_typed_literal("true", xsd::BOOLEAN));
     }
 }
