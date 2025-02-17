@@ -1586,7 +1586,7 @@ mod tests {
         let b: Term = BlankNode::new("foo").unwrap().into();
         let json = serde_json::to_string(&b).unwrap();
         assert_eq!(json, "{\"type\":\"bnode\",\"value\":\"foo\"}");
-        let b2: BlankNode = serde_json::from_str(&json).unwrap();
-        assert_eq!(b2, BlankNode::new("foo").unwrap());
+        let b2: Term = serde_json::from_str(&json).unwrap();
+        assert_eq!(b2, Term::BlankNode(BlankNode::new("foo").unwrap()));
     }
 }
