@@ -762,7 +762,7 @@ mod tests {
 
     // Test for serde validation errors
     #[test]
-    #[cfg(all(feature = "serde"))]
+    #[cfg(feature = "serde")]
     fn test_serde_validation() {
         let j = r#"{"value":"true","datatype":"boo"}"#;
         let mut de = serde_json::Deserializer::from_str(j);

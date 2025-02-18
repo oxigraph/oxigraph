@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "serde"))]
+    #[cfg(feature = "serde")]
     fn invalid_iri() {
         let j = r#"{"value":"boo"}"#;
         let mut de = serde_json::Deserializer::from_str(j);
