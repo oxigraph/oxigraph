@@ -169,7 +169,7 @@ jobs:
   test_features:
     strategy:
       matrix:
-        features: [ "serde", "serde-unvalidated", "rdf-star", "serde rdf-star" ]
+        features: [ "serde", "serde-unvalidated" ]
         os: [ "linux", "windows", "macos" ]
     runs-on: ${{ matrix.os }}-latest
     steps:
