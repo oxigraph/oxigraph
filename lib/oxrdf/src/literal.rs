@@ -190,11 +190,11 @@ impl Serialize for Literal {
 }
 
 #[cfg(feature = "serde")]
-#[derive(Deserialize)]  
-struct LiteralValue {  
-    value: String,  
-    language: Option<String>,  
-    datatype: Option<String>  
+#[derive(Deserialize)]
+struct LiteralValue {
+    value: String,
+    language: Option<String>,
+    datatype: Option<String>,
 }
 
 #[cfg(feature = "serde")]
@@ -203,7 +203,11 @@ impl<'de> Deserialize<'de> for Literal {
     where
         D: Deserializer<'de>,
     {
-        let LiteralValue { value, language, datatype } = LiteralValue::deserialize(deserializer)?;
+        let LiteralValue {
+            value,
+            language,
+            datatype,
+        } = LiteralValue::deserialize(deserializer)?;
         match (datatype, language) {
             (Some(datatype), None) => Ok(Literal::new_typed_literal(
                 value,
