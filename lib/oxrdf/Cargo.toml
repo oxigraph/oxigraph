@@ -17,6 +17,7 @@ rust-version.workspace = true
 default = []
 rdf-star = []
 serde = ["dep:serde"]
+serde-unvalidated = ["serde"]
 
 [dependencies]
 oxilangtag.workspace = true
