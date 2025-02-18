@@ -195,7 +195,7 @@ struct LiteralVisitor;
 #[cfg(feature = "serde")]
 impl<'de> Visitor<'de> for LiteralVisitor {
     type Value = Literal;
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("struct Literal")
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
@@ -233,10 +233,20 @@ impl<'de> Visitor<'de> for LiteralVisitor {
         match (value, datatype, language) {
             (Some(value), Some(datatype), None) => Ok(Literal::new_typed_literal(
                 value,
-                NamedNode::new_unchecked(datatype),
+                if cfg!(feature = "serde-unvalidated") {
+                    NamedNode::new_unchecked(datatype)
+                } else {
+                    NamedNode::new(datatype).map_err(de::Error::custom)?
+                },
             )),
             (Some(value), None, Some(language)) => {
-                Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
+                if cfg!(feature = "serde-unvalidated") {
+                    Ok(Literal::new_language_tagged_literal_unchecked(
+                        value, language,
+                    ))
+                } else {
+                    Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
+                }
             }
             (Some(value), None, None) => Ok(Literal::new_simple_literal(value)),
             _ => Err(de::Error::missing_field("value")),
@@ -785,5 +795,30 @@ mod tests {
         let mut de = serde_json::Deserializer::from_str(&j);
         let node: Literal = Deserialize::deserialize(&mut de).unwrap();
         assert_eq!(node, Literal::new_typed_literal("true", xsd::BOOLEAN));
+    }
+
+    // Test for serde validation errors
+    #[test]
+    #[cfg(all(feature = "serde"))]
+    fn test_serde_validation() {
+        let j = r#"{"value":"true","datatype":"boo"}"#;
+        let mut de = serde_json::Deserializer::from_str(j);
+        let deserialized = Literal::deserialize(&mut de);
+
+        if cfg!(feature = "serde-unvalidated") {
+            assert!(deserialized.is_ok());
+        } else {
+            assert!(deserialized.is_err());
+        }
+
+        let j = r#"{"value":"true","language":"bo2"}"#;
+        let mut de = serde_json::Deserializer::from_str(j);
+        let deserialized = Literal::deserialize(&mut de);
+
+        if cfg!(feature = "serde-unvalidated") {
+            assert!(deserialized.is_ok());
+        } else {
+            assert!(deserialized.is_err());
+        }
     }
 }

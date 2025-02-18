@@ -134,6 +134,7 @@ impl Serialize for BlankNode {
         state.end()
     }
 }
+
 #[cfg(feature = "serde")]
 struct BlankNodeVisitor;
 
@@ -141,7 +142,7 @@ struct BlankNodeVisitor;
 impl<'de> Visitor<'de> for BlankNodeVisitor {
     type Value = BlankNode;
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("struct Value")
+        formatter.write_str("struct BlankNode")
     }
     fn visit_map<V>(self, mut map: V) -> Result<BlankNode, V::Error>
     where
@@ -154,7 +155,11 @@ impl<'de> Visitor<'de> for BlankNodeVisitor {
             }
             return Err(de::Error::missing_field("value"));
         }
-        Ok(BlankNode::new(map.next_value::<&str>()?).map_err(de::Error::custom)?)
+        if cfg!(not(feature = "serde-unvalidated")) {
+            Ok(BlankNode::new(map.next_value::<&str>()?).map_err(de::Error::custom)?)
+        } else {
+            Ok(BlankNode::new_unchecked(map.next_value::<String>()?))
+        }
     }
 }
 
