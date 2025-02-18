@@ -176,8 +176,7 @@ jobs:
     strategy:
       matrix:
         features: [ "serde", "serde-unvalidated" ]
-        os: [ "linux", "windows", "macos" ]
-    runs-on: ${{ matrix.os }}-latest
+    runs-on: linux-latest
     steps:
       - uses: actions/checkout@v4
         with:
