@@ -190,68 +190,11 @@ impl Serialize for Literal {
 }
 
 #[cfg(feature = "serde")]
-struct LiteralVisitor;
-
-#[cfg(feature = "serde")]
-impl<'de> Visitor<'de> for LiteralVisitor {
-    type Value = Literal;
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("struct Literal")
-    }
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut value: Option<&str> = None;
-        let mut datatype: Option<&str> = None;
-        let mut language: Option<&str> = None;
-        while let Some(key) = map.next_key()? {
-            match key {
-                "value" => {
-                    if value.is_some() {
-                        return Err(de::Error::duplicate_field("value"));
-                    }
-                    value = Some(map.next_value()?);
-                }
-                "datatype" => {
-                    if datatype.is_some() {
-                        return Err(de::Error::duplicate_field("datatype"));
-                    }
-                    datatype = Some(map.next_value()?);
-                }
-                "language" => {
-                    if language.is_some() {
-                        return Err(de::Error::duplicate_field("language"));
-                    }
-                    language = Some(map.next_value()?);
-                }
-                _ => {
-                    return Err(de::Error::unknown_field(
-                        key,
-                        &["value", "datatype", "language"],
-                    ));
-                }
-            }
-        }
-        match (value, datatype, language) {
-            (Some(value), Some(datatype), None) => Ok(Literal::new_typed_literal(
-                value,
-                if cfg!(feature = "serde-unvalidated") {
-                    NamedNode::new_unchecked(datatype)
-                } else {
-                    NamedNode::new(datatype).map_err(de::Error::custom)?
-                },
-            )),
-            (Some(value), None, Some(language)) => {
-                if cfg!(feature = "serde-unvalidated") {
-                    Ok(Literal::new_language_tagged_literal_unchecked(
-                        value, language,
-                    ))
-                } else {
-                    Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
-                }
-            }
-            (Some(value), None, None) => Ok(Literal::new_simple_literal(value)),
-            _ => Err(de::Error::missing_field("value")),
-        }
-    }
+#[derive(Deserialize)]  
+struct LiteralValue {  
+    value: String,  
+    language: Option<String>,  
+    datatype: Option<String>  
 }
 
 #[cfg(feature = "serde")]
@@ -260,11 +203,27 @@ impl<'de> Deserialize<'de> for Literal {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_struct(
-            "Literal",
-            &["value", "datatype", "language"],
-            LiteralVisitor,
-        )
+        let LiteralValue { value, language, datatype } = LiteralValue::deserialize(deserializer)?;
+        match (datatype, language) {
+            (Some(datatype), None) => Ok(Literal::new_typed_literal(
+                value,
+                if cfg!(feature = "serde-unvalidated") {
+                    NamedNode::new_unchecked(datatype)
+                } else {
+                    NamedNode::new(datatype).map_err(de::Error::custom)?
+                },
+            )),
+            (None, Some(language)) => {
+                if cfg!(feature = "serde-unvalidated") {
+                    Ok(Literal::new_language_tagged_literal_unchecked(
+                        value, language,
+                    ))
+                } else {
+                    Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
+                }
+            }
+            _ => Ok(Literal::new_simple_literal(value)),
+        }
     }
 }
 
