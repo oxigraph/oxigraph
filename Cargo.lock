@@ -510,6 +510,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "criterion-bench"
+version = "0.2.4"
+dependencies = [
+ "criterion",
+ "oxrdf",
+ "serde_json",
+]
+
+[[package]]
 name = "criterion-plot"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
