@@ -95,7 +95,6 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
       - run: cargo build --release
         working-directory: ./cli
       - uses: actions/upload-artifact@v4
@@ -236,16 +235,15 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
-      - run: Remove-Item -LiteralPath "C:\msys64\" -Force -Recurse
-      - run: uv pip install -r python/requirements.build.txt
+          cache: pip
+          cache-dependency-path: '**/requirements.build.txt'
+      - run: pip install -r python/requirements.build.txt
       - run: maturin build --release --features abi3
         working-directory: ./python
-      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
+      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
       - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
