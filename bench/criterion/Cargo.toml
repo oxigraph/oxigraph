@@ -15,7 +15,7 @@ rust-version.workspace = true
 
 [dependencies]
 oxrdf = { workspace = true, features = ["serde", "rdf-star", "serde-unvalidated"] }
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.5.1", features = ["html_reports"] }
 
 [dev-dependencies]
 # Ideally this would be an optional dependency, used only when the `serde` feature is enabled.
