@@ -5,7 +5,7 @@ use oxilangtag::{LanguageTag, LanguageTagParseError};
 use oxsdatatypes::*;
 #[cfg(feature = "serde")]
 use serde::{
-    de, de::MapAccess, de::Visitor, ser::SerializeStruct, Deserialize, Deserializer, Serialize,
+    de, ser::SerializeStruct, Deserialize, Deserializer, Serialize,
     Serializer,
 };
 use std::borrow::Cow;
