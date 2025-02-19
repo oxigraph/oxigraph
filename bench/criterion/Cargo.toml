@@ -21,7 +21,7 @@ criterion = { version = "0.5.1", features = ["html_reports"] }
 # Ideally this would be an optional dependency, used only when the `serde` feature is enabled.
 # However, optional dev-dependencies are not currently supported by cargo.
 # See https://github.com/rust-lang/cargo/issues/1596
-serde_json = { version = "1.0.138" }
+serde_json = { version = "1.0.134" }
 
 [lints]
 workspace = true
