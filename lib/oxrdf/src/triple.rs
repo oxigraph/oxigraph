@@ -865,7 +865,7 @@ where
                     }
                 }
             }
-            iri.map(|iri| NamedNode::new_unchecked(iri))
+            iri.map(NamedNode::new_unchecked)
                 .ok_or_else(|| de::Error::missing_field("value"))
         }
     }
