@@ -3,6 +3,8 @@ use crate::vocab::{rdf, xsd};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
+#[cfg(feature = "serde")]
+use serde::{de, ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -156,6 +158,73 @@ impl fmt::Display for Literal {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for Literal {
+    #[inline]
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map: <S as Serializer>::SerializeStruct;
+        match self {
+            Self(LiteralContent::String(value)) => {
+                map = serializer.serialize_struct("Literal", 1)?;
+                map.serialize_field("value", value)?;
+            }
+            Self(LiteralContent::LanguageTaggedString { value, language }) => {
+                map = serializer.serialize_struct("Literal", 2)?;
+                map.serialize_field("value", value)?;
+                map.serialize_field("language", language)?;
+            }
+            Self(LiteralContent::TypedLiteral { value, datatype }) => {
+                map = serializer.serialize_struct("Literal", 2)?;
+                map.serialize_field("value", value)?;
+                map.serialize_field("datatype", datatype.as_str())?;
+            }
+        };
+        map.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(Deserialize)]
+struct LiteralValue {
+    value: String,
+    language: Option<String>,
+    datatype: Option<String>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for Literal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let LiteralValue {
+            value,
+            language,
+            datatype,
+        } = LiteralValue::deserialize(deserializer)?;
+        match (datatype, language) {
+            (Some(datatype), None) => Ok(Literal::new_typed_literal(
+                value,
+                if cfg!(feature = "serde-unvalidated") {
+                    NamedNode::new_unchecked(datatype)
+                } else {
+                    NamedNode::new(datatype).map_err(de::Error::custom)?
+                },
+            )),
+            (None, Some(language)) => {
+                if cfg!(feature = "serde-unvalidated") {
+                    Ok(Literal::new_language_tagged_literal_unchecked(
+                        value, language,
+                    ))
+                } else {
+                    Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
+                }
+            }
+            _ => Ok(Literal::new_simple_literal(value)),
+        }
     }
 }
 
@@ -664,5 +733,52 @@ mod tests {
         assert_eq!("-INF", Literal::from(f64::NEG_INFINITY).value());
         assert_eq!("NaN", Literal::from(f32::NAN).value());
         assert_eq!("NaN", Literal::from(f64::NAN).value());
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        let j = serde_json::to_string(&Literal::new_simple_literal("foo")).unwrap();
+        assert_eq!("{\"value\":\"foo\"}", j);
+
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
+        assert_eq!(node, Literal::new_simple_literal("foo"));
+
+        let j = serde_json::to_string(&Literal::new_typed_literal("true", xsd::BOOLEAN)).unwrap();
+
+        assert_eq!(
+            "{\"value\":\"true\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",
+            j
+        );
+
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
+        assert_eq!(node, Literal::new_typed_literal("true", xsd::BOOLEAN));
+    }
+
+    // Test for serde validation errors
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde_validation() {
+        let j = r#"{"value":"true","datatype":"boo"}"#;
+        let mut de = serde_json::Deserializer::from_str(j);
+        let deserialized = Literal::deserialize(&mut de);
+
+        if cfg!(feature = "serde-unvalidated") {
+            assert!(deserialized.is_ok());
+        } else {
+            assert!(deserialized.is_err());
+        }
+
+        let j = r#"{"value":"true","language":"bo2"}"#;
+        let mut de = serde_json::Deserializer::from_str(j);
+        let deserialized = Literal::deserialize(&mut de);
+
+        if cfg!(feature = "serde-unvalidated") {
+            assert!(deserialized.is_ok());
+        } else {
+            assert!(deserialized.is_err());
+        }
     }
 }

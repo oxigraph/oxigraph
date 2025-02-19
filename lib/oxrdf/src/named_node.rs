@@ -1,4 +1,8 @@
 use oxiri::{Iri, IriParseError};
+#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
+use serde::{de, de::MapAccess, de::Visitor, ser::SerializeStruct, Deserializer, Serializer};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -14,9 +18,53 @@ use std::fmt;
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(
+    all(feature = "serde", feature = "serde-unvalidated"),
+    derive(Deserialize)
+)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
+    #[cfg_attr(feature = "serde", serde(rename = "value"))]
     iri: String,
+}
+
+#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
+struct NamedNodeVisitor;
+
+#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
+impl<'de> Visitor<'de> for NamedNodeVisitor {
+    type Value = NamedNode;
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("struct NamedNode")
+    }
+    fn visit_map<V>(self, mut map: V) -> Result<NamedNode, V::Error>
+    where
+        V: MapAccess<'de>,
+    {
+        let key = map.next_key::<&str>()?;
+        if key != Some("value") {
+            if let Some(val) = key {
+                return Err(de::Error::unknown_field(val, &["value"]));
+            }
+            return Err(de::Error::missing_field("value"));
+        }
+        if cfg!(not(feature = "serde-unvalidated")) {
+            Ok(NamedNode::new(map.next_value::<&str>()?).map_err(de::Error::custom)?)
+        } else {
+            Ok(NamedNode::new_unchecked(map.next_value::<String>()?))
+        }
+    }
+}
+
+#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
+impl<'de> Deserialize<'de> for NamedNode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_struct("BlankNode", &["value"], NamedNodeVisitor)
+    }
 }
 
 impl NamedNode {
@@ -232,5 +280,47 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
         Self {
             iri: iri.into_inner(),
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn as_str_partial() {
+        let j = serde_json::to_string(&NamedNode::new("http://example.org/").unwrap()).unwrap();
+        let mut de = serde_json::Deserializer::from_str(&j);
+        let deserialized = NamedNode::deserialize(&mut de);
+
+        assert!(deserialized.is_ok());
+        assert_eq!(
+            deserialized.unwrap(),
+            NamedNode::new("http://example.org/").unwrap()
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn invalid_iri() {
+        let j = r#"{"value":"boo"}"#;
+        let mut de = serde_json::Deserializer::from_str(j);
+        let deserialized = NamedNode::deserialize(&mut de);
+
+        if cfg!(feature = "serde-unvalidated") {
+            assert!(deserialized.is_ok());
+        } else {
+            assert!(deserialized.is_err());
+        }
+    }
+
+    #[test]
+    fn named_node_construction() {
+        assert_eq!(
+            "http://example.org/",
+            NamedNode::new("http://example.org/").unwrap().iri
+        );
     }
 }
