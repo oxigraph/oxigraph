@@ -42,15 +42,15 @@ impl<'de> Visitor<'de> for NamedNodeVisitor {
     where
         V: MapAccess<'de>,
     {
-        let key = map.next_key::<&str>()?;
-        if key != Some("value") {
+        let key = map.next_key::<String>()?;
+        if key != Some("value".to_string()) {
             if let Some(val) = key {
-                return Err(de::Error::unknown_field(val, &["value"]));
+                return Err(de::Error::unknown_field(&val, &["value"]));
             }
             return Err(de::Error::missing_field("value"));
         }
         if cfg!(not(feature = "serde-unvalidated")) {
-            Ok(NamedNode::new(map.next_value::<&str>()?).map_err(de::Error::custom)?)
+            Ok(NamedNode::new(map.next_value::<String>()?).map_err(de::Error::custom)?)
         } else {
             Ok(NamedNode::new_unchecked(map.next_value::<String>()?))
         }
@@ -286,6 +286,9 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
+    #[cfg(feature = "serde")]
+    use serde::de::DeserializeOwned;
+
     use super::*;
 
     #[test]
@@ -314,6 +317,37 @@ mod tests {
         } else {
             assert!(deserialized.is_err());
         }
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn as_str_partial_reader() {
+        let j = serde_json::to_string(&NamedNode::new("http://example.org/").unwrap()).unwrap();
+        let reader = std::io::Cursor::new(j.into_bytes());
+
+        let mut de = serde_json::Deserializer::from_reader(reader);
+        let deserialized = NamedNode::deserialize(&mut de);
+
+        if let Err(e) = deserialized {
+            panic!("{}", e);
+        }
+
+        assert!(deserialized.is_ok());
+        assert_eq!(
+            deserialized.unwrap(),
+            NamedNode::new("http://example.org/").unwrap()
+        );
+    }
+
+    // This helper function will only compile if T implements DeserializeOwned.
+    #[cfg(feature = "serde")]
+    fn assert_deserialize_owned<T: DeserializeOwned>() {}
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_named_node_deserialize_owned() {
+        // If NamedNode does not implement DeserializeOwned, this call will fail to compile.
+        assert_deserialize_owned::<NamedNode>();
     }
 
     #[test]
