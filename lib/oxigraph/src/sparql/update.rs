@@ -13,9 +13,11 @@ use spareval::{QueryEvaluator, QueryResults};
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
     BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundSubject,
-    GroundTerm, GroundTermPattern, GroundTriple, GroundTriplePattern, NamedNode, NamedNodePattern,
-    Quad, QuadPattern, Subject, Term, TermPattern, Triple, TriplePattern,
+    GroundTerm, GroundTermPattern, NamedNode, NamedNodePattern, Quad, QuadPattern, Subject, Term,
+    TermPattern,
 };
+#[cfg(feature = "rdf-star")]
+use spargebra::term::{GroundTriple, GroundTriplePattern, Triple, TriplePattern};
 use spargebra::{GraphUpdateOperation, Query};
 use std::io;
 use std::io::Read;
@@ -251,6 +253,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             subject: match &quad.subject {
                 Subject::NamedNode(subject) => subject.clone().into(),
                 Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
+                #[cfg(feature = "rdf-star")]
                 Subject::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
             predicate: quad.predicate.clone(),
@@ -258,6 +261,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Term::NamedNode(object) => object.clone().into(),
                 Term::BlankNode(object) => Self::convert_blank_node(object, bnodes).into(),
                 Term::Literal(object) => object.clone().into(),
+                #[cfg(feature = "rdf-star")]
                 Term::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
             graph_name: match &quad.graph_name {
@@ -267,11 +271,13 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
+    #[cfg(feature = "rdf-star")]
     fn convert_triple(triple: &Triple, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> Triple {
         Triple {
             subject: match &triple.subject {
                 Subject::NamedNode(subject) => subject.clone().into(),
                 Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
+                #[cfg(feature = "rdf-star")]
                 Subject::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
             predicate: triple.predicate.clone(),
@@ -279,6 +285,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Term::NamedNode(object) => object.clone().into(),
                 Term::BlankNode(object) => Self::convert_blank_node(object, bnodes).into(),
                 Term::Literal(object) => object.clone().into(),
+                #[cfg(feature = "rdf-star")]
                 Term::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
         }
@@ -295,12 +302,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         OxQuad {
             subject: match &quad.subject {
                 GroundSubject::NamedNode(subject) => subject.clone().into(),
+                #[cfg(feature = "rdf-star")]
                 GroundSubject::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
             predicate: quad.predicate.clone(),
             object: match &quad.object {
                 GroundTerm::NamedNode(object) => object.clone().into(),
                 GroundTerm::Literal(object) => object.clone().into(),
+                #[cfg(feature = "rdf-star")]
                 GroundTerm::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
             graph_name: match &quad.graph_name {
@@ -310,16 +319,19 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
+    #[cfg(feature = "rdf-star")]
     fn convert_ground_triple(triple: &GroundTriple) -> Triple {
         Triple {
             subject: match &triple.subject {
                 GroundSubject::NamedNode(subject) => subject.clone().into(),
+                #[cfg(feature = "rdf-star")]
                 GroundSubject::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
             predicate: triple.predicate.clone(),
             object: match &triple.object {
                 GroundTerm::NamedNode(object) => object.clone().into(),
                 GroundTerm::Literal(object) => object.clone().into(),
+                #[cfg(feature = "rdf-star")]
                 GroundTerm::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
         }
@@ -334,6 +346,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             subject: match Self::fill_term_or_var(&quad.subject, solution, bnodes)? {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
+                #[cfg(feature = "rdf-star")]
                 Term::Triple(triple) => triple.into(),
                 Term::Literal(_) => return None,
             },
@@ -352,6 +365,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             TermPattern::NamedNode(term) => term.clone().into(),
             TermPattern::BlankNode(bnode) => Self::convert_blank_node(bnode, bnodes).into(),
             TermPattern::Literal(term) => term.clone().into(),
+            #[cfg(feature = "rdf-star")]
             TermPattern::Triple(triple) => {
                 Self::fill_triple_pattern(triple, solution, bnodes)?.into()
             }
@@ -385,11 +399,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             GraphNamePattern::Variable(v) => match solution.get(v)? {
                 Term::NamedNode(node) => node.clone().into(),
                 Term::BlankNode(node) => node.clone().into(),
-                Term::Triple(_) | Term::Literal(_) => return None,
+                Term::Literal(_) => return None,
+                #[cfg(feature = "rdf-star")]
+                Term::Triple(_) => return None,
             },
         })
     }
 
+    #[cfg(feature = "rdf-star")]
     fn fill_triple_pattern(
         triple: &TriplePattern,
         solution: &QuerySolution,
@@ -399,6 +416,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             subject: match Self::fill_term_or_var(&triple.subject, solution, bnodes)? {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
+                #[cfg(feature = "rdf-star")]
                 Term::Triple(triple) => triple.into(),
                 Term::Literal(_) => return None,
             },
@@ -414,6 +432,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             subject: match Self::fill_ground_term_or_var(&quad.subject, solution)? {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
+                #[cfg(feature = "rdf-star")]
                 Term::Triple(triple) => triple.into(),
                 Term::Literal(_) => return None,
             },
@@ -427,6 +446,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         Some(match term {
             GroundTermPattern::NamedNode(term) => term.clone().into(),
             GroundTermPattern::Literal(term) => term.clone().into(),
+            #[cfg(feature = "rdf-star")]
             GroundTermPattern::Triple(triple) => {
                 Self::fill_ground_triple_pattern(triple, solution)?.into()
             }
@@ -434,6 +454,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         })
     }
 
+    #[cfg(feature = "rdf-star")]
     fn fill_ground_triple_pattern(
         triple: &GroundTriplePattern,
         solution: &QuerySolution,
@@ -442,6 +463,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             subject: match Self::fill_ground_term_or_var(&triple.subject, solution)? {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
+                #[cfg(feature = "rdf-star")]
                 Term::Triple(triple) => triple.into(),
                 Term::Literal(_) => return None,
             },
