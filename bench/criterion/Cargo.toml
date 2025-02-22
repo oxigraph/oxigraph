@@ -1,11 +1,11 @@
 [package]
-name = "oxrdf"
+name = "criterion-bench"
 version = "0.2.4"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
-keywords = ["RDF"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxrdf"
+keywords = []
+repository = "https://github.com/oxigraph/oxigraph/tree/main/bench/criterion"
 description = """
 A library providing basic data structures related to RDF
 """
@@ -13,19 +13,9 @@ documentation = "https://docs.rs/oxrdf"
 edition.workspace = true
 rust-version.workspace = true
 
-[features]
-default = []
-rdf-star = []
-serde = ["dep:serde"]
-serde-unvalidated = ["serde"]
-
 [dependencies]
-oxilangtag.workspace = true
-oxiri.workspace = true
-oxsdatatypes = { workspace = true, optional = true }
-rand.workspace = true
-thiserror.workspace = true
-serde = { version = "1.0.217", features = ["derive"], optional = true}
+oxrdf = { workspace = true, features = ["serde", "rdf-star", "serde-unvalidated"] }
+criterion = { version = "0.5.1", features = ["html_reports"] }
 
 [dev-dependencies]
 # Ideally this would be an optional dependency, used only when the `serde` feature is enabled.
@@ -36,6 +26,6 @@ serde_json = { version = "1.0.134" }
 [lints]
 workspace = true
 
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+[[bench]]
+name = "serde_bench"
+harness = false
