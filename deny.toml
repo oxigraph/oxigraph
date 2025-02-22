@@ -1,5 +1,5 @@
 [advisories]
-ignore = ["RUSTSEC-2018-0015"]
+ignore = ["RUSTSEC-2018-0015", "RUSTSEC-2025-0007"]
 
 [licenses]
 allow = [
