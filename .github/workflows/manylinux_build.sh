@@ -20,4 +20,4 @@ if [ %for_each_version% ]; then
   done
 fi
 cd ../cli
-uvx maturin build --release --no-default-features --features rustls-native,geosparql --compatibility manylinux2014
+uvx maturin build --release --no-default-features --features rustls-native,geosparql,rdf-star --compatibility manylinux2014

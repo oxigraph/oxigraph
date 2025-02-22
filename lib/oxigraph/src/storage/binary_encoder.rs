@@ -1,9 +1,12 @@
 use crate::storage::error::{CorruptionError, StorageError};
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, EncodedTriple, StrHash};
+#[cfg(feature = "rdf-star")]
+use crate::storage::numeric_encoder::EncodedTriple;
+use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash};
 use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
 use std::io::Read;
 use std::mem::size_of;
+#[cfg(feature = "rdf-star")]
 use std::sync::Arc;
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -47,6 +50,7 @@ const TYPE_G_MONTH_LITERAL: u8 = 41;
 const TYPE_DURATION_LITERAL: u8 = 42;
 const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 43;
 const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 44;
+#[cfg(feature = "rdf-star")]
 const TYPE_TRIPLE: u8 = 48;
 
 #[derive(Clone, Copy)]
@@ -400,6 +404,7 @@ impl<R: Read> TermReader for R {
                     DayTimeDuration::from_be_bytes(buffer),
                 ))
             }
+            #[cfg(feature = "rdf-star")]
             TYPE_TRIPLE => Ok(EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.read_term()?,
                 predicate: self.read_term()?,
@@ -633,6 +638,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
             sink.push(TYPE_DAY_TIME_DURATION_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
+        #[cfg(feature = "rdf-star")]
         EncodedTerm::Triple(value) => {
             sink.push(TYPE_TRIPLE);
             write_term(sink, &value.subject);
@@ -736,6 +742,7 @@ mod tests {
                 NamedNode::new_unchecked("http://foo.com"),
             )
             .into(),
+            #[cfg(feature = "rdf-star")]
             Triple::new(
                 NamedNode::new_unchecked("http://foo.com"),
                 NamedNode::new_unchecked("http://bar.com"),

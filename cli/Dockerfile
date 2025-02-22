@@ -13,10 +13,10 @@ RUN if [ "$BUILDARCH" != "$TARGETARCH" ] && [ "$TARGETARCH" = "arm64" ] ; \
     then \
         export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc && \
         export BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/aarch64-linux-gnu" && \
-        cargo build --release --target aarch64-unknown-linux-gnu --no-default-features --features rustls-webpki,geosparql && \
+        cargo build --release --target aarch64-unknown-linux-gnu --no-default-features --features rustls-webpki,geosparql,rdf-star && \
         mv /oxigraph/target/aarch64-unknown-linux-gnu/release/oxigraph /oxigraph/target/release/oxigraph ; \
     else \
-        cargo build --release --no-default-features --features rustls-webpki,geosparql ; \
+        cargo build --release --no-default-features --features rustls-webpki,geosparql,rdf-star ; \
     fi
 
 FROM gcr.io/distroless/cc-debian12
