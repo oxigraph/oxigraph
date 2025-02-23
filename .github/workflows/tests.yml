@@ -68,6 +68,8 @@ jobs:
         working-directory: ./lib/oxigraph
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./python
+      - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
+        working-directory: ./python
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./cli
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
@@ -84,6 +86,8 @@ jobs:
           version: 1.82.0
           target: wasm32-unknown-unknown
           component: clippy
+      - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --no-default-features -- -D warnings -D clippy::all
+        working-directory: ./js
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown -- -D warnings -D clippy::all
         working-directory: ./js
 

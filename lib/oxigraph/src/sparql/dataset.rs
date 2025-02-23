@@ -1,16 +1,21 @@
 use crate::sparql::QueryDataset;
+#[cfg(feature = "rdf-star")]
+use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedTerm, EncodedTriple, StrHash, StrHashHasher, StrLookup,
+    insert_term, Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup,
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxrdf::Term;
 use oxsdatatypes::Boolean;
-use spareval::{ExpressionTerm, ExpressionTriple, InternalQuad, QueryableDataset};
+#[cfg(feature = "rdf-star")]
+use spareval::ExpressionTriple;
+use spareval::{ExpressionTerm, InternalQuad, QueryableDataset};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
+#[cfg(feature = "rdf-star")]
 use std::sync::Arc;
 
 pub struct DatasetView {
@@ -236,6 +241,7 @@ impl QueryableDataset for DatasetView {
             EncodedTerm::DayTimeDurationLiteral(value) => {
                 ExpressionTerm::DayTimeDurationLiteral(value)
             }
+            #[cfg(feature = "rdf-star")]
             EncodedTerm::Triple(t) => ExpressionTriple::new(
                 self.externalize_expression_term(t.subject.clone())?,
                 self.externalize_expression_term(t.predicate.clone())?,
@@ -272,6 +278,7 @@ impl QueryableDataset for DatasetView {
             ExpressionTerm::DayTimeDurationLiteral(value) => {
                 EncodedTerm::DayTimeDurationLiteral(value)
             }
+            #[cfg(feature = "rdf-star")]
             ExpressionTerm::Triple(t) => EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.internalize_expression_term(t.subject.into())?,
                 predicate: self.internalize_expression_term(t.predicate.into())?,

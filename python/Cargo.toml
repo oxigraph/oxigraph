@@ -19,10 +19,11 @@ doctest = false
 doc = false
 
 [features]
-default = ["geosparql"]
+default = ["geosparql", "rdf-star"]
 abi3 = ["pyo3/abi3-py38"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 geosparql = ["dep:spargeo"]
+rdf-star = ["oxigraph/rdf-star"]
 
 [dependencies]
 pyo3 = { workspace = true, features = ["extension-module"] }

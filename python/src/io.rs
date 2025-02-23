@@ -350,6 +350,7 @@ impl PyRdfFormat {
     /// True
     /// >>> RdfFormat.RDF_XML.supports_rdf_star
     /// False
+    #[cfg(feature = "rdf-star")]
     #[getter]
     fn supports_rdf_star(&self) -> bool {
         self.inner.supports_rdf_star()
