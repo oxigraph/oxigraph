@@ -5,7 +5,7 @@ use crate::error::QueryEvaluationError;
 use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 use crate::CustomFunctionRegistry;
-use json_event_parser::{JsonEvent, ToWriteJsonWriter};
+use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use md5::{Digest, Md5};
 use oxiri::Iri;
 use oxrdf::vocab::{rdf, xsd};
@@ -6326,27 +6326,29 @@ pub struct EvalNodeWithStats {
 impl EvalNodeWithStats {
     pub fn json_node(
         &self,
-        writer: &mut ToWriteJsonWriter<impl io::Write>,
+        serializer: &mut WriterJsonSerializer<impl io::Write>,
         with_stats: bool,
     ) -> io::Result<()> {
-        writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("name".into()))?;
-        writer.write_event(JsonEvent::String((&self.label).into()))?;
+        serializer.serialize_event(JsonEvent::StartObject)?;
+        serializer.serialize_event(JsonEvent::ObjectKey("name".into()))?;
+        serializer.serialize_event(JsonEvent::String((&self.label).into()))?;
         if with_stats {
-            writer.write_event(JsonEvent::ObjectKey("number of results".into()))?;
-            writer.write_event(JsonEvent::Number(self.exec_count.get().to_string().into()))?;
+            serializer.serialize_event(JsonEvent::ObjectKey("number of results".into()))?;
+            serializer
+                .serialize_event(JsonEvent::Number(self.exec_count.get().to_string().into()))?;
             if let Some(duration) = self.exec_duration.get() {
-                writer.write_event(JsonEvent::ObjectKey("duration in seconds".into()))?;
-                writer.write_event(JsonEvent::Number(duration.as_seconds().to_string().into()))?;
+                serializer.serialize_event(JsonEvent::ObjectKey("duration in seconds".into()))?;
+                serializer
+                    .serialize_event(JsonEvent::Number(duration.as_seconds().to_string().into()))?;
             }
         }
-        writer.write_event(JsonEvent::ObjectKey("children".into()))?;
-        writer.write_event(JsonEvent::StartArray)?;
+        serializer.serialize_event(JsonEvent::ObjectKey("children".into()))?;
+        serializer.serialize_event(JsonEvent::StartArray)?;
         for child in &self.children {
-            child.json_node(writer, with_stats)?;
+            child.json_node(serializer, with_stats)?;
         }
-        writer.write_event(JsonEvent::EndArray)?;
-        writer.write_event(JsonEvent::EndObject)
+        serializer.serialize_event(JsonEvent::EndArray)?;
+        serializer.serialize_event(JsonEvent::EndObject)
     }
 }
 

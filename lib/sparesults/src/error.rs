@@ -1,3 +1,4 @@
+use json_event_parser::{JsonParseError, JsonSyntaxError};
 use oxrdf::TermParseError;
 use quick_xml::encoding::EncodingError;
 use std::io;
@@ -26,13 +27,11 @@ impl From<QueryResultsParseError> for io::Error {
 }
 
 #[doc(hidden)]
-impl From<json_event_parser::ParseError> for QueryResultsParseError {
-    fn from(error: json_event_parser::ParseError) -> Self {
+impl From<JsonParseError> for QueryResultsParseError {
+    fn from(error: JsonParseError) -> Self {
         match error {
-            json_event_parser::ParseError::Syntax(error) => {
-                QueryResultsSyntaxError::from(error).into()
-            }
-            json_event_parser::ParseError::Io(error) => error.into(),
+            JsonParseError::Syntax(error) => QueryResultsSyntaxError::from(error).into(),
+            JsonParseError::Io(error) => error.into(),
         }
     }
 }
@@ -65,7 +64,7 @@ pub struct QueryResultsSyntaxError(#[from] SyntaxErrorKind);
 #[derive(Debug, thiserror::Error)]
 enum SyntaxErrorKind {
     #[error(transparent)]
-    Json(#[from] json_event_parser::SyntaxError),
+    Json(#[from] JsonSyntaxError),
     #[error(transparent)]
     Xml(#[from] quick_xml::Error),
     #[error("Error {error} on '{term}' in line {}", location.start.line + 1)]
@@ -151,8 +150,8 @@ impl From<QueryResultsSyntaxError> for io::Error {
 }
 
 #[doc(hidden)]
-impl From<json_event_parser::SyntaxError> for QueryResultsSyntaxError {
-    fn from(error: json_event_parser::SyntaxError) -> Self {
+impl From<JsonSyntaxError> for QueryResultsSyntaxError {
+    fn from(error: JsonSyntaxError) -> Self {
         Self(SyntaxErrorKind::Json(error))
     }
 }
