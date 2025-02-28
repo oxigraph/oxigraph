@@ -479,6 +479,11 @@ jobs:
 
   codspeed:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_args:
+          - "-p oxigraph --features http-client-native-tls"
+          - "-p oxigraph-testsuite"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -486,6 +491,19 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-codspeed }
+      - run: cargo codspeed build ${{ matrix.build_args }}
+      - uses: CodSpeedHQ/action@v3
+        with:
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+
+  codspeed_js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -493,12 +511,13 @@ jobs:
           cache-dependency-path: "js/package.json"
       - run: npm install
         working-directory: ./js
-      - run: cargo codspeed build -p oxigraph --features http-client-native-tls
-      - run: cargo codspeed build -p oxigraph-testsuite
+      - run: npm run build-node
+        working-directory: ./js
       - uses: CodSpeedHQ/action@v3
         with:
-          run: cargo codspeed run && npm run --prefix js bench
+          run: npx vitest bench
           token: ${{ secrets.CODSPEED_TOKEN }}
+          working-directory: ./js
 
   codecov:
     runs-on: ubuntu-latest
