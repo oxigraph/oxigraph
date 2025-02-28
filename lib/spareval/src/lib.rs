@@ -17,7 +17,7 @@ use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
-use json_event_parser::{JsonEvent, ToWriteJsonWriter};
+use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxrdf::{NamedNode, Term, Variable};
 use oxsdatatypes::{DayTimeDuration, Float};
 use spargebra::Query;
@@ -335,17 +335,18 @@ pub struct QueryExplanation {
 impl QueryExplanation {
     /// Writes the explanation as JSON.
     pub fn write_in_json(&self, writer: impl io::Write) -> io::Result<()> {
-        let mut writer = ToWriteJsonWriter::new(writer);
-        writer.write_event(JsonEvent::StartObject)?;
+        let mut serializer = WriterJsonSerializer::new(writer);
+        serializer.serialize_event(JsonEvent::StartObject)?;
         if let Some(planning_duration) = self.planning_duration {
-            writer.write_event(JsonEvent::ObjectKey("planning duration in seconds".into()))?;
-            writer.write_event(JsonEvent::Number(
+            serializer
+                .serialize_event(JsonEvent::ObjectKey("planning duration in seconds".into()))?;
+            serializer.serialize_event(JsonEvent::Number(
                 planning_duration.as_seconds().to_string().into(),
             ))?;
         }
-        writer.write_event(JsonEvent::ObjectKey("plan".into()))?;
-        self.inner.json_node(&mut writer, self.with_stats)?;
-        writer.write_event(JsonEvent::EndObject)
+        serializer.serialize_event(JsonEvent::ObjectKey("plan".into()))?;
+        self.inner.json_node(&mut serializer, self.with_stats)?;
+        serializer.serialize_event(JsonEvent::EndObject)
     }
 }
 
