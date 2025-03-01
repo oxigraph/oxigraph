@@ -3,7 +3,7 @@
 use crate::format::RdfFormat;
 use oxrdf::{GraphNameRef, IriParseError, QuadRef, TripleRef};
 #[cfg(feature = "async-tokio")]
-use oxrdfxml::TokioAsyncWriterdfXmlSerializer;
+use oxrdfxml::TokioAsyncWriterRdfXmlSerializer;
 use oxrdfxml::{RdfXmlSerializer, WriterRdfXmlSerializer};
 #[cfg(feature = "async-tokio")]
 use oxttl::nquads::TokioAsyncWriterNQuadsSerializer;
@@ -393,7 +393,7 @@ pub struct TokioAsyncWriterQuadSerializer<W: AsyncWrite + Unpin> {
 enum TokioAsyncWriterQuadSerializerKind<W: AsyncWrite + Unpin> {
     NQuads(TokioAsyncWriterNQuadsSerializer<W>),
     NTriples(TokioAsyncWriterNTriplesSerializer<W>),
-    RdfXml(TokioAsyncWriterdfXmlSerializer<W>),
+    RdfXml(TokioAsyncWriterRdfXmlSerializer<W>),
     TriG(TokioAsyncWriterTriGSerializer<W>),
     Turtle(TokioAsyncWriterTurtleSerializer<W>),
 }
