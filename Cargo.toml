@@ -3,6 +3,7 @@ members = [
     "cli",
     "js",
     "lib/oxigraph",
+    "lib/oxjsonld",
     "lib/oxrdf",
     "lib/oxrdfio",
     "lib/oxrdfxml",
