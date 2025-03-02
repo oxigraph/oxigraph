@@ -1553,6 +1553,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
+name = "oxjsonld"
+version = "0.1.0"
+dependencies = [
+ "json-event-parser",
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "oxrdf"
 version = "0.2.4"
 dependencies = [
