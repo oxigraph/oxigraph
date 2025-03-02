@@ -167,8 +167,8 @@ impl RdfXmlSerializer {
     pub fn for_tokio_async_writer<W: AsyncWrite + Unpin>(
         self,
         writer: W,
-    ) -> TokioAsyncWriterdfXmlSerializer<W> {
-        TokioAsyncWriterdfXmlSerializer {
+    ) -> TokioAsyncWriterRdfXmlSerializer<W> {
+        TokioAsyncWriterRdfXmlSerializer {
             writer: Writer::new_with_indent(writer, b'\t', 1),
             inner: self.inner_writer(),
         }
@@ -232,7 +232,6 @@ pub struct WriterRdfXmlSerializer<W: Write> {
 
 impl<W: Write> WriterRdfXmlSerializer<W> {
     /// Serializes an extra triple.
-    #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
     pub fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
         let mut buffer = Vec::new();
         self.inner.serialize_triple(t, &mut buffer)?;
@@ -286,15 +285,14 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 /// ```
 #[cfg(feature = "async-tokio")]
 #[must_use]
-pub struct TokioAsyncWriterdfXmlSerializer<W: AsyncWrite + Unpin> {
+pub struct TokioAsyncWriterRdfXmlSerializer<W: AsyncWrite + Unpin> {
     writer: Writer<W>,
     inner: InnerRdfXmlWriter,
 }
 
 #[cfg(feature = "async-tokio")]
-impl<W: AsyncWrite + Unpin> TokioAsyncWriterdfXmlSerializer<W> {
+impl<W: AsyncWrite + Unpin> TokioAsyncWriterRdfXmlSerializer<W> {
     /// Serializes an extra triple.
-    #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
     pub async fn serialize_triple<'a>(&mut self, t: impl Into<TripleRef<'a>>) -> io::Result<()> {
         let mut buffer = Vec::new();
         self.inner.serialize_triple(t, &mut buffer)?;
@@ -329,7 +327,6 @@ pub struct InnerRdfXmlWriter {
 }
 
 impl InnerRdfXmlWriter {
-    #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
     fn serialize_triple<'a>(
         &mut self,
         t: impl Into<TripleRef<'a>>,
@@ -366,6 +363,7 @@ impl InnerRdfXmlWriter {
             } else {
                 (BytesStart::new("rdf:Description"), false)
             };
+            #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
             match triple.subject {
                 SubjectRef::NamedNode(node) => description_open
                     .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri))),
@@ -390,6 +388,7 @@ impl InnerRdfXmlWriter {
         if let Some(prop_xmlns) = prop_xmlns {
             property_open.push_attribute(prop_xmlns);
         }
+        #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
         let content = match triple.object {
             TermRef::NamedNode(node) => {
                 property_open
