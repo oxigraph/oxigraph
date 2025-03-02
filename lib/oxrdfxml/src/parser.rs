@@ -113,7 +113,7 @@ impl RdfXmlParser {
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderRdfXmlParser<R> {
         ReaderRdfXmlParser {
             results: Vec::new(),
-            parser: self.parse(BufReader::new(reader)),
+            parser: self.into_internal(BufReader::new(reader)),
             reader_buffer: Vec::default(),
         }
     }
@@ -157,7 +157,7 @@ impl RdfXmlParser {
     ) -> TokioAsyncReaderRdfXmlParser<R> {
         TokioAsyncReaderRdfXmlParser {
             results: Vec::new(),
-            parser: self.parse(AsyncBufReader::new(reader)),
+            parser: self.into_internal(AsyncBufReader::new(reader)),
             reader_buffer: Vec::default(),
         }
     }
@@ -193,12 +193,12 @@ impl RdfXmlParser {
     pub fn for_slice(self, slice: &[u8]) -> SliceRdfXmlParser<'_> {
         SliceRdfXmlParser {
             results: Vec::new(),
-            parser: self.parse(slice),
+            parser: self.into_internal(slice),
             reader_buffer: Vec::default(),
         }
     }
 
-    fn parse<T>(&self, reader: T) -> InternalRdfXmlParser<T> {
+    fn into_internal<T>(self, reader: T) -> InternalRdfXmlParser<T> {
         let mut reader = NsReader::from_reader(reader);
         reader.config_mut().expand_empty_elements = true;
         InternalRdfXmlParser {
