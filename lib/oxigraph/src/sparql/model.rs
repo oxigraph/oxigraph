@@ -377,6 +377,7 @@ mod tests {
                                 Some(Literal::from(1.33).into()),
                                 Some(Literal::from(false).into()),
                             ]),
+                            #[cfg(feature = "rdf-star")]
                             Ok(vec![
                                 Some(
                                     Triple::new(

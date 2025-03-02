@@ -20,7 +20,8 @@ path = "src/main.rs"
 doc = false
 
 [features]
-default = ["native-tls", "geosparql"]
+default = ["native-tls", "geosparql", "rdf-star"]
+rdf-star = ["oxigraph/rdf-star"]
 native-tls = ["oxigraph/http-client-native-tls"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 rustls-native = ["oxigraph/http-client-rustls-native"]

@@ -225,6 +225,7 @@ impl JsStore {
             query.dataset_mut().set_available_named_graphs(named_graphs);
         }
 
+        #[cfg_attr(not(feature = "geosparql"), allow(unused_mut))]
         let mut options = QueryOptions::default();
         #[cfg(feature = "geosparql")]
         {
@@ -316,6 +317,7 @@ impl JsStore {
 
         let update = Update::parse(update, base_iri.as_deref()).map_err(JsError::from)?;
 
+        #[cfg_attr(not(feature = "geosparql"), allow(unused_mut))]
         let mut options = QueryOptions::default();
         #[cfg(feature = "geosparql")]
         {

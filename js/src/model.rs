@@ -620,6 +620,7 @@ impl From<Subject> for JsTerm {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
+            #[cfg(feature = "rdf-star")]
             Subject::Triple(node) => node.into(),
         }
     }
@@ -631,6 +632,7 @@ impl From<Term> for JsTerm {
             Term::NamedNode(node) => node.into(),
             Term::BlankNode(node) => node.into(),
             Term::Literal(literal) => literal.into(),
+            #[cfg(feature = "rdf-star")]
             Term::Triple(node) => node.into(),
         }
     }
@@ -738,7 +740,13 @@ impl TryFrom<JsTerm> for Subject {
                 "The variable {} is not a possible RDF subject",
                 variable.inner
             )),
+            #[cfg(feature = "rdf-star")]
             JsTerm::Quad(quad) => Ok(Triple::from(quad).into()),
+            #[cfg(not(feature = "rdf-star"))]
+            JsTerm::Quad(quad) => Err(format_err!(
+                "The quad {} is not a possible RDF subject",
+                quad.inner
+            )),
         }
     }
 }
@@ -758,7 +766,13 @@ impl TryFrom<JsTerm> for Term {
                 "The variable {} is not a possible RDF term",
                 variable.inner
             )),
+            #[cfg(feature = "rdf-star")]
             JsTerm::Quad(quad) => Ok(Triple::from(quad).into()),
+            #[cfg(not(feature = "rdf-star"))]
+            JsTerm::Quad(quad) => Err(format_err!(
+                "The quad {} is not a possible RDF term",
+                quad.inner
+            )),
         }
     }
 }
