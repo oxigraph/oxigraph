@@ -113,7 +113,7 @@ impl RdfXmlParser {
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderRdfXmlParser<R> {
         ReaderRdfXmlParser {
             results: Vec::new(),
-            parser: self.parse(BufReader::new(reader)),
+            parser: self.into_internal(BufReader::new(reader)),
             reader_buffer: Vec::default(),
         }
     }
@@ -157,7 +157,7 @@ impl RdfXmlParser {
     ) -> TokioAsyncReaderRdfXmlParser<R> {
         TokioAsyncReaderRdfXmlParser {
             results: Vec::new(),
-            parser: self.parse(AsyncBufReader::new(reader)),
+            parser: self.into_internal(AsyncBufReader::new(reader)),
             reader_buffer: Vec::default(),
         }
     }
@@ -193,12 +193,12 @@ impl RdfXmlParser {
     pub fn for_slice(self, slice: &[u8]) -> SliceRdfXmlParser<'_> {
         SliceRdfXmlParser {
             results: Vec::new(),
-            parser: self.parse(slice),
+            parser: self.into_internal(slice),
             reader_buffer: Vec::default(),
         }
     }
 
-    fn parse<T>(&self, reader: T) -> InternalRdfXmlParser<T> {
+    fn into_internal<T>(self, reader: T) -> InternalRdfXmlParser<T> {
         let mut reader = NsReader::from_reader(reader);
         reader.config_mut().expand_empty_elements = true;
         InternalRdfXmlParser {
@@ -206,7 +206,7 @@ impl RdfXmlParser {
             state: vec![RdfXmlState::Doc {
                 base_iri: self.base.clone(),
             }],
-            custom_entities: HashMap::default(),
+            custom_entities: HashMap::new(),
             in_literal_depth: 0,
             known_rdf_id: HashSet::default(),
             is_end: false,
@@ -1135,12 +1135,12 @@ impl<R> InternalRdfXmlParser<R> {
                             || !property_attrs.is_empty()
                         {
                             let object = match (resource_attr, node_id_attr)
-                    {
-                        (Some(resource_attr), None) => Subject::from(resource_attr),
-                        (None, Some(node_id_attr)) => node_id_attr.into(),
-                        (None, None) => BlankNode::default().into(),
-                        (Some(_), Some(_)) => return Err(RdfXmlSyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time").into())
-                    };
+                            {
+                                (Some(resource_attr), None) => Subject::from(resource_attr),
+                                (None, Some(node_id_attr)) => node_id_attr.into(),
+                                (None, None) => BlankNode::default().into(),
+                                (Some(_), Some(_)) => return Err(RdfXmlSyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time").into())
+                            };
                             Self::emit_property_attrs(&object, property_attrs, &language, results);
                             if let Some(type_attr) = type_attr {
                                 results.push(Triple::new(object.clone(), rdf::TYPE, type_attr));
