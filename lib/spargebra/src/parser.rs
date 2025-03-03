@@ -437,7 +437,7 @@ fn build_select(
     let mut pv = Vec::new();
     let with_project = match select.variables {
         SelectionVariables::Explicit(sel_items) => {
-            let mut visible = HashSet::default();
+            let mut visible = HashSet::new();
             p.on_in_scope_variable(|v| {
                 visible.insert(v.clone());
             });
@@ -662,7 +662,7 @@ enum Either<L, R> {
 
 pub struct ParserState {
     base_iri: Option<Iri<String>>,
-    namespaces: HashMap<String, String>,
+    prefixes: HashMap<String, String>,
     used_bnodes: HashSet<BlankNode>,
     currently_used_bnodes: HashSet<BlankNode>,
     aggregates: Vec<Vec<(Variable, AggregateExpression)>>,
@@ -679,9 +679,9 @@ impl ParserState {
             } else {
                 None
             },
-            namespaces: HashMap::default(),
-            used_bnodes: HashSet::default(),
-            currently_used_bnodes: HashSet::default(),
+            prefixes: HashMap::new(),
+            used_bnodes: HashSet::new(),
+            currently_used_bnodes: HashSet::new(),
             aggregates: Vec::new(),
         })
     }
@@ -793,7 +793,7 @@ parser! {
         }
 
         rule PrefixDecl() = i("PREFIX") _ ns:PNAME_NS() _ i:IRIREF() {
-            state.namespaces.insert(ns.into(), i.into_inner());
+            state.prefixes.insert(ns.into(), i.into_inner());
         }
 
         rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
@@ -1188,7 +1188,7 @@ parser! {
                     }
                     #[cfg(feature = "sep-0006")]
                     PartialGraphPattern::Lateral(p) => {
-                        let mut defined_variables = HashSet::default();
+                        let mut defined_variables = HashSet::new();
                         add_defined_variables(&p, &mut defined_variables);
                         let mut contains = false;
                         g.on_in_scope_variable(|v| {
@@ -1953,7 +1953,7 @@ parser! {
         }
 
         rule PrefixedName() -> Iri<String> = PNAME_LN() /
-            ns:PNAME_NS() {? if let Some(iri) = state.namespaces.get(ns).cloned() {
+            ns:PNAME_NS() {? if let Some(iri) = state.prefixes.get(ns).cloned() {
                 Iri::parse(iri).map_err(|_| "IRI parsing failed")
             } else {
                 Err("Prefix not found")
@@ -1978,7 +1978,7 @@ parser! {
         }
 
         rule PNAME_LN() -> Iri<String> = ns:PNAME_NS() local:$(PN_LOCAL()) {?
-            if let Some(base) = state.namespaces.get(ns) {
+            if let Some(base) = state.prefixes.get(ns) {
                 let mut iri = String::with_capacity(base.len() + local.len());
                 iri.push_str(base);
                 for chunk in local.split('\\') { // We remove \
