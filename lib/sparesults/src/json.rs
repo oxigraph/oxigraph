@@ -6,7 +6,7 @@ use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJson
 use json_event_parser::{TokioAsyncReaderJsonParser, TokioAsyncWriterJsonSerializer};
 use oxrdf::vocab::rdf;
 use oxrdf::*;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::mem::take;
 #[cfg(feature = "async-tokio")]
@@ -223,6 +223,7 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -278,6 +279,7 @@ impl<R: Read> ReaderJsonSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
+#[allow(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderJsonQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -337,6 +339,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum SliceJsonQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -566,7 +569,7 @@ impl JsonInnerReader {
                 },
                 JsonEvent::EndArray => {
                     if self.solutions_read {
-                        let mut mapping = BTreeMap::default();
+                        let mut mapping = HashMap::new();
                         for (i, var) in self.variables.iter().enumerate() {
                             mapping.insert(var.as_str().to_owned(), i);
                         }
@@ -640,7 +643,7 @@ impl JsonInnerReader {
                 if event == JsonEvent::StartArray {
                     self.solutions_read = true;
                     if self.vars_read {
-                        let mut mapping = BTreeMap::default();
+                        let mut mapping = HashMap::new();
                         for (i, var) in self.variables.iter().enumerate() {
                             mapping.insert(var.as_str().to_owned(), i);
                         }
@@ -762,7 +765,7 @@ impl JsonInnerReader {
 
 struct JsonInnerSolutionsParser {
     state: JsonInnerSolutionsParserState,
-    mapping: BTreeMap<String, usize>,
+    mapping: HashMap<String, usize>,
     new_bindings: Vec<Option<Term>>,
 }
 
@@ -1137,7 +1140,7 @@ impl JsonInnerTermReader {
 }
 
 pub struct JsonBufferedSolutionsIterator {
-    mapping: BTreeMap<String, usize>,
+    mapping: HashMap<String, usize>,
     bindings: std::vec::IntoIter<(Vec<String>, Vec<Term>)>,
 }
 

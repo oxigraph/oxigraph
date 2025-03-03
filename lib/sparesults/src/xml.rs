@@ -8,7 +8,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::reader::Config;
 use quick_xml::{Decoder, Error, Reader, Writer};
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
 use std::mem::take;
 #[cfg(feature = "async-tokio")]
@@ -222,6 +222,7 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum ReaderXmlQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -285,6 +286,7 @@ impl<R: Read> ReaderXmlSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
+#[allow(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderXmlQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -355,6 +357,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderXmlSolutionsParser<R> {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum SliceXmlQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -435,6 +438,7 @@ impl SliceXmlSolutionsParser<'_> {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum XmlInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -514,7 +518,7 @@ impl XmlInnerQueryResultsParser {
                         self.state = ResultsState::Boolean;
                         Ok(None)
                     } else if event.local_name().as_ref() == b"results" {
-                        let mut mapping = BTreeMap::default();
+                        let mut mapping = HashMap::new();
                         for (i, var) in self.variables.iter().enumerate() {
                             mapping.insert(var.clone().into_string(), i);
                         }
@@ -597,7 +601,7 @@ enum State {
 
 struct XmlInnerSolutionsParser {
     decoder: Decoder,
-    mapping: BTreeMap<String, usize>,
+    mapping: HashMap<String, usize>,
     state_stack: Vec<State>,
     new_bindings: Vec<Option<Term>>,
     current_var: Option<String>,
