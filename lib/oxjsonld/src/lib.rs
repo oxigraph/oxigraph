@@ -5,13 +5,13 @@
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
 mod error;
-// mod parser;
+mod parser;
 mod serializer;
 
 pub use error::{JsonLdParseError, JsonLdSyntaxError};
-//#[cfg(feature = "async-tokio")]
-// pub use parser::TokioAsyncReaderJsonLdParser;
-// pub use parser::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};
+#[cfg(feature = "async-tokio")]
+pub use parser::TokioAsyncReaderJsonLdParser;
+pub use parser::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};
 #[cfg(feature = "async-tokio")]
 pub use serializer::TokioAsyncWriterJsonLdSerializer;
 pub use serializer::{JsonLdSerializer, WriterJsonLdSerializer};

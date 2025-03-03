@@ -1,14 +1,21 @@
-use crate::files::{guess_rdf_format, load_to_graph};
+use crate::files::{guess_rdf_format, load_to_graph, JsonLdLoader};
 use crate::vocab::*;
 use anyhow::{bail, Context, Result};
+use json_ld::rdf_types::generator::Blank;
+use json_ld::rdf_types::{LiteralType, Quad};
+use json_ld::{IriBuf, JsonLdProcessor, RemoteDocumentReference};
+use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use std::collections::VecDeque;
 use std::fmt;
+use std::future::Future;
+use std::pin::pin;
+use std::task::{Poll, Waker};
 
 pub struct Test {
     pub id: NamedNode,
-    pub kind: NamedNode,
+    pub kinds: Vec<NamedNode>,
     pub name: Option<String>,
     pub comment: Option<String>,
     pub action: Option<String>,
@@ -23,7 +30,9 @@ pub struct Test {
 
 impl fmt::Display for Test {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.kind)?;
+        for kind in &self.kinds {
+            write!(f, "{kind}")?;
+        }
         if let Some(name) = &self.name {
             write!(f, " named \"{name}\"")?;
         }
@@ -105,17 +114,20 @@ impl TestManifest {
             } else {
                 None
             };
-            let kind = if let Some(TermRef::NamedNode(c)) = self
+            let kinds = self
                 .graph
-                .object_for_subject_predicate(&test_node, rdf::TYPE)
-            {
-                c.into_owned()
-            } else {
-                bail!(
-                    "The test {test_node} named {} has no rdf:type",
-                    name.as_deref().unwrap_or("")
-                );
-            };
+                .objects_for_subject_predicate(&test_node, rdf::TYPE)
+                .map(|c| {
+                    if let TermRef::NamedNode(c) = c {
+                        Ok(c.into_owned())
+                    } else {
+                        bail!(
+                            "The test {test_node} named {} has no rdf:type",
+                            name.as_deref().unwrap_or("")
+                        )
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?;
             let comment = if let Some(TermRef::Literal(c)) = self
                 .graph
                 .object_for_subject_predicate(&test_node, rdfs::COMMENT)
@@ -264,12 +276,13 @@ impl TestManifest {
                         })
                         .collect::<Result<_, _>>()?,
                 ),
+                Some(TermRef::Literal(l)) => (Some(l.value().to_owned()), Vec::new()),
                 Some(_) => bail!("invalid result"),
                 None => (None, Vec::new()),
             };
             return Ok(Some(Test {
                 id: test_node,
-                kind,
+                kinds,
                 name,
                 comment,
                 action,
@@ -289,7 +302,52 @@ impl TestManifest {
             return Ok(None);
         };
         self.graph.clear();
-        load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)?;
+        let format = guess_rdf_format(&url)?;
+        if format == RdfFormat::JsonLd {
+            // TODO: hack to support JSON-Ld manifests
+            let mut generator = Blank::new();
+            let Poll::Ready(mut rdf) =
+                pin!(RemoteDocumentReference::iri(IriBuf::new(url.clone())?)
+                    .to_rdf(&mut generator, &JsonLdLoader))
+                .poll(&mut std::task::Context::from_waker(Waker::noop()))?
+            else {
+                bail!("Not ready future when parsing JSON-LD")
+            };
+
+            for Quad(s, p, o, _) in rdf.quads() {
+                self.graph.insert(TripleRef {
+                    subject: if s.is_iri() {
+                        NamedNodeRef::new_unchecked(s.as_str()).into()
+                    } else {
+                        BlankNodeRef::new_unchecked(s.as_str()).into()
+                    },
+                    predicate: NamedNodeRef::new_unchecked(p.as_str()),
+                    object: if let Some(o) = o.as_iri() {
+                        NamedNodeRef::new_unchecked(o.as_str()).into()
+                    } else if let Some(o) = o.as_blank() {
+                        BlankNodeRef::new_unchecked(o.as_str()).into()
+                    } else if let Some(o) = o.as_literal() {
+                        match &o.type_ {
+                            LiteralType::Any(t) => LiteralRef::new_typed_literal(
+                                o.as_str(),
+                                NamedNodeRef::new_unchecked(t.as_str()),
+                            ),
+                            LiteralType::LangString(l) => {
+                                LiteralRef::new_language_tagged_literal_unchecked(
+                                    o.as_value(),
+                                    l.as_str(),
+                                )
+                            }
+                        }
+                        .into()
+                    } else {
+                        unreachable!()
+                    },
+                });
+            }
+        } else {
+            load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)?;
+        }
 
         let manifests = self
             .graph

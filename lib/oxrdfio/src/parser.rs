@@ -3,6 +3,9 @@
 pub use crate::error::RdfParseError;
 use crate::format::RdfFormat;
 use crate::RdfSyntaxError;
+#[cfg(feature = "async-tokio")]
+use oxjsonld::TokioAsyncReaderJsonLdParser;
+use oxjsonld::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};
 use oxrdf::{BlankNode, GraphName, IriParseError, Quad, Subject, Term, Triple};
 #[cfg(feature = "async-tokio")]
 use oxrdfxml::TokioAsyncReaderRdfXmlParser;
@@ -67,6 +70,7 @@ pub struct RdfParser {
 
 #[derive(Clone)]
 enum RdfParserKind {
+    JsonLd(JsonLdParser),
     N3(N3Parser),
     NQuads(NQuadsParser),
     NTriples(NTriplesParser),
@@ -81,6 +85,9 @@ impl RdfParser {
     pub fn from_format(format: RdfFormat) -> Self {
         Self {
             inner: match format {
+                RdfFormat::JsonLd | RdfFormat::StreamingJsonLd => {
+                    RdfParserKind::JsonLd(JsonLdParser::new())
+                } // TODO: streaming option
                 RdfFormat::N3 => RdfParserKind::N3(N3Parser::new()),
                 RdfFormat::NQuads => RdfParserKind::NQuads({
                     #[cfg(feature = "rdf-star")]
@@ -142,6 +149,7 @@ impl RdfParser {
     /// ```
     pub fn format(&self) -> RdfFormat {
         match &self.inner {
+            RdfParserKind::JsonLd(_) => RdfFormat::JsonLd,
             RdfParserKind::N3(_) => RdfFormat::N3,
             RdfParserKind::NQuads(_) => RdfFormat::NQuads,
             RdfParserKind::NTriples(_) => RdfFormat::NTriples,
@@ -170,6 +178,7 @@ impl RdfParser {
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
+            RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.with_base_iri(base_iri)?),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.with_base_iri(base_iri)?),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p),
@@ -255,6 +264,7 @@ impl RdfParser {
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.inner = match self.inner {
+            RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.unchecked()),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.unchecked()),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.unchecked()),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p.unchecked()),
@@ -285,6 +295,7 @@ impl RdfParser {
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderQuadParser<R> {
         ReaderQuadParser {
             inner: match self.inner {
+                RdfParserKind::JsonLd(p) => ReaderQuadParserKind::JsonLd(p.for_reader(reader)),
                 RdfParserKind::N3(p) => ReaderQuadParserKind::N3(p.for_reader(reader)),
                 RdfParserKind::NQuads(p) => ReaderQuadParserKind::NQuads(p.for_reader(reader)),
                 RdfParserKind::NTriples(p) => ReaderQuadParserKind::NTriples(p.for_reader(reader)),
@@ -326,6 +337,9 @@ impl RdfParser {
     ) -> TokioAsyncReaderQuadParser<R> {
         TokioAsyncReaderQuadParser {
             inner: match self.inner {
+                RdfParserKind::JsonLd(p) => {
+                    TokioAsyncReaderQuadParserKind::JsonLd(p.for_tokio_async_reader(reader))
+                }
                 RdfParserKind::N3(p) => {
                     TokioAsyncReaderQuadParserKind::N3(p.for_tokio_async_reader(reader))
                 }
@@ -371,6 +385,7 @@ impl RdfParser {
     pub fn for_slice(self, slice: &[u8]) -> SliceQuadParser<'_> {
         SliceQuadParser {
             inner: match self.inner {
+                RdfParserKind::JsonLd(p) => SliceQuadParserKind::JsonLd(p.for_slice(slice)),
                 RdfParserKind::N3(p) => SliceQuadParserKind::N3(p.for_slice(slice)),
                 RdfParserKind::NQuads(p) => SliceQuadParserKind::NQuads(p.for_slice(slice)),
                 RdfParserKind::NTriples(p) => SliceQuadParserKind::NTriples(p.for_slice(slice)),
@@ -419,6 +434,7 @@ pub struct ReaderQuadParser<R: Read> {
 }
 
 enum ReaderQuadParserKind<R: Read> {
+    JsonLd(ReaderJsonLdParser<R>),
     N3(ReaderN3Parser<R>),
     NQuads(ReaderNQuadsParser<R>),
     NTriples(ReaderNTriplesParser<R>),
@@ -432,6 +448,10 @@ impl<R: Read> Iterator for ReaderQuadParser<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(match &mut self.inner {
+            ReaderQuadParserKind::JsonLd(parser) => match parser.next()? {
+                Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
+                Err(e) => Err(e.into()),
+            },
             ReaderQuadParserKind::N3(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_n3_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
@@ -490,6 +510,7 @@ impl<R: Read> ReaderQuadParser<R> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.inner {
+                ReaderQuadParserKind::JsonLd(p) => PrefixesIterKind::JsonLd(p.prefixes()),
                 ReaderQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 ReaderQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
                 ReaderQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
@@ -522,6 +543,7 @@ impl<R: Read> ReaderQuadParser<R> {
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         match &self.inner {
+            ReaderQuadParserKind::JsonLd(p) => p.base_iri(),
             ReaderQuadParserKind::N3(p) => p.base_iri(),
             ReaderQuadParserKind::TriG(p) => p.base_iri(),
             ReaderQuadParserKind::Turtle(p) => p.base_iri(),
@@ -561,6 +583,7 @@ pub struct TokioAsyncReaderQuadParser<R: AsyncRead + Unpin> {
 
 #[cfg(feature = "async-tokio")]
 enum TokioAsyncReaderQuadParserKind<R: AsyncRead + Unpin> {
+    JsonLd(TokioAsyncReaderJsonLdParser<R>),
     N3(TokioAsyncReaderN3Parser<R>),
     NQuads(TokioAsyncReaderNQuadsParser<R>),
     NTriples(TokioAsyncReaderNTriplesParser<R>),
@@ -573,6 +596,10 @@ enum TokioAsyncReaderQuadParserKind<R: AsyncRead + Unpin> {
 impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     pub async fn next(&mut self) -> Option<Result<Quad, RdfParseError>> {
         Some(match &mut self.inner {
+            TokioAsyncReaderQuadParserKind::JsonLd(parser) => match parser.next().await? {
+                Ok(quad) => self.mapper.map_quad(quad).map_err(Into::into),
+                Err(e) => Err(e.into()),
+            },
             TokioAsyncReaderQuadParserKind::N3(parser) => match parser.next().await? {
                 Ok(quad) => self.mapper.map_n3_quad(quad).map_err(Into::into),
                 Err(e) => Err(e.into()),
@@ -633,6 +660,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.inner {
+                TokioAsyncReaderQuadParserKind::JsonLd(p) => PrefixesIterKind::JsonLd(p.prefixes()),
                 TokioAsyncReaderQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 TokioAsyncReaderQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
                 TokioAsyncReaderQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
@@ -668,6 +696,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         match &self.inner {
+            TokioAsyncReaderQuadParserKind::JsonLd(p) => p.base_iri(),
             TokioAsyncReaderQuadParserKind::N3(p) => p.base_iri(),
             TokioAsyncReaderQuadParserKind::TriG(p) => p.base_iri(),
             TokioAsyncReaderQuadParserKind::Turtle(p) => p.base_iri(),
@@ -702,6 +731,7 @@ pub struct SliceQuadParser<'a> {
 }
 
 enum SliceQuadParserKind<'a> {
+    JsonLd(SliceJsonLdParser<'a>),
     N3(SliceN3Parser<'a>),
     NQuads(SliceNQuadsParser<'a>),
     NTriples(SliceNTriplesParser<'a>),
@@ -715,6 +745,10 @@ impl Iterator for SliceQuadParser<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(match &mut self.inner {
+            SliceQuadParserKind::JsonLd(parser) => match parser.next()? {
+                Ok(quad) => self.mapper.map_quad(quad),
+                Err(e) => Err(e.into()),
+            },
             SliceQuadParserKind::N3(parser) => match parser.next()? {
                 Ok(quad) => self.mapper.map_n3_quad(quad),
                 Err(e) => Err(e.into()),
@@ -773,6 +807,7 @@ impl SliceQuadParser<'_> {
     pub fn prefixes(&self) -> PrefixesIter<'_> {
         PrefixesIter {
             inner: match &self.inner {
+                SliceQuadParserKind::JsonLd(p) => PrefixesIterKind::JsonLd(p.prefixes()),
                 SliceQuadParserKind::N3(p) => PrefixesIterKind::N3(p.prefixes()),
                 SliceQuadParserKind::TriG(p) => PrefixesIterKind::TriG(p.prefixes()),
                 SliceQuadParserKind::Turtle(p) => PrefixesIterKind::Turtle(p.prefixes()),
@@ -805,6 +840,7 @@ impl SliceQuadParser<'_> {
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
         match &self.inner {
+            SliceQuadParserKind::JsonLd(p) => p.base_iri(),
             SliceQuadParserKind::N3(p) => p.base_iri(),
             SliceQuadParserKind::TriG(p) => p.base_iri(),
             SliceQuadParserKind::Turtle(p) => p.base_iri(),
@@ -822,6 +858,7 @@ pub struct PrefixesIter<'a> {
 }
 
 enum PrefixesIterKind<'a> {
+    JsonLd(JsonLdPrefixesIter<'a>),
     Turtle(TurtlePrefixesIter<'a>),
     TriG(TriGPrefixesIter<'a>),
     N3(N3PrefixesIter<'a>),
@@ -835,6 +872,7 @@ impl<'a> Iterator for PrefixesIter<'a> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.inner {
+            PrefixesIterKind::JsonLd(iter) => iter.next(),
             PrefixesIterKind::Turtle(iter) => iter.next(),
             PrefixesIterKind::TriG(iter) => iter.next(),
             PrefixesIterKind::N3(iter) => iter.next(),
@@ -846,6 +884,7 @@ impl<'a> Iterator for PrefixesIter<'a> {
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         match &self.inner {
+            PrefixesIterKind::JsonLd(iter) => iter.size_hint(),
             PrefixesIterKind::Turtle(iter) => iter.size_hint(),
             PrefixesIterKind::TriG(iter) => iter.size_hint(),
             PrefixesIterKind::N3(iter) => iter.size_hint(),

@@ -2,7 +2,7 @@
 use json_event_parser::TokioAsyncWriterJsonSerializer;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::{rdf, xsd};
+use oxrdf::vocab::xsd;
 use oxrdf::{
     GraphName, GraphNameRef, NamedNode, NamedOrBlankNodeRef, QuadRef, Subject, SubjectRef, TermRef,
 };
@@ -175,11 +175,11 @@ impl JsonLdSerializer {
     fn inner_writer(self) -> InnerJsonLdWriter {
         InnerJsonLdWriter {
             started: false,
-            current_graph_name: GraphName::DefaultGraph,
+            current_graph_name: None,
             current_subject: None,
             current_predicate: None,
             emitted_predicates: BTreeSet::new(),
-            prefixes_by_iri: BTreeMap::new(),
+            prefixes: self.prefixes,
             base_iri: self.base_iri,
         }
     }
@@ -304,11 +304,11 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonLdSerializer<W> {
 
 pub struct InnerJsonLdWriter {
     started: bool,
-    current_graph_name: GraphName,
+    current_graph_name: Option<GraphName>,
     current_subject: Option<Subject>,
     current_predicate: Option<NamedNode>,
     emitted_predicates: BTreeSet<String>,
-    prefixes_by_iri: BTreeMap<String, String>,
+    prefixes: BTreeMap<String, String>,
     base_iri: Option<Iri<String>>,
 }
 
@@ -324,60 +324,68 @@ impl InnerJsonLdWriter {
         }
 
         let quad = quad.into();
-        if let Some(current_predicate) = self.current_predicate.take() {
-            if current_predicate.as_ref() == quad.predicate {
-                self.current_predicate = Some(current_predicate);
-            } else {
-                // We close the predicate
-                output.push(JsonEvent::EndArray);
-                self.emitted_predicates
-                    .insert(current_predicate.into_string());
-            }
-        }
-        if let Some(current_subject) = self.current_subject.take() {
-            if current_subject.as_ref() != quad.subject
-                || self
-                    .current_predicate
-                    .as_ref()
-                    .is_some_and(|current_predicate| {
-                        self.emitted_predicates.contains(current_predicate.as_str())
-                    })
-            // We don't want to repeat predicates
-            {
-                // We close the subject
-                output.push(JsonEvent::EndObject);
-                self.current_predicate = None;
-                self.emitted_predicates.clear();
-            } else {
-                self.current_subject = Some(current_subject);
-            }
-        }
-        if !self.current_graph_name.is_default_graph()
-            && self.current_graph_name.as_ref() != quad.graph_name
+        if self
+            .current_graph_name
+            .as_ref()
+            .map_or(false, |graph_name| graph_name.as_ref() != quad.graph_name)
         {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject);
-            self.current_graph_name = GraphName::DefaultGraph;
+            if self
+                .current_graph_name
+                .as_ref()
+                .map_or(false, |g| !g.is_default_graph())
+            {
+                output.push(JsonEvent::EndArray);
+                output.push(JsonEvent::EndObject);
+            }
+            self.current_graph_name = None;
             self.current_subject = None;
             self.current_predicate = None;
             self.emitted_predicates.clear();
+        } else if self
+            .current_subject
+            .as_ref()
+            .map_or(false, |subject| subject.as_ref() != quad.subject)
+            || self
+                .current_predicate
+                .as_ref()
+                .map_or(false, |predicate| predicate.as_ref() != quad.predicate)
+                && self.emitted_predicates.contains(quad.predicate.as_str())
+        {
+            output.push(JsonEvent::EndArray);
+            output.push(JsonEvent::EndObject);
+            self.current_subject = None;
+            self.emitted_predicates.clear();
+            self.current_predicate = None;
+        } else if self
+            .current_predicate
+            .as_ref()
+            .map_or(false, |predicate| predicate.as_ref() != quad.predicate)
+        {
+            output.push(JsonEvent::EndArray);
+            self.emitted_predicates
+                .insert(self.current_predicate.take().unwrap().into_string());
         }
-        if !quad.graph_name.is_default_graph() {
-            // We open a new graph name
-            output.push(JsonEvent::StartObject);
-            output.push(JsonEvent::ObjectKey("@id".into()));
-            output.push(JsonEvent::String(self.id_value(match quad.graph_name {
-                GraphNameRef::NamedNode(iri) => iri.into(),
-                GraphNameRef::BlankNode(bnode) => bnode.into(),
-                GraphNameRef::DefaultGraph => unreachable!(),
-            })));
-            output.push(JsonEvent::ObjectKey("@graph".into()));
-            output.push(JsonEvent::StartArray);
-            self.current_graph_name = quad.graph_name.into_owned();
+
+        if self.current_graph_name.is_none() {
+            if !quad.graph_name.is_default_graph() {
+                // We open a new graph name
+                output.push(JsonEvent::StartObject);
+                output.push(JsonEvent::ObjectKey("@id".into()));
+                output.push(JsonEvent::String(self.id_value(match quad.graph_name {
+                    GraphNameRef::NamedNode(iri) => iri.into(),
+                    GraphNameRef::BlankNode(bnode) => bnode.into(),
+                    GraphNameRef::DefaultGraph => unreachable!(),
+                })));
+                output.push(JsonEvent::ObjectKey("@graph".into()));
+                output.push(JsonEvent::StartArray);
+            }
+            self.current_graph_name = Some(quad.graph_name.into_owned());
         }
 
         // We open a new subject block if useful (ie. new subject or already used predicate)
-        let is_object_start = if self.current_subject.is_none() {
+        if self.current_subject.is_none() {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("@id".into()));
             output.push(JsonEvent::String(self.id_value(match quad.subject {
@@ -391,19 +399,13 @@ impl InnerJsonLdWriter {
                 }
             })));
             self.current_subject = Some(quad.subject.into_owned());
-            true
-        } else {
-            false
-        };
+        }
 
         // We open a predicate key
         if self.current_predicate.is_none() {
             output.push(JsonEvent::ObjectKey(
-                if quad.predicate == rdf::TYPE && is_object_start {
-                    "@type".into()
-                } else {
-                    quad.predicate.as_str().into()
-                },
+                // TODO: use @type
+                quad.predicate.as_str().into(), // TODO: prefixes including @vocab
             ));
             output.push(JsonEvent::StartArray);
             self.current_predicate = Some(quad.predicate.into_owned());
@@ -413,11 +415,22 @@ impl InnerJsonLdWriter {
     }
 
     fn serialize_start(&self, output: &mut Vec<JsonEvent<'_>>) {
-        if self.base_iri.is_some() || !self.prefixes_by_iri.is_empty() {
+        if self.base_iri.is_some() || !self.prefixes.is_empty() {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("@context".into()));
             output.push(JsonEvent::StartObject);
-            // TODO: context itself
+            if let Some(base_iri) = &self.base_iri {
+                output.push(JsonEvent::ObjectKey("@base".into()));
+                output.push(JsonEvent::String(base_iri.to_string().into()));
+            }
+            for (prefix_name, prefix_iri) in &self.prefixes {
+                output.push(JsonEvent::ObjectKey(if prefix_name.is_empty() {
+                    "@vocab".into()
+                } else {
+                    prefix_name.clone().into()
+                }));
+                output.push(JsonEvent::String(prefix_iri.clone().into()));
+            }
             output.push(JsonEvent::EndObject);
             output.push(JsonEvent::ObjectKey("@graph".into()));
         }
@@ -429,30 +442,25 @@ impl InnerJsonLdWriter {
         term: TermRef<'a>,
         output: &mut Vec<JsonEvent<'a>>,
     ) -> io::Result<()> {
+        output.push(JsonEvent::StartObject);
         match term {
             TermRef::NamedNode(iri) => {
+                output.push(JsonEvent::ObjectKey("@id".into()));
                 output.push(JsonEvent::String(self.id_value(iri.into())));
             }
             TermRef::BlankNode(bnode) => {
+                output.push(JsonEvent::ObjectKey("@id".into()));
                 output.push(JsonEvent::String(self.id_value(bnode.into())));
             }
             TermRef::Literal(literal) => {
+                output.push(JsonEvent::ObjectKey("@value".into()));
+                output.push(JsonEvent::String(literal.value().into()));
                 if let Some(language) = literal.language() {
-                    output.push(JsonEvent::StartObject);
-                    output.push(JsonEvent::ObjectKey("@value".into()));
-                    output.push(JsonEvent::String(literal.value().into()));
                     output.push(JsonEvent::ObjectKey("@language".into()));
                     output.push(JsonEvent::String(language.into()));
-                    output.push(JsonEvent::EndObject);
-                } else if literal.datatype() == xsd::STRING {
-                    output.push(JsonEvent::String(literal.value().into()));
-                } else {
-                    output.push(JsonEvent::StartObject);
-                    output.push(JsonEvent::ObjectKey("@value".into()));
-                    output.push(JsonEvent::String(literal.value().into()));
-                    output.push(JsonEvent::ObjectKey("@datatype".into()));
+                } else if literal.datatype() != xsd::STRING {
+                    output.push(JsonEvent::ObjectKey("@type".into()));
                     output.push(JsonEvent::String(self.id_value(literal.datatype().into())));
-                    output.push(JsonEvent::EndObject);
                 }
             }
             TermRef::Triple(_) => {
@@ -462,12 +470,13 @@ impl InnerJsonLdWriter {
                 ))
             }
         }
+        output.push(JsonEvent::EndObject);
         Ok(())
     }
 
     fn id_value<'a>(&self, id: NamedOrBlankNodeRef<'a>) -> Cow<'a, str> {
         match id {
-            NamedOrBlankNodeRef::NamedNode(iri) => iri.as_str().into(),
+            NamedOrBlankNodeRef::NamedNode(iri) => relative_iri(iri.as_str(), &self.base_iri),
             NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
         }
     }
@@ -479,13 +488,26 @@ impl InnerJsonLdWriter {
         if self.current_subject.is_some() {
             output.push(JsonEvent::EndObject)
         }
-        if !self.current_graph_name.is_default_graph() {
+        if self
+            .current_graph_name
+            .as_ref()
+            .map_or(false, |g| !g.is_default_graph())
+        {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject)
         }
         output.push(JsonEvent::EndArray);
-        if self.base_iri.is_some() || !self.prefixes_by_iri.is_empty() {
+        if self.base_iri.is_some() || !self.prefixes.is_empty() {
             output.push(JsonEvent::EndObject);
         }
     }
+}
+
+fn relative_iri<'a>(iri: &'a str, base_iri: &Option<Iri<String>>) -> Cow<'a, str> {
+    if let Some(base_iri) = base_iri {
+        if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri)) {
+            return relative.into_inner().into();
+        }
+    }
+    iri.into()
 }

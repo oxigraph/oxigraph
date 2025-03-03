@@ -13,6 +13,8 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
+json-ld.workspace = true
+json-event-parser.workspace = true
 oxigraph.workspace = true
 oxiri.workspace = true
 oxttl.workspace = true

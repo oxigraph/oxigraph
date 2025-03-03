@@ -1,9 +1,10 @@
 use crate::evaluator::TestEvaluator;
-use crate::files::{guess_rdf_format, load_dataset, load_n3, read_file_to_string};
+use crate::files::{guess_rdf_format, load_dataset, load_n3, read_file, read_file_to_string};
 use crate::manifest::Test;
 use crate::report::{dataset_diff, format_diff};
 use anyhow::{bail, ensure, Context, Result};
-use oxigraph::io::RdfFormat;
+use json_event_parser::{JsonEvent, SliceJsonParser};
+use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{BlankNode, Dataset, Quad};
 use oxttl::n3::{N3Quad, N3Term};
@@ -68,6 +69,14 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     evaluator.register("http://www.w3.org/ns/rdftest#TestTrigNegativeEval", |t| {
         evaluate_negative_syntax_test(t, RdfFormat::TriG)
     });
+    evaluator.register(
+        "https://w3c.github.io/json-ld-api/tests/vocab#FromRDFTest",
+        |t| evaluate_jsonld_from_rdf_test(t),
+    );
+    evaluator.register(
+        "https://w3c.github.io/json-ld-api/tests/vocab#ToRDFTest",
+        |t| evaluate_eval_test(t, RdfFormat::JsonLd, false, false),
+    );
     evaluator.register(
         "http://www.w3.org/ns/rdftest#TestNTriplesPositiveC14N",
         |t| evaluate_positive_c14n_test(t, RdfFormat::NTriples),
@@ -163,6 +172,36 @@ fn evaluate_eval_test(
         dataset_diff(&expected_dataset, &actual_dataset)
     );
     Ok(())
+}
+
+fn evaluate_jsonld_from_rdf_test(test: &Test) -> Result<()> {
+    let action = test.action.as_deref().context("No action found")?;
+    let parser = RdfParser::from_format(guess_rdf_format(action)?).for_reader(read_file(action)?);
+    let mut serializer = RdfSerializer::from_format(RdfFormat::JsonLd).for_writer(Vec::new());
+    for quad in parser {
+        let quad = quad?;
+        serializer.serialize_quad(&quad)?;
+    }
+    let actual_json = String::from_utf8(serializer.finish()?)?;
+
+    let result = test.result.as_ref().context("No tests result found")?;
+    let expected_json = read_file_to_string(result)?;
+
+    ensure!(
+        parse_json_to_events(&expected_json)? == parse_json_to_events(&actual_json)?,
+        "Expected JSON:\n{expected_json}\nActual JSON:\n{actual_json}"
+    );
+
+    Ok(())
+}
+
+fn parse_json_to_events(json: &str) -> Result<Vec<JsonEvent<'_>>> {
+    let mut events = Vec::new();
+    let mut parser = SliceJsonParser::new(json.as_bytes());
+    while !events.ends_with(&[JsonEvent::Eof]) {
+        events.push(parser.parse_next()?);
+    }
+    Ok(events)
 }
 
 fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {

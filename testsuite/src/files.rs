@@ -1,9 +1,12 @@
 use anyhow::{bail, Context, Result};
+use json_ld::fs::Error;
+use json_ld::{Iri, IriBuf, LoadError, Loader, LoadingResult, RemoteDocument};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::{Dataset, Graph};
 use oxttl::n3::N3Quad;
 use oxttl::N3Parser;
 use std::fs::File;
+use std::io;
 use std::io::Read;
 use std::path::Path;
 
@@ -119,4 +122,23 @@ pub fn load_n3(url: &str, ignore_errors: bool) -> Result<Vec<N3Quad>> {
         }
     }
     Ok(quads)
+}
+
+pub struct JsonLdLoader;
+
+impl Loader for JsonLdLoader {
+    async fn load(&self, url: &Iri) -> LoadingResult<IriBuf> {
+        let mut file = read_file(url.as_str())
+            .map_err(|e| LoadError::new(url.to_owned(), Error::IO(io::Error::other(e))))?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)
+            .map_err(|e| LoadError::new(url.to_owned(), Error::IO(e)))?;
+        Ok(RemoteDocument::new(
+            Some(url.to_owned()),
+            Some("application/ld+json".parse().unwrap()),
+            contents
+                .parse()
+                .map_err(|e| LoadError::new(url.to_owned(), Error::Parse(e)))?,
+        ))
+    }
 }
