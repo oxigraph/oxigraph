@@ -162,6 +162,7 @@ fn n3_parser_testsuite() -> Result<()> {
         &[],
     )
 }
+
 #[test]
 fn n3_extended_testsuite() -> Result<()> {
     check_testsuite(
@@ -176,5 +177,65 @@ fn n3_turtle_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/N3/tests/TurtleTests/manifest.ttl",
         &[],
+    )
+}
+
+#[test]
+fn jsonld_to_rdf_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://w3c.github.io/json-ld-api/tests/toRdf-manifest.jsonld",
+        &[],
+    )
+}
+
+#[test]
+fn jsonld_from_rdf_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld",
+        &[
+            // We do not support @list
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0004",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0005",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0006",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0008",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0009",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0011",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0013",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0014",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0016",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0020",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0021",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0022",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0026",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tli01",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tli02",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tli03",
+            // We do not support @json
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs01",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs02",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs03",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs04",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs05",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs06",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs07",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs08",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs09",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs10",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tjs11",
+            // We do not support useNativeTypes option
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0018",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0027",
+            // We do not support useRdfType option
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#t0019",
+            // We do not support rdfDirection i18n-datatype option
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi05",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi06",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi07",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi08",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi09",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi10",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi11",
+            "https://w3c.github.io/json-ld-api/tests/fromRdf-manifest.jsonld#tdi12",
+        ],
     )
 }
