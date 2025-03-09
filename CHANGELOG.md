@@ -1,3 +1,10 @@
+## [0.4.9] - 2025-03-09
+
+### Changed
+- SPARQL: Fixes a bug that made `GROUP_CONCAT(..., SEPARATOR="...")` always assume `DISTINCT`.
+- `oxrdfxml`: Fixes `TokioAsyncWriterRdfXmlSerializer` name.
+
+
 ## [0.4.8] - 2025-02-14
 
 ### Changed

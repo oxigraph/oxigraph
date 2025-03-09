@@ -1269,9 +1269,9 @@ checksum = "6db9c683daf087dc577b7506e9695b3d556a9f3849903fa28186283afd6809e9"
 
 [[package]]
 name = "litemap"
-version = "0.7.4"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
+checksum = "23fb14cb19457329c82206317a5663005a4d404783dc74f4252769b0d5f42856"
 
 [[package]]
 name = "lock_api"
@@ -1331,9 +1331,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dab59f8e050d5df8e4dd87d9206fb6f65a483e20ac9fda365ade4fab353196c"
+checksum = "87de3442987e9dbec73158d5c715e7ad9072fda936bb03d19d7fa10e00520f0e"
 dependencies = [
  "libc",
  "log",
@@ -1461,7 +1461,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "bzip2",
  "codspeed-criterion-compat",
@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1508,7 +1508,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfio"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "oxrdf",
  "oxrdfxml",
@@ -1574,7 +1574,7 @@ dependencies = [
 
 [[package]]
 name = "oxrdfxml"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1586,7 +1586,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "bindgen",
  "cc",
@@ -1604,7 +1604,7 @@ dependencies = [
 
 [[package]]
 name = "oxttl"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "memchr",
  "oxilangtag",
@@ -1836,7 +1836,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -2225,7 +2225,7 @@ dependencies = [
 
 [[package]]
 name = "spareval"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "hex",
  "json-event-parser",
@@ -2246,7 +2246,7 @@ dependencies = [
 
 [[package]]
 name = "spargebra"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -2258,7 +2258,7 @@ dependencies = [
 
 [[package]]
 name = "spargeo"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "geo",
  "geojson",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "sparopt"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "oxrdf",
  "rand",
@@ -2858,9 +2858,9 @@ dependencies = [
 
 [[package]]
 name = "zerofrom"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cff3ee08c995dee1859d998dea82f7374f2826091dd9cd47def953cae446cd2e"
+checksum = "50cc42e0333e05660c3587f3bf9d0478688e15d870fab3346451ce7f8c9fbea5"
 dependencies = [
  "zerofrom-derive",
 ]
