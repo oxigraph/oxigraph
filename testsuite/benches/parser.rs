@@ -13,7 +13,11 @@ fn test_data_from_testsuite(manifest_uri: String, include_tests_types: &[&str]) 
     let mut data = Vec::default();
     for test in manifest {
         let test = test?;
-        if include_tests_types.contains(&test.kind.as_str()) {
+        if test
+            .kinds
+            .iter()
+            .any(|kind| include_tests_types.contains(&kind.as_str()))
+        {
             read_file(&test.action.unwrap())?.read_to_end(&mut data)?;
             data.push(b'\n');
         }

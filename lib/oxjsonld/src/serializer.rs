@@ -327,14 +327,14 @@ impl InnerJsonLdWriter {
         if self
             .current_graph_name
             .as_ref()
-            .map_or(false, |graph_name| graph_name.as_ref() != quad.graph_name)
+            .is_some_and(|graph_name| graph_name.as_ref() != quad.graph_name)
         {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject);
             if self
                 .current_graph_name
                 .as_ref()
-                .map_or(false, |g| !g.is_default_graph())
+                .is_some_and(|g| !g.is_default_graph())
             {
                 output.push(JsonEvent::EndArray);
                 output.push(JsonEvent::EndObject);
@@ -346,11 +346,11 @@ impl InnerJsonLdWriter {
         } else if self
             .current_subject
             .as_ref()
-            .map_or(false, |subject| subject.as_ref() != quad.subject)
+            .is_some_and(|subject| subject.as_ref() != quad.subject)
             || self
                 .current_predicate
                 .as_ref()
-                .map_or(false, |predicate| predicate.as_ref() != quad.predicate)
+                .is_some_and(|predicate| predicate.as_ref() != quad.predicate)
                 && self.emitted_predicates.contains(quad.predicate.as_str())
         {
             output.push(JsonEvent::EndArray);
@@ -361,11 +361,13 @@ impl InnerJsonLdWriter {
         } else if self
             .current_predicate
             .as_ref()
-            .map_or(false, |predicate| predicate.as_ref() != quad.predicate)
+            .is_some_and(|predicate| predicate.as_ref() != quad.predicate)
         {
             output.push(JsonEvent::EndArray);
-            self.emitted_predicates
-                .insert(self.current_predicate.take().unwrap().into_string());
+            if let Some(current_predicate) = self.current_predicate.take() {
+                self.emitted_predicates
+                    .insert(current_predicate.into_string());
+            }
         }
 
         if self.current_graph_name.is_none() {
@@ -491,7 +493,7 @@ impl InnerJsonLdWriter {
         if self
             .current_graph_name
             .as_ref()
-            .map_or(false, |g| !g.is_default_graph())
+            .is_some_and(|g| !g.is_default_graph())
         {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject)
