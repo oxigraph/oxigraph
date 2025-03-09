@@ -306,9 +306,8 @@ impl TestManifest {
         if format == RdfFormat::JsonLd {
             // TODO: hack to support JSON-Ld manifests
             let mut generator = Blank::new();
-            let Poll::Ready(mut rdf) =
-                pin!(RemoteDocumentReference::iri(IriBuf::new(url.clone())?)
-                    .to_rdf(&mut generator, &JsonLdLoader))
+            let document = RemoteDocumentReference::iri(IriBuf::new(url.clone())?);
+            let Poll::Ready(mut rdf) = pin!(document.to_rdf(&mut generator, &JsonLdLoader))
                 .poll(&mut std::task::Context::from_waker(Waker::noop()))?
             else {
                 bail!("Not ready future when parsing JSON-LD")

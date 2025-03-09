@@ -71,7 +71,7 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     });
     evaluator.register(
         "https://w3c.github.io/json-ld-api/tests/vocab#FromRDFTest",
-        |t| evaluate_jsonld_from_rdf_test(t),
+        evaluate_jsonld_from_rdf_test,
     );
     evaluator.register(
         "https://w3c.github.io/json-ld-api/tests/vocab#ToRDFTest",

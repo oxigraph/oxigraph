@@ -1,10 +1,14 @@
-use crate::error::{JsonLdParseError, JsonLdSyntaxError};
+use crate::error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
+use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
-use oxrdf::{NamedOrBlankNode, Quad};
-use std::collections::HashMap;
+use oxrdf::vocab::{rdf, xsd};
+use oxrdf::{
+    BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Subject,
+};
+use std::borrow::Cow;
 use std::io::Read;
 use std::marker::PhantomData;
 use std::str;
@@ -195,14 +199,7 @@ impl JsonLdParser {
 
     fn into_inner(self) -> InternalJsonLdParser {
         InternalJsonLdParser {
-            state: vec![JsonLdState {
-                context: JsonLdContext {
-                    base: self.base,
-                    vocab: None,
-                    prefixes: HashMap::new(),
-                },
-                id: None,
-            }],
+            state: vec![JsonLdState::Root],
             is_end: false,
             unchecked: self.unchecked,
         }
@@ -609,15 +606,27 @@ impl<'a> Iterator for JsonLdPrefixesIter<'a> {
     }
 }
 
-struct JsonLdState {
-    context: JsonLdContext,
-    id: Option<NamedOrBlankNode>,
-}
-
-struct JsonLdContext {
-    base: Option<Iri<String>>,
-    vocab: Option<String>,
-    prefixes: HashMap<String, String>,
+enum JsonLdState {
+    Root,
+    RootArray,
+    StartObject,
+    Object {
+        id: Option<NamedOrBlankNode>,
+    },
+    ObjectId,
+    ObjectPredicate {
+        predicate: NamedNode,
+    },
+    Literal {
+        value: Option<String>,
+        r#type: Option<NamedNode>,
+        language: Option<String>,
+        fallback_type: Option<NamedNodeRef<'static>>,
+    },
+    LiteralValue,
+    LiteralType,
+    LiteralLanguage,
+    Skip,
 }
 
 struct InternalJsonLdParser {
@@ -632,6 +641,423 @@ impl InternalJsonLdParser {
         event: JsonEvent<'_>,
         results: &mut Vec<Quad>,
     ) -> Result<(), JsonLdSyntaxError> {
-        todo!()
+        if self.state.len() > 1000 {
+            unimplemented!();
+        }
+        if event == JsonEvent::Eof {
+            self.is_end = true;
+            return Ok(());
+        }
+        let Some(state) = self.state.pop() else {
+            assert_eq!(event, JsonEvent::Eof, "State can only be empty on EOF");
+            return Ok(());
+        };
+        match state {
+            JsonLdState::Root => match event {
+                JsonEvent::StartObject => {
+                    self.state.push(JsonLdState::StartObject);
+                    Ok(())
+                }
+                JsonEvent::StartArray => {
+                    self.state.push(JsonLdState::RootArray);
+                    Ok(())
+                }
+                JsonEvent::String(_)
+                | JsonEvent::Number(_)
+                | JsonEvent::Boolean(_)
+                | JsonEvent::Null => {
+                    Ok(()) // Empty document
+                }
+                JsonEvent::EndArray
+                | JsonEvent::EndObject
+                | JsonEvent::ObjectKey(_)
+                | JsonEvent::Eof => unreachable!(),
+            },
+            JsonLdState::RootArray => match event {
+                JsonEvent::StartObject => {
+                    self.state.push(JsonLdState::RootArray);
+                    self.state.push(JsonLdState::StartObject);
+                    Ok(())
+                }
+                JsonEvent::StartArray => {
+                    self.state.push(JsonLdState::RootArray);
+                    self.state.push(JsonLdState::RootArray);
+                    Ok(())
+                }
+                JsonEvent::String(_)
+                | JsonEvent::Number(_)
+                | JsonEvent::Boolean(_)
+                | JsonEvent::Null => {
+                    self.state.push(JsonLdState::RootArray);
+                    Ok(())
+                }
+                JsonEvent::EndArray => Ok(()),
+                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => unreachable!(),
+            },
+            JsonLdState::StartObject => match event {
+                JsonEvent::ObjectKey(key) => {
+                    self.state.push(
+                        if matches!(key.as_ref(), "@value" | "@language" | "@direction") {
+                            JsonLdState::Literal {
+                                value: None,
+                                r#type: None,
+                                language: None,
+                                fallback_type: None,
+                            }
+                        } else if key == "@type" {
+                            unimplemented!()
+                        } else {
+                            JsonLdState::Object { id: None }
+                        },
+                    );
+                    self.parse_event(JsonEvent::ObjectKey(key), results)
+                }
+                JsonEvent::EndObject => unimplemented!(),
+                _ => unreachable!(),
+            },
+            JsonLdState::Object { id } => match event {
+                JsonEvent::ObjectKey(key) => {
+                    self.state.push(JsonLdState::Object { id });
+                    if key.as_ref() == "@id" {
+                        self.state.push(JsonLdState::ObjectId);
+                        Ok(())
+                    } else {
+                        match NamedNode::new(key.as_ref()) {
+                            Ok(predicate) => {
+                                self.state.push(JsonLdState::ObjectPredicate { predicate });
+                                Ok(())
+                            }
+                            Err(e) => {
+                                self.state.push(JsonLdState::Skip);
+                                Err(JsonLdSyntaxError::msg(format!(
+                                    "Invalid predicate IRI '{key}': {e}"
+                                )))
+                            }
+                        }
+                    }
+                }
+                JsonEvent::EndObject => {
+                    // TODO: do it as soon as @id is emitted to get nicer output
+                    if let Some(subject) = self.current_subject() {
+                        let Some(predicate) = self.current_predicate() else {
+                            unreachable!("Subject without predicate")
+                        };
+                        results.push(Quad {
+                            subject,
+                            predicate,
+                            object: id.unwrap_or_else(|| BlankNode::default().into()).into(),
+                            graph_name: self.current_graph_name(),
+                        });
+                    }
+                    Ok(())
+                }
+                _ => unreachable!(),
+            },
+            JsonLdState::ObjectPredicate { predicate } => match event {
+                JsonEvent::String(value) => {
+                    let Some(subject) = self.current_subject() else {
+                        unreachable!("Predicate without subject")
+                    };
+                    results.push(Quad {
+                        subject,
+                        predicate,
+                        object: Literal::new_simple_literal(value).into(),
+                        graph_name: self.current_graph_name(),
+                    });
+                    Ok(())
+                }
+                JsonEvent::Number(_) => unimplemented!(),
+                JsonEvent::Boolean(_) => unimplemented!(),
+                JsonEvent::Null => Ok(()),
+                JsonEvent::StartArray => unimplemented!(),
+                JsonEvent::EndArray => unimplemented!(),
+                JsonEvent::StartObject => {
+                    self.state.push(JsonLdState::ObjectPredicate { predicate });
+                    self.state.push(JsonLdState::StartObject);
+                    Ok(())
+                }
+                JsonEvent::EndObject => unimplemented!(),
+                JsonEvent::ObjectKey(_) | JsonEvent::Eof => unreachable!(),
+            },
+            JsonLdState::ObjectId => {
+                let Some(JsonLdState::Object { id }) = self.state.last_mut() else {
+                    unreachable!();
+                };
+                if id.is_some() {
+                    return Err(JsonLdSyntaxError::msg_and_code(
+                        "An @id is already set for this object",
+                        JsonLdErrorCode::CollidingKeywords,
+                    ));
+                }
+                match event {
+                    JsonEvent::String(i) => {
+                        *id = Some(parse_id(i)?);
+                        Ok(())
+                    }
+                    JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                        Err(JsonLdSyntaxError::msg_and_code(
+                            "The value of @id must be a string",
+                            JsonLdErrorCode::InvalidIdValue,
+                        ))
+                    }
+                    JsonEvent::Null
+                    | JsonEvent::StartArray
+                    | JsonEvent::EndArray
+                    | JsonEvent::StartObject
+                    | JsonEvent::EndObject
+                    | JsonEvent::ObjectKey(_)
+                    | JsonEvent::Eof => unimplemented!(),
+                }
+            }
+            JsonLdState::Literal {
+                value,
+                language,
+                r#type,
+                fallback_type,
+            } => match event {
+                JsonEvent::ObjectKey(key) => {
+                    self.state.push(JsonLdState::Literal {
+                        value,
+                        language,
+                        r#type,
+                        fallback_type,
+                    });
+                    self.state.push(match key.as_ref() {
+                        "@value" => JsonLdState::LiteralValue,
+                        "@type" => JsonLdState::LiteralType,
+                        "@language" => JsonLdState::LiteralLanguage,
+                        _ => unimplemented!(),
+                    });
+                    Ok(())
+                }
+                JsonEvent::EndObject => {
+                    let Some(value) = value else {
+                        return Ok(()); // TODO: is it ok to skip?
+                    };
+                    let object = if let Some(language) = language {
+                        if fallback_type.is_some() {
+                            return Err(JsonLdSyntaxError::msg_and_code(
+                                "@language must be used only on string @value",
+                                JsonLdErrorCode::InvalidLanguageTaggedValue,
+                            ));
+                        }
+                        if !r#type.is_some_and(|t| t == rdf::LANG_STRING) {
+                            return Err(JsonLdSyntaxError::msg(
+                                "When @language is present, @type must not be set",
+                            ));
+                        }
+                        Literal::new_language_tagged_literal_unchecked(value, language)
+                    } else if let Some(r#type) = r#type {
+                        Literal::new_typed_literal(value, r#type)
+                    } else if let Some(fallback_type) = fallback_type {
+                        Literal::new_typed_literal(value, fallback_type)
+                    } else {
+                        Literal::new_simple_literal(value)
+                    }
+                    .into();
+                    let Some(subject) = self.current_subject() else {
+                        return Ok(()); // TODO: is it ok to skip?
+                    };
+                    let Some(predicate) = self.current_predicate() else {
+                        unreachable!("No predicate when parsing a value")
+                    };
+                    results.push(Quad {
+                        subject,
+                        predicate,
+                        object,
+                        graph_name: self.current_graph_name(),
+                    });
+                    Ok(())
+                }
+                _ => unreachable!(),
+            },
+            JsonLdState::LiteralValue => {
+                let Some(JsonLdState::Literal {
+                    value,
+                    fallback_type,
+                    language,
+                    ..
+                }) = self.state.last_mut()
+                else {
+                    unreachable!();
+                };
+                if value.is_some() {
+                    return Err(JsonLdSyntaxError::msg_and_code(
+                        "An @value is already set for this object",
+                        JsonLdErrorCode::CollidingKeywords,
+                    ));
+                }
+                match event {
+                    JsonEvent::String(v) => {
+                        *value = Some(v.into_owned());
+                        *fallback_type = Some(xsd::STRING);
+                        Ok(())
+                    }
+                    JsonEvent::Number(v) => {
+                        *value = Some(v.to_string());
+                        *fallback_type = Some(guess_number_datatype(&v));
+                        if language.is_some() {
+                            return Err(JsonLdSyntaxError::msg_and_code(
+                                "@value must be a string if @language is set",
+                                JsonLdErrorCode::InvalidLanguageTaggedValue,
+                            ));
+                        }
+                        Ok(())
+                    }
+                    JsonEvent::Boolean(v) => {
+                        *value = Some(v.to_string());
+                        *fallback_type = Some(xsd::BOOLEAN);
+                        if language.is_some() {
+                            return Err(JsonLdSyntaxError::msg_and_code(
+                                "@value must be a string if @language is set",
+                                JsonLdErrorCode::InvalidLanguageTaggedValue,
+                            ));
+                        }
+                        Ok(())
+                    }
+                    JsonEvent::Null
+                    | JsonEvent::StartArray
+                    | JsonEvent::EndArray
+                    | JsonEvent::StartObject
+                    | JsonEvent::EndObject
+                    | JsonEvent::ObjectKey(_)
+                    | JsonEvent::Eof => unimplemented!(),
+                }
+            }
+            JsonLdState::LiteralLanguage => {
+                let Some(JsonLdState::Literal { language, .. }) = self.state.last_mut() else {
+                    unreachable!();
+                };
+                if language.is_some() {
+                    return Err(JsonLdSyntaxError::msg_and_code(
+                        "A @language is already set for this object",
+                        JsonLdErrorCode::CollidingKeywords,
+                    ));
+                }
+                match event {
+                    JsonEvent::String(v) => {
+                        if let Err(e) = LanguageTag::parse(v.as_ref()) {
+                            return Err(JsonLdSyntaxError::msg_and_code(
+                                format!("Invalid language tag '{v}': {e}"),
+                                JsonLdErrorCode::InvalidLanguageTaggedString,
+                            ));
+                        }
+                        *language = Some(v.into_owned());
+                        Ok(())
+                    }
+                    JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::Null
+                    | JsonEvent::StartArray
+                    | JsonEvent::EndArray
+                    | JsonEvent::StartObject
+                    | JsonEvent::EndObject
+                    | JsonEvent::ObjectKey(_)
+                    | JsonEvent::Eof => Err(JsonLdSyntaxError::msg_and_code(
+                        "A literal language must be a string",
+                        JsonLdErrorCode::InvalidLanguageTaggedString,
+                    )),
+                }
+            }
+            JsonLdState::LiteralType => {
+                let Some(JsonLdState::Literal { r#type, .. }) = self.state.last_mut() else {
+                    unreachable!();
+                };
+                if r#type.is_some() {
+                    return Err(JsonLdSyntaxError::msg_and_code(
+                        "A @language is already set for this object",
+                        JsonLdErrorCode::CollidingKeywords,
+                    ));
+                }
+                match event {
+                    JsonEvent::String(t) => match NamedNode::new(t.as_ref()) {
+                        Ok(t) => {
+                            *r#type = Some(t);
+                            Ok(())
+                        }
+                        Err(e) => Err(JsonLdSyntaxError::msg_and_code(
+                            format!("@type value '{t}' must be a a valid IRI: {e}"),
+                            JsonLdErrorCode::InvalidTypeValue,
+                        )),
+                    },
+                    JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::Null
+                    | JsonEvent::StartArray
+                    | JsonEvent::EndArray
+                    | JsonEvent::StartObject
+                    | JsonEvent::EndObject
+                    | JsonEvent::ObjectKey(_)
+                    | JsonEvent::Eof => Err(JsonLdSyntaxError::msg_and_code(
+                        "A literal type must be a string",
+                        JsonLdErrorCode::InvalidTypeValue,
+                    )),
+                }
+            }
+            JsonLdState::Skip => match event {
+                JsonEvent::String(_)
+                | JsonEvent::Number(_)
+                | JsonEvent::Boolean(_)
+                | JsonEvent::Null
+                | JsonEvent::EndArray
+                | JsonEvent::EndObject
+                | JsonEvent::Eof => Ok(()),
+                JsonEvent::StartArray | JsonEvent::StartObject | JsonEvent::ObjectKey(_) => {
+                    self.state.push(JsonLdState::Skip);
+                    self.state.push(JsonLdState::Skip);
+                    Ok(())
+                }
+            },
+        }
+    }
+
+    fn current_subject(&mut self) -> Option<Subject> {
+        for state in self.state.iter_mut().rev() {
+            if let JsonLdState::Object { id } = state {
+                // TODO: is only valid in streaming
+                return Some(
+                    id.get_or_insert_with(|| BlankNode::default().into())
+                        .clone()
+                        .into(),
+                );
+            }
+        }
+        None
+    }
+
+    fn current_predicate(&self) -> Option<NamedNode> {
+        for state in self.state.iter().rev() {
+            if let JsonLdState::ObjectPredicate { predicate } = state {
+                return Some(predicate.clone());
+            }
+        }
+        None
+    }
+
+    fn current_graph_name(&self) -> GraphName {
+        GraphName::DefaultGraph // TODO
+    }
+}
+
+fn parse_id(value: Cow<'_, str>) -> Result<NamedOrBlankNode, JsonLdSyntaxError> {
+    // TODO: lenient
+    Ok(if let Some(bnode_id) = value.strip_prefix("_:") {
+        BlankNode::new(bnode_id)
+            .map_err(|e| JsonLdSyntaxError::msg(format!("Invalid blank node @id '{value}': {e}")))?
+            .into()
+    } else {
+        NamedNode::new(&*value)
+            .map_err(|e| JsonLdSyntaxError::msg(format!("Invalid IRI @id '{value}': {e}")))?
+            .into()
+    })
+}
+
+fn guess_number_datatype(number: &str) -> NamedNodeRef<'static> {
+    if number.contains('e') || number.contains('E') {
+        xsd::DOUBLE
+    } else if number.contains('.') {
+        xsd::DECIMAL // TODO: this is false!
+    } else {
+        xsd::INTEGER
     }
 }

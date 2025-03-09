@@ -33,7 +33,7 @@ impl TestEvaluator {
                 if handlers.len() > 1 {
                     bail!("The test {test} has multiple possible handlers")
                 }
-                for handler in handlers {
+                if let Some(handler) = handlers.into_iter().next() {
                     let outcome = handler(&test);
                     return Ok(TestResult {
                         test: test.id,
