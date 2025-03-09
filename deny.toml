@@ -1,5 +1,5 @@
 [advisories]
-ignore = ["RUSTSEC-2018-0015", "RUSTSEC-2025-0007"]
+ignore = ["RUSTSEC-2018-0015"]
 
 [licenses]
 allow = [
@@ -9,7 +9,8 @@ allow = [
     "ISC",
     "MIT",
     "OpenSSL",
-    "Unicode-3.0"
+    "Unicode-3.0",
+    "Zlib"
 ]
 
 [[licenses.clarify]]
