@@ -622,7 +622,7 @@ pub fn map_parse_error(error: RdfParseError, file_path: Option<PathBuf>) -> PyEr
             if python_version() >= (3, 10) {
                 let params = if let Some(location) = error.location() {
                     (
-                        file_path,
+                        file_path.map(PathBuf::into_os_string),
                         Some(location.start.line + 1),
                         Some(location.start.column + 1),
                         None::<Vec<u8>>,
@@ -636,7 +636,7 @@ pub fn map_parse_error(error: RdfParseError, file_path: Option<PathBuf>) -> PyEr
             } else {
                 let params = if let Some(location) = error.location() {
                     (
-                        file_path,
+                        file_path.map(PathBuf::into_os_string),
                         Some(location.start.line + 1),
                         Some(location.start.column + 1),
                         None::<Vec<u8>>,
