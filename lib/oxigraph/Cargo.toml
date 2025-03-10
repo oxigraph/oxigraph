@@ -17,6 +17,7 @@ rust-version.workspace = true
 
 [features]
 default = ["rocksdb"]
+rdf-star = ["oxrdfio/rdf-star", "spareval/rdf-star"]
 rocksdb = ["oxrocksdb-sys"]
 js = ["getrandom/js", "oxsdatatypes/js", "js-sys"]
 http-client = ["oxhttp"]
@@ -29,15 +30,15 @@ rocksdb-debug = []
 [dependencies]
 dashmap.workspace = true
 oxiri.workspace = true
-oxrdf = { workspace = true, features = ["rdf-star", "oxsdatatypes"] }
-oxrdfio = { workspace = true, features = ["rdf-star"] }
+oxrdf = { workspace = true, features = ["oxsdatatypes"] }
+oxrdfio.workspace = true
 oxsdatatypes.workspace = true
 rand.workspace = true
 rustc-hash.workspace = true
 siphasher.workspace = true
-sparesults = { workspace = true, features = ["rdf-star"] }
-spargebra = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006"] }
-spareval = { workspace = true, features = ["rdf-star", "sep-0002", "sep-0006", "calendar-ext"] }
+sparesults.workspace = true
+spargebra = { workspace = true, features = ["sep-0002", "sep-0006"] }
+spareval = { workspace = true, features = ["sep-0002", "sep-0006", "calendar-ext"] }
 thiserror.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

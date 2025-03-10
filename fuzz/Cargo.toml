@@ -14,13 +14,13 @@ rocksdb = ["oxigraph/rocksdb"]
 anyhow = "1.0.72"
 libfuzzer-sys = "0.4"
 oxiri = "0.2"
-oxigraph = { path = "../lib/oxigraph", default-features = false }
-oxrdf = { path = "../lib/oxrdf", features = ["rdf-star"] }
+oxigraph = { path = "../lib/oxigraph", default-features = false, features = ["rdf-star"] }
+oxrdf.path = "../lib/oxrdf"
 oxrdfxml.path = "../lib/oxrdfxml"
-oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
-sparesults = { path = "../lib/sparesults", features = ["rdf-star"] }
-spargebra = { path = "../lib/spargebra", features = ["rdf-star", "sep-0006"] }
-spareval = { path = "../lib/spareval", features = ["rdf-star", "sep-0006"] }
+oxttl.path = "../lib/oxttl"
+sparesults.path = "../lib/sparesults"
+spargebra.path = "../lib/spargebra"
+spareval.path = "../lib/spareval"
 sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
 
 [profile.release]
