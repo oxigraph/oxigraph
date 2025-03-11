@@ -1,11 +1,11 @@
-use crate::model::{BlankNodeRef, NamedNodeRef, TermRef};
+use crate::model::{BlankNodeRef, NamedNodeRef};
 use crate::sparql::QueryDataset;
 use crate::storage::numeric_encoder::{
     insert_term, Decoder, EncodedTerm, EncodedTriple, StrHash, StrHashHasher, StrLookup,
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use hdt::Hdt;
-use oxrdf::{QuadRef, Term};
+use oxrdf::Term;
 use oxsdatatypes::Boolean;
 use spareval::{ExpressionTerm, ExpressionTriple, InternalQuad, QueryableDataset};
 use std::cell::RefCell;
@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::io::{Error, ErrorKind};
 use std::iter::empty;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -23,7 +22,7 @@ pub struct HDTDataset {
     path: String,
 
     /// HDT interface.
-    hdt: Hdt,
+    hdt: Arc<Hdt>,
 }
 
 /// Boundry over a Header-Dictionary-Triplies (HDT) storage layer.
@@ -39,12 +38,10 @@ pub struct HDTDatasetView {
 impl Clone for HDTDatasetView {
     fn clone(&self) -> HDTDatasetView {
         let mut hdts: Vec<HDTDataset> = Vec::new();
-        for dataset in self.hdts.iter() {
-            let file = std::fs::File::open(&dataset.path).expect("error opening file");
-            let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
+        for dataset in &self.hdts {
             hdts.push(HDTDataset {
                 path: dataset.path.clone(),
-                hdt,
+                hdt: Arc::<Hdt>::clone(&dataset.hdt),
             })
         }
 
@@ -56,15 +53,14 @@ impl Clone for HDTDatasetView {
 }
 
 impl HDTDatasetView {
-    pub fn new(paths: Vec<String>) -> Self {
+    pub fn new(paths: &[String]) -> Self {
         let mut hdts: Vec<HDTDataset> = Vec::new();
-        for path in paths.iter() {
+        for path in paths {
             // TODO catch error and proceed to next file?
-            let file = std::fs::File::open(path.as_str()).expect("error opening HDT file");
-            let hdt = Hdt::new(std::io::BufReader::new(file)).expect("error loading HDT");
+            let hdt = Hdt::new_from_path(std::path::Path::new(&path)).unwrap();
             hdts.push(HDTDataset {
                 path: path.to_string(),
-                hdt,
+                hdt: Arc::new(hdt),
             })
         }
 
@@ -77,8 +73,6 @@ impl HDTDatasetView {
         if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
             e.insert(value.to_owned());
         }
-
-        return;
     }
 
     /// Create the correct OxRDF term for a given resource string.  Slow,
@@ -90,21 +84,38 @@ impl HDTDatasetView {
             None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
 
             // Double-quote delimters are used around the string.
-            Some('"') => match s.rfind('"') {
-                None => Err(Error::new(
-                    ErrorKind::InvalidData,
-                    format!("missing right quotation mark in literal string {s}"),
-                )),
-
-                Some(_) => {
-                    let term = Term::from_str(s);
-                    Ok(self.internalize_term(term.unwrap())?)
+            Some('"') => {
+                if s.rfind('"').is_none() {
+                    Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("missing right quotation mark in literal string {s}"),
+                    ))
+                } else {
+                    let term = match Term::from_str(s) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            return Err(Error::new(
+                                ErrorKind::InvalidData,
+                                format!("failed to build oxRDF literal from {s}: {e}"),
+                            ))
+                        }
+                    };
+                    let encoded = term.as_ref().into();
+                    Ok(encoded)
                 }
-            },
+            }
 
             // Underscore prefix indicating an Blank Node.
             Some('_') => {
-                let term = oxrdf::BlankNode::new(&s[2..]).unwrap();
+                let term = match oxrdf::BlankNode::new(&s[2..]) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        return Err(Error::new(
+                            ErrorKind::InvalidData,
+                            format!("failed to build oxRDF BlankNode from {s}: {e}"),
+                        ))
+                    }
+                };
                 let _val = self.internalize_term(term.into());
                 Ok(EncodedTerm::from(BlankNodeRef::new_unchecked(*Arc::from(
                     &s[2..],
@@ -117,95 +128,170 @@ impl HDTDatasetView {
                 // Note that Term::from_str() will not work for URIs
                 // (OxRDF NamedNode) when the string is not within "<"
                 // and ">" delimiters.
-                let named_node = NamedNodeRef::new(*Arc::from(s)).unwrap();
-                let t = named_node.into();
+                let named_node = match NamedNodeRef::new(*Arc::from(s)) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        return Err(Error::new(
+                            ErrorKind::InvalidData,
+                            format!("failed to build oxRDF NamedNode from {s}: {e}"),
+                        ))
+                    }
+                };
 
-                Ok(self.internalize_term(t)?)
+                Ok(named_node.into())
             }
         }
     }
-    /// Convert triple string formats from OxRDF to HDT.
-    fn encodedterm_to_hdt_bgp_str(&self, encoded_term: Option<&EncodedTerm>) -> Option<String> {
-        let term_str = match encoded_term {
-            None => None,
-            Some(i) => {
-                // It is not possible to get a string representation
-                // directly from an EncodedTerm, so it must first be
-                // decoded.
-                let decoded_term = &self.decode_term(i).unwrap();
-                let term = match decoded_term {
-                    // Remove double quote delimiters from URIs.
-                    Term::NamedNode(named_node) => Some(named_node.clone().into_string()),
 
-                    // Get the string directly from literals and add
-                    // quotes to work-around handling of "\n" being
-                    // double-escaped.
-                    // format!("\"{}\"", literal.value()),
-                    Term::Literal(literal) => {
-                        if literal.is_plain() {
-                            Some(literal.to_string().replace("\\n", "\n"))
-                        }
-                        // For numbers and other typed literals return
-                        // None as the BGP search will need to collect
-                        // all possibilities before filtering.
-                        else {
-                            None
-                        }
+    /// Create the correct OxRDF term for a given resource string.  Slow,
+    /// use the appropriate method if you know which type (Literal, URI,
+    /// or blank node) the string has. Based on
+    /// https://github.com/KonradHoeffner/hdt/blob/871db777db3220dc4874af022287975b31d72d3a/src/hdt_graph.rs#L64
+    fn hdt_bgp_str_to_term(&self, s: &str) -> Result<Term, Error> {
+        match s.chars().next() {
+            None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
+
+            // Double-quote delimters are used around the string.
+            Some('"') => match s.rfind('"') {
+                None => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("missing right quotation mark in literal string {s}"),
+                )),
+
+                Some(_) => match Term::from_str(s) {
+                    Ok(s) => Ok(s),
+                    Err(e) => Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("literal parse error {e} for {s}"),
+                    )),
+                },
+            },
+
+            // Underscore prefix indicating an Blank Node.
+            Some('_') => {
+                let term = match oxrdf::BlankNode::new(&s[2..]) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        return Err(Error::new(
+                            ErrorKind::InvalidData,
+                            format!("blanknode parse error {e} for {s}"),
+                        ))
                     }
-
-                    Term::BlankNode(_s) => Some(decoded_term.to_string()),
-
-                    // Otherwise use the string directly.
-                    _ => Some(decoded_term.to_string()),
                 };
+                match Term::from_str(&term.to_string()) {
+                    Ok(s) => Ok(s),
+                    Err(e) => Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("blanknode parse error {e} for {s}"),
+                    )),
+                }
+            }
 
-                term
+            // Double-quote delimiters not present. Underscore prefix
+            // not present. Assuming a URI.
+            _ => {
+                // Note that Term::from_str() will not work for URIs
+                // (OxRDF NamedNode) when the string is not within "<"
+                // and ">" delimiters.
+                let named_node = match NamedNodeRef::new(*Arc::from(s)) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        return Err(Error::new(
+                            ErrorKind::InvalidData,
+                            format!("iri parse error {e} for {s}"),
+                        ))
+                    }
+                };
+                match Term::from_str(&named_node.to_string()) {
+                    Ok(s) => Ok(s),
+                    Err(e) => Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("iri parse error {e} for {s}"),
+                    )),
+                }
+            }
+        }
+    }
+
+    /// Convert triple string formats from OxRDF to HDT.
+    fn encodedterm_to_hdt_bgp_str(
+        &self,
+        encoded_term: &EncodedTerm,
+    ) -> Result<String, StorageError> {
+        // It is not possible to get a string representation
+        // directly from an EncodedTerm, so it must first be
+        // decoded.
+        let decoded_term = match self.decode_term(encoded_term) {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(StorageError::Corruption(CorruptionError::new(format!(
+                    "decoding error {e} for {:?}",
+                    encoded_term
+                ))));
             }
         };
+        let term = match &decoded_term {
+            // Remove double quote delimiters from URIs.
+            Term::NamedNode(named_node) => named_node.clone().into_string(),
 
-        term_str
+            // Get the string directly from literals and add
+            // quotes to work-around handling of "\n" being
+            // double-escaped.
+            // format!("\"{}\"", literal.value()),
+            Term::Literal(literal) => {
+                if literal.is_plain() {
+                    literal.to_string().replace("\\n", "\n")
+                }
+                // For numbers and other typed literals return
+                // None as the BGP search will need to collect
+                // all possibilities before filtering.
+                else {
+                    return Err(StorageError::Corruption(CorruptionError::new(format!(
+                        "unhandled literal value {literal}"
+                    ))));
+                }
+            }
+
+            Term::BlankNode(_s) => decoded_term.to_string(),
+
+            // Otherwise use the string directly.
+            Term::Triple(_) => decoded_term.to_string(),
+        };
+
+        Ok(term)
     }
 }
 
 impl StrLookup for HDTDatasetView {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
-        Ok(if let Some(value) = self.extra.borrow().get(key) {
-            Some(value.clone())
-        } else {
-            None
-        })
+        Ok(self.extra.borrow().get(key).cloned())
     }
 }
 
 impl QueryableDataset for HDTDatasetView {
-    type InternalTerm = EncodedTerm;
+    type InternalTerm = String;
     type Error = StorageError;
 
     fn internal_quads_for_pattern(
         &self,
-        subject: Option<&EncodedTerm>,
-        predicate: Option<&EncodedTerm>,
-        object: Option<&EncodedTerm>,
-        graph_name: Option<Option<&EncodedTerm>>,
+        subject: Option<&String>,
+        predicate: Option<&String>,
+        object: Option<&String>,
+        graph_name: Option<Option<&String>>,
     ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, StorageError>>> {
         if let Some(graph_name) = graph_name {
-            if let Some(graph_name) = graph_name {
-                match graph_name {
-                    EncodedTerm::DefaultGraph => (),
-                    _ => panic!("HDT does not support named graphs."),
-                }
+            if graph_name.is_some() {
+                panic!("HDT does not support named graphs.")
             }
         }
-        // Get string representations of the Oxigraph EncodedTerms.
-        println!("{subject:?}");
-        let s = self.encodedterm_to_hdt_bgp_str(subject);
-        let p = self.encodedterm_to_hdt_bgp_str(predicate);
-        let o = self.encodedterm_to_hdt_bgp_str(object);
+        let s = subject.cloned();
+        let p = predicate.cloned();
+        let o = object.cloned();
 
         // Create a vector to hold the results.
         let mut v: Vec<Result<InternalQuad<_>, StorageError>> = Vec::new();
 
-        for data in self.hdts.iter() {
+        for data in &self.hdts {
             // Query HDT for BGP by string values.
             let results = data
                 .hdt
@@ -213,42 +299,42 @@ impl QueryableDataset for HDTDatasetView {
 
             // For each result
             for result in results {
-                // Create OxRDF terms for the HDT result.
-                let ex_s = self.auto_term(&(*result.0)).unwrap();
-                let ex_p = self.auto_term(&(*result.1)).unwrap();
-                let ex_o = self.auto_term(&(*result.2)).unwrap();
+                let ex_s = (*result.0).to_string();
+                let ex_p = (*result.1).to_string();
+                let ex_o = (*result.2).to_string();
 
                 // Add the result to the vector.
                 v.push(Ok(InternalQuad {
                     subject: ex_s,
                     predicate: ex_p,
                     object: ex_o,
-                    graph_name: Some(EncodedTerm::DefaultGraph),
+                    graph_name: None,
                 }));
             }
         }
 
-        return Box::new(v.into_iter());
+        Box::new(v.into_iter())
     }
 
-    fn internalize_term(&self, term: Term) -> Result<EncodedTerm, StorageError> {
+    fn internalize_term(&self, term: Term) -> Result<String, StorageError> {
         let encoded = term.as_ref().into();
         insert_term(term.as_ref(), &encoded, &mut |key, value| {
             self.insert_str(key, value);
             Ok(())
         })?;
-        Ok(encoded)
+        self.encodedterm_to_hdt_bgp_str(&encoded)
     }
 
-    fn externalize_term(&self, term: EncodedTerm) -> Result<Term, StorageError> {
-        self.decode_term(&term)
+    fn externalize_term(&self, term: String) -> Result<Term, StorageError> {
+        match self.hdt_bgp_str_to_term(&term) {
+            Ok(s) => Ok(s),
+            Err(e) => Err(CorruptionError::new(format!("Unexpected externalize bug {e}")).into()),
+        }
     }
 
-    fn externalize_expression_term(
-        &self,
-        term: EncodedTerm,
-    ) -> Result<ExpressionTerm, StorageError> {
-        Ok(match term {
+    fn externalize_expression_term(&self, term: String) -> Result<ExpressionTerm, StorageError> {
+        let encoded_term = self.auto_term(&term)?;
+        Ok(match encoded_term {
             EncodedTerm::DefaultGraph => {
                 return Err(CorruptionError::new("Unexpected default graph").into())
             }
@@ -273,56 +359,85 @@ impl QueryableDataset for HDTDatasetView {
                 ExpressionTerm::DayTimeDurationLiteral(value)
             }
             EncodedTerm::Triple(t) => ExpressionTriple::new(
-                self.externalize_expression_term(t.subject.clone())?,
-                self.externalize_expression_term(t.predicate.clone())?,
-                self.externalize_expression_term(t.object.clone())?,
+                self.externalize_expression_term(self.encodedterm_to_hdt_bgp_str(&t.subject)?)?,
+                self.externalize_expression_term(self.encodedterm_to_hdt_bgp_str(&t.predicate)?)?,
+                self.externalize_expression_term(self.encodedterm_to_hdt_bgp_str(&t.object)?)?,
             )
             .ok_or_else(|| CorruptionError::msg("Invalid RDF-star triple term in the storage"))?
             .into(),
-            _ => self.decode_term(&term)?.into(), // No escape
+            _ => self.decode_term(&encoded_term)?.into(), // No escape
         })
     }
 
-    fn internalize_expression_term(
-        &self,
-        term: ExpressionTerm,
-    ) -> Result<EncodedTerm, StorageError> {
+    fn internalize_expression_term(&self, term: ExpressionTerm) -> Result<String, StorageError> {
         Ok(match term {
-            ExpressionTerm::BooleanLiteral(value) => EncodedTerm::BooleanLiteral(value),
-            ExpressionTerm::FloatLiteral(value) => EncodedTerm::FloatLiteral(value),
-            ExpressionTerm::DoubleLiteral(value) => EncodedTerm::DoubleLiteral(value),
-            ExpressionTerm::IntegerLiteral(value) => EncodedTerm::IntegerLiteral(value),
-            ExpressionTerm::DecimalLiteral(value) => EncodedTerm::DecimalLiteral(value),
-            ExpressionTerm::DateTimeLiteral(value) => EncodedTerm::DateTimeLiteral(value),
-            ExpressionTerm::TimeLiteral(value) => EncodedTerm::TimeLiteral(value),
-            ExpressionTerm::DateLiteral(value) => EncodedTerm::DateLiteral(value),
-            ExpressionTerm::GYearMonthLiteral(value) => EncodedTerm::GYearMonthLiteral(value),
-            ExpressionTerm::GYearLiteral(value) => EncodedTerm::GYearLiteral(value),
-            ExpressionTerm::GMonthDayLiteral(value) => EncodedTerm::GMonthDayLiteral(value),
-            ExpressionTerm::GDayLiteral(value) => EncodedTerm::GDayLiteral(value),
-            ExpressionTerm::GMonthLiteral(value) => EncodedTerm::GMonthLiteral(value),
-            ExpressionTerm::DurationLiteral(value) => EncodedTerm::DurationLiteral(value),
+            ExpressionTerm::BooleanLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::BooleanLiteral(value))?
+            }
+            ExpressionTerm::FloatLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::FloatLiteral(value))?
+            }
+            ExpressionTerm::DoubleLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DoubleLiteral(value))?
+            }
+            ExpressionTerm::IntegerLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::IntegerLiteral(value))?
+            }
+            ExpressionTerm::DecimalLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DecimalLiteral(value))?
+            }
+            ExpressionTerm::DateTimeLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DateTimeLiteral(value))?
+            }
+            ExpressionTerm::TimeLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::TimeLiteral(value))?
+            }
+            ExpressionTerm::DateLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DateLiteral(value))?
+            }
+            ExpressionTerm::GYearMonthLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GYearMonthLiteral(value))?
+            }
+            ExpressionTerm::GYearLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GYearLiteral(value))?
+            }
+            ExpressionTerm::GMonthDayLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GMonthDayLiteral(value))?
+            }
+            ExpressionTerm::GDayLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GDayLiteral(value))?
+            }
+            ExpressionTerm::GMonthLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GMonthLiteral(value))?
+            }
+            ExpressionTerm::DurationLiteral(value) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DurationLiteral(value))?
+            }
             ExpressionTerm::YearMonthDurationLiteral(value) => {
-                EncodedTerm::YearMonthDurationLiteral(value)
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::YearMonthDurationLiteral(value))?
             }
             ExpressionTerm::DayTimeDurationLiteral(value) => {
-                EncodedTerm::DayTimeDurationLiteral(value)
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DayTimeDurationLiteral(value))?
             }
-            ExpressionTerm::Triple(t) => EncodedTriple {
-                subject: self.internalize_expression_term(t.subject.into())?,
-                predicate: self.internalize_expression_term(t.predicate.into())?,
-                object: self.internalize_expression_term(t.object)?,
-            }
-            .into(),
+            ExpressionTerm::Triple(t) => self.encodedterm_to_hdt_bgp_str(
+                &EncodedTriple {
+                    subject: self
+                        .auto_term(&self.internalize_expression_term(t.subject.into())?)?,
+                    predicate: self
+                        .auto_term(&self.internalize_expression_term(t.predicate.into())?)?,
+                    object: self.auto_term(&self.internalize_expression_term(t.object)?)?,
+                }
+                .into(),
+            )?,
             _ => self.internalize_term(term.into())?, // No fast path
         })
     }
 
     fn internal_term_effective_boolean_value(
         &self,
-        term: EncodedTerm,
+        term: String,
     ) -> Result<Option<bool>, StorageError> {
-        Ok(match term {
+        Ok(match self.auto_term(&term)? {
             EncodedTerm::BooleanLiteral(value) => Some(value.into()),
             EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
             EncodedTerm::BigStringLiteral { .. } => {

@@ -2,7 +2,6 @@ use oxigraph::sparql::dataset::HDTDatasetView;
 use oxigraph::sparql::results::QueryResultsFormat;
 use oxigraph::sparql::{evaluate_hdt_query, QueryOptions};
 use std::io;
-use std::rc::Rc;
 
 // Run with `cargo run --bin hdt_driver`.
 
@@ -13,7 +12,7 @@ fn main() {
     println!("Oxigraph/HDT - Driver for Testing");
 
     // Open the HDT file.
-    let dataset = HDTDatasetView::new(vec!["oxhdt-sys/tests/resources/test.hdt".to_string()]);
+    let dataset = HDTDatasetView::new(&["oxhdt-sys/tests/resources/test.hdt".to_string()]);
 
     // Test
     println!();

@@ -6,32 +6,29 @@ use oxigraph_testsuite::sparql_evaluator::{
     are_query_results_isomorphic, load_sparql_query_result, StaticQueryResults,
 };
 use std::fs;
-use std::rc::Rc;
 
 #[allow(dead_code)]
 fn hdt_query(hdt_path: &str, sparql_query: &str) -> Result<QueryResults, EvaluationError> {
     // Open the HDT file.
-    let dataset = HDTDatasetView::new(vec![hdt_path.to_string()]);
-
-    let sparql_query = sparql_query;
+    let dataset = HDTDatasetView::new(&[hdt_path.to_string()]);
 
     // SPARQL query
     let (results, _explain) =
         evaluate_hdt_query(dataset, sparql_query, QueryOptions::default(), false, [])
             .expect("failed to evaluate SPARQL query");
 
-    return results;
+    results
 }
 
 #[allow(dead_code)]
 fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool {
     // The test SPARQL query
-    let rq = fs::read_to_string(&query_path).expect("Failed to read test query from file");
+    let rq = fs::read_to_string(query_path).expect("Failed to read test query from file");
 
     let query = Query::parse(&rq, None).expect("Failed to parse the test query string");
 
     // The test data in HDT format
-    let data = HDTDatasetView::new(vec![data_path.to_string()]);
+    let data = HDTDatasetView::new(&[data_path.to_string()]);
 
     // The expected results in XML format
     // let f = File::open(result_path).expect("Failed to open the expected results from file");
@@ -39,8 +36,9 @@ fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool
     // let ref_results = QueryResults::read(f, QueryResultsFormat::Xml);
 
     // Execute the query
-    let (results, _explain) = evaluate_hdt_query(data.clone(), query, QueryOptions::default(), false, [])
-        .expect("Failed to evaluate SPARQL query");
+    let (results, _explain) =
+        evaluate_hdt_query(data.clone(), query, QueryOptions::default(), false, [])
+            .expect("Failed to evaluate SPARQL query");
 
     // Compare the XML results
 
@@ -54,7 +52,7 @@ fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool
     //     StaticQueryResults::from_query_results(ref_results.unwrap(), false).unwrap();
 
     // Load the SPARQL query results, automatically identifying the source format.
-    let static_ref_results = load_sparql_query_result(&result_path)
+    let static_ref_results = load_sparql_query_result(result_path)
         .expect("Failed to load the reference results from file");
 
     // Set the second parameter, "with_order" to true so that order of
@@ -79,7 +77,7 @@ fn rdf_test_runner(query_path: &str, data_path: &str, result_path: &str) -> bool
         }
     }
 
-    return results_match;
+    results_match
 }
 
 #[cfg(test)]
