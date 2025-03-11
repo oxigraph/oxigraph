@@ -419,16 +419,15 @@ impl QueryableDataset for HDTDatasetView {
             ExpressionTerm::DayTimeDurationLiteral(value) => {
                 self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DayTimeDurationLiteral(value))?
             }
-            ExpressionTerm::Triple(t) => self.encodedterm_to_hdt_bgp_str(
-                &EncodedTriple {
+            ExpressionTerm::Triple(t) => {
+                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::Triple(Arc::new(EncodedTriple {
                     subject: self
                         .auto_term(&self.internalize_expression_term(t.subject.into())?)?,
                     predicate: self
                         .auto_term(&self.internalize_expression_term(t.predicate.into())?)?,
                     object: self.auto_term(&self.internalize_expression_term(t.object)?)?,
-                }
-                .into(),
-            )?,
+                })))?
+            }
             _ => self.internalize_term(term.into())?, // No fast path
         })
     }
@@ -626,6 +625,14 @@ impl QueryableDataset for DatasetView {
         }
     }
 
+    fn internal_named_graphs(&self) -> Box<dyn Iterator<Item = Result<EncodedTerm, StorageError>>> {
+        Box::new(self.reader.named_graphs())
+    }
+
+    fn contains_internal_graph_name(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
+        self.reader.contains_named_graph(graph_name)
+    }
+
     fn internalize_term(&self, term: Term) -> Result<EncodedTerm, StorageError> {
         let encoded = term.as_ref().into();
         insert_term(term.as_ref(), &encoded, &mut |key, value| {
@@ -703,12 +710,11 @@ impl QueryableDataset for DatasetView {
             ExpressionTerm::DayTimeDurationLiteral(value) => {
                 EncodedTerm::DayTimeDurationLiteral(value)
             }
-            ExpressionTerm::Triple(t) => EncodedTriple {
+            ExpressionTerm::Triple(t) => EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.internalize_expression_term(t.subject.into())?,
                 predicate: self.internalize_expression_term(t.predicate.into())?,
                 object: self.internalize_expression_term(t.object)?,
-            }
-            .into(),
+            })),
             _ => self.internalize_term(term.into())?, // No fast path
         })
     }

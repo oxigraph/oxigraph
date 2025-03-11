@@ -5,23 +5,24 @@
     "devDependencies": {
         "@biomejs/biome": "^1.0.0",
         "@codspeed/vitest-plugin": "^4.0.0",
-        "@rdfjs/data-model": "^2.0.1",
+        "@rdfjs/data-model": ">=2.0.1 <2.1.0",
         "@tsconfig/node18": "^18.2.4",
         "@tsconfig/strictest": "^2.0.5",
         "@types/node": "^18",
-        "@types/rdfjs__data-model": "^2.0.8",
+        "@types/rdfjs__data-model": ">=2.0.8 <2.1.0",
         "fzstd": "^0.1.1",
-        "typescript": "~5.7",
-        "vitest": "^2.0.2",
+        "typescript": "~5.8",
+        "vitest": "^3.0.0",
         "wasm-pack": "^0.13.0"
     },
     "scripts": {
         "fmt": "biome check --write --unsafe .",
         "test": "biome ci . && wasm-pack build --debug --target nodejs --weak-refs --reference-types && vitest",
         "build": "wasm-pack build --release --target web --out-name web --weak-refs --reference-types && wasm-pack build --release --target nodejs --out-name node --weak-refs --reference-types && node build_package.mjs",
+        "build-node": "wasm-pack build --release --target nodejs --weak-refs --reference-types",
         "release": "npm run build && npm publish --provenance --access public ./pkg",
         "pack": "npm run build && npm pack ./pkg",
-        "bench": "wasm-pack build --release --target nodejs --weak-refs --reference-types && vitest bench"
+        "bench": "npm run build-node && vitest bench"
     },
     "standard": {
         "ignore": ["pkg*"]

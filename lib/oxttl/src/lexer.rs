@@ -124,7 +124,7 @@ impl TokenRecognizer for N3Lexer {
             }
             b'@' => self.recognize_lang_tag(data),
             b'.' => match data.get(1) {
-                Some(b'0'..=b'9') => Self::recognize_number(data),
+                Some(b'0'..=b'9') => Self::recognize_number(data, is_ending),
                 Some(_) => Some((1, Ok(N3Token::Punctuation(".")))),
                 None => is_ending.then_some((1, Ok(N3Token::Punctuation(".")))),
             },
@@ -164,7 +164,7 @@ impl TokenRecognizer for N3Lexer {
                     Some((1, Ok(N3Token::Punctuation("="))))
                 }
             }
-            b'0'..=b'9' | b'+' | b'-' => Self::recognize_number(data),
+            b'0'..=b'9' | b'+' | b'-' => Self::recognize_number(data, is_ending),
             b'?' => self.recognize_variable(data, is_ending),
             _ => self.recognize_pname_or_keyword(data, is_ending),
         }
@@ -680,7 +680,10 @@ impl N3Lexer {
         }
     }
 
-    fn recognize_number(data: &[u8]) -> Option<(usize, Result<N3Token<'_>, TokenRecognizerError>)> {
+    fn recognize_number(
+        data: &[u8],
+        is_ending: bool,
+    ) -> Option<(usize, Result<N3Token<'_>, TokenRecognizerError>)> {
         // [19]  INTEGER    ::=  [+-]? [0-9]+
         // [20]  DECIMAL    ::=  [+-]? [0-9]* '.' [0-9]+
         // [21]  DOUBLE     ::=  [+-]? ([0-9]+ '.' [0-9]* EXPONENT | '.' [0-9]+ EXPONENT | [0-9]+ EXPONENT)
@@ -691,60 +694,53 @@ impl N3Lexer {
             i += 1;
         }
         // We read the digits before .
-        let mut count_before: usize = 0;
-        loop {
-            let c = *data.get(i)?;
-            if c.is_ascii_digit() {
-                i += 1;
-                count_before += 1;
-            } else {
-                break;
-            }
-        }
+        let count_before = Self::recognize_digits(&data[i..], is_ending)?;
+        i += count_before;
 
         // We read the digits after .
-        #[allow(clippy::if_then_some_else_none)]
-        let count_after = if *data.get(i)? == b'.' {
+        let c = if let Some(c) = data.get(i) {
+            Some(c)
+        } else if is_ending {
+            None
+        } else {
+            return None;
+        };
+        let count_after = if c == Some(&b'.') {
             i += 1;
-
-            let mut count_after = 0;
-            loop {
-                let c = *data.get(i)?;
-                if c.is_ascii_digit() {
-                    i += 1;
-                    count_after += 1;
-                } else {
-                    break;
-                }
-            }
+            let count_after = Self::recognize_digits(&data[i..], is_ending)?;
+            i += count_after;
             Some(count_after)
         } else {
             None
         };
 
         // End
-        let c = *data.get(i)?;
-        if matches!(c, b'e' | b'E') {
+        let c = if let Some(c) = data.get(i) {
+            Some(c)
+        } else if is_ending {
+            None
+        } else {
+            return None;
+        };
+        if matches!(c, Some(b'e' | b'E')) {
             i += 1;
 
-            let c = *data.get(i)?;
-            if matches!(c, b'+' | b'-') {
+            let c = if let Some(c) = data.get(i) {
+                Some(c)
+            } else if is_ending {
+                None
+            } else {
+                return None;
+            };
+            if matches!(c, Some(b'+' | b'-')) {
                 i += 1;
             }
 
-            let mut found = false;
-            loop {
-                let c = *data.get(i)?;
-                if c.is_ascii_digit() {
-                    i += 1;
-                    found = true;
-                } else {
-                    break;
-                }
-            }
+            let count_exp = Self::recognize_digits(&data[i..], is_ending)?;
+            i += count_exp;
             Some((
                 i,
-                if !found {
+                if count_exp == 0 {
                     Err((0..i, "A double exponent cannot be empty").into())
                 } else if count_before == 0 && count_after.unwrap_or(0) == 0 {
                     Err((0..i, "A double should not be empty").into())
@@ -777,6 +773,15 @@ impl N3Lexer {
                 },
             ))
         }
+    }
+
+    fn recognize_digits(data: &[u8], is_ending: bool) -> Option<usize> {
+        for (i, c) in data.iter().enumerate() {
+            if !c.is_ascii_digit() {
+                return Some(i);
+            }
+        }
+        is_ending.then_some(data.len())
     }
 
     fn recognize_escape(

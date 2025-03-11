@@ -1,6 +1,6 @@
 [package]
 name = "spareval"
-version = "0.1.0"
+version = "0.1.3"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"

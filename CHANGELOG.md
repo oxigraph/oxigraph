@@ -1,3 +1,25 @@
+## [0.4.9] - 2025-03-09
+
+### Changed
+- SPARQL: Fixes a bug that made `GROUP_CONCAT(..., SEPARATOR="...")` always assume `DISTINCT`.
+- `oxrdfxml`: Fixes `TokioAsyncWriterRdfXmlSerializer` name.
+
+
+## [0.4.8] - 2025-02-14
+
+### Changed
+- SPARQL: Fixes a bug in `sameTerm` implementation on `xsd:decimal`.
+- Turtle: fixes a parsing ambiguity when a file ends with an integer then a concatenated dot eg. `11.`.
+
+
+## [0.4.7] - 2025-01-19
+
+### Changed
+- SPARQL: `GRAPH ?g {}` now properly returns all named graph in the queried dataset.
+- SPARQL: `ASK { OPTIONAL { X }}` now properly returns true even if `X` raises an error.
+- `sparopt`: breaking 0.2 release because of the introduction of a `Graph` algebra node to support `GRAPH ?g {}` syntax.
+
+
 ## [0.4.6] - 2025-01-11
 
 ### Added

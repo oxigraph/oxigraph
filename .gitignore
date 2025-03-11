@@ -16,3 +16,4 @@ data/
 **.pyi
 *~
 *.hdt.index.v1-1
+*.index.v1-rust-cache

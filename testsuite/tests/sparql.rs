@@ -34,9 +34,7 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
         // This test relies on naive iteration on the input file
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
-        // TODO: GRAPH ?g {}
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest#graph-empty"
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2"
     ])
 }
 

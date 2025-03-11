@@ -8,10 +8,12 @@ use oxsdatatypes::{Boolean, DateTime, Decimal, Double, Float, Integer};
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, YearMonthDuration};
 #[cfg(feature = "calendar-ext")]
 use oxsdatatypes::{GDay, GMonth, GMonthDay, GYear, GYearMonth};
+use rustc_hash::FxHashSet;
 use std::convert::Infallible;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::iter::empty;
+use std::mem::discriminant;
 
 /// A [RDF dataset](https://www.w3.org/TR/sparql11-query/#rdfDataset) that can be queried using SPARQL
 pub trait QueryableDataset: Sized + 'static {
@@ -35,6 +37,43 @@ pub trait QueryableDataset: Sized + 'static {
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
     ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, Self::Error>>>; // TODO: consider `impl`
+
+    /// Fetches the list of dataset named graphs
+    fn internal_named_graphs(
+        &self,
+    ) -> Box<dyn Iterator<Item = Result<Self::InternalTerm, Self::Error>>> {
+        // TODO: consider `impl`
+        let mut error = None;
+        let graph_names = self
+            .internal_quads_for_pattern(None, None, None, None)
+            .filter_map(|r| match r {
+                Ok(r) => Some(r.graph_name?),
+                Err(e) => {
+                    error = Some(e);
+                    None
+                }
+            })
+            .collect::<FxHashSet<_>>();
+
+        Box::new(
+            error
+                .map(Err)
+                .into_iter()
+                .chain(graph_names.into_iter().map(Ok)),
+        )
+    }
+
+    /// Returns if the dataset contains a given named graph
+    fn contains_internal_graph_name(
+        &self,
+        graph_name: &Self::InternalTerm,
+    ) -> Result<bool, Self::Error> {
+        Ok(self
+            .internal_quads_for_pattern(None, None, None, Some(Some(graph_name)))
+            .next()
+            .transpose()?
+            .is_some())
+    }
 
     /// Builds an internal term from the [`Term`] struct
     fn internalize_term(&self, term: Term) -> Result<Self::InternalTerm, Self::Error>;
@@ -238,59 +277,61 @@ pub enum ExpressionTerm {
 impl PartialEq for ExpressionTerm {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::NamedNode(l), Self::NamedNode(r)) => l == r,
-            (Self::BlankNode(l), Self::BlankNode(r)) => l == r,
-            (Self::StringLiteral(l), Self::StringLiteral(r)) => l == r,
-            (
-                Self::LangStringLiteral {
-                    value: lv,
-                    language: ll,
-                },
-                Self::LangStringLiteral {
-                    value: rv,
-                    language: rl,
-                },
-            ) => lv == rv && ll == rl,
-            (Self::BooleanLiteral(l), Self::BooleanLiteral(r)) => l == r,
-            (Self::IntegerLiteral(l), Self::IntegerLiteral(r)) => l == r,
-            (Self::FloatLiteral(l), Self::FloatLiteral(r)) => l.is_identical_with(*r),
-            (Self::DoubleLiteral(l), Self::DoubleLiteral(r)) => l.is_identical_with(*r),
-            (Self::DateTimeLiteral(l), Self::DateTimeLiteral(r)) => l == r,
-            #[cfg(feature = "sep-0002")]
-            (Self::DateLiteral(l), Self::DateLiteral(r)) => l == r,
-            #[cfg(feature = "sep-0002")]
-            (Self::TimeLiteral(l), Self::TimeLiteral(r)) => l == r,
-            #[cfg(feature = "calendar-ext")]
-            (Self::GYearMonthLiteral(l), Self::GYearMonthLiteral(r)) => l == r,
-            #[cfg(feature = "calendar-ext")]
-            (Self::GYearLiteral(l), Self::GYearLiteral(r)) => l == r,
-            #[cfg(feature = "calendar-ext")]
-            (Self::GMonthLiteral(l), Self::GMonthLiteral(r)) => l == r,
-            #[cfg(feature = "calendar-ext")]
-            (Self::GMonthDayLiteral(l), Self::GMonthDayLiteral(r)) => l == r,
-            #[cfg(feature = "calendar-ext")]
-            (Self::GDayLiteral(l), Self::GDayLiteral(r)) => l == r,
-            #[cfg(feature = "sep-0002")]
-            (Self::DurationLiteral(l), Self::DurationLiteral(r)) => l == r,
-            #[cfg(feature = "sep-0002")]
-            (Self::YearMonthDurationLiteral(l), Self::YearMonthDurationLiteral(r)) => l == r,
-            #[cfg(feature = "sep-0002")]
-            (Self::DayTimeDurationLiteral(l), Self::DayTimeDurationLiteral(r)) => l == r,
-            (
-                Self::OtherTypedLiteral {
-                    value: lv,
-                    datatype: ld,
-                },
-                Self::OtherTypedLiteral {
-                    value: rv,
-                    datatype: rd,
-                },
-            ) => lv == rv && ld == rd,
-            #[cfg(feature = "rdf-star")]
-            (Self::Triple(l), Self::Triple(r)) => l == r,
-            (_, _) => false,
-        }
+        discriminant(self) == discriminant(other)
+            && match (self, other) {
+                (Self::NamedNode(l), Self::NamedNode(r)) => l == r,
+                (Self::BlankNode(l), Self::BlankNode(r)) => l == r,
+                (Self::StringLiteral(l), Self::StringLiteral(r)) => l == r,
+                (
+                    Self::LangStringLiteral {
+                        value: lv,
+                        language: ll,
+                    },
+                    Self::LangStringLiteral {
+                        value: rv,
+                        language: rl,
+                    },
+                ) => lv == rv && ll == rl,
+                (Self::BooleanLiteral(l), Self::BooleanLiteral(r)) => l == r,
+                (Self::IntegerLiteral(l), Self::IntegerLiteral(r)) => l == r,
+                (Self::DecimalLiteral(l), Self::DecimalLiteral(r)) => l == r,
+                (Self::FloatLiteral(l), Self::FloatLiteral(r)) => l.is_identical_with(*r),
+                (Self::DoubleLiteral(l), Self::DoubleLiteral(r)) => l.is_identical_with(*r),
+                (Self::DateTimeLiteral(l), Self::DateTimeLiteral(r)) => l == r,
+                #[cfg(feature = "sep-0002")]
+                (Self::DateLiteral(l), Self::DateLiteral(r)) => l == r,
+                #[cfg(feature = "sep-0002")]
+                (Self::TimeLiteral(l), Self::TimeLiteral(r)) => l == r,
+                #[cfg(feature = "calendar-ext")]
+                (Self::GYearMonthLiteral(l), Self::GYearMonthLiteral(r)) => l == r,
+                #[cfg(feature = "calendar-ext")]
+                (Self::GYearLiteral(l), Self::GYearLiteral(r)) => l == r,
+                #[cfg(feature = "calendar-ext")]
+                (Self::GMonthLiteral(l), Self::GMonthLiteral(r)) => l == r,
+                #[cfg(feature = "calendar-ext")]
+                (Self::GMonthDayLiteral(l), Self::GMonthDayLiteral(r)) => l == r,
+                #[cfg(feature = "calendar-ext")]
+                (Self::GDayLiteral(l), Self::GDayLiteral(r)) => l == r,
+                #[cfg(feature = "sep-0002")]
+                (Self::DurationLiteral(l), Self::DurationLiteral(r)) => l == r,
+                #[cfg(feature = "sep-0002")]
+                (Self::YearMonthDurationLiteral(l), Self::YearMonthDurationLiteral(r)) => l == r,
+                #[cfg(feature = "sep-0002")]
+                (Self::DayTimeDurationLiteral(l), Self::DayTimeDurationLiteral(r)) => l == r,
+                (
+                    Self::OtherTypedLiteral {
+                        value: lv,
+                        datatype: ld,
+                    },
+                    Self::OtherTypedLiteral {
+                        value: rv,
+                        datatype: rd,
+                    },
+                ) => lv == rv && ld == rd,
+                #[cfg(feature = "rdf-star")]
+                (Self::Triple(l), Self::Triple(r)) => l == r,
+                (_, _) => unreachable!(),
+            }
     }
 }
 
@@ -299,6 +340,7 @@ impl Eq for ExpressionTerm {}
 impl Hash for ExpressionTerm {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
+        discriminant(self).hash(state);
         match self {
             ExpressionTerm::NamedNode(v) => v.hash(state),
             ExpressionTerm::BlankNode(v) => v.hash(state),

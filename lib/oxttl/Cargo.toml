@@ -1,6 +1,6 @@
 [package]
 name = "oxttl"
-version = "0.1.5"
+version = "0.1.7"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"

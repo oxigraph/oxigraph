@@ -10,7 +10,6 @@ ALLOWED_MISSING_PACKAGES = {
     "codspeed-criterion-compat",
     "json-event-parser",
     "oxhttp",
-    "oxiri",
     "rustc-hash",
     "geo",
     "wkt",

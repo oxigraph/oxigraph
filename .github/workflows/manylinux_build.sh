@@ -7,9 +7,9 @@ chmod +x rustup-init
 ./rustup-init -y --profile minimal
 source "$HOME/.cargo/env"
 cd python
-python3.13 -m venv venv
-source venv/bin/activate
-pip install -r requirements.build.txt
+uv venv
+uv pip install -r requirements.build.txt
+source .venv/bin/activate
 maturin develop --release
 python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
 maturin build --release --features abi3 --compatibility manylinux2014

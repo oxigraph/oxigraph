@@ -562,7 +562,7 @@ enum TermParseErrorKind {
 }
 
 impl TermParseError {
-    pub fn msg(msg: impl Into<String>) -> Self {
+    pub(crate) fn msg(msg: impl Into<String>) -> Self {
         Self(TermParseErrorKind::Msg(msg.into()))
     }
 }

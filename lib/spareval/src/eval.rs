@@ -5,7 +5,7 @@ use crate::error::QueryEvaluationError;
 use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 use crate::CustomFunctionRegistry;
-use json_event_parser::{JsonEvent, ToWriteJsonWriter};
+use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use md5::{Digest, Md5};
 use oxiri::Iri;
 use oxrdf::vocab::{rdf, xsd};
@@ -56,6 +56,23 @@ impl<D: QueryableDataset> EvalDataset<D> {
         self.dataset
             .internal_quads_for_pattern(subject, predicate, object, graph_name)
             .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
+    }
+
+    fn internal_named_graphs(
+        &self,
+    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> {
+        self.dataset
+            .internal_named_graphs()
+            .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
+    }
+
+    fn contains_internal_graph_name(
+        &self,
+        graph_name: &D::InternalTerm,
+    ) -> Result<bool, QueryEvaluationError> {
+        self.dataset
+            .contains_internal_graph_name(graph_name)
+            .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
     }
 
     fn internalize_term(&self, term: Term) -> Result<D::InternalTerm, QueryEvaluationError> {
@@ -954,6 +971,57 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     }
                 })
             }
+            GraphPattern::Graph { graph_name } => {
+                let graph_name_selector = match TupleSelector::from_named_node_pattern(
+                    graph_name,
+                    encoded_variables,
+                    &self.dataset,
+                ) {
+                    Ok(selector) => selector,
+                    Err(e) => return error_evaluator(e),
+                };
+                let dataset = self.dataset.clone();
+                Rc::new(move |from| {
+                    let input_graph_name = match graph_name_selector.get_pattern_value(
+                        &from,
+                        #[cfg(feature = "rdf-star")]
+                        &dataset,
+                    ) {
+                        Ok(value) => value,
+                        Err(e) => return Box::new(once(Err(e))),
+                    };
+                    if let Some(input_graph_name) = input_graph_name {
+                        match dataset.contains_internal_graph_name(&input_graph_name) {
+                            Ok(true) => Box::new(once(Ok(from))),
+                            Ok(false) => Box::new(empty()),
+                            Err(e) => Box::new(once(Err(e))),
+                        }
+                    } else {
+                        let graph_name_selector = graph_name_selector.clone();
+                        #[cfg(feature = "rdf-star")]
+                        let dataset = dataset.clone();
+                        Box::new(
+                            dataset
+                                .internal_named_graphs()
+                                .map(move |graph_name| {
+                                    let graph_name = graph_name?;
+                                    let mut new_tuple = from.clone();
+                                    if !put_pattern_value(
+                                        &graph_name_selector,
+                                        graph_name,
+                                        &mut new_tuple,
+                                        #[cfg(feature = "rdf-star")]
+                                        &dataset,
+                                    )? {
+                                        return Ok(None);
+                                    }
+                                    Ok(Some(new_tuple))
+                                })
+                                .filter_map(Result::transpose),
+                        )
+                    }
+                })
+            }
             GraphPattern::Join {
                 left,
                 right,
@@ -1057,6 +1125,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 right_evaluator: Rc::clone(&right),
                                 left_iter: left(from),
                                 current_right: Box::new(empty()),
+                                left_tuple_to_yield: None,
                             })
                         });
                     }
@@ -1835,7 +1904,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     for child in &*children {
                         match child(tuple) {
                             Some(true) => return Some(true.into()),
-                            Some(false) => continue,
+                            Some(false) => (),
                             None => error = true,
                         }
                     }
@@ -1861,7 +1930,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     let mut error = false;
                     for child in &*children {
                         match child(tuple) {
-                            Some(true) => continue,
+                            Some(true) => (),
                             Some(false) => return Some(false.into()),
                             None => error = true,
                         }
@@ -5614,6 +5683,7 @@ struct ForLoopLeftJoinIterator<D: QueryableDataset> {
     right_evaluator: Rc<dyn Fn(InternalTuple<D>) -> InternalTuplesIterator<D>>,
     left_iter: InternalTuplesIterator<D>,
     current_right: InternalTuplesIterator<D>,
+    left_tuple_to_yield: Option<InternalTuple<D>>,
 }
 
 #[cfg(feature = "sep-0006")]
@@ -5621,18 +5691,23 @@ impl<D: QueryableDataset> Iterator for ForLoopLeftJoinIterator<D> {
     type Item = Result<InternalTuple<D>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(tuple) = self.current_right.next() {
-            return Some(tuple);
-        }
-        let left_tuple = match self.left_iter.next()? {
-            Ok(left_tuple) => left_tuple,
-            Err(error) => return Some(Err(error)),
-        };
-        self.current_right = (self.right_evaluator)(left_tuple.clone());
-        if let Some(right_tuple) = self.current_right.next() {
-            Some(right_tuple)
-        } else {
-            Some(Ok(left_tuple))
+        loop {
+            if let Some(tuple) = self.current_right.next() {
+                if tuple.is_ok() {
+                    // No need to yield left, we have a tuple combined with right
+                    self.left_tuple_to_yield = None;
+                }
+                return Some(tuple);
+            }
+            if let Some(left_tuple) = self.left_tuple_to_yield.take() {
+                return Some(Ok(left_tuple));
+            }
+            let left_tuple = match self.left_iter.next()? {
+                Ok(left_tuple) => left_tuple,
+                Err(error) => return Some(Err(error)),
+            };
+            self.current_right = (self.right_evaluator)(left_tuple.clone());
+            self.left_tuple_to_yield = Some(left_tuple);
         }
     }
 }
@@ -6251,27 +6326,29 @@ pub struct EvalNodeWithStats {
 impl EvalNodeWithStats {
     pub fn json_node(
         &self,
-        writer: &mut ToWriteJsonWriter<impl io::Write>,
+        serializer: &mut WriterJsonSerializer<impl io::Write>,
         with_stats: bool,
     ) -> io::Result<()> {
-        writer.write_event(JsonEvent::StartObject)?;
-        writer.write_event(JsonEvent::ObjectKey("name".into()))?;
-        writer.write_event(JsonEvent::String((&self.label).into()))?;
+        serializer.serialize_event(JsonEvent::StartObject)?;
+        serializer.serialize_event(JsonEvent::ObjectKey("name".into()))?;
+        serializer.serialize_event(JsonEvent::String((&self.label).into()))?;
         if with_stats {
-            writer.write_event(JsonEvent::ObjectKey("number of results".into()))?;
-            writer.write_event(JsonEvent::Number(self.exec_count.get().to_string().into()))?;
+            serializer.serialize_event(JsonEvent::ObjectKey("number of results".into()))?;
+            serializer
+                .serialize_event(JsonEvent::Number(self.exec_count.get().to_string().into()))?;
             if let Some(duration) = self.exec_duration.get() {
-                writer.write_event(JsonEvent::ObjectKey("duration in seconds".into()))?;
-                writer.write_event(JsonEvent::Number(duration.as_seconds().to_string().into()))?;
+                serializer.serialize_event(JsonEvent::ObjectKey("duration in seconds".into()))?;
+                serializer
+                    .serialize_event(JsonEvent::Number(duration.as_seconds().to_string().into()))?;
             }
         }
-        writer.write_event(JsonEvent::ObjectKey("children".into()))?;
-        writer.write_event(JsonEvent::StartArray)?;
+        serializer.serialize_event(JsonEvent::ObjectKey("children".into()))?;
+        serializer.serialize_event(JsonEvent::StartArray)?;
         for child in &self.children {
-            child.json_node(writer, with_stats)?;
+            child.json_node(serializer, with_stats)?;
         }
-        writer.write_event(JsonEvent::EndArray)?;
-        writer.write_event(JsonEvent::EndObject)
+        serializer.serialize_event(JsonEvent::EndArray)?;
+        serializer.serialize_event(JsonEvent::EndObject)
     }
 }
 
@@ -6308,6 +6385,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
             "Filter({})",
             spargebra::algebra::Expression::from(expression)
         ),
+        GraphPattern::Graph { graph_name } => format!("Graph({graph_name})"),
         GraphPattern::Group {
             variables,
             aggregates,

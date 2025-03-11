@@ -1,21 +1,21 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
-use json_event_parser::{FromBufferJsonReader, FromReadJsonReader, JsonEvent, ToWriteJsonWriter};
+use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJsonSerializer};
 #[cfg(feature = "async-tokio")]
-use json_event_parser::{FromTokioAsyncReadJsonReader, ToTokioAsyncWriteJsonWriter};
+use json_event_parser::{TokioAsyncReaderJsonParser, TokioAsyncWriterJsonSerializer};
 use oxrdf::vocab::rdf;
 use oxrdf::*;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::mem::take;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
 pub fn write_boolean_json_result<W: Write>(writer: W, value: bool) -> io::Result<W> {
-    let mut serializer = ToWriteJsonWriter::new(writer);
+    let mut serializer = WriterJsonSerializer::new(writer);
     for event in inner_write_boolean_json_result(value) {
-        serializer.write_event(event)?;
+        serializer.serialize_event(event)?;
     }
     serializer.finish()
 }
@@ -25,9 +25,9 @@ pub async fn tokio_async_write_boolean_json_result<W: AsyncWrite + Unpin>(
     writer: W,
     value: bool,
 ) -> io::Result<W> {
-    let mut serializer = ToTokioAsyncWriteJsonWriter::new(writer);
+    let mut serializer = TokioAsyncWriterJsonSerializer::new(writer);
     for event in inner_write_boolean_json_result(value) {
-        serializer.write_event(event).await?;
+        serializer.serialize_event(event).await?;
     }
     serializer.finish()
 }
@@ -46,16 +46,16 @@ fn inner_write_boolean_json_result(value: bool) -> [JsonEvent<'static>; 7] {
 
 pub struct WriterJsonSolutionsSerializer<W: Write> {
     inner: InnerJsonSolutionsSerializer,
-    writer: ToWriteJsonWriter<W>,
+    serializer: WriterJsonSerializer<W>,
 }
 
 impl<W: Write> WriterJsonSolutionsSerializer<W> {
     pub fn start(writer: W, variables: &[Variable]) -> io::Result<Self> {
-        let mut writer = ToWriteJsonWriter::new(writer);
+        let mut serializer = WriterJsonSerializer::new(writer);
         let mut buffer = Vec::with_capacity(48);
         let inner = InnerJsonSolutionsSerializer::start(&mut buffer, variables);
-        Self::do_write(&mut writer, buffer)?;
-        Ok(Self { inner, writer })
+        Self::do_write(&mut serializer, buffer)?;
+        Ok(Self { inner, serializer })
     }
 
     pub fn serialize<'a>(
@@ -64,19 +64,22 @@ impl<W: Write> WriterJsonSolutionsSerializer<W> {
     ) -> io::Result<()> {
         let mut buffer = Vec::with_capacity(48);
         self.inner.write(&mut buffer, solution);
-        Self::do_write(&mut self.writer, buffer)
+        Self::do_write(&mut self.serializer, buffer)
     }
 
     pub fn finish(mut self) -> io::Result<W> {
         let mut buffer = Vec::with_capacity(4);
         self.inner.finish(&mut buffer);
-        Self::do_write(&mut self.writer, buffer)?;
-        self.writer.finish()
+        Self::do_write(&mut self.serializer, buffer)?;
+        self.serializer.finish()
     }
 
-    fn do_write(writer: &mut ToWriteJsonWriter<W>, output: Vec<JsonEvent<'_>>) -> io::Result<()> {
+    fn do_write(
+        serializer: &mut WriterJsonSerializer<W>,
+        output: Vec<JsonEvent<'_>>,
+    ) -> io::Result<()> {
         for event in output {
-            writer.write_event(event)?;
+            serializer.serialize_event(event)?;
         }
         Ok(())
     }
@@ -85,17 +88,17 @@ impl<W: Write> WriterJsonSolutionsSerializer<W> {
 #[cfg(feature = "async-tokio")]
 pub struct TokioAsyncWriterJsonSolutionsSerializer<W: AsyncWrite + Unpin> {
     inner: InnerJsonSolutionsSerializer,
-    writer: ToTokioAsyncWriteJsonWriter<W>,
+    serializer: TokioAsyncWriterJsonSerializer<W>,
 }
 
 #[cfg(feature = "async-tokio")]
 impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonSolutionsSerializer<W> {
     pub async fn start(writer: W, variables: &[Variable]) -> io::Result<Self> {
-        let mut writer = ToTokioAsyncWriteJsonWriter::new(writer);
+        let mut serializer = TokioAsyncWriterJsonSerializer::new(writer);
         let mut buffer = Vec::with_capacity(48);
         let inner = InnerJsonSolutionsSerializer::start(&mut buffer, variables);
-        Self::do_write(&mut writer, buffer).await?;
-        Ok(Self { inner, writer })
+        Self::do_write(&mut serializer, buffer).await?;
+        Ok(Self { inner, serializer })
     }
 
     pub async fn serialize<'a>(
@@ -104,22 +107,22 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonSolutionsSerializer<W> {
     ) -> io::Result<()> {
         let mut buffer = Vec::with_capacity(48);
         self.inner.write(&mut buffer, solution);
-        Self::do_write(&mut self.writer, buffer).await
+        Self::do_write(&mut self.serializer, buffer).await
     }
 
     pub async fn finish(mut self) -> io::Result<W> {
         let mut buffer = Vec::with_capacity(4);
         self.inner.finish(&mut buffer);
-        Self::do_write(&mut self.writer, buffer).await?;
-        self.writer.finish()
+        Self::do_write(&mut self.serializer, buffer).await?;
+        self.serializer.finish()
     }
 
     async fn do_write(
-        writer: &mut ToTokioAsyncWriteJsonWriter<W>,
+        serializer: &mut TokioAsyncWriterJsonSerializer<W>,
         output: Vec<JsonEvent<'_>>,
     ) -> io::Result<()> {
         for event in output {
-            writer.write_event(event).await?;
+            serializer.serialize_event(event).await?;
         }
         Ok(())
     }
@@ -220,6 +223,7 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -230,10 +234,10 @@ pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
 
 impl<R: Read> ReaderJsonQueryResultsParserOutput<R> {
     pub fn read(reader: R) -> Result<Self, QueryResultsParseError> {
-        let mut json_reader = FromReadJsonReader::new(reader);
+        let mut json_parser = ReaderJsonParser::new(reader);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(json_reader.read_next_event()?)? {
+            if let Some(result) = inner.read_event(json_parser.parse_next()?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
@@ -242,7 +246,7 @@ impl<R: Read> ReaderJsonQueryResultsParserOutput<R> {
                         variables,
                         solutions: ReaderJsonSolutionsParser {
                             inner: solutions,
-                            json_reader,
+                            json_parser,
                         },
                     }),
                     JsonInnerQueryResults::Boolean(value) => Ok(Self::Boolean(value)),
@@ -254,18 +258,18 @@ impl<R: Read> ReaderJsonQueryResultsParserOutput<R> {
 
 pub struct ReaderJsonSolutionsParser<R: Read> {
     inner: JsonInnerSolutions,
-    json_reader: FromReadJsonReader<R>,
+    json_parser: ReaderJsonParser<R>,
 }
 
 impl<R: Read> ReaderJsonSolutionsParser<R> {
     pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.json_reader.read_next_event()?;
+                let event = self.json_parser.parse_next()?;
                 if event == JsonEvent::Eof {
                     return Ok(None);
                 }
-                if let Some(result) = reader.read_event(event)? {
+                if let Some(result) = reader.parse_event(event)? {
                     return Ok(Some(result));
                 }
             },
@@ -275,6 +279,7 @@ impl<R: Read> ReaderJsonSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
+#[allow(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderJsonQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -286,10 +291,10 @@ pub enum TokioAsyncReaderJsonQueryResultsParserOutput<R: AsyncRead + Unpin> {
 #[cfg(feature = "async-tokio")]
 impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonQueryResultsParserOutput<R> {
     pub async fn read(reader: R) -> Result<Self, QueryResultsParseError> {
-        let mut json_reader = FromTokioAsyncReadJsonReader::new(reader);
+        let mut json_parser = TokioAsyncReaderJsonParser::new(reader);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(json_reader.read_next_event().await?)? {
+            if let Some(result) = inner.read_event(json_parser.parse_next().await?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
@@ -298,7 +303,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonQueryResultsParserOutput<R> {
                         variables,
                         solutions: TokioAsyncReaderJsonSolutionsParser {
                             inner: solutions,
-                            json_reader,
+                            json_parser,
                         },
                     }),
                     JsonInnerQueryResults::Boolean(value) => Ok(Self::Boolean(value)),
@@ -311,7 +316,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonQueryResultsParserOutput<R> {
 #[cfg(feature = "async-tokio")]
 pub struct TokioAsyncReaderJsonSolutionsParser<R: AsyncRead + Unpin> {
     inner: JsonInnerSolutions,
-    json_reader: FromTokioAsyncReadJsonReader<R>,
+    json_parser: TokioAsyncReaderJsonParser<R>,
 }
 
 #[cfg(feature = "async-tokio")]
@@ -321,11 +326,11 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsParseError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.json_reader.read_next_event().await?;
+                let event = self.json_parser.parse_next().await?;
                 if event == JsonEvent::Eof {
                     return Ok(None);
                 }
-                if let Some(result) = reader.read_event(event)? {
+                if let Some(result) = reader.parse_event(event)? {
                     return Ok(Some(result));
                 }
             },
@@ -334,6 +339,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum SliceJsonQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -344,10 +350,10 @@ pub enum SliceJsonQueryResultsParserOutput<'a> {
 
 impl<'a> SliceJsonQueryResultsParserOutput<'a> {
     pub fn read(slice: &'a [u8]) -> Result<Self, QueryResultsSyntaxError> {
-        let mut json_reader = FromBufferJsonReader::new(slice);
+        let mut json_parser = SliceJsonParser::new(slice);
         let mut inner = JsonInnerReader::new();
         loop {
-            if let Some(result) = inner.read_event(json_reader.read_next_event()?)? {
+            if let Some(result) = inner.read_event(json_parser.parse_next()?)? {
                 return match result {
                     JsonInnerQueryResults::Solutions {
                         variables,
@@ -356,7 +362,7 @@ impl<'a> SliceJsonQueryResultsParserOutput<'a> {
                         variables,
                         solutions: SliceJsonSolutionsParser {
                             inner: solutions,
-                            json_reader,
+                            json_parser,
                         },
                     }),
                     JsonInnerQueryResults::Boolean(value) => Ok(Self::Boolean(value)),
@@ -368,18 +374,18 @@ impl<'a> SliceJsonQueryResultsParserOutput<'a> {
 
 pub struct SliceJsonSolutionsParser<'a> {
     inner: JsonInnerSolutions,
-    json_reader: FromBufferJsonReader<'a>,
+    json_parser: SliceJsonParser<'a>,
 }
 
 impl SliceJsonSolutionsParser<'_> {
     pub fn parse_next(&mut self) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
         match &mut self.inner {
             JsonInnerSolutions::Reader(reader) => loop {
-                let event = self.json_reader.read_next_event()?;
+                let event = self.json_parser.parse_next()?;
                 if event == JsonEvent::Eof {
                     return Ok(None);
                 }
-                if let Some(result) = reader.read_event(event)? {
+                if let Some(result) = reader.parse_event(event)? {
                     return Ok(Some(result));
                 }
             },
@@ -563,7 +569,7 @@ impl JsonInnerReader {
                 },
                 JsonEvent::EndArray => {
                     if self.solutions_read {
-                        let mut mapping = BTreeMap::default();
+                        let mut mapping = HashMap::new();
                         for (i, var) in self.variables.iter().enumerate() {
                             mapping.insert(var.as_str().to_owned(), i);
                         }
@@ -637,7 +643,7 @@ impl JsonInnerReader {
                 if event == JsonEvent::StartArray {
                     self.solutions_read = true;
                     if self.vars_read {
-                        let mut mapping = BTreeMap::default();
+                        let mut mapping = HashMap::new();
                         for (i, var) in self.variables.iter().enumerate() {
                             mapping.insert(var.as_str().to_owned(), i);
                         }
@@ -759,7 +765,7 @@ impl JsonInnerReader {
 
 struct JsonInnerSolutionsParser {
     state: JsonInnerSolutionsParserState,
-    mapping: BTreeMap<String, usize>,
+    mapping: HashMap<String, usize>,
     new_bindings: Vec<Option<Term>>,
 }
 
@@ -774,7 +780,7 @@ enum JsonInnerSolutionsParserState {
 }
 
 impl JsonInnerSolutionsParser {
-    fn read_event(
+    fn parse_event(
         &mut self,
         event: JsonEvent<'_>,
     ) -> Result<Option<Vec<Option<Term>>>, QueryResultsSyntaxError> {
@@ -1134,7 +1140,7 @@ impl JsonInnerTermReader {
 }
 
 pub struct JsonBufferedSolutionsIterator {
-    mapping: BTreeMap<String, usize>,
+    mapping: HashMap<String, usize>,
     bindings: std::vec::IntoIter<(Vec<String>, Vec<Term>)>,
 }
 
