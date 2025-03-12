@@ -1,4 +1,4 @@
-use crate::model::{BlankNodeRef, NamedNodeRef};
+use crate::model::NamedNodeRef;
 use crate::sparql::QueryDataset;
 use crate::storage::numeric_encoder::{
     insert_term, Decoder, EncodedTerm, EncodedTriple, StrHash, StrHashHasher, StrLookup,
@@ -72,74 +72,6 @@ impl HDTDatasetView {
     pub fn insert_str(&self, key: &StrHash, value: &str) {
         if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
             e.insert(value.to_owned());
-        }
-    }
-
-    /// Create the correct OxRDF term for a given resource string.  Slow,
-    /// use the appropriate method if you know which type (Literal, URI,
-    /// or blank node) the string has. Based on
-    /// https://github.com/KonradHoeffner/hdt/blob/871db777db3220dc4874af022287975b31d72d3a/src/hdt_graph.rs#L64
-    fn auto_term(&self, s: &str) -> Result<EncodedTerm, Error> {
-        match s.chars().next() {
-            None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
-
-            // Double-quote delimters are used around the string.
-            Some('"') => {
-                if s.rfind('"').is_none() {
-                    Err(Error::new(
-                        ErrorKind::InvalidData,
-                        format!("missing right quotation mark in literal string {s}"),
-                    ))
-                } else {
-                    let term = match Term::from_str(s) {
-                        Ok(t) => t,
-                        Err(e) => {
-                            return Err(Error::new(
-                                ErrorKind::InvalidData,
-                                format!("failed to build oxRDF literal from {s}: {e}"),
-                            ))
-                        }
-                    };
-                    let encoded = term.as_ref().into();
-                    Ok(encoded)
-                }
-            }
-
-            // Underscore prefix indicating an Blank Node.
-            Some('_') => {
-                let term = match oxrdf::BlankNode::new(&s[2..]) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            format!("failed to build oxRDF BlankNode from {s}: {e}"),
-                        ))
-                    }
-                };
-                let _val = self.internalize_term(term.into());
-                Ok(EncodedTerm::from(BlankNodeRef::new_unchecked(*Arc::from(
-                    &s[2..],
-                ))))
-            }
-
-            // Double-quote delimiters not present. Underscore prefix
-            // not present. Assuming a URI.
-            _ => {
-                // Note that Term::from_str() will not work for URIs
-                // (OxRDF NamedNode) when the string is not within "<"
-                // and ">" delimiters.
-                let named_node = match NamedNodeRef::new(*Arc::from(s)) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            format!("failed to build oxRDF NamedNode from {s}: {e}"),
-                        ))
-                    }
-                };
-
-                Ok(named_node.into())
-            }
         }
     }
 
@@ -225,8 +157,7 @@ impl HDTDatasetView {
             Ok(t) => t,
             Err(e) => {
                 return Err(StorageError::Corruption(CorruptionError::new(format!(
-                    "decoding error {e} for {:?}",
-                    encoded_term
+                    "decoding error {e} for {encoded_term:?}",
                 ))));
             }
         };
@@ -330,124 +261,6 @@ impl QueryableDataset for HDTDatasetView {
             Ok(s) => Ok(s),
             Err(e) => Err(CorruptionError::new(format!("Unexpected externalize bug {e}")).into()),
         }
-    }
-
-    fn externalize_expression_term(&self, term: String) -> Result<ExpressionTerm, StorageError> {
-        let encoded_term = self.auto_term(&term)?;
-        Ok(match encoded_term {
-            EncodedTerm::DefaultGraph => {
-                return Err(CorruptionError::new("Unexpected default graph").into())
-            }
-            EncodedTerm::BooleanLiteral(value) => ExpressionTerm::BooleanLiteral(value),
-            EncodedTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(value),
-            EncodedTerm::DoubleLiteral(value) => ExpressionTerm::DoubleLiteral(value),
-            EncodedTerm::IntegerLiteral(value) => ExpressionTerm::IntegerLiteral(value),
-            EncodedTerm::DecimalLiteral(value) => ExpressionTerm::DecimalLiteral(value),
-            EncodedTerm::DateTimeLiteral(value) => ExpressionTerm::DateTimeLiteral(value),
-            EncodedTerm::TimeLiteral(value) => ExpressionTerm::TimeLiteral(value),
-            EncodedTerm::DateLiteral(value) => ExpressionTerm::DateLiteral(value),
-            EncodedTerm::GYearMonthLiteral(value) => ExpressionTerm::GYearMonthLiteral(value),
-            EncodedTerm::GYearLiteral(value) => ExpressionTerm::GYearLiteral(value),
-            EncodedTerm::GMonthDayLiteral(value) => ExpressionTerm::GMonthDayLiteral(value),
-            EncodedTerm::GDayLiteral(value) => ExpressionTerm::GDayLiteral(value),
-            EncodedTerm::GMonthLiteral(value) => ExpressionTerm::GMonthLiteral(value),
-            EncodedTerm::DurationLiteral(value) => ExpressionTerm::DurationLiteral(value),
-            EncodedTerm::YearMonthDurationLiteral(value) => {
-                ExpressionTerm::YearMonthDurationLiteral(value)
-            }
-            EncodedTerm::DayTimeDurationLiteral(value) => {
-                ExpressionTerm::DayTimeDurationLiteral(value)
-            }
-            EncodedTerm::Triple(t) => ExpressionTriple::new(
-                self.externalize_expression_term(self.encodedterm_to_hdt_bgp_str(&t.subject)?)?,
-                self.externalize_expression_term(self.encodedterm_to_hdt_bgp_str(&t.predicate)?)?,
-                self.externalize_expression_term(self.encodedterm_to_hdt_bgp_str(&t.object)?)?,
-            )
-            .ok_or_else(|| CorruptionError::msg("Invalid RDF-star triple term in the storage"))?
-            .into(),
-            _ => self.decode_term(&encoded_term)?.into(), // No escape
-        })
-    }
-
-    fn internalize_expression_term(&self, term: ExpressionTerm) -> Result<String, StorageError> {
-        Ok(match term {
-            ExpressionTerm::BooleanLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::BooleanLiteral(value))?
-            }
-            ExpressionTerm::FloatLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::FloatLiteral(value))?
-            }
-            ExpressionTerm::DoubleLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DoubleLiteral(value))?
-            }
-            ExpressionTerm::IntegerLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::IntegerLiteral(value))?
-            }
-            ExpressionTerm::DecimalLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DecimalLiteral(value))?
-            }
-            ExpressionTerm::DateTimeLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DateTimeLiteral(value))?
-            }
-            ExpressionTerm::TimeLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::TimeLiteral(value))?
-            }
-            ExpressionTerm::DateLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DateLiteral(value))?
-            }
-            ExpressionTerm::GYearMonthLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GYearMonthLiteral(value))?
-            }
-            ExpressionTerm::GYearLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GYearLiteral(value))?
-            }
-            ExpressionTerm::GMonthDayLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GMonthDayLiteral(value))?
-            }
-            ExpressionTerm::GDayLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GDayLiteral(value))?
-            }
-            ExpressionTerm::GMonthLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::GMonthLiteral(value))?
-            }
-            ExpressionTerm::DurationLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DurationLiteral(value))?
-            }
-            ExpressionTerm::YearMonthDurationLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::YearMonthDurationLiteral(value))?
-            }
-            ExpressionTerm::DayTimeDurationLiteral(value) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::DayTimeDurationLiteral(value))?
-            }
-            ExpressionTerm::Triple(t) => {
-                self.encodedterm_to_hdt_bgp_str(&EncodedTerm::Triple(Arc::new(EncodedTriple {
-                    subject: self
-                        .auto_term(&self.internalize_expression_term(t.subject.into())?)?,
-                    predicate: self
-                        .auto_term(&self.internalize_expression_term(t.predicate.into())?)?,
-                    object: self.auto_term(&self.internalize_expression_term(t.object)?)?,
-                })))?
-            }
-            _ => self.internalize_term(term.into())?, // No fast path
-        })
-    }
-
-    fn internal_term_effective_boolean_value(
-        &self,
-        term: String,
-    ) -> Result<Option<bool>, StorageError> {
-        Ok(match self.auto_term(&term)? {
-            EncodedTerm::BooleanLiteral(value) => Some(value.into()),
-            EncodedTerm::SmallStringLiteral(value) => Some(!value.is_empty()),
-            EncodedTerm::BigStringLiteral { .. } => {
-                Some(false) // A big literal can't be empty
-            }
-            EncodedTerm::FloatLiteral(value) => Some(Boolean::from(value).into()),
-            EncodedTerm::DoubleLiteral(value) => Some(Boolean::from(value).into()),
-            EncodedTerm::IntegerLiteral(value) => Some(Boolean::from(value).into()),
-            EncodedTerm::DecimalLiteral(value) => Some(Boolean::from(value).into()),
-            _ => None,
-        })
     }
 }
 
