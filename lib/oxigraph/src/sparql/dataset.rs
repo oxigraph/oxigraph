@@ -146,22 +146,8 @@ impl HDTDatasetView {
     }
 
     /// Convert triple string formats from OxRDF to HDT.
-    fn encodedterm_to_hdt_bgp_str(
-        &self,
-        encoded_term: &EncodedTerm,
-    ) -> Result<String, StorageError> {
-        // It is not possible to get a string representation
-        // directly from an EncodedTerm, so it must first be
-        // decoded.
-        let decoded_term = match self.decode_term(encoded_term) {
-            Ok(t) => t,
-            Err(e) => {
-                return Err(StorageError::Corruption(CorruptionError::new(format!(
-                    "decoding error {e} for {encoded_term:?}",
-                ))));
-            }
-        };
-        let term = match &decoded_term {
+    fn term_to_hdt_bgp_str(&self, term: &Term) -> Result<String, StorageError> {
+        let hdt_str = match term {
             // Remove double quote delimiters from URIs.
             Term::NamedNode(named_node) => named_node.clone().into_string(),
 
@@ -183,13 +169,13 @@ impl HDTDatasetView {
                 }
             }
 
-            Term::BlankNode(_s) => decoded_term.to_string(),
+            Term::BlankNode(_s) => term.to_string(),
 
             // Otherwise use the string directly.
-            Term::Triple(_) => decoded_term.to_string(),
+            Term::Triple(_) => term.to_string(),
         };
 
-        Ok(term)
+        Ok(hdt_str)
     }
 }
 
@@ -253,7 +239,7 @@ impl QueryableDataset for HDTDatasetView {
             self.insert_str(key, value);
             Ok(())
         })?;
-        self.encodedterm_to_hdt_bgp_str(&encoded)
+        self.term_to_hdt_bgp_str(&term)
     }
 
     fn externalize_term(&self, term: String) -> Result<Term, StorageError> {
