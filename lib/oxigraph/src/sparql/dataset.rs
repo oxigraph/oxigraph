@@ -29,9 +29,6 @@ pub struct HDTDataset {
 pub struct HDTDatasetView {
     // collection of HDT files in the dataset
     hdts: Vec<HDTDataset>,
-
-    /// In-memory string hashs.
-    extra: RefCell<HashMap<StrHash, String>>,
 }
 
 /// Cloning opens the same file again.
@@ -45,10 +42,7 @@ impl Clone for HDTDatasetView {
             })
         }
 
-        Self {
-            hdts,
-            extra: self.extra.clone(),
-        }
+        Self { hdts }
     }
 }
 
@@ -64,125 +58,111 @@ impl HDTDatasetView {
             })
         }
 
-        Self {
-            hdts,
-            extra: RefCell::new(HashMap::default()),
-        }
-    }
-    pub fn insert_str(&self, key: &StrHash, value: &str) {
-        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
-            e.insert(value.to_owned());
-        }
-    }
-
-    /// Create the correct OxRDF term for a given resource string.  Slow,
-    /// use the appropriate method if you know which type (Literal, URI,
-    /// or blank node) the string has. Based on
-    /// https://github.com/KonradHoeffner/hdt/blob/871db777db3220dc4874af022287975b31d72d3a/src/hdt_graph.rs#L64
-    fn hdt_bgp_str_to_term(&self, s: &str) -> Result<Term, Error> {
-        match s.chars().next() {
-            None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
-
-            // Double-quote delimters are used around the string.
-            Some('"') => match s.rfind('"') {
-                None => Err(Error::new(
-                    ErrorKind::InvalidData,
-                    format!("missing right quotation mark in literal string {s}"),
-                )),
-
-                Some(_) => match Term::from_str(s) {
-                    Ok(s) => Ok(s),
-                    Err(e) => Err(Error::new(
-                        ErrorKind::InvalidData,
-                        format!("literal parse error {e} for {s}"),
-                    )),
-                },
-            },
-
-            // Underscore prefix indicating an Blank Node.
-            Some('_') => {
-                let term = match oxrdf::BlankNode::new(&s[2..]) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            format!("blanknode parse error {e} for {s}"),
-                        ))
-                    }
-                };
-                match Term::from_str(&term.to_string()) {
-                    Ok(s) => Ok(s),
-                    Err(e) => Err(Error::new(
-                        ErrorKind::InvalidData,
-                        format!("blanknode parse error {e} for {s}"),
-                    )),
-                }
-            }
-
-            // Double-quote delimiters not present. Underscore prefix
-            // not present. Assuming a URI.
-            _ => {
-                // Note that Term::from_str() will not work for URIs
-                // (OxRDF NamedNode) when the string is not within "<"
-                // and ">" delimiters.
-                let named_node = match NamedNodeRef::new(*Arc::from(s)) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            format!("iri parse error {e} for {s}"),
-                        ))
-                    }
-                };
-                match Term::from_str(&named_node.to_string()) {
-                    Ok(s) => Ok(s),
-                    Err(e) => Err(Error::new(
-                        ErrorKind::InvalidData,
-                        format!("iri parse error {e} for {s}"),
-                    )),
-                }
-            }
-        }
-    }
-
-    /// Convert triple string formats from OxRDF to HDT.
-    fn term_to_hdt_bgp_str(&self, term: &Term) -> Result<String, StorageError> {
-        let hdt_str = match term {
-            // Remove double quote delimiters from URIs.
-            Term::NamedNode(named_node) => named_node.clone().into_string(),
-
-            // Get the string directly from literals and add
-            // quotes to work-around handling of "\n" being
-            // double-escaped.
-            // format!("\"{}\"", literal.value()),
-            Term::Literal(literal) => {
-                if literal.is_plain() {
-                    literal.to_string().replace("\\n", "\n")
-                }
-                // For numbers and other typed literals return
-                // None as the BGP search will need to collect
-                // all possibilities before filtering.
-                else {
-                    return Err(StorageError::Corruption(CorruptionError::new(format!(
-                        "unhandled literal value {literal}"
-                    ))));
-                }
-            }
-
-            Term::BlankNode(_s) => term.to_string(),
-
-            // Otherwise use the string directly.
-            Term::Triple(_) => term.to_string(),
-        };
-
-        Ok(hdt_str)
+        Self { hdts }
     }
 }
 
-impl StrLookup for HDTDatasetView {
-    fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
-        Ok(self.extra.borrow().get(key).cloned())
+/// Create the correct OxRDF term for a given resource string.  Slow,
+/// use the appropriate method if you know which type (Literal, URI,
+/// or blank node) the string has. Based on
+/// https://github.com/KonradHoeffner/hdt/blob/871db777db3220dc4874af022287975b31d72d3a/src/hdt_graph.rs#L64
+fn hdt_bgp_str_to_term(s: &str) -> Result<Term, Error> {
+    match s.chars().next() {
+        None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
+
+        // Double-quote delimters are used around the string.
+        Some('"') => match s.rfind('"') {
+            None => Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("missing right quotation mark in literal string {s}"),
+            )),
+
+            Some(_) => match Term::from_str(s) {
+                Ok(s) => Ok(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("literal parse error {e} for {s}"),
+                )),
+            },
+        },
+
+        // Underscore prefix indicating an Blank Node.
+        Some('_') => {
+            let term = match oxrdf::BlankNode::new(&s[2..]) {
+                Ok(n) => n,
+                Err(e) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("blanknode parse error {e} for {s}"),
+                    ))
+                }
+            };
+            match Term::from_str(&term.to_string()) {
+                Ok(s) => Ok(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("blanknode parse error {e} for {s}"),
+                )),
+            }
+        }
+
+        // Double-quote delimiters not present. Underscore prefix
+        // not present. Assuming a URI.
+        _ => {
+            // Note that Term::from_str() will not work for URIs
+            // (OxRDF NamedNode) when the string is not within "<"
+            // and ">" delimiters.
+            let named_node = match NamedNodeRef::new(*Arc::from(s)) {
+                Ok(n) => n,
+                Err(e) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("iri parse error {e} for {s}"),
+                    ))
+                }
+            };
+            match Term::from_str(&named_node.to_string()) {
+                Ok(s) => Ok(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("iri parse error {e} for {s}"),
+                )),
+            }
+        }
     }
+}
+
+/// Convert triple string formats from OxRDF to HDT.
+fn term_to_hdt_bgp_str(term: &Term) -> Result<String, StorageError> {
+    let hdt_str = match term {
+        // Remove double quote delimiters from URIs.
+        Term::NamedNode(named_node) => named_node.clone().into_string(),
+
+        // Get the string directly from literals and add
+        // quotes to work-around handling of "\n" being
+        // double-escaped.
+        // format!("\"{}\"", literal.value()),
+        Term::Literal(literal) => {
+            if literal.is_plain() {
+                literal.to_string().replace("\\n", "\n")
+            }
+            // For numbers and other typed literals return
+            // None as the BGP search will need to collect
+            // all possibilities before filtering.
+            else {
+                return Err(StorageError::Corruption(CorruptionError::new(format!(
+                    "unhandled literal value {literal}"
+                ))));
+            }
+        }
+
+        Term::BlankNode(_s) => term.to_string(),
+
+        // Otherwise use the string directly.
+        Term::Triple(_) => term.to_string(),
+    };
+
+    Ok(hdt_str)
 }
 
 impl QueryableDataset for HDTDatasetView {
@@ -198,7 +178,12 @@ impl QueryableDataset for HDTDatasetView {
     ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, StorageError>>> {
         if let Some(graph_name) = graph_name {
             if graph_name.is_some() {
-                panic!("HDT does not support named graphs.")
+                return Box::new(
+                    vec![Err(StorageError::Corruption(CorruptionError::new(
+                        format!("HDT does not support named graph: {graph_name:?}"),
+                    )))]
+                    .into_iter(),
+                );
             }
         }
         let s = subject.cloned();
@@ -234,16 +219,11 @@ impl QueryableDataset for HDTDatasetView {
     }
 
     fn internalize_term(&self, term: Term) -> Result<String, StorageError> {
-        let encoded = term.as_ref().into();
-        insert_term(term.as_ref(), &encoded, &mut |key, value| {
-            self.insert_str(key, value);
-            Ok(())
-        })?;
-        self.term_to_hdt_bgp_str(&term)
+        term_to_hdt_bgp_str(&term)
     }
 
     fn externalize_term(&self, term: String) -> Result<Term, StorageError> {
-        match self.hdt_bgp_str_to_term(&term) {
+        match hdt_bgp_str_to_term(&term) {
             Ok(s) => Ok(s),
             Err(e) => Err(CorruptionError::new(format!("Unexpected externalize bug {e}")).into()),
         }
