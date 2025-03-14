@@ -211,12 +211,13 @@ jobs:
           submodules: true
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - run: mkdir .cargo && echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
       - uses: ./.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
       - run: cargo test --workspace --exclude sparql-smith
 
   test_linux_latest:
@@ -342,7 +343,6 @@ jobs:
           submodules: true
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - run: mkdir .cargo && echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
       - uses: ./.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
@@ -354,6 +354,8 @@ jobs:
           cache-dependency-glob: "**/requirements**.txt"
       - run: uv pip install -r python/requirements.dev.txt
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
       - run: maturin build -m python/Cargo.toml
       - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
       - run: rm -r target/wheels
