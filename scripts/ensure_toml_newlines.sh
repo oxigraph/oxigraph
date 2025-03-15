@@ -24,4 +24,4 @@ if [ $count -eq 0 ]; then
   echo "All TOML files already have final newlines."
 else
   echo "Added newlines to $count TOML files."
-fi 
+fi
