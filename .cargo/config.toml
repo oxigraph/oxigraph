@@ -1,0 +1,29 @@
+[build]
+# Enable incremental compilation
+incremental = true
+
+# Parallelize the build with all available CPU cores
+jobs = 12
+
+# Cache build artifacts
+target-dir = "target"
+
+[profile.dev]
+# Use minimal optimizations for dependencies while keeping your code unoptimized for fast compilation
+opt-level = 0
+# Dependencies use a higher optimization level
+codegen-units = 256
+# Enable debug info for better debugging experience
+debug = true
+
+[profile.release]
+# Full optimization for release builds
+opt-level = 3
+# Control the number of parallel code generation units
+codegen-units = 16
+# Enable link time optimization for better performance
+lto = "thin"
+
+[profile.dev.package."*"]
+# Optimize dependencies even in debug mode
+opt-level = 1 

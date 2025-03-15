@@ -2,6 +2,7 @@ use oxigraph::model::*;
 use oxigraph::sparql::{QueryOptions, QueryResults};
 use oxigraph::store::Store;
 use std::error::Error;
+use serde_json::{from_slice, to_string_pretty};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("=== Oxigraph Query Execution Explanation ===\n");
@@ -138,7 +139,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         # Only include books with "The" in the title
         FILTER(CONTAINS(?title, "The"))
     }
-    ORDER BY ?title
     "#;
     
     println!("Query to execute:");
@@ -180,7 +180,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("\nExplanation in JSON format:");
     let mut buffer = Vec::new();
     explanation.write_in_json(&mut buffer)?;
-    println!("{}", String::from_utf8(buffer)?);
+    
+    // Parse the JSON and then pretty print it
+    let json_value = from_slice(&buffer)?;
+    let pretty_json = to_string_pretty(&json_value)?;
+    println!("{}", pretty_json);
     
     Ok(())
 }

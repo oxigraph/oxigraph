@@ -1511,6 +1511,7 @@ name = "oxigraph-examples"
 version = "0.1.0"
 dependencies = [
  "oxigraph",
+ "serde_json",
 ]
 
 [[package]]

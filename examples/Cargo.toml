@@ -9,4 +9,5 @@ name = "query_explanation"
 path = "query_explanation.rs"
 
 [dependencies]
-oxigraph = { path = "../lib/oxigraph" } 
+oxigraph = { path = "../lib/oxigraph" }
+serde_json = { workspace = true } 
