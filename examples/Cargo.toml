@@ -1,0 +1,12 @@
+[package]
+name = "oxigraph-examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[example]]
+name = "query_explanation"
+path = "query_explanation.rs"
+
+[dependencies]
+oxigraph = { path = "../lib/oxigraph" } 
