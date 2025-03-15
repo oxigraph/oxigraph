@@ -31,4 +31,14 @@ path = "my_example.rs"
 ```
 3. Make sure to import the necessary dependencies from Oxigraph
 
-All examples automatically use the dependencies defined in the `[dependencies]` section of this directory's `Cargo.toml`. 
+All examples automatically use the dependencies defined in the `[dependencies]` section of this directory's `Cargo.toml`.
+
+## Continuous Integration
+
+All examples in this directory are automatically built and run as part of the CI pipeline. This ensures that:
+
+1. Examples always compile correctly
+2. Examples execute without errors
+3. Changes to the Oxigraph codebase don't break the examples
+
+When adding a new example, it will automatically be included in the CI checks without any additional configuration. 

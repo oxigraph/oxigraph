@@ -463,6 +463,19 @@ jobs:
           name: fuzz-artifacts-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}
 
+  test_examples:
+    runs-on: ubuntu-latest
+    name: Test examples
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - name: Run example tests
+        run: |
+          chmod +x scripts/test_examples.sh
+          ./scripts/test_examples.sh
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:
