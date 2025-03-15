@@ -217,7 +217,7 @@ jobs:
           submodules: true
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - run: mkdir .cargo && echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
+      - run: echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
       - uses: ./.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
@@ -348,7 +348,7 @@ jobs:
           submodules: true
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - run: mkdir .cargo && echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
+      - run: echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
       - uses: ./.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}

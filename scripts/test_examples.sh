@@ -9,8 +9,8 @@ echo "Building all examples..."
 cargo build --examples
 
 examples=$(cargo metadata --no-deps --format-version=1 | 
-            grep -o '"name":"[^"]*","kind":\["example"\]' | 
-            sed 's/"name":"//;s/","kind":\["example"\]//')
+  jq -r '.packages[] | select(.name == "oxigraph-examples") | .targets[] | 
+  select(.kind[] | contains("example")) | .name')
 
 # Run each example
 echo "Running examples:"
