@@ -29,4 +29,4 @@ for example in $examples; do
   fi
 done
 
-echo "All examples passed!" 
+echo "All examples passed!"
