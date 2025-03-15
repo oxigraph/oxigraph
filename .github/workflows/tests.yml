@@ -23,6 +23,12 @@ jobs:
         with:
           component: rustfmt
       - run: cargo fmt -- --check
+      - name: Check TOML files for final newlines
+        run: |
+          chmod +x scripts/ensure_toml_newlines.sh
+          ./scripts/ensure_toml_newlines.sh
+          # Fail if any TOML files were modified (needed newlines)
+          git diff --exit-code || (echo "::error::Some TOML files are missing final newlines. Run scripts/ensure_toml_newlines.sh locally." && exit 1)
 
   clippy:
     runs-on: ubuntu-latest
@@ -211,7 +217,7 @@ jobs:
           submodules: true
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - run: mkdir .cargo && echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
+      - run: echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
       - uses: ./.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
@@ -342,7 +348,7 @@ jobs:
           submodules: true
       - run: echo "rust-version=$(sed -ne 's/rust-version *= *\"\(.*\)\"/\1/p' Cargo.toml)" >> $GITHUB_OUTPUT
         id: metadata
-      - run: mkdir .cargo && echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
+      - run: echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml
       - uses: ./.github/actions/setup-rust
         with:
           version: ${{ steps.metadata.outputs.rust-version }}
@@ -456,6 +462,19 @@ jobs:
         with:
           name: fuzz-artifacts-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}
+
+  test_examples:
+    runs-on: ubuntu-latest
+    name: Test examples
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup-rust
+      - name: Run example tests
+        run: |
+          chmod +x scripts/test_examples.sh
+          ./scripts/test_examples.sh
 
   shellcheck:
     runs-on: ubuntu-latest
