@@ -182,7 +182,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     explanation.write_in_json(&mut buffer)?;
     
     // Parse the JSON and then pretty print it
-    let json_value = from_slice(&buffer)?;
+    let json_value: serde_json::Value = from_slice(&buffer)?;
     let pretty_json = to_string_pretty(&json_value)?;
     println!("{}", pretty_json);
     

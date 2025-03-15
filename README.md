@@ -37,6 +37,7 @@ It is split into multiple parts:
 - [Oxigraph binary](./cli) that provides a standalone command-line tool allowing to manipulate RDF data and spawn a a web server implementing the [SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) and the [SPARQL 1.1 Graph Store Protocol](https://www.w3.org/TR/sparql11-http-rdf-update/). Its source code and instructions (including Docker) are in the `cli` directory.
   Note that it was previously named [Oxigraph server](https://crates.io/crates/oxigraph-server).
   [![Latest Version](https://img.shields.io/crates/v/oxigraph-cli.svg)](https://crates.io/crates/oxigraph-cli)
+- [Example code](./examples) demonstrating various Oxigraph use cases. See the [examples documentation](./examples/README.md) for instructions on running examples.
 
 Also, some parts of Oxigraph are available as standalone Rust crates:
 * [`oxrdf`](./lib/oxrdf), datastructures encoding RDF basic concepts (the [`oxigraph::model`](crate::model) module).
