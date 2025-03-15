@@ -23,6 +23,12 @@ jobs:
         with:
           component: rustfmt
       - run: cargo fmt -- --check
+      - name: Check TOML files for final newlines
+        run: |
+          chmod +x scripts/ensure_toml_newlines.sh
+          ./scripts/ensure_toml_newlines.sh
+          # Fail if any TOML files were modified (needed newlines)
+          git diff --exit-code || (echo "::error::Some TOML files are missing final newlines. Run scripts/ensure_toml_newlines.sh locally." && exit 1)
 
   clippy:
     runs-on: ubuntu-latest

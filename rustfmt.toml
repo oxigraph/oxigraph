@@ -8,3 +8,4 @@ normalize_doc_attributes = true
 group_imports = "One"
 use_field_init_shorthand = true
 use_try_shorthand = true
+final_newline = true
