@@ -1,0 +1,4462 @@
+# $Id: manifest.ttl,v 1.14 2010/11/30 14:17:22 apollere2 Exp $
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label  "Built-ins" ;
+    rdfs:comment  "DAWG Expression tests: Built-ins" ;
+    mf:entries
+    ( :dawg-str-1 :dawg-str-2 :dawg-str-3 :dawg-str-4
+      :dawg-isBlank-1 :dawg-isLiteral-1 :dawg-datatype-1 :dawg-datatype-2 :dawg-datatype-3
+      :dawg-lang-1 :dawg-lang-2 :dawg-lang-3 :dawg-isURI-1
+      :dawg-isIRI-1 :dawg-langMatches-1 :dawg-langMatches-2 
+      :dawg-langMatches-3 :dawg-langMatches-4 :dawg-langMatches-basic
+      :lang-case-insensitive-eq
+      :lang-case-insensitive-ne
+      :sameTerm-simple :sameTerm-eq :sameTerm-not-eq
+    ).
+
+:dawg-isLiteral-1 a mf:QueryEvaluationTest ;
+     mf:name    "isLiteral" ;
+     mf:action
+	[ qt:query  <q-isliteral-1.rq> ;
+	  qt:data   <data-builtin-2.ttl> ] ;
+     mf:result  <result-isliteral-1.ttl> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> .
+
+:dawg-str-1 a mf:QueryEvaluationTest ;
+     mf:name    "str-1" ;
+     mf:action
+	[ qt:query  <q-str-1.rq> ;
+	  qt:data   <data-builtin-1.ttl> ] ;
+     mf:result  <result-str-1.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+:dawg-str-2 a mf:QueryEvaluationTest ;
+     mf:name    "str-2" ;
+     mf:action
+	[ qt:query  <q-str-2.rq> ;
+	  qt:data   <data-builtin-1.ttl> ] ;
+     mf:result  <result-str-2.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-str-3 a mf:QueryEvaluationTest ;
+     mf:name    "str-3" ;
+     mf:action
+	[ qt:query  <q-str-3.rq> ;
+	  qt:data   <data-builtin-1.ttl> ] ;
+     mf:result  <result-str-3.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-str-4 a mf:QueryEvaluationTest ;
+     mf:name    "str-4" ;
+     mf:action
+	[ qt:query  <q-str-4.rq> ;
+	  qt:data   <data-builtin-1.ttl> ] ;
+     mf:result  <result-str-4.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-isBlank-1 a mf:QueryEvaluationTest ;
+     mf:name    "isBlank-1" ;
+     mf:action
+	[ qt:query  <q-blank-1.rq> ;
+	  qt:data   <data-builtin-1.ttl> ] ;
+     mf:result  <result-blank-1.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-datatype-1 a mf:QueryEvaluationTest ;
+     mf:name    "datatype-1" ;
+     mf:action
+	[ qt:query  <q-datatype-1.rq> ;
+	  qt:data   <data-builtin-1.ttl> ] ;
+     mf:result  <result-datatype-1.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-datatype-2 a mf:QueryEvaluationTest ;
+    mf:name "datatype-2 : Literals with a datatype" ;
+    rdfs:comment "updated from original test case: eliminated ordering from test" ;
+    mf:action
+        [ qt:query  <q-datatype-2.rq> ;
+	  qt:data   <data-builtin-2.ttl> ] ;
+    mf:result  <result-datatype-2.srx> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-datatype-3 a mf:QueryEvaluationTest ;
+    mf:name "datatype-3 : Literals with a datatype of xsd:string" ;
+    rdfs:comment "updated from original test case: eliminated ordering from test" ;
+    mf:action
+	[ qt:query  <q-datatype-3.rq> ;
+          qt:data   <data-builtin-2.ttl> ] ;
+    mf:result  <result-datatype-3.srx> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-lang-1 a mf:QueryEvaluationTest ;
+    mf:name "lang-1 : Literals with a lang tag of some kind" ;
+    rdfs:comment "updated from original test case: eliminated ordering from test" ;
+    mf:action
+	[ qt:query  <q-lang-1.rq> ;
+	  qt:data   <data-builtin-2.ttl> ] ;
+    mf:result  <result-lang-1.srx> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-lang-2 a mf:QueryEvaluationTest ;
+    mf:name "lang-2 : Literals with a lang tag of ''" ;
+    rdfs:comment "updated from original test case: eliminated ordering from test" ;
+    mf:action
+	[ qt:query  <q-lang-2.rq> ;
+          qt:data   <data-builtin-2.ttl> ] ;
+    mf:result  <result-lang-2.srx> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-lang-3 a mf:QueryEvaluationTest ;
+    mf:name "lang-3 : Graph matching with lang tag being a different case" ;
+    rdfs:comment "updated from original test case: eliminated ordering from test" ;
+    mf:action
+	[ qt:query  <q-lang-3.rq> ;
+          qt:data   <data-builtin-2.ttl> ] ;
+    mf:result  <result-lang-3.srx> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-isURI-1 a mf:QueryEvaluationTest ;
+    mf:name    "isURI-1" ;
+    mf:action
+	[ qt:query  <q-uri-1.rq> ;
+          qt:data   <data-builtin-1.ttl> ] ;
+    mf:result  <result-uri-1.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-isIRI-1 a mf:QueryEvaluationTest ;
+    mf:name    "isIRI-1" ;
+    mf:action
+       [ qt:query  <q-iri-1.rq> ;
+	 qt:data   <data-builtin-1.ttl> ] ;
+    # NB same result as before.
+    mf:result  <result-iri-1.ttl> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> .
+
+
+:dawg-langMatches-1 a mf:QueryEvaluationTest ;
+    mf:name    "LangMatches-1" ;
+    rdfs:comment "langMatches(lang(?v), 'en-GB') matches 'abc'@en-gb" ;
+    mf:action
+	[ qt:query  <q-langMatches-1.rq> ;
+          qt:data   <data-langMatches.ttl> ] ;
+    mf:result  <result-langMatches-1.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-langMatches-2 a mf:QueryEvaluationTest ;
+    mf:name    "LangMatches-2" ;
+    rdfs:comment "langMatches(lang(?v), 'en') matches 'abc'@en, 'abc'@en-gb" ;
+    mf:action
+	[ qt:query  <q-langMatches-2.rq> ;
+          qt:data   <data-langMatches.ttl> ] ;
+    mf:result  <result-langMatches-2.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-langMatches-3 a mf:QueryEvaluationTest ;
+    mf:name    "LangMatches-3" ;
+    rdfs:comment "langMatches(lang(?v), '*') matches 'abc'@en, 'abc'@en-gb, 'abc'@fr" ;
+    mf:action
+	[ qt:query  <q-langMatches-3.rq> ;
+          qt:data   <data-langMatches.ttl> ] ;
+    mf:result  <result-langMatches-3.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+
+:dawg-langMatches-4 a mf:QueryEvaluationTest ;
+    mf:name    "LangMatches-4" ;
+    rdfs:comment "! langMatches(lang(?v), '*') matches 'abc'" ;
+    mf:action
+	[ qt:query  <q-langMatches-4.rq> ;
+          qt:data   <data-langMatches.ttl> ] ;
+    mf:result  <result-langMatches-4.ttl> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+     dawgt:approval dawgt:Approved .
+
+:dawg-langMatches-basic a mf:QueryEvaluationTest ;
+    mf:name    "LangMatches-basic" ;
+    rdfs:comment "the basic range 'de-de' does not match 'de-Latn-de'" ;
+    mf:action
+	[ qt:query  <q-langMatches-de-de.rq> ;
+          qt:data   <data-langMatches-de.ttl> ] ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+    mf:result  <result-langMatches-de.ttl> .
+
+:lang-case-insensitive-eq a mf:QueryEvaluationTest ;
+    mf:name    "lang-case-insensitive-eq" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+	rdfs:comment "'xyz'@en = 'xyz'@EN" ;
+        mf:action
+           [ qt:query  <lang-case-sensitivity-eq.rq> ;
+             qt:data   <lang-case-sensitivity.ttl> ] ;
+        mf:result  <lang-case-insensitive-eq.srx> .
+
+:lang-case-insensitive-ne a mf:QueryEvaluationTest ;
+    mf:name    "lang-case-insensitive-ne" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+	rdfs:comment	"'xyz'@en != 'xyz'@EN" ;
+    mf:action
+       [ qt:query  <lang-case-sensitivity-ne.rq> ;
+         qt:data   <lang-case-sensitivity.ttl> ] ;
+    mf:result  <lang-case-insensitive-ne.srx> .
+
+
+:sameTerm-simple a mf:QueryEvaluationTest ;
+    mf:name    "sameTerm-simple" ;
+    rdfs:comment	"sameTerm(?v1, ?v2)" ;
+    mf:action
+       [ qt:query  <sameTerm.rq> ;
+	 qt:data   <data-builtin-1.ttl> ] ;
+     dawgt:approval dawgt:Approved ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+    mf:result  <result-sameTerm.ttl> .
+
+
+:sameTerm-eq a mf:QueryEvaluationTest ;
+    mf:name    "sameTerm-eq" ;
+    rdfs:comment	"sameTerm(?v1, ?v2) && ?v1 = ?v2" ;
+    mf:action
+       [ qt:query  <sameTerm-eq.rq> ;
+	 qt:data   <data-builtin-1.ttl> ] ;
+     dawgt:approval dawgt:Approved ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+    mf:result  <result-sameTerm-eq.ttl> .
+
+
+:sameTerm-not-eq a mf:QueryEvaluationTest ;
+    mf:name    "sameTerm-not-eq" ;
+    rdfs:comment	"!sameTerm(?v1, ?v2) && ?v1 = ?v2" ;
+    mf:action
+       [ qt:query  <sameTerm-not-eq.rq> ;
+	 qt:data   <data-builtin-1.ttl> ] ;
+     dawgt:approval dawgt:Approved ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+    mf:result  <result-sameTerm-not-eq.ttl> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "XPath operators" ;
+    rdfs:comment "SPARQL tests - XPath operators in FILTERs" ;
+    mf:entries
+    ( 
+        :ge-1 :le-1 :mul-1 :plus-1 :minus-1 :unplus-1 :unminus-1
+    ).
+
+
+:unplus-1 a mf:QueryEvaluationTest ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+         mf:name    "Unary Plusn" ;
+         rdfs:comment "+A in FILTER expressions" ;
+         mf:action
+            [ qt:query  <query-unplus-1.rq> ;
+              qt:data   <data.ttl> ] ;
+         mf:result  <result-unplus-1.srx>
+      .
+:unminus-1 a mf:QueryEvaluationTest ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+         mf:name    "Unary Minus" ;
+         rdfs:comment "-A in FILTER expressions" ;
+         mf:action
+            [ qt:query  <query-unminus-1.rq> ;
+              qt:data   <data.ttl> ] ;
+         mf:result  <result-unminus-1.srx>
+      .
+:plus-1 a mf:QueryEvaluationTest ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+         mf:name    "Addition" ;
+         rdfs:comment "A + B in FILTER expressions" ;
+         mf:action
+            [ qt:query  <query-plus-1.rq> ;
+              qt:data   <data.ttl> ] ;
+         mf:result  <result-plus-1.srx>
+      .
+:minus-1 a mf:QueryEvaluationTest ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+         mf:name    "Subtraction" ;
+         rdfs:comment "A - B in FILTER expressions" ;
+         mf:action
+            [ qt:query  <query-minus-1.rq> ;
+              qt:data   <data.ttl> ] ;
+         mf:result  <result-minus-1.srx>
+      .
+:mul-1 a mf:QueryEvaluationTest ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+         mf:name    "Multiplication" ;
+         rdfs:comment "A * B in FILTER expressions" ;
+         mf:action
+            [ qt:query  <query-mul-1.rq> ;
+              qt:data   <data.ttl> ] ;
+         mf:result  <result-mul-1.srx>
+      .
+
+:ge-1 a mf:QueryEvaluationTest ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+         mf:name    "Greater-than or equals" ;
+         rdfs:comment ">= in FILTER expressions" ;
+         mf:action
+            [ qt:query  <query-ge-1.rq> ;
+              qt:data   <data.ttl> ] ;
+         mf:result  <result-ge-1.srx>
+      .
+
+:le-1 a mf:QueryEvaluationTest ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+         mf:name    "Less-than or equals" ;
+         rdfs:comment "<= in FILTER expressions" ;
+         mf:action
+            [ qt:query  <query-le-1.rq> ;
+              qt:data   <data.ttl> ] ;
+         mf:result  <result-le-1.srx>
+      .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/sort/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "SORT" ;
+    rdfs:comment "Sorting test cases." ;
+    mf:entries
+    ( :dawg-sort-1 :dawg-sort-2 :dawg-sort-3 :dawg-sort-4
+    :dawg-sort-5 :dawg-sort-6 :dawg-sort-7 :dawg-sort-8
+    :dawg-sort-9 :dawg-sort-10 
+    :dawg-sort-numbers
+    :dawg-sort-builtin
+    :dawg-sort-function
+    ).
+
+:dawg-sort-1 a mf:QueryEvaluationTest;
+	 mf:name "sort-1" ;
+         rdfs:comment "Alphabetic sort (ascending) on untyped literals" ;
+         mf:action
+            [ qt:query  <query-sort-1.rq> ;
+              qt:data   <data-sort-1.ttl> ] ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:result  <result-sort-1.rdf> .
+
+:dawg-sort-2 a mf:QueryEvaluationTest;
+	 mf:name "sort-2" ;
+         rdfs:comment "Alphabetic sort (descending) on untyped literals" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-2.rq> ;
+              qt:data   <data-sort-1.ttl> ] ;
+         mf:result  <result-sort-2.rdf>.
+
+:dawg-sort-3 a mf:QueryEvaluationTest;
+	 mf:name "sort-3" ;
+         rdfs:comment "Sort on (possibly unbound) URIs" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-3.rq> ;
+              qt:data   <data-sort-3.ttl> ] ;
+         mf:result  <result-sort-3.rdf>.
+
+:dawg-sort-4 a mf:QueryEvaluationTest;
+	 mf:name "sort-4" ;
+         rdfs:comment "Sort on datatyped (integer) literals" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-4.rq> ;
+              qt:data   <data-sort-4.ttl> ] ;
+         mf:result  <result-sort-4.rdf>.
+
+:dawg-sort-5 a mf:QueryEvaluationTest;
+	 mf:name "sort-5" ;
+         rdfs:comment "Sort first on untyped literals (ascending), then on datatyped (integer) literals (descending" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-5.rq> ;
+              qt:data   <data-sort-4.ttl> ] ;
+         mf:result  <result-sort-5.rdf>.
+
+:dawg-sort-6 a mf:QueryEvaluationTest;
+	 mf:name "sort-6" ;
+         rdfs:comment "Sort on mixed result of uris and literals." ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-6.rq> ;
+              qt:data   <data-sort-6.ttl> ] ;
+         mf:result  <result-sort-6.rdf>.
+
+:dawg-sort-7 a mf:QueryEvaluationTest;
+	 mf:name "sort-7" ;
+         rdfs:comment "Sort on comparable mixed typed literals (integer and float)" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-4.rq> ;
+              qt:data   <data-sort-7.ttl> ] ;
+         mf:result  <result-sort-7.rdf>.
+
+:dawg-sort-8 a mf:QueryEvaluationTest;
+	 mf:name "sort-8" ;
+         rdfs:comment "Sort on several mixed values (bnode, uri, literal)" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-4.rq> ;
+              qt:data   <data-sort-8.ttl> ] ;
+         mf:result  <result-sort-8.rdf>.
+
+:dawg-sort-9 a mf:QueryEvaluationTest;
+	 mf:name "sort-9" ;
+         rdfs:comment "Alphabetic sort (ascending) on datatyped (string) literals" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-9.rq> ;
+              qt:data   <data-sort-9.ttl> ] ;
+         mf:result  <result-sort-9.rdf> .
+
+:dawg-sort-10 a mf:QueryEvaluationTest;
+	 mf:name "sort-10" ;
+         rdfs:comment "Alphabetic sort (descending) on datatyped (string) literals" ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/26-dawg-minutes> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-sort-10.rq> ;
+              qt:data   <data-sort-9.ttl> ] ;
+         mf:result  <result-sort-10.rdf>.
+
+:dawg-sort-numbers a mf:QueryEvaluationTest;
+	 mf:name "Expression sort" ;
+         rdfs:comment "Sort by a bracketted expression" ;
+         mf:action
+            [ qt:query  <query-sort-numbers.rq> ;
+              qt:data   <data-sort-numbers.ttl> ] ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    dawgt:approval dawgt:Approved ;
+         mf:result  <result-sort-numbers.ttl> .
+
+:dawg-sort-builtin a mf:QueryEvaluationTest;
+	 mf:name "Builtin sort" ;
+         rdfs:comment "Sort by a builtin operator" ;
+         mf:action
+            [ qt:query  <query-sort-builtin.rq> ;
+              qt:data   <data-sort-builtin.ttl> ] ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    dawgt:approval dawgt:Approved ;
+         mf:result  <result-sort-builtin.ttl> .
+
+:dawg-sort-function a mf:QueryEvaluationTest;
+	 mf:name "Function sort" ;
+         rdfs:comment "Sort by function invocation" ;
+         mf:action
+            [ qt:query  <query-sort-function.rq> ;
+              qt:data   <data-sort-function.ttl> ] ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    dawgt:approval dawgt:Approved ;
+         mf:result  <result-sort-function.ttl> .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "OPTIONAL FILTER" ;
+    rdfs:comment "OPTIONAL with inner and outer FILTERs" ;
+    mf:entries
+    (
+        :dawg-optional-filter-001
+        :dawg-optional-filter-002
+        :dawg-optional-filter-003
+        :dawg-optional-filter-004
+        ## Ambiguity in SPARQL 1.0
+        ##:dawg-optional-filter-005-simplified
+        ## Preferred reading and SPARQL 1.1:
+        :dawg-optional-filter-005-not-simplified
+    ).
+    
+:dawg-optional-filter-001 a mf:QueryEvaluationTest ;
+      mf:name    "OPTIONAL-FILTER" ;
+      rdfs:comment "FILTER inside an OPTIONAL does not block an entire solution" ;
+      mf:action
+          [ qt:query  <expr-1.rq> ;
+            qt:data   <data-1.ttl> ] ;
+      mf:result  <expr-1-result.ttl> ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+      dawgt:approval dawgt:Approved .
+
+:dawg-optional-filter-002 a mf:QueryEvaluationTest ;
+      mf:name    "OPTIONAL - Outer FILTER" ;
+      rdfs:comment "FILTER outside an OPTIONAL tests bound and unbound variables" ; 
+       mf:action
+          [ qt:query  <expr-2.rq> ;
+            qt:data   <data-1.ttl> ] ;
+       mf:result  <expr-2-result.ttl> ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved .
+
+
+:dawg-optional-filter-003 a mf:QueryEvaluationTest ;
+      mf:name    "OPTIONAL - Outer FILTER with BOUND" ;
+      rdfs:comment "Use !bound to only run outer FILTERs against variables bound in an OPTIONAL" ;
+       mf:action
+          [ qt:query  <expr-3.rq> ;
+            qt:data   <data-1.ttl> ] ;
+       mf:result  <expr-3-result.ttl> ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved .
+
+:dawg-optional-filter-004 a mf:QueryEvaluationTest ;
+      mf:name    "OPTIONAL - Inner FILTER with negative EBV for outer variables" ;
+      rdfs:comment "FILTER inside an OPTIONAL does not corrupt the entire solution" ;
+       mf:action
+          [ qt:query  <expr-4.rq> ;
+            qt:data   <data-1.ttl> ] ;
+       mf:result  <expr-4-result.ttl> ;
+       dawgt:approval dawgt:Approved ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007OctDec/att-0006/02-dawg-minutes.html> .
+
+:dawg-optional-filter-005-simplified a mf:QueryEvaluationTest ;
+      mf:name    "dawg-optional-filter-005-simplified";
+      rdfs:comment "Double curly braces get simplified to single curly braces early on, before filters are scoped";
+       mf:action
+          [ qt:query  <expr-5.rq> ;
+            qt:data   <data-1.ttl> ] ;
+       mf:result  <expr-5-result-simplified.ttl> .
+
+:dawg-optional-filter-005-not-simplified a mf:QueryEvaluationTest ;
+      mf:name    "dawg-optional-filter-005-not-simplified";
+      rdfs:comment "Double curly braces do NOT get simplified to single curly braces early on, before filters are scoped";
+       mf:action
+          [ qt:query  <expr-5.rq> ;
+            qt:data   <data-1.ttl> ] ;
+       mf:result  <expr-5-result-not-simplified.ttl> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/boolean-effective-value/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Boolean Effective Value" ;
+    rdfs:comment "Test of boolean expressions" ;
+    mf:entries
+    ( :dawg-boolean-literal :dawg-bev-1 :dawg-bev-2 :dawg-bev-3 :dawg-bev-4 :dawg-bev-5 :dawg-bev-6 ) .
+
+:dawg-boolean-literal a mf:QueryEvaluationTest ;
+       mf:name    "Test literal 'true'" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+       mf:action
+          [ qt:query  <query-boolean-literal.rq> ;
+            qt:data   <data-1.ttl> ] ;
+      mf:result  <result-boolean-literal.ttl> .
+
+:dawg-bev-1 a mf:QueryEvaluationTest ;
+       mf:name    "Test 'boolean effective value' - true" ;
+       rdfs:comment "Non-zero numerics, non-empty strings, and the true boolean have an EBV of true" ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved ;
+       mf:action
+          [ qt:query  <query-bev-1.rq> ;
+            qt:data   <data-1.ttl> ] ;
+      mf:result  <result-bev-1.ttl> .
+
+:dawg-bev-2 a mf:QueryEvaluationTest ;
+        mf:name    "Test 'boolean effective value' - false" ;
+       rdfs:comment "Zero-valued numerics, the empty string, and the false boolean have an EBV of false" ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-bev-2.rq> ;
+              qt:data   <data-1.ttl> ] ;
+        mf:result  <result-bev-2.ttl>
+      .
+:dawg-bev-3 a mf:QueryEvaluationTest ;
+        mf:name    "Test 'boolean effective value' - &&" ;
+       rdfs:comment "The && operator takes the EBV of its operands" ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-bev-3.rq> ;
+              qt:data   <data-1.ttl> ] ;
+        mf:result  <result-bev-3.ttl> .
+      
+:dawg-bev-4 a mf:QueryEvaluationTest ;
+        mf:name    "Test 'boolean effective value' - ||" ;
+       rdfs:comment "The || operator takes the EBV of its operands" ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-bev-4.rq> ;
+              qt:data   <data-1.ttl> ] ;
+        mf:result  <result-bev-4.ttl> .
+      
+:dawg-bev-5 a mf:QueryEvaluationTest ;
+        mf:name    "Test 'boolean effective value' - optional" ;
+       rdfs:comment "The EBV of an unbound value  or a literal with an unknown datatype is a type error, which eliminates the solution in question" ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-bev-5.rq> ;
+              qt:data   <data-2.ttl> ] ;
+        mf:result  <result-bev-5.ttl> .
+      
+:dawg-bev-6 a mf:QueryEvaluationTest ;
+        mf:name    "Test 'boolean effective value' - unknown types" ;
+        rdfs:comment "Negating a type error is still a type error" ;
+       dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> ;
+       dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <query-bev-6.rq> ;
+              qt:data   <data-2.ttl> ] ;
+        mf:result  <result-bev-6.ttl> .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bound/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "bound" ;
+    rdfs:comment "DAWG bound test cases" ;
+    mf:entries 
+    (:dawg-bound-query-001) .
+
+:dawg-bound-query-001 a mf:QueryEvaluationTest ;
+  mf:name    "dawg-bound-query-001" ;
+    rdfs:comment
+	"BOUND test case." ;
+    mf:action
+	[ qt:query  <bound1.rq> ;
+	  qt:data   <data.ttl> ] ;
+    mf:result  <bound1-result.ttl> ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+    dawgt:approval dawgt:Approved .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "SPARQL Query tests" ;
+    mf:include (
+        <basic/manifest.ttl>
+        <triple-match/manifest.ttl>
+
+        <open-world/manifest.ttl>
+        <algebra/manifest.ttl>
+        <bnode-coreference/manifest.ttl>
+
+        <optional/manifest.ttl>
+        <optional-filter/manifest.ttl>
+        <graph/manifest.ttl>
+        <dataset/manifest.ttl>
+
+        <type-promotion/manifest.ttl>
+        <cast/manifest.ttl>
+        <boolean-effective-value/manifest.ttl>
+        <bound/manifest.ttl>
+        <expr-builtin/manifest.ttl>
+        <expr-ops/manifest.ttl>
+        <expr-equals/manifest.ttl>
+        <regex/manifest.ttl>
+        <i18n/manifest.ttl>
+
+        <construct/manifest.ttl>
+        <ask/manifest.ttl>
+        <distinct/manifest.ttl>
+        <sort/manifest.ttl>
+        <solution-seq/manifest.ttl>
+
+        <reduced/manifest.ttl>
+
+        <syntax-sparql1/manifest.ttl>
+        <syntax-sparql2/manifest.ttl>
+        <syntax-sparql3/manifest.ttl>
+        <syntax-sparql4/manifest.ttl>
+        <syntax-sparql5/manifest.ttl>
+    ).
+
+# $Id: manifest.ttl,v 1.3 2005/10/25 09:38:08 aseaborne Exp $
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/i18n/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "I18N" ;
+    mf:entries
+    (
+        :kanji-1
+        :kanji-2
+        :normalization-1
+        :normalization-2
+        :normalization-3
+    ) .
+
+
+
+
+:kanji-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "kanji-01" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+        [ qt:data   <kanji.ttl> ;
+          qt:query  <kanji-01.rq> ] ;
+    mf:result  <kanji-01-results.ttl>
+    .
+      
+
+:kanji-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "kanji-02" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+        [ qt:data   <kanji.ttl> ;
+          qt:query  <kanji-02.rq> ] ;
+    mf:result  <kanji-02-results.ttl>
+    .
+
+
+:normalization-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "normalization-01" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+    mf:action
+        [ qt:data   <normalization-01.ttl> ;
+          qt:query  <normalization-01.rq> ] ;
+    mf:result  <normalization-01-results.ttl>
+    .
+    
+:normalization-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "normalization-02" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    rdfs:comment
+        "Example 1 from http://lists.w3.org/Archives/Public/public-rdf-dawg/2005JulSep/0096" ;
+    mf:action
+        [ qt:data   <normalization-02.ttl> ;
+          qt:query  <normalization-02.rq> ] ;
+    mf:result  <normalization-02-results.ttl>
+    .
+
+:normalization-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "normalization-03" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    rdfs:comment
+        "Example 2 from http://lists.w3.org/Archives/Public/public-rdf-dawg/2005JulSep/0096" ;
+    mf:action
+        [ qt:data   <normalization-03.ttl> ;
+          qt:query  <normalization-03.rq> ] ;
+    mf:result  <normalization-03-results.ttl>
+    .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/ask/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "ASK" ;
+    mf:entries
+    ( 
+      :ask-1
+      :ask-4
+      :ask-7
+      :ask-8
+    ) .
+
+
+:ask-1 rdf:type mf:QueryEvaluationTest ;
+      qt:queryForm qt:QueryAsk ;
+      mf:name    "ASK-1 (SPARQL XML results)" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+      mf:action
+         [ qt:query  <ask-1.rq> ;
+           qt:data   <data.ttl> ] ;
+      mf:result  <ask-1.srx>
+      .
+
+:ask-4 rdf:type mf:QueryEvaluationTest ;
+      qt:queryForm qt:QueryAsk ;
+      mf:name    "ASK-4 (SPARQL XML results)" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+      mf:action
+         [ qt:query  <ask-4.rq> ;
+           qt:data   <data.ttl> ] ;
+      mf:result  <ask-4.srx>
+      .
+
+:ask-7 rdf:type mf:QueryEvaluationTest ;
+      qt:queryForm qt:QueryAsk ;
+      mf:name    "ASK-7 (SPARQL XML results)" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+      mf:action
+         [ qt:query  <ask-7.rq> ;
+           qt:data   <data.ttl> ] ;
+      mf:result  <ask-7.srx>
+      .
+
+:ask-8 rdf:type mf:QueryEvaluationTest ;
+      qt:queryForm qt:QueryAsk ;
+      mf:name    "ASK-8 (SPARQL XML results)" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+      mf:action
+         [ qt:query  <ask-8.rq> ;
+           qt:data   <data.ttl> ] ;
+      mf:result  <ask-8.srx>
+      .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/bnode-coreference/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+[]  rdf:type mf:Manifest ;
+    rdfs:label "bnode co-reference" ;
+    rdfs:comment "DAWG test cases on bnode co-reference" ;
+    mf:entries
+    ( :dawg-bnode-coref-001).
+   
+:dawg-bnode-coref-001 a mf:QueryEvaluationTest ;
+    mf:name    "dawg-bnode-coreference" ;
+    rdfs:comment
+	"Query results must maintain bnode co-references in the dataset" ;
+    mf:action
+	[ qt:query  <query.rq> ;
+	  qt:data   <data.ttl> ] ;
+    mf:result  <result.ttl> ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+    dawgt:approval dawgt:Approved .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:  <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "dataset" ;
+    rdfs:comment "Tests for GRAPH" ;
+    mf:entries
+    (
+	:dawg-dataset-01
+	:dawg-dataset-02
+	:dawg-dataset-03
+	:dawg-dataset-04
+	:dawg-dataset-05
+	:dawg-dataset-06
+	:dawg-dataset-07
+	:dawg-dataset-08
+	:dawg-dataset-11
+	:dawg-dataset-09b
+	:dawg-dataset-10b
+	:dawg-dataset-12b
+   ).
+
+:dawg-dataset-01  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-01" ;
+    rdfs:comment  "Data: default dataset / Query: default dataset" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query  <dataset-01.rq> ] ;
+    mf:result  <dataset-01.ttl> ;
+    .
+
+:dawg-dataset-02  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-02" ;
+    rdfs:comment  "Data: named dataset / Query: default dataset" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query       <dataset-02.rq> ] ;
+    mf:result  <dataset-02.ttl> ;
+    .
+
+:dawg-dataset-03  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-03" ;
+    rdfs:comment  "Data: named dataset / Query: named dataset dataset" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query       <dataset-03.rq> ] ;
+    mf:result  <dataset-03.ttl> ;
+    .
+
+:dawg-dataset-04  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-04" ;
+    rdfs:comment  "Data: named dataset / Query: default dataset" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query       <dataset-04.rq> ] ;
+    mf:result  <dataset-04.ttl> ;
+    .
+
+:dawg-dataset-05  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-05" ;
+    rdfs:comment  "Data: default and named / Query: default dataset" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <dataset-05.rq> ] ;
+    mf:result  <dataset-05.ttl> ;
+    .
+
+:dawg-dataset-06  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-06" ;
+    rdfs:comment  "Data: default and named / Query: named dataset" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <dataset-06.rq> ] ;
+    mf:result  <dataset-06.ttl> ;
+    .
+
+:dawg-dataset-07  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-07" ;
+    rdfs:comment  "Data: default and named / Query: all data by UNION" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <dataset-07.rq> ] ;
+    mf:result  <dataset-07.ttl> ;
+    .
+
+:dawg-dataset-08  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-08" ;
+    rdfs:comment  "Data: default and named / Query: common subjects" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <dataset-08.rq> ] ;
+    mf:result  <dataset-08.ttl> ;
+    .
+
+:dawg-dataset-09b  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-09b" ;
+    rdfs:comment  "Data: default and named (bnodes) / Query: common subjects" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/10/09-dawg-minutes.html> ;
+    mf:action
+            [ qt:query        <dataset-09b.rq> ] ;
+    mf:result  <dataset-09.ttl> ;
+    .
+
+:dawg-dataset-10b  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-10b" ;
+    rdfs:comment  "Data: default and named (same data, with bnodes) / Query: common subjects" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/10/09-dawg-minutes.html> ;
+    mf:action
+            [ qt:query        <dataset-10b.rq> ] ;
+    mf:result  <dataset-10.ttl> ;
+    .
+
+:dawg-dataset-11  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-11" ;
+    rdfs:comment  "Data: default and named (several) / Query: get everything" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+    mf:action
+            [ qt:query        <dataset-11.rq> ] ;
+    mf:result  <dataset-11.ttl> ;
+    .
+
+:dawg-dataset-12b  rdf:type mf:QueryEvaluationTest ;
+	mf:name "dataset-12b" ;
+    rdfs:comment  "Data: default (several) and named (several) / Query: get everything" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/10/09-dawg-minutes.html> ;
+    mf:action
+            [ qt:query        <dataset-12b.rq> ] ;
+    mf:result  <dataset-12.ttl> ;
+    .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "DISTINCT" ;
+    mf:entries
+    ( 
+      :no-distinct-1
+      :distinct-1
+      :no-distinct-2
+      :distinct-2
+      :no-distinct-3
+      :distinct-3
+      :no-distinct-4
+      :distinct-4
+      :no-distinct-9
+      :distinct-9
+      :distinct-star-1
+    ) .
+
+:distinct-star-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "SELECT DISTINCT *" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+            [ qt:query <distinct-star-1.rq> ;
+              qt:data <data-star.ttl> ] ;
+    mf:result <distinct-star-1.srx> .
+
+:no-distinct-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Numbers: No distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <no-distinct-1.rq> ;
+              qt:data   <data-num.ttl> ] ;
+    mf:result  <no-distinct-num.srx> .
+
+:distinct-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Numbers: Distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <distinct-1.rq> ;
+              qt:data   <data-num.ttl> ] ;
+    mf:result  <distinct-num.srx> .
+
+:no-distinct-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Strings: No distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <no-distinct-1.rq> ;
+              qt:data   <data-str.ttl> ] ;
+    mf:result  <no-distinct-str.srx> .
+
+:distinct-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Strings: Distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <distinct-1.rq> ;
+              qt:data   <data-str.ttl> ] ;
+    mf:result  <distinct-str.srx> .
+
+:no-distinct-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Nodes: No distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <no-distinct-1.rq> ;
+              qt:data   <data-node.ttl> ] ;
+    mf:result  <no-distinct-node.srx> .
+
+:distinct-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Nodes: Distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <distinct-1.rq> ;
+              qt:data   <data-node.ttl> ] ;
+    mf:result  <distinct-node.srx> .
+
+:no-distinct-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Opt: No distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <no-distinct-2.rq> ;
+              qt:data   <data-opt.ttl> ] ;
+    mf:result  <no-distinct-opt.srx> .
+
+:distinct-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Opt: Distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <distinct-2.rq> ;
+              qt:data   <data-opt.ttl> ] ;
+    mf:result  <distinct-opt.srx> .
+
+
+
+:no-distinct-9 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "All: No distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <no-distinct-1.rq> ;
+              ##qt:data   <data-num.ttl> , <data-str.ttl> , <data-node.ttl> 
+              qt:data <data-all.ttl>
+            ] ;
+    mf:result  <no-distinct-all.srx> .
+
+:distinct-9 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "All: Distinct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+    mf:action
+            [ qt:query  <distinct-1.rq> ;
+              ##qt:data   <data-num.ttl> , <data-str.ttl> , <data-node.ttl> 
+              qt:data <data-all.ttl>
+            ] ;
+    mf:result  <distinct-all.srx> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/solution-seq/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Solution Sequence" ;
+    mf:entries
+    ( 
+        :limit-1
+        :limit-2
+        :limit-3
+        :limit-4
+        :offset-1
+        :offset-2
+        :offset-3
+        :offset-4
+        :slice-1
+        :slice-2
+        :slice-3
+        :slice-4
+        :slice-5
+    ) .
+    
+
+:limit-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Limit 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-01.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-01.ttl> .
+
+:limit-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Limit 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-02.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-02.ttl> .
+
+:limit-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Limit 3" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-03.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-03.ttl> .
+
+:limit-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Limit 4" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-04.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-04.ttl> .
+
+:offset-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Offset 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-10.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-10.ttl> .
+
+:offset-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Offset 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-11.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-11.ttl> .
+
+:offset-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Offset 3" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-12.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-12.ttl> .
+
+:offset-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Offset 4" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-13.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-13.ttl> .
+
+:slice-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Slice 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-20.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-20.ttl> .
+
+:slice-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Slice 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-21.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-21.ttl> .
+
+:slice-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Slice 3" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-22.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-22.ttl> .
+
+:slice-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Slice 4" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-23.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-23.ttl> .
+
+:slice-5 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Slice 5" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes#item03> ;
+    mf:action [ qt:query  <slice-24.rq> ; qt:data <data.ttl> ] ;
+    mf:result <slice-results-24.ttl> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "OPTIONAL" ;
+    rdfs:comment "OPTIONAL test cases" ;
+    mf:entries
+    (:dawg-optional-001 
+     :dawg-optional-002 
+     :dawg-union-001 
+     :dawg-optional-complex-1
+     :dawg-optional-complex-2
+     :dawg-optional-complex-3
+     :dawg-optional-complex-4 ).
+
+:dawg-optional-complex-1 a mf:QueryEvaluationTest ;
+    mf:name    "Complex optional semantics: 1" ;
+    rdfs:comment
+            "Complex optional: LeftJoin(LeftJoin(BGP(..),{..}),Join(BGP(..),Union(..,..)))" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    mf:action
+    [ qt:query  <q-opt-complex-1.rq> ;
+      qt:data   <complex-data-1.ttl> ] ;
+    mf:result  <result-opt-complex-1.ttl> .
+
+:dawg-optional-complex-2 a mf:QueryEvaluationTest ;
+    mf:name    "Complex optional semantics: 2" ;
+    rdfs:comment
+            "Complex optional: LeftJoin(Join(BGP(..),Graph(var,{..})),Union(..,..))" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    mf:action
+    [ qt:query  <q-opt-complex-2.rq> ;
+      qt:graphData <complex-data-1.ttl>;
+      qt:data   <complex-data-2.ttl> ] ;
+    mf:result  <result-opt-complex-2.ttl> .
+
+:dawg-optional-complex-3 a mf:QueryEvaluationTest ;
+    mf:name    "Complex optional semantics: 3" ;
+    rdfs:comment
+            "Complex optional: LeftJoin(Join(BGP(..),Graph(var,{..})),LeftJoin(BGP(..),{..}))" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    mf:action
+    [ qt:query  <q-opt-complex-3.rq> ;
+      qt:graphData <complex-data-1.ttl>;
+      qt:data   <complex-data-2.ttl> ] ;
+    mf:result  <result-opt-complex-3.ttl> .
+
+:dawg-optional-complex-4 a mf:QueryEvaluationTest ;
+    mf:name    "Complex optional semantics: 4" ;
+    rdfs:comment
+            "Complex optional: LeftJoin(Join(BGP(..),Union(..,..)),Join(BGP(..),Graph(varOrIRI,{..})))" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    mf:action
+    [ qt:query  <q-opt-complex-4.rq> ;
+      qt:graphData <complex-data-1.ttl>;
+      qt:data   <complex-data-2.ttl> ] ;
+    mf:result  <result-opt-complex-4.ttl> .
+
+:dawg-optional-001 a mf:QueryEvaluationTest ;
+    mf:name    "One optional clause" ;
+    rdfs:comment
+            "One optional clause" ;
+    mf:action
+	[ qt:query  <q-opt-1.rq> ;
+	  qt:data   <data.ttl> ] ;
+    mf:result  <result-opt-1.ttl> ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+    dawgt:approval dawgt:Approved .
+
+
+:dawg-optional-002 a mf:QueryEvaluationTest ;
+    mf:name    "Two optional clauses" ;
+    rdfs:comment
+	"One optional clause" ;
+    mf:action
+	[ qt:query  <q-opt-2.rq> ;
+	  qt:data   <data.ttl> ] ;
+    mf:result  <result-opt-2.ttl> ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+    dawgt:approval dawgt:Approved .
+
+
+:dawg-union-001 a mf:QueryEvaluationTest ;
+    mf:name     "Union is not optional" ;
+    rdfs:comment "Union is not optional" ;
+    mf:action
+        [ qt:query  <q-opt-3.rq> ;
+          qt:data   <data.ttl> ] ;
+    mf:result  <result-opt-3.ttl> ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0006> ;
+    dawgt:approval dawgt:Approved .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/construct/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:  <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+[]  rdf:type mf:Manifest ;
+    rdfs:label "CONSTRUCT" ;
+    rdfs:comment "Some DAWG test cases on the CONSTRUCT result form" ;
+    mf:entries
+    ( 
+      :construct-1
+      :construct-2
+      :construct-3
+      :construct-4
+      :construct-5
+    ) .
+
+:construct-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "dawg-construct-identity" ;
+    qt:queryForm qt:QueryConstruct ;
+    rdfs:comment "Graph equivalent result graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query  <query-ident.rq> ;
+              qt:data   <data-ident.ttl> ] ;
+    mf:result  <result-ident.ttl> ;
+    .
+
+:construct-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "dawg-construct-subgraph" ;
+    qt:queryForm qt:QueryConstruct ;
+    rdfs:comment "Result subgraph of original graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query  <query-subgraph.rq> ;
+              qt:data   <data-ident.ttl> ] ;
+    mf:result  <result-subgraph.ttl> ;
+    .
+
+:construct-3 rdf:type mf:QueryEvaluationTest ;
+     mf:name    "dawg-construct-reification-1" ;
+    qt:queryForm qt:QueryConstruct ;
+     rdfs:comment "Reification of the default graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+     mf:action
+            [ qt:query  <query-reif-1.rq> ;
+              qt:data   <data-reif.ttl> ] ;
+     mf:result  <result-reif.ttl> ;
+    .
+
+:construct-4 rdf:type mf:QueryEvaluationTest ;
+     mf:name    "dawg-construct-reification-2" ;
+    qt:queryForm qt:QueryConstruct ;
+     rdfs:comment "Reification of the default graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+     mf:action
+            [ qt:query  <query-reif-2.rq> ;
+              qt:data   <data-reif.ttl> ] ;
+     mf:result  <result-reif.ttl> ;
+    .
+
+:construct-5 rdf:type mf:QueryEvaluationTest ;
+     mf:name    "dawg-construct-optional" ;
+    qt:queryForm qt:QueryConstruct ;
+     rdfs:comment "Reification of the default graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+     mf:action
+            [ qt:query  <query-construct-optional.rq> ;
+              qt:data   <data-opt.ttl> ] ;
+     mf:result  <result-construct-optional.ttl> ;
+    .
+# $Id: manifest.ttl,v 1.7 2007/09/26 14:28:52 lfeigenb Exp $
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/type-promotion/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Type Promotion" ;
+    rdfs:comment "Type Promotion Tests" ;
+    mf:entries
+    (
+      :type-promotion-01
+      :type-promotion-02
+      :type-promotion-03
+      :type-promotion-04
+      :type-promotion-05
+      :type-promotion-06
+      :type-promotion-07
+      :type-promotion-08
+      :type-promotion-09
+      :type-promotion-10
+      :type-promotion-11
+      :type-promotion-12
+      :type-promotion-13
+      :type-promotion-14
+      :type-promotion-15
+      :type-promotion-16
+      :type-promotion-17
+      :type-promotion-18
+      :type-promotion-19
+      :type-promotion-20
+      :type-promotion-21
+      :type-promotion-22
+      :type-promotion-23
+      :type-promotion-24
+      :type-promotion-25
+      :type-promotion-26
+      :type-promotion-27
+      :type-promotion-28
+      :type-promotion-29
+      :type-promotion-30
+    ) .
+
+
+:type-promotion-01 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-double-double" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-double-double.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-02 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-double-float" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-double-float.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-03 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-double-decimal" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-double-decimal.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-04 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-float-float" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-float-float.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-05 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-float-decimal" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-float-decimal.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-06 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-decimal-decimal" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-decimal-decimal.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-07 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-integer-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-integer-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-08 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-nonPositiveInteger-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-nonPositiveInteger-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-09 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-negativeInteger-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-negativeInteger-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-10 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-long-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-long-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-11 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-int-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-int-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-12 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-13 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-byte-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-byte-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-14 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-nonNegativeInteger-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-nonNegativeInteger-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-15 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-unsignedLong-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-unsignedLong-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-16 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-unsignedInt-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-unsignedInt-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-17 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-unsignedShort-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-unsignedShort-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-18 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-unsignedByte-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-unsignedByte-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-19 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-positiveInteger-short" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-positiveInteger-short.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-20 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-double" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-double.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-21 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-float" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-float.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-22 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-decimal" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-decimal.rq> ] ;
+        mf:result  <true.ttl> 
+     .
+:type-promotion-23 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-short-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-short-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+:type-promotion-24 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-byte-short-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-byte-short-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+:type-promotion-25 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-long-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-long-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+:type-promotion-26 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-int-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-int-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+:type-promotion-27 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-short-byte-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-short-byte-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+:type-promotion-28 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-double-float-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-double-float-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+:type-promotion-29 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-double-decimal-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-double-decimal-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+:type-promotion-30 rdf:type mf:QueryEvaluationTest ;
+        mf:name    "tP-float-decimal-fail" ;
+        qt:queryForm qt:QueryAsk ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/07/17-dawg-minutes> ;
+        rdfs:comment
+            "Positive test: product of type promotion within the xsd:decimal type tree." ;
+        mf:action
+            [ qt:data   <tP.ttl> ;
+              qt:query  <tP-float-decimal-fail.rq> ] ;
+        mf:result  <false.ttl> 
+     .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/triple-match/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Triple Match" ;
+    rdfs:comment "Some simple DAWG query evaluation test cases" ;
+    mf:entries
+    (
+	:dawg-triple-pattern-001 
+	:dawg-triple-pattern-002 
+	:dawg-triple-pattern-003 
+	:dawg-triple-pattern-004 
+   ).
+
+:dawg-triple-pattern-001  a mf:QueryEvaluationTest ;
+	mf:name "dawg-triple-pattern-001" ;
+        rdfs:comment
+            "Simple triple match" ;
+        mf:action
+            [ qt:query  <dawg-tp-01.rq> ;
+              qt:data   <data-01.ttl> ] ;
+        mf:result  <result-tp-01.ttl> ;
+	dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2005JanMar/0358> ;
+        dawgt:approval dawgt:Approved .
+
+:dawg-triple-pattern-002  a mf:QueryEvaluationTest ;
+	mf:name "dawg-triple-pattern-002" ;
+        rdfs:comment
+            "Simple triple match" ;
+        mf:action
+            [ qt:query  <dawg-tp-02.rq> ;
+              qt:data   <data-01.ttl> ] ;
+        mf:result  <result-tp-02.ttl> ;
+	dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2005JanMar/0358> ;
+        dawgt:approval dawgt:Approved .
+    
+:dawg-triple-pattern-003  a mf:QueryEvaluationTest ;
+	mf:name "dawg-triple-pattern-003" ;
+        rdfs:comment
+            "Simple triple match - repeated variable" ;
+        mf:action
+            [ qt:query  <dawg-tp-03.rq> ;
+              qt:data   <data-02.ttl> ] ;
+        mf:result  <result-tp-03.ttl> ;
+	dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2005JanMar/0358> ;
+        dawgt:approval dawgt:Approved .
+
+:dawg-triple-pattern-004  a mf:QueryEvaluationTest ;
+	mf:name "dawg-triple-pattern-004" ;
+        rdfs:comment
+            "Simple triple match - two triples, common variable" ;
+        mf:action
+            [ qt:query  <dawg-tp-04.rq> ;
+              qt:data   <dawg-data-01.ttl> ] ;
+        mf:result  <result-tp-04.ttl> ;
+	dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2005JanMar/0358> ;
+        dawgt:approval dawgt:Approved .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql2/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Syntax 2" ;
+    rdfs:comment "Syntax tests syntax-sparql2" ;
+    mf:entries
+    ( :syntax-general-01 :syntax-general-02 :syntax-general-03
+    :syntax-general-04 :syntax-general-05 :syntax-general-06
+    :syntax-general-07 :syntax-general-08 :syntax-general-09
+    :syntax-general-10 :syntax-general-11 :syntax-general-12
+    :syntax-general-13 :syntax-general-14 :syntax-keywords-01
+    :syntax-keywords-02 :syntax-keywords-03 :syntax-lists-01
+    :syntax-lists-02 :syntax-lists-03 :syntax-lists-04
+    :syntax-lists-05 :syntax-bnode-01 :syntax-bnode-02
+    :syntax-bnode-03 :syntax-function-01 :syntax-function-02
+    :syntax-function-03 :syntax-function-04 :syntax-form-select-01
+    :syntax-form-select-02 :syntax-form-ask-02
+    :syntax-form-construct01 :syntax-form-construct02
+    :syntax-form-construct03 :syntax-form-construct04
+    :syntax-form-construct06 :syntax-form-describe01
+    :syntax-form-describe02 :syntax-dataset-01 :syntax-dataset-02
+    :syntax-dataset-03 :syntax-dataset-04 :syntax-graph-01
+    :syntax-graph-02 :syntax-graph-03 :syntax-graph-04
+    :syntax-graph-05 :syntax-esc-01 :syntax-esc-02 :syntax-esc-03
+    :syntax-esc-04 :syntax-esc-05 ) .
+
+:syntax-general-01  mf:name  "syntax-general-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-02  mf:name  "syntax-general-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-03  mf:name  "syntax-general-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-04  mf:name  "syntax-general-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-05  mf:name  "syntax-general-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-06  mf:name  "syntax-general-06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-06.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-07  mf:name  "syntax-general-07.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-07.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-08  mf:name  "syntax-general-08.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-08.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-09  mf:name  "syntax-general-09.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-09.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-10  mf:name  "syntax-general-10.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-10.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-11  mf:name  "syntax-general-11.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-11.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-12  mf:name  "syntax-general-12.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-12.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-13  mf:name  "syntax-general-13.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-13.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-general-14  mf:name  "syntax-general-14.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-general-14.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-keywords-01  mf:name  "syntax-keywords-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-keywords-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-keywords-02  mf:name  "syntax-keywords-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-keywords-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-keywords-03  mf:name  "syntax-keywords-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-keywords-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lists-01  mf:name  "syntax-lists-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lists-02  mf:name  "syntax-lists-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lists-03  mf:name  "syntax-lists-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lists-04  mf:name  "syntax-lists-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lists-05  mf:name  "syntax-lists-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-bnode-01  mf:name  "syntax-bnode-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnode-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-bnode-02  mf:name  "syntax-bnode-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnode-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-bnode-03  mf:name  "syntax-bnode-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnode-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-function-01  mf:name  "syntax-function-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-function-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-function-02  mf:name  "syntax-function-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-function-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-function-03  mf:name  "syntax-function-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-function-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-function-04  mf:name  "syntax-function-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-function-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-select-01  mf:name  "syntax-form-select-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-select-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-select-02  mf:name  "syntax-form-select-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-select-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-ask-02  mf:name  "syntax-form-ask-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-ask-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-construct01  mf:name  "syntax-form-construct01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-construct01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-construct02  mf:name  "syntax-form-construct02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-construct02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-construct03  mf:name  "syntax-form-construct03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-construct03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-construct04  mf:name  "syntax-form-construct04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-construct04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-construct06  mf:name  "syntax-form-construct06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-construct06.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-describe01  mf:name  "syntax-form-describe01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-describe01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-form-describe02  mf:name  "syntax-form-describe02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-form-describe02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-dataset-01  mf:name  "syntax-dataset-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-dataset-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-dataset-02  mf:name  "syntax-dataset-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-dataset-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-dataset-03  mf:name  "syntax-dataset-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-dataset-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-dataset-04  mf:name  "syntax-dataset-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-dataset-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-graph-01  mf:name  "syntax-graph-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-graph-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-graph-02  mf:name  "syntax-graph-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-graph-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-graph-03  mf:name  "syntax-graph-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-graph-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-graph-04  mf:name  "syntax-graph-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-graph-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-graph-05  mf:name  "syntax-graph-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-graph-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-esc-01  mf:name  "syntax-esc-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-esc-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-esc-02  mf:name  "syntax-esc-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-esc-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-esc-03  mf:name  "syntax-esc-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-esc-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-esc-04  mf:name  "syntax-esc-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-esc-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-esc-05  mf:name  "syntax-esc-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-esc-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/graph/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:  <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "GRAPH" ;
+    rdfs:comment "Tests for GRAPH" ;
+    mf:entries
+    (
+	:dawg-graph-01
+	:dawg-graph-02
+	:dawg-graph-03
+	:dawg-graph-04
+	:dawg-graph-05
+	:dawg-graph-06
+	:dawg-graph-07
+	:dawg-graph-08
+	:dawg-graph-09
+	:dawg-graph-10b
+	:dawg-graph-11
+   ).
+
+:dawg-graph-01  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-01" ;
+    rdfs:comment  "Data: default graph / Query: default graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query  <graph-01.rq> ;
+              qt:data   <data-g1.ttl> ;
+            ] ;
+    mf:result  <graph-01.ttl> ;
+    .
+
+:dawg-graph-02  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-02" ;
+    rdfs:comment  "Data: named graph / Query: default graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query       <graph-02.rq> ;
+              qt:graphData   <data-g1.ttl> ;
+            ] ;
+    mf:result  <graph-02.ttl> ;
+    .
+
+:dawg-graph-03  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-03" ;
+    rdfs:comment  "Data: named graph / Query: named graph graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query       <graph-03.rq> ;
+              qt:graphData   <data-g1.ttl> ;
+            ] ;
+    mf:result  <graph-03.ttl> ;
+    .
+
+:dawg-graph-04  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-04" ;
+    rdfs:comment  "Data: named graph / Query: default graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query       <graph-04.rq> ;
+              qt:data   <data-g1.ttl> ;
+            ] ;
+    mf:result  <graph-04.ttl> ;
+    .
+
+:dawg-graph-05  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-05" ;
+    rdfs:comment  "Data: default and named / Query: default graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <graph-05.rq> ;
+              qt:data         <data-g1.ttl> ;
+              qt:graphData    <data-g2.ttl> ;
+            ] ;
+    mf:result  <graph-05.ttl> ;
+    .
+
+:dawg-graph-06  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-06" ;
+    rdfs:comment  "Data: default and named / Query: named graph" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <graph-06.rq> ;
+              qt:data         <data-g1.ttl> ;
+              qt:graphData    <data-g2.ttl> ;
+            ] ;
+    mf:result  <graph-06.ttl> ;
+    .
+
+:dawg-graph-07  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-07" ;
+    rdfs:comment  "Data: default and named / Query: all data by UNION" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <graph-07.rq> ;
+              qt:data         <data-g1.ttl> ;
+              qt:graphData    <data-g2.ttl> ;
+            ] ;
+    mf:result  <graph-07.ttl> ;
+    .
+
+:dawg-graph-08  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-08" ;
+    rdfs:comment  "Data: default and named / Query: common subjects" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <graph-08.rq> ;
+              qt:data         <data-g1.ttl> ;
+              qt:graphData    <data-g2.ttl> ;
+            ] ;
+    mf:result  <graph-08.ttl> ;
+    .
+
+:dawg-graph-09  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-09" ;
+    rdfs:comment  "Data: default and named (bnodes) / Query: common subjects" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <graph-09.rq> ;
+              qt:data         <data-g3.ttl> ;
+              qt:graphData    <data-g4.ttl> ;
+            ] ;
+    mf:result  <graph-09.ttl> ;
+    .
+
+:dawg-graph-10b  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-10b" ;
+    rdfs:comment  "Data: default and named (same data, with bnodes) / Query: common subjects" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/10/09-dawg-minutes.html> ;
+    mf:action
+            [ qt:query        <graph-10.rq> ;
+              qt:data         <data-g3.ttl> ;
+              qt:graphData    <data-g3-dup.ttl> ;
+            ] ;
+    mf:result  <graph-10.ttl> ;
+    .
+
+:dawg-graph-11  rdf:type mf:QueryEvaluationTest ;
+	mf:name "graph-11" ;
+    rdfs:comment  "Data: default and named (several) / Query: get everything" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0047/31-dawg-minutes> ;
+    mf:action
+            [ qt:query        <graph-11.rq> ;
+              qt:data         <data-g1.ttl> ;
+              qt:graphData    <data-g1.ttl> ;
+              qt:graphData    <data-g2.ttl> ;
+              qt:graphData    <data-g3.ttl> ;
+              qt:graphData    <data-g4.ttl> ;
+            ] ;
+    mf:result  <graph-11.ttl> ;
+    .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "REGEX" ;
+    rdfs:comment "SPARQL regex test cases" ;
+    mf:entries (
+      :dawg-regex-001 :dawg-regex-002 :dawg-regex-003 :dawg-regex-004
+    ).
+
+:dawg-regex-001 a mf:QueryEvaluationTest ;
+      mf:name    "regex-query-001" ;
+      dawgt:approval dawgt:Approved ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0029.html> ;
+      rdfs:comment
+            "Simple unanchored match test" ;
+        mf:action
+            [ qt:query  <regex-query-001.rq> ;
+              qt:data   <regex-data-01.ttl> ] ;
+        mf:result  <regex-result-001.ttl> .
+
+:dawg-regex-002 a mf:QueryEvaluationTest ;
+      mf:name    "regex-query-002" ;
+      dawgt:approval dawgt:Approved ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0029.html> ;
+      rdfs:comment
+          "Case insensitive unanchored match test" ;
+      mf:action
+          [ qt:query  <regex-query-002.rq> ;
+            qt:data   <regex-data-01.ttl> ] ;
+      mf:result  <regex-result-002.ttl> .
+
+:dawg-regex-003 a mf:QueryEvaluationTest ;
+      mf:name    "regex-query-003" ;
+      dawgt:approval dawgt:Approved ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0029.html> ;
+      rdfs:comment
+          "Use/mention test" ;
+      mf:action
+          [ qt:query  <regex-query-003.rq> ;
+            qt:data   <regex-data-01.ttl> ] ;
+      mf:result  <regex-result-003.ttl> .
+
+:dawg-regex-004 a mf:QueryEvaluationTest ;
+      mf:name    "regex-query-004" ;
+      dawgt:approval dawgt:Approved ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/0029.html> ;
+      rdfs:comment
+          "str()+URI test" ;
+      mf:action
+          [ qt:query  <regex-query-004.rq> ;
+            qt:data   <regex-data-01.ttl> ] ;
+      mf:result  <regex-result-004.ttl> .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql4/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Syntax 4" ;
+    rdfs:comment "Syntax tests syntax-sparql4" ;
+    mf:entries
+    ( :syn-09 :syn-10 :syn-11
+    :syn-bad-34 :syn-bad-35 :syn-bad-36 :syn-bad-37 :syn-bad-38
+    :syn-bad-OPT-breaks-BGP :syn-bad-UNION-breaks-BGP :syn-bad-GRAPH-breaks-BGP
+    :syn-leading-digits-in-prefixed-names) .
+
+:syn-09  mf:name  "syn-09.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-09.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-10  mf:name  "syn-10.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-10.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-11  mf:name  "syn-11.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-11.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-leading-digits-in-prefixed-names mf:name "syn-leading-digits-in-prefixed-names.rq" ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0063/29-dawg-minutes.htm> ;
+	 dawgt:approval dawgt:Approved ;
+    rdf:type mf:PositiveSyntaxTest ;
+    mf:action <syn-leading-digits-in-prefixed-names.rq> .
+
+
+:syn-bad-34  mf:name  "syn-bad-34.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-34.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-35  mf:name  "syn-bad-35.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-35.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-36  mf:name  "syn-bad-36.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-36.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-37  mf:name  "syn-bad-37.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-37.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-38  mf:name  "syn-bad-38.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-38.rq> ;
+	 dawgt:approvedBy <http://www.w3.org/2007/02/13-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+ :syn-bad-OPT-breaks-BGP  mf:name  "syn-bad-OPT-breaks-BGP" ;
+         rdfs:comment  "bad: re-used BNode label after OPTIONAL" ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0063/29-dawg-minutes.htm> ;
+	 dawgt:approval dawgt:Approved ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-OPT-breaks-BGP.rq> .
+
+ :syn-bad-UNION-breaks-BGP  mf:name  "syn-bad-UNION-breaks-BGP" ;
+         rdfs:comment  "bad: re-used BNode label after UNION" ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-UNION-breaks-BGP.rq> .
+
+ :syn-bad-GRAPH-breaks-BGP  mf:name  "syn-bad-GRAPH-breaks-BGP" ;
+         rdfs:comment  "bad: re-used BNode label after GRAPH" ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0063/29-dawg-minutes.htm> ;
+	 dawgt:approval dawgt:Approved ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-GRAPH-breaks-BGP.rq> .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql1/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Syntax 1" ;
+    rdfs:comment "Syntax tests syntax-sparql1" ;
+    mf:entries
+    ( :syntax-basic-01 :syntax-basic-02 :syntax-basic-03
+    :syntax-basic-04 :syntax-basic-05 :syntax-basic-06
+    :syntax-qname-01 :syntax-qname-02 :syntax-qname-03
+    :syntax-qname-04 :syntax-qname-05 :syntax-qname-06
+    :syntax-qname-07 :syntax-qname-08 :syntax-lit-01
+    :syntax-lit-02 :syntax-lit-03 :syntax-lit-04 :syntax-lit-05
+    :syntax-lit-06 :syntax-lit-07 :syntax-lit-08 :syntax-lit-09
+    :syntax-lit-10 :syntax-lit-11 :syntax-lit-12 :syntax-lit-13
+    :syntax-lit-14 :syntax-lit-15 :syntax-lit-16 :syntax-lit-17
+    :syntax-lit-18 :syntax-lit-19 :syntax-lit-20 :syntax-struct-01
+    :syntax-struct-02 :syntax-struct-03 :syntax-struct-05
+    :syntax-struct-06 :syntax-struct-07 :syntax-struct-08
+    :syntax-struct-09 :syntax-struct-10 :syntax-struct-11
+    :syntax-struct-12 :syntax-struct-13 :syntax-struct-14
+    :syntax-lists-01 :syntax-lists-02 :syntax-lists-03
+    :syntax-lists-04 :syntax-lists-05 :syntax-bnodes-01
+    :syntax-bnodes-02 :syntax-bnodes-03 :syntax-bnodes-04
+    :syntax-bnodes-05 :syntax-forms-01 :syntax-forms-02
+    :syntax-union-01 :syntax-union-02 :syntax-expr-01
+    :syntax-expr-02 :syntax-expr-03 :syntax-expr-04
+    :syntax-expr-05 :syntax-order-01 :syntax-order-02
+    :syntax-order-03 :syntax-order-04 :syntax-order-05
+    :syntax-order-06 :syntax-order-07 :syntax-limit-offset-01
+    :syntax-limit-offset-02 :syntax-limit-offset-03
+    :syntax-limit-offset-04 :syntax-pat-01 :syntax-pat-02
+    :syntax-pat-03 :syntax-pat-04 
+    ).
+
+:syntax-basic-01  mf:name  "syntax-basic-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-basic-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+	 
+:syntax-basic-02  mf:name  "syntax-basic-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-basic-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+	 
+:syntax-basic-03  mf:name  "syntax-basic-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-basic-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+	 
+:syntax-basic-04  mf:name  "syntax-basic-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-basic-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+	 
+:syntax-basic-05  mf:name  "syntax-basic-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-basic-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+	 
+:syntax-basic-06  mf:name  "syntax-basic-06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-basic-06.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-01  mf:name  "syntax-qname-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-01.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-02  mf:name  "syntax-qname-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-02.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-03  mf:name  "syntax-qname-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-03.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-04  mf:name  "syntax-qname-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-04.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-05  mf:name  "syntax-qname-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-05.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-06  mf:name  "syntax-qname-06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-06.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-07  mf:name  "syntax-qname-07.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-07.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-qname-08  mf:name  "syntax-qname-08.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-qname-08.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-01  mf:name  "syntax-lit-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-01.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-02  mf:name  "syntax-lit-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-02.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-03  mf:name  "syntax-lit-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-03.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-04  mf:name  "syntax-lit-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-04.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-05  mf:name  "syntax-lit-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-05.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-06  mf:name  "syntax-lit-06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-06.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-07  mf:name  "syntax-lit-07.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-07.rq>  ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lit-08  mf:name  "syntax-lit-08.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-08.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-09  mf:name  "syntax-lit-09.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-09.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-10  mf:name  "syntax-lit-10.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-10.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-11  mf:name  "syntax-lit-11.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-11.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-12  mf:name  "syntax-lit-12.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-12.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-13  mf:name  "syntax-lit-13.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-13.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-14  mf:name  "syntax-lit-14.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-14.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-15  mf:name  "syntax-lit-15.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-15.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-16  mf:name  "syntax-lit-16.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-16.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-17  mf:name  "syntax-lit-17.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-17.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-18  mf:name  "syntax-lit-18.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-18.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-19  mf:name  "syntax-lit-19.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-19.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lit-20  mf:name  "syntax-lit-20.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lit-20.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-01  mf:name  "syntax-struct-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-02  mf:name  "syntax-struct-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-03  mf:name  "syntax-struct-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-05  mf:name  "syntax-struct-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-06  mf:name  "syntax-struct-06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-06.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-07  mf:name  "syntax-struct-07.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-07.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-08  mf:name  "syntax-struct-08.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-08.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-09  mf:name  "syntax-struct-09.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-09.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-10  mf:name  "syntax-struct-10.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-10.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-11  mf:name  "syntax-struct-11.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-11.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-12  mf:name  "syntax-struct-12.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-12.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-13  mf:name  "syntax-struct-13.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-13.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-struct-14  mf:name  "syntax-struct-14.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-struct-14.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lists-01  mf:name  "syntax-lists-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-lists-02  mf:name  "syntax-lists-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lists-03  mf:name  "syntax-lists-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lists-04  mf:name  "syntax-lists-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-lists-05  mf:name  "syntax-lists-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-lists-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-bnodes-01  mf:name  "syntax-bnodes-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnodes-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-bnodes-02  mf:name  "syntax-bnodes-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnodes-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-bnodes-03  mf:name  "syntax-bnodes-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnodes-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-bnodes-04  mf:name  "syntax-bnodes-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnodes-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-bnodes-05  mf:name  "syntax-bnodes-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-bnodes-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-forms-01  mf:name  "syntax-forms-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-forms-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-forms-02  mf:name  "syntax-forms-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-forms-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-union-01  mf:name  "syntax-union-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-union-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-union-02  mf:name  "syntax-union-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-union-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-expr-01  mf:name  "syntax-expr-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-expr-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-expr-02  mf:name  "syntax-expr-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-expr-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-expr-03  mf:name  "syntax-expr-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-expr-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-expr-04  mf:name  "syntax-expr-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-expr-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-expr-05  mf:name  "syntax-expr-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-expr-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-order-01  mf:name  "syntax-order-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-order-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-order-02  mf:name  "syntax-order-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-order-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-order-03  mf:name  "syntax-order-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-order-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-order-04  mf:name  "syntax-order-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-order-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-order-05  mf:name  "syntax-order-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-order-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-order-06  mf:name  "syntax-order-06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-order-06.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-order-07  mf:name  "syntax-order-07.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-order-07.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-limit-offset-01  mf:name  "syntax-limit-offset-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-limit-offset-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-limit-offset-02  mf:name  "syntax-limit-offset-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-limit-offset-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-limit-offset-03  mf:name  "syntax-limit-offset-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-limit-offset-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-limit-offset-04  mf:name  "syntax-limit-offset-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-limit-offset-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-pat-01  mf:name  "syntax-pat-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-pat-01.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syntax-pat-02  mf:name  "syntax-pat-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-pat-02.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-pat-03  mf:name  "syntax-pat-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-pat-03.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved . 
+
+:syntax-pat-04  mf:name  "syntax-pat-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-pat-04.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved . 
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Syntax 3" ;
+    rdfs:comment "Syntax tests syntax-sparql3" ;
+    mf:entries
+    ( :syn-01 :syn-02 :syn-03 :syn-04 :syn-05 :syn-06
+    :syn-07 :syn-08 :syn-bad-01 :syn-bad-02 :syn-bad-03
+    :syn-bad-04 :syn-bad-05 :syn-bad-06 :syn-bad-07 :syn-bad-08
+    :syn-bad-09 :syn-bad-10 :syn-bad-11 :syn-bad-12 :syn-bad-13
+    :syn-bad-14 :syn-bad-15 :syn-bad-16 :syn-bad-17 :syn-bad-18
+    :syn-bad-19 :syn-bad-20 :syn-bad-21 :syn-bad-22 :syn-bad-23
+    :syn-bad-24 :syn-bad-25 :syn-bad-26 :syn-bad-27 :syn-bad-28
+    :syn-bad-29 :syn-bad-30 :syn-bad-31 :bnode-dot
+    :bnodes-missing-pvalues-01 :bnodes-missing-pvalues-02
+    :empty-optional-01 :empty-optional-02 :filter-missing-parens
+    :lone-list :lone-node
+    :blabel-cross-filter :blabel-cross-graph-bad
+    :blabel-cross-optional-bad :blabel-cross-union-bad ) .
+
+:syn-01  mf:name  "syn-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-02  mf:name  "syn-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-03  mf:name  "syn-03.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-04  mf:name  "syn-04.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-05  mf:name  "syn-05.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-06  mf:name  "syn-06.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-06.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-07  mf:name  "syn-07.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-07.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-08  mf:name  "syn-08.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syn-08.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-01  mf:name  "syn-bad-01.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-02  mf:name  "syn-bad-02.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-03  mf:name  "syn-bad-03.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-03.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-04  mf:name  "syn-bad-04.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-04.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-05  mf:name  "syn-bad-05.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-05.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-06  mf:name  "syn-bad-06.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-06.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-07  mf:name  "syn-bad-07.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-07.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-08  mf:name  "syn-bad-08.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-08.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-09  mf:name  "syn-bad-09.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-09.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-10  mf:name  "syn-bad-10.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-10.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-11  mf:name  "syn-bad-11.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-11.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-12  mf:name  "syn-bad-12.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-12.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-13  mf:name  "syn-bad-13.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-13.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-14  mf:name  "syn-bad-14.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-14.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-15  mf:name  "syn-bad-15.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-15.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-16  mf:name  "syn-bad-16.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-16.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-17  mf:name  "syn-bad-17.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-17.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-18  mf:name  "syn-bad-18.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-18.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-19  mf:name  "syn-bad-19.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-19.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-20  mf:name  "syn-bad-20.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-20.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-21  mf:name  "syn-bad-21.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-21.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-22  mf:name  "syn-bad-22.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-22.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-23  mf:name  "syn-bad-23.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-23.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-24  mf:name  "syn-bad-24.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-24.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-25  mf:name  "syn-bad-25.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-25.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-26  mf:name  "syn-bad-26.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-26.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-27  mf:name  "syn-bad-27.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-27.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-28  mf:name  "syn-bad-28.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-28.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-29  mf:name  "syn-bad-29.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-29.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-30  mf:name  "syn-bad-30.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-30.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:syn-bad-31  mf:name  "syn-bad-31.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-31.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:bnode-dot  mf:name  "syn-bad-bnode-dot.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-bnode-dot.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:bnodes-missing-pvalues-01  mf:name  "syn-bad-bnodes-missing-pvalues-01.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-bnodes-missing-pvalues-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:bnodes-missing-pvalues-02  mf:name  "syn-bad-bnodes-missing-pvalues-02.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-bnodes-missing-pvalues-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:empty-optional-01  mf:name  "syn-bad-empty-optional-01.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-empty-optional-01.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:empty-optional-02  mf:name  "syn-bad-empty-optional-02.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-empty-optional-02.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:filter-missing-parens  mf:name  "syn-bad-filter-missing-parens.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-filter-missing-parens.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:lone-list  mf:name  "syn-bad-lone-list.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-lone-list.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:lone-node  mf:name  "syn-bad-lone-node.rq" ;
+         rdf:type   mf:NegativeSyntaxTest ;
+         mf:action  <syn-bad-lone-node.rq> ;
+	 dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JanMar/0047> ;
+	 dawgt:approval dawgt:Approved .
+
+:blabel-cross-filter  mf:name  "syn-blabel-cross-filter" ;
+	 rdf:type   mf:PositiveSyntaxTest ;
+	 mf:action  <syn-blabel-cross-filter.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0012/2007-04-10-dawg-minutes.html#item06> ;
+	 dawgt:approval dawgt:Approved .
+
+:blabel-cross-graph-bad  mf:name  "syn-blabel-cross-graph-bad" ;
+	 rdf:type   mf:NegativeSyntaxTest ;
+	 mf:action  <syn-blabel-cross-graph-bad.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0012/2007-04-10-dawg-minutes.html#item06> ;
+	 dawgt:approval dawgt:Approved .
+
+:blabel-cross-optional-bad  mf:name  "syn-blabel-cross-optional-bad" ;
+	 rdf:type   mf:NegativeSyntaxTest ;
+	 mf:action  <syn-blabel-cross-optional-bad.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+
+:blabel-cross-union-bad  mf:name  "syn-blabel-cross-union-bad" ;
+	 rdf:type   mf:NegativeSyntaxTest ;
+	 mf:action  <syn-blabel-cross-union-bad.rq> ;
+     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> ;
+	 dawgt:approval dawgt:Approved .
+# $Id: manifest.ttl,v 1.10 2007/09/20 14:26:51 aseaborne Exp $
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "open world value testing tests" ;
+    mf:entries
+    (
+      :open-eq-01 :open-eq-02 :open-eq-03 :open-eq-04 :open-eq-05 :open-eq-06
+      :open-eq-07 :open-eq-08 :open-eq-09 :open-eq-10 :open-eq-11 :open-eq-12
+      :date-1 :date-2 :date-3 :date-4
+      :open-cmp-01 :open-cmp-02
+    ) .
+
+:open-eq-01 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-01" ;
+    rdfs:comment    "graph match - no lexical form in data (assumes no value matching)" ;
+    mf:action
+            [ qt:query  <open-eq-01.rq> ;
+              qt:data   <data-1.ttl> ] ;
+    mf:result  <open-eq-01-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+   
+:open-eq-02 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-02" ;
+    rdfs:comment    "graph match - unknown type" ;
+    mf:action
+           [ qt:query  <open-eq-02.rq> ;
+             qt:data   <data-1.ttl> ] ;
+    mf:result  <open-eq-02-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+  
+:open-eq-03 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-03" ;
+    rdfs:comment    "Filter(?v=1)" ;
+        mf:action
+           [ qt:query  <open-eq-03.rq> ;
+             qt:data   <data-1.ttl> ] ;
+        mf:result  <open-eq-03-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+ 
+:open-eq-04 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-04" ;
+    rdfs:comment    "Filter(?v!=1)" ;
+    mf:action
+           [ qt:query  <open-eq-04.rq> ;
+             qt:data   <data-1.ttl> ] ;
+    mf:result  <open-eq-04-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-05 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-05" ;
+    rdfs:comment    "FILTER(?v = unknown type)" ;
+    mf:action
+           [ qt:query  <open-eq-05.rq> ;
+             qt:data   <data-1.ttl> ] ;
+    mf:result  <open-eq-05-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-06 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-06" ;
+    rdfs:comment    "FILTER(?v != unknown type)" ;
+    mf:action
+           [ qt:query  <open-eq-06.rq> ;
+             qt:data   <data-1.ttl> ] ;
+    mf:result  <open-eq-06-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-07 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-07" ;
+    rdfs:comment    "Test of '=' " ;
+    mf:action
+           [ qt:query  <open-eq-07.rq> ;
+             qt:data   <data-2.ttl> ] ;
+    mf:result  <open-eq-07-result.srx> ;
+    mf:requires mf:LangTagAwareness ;
+    mf:requires mf:StringSimpleLiteralCmp ;
+    mf:notable  mf:IllFormedLiteral ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-08 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-08" ;
+    rdfs:comment    "Test of '!='" ;
+    mf:action
+           [ qt:query  <open-eq-08.rq> ;
+             qt:data   <data-2.ttl> ] ;
+    mf:result  <open-eq-08-result.srx> ;
+    mf:requires mf:StringSimpleLiteralCmp ;
+    mf:requires mf:LangTagAwareness ;
+    mf:requires mf:KnownTypesDefault2Neq ;
+    mf:notable  mf:IllFormedLiteral ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-09 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-09" ;
+    rdfs:comment    "Test of '='" ;
+    mf:action
+           [ qt:query  <open-eq-09.rq> ;
+             qt:data   <data-2.ttl> ] ;
+    mf:result  <open-eq-09-result.srx> ;
+    mf:notable  mf:IllFormedLiteral ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-10 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-10" ;
+    rdfs:comment    "Test of '!='" ;
+    mf:action
+           [ qt:query  <open-eq-10.rq> ;
+             qt:data   <data-2.ttl> ] ;
+    mf:result  <open-eq-10-result.srx> ;
+    mf:notable mf:IllFormedLiteral ;
+    mf:requires mf:KnownTypesDefault2Neq ;
+    mf:requires mf:LangTagAwareness ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-11 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-11" ;
+    rdfs:comment    "test of '=' || '!='" ;
+    mf:action
+           [ qt:query  <open-eq-11.rq> ;
+             qt:data   <data-2.ttl> ] ;
+    mf:result  <open-eq-11-result.srx> ;
+    mf:notable mf:IllFormedLiteral ;
+    mf:requires mf:KnownTypesDefault2Neq ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-eq-12 a mf:QueryEvaluationTest ;
+    mf:name    "open-eq-12" ;
+    rdfs:comment    "find pairs that don't value-compare" ;
+    mf:action
+           [ qt:query  <open-eq-12.rq> ;
+             qt:data   <data-2.ttl> ] ;
+    mf:result  <open-eq-12-result.srx> ;
+    mf:notable mf:IllFormedLiteral ;
+    mf:requires mf:KnownTypesDefault2Neq ;
+    mf:requires mf:LangTagAwareness ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:date-1 a mf:QueryEvaluationTest ;
+    mf:name    "date-1" ;
+    rdfs:comment    "Added type : xsd:date '='" ;
+    mf:action
+              [ qt:query  <date-1.rq> ;
+                qt:data   <data-3.ttl> ] ;
+    mf:result  <date-1-result.srx> ;
+    mf:requires mf:XsdDateOperations ;
+    .
+
+    # Fixed test (was wrong) - needs reapproving 
+    # Decision at http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html to leave test not approved
+##         dawgt:approval dawgt:Approved ;
+##     dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:date-2 a mf:QueryEvaluationTest ;
+    mf:name    "date-2" ;
+    rdfs:comment    "Added type : xsd:date '!='" ;
+    mf:action
+              [ qt:query  <date-2.rq> ;
+                qt:data   <data-3.ttl> ] ;
+    mf:result  <date-2-result.srx> ;
+    mf:requires mf:XsdDateOperations ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:date-3 a mf:QueryEvaluationTest ;
+    mf:name    "date-3" ;
+    rdfs:comment    "Added type : xsd:date '>'" ;
+    mf:action
+             [ qt:query  <date-3.rq> ;
+               qt:data   <data-3.ttl> ] ;
+    mf:result  <date-3-result.srx> ;
+    mf:requires mf:XsdDateOperations ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:date-4 a mf:QueryEvaluationTest ;
+    mf:name    "date-4" ;
+    rdfs:comment    "xsd:date ORDER BY" ;
+    mf:action
+           [ qt:query  <date-4.rq> ;
+             qt:data   <data-3.ttl> ] ;
+    mf:result  <date-4-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-cmp-01 a mf:QueryEvaluationTest ;
+    mf:name    "open-cmp-01" ;
+    rdfs:comment    "Find things that compare with < or >" ;
+    mf:action
+           [ qt:query  <open-cmp-01.rq> ;
+             qt:data   <data-4.ttl> ] ;
+    mf:result  <open-cmp-01-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007AprJun/att-0082/2007-06-12-dawg-minutes.html> .
+
+:open-cmp-02 a mf:QueryEvaluationTest ;
+    mf:name    "open-cmp-02" ;
+    rdfs:comment    "Find things that compare with <= and >" ;
+    mf:action
+           [ qt:query  <open-cmp-02.rq> ;
+             qt:data   <data-4.ttl> ] ;
+    mf:result  <open-cmp-02-result.srx> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0118/04-dawg-minutes.html> .
+
+    
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "REDUCED" ;
+    mf:entries
+    ( 
+      :reduced-1
+      :reduced-2
+    ) .
+
+:reduced-1 rdf:type mf:QueryEvaluationTest ;
+    mf:resultCardinality mf:LaxCardinality ;
+    mf:name    "SELECT REDUCED *" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007OctDec/att-0069/13-dawg-minutes.html> ;
+    #dawgt:approval dawgt:NotApproved ;
+    
+    mf:action
+            [ qt:query <reduced-1.rq> ;
+              qt:data <reduced-star.ttl> ] ;
+    mf:result <reduced-1.srx> .
+
+:reduced-2 rdf:type mf:QueryEvaluationTest ;
+    mf:resultCardinality mf:LaxCardinality ;
+    mf:name    "SELECT REDUCED ?x with strings" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007OctDec/att-0069/13-dawg-minutes.html> ;
+    #dawgt:approval dawgt:NotApproved ;
+    mf:action
+            [ qt:query  <reduced-2.rq> ;
+              qt:data   <reduced-str.ttl> ] ;
+    mf:result  <reduced-2.srx> .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql5/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Syntax 5" ;
+    rdfs:comment "Syntax tests syntax-sparql5" ;
+    mf:entries
+    ( :syntax-reduced-01 :syntax-reduced-02
+    ).
+
+:syntax-reduced-01  mf:name  "syntax-reduced-01.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-reduced-01.rq> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007OctDec/att-0069/13-dawg-minutes.html> ;
+.
+	 
+:syntax-reduced-02  mf:name  "syntax-reduced-02.rq" ;
+         rdf:type   mf:PositiveSyntaxTest ;
+         mf:action  <syntax-reduced-02.rq> ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007OctDec/att-0069/13-dawg-minutes.html> ;
+.
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Algebra" ;
+    mf:entries
+    (   :nested-opt-1 
+        :nested-opt-2 
+        :opt-filter-1 
+        :opt-filter-2 
+        :opt-filter-3 
+        :filter-place-1 
+        :filter-place-2 
+        :filter-place-3 
+        :filter-nested-1 
+        :filter-nested-2 
+        :filter-scope-1 
+        :join-scope-1
+        :join-combo-1 
+        :join-combo-2
+    ) .
+
+:join-combo-1 a mf:QueryEvaluationTest ;
+   mf:name    "Join operator with OPTs, BGPs, and UNIONs" ;
+   rdfs:comment """Tests nested combination of Join with a BGP / OPT and a BGP / UNION""" ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <join-combo-1.rq> ;
+              qt:data   <join-combo-graph-2.ttl> ] ;
+         mf:result  <join-combo-1.srx> .
+
+:join-combo-2 a mf:QueryEvaluationTest ;
+   mf:name    "Join operator with Graph and Union" ;
+   rdfs:comment """Tests combination of Join operator with Graph on LHS and Union on RHS""" ;
+      dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0096/21-dawg-minutes.html> ;
+    dawgt:approval dawgt:Approved ;
+         mf:action
+            [ qt:query  <join-combo-2.rq> ;
+              qt:graphData   <join-combo-graph-1.ttl>;
+              qt:data        <join-combo-graph-2.ttl> ] ;
+         mf:result  <join-combo-2.srx> .
+
+:nested-opt-1 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Nested Optionals - 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+    rdfs:comment """Nested-optionals with a shared variable that does not appear in the middle pattern (a not well-formed query pattern as per "Semantics and Complexity" of SPARQL""" ;
+         mf:action
+            [ qt:query  <two-nested-opt.rq> ;
+              qt:data   <two-nested-opt.ttl> ] ;
+         mf:result  <two-nested-opt.srx> .
+
+:nested-opt-2 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Nested Optionals - 2" ;
+         rdfs:comment "OPTIONALs parse in a left-associative manner" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <two-nested-opt-alt.rq> ;
+              qt:data   <two-nested-opt.ttl>  ] ;
+        mf:result  <two-nested-opt-alt.srx> .
+      
+
+:opt-filter-1 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Optional-filter - 1" ;
+         rdfs:comment "A FILTER inside an OPTIONAL can reference a variable bound in the required part of the OPTIONAL" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <opt-filter-1.rq> ;
+              qt:data   <opt-filter-1.ttl>  ] ;
+        mf:result  <opt-filter-1.srx> .
+      
+
+:opt-filter-2 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Optional-filter - 2 filters" ;
+     rdfs:comment "FILTERs inside an OPTIONAL can refer to variables from both the required and optional parts of the construct." ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <opt-filter-2.rq> ;
+              qt:data   <opt-filter-2.ttl>  ] ;
+        mf:result  <opt-filter-2.srx> .
+
+:opt-filter-3 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Optional-filter - scope of variable" ;
+         rdfs:comment "FILTERs in an OPTIONAL do not extend to variables bound outside of the LeftJoin(...) operation" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <opt-filter-3.rq> ;
+              qt:data   <opt-filter-3.ttl>  ] ;
+        mf:result  <opt-filter-3.srx> .
+      
+
+:filter-place-1 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Filter-placement - 1" ;
+        rdfs:comment "FILTER placed after the triple pattern that contains the variable tested" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <filter-placement-1.rq> ;
+              qt:data   <data-2.ttl>  ] ;
+        mf:result  <filter-placement-1.srx> .
+      
+
+:filter-place-2 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Filter-placement - 2" ;
+         rdfs:comment "FILTERs are scoped to the nearest enclosing group - placement within that group does not matter" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <filter-placement-2.rq> ;
+              qt:data   <data-2.ttl>  ] ;
+        mf:result  <filter-placement-2.srx> .
+      
+
+:filter-place-3 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Filter-placement - 3" ;
+         rdfs:comment "FILTERs are scoped to the nearest enclosing group - placement within that group does not matter" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <filter-placement-3.rq> ;
+              qt:data   <data-2.ttl>  ] ;
+        mf:result  <filter-placement-3.srx> .
+      
+
+:filter-nested-1 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Filter-nested - 1" ;
+         rdfs:comment "A FILTER is in scope for variables bound at the same level of the query tree" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <filter-nested-1.rq> ;
+              qt:data   <data-1.ttl>  ] ;
+        mf:result  <filter-nested-1.srx> .
+      
+
+:filter-nested-2 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Filter-nested - 2" ;
+         rdfs:comment "A FILTER in a group { ... } cannot see variables bound outside that group" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <filter-nested-2.rq> ;
+              qt:data   <data-1.ttl>  ] ;
+        mf:result  <filter-nested-2.srx> .
+       
+
+:filter-scope-1 rdf:type mf:QueryEvaluationTest ;
+         mf:name    "Filter-scope - 1" ;
+         rdfs:comment "FILTERs in an OPTIONAL do not extend to variables bound outside of the LeftJoin(...) operation" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <filter-scope-1.rq> ;
+              qt:data   <data-2.ttl>  ] ;
+        mf:result  <filter-scope-1.srx> .
+      
+
+:join-scope-1 rdf:type mf:QueryEvaluationTest ;
+       mf:name      "Join scope - 1" ;
+       rdfs:comment "Variables have query scope." ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:action
+            [ qt:query  <var-scope-join-1.rq> ;
+              qt:data   <var-scope-join-1.ttl>  ] ;
+       mf:result  <var-scope-join-1.srx> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "equality of values" ;
+    rdfs:comment "Some SPARQL test cases - equality of values" ;
+    mf:entries
+    ( 
+        :eq-1 :eq-2 :eq-3 :eq-4 :eq-5 :eq-2-1 :eq-2-2
+        :eq-graph-1 :eq-graph-2 :eq-graph-3 :eq-graph-4 :eq-graph-5
+    ).
+
+:eq-1 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-1" ;
+         rdfs:comment "= in FILTER expressions is value equality" ;
+         mf:action
+            [ qt:query  <query-eq-1.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-1.ttl>
+      .
+:eq-2 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-2" ;
+         rdfs:comment "= in FILTER expressions is value equality" ;
+         mf:action
+            [ qt:query  <query-eq-2.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-2.ttl>
+      .
+:eq-3 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         rdfs:comment "Numerics are not value-equivalent to plain literals" ;
+         mf:name    "Equality 1-3" ;
+         mf:action
+            [ qt:query  <query-eq-3.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-3.ttl>
+      .
+:eq-4 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-4" ;
+         rdfs:comment "= compares plain literals and unknown types with the same lexical form as false" ;
+         mf:action
+            [ qt:query  <query-eq-4.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-4.ttl>
+      .
+:eq-5 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+        rdfs:comment "= on IRI terms" ;
+         mf:name    "Equality 1-5" ;
+         mf:action
+            [ qt:query  <query-eq-5.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-5.ttl>
+      .
+:eq-2-1 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality - 2 var - test equals" ;
+         rdfs:comment "= in FILTER is value equality" ;
+         mf:action
+            [ qt:query  <query-eq2-1.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq2-1.ttl>
+      .
+
+:eq-2-2 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+        rdfs:comment "!= in FILTER is value inequality" ;
+         mf:name    "Equality - 2 var - test not equals " ;
+         mf:action
+            [ qt:query  <query-eq2-1.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq2-1.ttl>
+      .
+
+    # Graph versions of the equality tests
+
+      # DAWG tests are graph-equivalence, not value equivalent.
+:eq-graph-1 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-1 -- graph" ;
+         rdfs:comment "Graph pattern matching matches exact terms, not values" ;
+         mf:action
+            [ qt:query  <query-eq-graph-1.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-graph-1.ttl>
+      .
+      # DAWG tests are graph-equivalence, not value equivalent.
+:eq-graph-2 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-2 -- graph" ;
+         rdfs:comment "Graph pattern matching matches exact terms, not values" ;
+         mf:action
+            [ qt:query  <query-eq-graph-2.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-graph-2.ttl>
+      .
+:eq-graph-3 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-3 -- graph" ;
+         rdfs:comment "Graph pattern matching matches exact terms, not values" ;
+         mf:action
+            [ qt:query  <query-eq-graph-3.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-graph-3.ttl>
+      .
+:eq-graph-4 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-4 -- graph" ;
+         rdfs:comment "Graph pattern matching matches exact terms, not values" ;
+         mf:action
+            [ qt:query  <query-eq-graph-4.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-graph-4.ttl>
+      .
+:eq-graph-5 a mf:QueryEvaluationTest ;
+        dawgt:approval dawgt:Approved ;
+        dawgt:approvedBy <http://www.w3.org/2007/06/19-dawg-minutes.html> ;
+         mf:name    "Equality 1-5 -- graph" ;
+         rdfs:comment "Graph pattern matching matches exact terms, not values" ;
+         mf:action
+            [ qt:query  <query-eq-graph-5.rq> ;
+              qt:data   <data-eq.ttl> ] ;
+         mf:result  <result-eq-graph-5.ttl>
+      .
+
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/basic/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Basic" ;
+    rdfs:comment "Basic test cases" ;
+    mf:entries
+    ( 
+      :base-prefix-1
+      :base-prefix-2
+      :base-prefix-3
+      :base-prefix-4
+      :base-prefix-5
+
+      :list-1
+      :list-2
+      :list-3
+      :list-4
+
+      :quotes-1
+      :quotes-2
+      :quotes-3
+      :quotes-4
+
+      :term-1
+      :term-2
+      :term-3
+      :term-4
+      :term-5
+      :term-6
+      :term-7
+      :term-8
+      :term-9
+
+      :var-1
+      :var-2
+
+      :bgp-no-match
+      :spoo-1
+
+      :prefix-name-1
+    ) .
+
+
+:bgp-no-match rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Non-matching triple pattern" ;
+    rdfs:comment "Patterns not in data don't match" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+    mf:action [ qt:query <bgp-no-match.rq> ; qt:data <data-7.ttl> ] ;
+    mf:result <bgp-no-match.srx> ;
+    .
+:prefix-name-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Prefix name 1" ;
+    rdfs:comment "No local name - foo:" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+    mf:action [ qt:query <prefix-name-1.rq> ; qt:data <data-6.ttl> ] ;
+    mf:result <prefix-name-1.srx> ;
+    .
+
+:spoo-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic graph pattern - spoo" ;
+    rdfs:comment "Test the :x :y :o1, :o2 construct" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action [ qt:query <spoo-1.rq> ; qt:data <data-6.ttl> ] ;
+    mf:result <spoo-1.srx> ;
+    .
+    
+
+:base-prefix-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Prefix/Base 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <base-prefix-1.rq> ;
+           qt:data   <data-1.ttl> ] ;
+    mf:result  <base-prefix-1.srx> ;
+    .
+
+:base-prefix-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Prefix/Base 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <base-prefix-2.rq> ;
+           qt:data   <data-1.ttl> ] ;
+    mf:result  <base-prefix-2.srx>
+    .
+
+:base-prefix-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Prefix/Base 3" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <base-prefix-3.rq> ;
+           qt:data   <data-1.ttl> ] ;
+    mf:result  <base-prefix-3.srx>
+    .
+
+:base-prefix-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Prefix/Base 4" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <base-prefix-4.rq> ;
+           qt:data   <data-1.ttl> ] ;
+    mf:result  <base-prefix-4.srx>
+    .
+
+:base-prefix-5 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Prefix/Base 5" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <base-prefix-5.rq> ;
+           qt:data   <data-1.ttl> ] ;
+    mf:result  <base-prefix-5.srx>
+    .
+
+:list-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - List 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <list-1.rq> ;
+           qt:data   <data-2.ttl> ] ;
+    mf:result  <list-1.srx>
+    .
+
+:list-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - List 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <list-2.rq> ;
+           qt:data   <data-2.ttl> ] ;
+    mf:result  <list-2.srx>
+    .
+
+:list-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - List 3" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <list-3.rq> ;
+           qt:data   <data-2.ttl> ] ;
+    mf:result  <list-3.srx>
+    .
+
+:list-4 rdf:type mf:QueryEvaluationTest ;
+   mf:name    "Basic - List 4" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <list-4.rq> ;
+           qt:data   <data-2.ttl> ] ;
+    mf:result  <list-4.srx>
+    .
+
+:quotes-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Quotes 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <quotes-1.rq> ;
+           qt:data   <data-3.ttl> ] ;
+    mf:result  <quotes-1.srx>
+    .
+
+:quotes-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Quotes 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <quotes-2.rq> ;
+           qt:data   <data-3.ttl> ] ;
+    mf:result  <quotes-2.srx>
+    .
+
+:quotes-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Quotes 3" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <quotes-3.rq> ;
+           qt:data   <data-3.ttl> ] ;
+    mf:result  <quotes-3.srx>
+    .
+
+:quotes-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Quotes 4" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <quotes-4.rq> ;
+           qt:data   <data-3.ttl> ] ;
+    mf:result  <quotes-4.srx>
+    .
+
+:term-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-1.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-1.srx> 
+    .
+
+:term-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-2.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-2.srx>
+    .
+
+:term-3 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 3" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-3.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-3.srx>
+    .
+
+:term-4 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 4" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-4.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-4.srx>
+    .
+
+:term-5 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 5" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-5.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-5.srx>
+    .
+
+:term-6 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 6" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-6.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-6.srx>
+    .
+
+:term-7 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 7" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-7.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-7.srx>
+    .
+
+:term-8 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 8" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-8.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-8.srx>
+    .
+
+:term-9 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Term 9" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <term-9.rq> ;
+           qt:data   <data-4.ttl> ] ;
+    mf:result  <term-9.srx>
+    .
+
+:var-1 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Var 1" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <var-1.rq> ;
+           qt:data   <data-5.ttl> ] ;
+    mf:result  <var-1.srx>
+    .
+
+:var-2 rdf:type mf:QueryEvaluationTest ;
+    mf:name    "Basic - Var 2" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0060/2007-08-07-dawg-minutes.html> ;
+    mf:action
+         [ qt:query  <var-2.rq> ;
+           qt:data   <data-5.ttl> ] ;
+    mf:result  <var-2.srx>
+    .
+
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix : <http://www.w3.org/2001/sw/DataAccess/tests/data-r2/cast/manifest#> .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:     <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix qt:     <http://www.w3.org/2001/sw/DataAccess/tests/test-query#> .
+@prefix dawgt:   <http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#> .
+
+<>  rdf:type mf:Manifest ;
+    rdfs:label "Casting" ;
+    mf:entries
+    (   
+        :cast-str
+        :cast-flt
+        :cast-dbl
+        :cast-dec
+        :cast-int
+        :cast-dT
+        :cast-bool
+    ) .
+
+:cast-str rdf:type mf:QueryEvaluationTest ;
+     mf:name    "Cast to xsd:string" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+     mf:action
+        [ qt:query  <cast-str.rq> ;
+          qt:data   <data.ttl>  ] ;
+     mf:result  <cast-str.srx> .
+      
+:cast-flt rdf:type mf:QueryEvaluationTest ;
+     mf:name    "Cast to xsd:float" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+     mf:action
+        [ qt:query  <cast-flt.rq> ;
+          qt:data   <data.ttl>  ] ;
+     mf:result  <cast-flt.srx> .
+      
+:cast-dbl rdf:type mf:QueryEvaluationTest ;
+     mf:name    "Cast to xsd:double" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+     mf:action
+        [ qt:query  <cast-dbl.rq> ;
+          qt:data   <data.ttl>  ] ;
+     mf:result  <cast-dbl.srx> .
+      
+:cast-dec rdf:type mf:QueryEvaluationTest ;
+     mf:name    "Cast to xsd:decimal" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+     mf:action
+        [ qt:query  <cast-dec.rq> ;
+          qt:data   <data.ttl>  ] ;
+     mf:result  <cast-dec.srx> .
+      
+:cast-int rdf:type mf:QueryEvaluationTest ;
+     mf:name    "Cast to xsd:integer" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+     mf:action
+        [ qt:query  <cast-int.rq> ;
+          qt:data   <data.ttl>  ] ;
+     mf:result  <cast-int.srx> .
+      
+:cast-dT rdf:type mf:QueryEvaluationTest ;
+     mf:name    "Cast to xsd:dateTime" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+     mf:action
+        [ qt:query  <cast-dT.rq> ;
+          qt:data   <data.ttl>  ] ;
+     mf:result  <cast-dT.srx> .
+      
+:cast-bool rdf:type mf:QueryEvaluationTest ;
+     mf:name    "Cast to xsd:boolean" ;
+    dawgt:approval dawgt:Approved ;
+    dawgt:approvedBy <http://lists.w3.org/Archives/Public/public-rdf-dawg/2007JulSep/att-0087/14-dawg-minutes.html> ;
+     mf:action
+        [ qt:query  <cast-bool.rq> ;
+          qt:data   <data.ttl>  ] ;
+     mf:result  <cast-bool.srx> .
+
