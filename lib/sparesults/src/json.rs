@@ -394,6 +394,7 @@ impl SliceJsonSolutionsParser<'_> {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -402,6 +403,7 @@ enum JsonInnerQueryResults {
     Boolean(bool),
 }
 
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerSolutions {
     Reader(JsonInnerSolutionsParser),
     Iterator(JsonBufferedSolutionsIterator),
@@ -417,6 +419,7 @@ struct JsonInnerReader {
     solutions_read: bool,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerReaderState {
     Start,
     InRootObject,
@@ -769,6 +772,7 @@ struct JsonInnerSolutionsParser {
     new_bindings: Vec<Option<Term>>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum JsonInnerSolutionsParserState {
     BeforeSolution,
     BetweenSolutionTerms,

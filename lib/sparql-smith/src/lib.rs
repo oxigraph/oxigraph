@@ -97,6 +97,7 @@ struct QueryContent {
     values_clause: ValuesClause,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum QueryVariant {
     Select(SelectQuery),
@@ -191,6 +192,7 @@ enum SelectOption {
     Reduced,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum SelectValues {
     Star,
@@ -200,6 +202,7 @@ enum SelectValues {
     },
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum SelectProjection {
     Variable(Var),
@@ -230,6 +233,7 @@ impl fmt::Display for SelectClause {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum ConstructQuery {
     // [10] ConstructQuery	  ::=  	'CONSTRUCT' ( ConstructTemplate DatasetClause* WhereClause SolutionModifier | DatasetClause* 'WHERE' '{' TriplesTemplate? '}' SolutionModifier )
@@ -377,6 +381,7 @@ impl fmt::Display for GroupClause {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum GroupCondition {
     // [20]   GroupCondition   ::=   BuiltInCall | FunctionCall | '(' Expression ( 'AS' Var )? ')' | Var
@@ -440,6 +445,7 @@ impl fmt::Display for OrderClause {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum OrderCondition {
     // [24]   OrderCondition   ::=   ( ( 'ASC' | 'DESC' ) BrackettedExpression ) | ( Constraint | Var )
@@ -575,6 +581,7 @@ impl fmt::Debug for Update {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum Update1 {
     // [30]  	Update1	  ::=  	Load | Clear | Drop | Add | Move | Copy | Create | InsertData | DeleteData | DeleteWhere | Modify
@@ -912,6 +919,7 @@ impl fmt::Display for IriOrLiteral {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum GroupGraphPattern {
     // [53]   GroupGraphPattern   ::=   '{' ( SubSelect | GroupGraphPatternSub ) '}'
@@ -982,6 +990,7 @@ impl fmt::Display for TriplesBlock {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum GraphPatternNotTriples {
     // [56]   GraphPatternNotTriples   ::=   GroupOrUnionGraphPattern | OptionalGraphPattern | MinusGraphPattern | GraphGraphPattern | ServiceGraphPattern | Filter | Bind | InlineData
@@ -1240,6 +1249,7 @@ impl fmt::Display for Filter {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum Constraint {
     // [69]   Constraint   ::=   BrackettedExpression | BuiltInCall | FunctionCall
@@ -2069,6 +2079,7 @@ impl fmt::Display for UnaryExpression {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Arbitrary)]
 enum PrimaryExpression {
     // [119]   PrimaryExpression   ::=   BrackettedExpression | BuiltInCall | iriOrFunction | RDFLiteral | NumericLiteral | BooleanLiteral | Var
