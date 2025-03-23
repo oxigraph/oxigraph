@@ -4845,7 +4845,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                 .internal_quads_for_pattern(Some(start), None, Some(end), Some(graph_name))
                 .find_map(move |t| match t {
                     Ok(t) => {
-                        if ps.iter().any(|p| *p == t.predicate) {
+                        if ps.contains(&t.predicate) {
                             None
                         } else {
                             Some(Ok(()))
@@ -4943,7 +4943,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                         .internal_quads_for_pattern(Some(start), None, Some(end), None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| *p == t.predicate) {
+                                if ps.contains(&t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.graph_name))
@@ -5018,7 +5018,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                         .internal_quads_for_pattern(Some(start), None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| *p == t.predicate) {
+                                if ps.contains(&t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.object))
@@ -5109,7 +5109,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                         .internal_quads_for_pattern(Some(start), None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| *p == t.predicate) {
+                                if ps.contains(&t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.object, t.graph_name)))
@@ -5181,7 +5181,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                         .internal_quads_for_pattern(None, None, Some(end), Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| *p == t.predicate) {
+                                if ps.contains(&t.predicate) {
                                     None
                                 } else {
                                     Some(Ok(t.subject))
@@ -5272,7 +5272,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                         .internal_quads_for_pattern(None, None, Some(end), None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| *p == t.predicate) {
+                                if ps.contains(&t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.graph_name)))
@@ -5354,7 +5354,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                         .internal_quads_for_pattern(None, None, None, Some(graph_name))
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| *p == t.predicate) {
+                                if ps.contains(&t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.object)))
@@ -5438,7 +5438,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
                         .internal_quads_for_pattern(None, None, None, None)
                         .filter_map(move |t| match t {
                             Ok(t) => {
-                                if ps.iter().any(|p| *p == t.predicate) {
+                                if ps.contains(&t.predicate) {
                                     None
                                 } else {
                                     Some(Ok((t.subject, t.object, t.graph_name)))
