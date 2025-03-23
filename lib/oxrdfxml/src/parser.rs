@@ -329,7 +329,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        Some(self.parser.state.last()?.base_iri()?.as_str())
+        Some(self.parser.current_base_iri()?.as_str())
     }
 
     /// The current byte position in the input data.
@@ -470,7 +470,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// # }
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        Some(self.parser.state.last()?.base_iri()?.as_str())
+        Some(self.parser.current_base_iri()?.as_str())
     }
 
     /// The current byte position in the input data.
@@ -604,7 +604,7 @@ impl SliceRdfXmlParser<'_> {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        Some(self.parser.state.last()?.base_iri()?.as_str())
+        Some(self.parser.current_base_iri()?.as_str())
     }
 
     /// The current byte position in the input data.
@@ -759,30 +759,6 @@ enum RdfXmlState {
     },
 }
 
-impl RdfXmlState {
-    fn base_iri(&self) -> Option<&Iri<String>> {
-        match self {
-            Self::Doc { base_iri, .. }
-            | Self::Rdf { base_iri, .. }
-            | Self::NodeElt { base_iri, .. }
-            | Self::PropertyElt { base_iri, .. }
-            | Self::ParseTypeCollectionPropertyElt { base_iri, .. }
-            | Self::ParseTypeLiteralPropertyElt { base_iri, .. } => base_iri.as_ref(),
-        }
-    }
-
-    fn language(&self) -> Option<&String> {
-        match self {
-            Self::Doc { .. } => None,
-            Self::Rdf { language, .. }
-            | Self::NodeElt { language, .. }
-            | Self::PropertyElt { language, .. }
-            | Self::ParseTypeCollectionPropertyElt { language, .. }
-            | Self::ParseTypeLiteralPropertyElt { language, .. } => language.as_ref(),
-        }
-    }
-}
-
 struct InternalRdfXmlParser<R> {
     reader: NsReader<R>,
     state: Vec<RdfXmlState>,
@@ -907,15 +883,8 @@ impl<R> InternalRdfXmlParser<R> {
         let tag_name = self.resolve_tag_name(event.name())?;
 
         // We read attributes
-        let (mut language, mut base_iri) = if let Some(current_state) = self.state.last() {
-            (
-                current_state.language().cloned(),
-                current_state.base_iri().cloned(),
-            )
-        } else {
-            (None, None)
-        };
-
+        let mut language = None;
+        let mut base_iri = None;
         let mut id_attr = None;
         let mut node_id_attr = None;
         let mut about_attr = None;
@@ -1009,7 +978,7 @@ impl<R> InternalRdfXmlParser<R> {
         // Parsing with the base URI
         let id_attr = match id_attr {
             Some(iri) => {
-                let iri = self.resolve_iri(&base_iri, iri)?;
+                let iri = self.resolve_iri(base_iri.as_ref(), iri)?;
                 if !self.unchecked {
                     if self.known_rdf_id.contains(iri.as_str()) {
                         return Err(RdfXmlSyntaxError::msg(format!(
@@ -1024,19 +993,19 @@ impl<R> InternalRdfXmlParser<R> {
             None => None,
         };
         let about_attr = match about_attr {
-            Some(attr) => Some(self.convert_iri_attribute(&base_iri, &attr)?),
+            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
             None => None,
         };
         let resource_attr = match resource_attr {
-            Some(attr) => Some(self.convert_iri_attribute(&base_iri, &attr)?),
+            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
             None => None,
         };
         let datatype_attr = match datatype_attr {
-            Some(attr) => Some(self.convert_iri_attribute(&base_iri, &attr)?),
+            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
             None => None,
         };
         let type_attr = match type_attr {
-            Some(attr) => Some(self.convert_iri_attribute(&base_iri, &attr)?),
+            Some(attr) => Some(self.convert_iri_attribute(base_iri.as_ref(), &attr)?),
             None => None,
         };
 
@@ -1073,7 +1042,7 @@ impl<R> InternalRdfXmlParser<R> {
                     ))
                     .into());
                 } else {
-                    Self::build_node_elt(
+                    self.build_node_elt(
                         self.parse_iri(tag_name)?,
                         base_iri,
                         language,
@@ -1093,7 +1062,7 @@ impl<R> InternalRdfXmlParser<R> {
                     ))
                     .into());
                 }
-                Self::build_node_elt(
+                self.build_node_elt(
                     self.parse_iri(tag_name)?,
                     base_iri,
                     language,
@@ -1141,7 +1110,12 @@ impl<R> InternalRdfXmlParser<R> {
                                 (None, None) => BlankNode::default().into(),
                                 (Some(_), Some(_)) => return Err(RdfXmlSyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time").into())
                             };
-                            Self::emit_property_attrs(&object, property_attrs, &language, results);
+                            self.emit_property_attrs(
+                                &object,
+                                property_attrs,
+                                language.as_deref(),
+                                results,
+                            );
                             if let Some(type_attr) = type_attr {
                                 results.push(Triple::new(object.clone(), rdf::TYPE, type_attr));
                             }
@@ -1297,6 +1271,7 @@ impl<R> InternalRdfXmlParser<R> {
 
     #[allow(clippy::too_many_arguments)]
     fn build_node_elt(
+        &self,
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
@@ -1329,7 +1304,7 @@ impl<R> InternalRdfXmlParser<R> {
             }
         };
 
-        Self::emit_property_attrs(&subject, property_attrs, &language, results);
+        self.emit_property_attrs(&subject, property_attrs, language.as_deref(), results);
 
         if let Some(type_attr) = type_attr {
             results.push(Triple::new(subject.clone(), rdf::TYPE, type_attr));
@@ -1386,9 +1361,11 @@ impl<R> InternalRdfXmlParser<R> {
                 let object = match object {
                     Some(NodeOrText::Node(node)) => Term::from(node),
                     Some(NodeOrText::Text(text)) => {
-                        Self::new_literal(text, language, datatype_attr).into()
+                        self.new_literal(text, language, datatype_attr).into()
                     }
-                    None => Self::new_literal(String::new(), language, datatype_attr).into(),
+                    None => self
+                        .new_literal(String::new(), language, datatype_attr)
+                        .into(),
                 };
                 let triple = Triple::new(subject, iri, object);
                 if let Some(id_attr) = id_attr {
@@ -1469,13 +1446,16 @@ impl<R> InternalRdfXmlParser<R> {
     }
 
     fn new_literal(
+        &self,
         value: String,
         language: Option<String>,
         datatype: Option<NamedNode>,
     ) -> Literal {
         if let Some(datatype) = datatype {
             Literal::new_typed_literal(value, datatype)
-        } else if let Some(language) = language {
+        } else if let Some(language) =
+            language.or_else(|| self.current_language().map(ToOwned::to_owned))
+        {
             Literal::new_language_tagged_literal_unchecked(value, language)
         } else {
             Literal::new_simple_literal(value)
@@ -1498,16 +1478,17 @@ impl<R> InternalRdfXmlParser<R> {
     }
 
     fn emit_property_attrs(
+        &self,
         subject: &Subject,
         literal_attributes: Vec<(NamedNode, String)>,
-        language: &Option<String>,
+        language: Option<&str>,
         results: &mut Vec<Triple>,
     ) {
         for (literal_predicate, literal_value) in literal_attributes {
             results.push(Triple::new(
                 subject.clone(),
                 literal_predicate,
-                if let Some(language) = language.clone() {
+                if let Some(language) = language.or_else(|| self.current_language()) {
                     Literal::new_language_tagged_literal_unchecked(literal_value, language)
                 } else {
                     Literal::new_simple_literal(literal_value)
@@ -1524,7 +1505,7 @@ impl<R> InternalRdfXmlParser<R> {
 
     fn convert_iri_attribute(
         &self,
-        base_iri: &Option<Iri<String>>,
+        base_iri: Option<&Iri<String>>,
         attribute: &Attribute<'_>,
     ) -> Result<NamedNode, RdfXmlParseError> {
         Ok(self.resolve_iri(base_iri, self.convert_attribute(attribute)?)?)
@@ -1532,10 +1513,10 @@ impl<R> InternalRdfXmlParser<R> {
 
     fn resolve_iri(
         &self,
-        base_iri: &Option<Iri<String>>,
+        base_iri: Option<&Iri<String>>,
         relative_iri: String,
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
-        if let Some(base_iri) = base_iri {
+        if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
             Ok(NamedNode::new_unchecked(
                 if self.unchecked {
                     base_iri.resolve_unchecked(&relative_iri)
@@ -1559,6 +1540,42 @@ impl<R> InternalRdfXmlParser<R> {
                 .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
                 .into_inner()
         }))
+    }
+
+    fn current_language(&self) -> Option<&str> {
+        for state in self.state.iter().rev() {
+            match state {
+                RdfXmlState::Doc { .. } => (),
+                RdfXmlState::Rdf { language, .. }
+                | RdfXmlState::NodeElt { language, .. }
+                | RdfXmlState::PropertyElt { language, .. }
+                | RdfXmlState::ParseTypeCollectionPropertyElt { language, .. }
+                | RdfXmlState::ParseTypeLiteralPropertyElt { language, .. } => {
+                    if let Some(language) = language {
+                        return Some(language);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn current_base_iri(&self) -> Option<&Iri<String>> {
+        for state in self.state.iter().rev() {
+            match state {
+                RdfXmlState::Doc { base_iri }
+                | RdfXmlState::Rdf { base_iri, .. }
+                | RdfXmlState::NodeElt { base_iri, .. }
+                | RdfXmlState::PropertyElt { base_iri, .. }
+                | RdfXmlState::ParseTypeCollectionPropertyElt { base_iri, .. }
+                | RdfXmlState::ParseTypeLiteralPropertyElt { base_iri, .. } => {
+                    if let Some(base_iri) = base_iri {
+                        return Some(base_iri);
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn resolve_entity(&self, e: &str) -> Option<&str> {
