@@ -5,6 +5,7 @@ import inspect
 import logging
 import re
 import subprocess
+import sys
 from functools import reduce
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
 
@@ -477,7 +478,7 @@ def build_doc_comment(doc: str) -> Optional[ast.Expr]:
 
 
 def format_with_ruff(file: str) -> None:
-    subprocess.check_call(["python", "-m", "ruff", "format", file])
+    subprocess.check_call([sys.executable, "-m", "ruff", "format", file])
 
 
 if __name__ == "__main__":

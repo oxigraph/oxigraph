@@ -120,15 +120,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
-      - run: uv pip install -r python/requirements.build.txt
-      - run: maturin build -m python/Cargo.toml
-      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
-      - run: rm -r target/wheels
-      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv sync --locked
         working-directory: ./python
-      - run: maturin sdist -m python/Cargo.toml
+      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+        working-directory: ./python
+      - run: uv run maturin sdist
+        working-directory: ./python
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_sdist
@@ -206,21 +203,18 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
-      - run: uv pip install -r python/requirements.build.txt
-      - run: maturin build --release --features abi3
+      - run: uv sync --locked --only-group build
         working-directory: ./python
-      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
-      - run: rm -r target/wheels
-      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run maturin develop --release --features abi3
         working-directory: ./python
-      - run: maturin build --release --target universal2-apple-darwin --features abi3
+      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: maturin build --release --target x86_64-apple-darwin --features abi3
+      - run: uv run maturin build --release --target universal2-apple-darwin --features abi3
+        working-directory: ./python
+      - run: uv run maturin build --release --target x86_64-apple-darwin --features abi3
         working-directory: ./python
         if: github.event_name == 'release'
-      - run: maturin build --release --target aarch64-apple-darwin --features abi3
+      - run: uv run maturin build --release --target aarch64-apple-darwin --features abi3
         working-directory: ./python
         if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
@@ -235,19 +229,17 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
-          cache: pip
-          cache-dependency-path: '**/requirements.build.txt'
-      - run: pip install -r python/requirements.build.txt
-      - run: maturin build --release --features abi3
+      - run: uv sync --locked --only-group build
         working-directory: ./python
-      - run: pip install --no-index --find-links=target/wheels/ pyoxigraph
-      - run: rm -r target/wheels
-      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run maturin develop --release --features abi3
         working-directory: ./python
-      - run: maturin build --release -m python/Cargo.toml --features abi3
+      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+        working-directory: ./python
+      - run: uv run maturin build --features abi3
+        working-directory: ./python
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_windows
