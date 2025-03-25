@@ -609,16 +609,20 @@ impl<'a> Iterator for JsonLdPrefixesIter<'a> {
 enum JsonLdState {
     Root,
     RootArray,
-    StartObject,
+    StartObject {
+        r#type: Vec<NamedNode>,
+    },
+    ObjectOrLiteralType,
     Object {
         id: Option<NamedOrBlankNode>,
+        r#type: Vec<NamedNode>,
     },
     ObjectId,
     ObjectPredicate {
         predicate: NamedNode,
     },
     Literal {
-        value: Option<String>,
+        value: Vec<String>,
         r#type: Option<NamedNode>,
         language: Option<String>,
         fallback_type: Option<NamedNodeRef<'static>>,
@@ -655,7 +659,8 @@ impl InternalJsonLdParser {
         match state {
             JsonLdState::Root => match event {
                 JsonEvent::StartObject => {
-                    self.state.push(JsonLdState::StartObject);
+                    self.state
+                        .push(JsonLdState::StartObject { r#type: Vec::new() });
                     Ok(())
                 }
                 JsonEvent::StartArray => {
@@ -676,7 +681,8 @@ impl InternalJsonLdParser {
             JsonLdState::RootArray => match event {
                 JsonEvent::StartObject => {
                     self.state.push(JsonLdState::RootArray);
-                    self.state.push(JsonLdState::StartObject);
+                    self.state
+                        .push(JsonLdState::StartObject { r#type: Vec::new() });
                     Ok(())
                 }
                 JsonEvent::StartArray => {
@@ -694,20 +700,20 @@ impl InternalJsonLdParser {
                 JsonEvent::EndArray => Ok(()),
                 JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => unreachable!(),
             },
-            JsonLdState::StartObject => match event {
+            JsonLdState::StartObject { r#type } => match event {
                 JsonEvent::ObjectKey(key) => {
                     self.state.push(
                         if matches!(key.as_ref(), "@value" | "@language" | "@direction") {
                             JsonLdState::Literal {
-                                value: None,
-                                r#type: None,
+                                value: Vec::new(),
+                                r#type: r#type.into_iter().next(),
                                 language: None,
                                 fallback_type: None,
                             }
                         } else if key == "@type" {
-                            unimplemented!()
+                            JsonLdState::ObjectOrLiteralType
                         } else {
-                            JsonLdState::Object { id: None }
+                            JsonLdState::Object { id: None, r#type }
                         },
                     );
                     self.parse_event(JsonEvent::ObjectKey(key), results)
@@ -715,9 +721,37 @@ impl InternalJsonLdParser {
                 JsonEvent::EndObject => unimplemented!(),
                 _ => unreachable!(),
             },
-            JsonLdState::Object { id } => match event {
+            JsonLdState::ObjectOrLiteralType => match event {
+                JsonEvent::String(t) => match NamedNode::new(t.as_ref()) {
+                    Ok(t) => {
+                        self.state
+                            .push(JsonLdState::StartObject { r#type: vec![t] });
+                        Ok(())
+                    }
+                    Err(e) => {
+                        self.state
+                            .push(JsonLdState::StartObject { r#type: Vec::new() });
+                        Err(JsonLdSyntaxError::msg_and_code(
+                            format!("@type value '{t}' must be a a valid IRI: {e}"),
+                            JsonLdErrorCode::InvalidTypeValue,
+                        ))
+                    }
+                },
+                JsonEvent::StartArray | JsonEvent::EndArray => unimplemented!(),
+                JsonEvent::Number(_)
+                | JsonEvent::Boolean(_)
+                | JsonEvent::Null
+                | JsonEvent::StartObject
+                | JsonEvent::EndObject
+                | JsonEvent::ObjectKey(_)
+                | JsonEvent::Eof => Err(JsonLdSyntaxError::msg_and_code(
+                    "A @type must be a string or an array of strings",
+                    JsonLdErrorCode::InvalidTypeValue,
+                )),
+            },
+            JsonLdState::Object { id, r#type } => match event {
                 JsonEvent::ObjectKey(key) => {
-                    self.state.push(JsonLdState::Object { id });
+                    self.state.push(JsonLdState::Object { id, r#type });
                     if key.as_ref() == "@id" {
                         self.state.push(JsonLdState::ObjectId);
                         Ok(())
@@ -739,6 +773,14 @@ impl InternalJsonLdParser {
                 JsonEvent::EndObject => {
                     // TODO: do it as soon as @id is emitted to get nicer output
                     if let Some(subject) = self.current_subject() {
+                        for t in r#type {
+                            results.push(Quad::new(
+                                subject.clone(),
+                                rdf::TYPE,
+                                t,
+                                self.current_graph_name(),
+                            ));
+                        }
                         let Some(predicate) = self.current_predicate() else {
                             unreachable!("Subject without predicate")
                         };
@@ -773,14 +815,17 @@ impl InternalJsonLdParser {
                 JsonEvent::EndArray => unimplemented!(),
                 JsonEvent::StartObject => {
                     self.state.push(JsonLdState::ObjectPredicate { predicate });
-                    self.state.push(JsonLdState::StartObject);
+                    self.state
+                        .push(JsonLdState::StartObject { r#type: Vec::new() });
                     Ok(())
                 }
-                JsonEvent::EndObject => unimplemented!(),
-                JsonEvent::ObjectKey(_) | JsonEvent::Eof => unreachable!(),
+                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
+                    self.parse_event(event, results)
+                }
             },
             JsonLdState::ObjectId => {
-                let Some(JsonLdState::Object { id }) = self.state.last_mut() else {
+                let current_graph_name = self.current_graph_name();
+                let Some(JsonLdState::Object { id, r#type }) = self.state.last_mut() else {
                     unreachable!();
                 };
                 if id.is_some() {
@@ -791,7 +836,17 @@ impl InternalJsonLdParser {
                 }
                 match event {
                     JsonEvent::String(i) => {
-                        *id = Some(parse_id(i)?);
+                        let i = parse_id(i)?;
+                        // We push types early
+                        for t in r#type.drain(..) {
+                            results.push(Quad::new(
+                                i.clone(),
+                                rdf::TYPE,
+                                t,
+                                current_graph_name.clone(),
+                            ));
+                        }
+                        *id = Some(i);
                         Ok(())
                     }
                     JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
@@ -822,18 +877,28 @@ impl InternalJsonLdParser {
                         r#type,
                         fallback_type,
                     });
-                    self.state.push(match key.as_ref() {
-                        "@value" => JsonLdState::LiteralValue,
-                        "@type" => JsonLdState::LiteralType,
-                        "@language" => JsonLdState::LiteralLanguage,
-                        _ => unimplemented!(),
-                    });
-                    Ok(())
+                    match key.as_ref() {
+                        "@value" => {
+                            self.state.push(JsonLdState::LiteralValue);
+                            Ok(())
+                        }
+                        "@language" => {
+                            self.state.push(JsonLdState::LiteralLanguage);
+                            Ok(())
+                        }
+                        "@type" => {
+                            self.state.push(JsonLdState::LiteralType);
+                            Ok(())
+                        }
+                        _ => {
+                            self.state.push(JsonLdState::Skip);
+                            Err(JsonLdSyntaxError::msg(
+                                "Only @language, @type and @value keys are allowed in literals",
+                            ))
+                        }
+                    }
                 }
                 JsonEvent::EndObject => {
-                    let Some(value) = value else {
-                        return Ok(()); // TODO: is it ok to skip?
-                    };
                     let object = if let Some(language) = language {
                         if fallback_type.is_some() {
                             return Err(JsonLdSyntaxError::msg_and_code(
@@ -881,7 +946,7 @@ impl InternalJsonLdParser {
                 else {
                     unreachable!();
                 };
-                if value.is_some() {
+                if !value.is_empty() {
                     return Err(JsonLdSyntaxError::msg_and_code(
                         "An @value is already set for this object",
                         JsonLdErrorCode::CollidingKeywords,
@@ -889,12 +954,12 @@ impl InternalJsonLdParser {
                 }
                 match event {
                     JsonEvent::String(v) => {
-                        *value = Some(v.into_owned());
+                        *value = vec![v.into_owned()];
                         *fallback_type = Some(xsd::STRING);
                         Ok(())
                     }
                     JsonEvent::Number(v) => {
-                        *value = Some(v.to_string());
+                        *value = vec![v.to_string()];
                         *fallback_type = Some(guess_number_datatype(&v));
                         if language.is_some() {
                             return Err(JsonLdSyntaxError::msg_and_code(
@@ -905,7 +970,7 @@ impl InternalJsonLdParser {
                         Ok(())
                     }
                     JsonEvent::Boolean(v) => {
-                        *value = Some(v.to_string());
+                        *value = vec![v.to_string()];
                         *fallback_type = Some(xsd::BOOLEAN);
                         if language.is_some() {
                             return Err(JsonLdSyntaxError::msg_and_code(
@@ -1013,7 +1078,7 @@ impl InternalJsonLdParser {
 
     fn current_subject(&mut self) -> Option<Subject> {
         for state in self.state.iter_mut().rev() {
-            if let JsonLdState::Object { id } = state {
+            if let JsonLdState::Object { id, .. } = state {
                 // TODO: is only valid in streaming
                 return Some(
                     id.get_or_insert_with(|| BlankNode::default().into())
