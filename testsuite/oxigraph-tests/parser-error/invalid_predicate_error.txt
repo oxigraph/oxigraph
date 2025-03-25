@@ -1,1 +1,1 @@
-Parser error between at line 2 between columns 24 and column 27: "p" is not a valid predicate
+Parser error at line 2 between columns 24 and 27: "p" is not a valid predicate
