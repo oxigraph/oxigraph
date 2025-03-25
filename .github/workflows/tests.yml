@@ -299,6 +299,8 @@ jobs:
           cache-dependency-path: "js/package.json"
       - run: npm install
         working-directory: ./js
+      - run: npx biome ci --reporter=github .
+        working-directory: ./js
       - run: npm test
         working-directory: ./js
 
@@ -312,27 +314,23 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
-      - run: uv pip install -r python/requirements.dev.txt
-      - run: maturin build -m python/Cargo.toml
-      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
-      - run: rm -r target/wheels
-      - run: python -m unittest
+      - run: uv sync --locked
+        working-directory: ./python
+      - run: uv run -m unittest
         working-directory: ./python/tests
-      - run: sphinx-build -M html . build
+      - run: uv run sphinx-build -M html . build
         working-directory: ./python/docs
-      - run: python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+      - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: python -m mypy.stubtest pyoxigraph  --allowlist=mypy_allowlist.txt
+      - run: uv run -m mypy.stubtest pyoxigraph  --allowlist=mypy_allowlist.txt
         working-directory: ./python
-      - run: python -m mypy generate_stubs.py tests --strict
+      - run: uv run -m mypy generate_stubs.py tests --strict
         working-directory: ./python
-      - run: python -m ruff format --check .
+      - run: uv run ruff format --check .
         working-directory: ./python
-      - run: python -m ruff check --output-format=github .
+      - run: uv run ruff check --output-format=github .
         working-directory: ./python
-      - run: sphinx-lint docs
+      - run: uv run sphinx-lint docs
         working-directory: ./python
 
   python_msv:
@@ -350,16 +348,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.8"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
-      - run: uv pip install -r python/requirements.dev.txt
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
         env:
           CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
-      - run: maturin build -m python/Cargo.toml
-      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
-      - run: rm -r target/wheels
-      - run: python -m unittest
+      - run: uv sync --locked
+        working-directory: ./python
+      - run: uv run -m unittest
         working-directory: ./python/tests
 
   python_pypy:
@@ -372,13 +366,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "pypy3.10"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
-      - run: uv pip install -r python/requirements.dev.txt
-      - run: maturin build -m python/Cargo.toml
-      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
-      - run: rm -r target/wheels
-      - run: python -m unittest
+      - run: uv sync --locked
+        working-directory: ./python
+      - run: uv run -m unittest
         working-directory: ./python/tests
 
   python_windows:
@@ -391,12 +381,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
-      - run: uv run --with "maturin~=1.0" maturin build -m python/Cargo.toml
-      - run: uv pip install --no-index --find-links=target/wheels/ pyoxigraph
-      - run: rm -r target/wheels
-      - run: python -m unittest
+      - run: uv sync --locked
+        working-directory: ./python
+      - run: uv run -m unittest
         working-directory: ./python/tests
 
   typos:
@@ -533,8 +520,6 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
-          enable-cache: true
-          cache-dependency-glob: "**/requirements**.txt"
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-llvm-cov }
       - run: |
@@ -542,9 +527,10 @@ jobs:
           export CARGO_TARGET_DIR=$CARGO_LLVM_COV_TARGET_DIR
           cargo llvm-cov clean --workspace
           cargo test --features oxrdfio/async-tokio,sparesults/async-tokio
-          uv run --with "maturin~=1.0" maturin build -m python/Cargo.toml
-          uv pip install --no-index --find-links=target/wheels/ pyoxigraph
-          cd python/tests
+          cd python
+          uv sync --locked --only-group dev
+          uv run maturin develop
+          cd tests
           uv run -m unittest
           cd ../..
           cargo llvm-cov report --codecov --output-path codecov.json

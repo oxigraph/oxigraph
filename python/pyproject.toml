@@ -31,6 +31,19 @@ Homepage = "https://pyoxigraph.readthedocs.io/"
 Source = "https://github.com/oxigraph/oxigraph/tree/main/python"
 Tracker = "https://github.com/oxigraph/oxigraph/issues"
 
+[dependency-groups]
+build = [
+    "maturin~=1.0",
+    "ruff~=0.11.0"
+]
+dev = [
+    {include-group = "build"},
+    "furo",
+    "mypy~=1.0",
+    "sphinx>=7.0,<9.0",
+    "sphinx-lint~=1.0"
+]
+
 [tool.ruff]
 line-length = 120
 
