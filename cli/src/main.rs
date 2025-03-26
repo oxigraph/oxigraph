@@ -574,7 +574,7 @@ fn dump<W: Write>(
 }
 
 fn do_convert<R: Read, W: Write>(
-    parser: RdfParser,
+    mut parser: RdfParser,
     reader: R,
     mut serializer: RdfSerializer,
     writer: W,
@@ -583,6 +583,9 @@ fn do_convert<R: Read, W: Write>(
     default_graph: &GraphName,
     to_base: Option<&str>,
 ) -> anyhow::Result<W> {
+    if lenient {
+        parser = parser.unchecked();
+    }
     let mut parser = parser.for_reader(reader);
     let first = parser.next(); // We read the first element to get prefixes and the base IRI
     if let Some(base_iri) = to_base.or_else(|| parser.base_iri()) {
