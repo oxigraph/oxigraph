@@ -37,7 +37,7 @@ build = [
     "ruff~=0.11.0"
 ]
 dev = [
-    {include-group = "build"},
+    { include-group = "build" },
     "furo",
     "mypy~=1.0",
     "sphinx>=7.0,<9.0",
