@@ -244,6 +244,8 @@ pub enum Command {
         #[arg(long, value_hint = ValueHint::Url)]
         to_base: Option<String>,
         /// Attempt to keep converting even if the data file is invalid
+        ///
+        /// This disables most of validation on RDF content.
         #[arg(long)]
         lenient: bool,
         /// Only load the given named graph from the input file
