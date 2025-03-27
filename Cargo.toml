@@ -15,6 +15,7 @@ members = [
     "lib/sparopt",
     "lib/sparql-smith",
     "oxrocksdb-sys",
+    "oxhdt-sys",
     "python",
     "testsuite"
 ]

@@ -1,8 +1,10 @@
+use crate::model::NamedNodeRef;
 use crate::sparql::QueryDataset;
 use crate::storage::numeric_encoder::{
     insert_term, Decoder, EncodedTerm, EncodedTriple, StrHash, StrHashHasher, StrLookup,
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
+use hdt::Hdt;
 use oxrdf::Term;
 use oxsdatatypes::Boolean;
 use spareval::{ExpressionTerm, ExpressionTriple, InternalQuad, QueryableDataset};
@@ -10,8 +12,223 @@ use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::io::{Error, ErrorKind};
 use std::iter::empty;
+use std::str::FromStr;
 use std::sync::Arc;
+
+pub struct HDTDataset {
+    /// Path to the HDT file.
+    path: String,
+
+    /// HDT interface.
+    hdt: Arc<Hdt>,
+}
+
+/// Boundry over a Header-Dictionary-Triplies (HDT) storage layer.
+pub struct HDTDatasetView {
+    // collection of HDT files in the dataset
+    hdts: Vec<HDTDataset>,
+}
+
+/// Cloning opens the same file again.
+impl Clone for HDTDatasetView {
+    fn clone(&self) -> HDTDatasetView {
+        let mut hdts: Vec<HDTDataset> = Vec::new();
+        for dataset in &self.hdts {
+            hdts.push(HDTDataset {
+                path: dataset.path.clone(),
+                hdt: Arc::<Hdt>::clone(&dataset.hdt),
+            })
+        }
+
+        Self { hdts }
+    }
+}
+
+impl HDTDatasetView {
+    pub fn new(paths: &[String]) -> Self {
+        let mut hdts: Vec<HDTDataset> = Vec::new();
+        for path in paths {
+            // TODO catch error and proceed to next file?
+            let hdt = Hdt::new_from_path(std::path::Path::new(&path)).unwrap();
+            hdts.push(HDTDataset {
+                path: path.to_string(),
+                hdt: Arc::new(hdt),
+            })
+        }
+
+        Self { hdts }
+    }
+}
+
+/// Create the correct OxRDF term for a given resource string.  Slow,
+/// use the appropriate method if you know which type (Literal, URI,
+/// or blank node) the string has. Based on
+/// https://github.com/KonradHoeffner/hdt/blob/871db777db3220dc4874af022287975b31d72d3a/src/hdt_graph.rs#L64
+fn hdt_bgp_str_to_term(s: &str) -> Result<Term, Error> {
+    match s.chars().next() {
+        None => Err(Error::new(ErrorKind::InvalidData, "empty input")),
+
+        // Double-quote delimters are used around the string.
+        Some('"') => match s.rfind('"') {
+            None => Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("missing right quotation mark in literal string {s}"),
+            )),
+
+            Some(_) => match Term::from_str(s) {
+                Ok(s) => Ok(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("literal parse error {e} for {s}"),
+                )),
+            },
+        },
+
+        // Underscore prefix indicating an Blank Node.
+        Some('_') => {
+            let term = match oxrdf::BlankNode::new(&s[2..]) {
+                Ok(n) => n,
+                Err(e) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("blanknode parse error {e} for {s}"),
+                    ))
+                }
+            };
+            match Term::from_str(&term.to_string()) {
+                Ok(s) => Ok(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("blanknode parse error {e} for {s}"),
+                )),
+            }
+        }
+
+        // Double-quote delimiters not present. Underscore prefix
+        // not present. Assuming a URI.
+        _ => {
+            // Note that Term::from_str() will not work for URIs
+            // (OxRDF NamedNode) when the string is not within "<"
+            // and ">" delimiters.
+            let named_node = match NamedNodeRef::new(*Arc::from(s)) {
+                Ok(n) => n,
+                Err(e) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("iri parse error {e} for {s}"),
+                    ))
+                }
+            };
+            match Term::from_str(&named_node.to_string()) {
+                Ok(s) => Ok(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("iri parse error {e} for {s}"),
+                )),
+            }
+        }
+    }
+}
+
+/// Convert triple string formats from OxRDF to HDT.
+fn term_to_hdt_bgp_str(term: &Term) -> Result<String, StorageError> {
+    let hdt_str = match term {
+        // Remove double quote delimiters from URIs.
+        Term::NamedNode(named_node) => named_node.clone().into_string(),
+
+        // Get the string directly from literals and add
+        // quotes to work-around handling of "\n" being
+        // double-escaped.
+        // format!("\"{}\"", literal.value()),
+        Term::Literal(literal) => {
+            if literal.is_plain() {
+                literal.to_string().replace("\\n", "\n")
+            }
+            // For numbers and other typed literals return
+            // None as the BGP search will need to collect
+            // all possibilities before filtering.
+            else {
+                return Err(StorageError::Corruption(CorruptionError::new(format!(
+                    "unhandled literal value {literal}"
+                ))));
+            }
+        }
+
+        Term::BlankNode(_s) => term.to_string(),
+
+        // Otherwise use the string directly.
+        Term::Triple(_) => term.to_string(),
+    };
+
+    Ok(hdt_str)
+}
+
+impl QueryableDataset for HDTDatasetView {
+    type InternalTerm = String;
+    type Error = StorageError;
+
+    fn internal_quads_for_pattern(
+        &self,
+        subject: Option<&String>,
+        predicate: Option<&String>,
+        object: Option<&String>,
+        graph_name: Option<Option<&String>>,
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, StorageError>>> {
+        if let Some(graph_name) = graph_name {
+            if graph_name.is_some() {
+                return Box::new(
+                    vec![Err(StorageError::Corruption(CorruptionError::new(
+                        format!("HDT does not support named graph: {graph_name:?}"),
+                    )))]
+                    .into_iter(),
+                );
+            }
+        }
+        let s = subject.cloned();
+        let p = predicate.cloned();
+        let o = object.cloned();
+
+        // Create a vector to hold the results.
+        let mut v: Vec<Result<InternalQuad<_>, StorageError>> = Vec::new();
+
+        for data in &self.hdts {
+            // Query HDT for BGP by string values.
+            let results = data
+                .hdt
+                .triples_with_pattern(s.as_deref(), p.as_deref(), o.as_deref());
+
+            // For each result
+            for result in results {
+                let ex_s = (*result.0).to_string();
+                let ex_p = (*result.1).to_string();
+                let ex_o = (*result.2).to_string();
+
+                // Add the result to the vector.
+                v.push(Ok(InternalQuad {
+                    subject: ex_s,
+                    predicate: ex_p,
+                    object: ex_o,
+                    graph_name: None,
+                }));
+            }
+        }
+
+        Box::new(v.into_iter())
+    }
+
+    fn internalize_term(&self, term: Term) -> Result<String, StorageError> {
+        term_to_hdt_bgp_str(&term)
+    }
+
+    fn externalize_term(&self, term: String) -> Result<Term, StorageError> {
+        match hdt_bgp_str_to_term(&term) {
+            Ok(s) => Ok(s),
+            Err(e) => Err(CorruptionError::new(format!("Unexpected externalize bug {e}")).into()),
+        }
+    }
+}
 
 pub struct DatasetView {
     reader: StorageReader,
