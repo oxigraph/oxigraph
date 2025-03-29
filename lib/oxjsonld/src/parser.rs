@@ -2,12 +2,9 @@ use crate::error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
-use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{
-    BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Subject,
-};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad};
 use std::borrow::Cow;
 use std::io::Read;
 use std::marker::PhantomData;
@@ -112,6 +109,7 @@ impl JsonLdParser {
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderJsonLdParser<R> {
         ReaderJsonLdParser {
             results: Vec::new(),
+            errors: Vec::new(),
             inner: self.into_inner(),
             json_parser: ReaderJsonParser::new(reader),
         }
@@ -156,6 +154,7 @@ impl JsonLdParser {
     ) -> TokioAsyncReaderJsonLdParser<R> {
         TokioAsyncReaderJsonLdParser {
             results: Vec::new(),
+            errors: Vec::new(),
             inner: self.into_inner(),
             json_parser: TokioAsyncReaderJsonParser::new(reader),
         }
@@ -192,6 +191,7 @@ impl JsonLdParser {
     pub fn for_slice(self, slice: &[u8]) -> SliceJsonLdParser<'_> {
         SliceJsonLdParser {
             results: Vec::new(),
+            errors: Vec::new(),
             inner: self.into_inner(),
             json_parser: SliceJsonParser::new(slice),
         }
@@ -199,9 +199,15 @@ impl JsonLdParser {
 
     fn into_inner(self) -> InternalJsonLdParser {
         InternalJsonLdParser {
-            state: vec![JsonLdState::Root],
-            is_end: false,
-            unchecked: self.unchecked,
+            expansion: JsonLdExpansionConverter {
+                state: vec![JsonLdExpansionState::General],
+                is_end: false,
+            },
+            expended_events: Vec::new(),
+            to_rdf: JsonLdToRdfConverter {
+                stack: vec![JsonLdToRdfState::Graph(Some(GraphName::DefaultGraph))],
+                unchecked: self.unchecked,
+            },
         }
     }
 }
@@ -239,6 +245,7 @@ impl JsonLdParser {
 #[must_use]
 pub struct ReaderJsonLdParser<R: Read> {
     results: Vec<Quad>,
+    errors: Vec<JsonLdSyntaxError>,
     inner: InternalJsonLdParser,
     json_parser: ReaderJsonParser<R>,
 }
@@ -248,9 +255,11 @@ impl<R: Read> Iterator for ReaderJsonLdParser<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(quad) = self.results.pop() {
+            if let Some(error) = self.errors.pop() {
+                return Some(Err(error.into()));
+            } else if let Some(quad) = self.results.pop() {
                 return Some(Ok(quad));
-            } else if self.inner.is_end {
+            } else if self.inner.expansion.is_end {
                 return None;
             }
             if let Err(e) = self.parse_step() {
@@ -295,7 +304,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
         JsonLdPrefixesIter {
             lifetime: PhantomData,
-            unchecked: self.inner.unchecked,
+            unchecked: self.inner.to_rdf.unchecked,
         }
     }
 
@@ -323,9 +332,12 @@ impl<R: Read> ReaderJsonLdParser<R> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        Ok(self
-            .inner
-            .parse_event(self.json_parser.parse_next()?, &mut self.results)?)
+        self.inner.parse_event(
+            self.json_parser.parse_next()?,
+            &mut self.results,
+            &mut self.errors,
+        );
+        Ok(())
     }
 }
 
@@ -367,6 +379,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
 #[must_use]
 pub struct TokioAsyncReaderJsonLdParser<R: AsyncRead + Unpin> {
     results: Vec<Quad>,
+    errors: Vec<JsonLdSyntaxError>,
     inner: InternalJsonLdParser,
     json_parser: TokioAsyncReaderJsonParser<R>,
 }
@@ -376,9 +389,11 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// Reads the next quad or returns `None` if the file is finished.
     pub async fn next(&mut self) -> Option<Result<Quad, JsonLdParseError>> {
         loop {
-            if let Some(quad) = self.results.pop() {
+            if let Some(error) = self.errors.pop() {
+                return Some(Err(error.into()));
+            } else if let Some(quad) = self.results.pop() {
                 return Some(Ok(quad));
-            } else if self.inner.is_end {
+            } else if self.inner.expansion.is_end {
                 return None;
             }
             if let Err(e) = self.parse_step().await {
@@ -455,9 +470,12 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     }
 
     async fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        Ok(self
-            .inner
-            .parse_event(self.json_parser.parse_next().await?, &mut self.results)?)
+        self.inner.parse_event(
+            self.json_parser.parse_next().await?,
+            &mut self.results,
+            &mut self.errors,
+        );
+        Ok(())
     }
 }
 
@@ -494,6 +512,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
 #[must_use]
 pub struct SliceJsonLdParser<'a> {
     results: Vec<Quad>,
+    errors: Vec<JsonLdSyntaxError>,
     inner: InternalJsonLdParser,
     json_parser: SliceJsonParser<'a>,
 }
@@ -503,9 +522,11 @@ impl Iterator for SliceJsonLdParser<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(quad) = self.results.pop() {
+            if let Some(error) = self.errors.pop() {
+                return Some(Err(error));
+            } else if let Some(quad) = self.results.pop() {
                 return Some(Ok(quad));
-            } else if self.inner.is_end {
+            } else if self.inner.expansion.is_end {
                 return None;
             }
             if let Err(e) = self.parse_step() {
@@ -551,7 +572,7 @@ impl SliceJsonLdParser<'_> {
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
         JsonLdPrefixesIter {
             lifetime: PhantomData,
-            unchecked: self.inner.unchecked,
+            unchecked: self.inner.to_rdf.unchecked,
         }
     }
 
@@ -579,8 +600,12 @@ impl SliceJsonLdParser<'_> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdSyntaxError> {
-        self.inner
-            .parse_event(self.json_parser.parse_next()?, &mut self.results)
+        self.inner.parse_event(
+            self.json_parser.parse_next()?,
+            &mut self.results,
+            &mut self.errors,
+        );
+        Ok(())
     }
 }
 
@@ -606,37 +631,10 @@ impl<'a> Iterator for JsonLdPrefixesIter<'a> {
     }
 }
 
-enum JsonLdState {
-    Root,
-    RootArray,
-    StartObject {
-        r#type: Vec<NamedNode>,
-    },
-    ObjectOrLiteralType,
-    Object {
-        id: Option<NamedOrBlankNode>,
-        r#type: Vec<NamedNode>,
-    },
-    ObjectId,
-    ObjectPredicate {
-        predicate: NamedNode,
-    },
-    Literal {
-        value: Vec<String>,
-        r#type: Option<NamedNode>,
-        language: Option<String>,
-        fallback_type: Option<NamedNodeRef<'static>>,
-    },
-    LiteralValue,
-    LiteralType,
-    LiteralLanguage,
-    Skip,
-}
-
 struct InternalJsonLdParser {
-    state: Vec<JsonLdState>,
-    is_end: bool,
-    unchecked: bool,
+    expansion: JsonLdExpansionConverter,
+    expended_events: Vec<JsonLdEvent>,
+    to_rdf: JsonLdToRdfConverter,
 }
 
 impl InternalJsonLdParser {
@@ -644,485 +642,651 @@ impl InternalJsonLdParser {
         &mut self,
         event: JsonEvent<'_>,
         results: &mut Vec<Quad>,
-    ) -> Result<(), JsonLdSyntaxError> {
-        if self.state.len() > 1000 {
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        self.expansion
+            .convert_event(event, &mut self.expended_events, errors);
+        for event in self.expended_events.drain(..) {
+            self.to_rdf.convert_event(event, results, errors);
+        }
+    }
+}
+
+enum JsonLdToRdfState {
+    StartObject {
+        types: Vec<NamedNode>,
+    },
+    Object(Option<NamedOrBlankNode>),
+    Value {
+        types: Vec<NamedNode>,
+        value: Option<JsonLdValue>,
+        language: Option<String>,
+    },
+    Property(Option<NamedNode>),
+    Graph(Option<GraphName>),
+}
+
+struct JsonLdToRdfConverter {
+    stack: Vec<JsonLdToRdfState>,
+    unchecked: bool,
+}
+
+impl JsonLdToRdfConverter {
+    fn convert_event(
+        &mut self,
+        event: JsonLdEvent,
+        results: &mut Vec<Quad>,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        let state = self.stack.pop().expect("Empty stack");
+        match state {
+            JsonLdToRdfState::StartObject { types } => match event {
+                JsonLdEvent::Id(id) => {
+                    let id = self.convert_named_or_blank_node(id, errors);
+                    self.emit_quads_for_new_object(id.as_ref(), types, results);
+                    self.stack.push(JsonLdToRdfState::Object(id))
+                }
+                JsonLdEvent::EndObject => {
+                    let id = Some(BlankNode::default().into());
+                    self.emit_quads_for_new_object(id.as_ref(), types, results);
+                }
+                JsonLdEvent::StartProperty(name) => {
+                    let id = Some(BlankNode::default().into());
+                    self.emit_quads_for_new_object(id.as_ref(), types, results);
+                    self.stack.push(JsonLdToRdfState::Object(id));
+                    self.stack.push(JsonLdToRdfState::Property(
+                        self.convert_named_node(name, errors),
+                    ));
+                }
+                JsonLdEvent::Value(value) => self.stack.push(JsonLdToRdfState::Value {
+                    types,
+                    value: Some(value),
+                    language: None,
+                }),
+                JsonLdEvent::Language(language) => self.stack.push(JsonLdToRdfState::Value {
+                    types,
+                    value: None,
+                    language: Some(language),
+                }),
+                JsonLdEvent::EndProperty | JsonLdEvent::StartObject { .. } => unreachable!(),
+            },
+            JsonLdToRdfState::Object(_) => match event {
+                JsonLdEvent::Id(id) => {
+                    errors.push(JsonLdSyntaxError::msg(
+                        "Oxigraph JSON-LD parser does not support yet @id defined after properties",
+                    ));
+                }
+                JsonLdEvent::EndObject => (),
+                JsonLdEvent::StartProperty(name) => {
+                    self.stack.push(JsonLdToRdfState::Property(
+                        self.convert_named_node(name, errors),
+                    ));
+                }
+                JsonLdEvent::StartObject { .. }
+                | JsonLdEvent::Value(_)
+                | JsonLdEvent::Language(_)
+                | JsonLdEvent::EndProperty => unreachable!(),
+            },
+            JsonLdToRdfState::Value {
+                types,
+                value,
+                language,
+            } => match event {
+                JsonLdEvent::Value(new_value) => self.stack.push(JsonLdToRdfState::Value {
+                    types,
+                    value: Some(new_value),
+                    language,
+                }),
+                JsonLdEvent::Language(new_language) => self.stack.push(JsonLdToRdfState::Value {
+                    types,
+                    value,
+                    language: Some(new_language),
+                }),
+                JsonLdEvent::EndObject => self.emit_quad_for_new_literal(
+                    self.convert_literal(value, language, types, errors),
+                    results,
+                ),
+                JsonLdEvent::StartProperty(_)
+                | JsonLdEvent::StartObject { .. }
+                | JsonLdEvent::EndProperty
+                | JsonLdEvent::Id(_) => unreachable!(),
+            },
+            JsonLdToRdfState::Property(_) => match event {
+                JsonLdEvent::StartObject { types } => {
+                    self.stack.push(state);
+                    self.stack.push(JsonLdToRdfState::StartObject {
+                        types: types
+                            .into_iter()
+                            .filter_map(|t| self.convert_named_node(t, errors))
+                            .collect(),
+                    });
+                }
+                JsonLdEvent::EndProperty => (),
+                JsonLdEvent::StartProperty(_)
+                | JsonLdEvent::Id(_)
+                | JsonLdEvent::EndObject
+                | JsonLdEvent::Value(_)
+                | JsonLdEvent::Language(_) => unreachable!(),
+            },
+            JsonLdToRdfState::Graph(_) => match event {
+                JsonLdEvent::StartObject { types } => {
+                    self.stack.push(state);
+                    self.stack.push(JsonLdToRdfState::StartObject {
+                        types: types
+                            .into_iter()
+                            .filter_map(|t| self.convert_named_node(t, errors))
+                            .collect(),
+                    });
+                }
+                JsonLdEvent::StartProperty(_)
+                | JsonLdEvent::EndProperty
+                | JsonLdEvent::Id(_)
+                | JsonLdEvent::EndObject
+                | JsonLdEvent::Value(_)
+                | JsonLdEvent::Language(_) => unreachable!(),
+            },
+        }
+    }
+
+    fn emit_quads_for_new_object(
+        &self,
+        id: Option<&NamedOrBlankNode>,
+        types: Vec<NamedNode>,
+        results: &mut Vec<Quad>,
+    ) {
+        let Some(id) = id else {
+            return;
+        };
+        let Some(graph_name) = self.last_graph_name() else {
+            return;
+        };
+        if let (Some(subject), Some(predicate)) = (self.last_subject(), self.last_predicate()) {
+            results.push(Quad::new(
+                subject.clone(),
+                predicate.clone(),
+                id.clone(),
+                graph_name.clone(),
+            ))
+        }
+        for t in types {
+            results.push(Quad::new(id.clone(), rdf::TYPE, t, graph_name.clone()))
+        }
+    }
+
+    fn emit_quad_for_new_literal(&self, literal: Option<Literal>, results: &mut Vec<Quad>) {
+        let Some(literal) = literal else {
+            return;
+        };
+        let Some(graph_name) = self.last_graph_name() else {
+            return;
+        };
+        let Some(subject) = self.last_subject() else {
+            return;
+        };
+        let Some(predicate) = self.last_predicate() else {
+            return;
+        };
+        results.push(Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            literal,
+            graph_name.clone(),
+        ))
+    }
+
+    fn convert_named_or_blank_node(
+        &self,
+        value: String,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) -> Option<NamedOrBlankNode> {
+        if let Some(bnode_id) = value.strip_prefix("_:") {
+            Some(
+                if self.unchecked {
+                    Some(BlankNode::new_unchecked(bnode_id))
+                } else {
+                    match BlankNode::new(bnode_id) {
+                        Ok(id) => Some(id),
+                        Err(e) => {
+                            errors.push(JsonLdSyntaxError::msg(format!(
+                                "Invalid blank node @id '{value}': {e}"
+                            )));
+                            None
+                        }
+                    }
+                }?
+                .into(),
+            )
+        } else {
+            Some(self.convert_named_node(value, errors)?.into())
+        }
+    }
+
+    fn convert_named_node(
+        &self,
+        value: String,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) -> Option<NamedNode> {
+        if self.unchecked {
+            Some(NamedNode::new_unchecked(value))
+        } else {
+            match NamedNode::new(&value) {
+                Ok(iri) => Some(iri),
+                Err(e) => {
+                    errors.push(JsonLdSyntaxError::msg(format!(
+                        "Invalid IRI @id '{value}': {e}"
+                    )));
+                    None
+                }
+            }
+        }
+    }
+
+    fn convert_literal(
+        &self,
+        value: Option<JsonLdValue>,
+        language: Option<String>,
+        types: Vec<NamedNode>,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) -> Option<Literal> {
+        let Some(value) = value else {
+            errors.push(JsonLdSyntaxError::msg_and_code(
+                "A literal must contain a @value key",
+                JsonLdErrorCode::InvalidValueObject,
+            ));
+            return None;
+        };
+        if types.len() > 1 {
+            errors.push(JsonLdSyntaxError::msg_and_code(
+                "A literal must have at most one @type",
+                JsonLdErrorCode::InvalidValueObject,
+            ));
+            return None;
+        }
+        let r#type = types.into_iter().next();
+        Some(match value {
+            JsonLdValue::String(value) => {
+                if let Some(language) = language {
+                    if self.unchecked {
+                        Literal::new_language_tagged_literal_unchecked(value, language)
+                    } else {
+                        match Literal::new_language_tagged_literal(value, &language) {
+                            Ok(l) => l,
+                            Err(e) => {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("Invalid language tag '{language}': {e}"),
+                                    JsonLdErrorCode::InvalidLanguageTaggedString,
+                                ));
+                                return None;
+                            }
+                        }
+                    }
+                } else if let Some(datatype) = r#type {
+                    Literal::new_typed_literal(value, datatype)
+                } else {
+                    Literal::new_simple_literal(value)
+                }
+            }
+            JsonLdValue::Number(value) => {
+                let datatype = r#type.unwrap_or_else(|| {
+                    {
+                        if value.contains('e')
+                            || value.contains('E')
+                            || value.contains('.')
+                            || value.strip_prefix('-').unwrap_or(value.as_ref()).len() >= 21
+                        {
+                            xsd::DOUBLE
+                        } else {
+                            xsd::INTEGER
+                        }
+                    }
+                    .into()
+                });
+                Literal::new_typed_literal(value, datatype)
+            }
+            JsonLdValue::Boolean(value) => Literal::new_typed_literal(
+                if value { "true" } else { "false" },
+                r#type.unwrap_or_else(|| xsd::BOOLEAN.into()),
+            ),
+        })
+    }
+
+    fn last_subject(&self) -> Option<&NamedOrBlankNode> {
+        for state in self.stack.iter().rev() {
+            match state {
+                JsonLdToRdfState::Object(id) => {
+                    return id.as_ref();
+                }
+                JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Value { .. } => {
+                    unreachable!()
+                }
+                JsonLdToRdfState::Property(_) | JsonLdToRdfState::Graph(_) => (),
+            }
+        }
+        None
+    }
+
+    fn last_predicate(&self) -> Option<&NamedNode> {
+        for state in self.stack.iter().rev() {
+            match state {
+                JsonLdToRdfState::Property(predicate) => {
+                    return predicate.as_ref();
+                }
+                JsonLdToRdfState::StartObject { .. }
+                | JsonLdToRdfState::Object(_)
+                | JsonLdToRdfState::Graph(_)
+                | JsonLdToRdfState::Value { .. } => (),
+            }
+        }
+        None
+    }
+
+    fn last_graph_name(&self) -> Option<&GraphName> {
+        for state in self.stack.iter().rev() {
+            match state {
+                JsonLdToRdfState::Graph(graph) => {
+                    return graph.as_ref();
+                }
+                JsonLdToRdfState::StartObject { .. }
+                | JsonLdToRdfState::Object(_)
+                | JsonLdToRdfState::Property(_)
+                | JsonLdToRdfState::Value { .. } => (),
+            }
+        }
+        None
+    }
+}
+
+enum JsonLdEvent {
+    StartObject { types: Vec<String> },
+    EndObject,
+    StartProperty(String),
+    EndProperty,
+    Id(String),
+    Value(JsonLdValue),
+    Language(String),
+}
+
+enum JsonLdValue {
+    String(String),
+    Number(String),
+    Boolean(bool),
+}
+
+enum JsonLdIdOrKeyword<'a> {
+    Id(Cow<'a, str>),
+    Keyword(&'static str),
+}
+
+enum JsonLdExpansionState {
+    General,
+    GeneralArray,
+    StartOfObject,
+    ObjectType,
+    ObjectTypeArray { types: Vec<String> },
+    Skip,
+    SkipArray,
+}
+
+/// Applies the [Expansion Algorithm](https://www.w3.org/TR/json-ld-api/#expansion-algorithms)
+struct JsonLdExpansionConverter {
+    state: Vec<JsonLdExpansionState>,
+    is_end: bool,
+}
+
+impl JsonLdExpansionConverter {
+    fn convert_event<'a>(
+        &mut self,
+        event: JsonEvent<'a>,
+        results: &mut Vec<JsonLdEvent>,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        if self.state.len() > 4096 {
             unimplemented!();
         }
         if event == JsonEvent::Eof {
             self.is_end = true;
-            return Ok(());
+            return;
         }
-        let Some(state) = self.state.pop() else {
-            assert_eq!(event, JsonEvent::Eof, "State can only be empty on EOF");
-            return Ok(());
-        };
+
+        // Large hack to fetch the last state but keep it if we are in an array
+        let state = self.state.pop().expect("Empty stack");
         match state {
-            JsonLdState::Root => match event {
-                JsonEvent::StartObject => {
-                    self.state
-                        .push(JsonLdState::StartObject { r#type: Vec::new() });
-                    Ok(())
-                }
-                JsonEvent::StartArray => {
-                    self.state.push(JsonLdState::RootArray);
-                    Ok(())
-                }
-                JsonEvent::String(_)
-                | JsonEvent::Number(_)
-                | JsonEvent::Boolean(_)
-                | JsonEvent::Null => {
-                    Ok(()) // Empty document
-                }
-                JsonEvent::EndArray
-                | JsonEvent::EndObject
-                | JsonEvent::ObjectKey(_)
-                | JsonEvent::Eof => unreachable!(),
-            },
-            JsonLdState::RootArray => match event {
-                JsonEvent::StartObject => {
-                    self.state.push(JsonLdState::RootArray);
-                    self.state
-                        .push(JsonLdState::StartObject { r#type: Vec::new() });
-                    Ok(())
-                }
-                JsonEvent::StartArray => {
-                    self.state.push(JsonLdState::RootArray);
-                    self.state.push(JsonLdState::RootArray);
-                    Ok(())
-                }
-                JsonEvent::String(_)
-                | JsonEvent::Number(_)
-                | JsonEvent::Boolean(_)
-                | JsonEvent::Null => {
-                    self.state.push(JsonLdState::RootArray);
-                    Ok(())
-                }
-                JsonEvent::EndArray => Ok(()),
-                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => unreachable!(),
-            },
-            JsonLdState::StartObject { r#type } => match event {
-                JsonEvent::ObjectKey(key) => {
-                    self.state.push(
-                        if matches!(key.as_ref(), "@value" | "@language" | "@direction") {
-                            JsonLdState::Literal {
-                                value: Vec::new(),
-                                r#type: r#type.into_iter().next(),
-                                language: None,
-                                fallback_type: None,
+            JsonLdExpansionState::General | JsonLdExpansionState::GeneralArray => {
+                match event {
+                    JsonEvent::Null => {
+                        // 1)
+                        if matches!(state, JsonLdExpansionState::GeneralArray) {
+                            self.state.push(JsonLdExpansionState::GeneralArray);
+                        }
+                    }
+                    JsonEvent::String(value) => {
+                        // 4)
+                        if matches!(state, JsonLdExpansionState::GeneralArray) {
+                            self.state.push(JsonLdExpansionState::GeneralArray);
+                        }
+                        self.expand_value(JsonLdValue::String(value.into()), results);
+                    }
+                    JsonEvent::Number(value) => {
+                        // 4)
+                        if matches!(state, JsonLdExpansionState::GeneralArray) {
+                            self.state.push(JsonLdExpansionState::GeneralArray);
+                        }
+                        self.expand_value(JsonLdValue::Number(value.into()), results);
+                    }
+                    JsonEvent::Boolean(value) => {
+                        // 4)
+                        if matches!(state, JsonLdExpansionState::GeneralArray) {
+                            self.state.push(JsonLdExpansionState::GeneralArray);
+                        }
+                        self.expand_value(JsonLdValue::Boolean(value), results);
+                    }
+                    JsonEvent::StartArray => {
+                        // 5)
+                        if matches!(state, JsonLdExpansionState::GeneralArray) {
+                            self.state.push(JsonLdExpansionState::GeneralArray);
+                        }
+                        self.state.push(JsonLdExpansionState::GeneralArray);
+                    }
+                    JsonEvent::EndArray => (),
+                    JsonEvent::StartObject => {
+                        if matches!(state, JsonLdExpansionState::GeneralArray) {
+                            self.state.push(JsonLdExpansionState::GeneralArray);
+                        }
+                        self.state.push(JsonLdExpansionState::StartOfObject);
+                    }
+                    JsonEvent::EndObject => {
+                        results.push(JsonLdEvent::EndObject);
+                    }
+                    JsonEvent::ObjectKey(key) => {
+                        self.state.push(state);
+                        if let Some(id_or_keyword) = self.expand_iri(key) {
+                            match id_or_keyword {
+                                JsonLdIdOrKeyword::Id(id) => {
+                                    self.state.push(JsonLdExpansionState::General);
+                                    results.push(JsonLdEvent::StartProperty(id.into()));
+                                }
+                                JsonLdIdOrKeyword::Keyword(keyword) => {
+                                    // TODO: we do not support any keyword
+                                    self.state.push(JsonLdExpansionState::Skip);
+                                    errors.push(JsonLdSyntaxError::msg(format!(
+                                        "Unsupported keyword: {keyword}"
+                                    )));
+                                }
                             }
-                        } else if key == "@type" {
-                            JsonLdState::ObjectOrLiteralType
                         } else {
-                            JsonLdState::Object { id: None, r#type }
-                        },
-                    );
-                    self.parse_event(JsonEvent::ObjectKey(key), results)
+                            self.state.push(JsonLdExpansionState::Skip);
+                        }
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+            }
+            JsonLdExpansionState::StartOfObject => match event {
+                JsonEvent::ObjectKey(key) => {
+                    if let Some(id_or_keyword) = self.expand_iri(key) {
+                        match id_or_keyword {
+                            JsonLdIdOrKeyword::Id(id) => {
+                                results.push(JsonLdEvent::StartObject { types: Vec::new() });
+                                results.push(JsonLdEvent::StartProperty(id.into()));
+                                self.state.push(JsonLdExpansionState::General);
+                                self.state.push(JsonLdExpansionState::General);
+                            }
+                            JsonLdIdOrKeyword::Keyword(keyword) => match keyword {
+                                "@type" => {
+                                    self.state.push(JsonLdExpansionState::ObjectType);
+                                }
+                                _ => {
+                                    errors.push(JsonLdSyntaxError::msg(format!(
+                                        "Unsupported keyword: {keyword}"
+                                    )));
+                                    self.state.push(JsonLdExpansionState::StartOfObject);
+                                    self.state.push(JsonLdExpansionState::Skip);
+                                }
+                            },
+                        }
+                    } else {
+                        self.state.push(JsonLdExpansionState::StartOfObject);
+                        self.state.push(JsonLdExpansionState::Skip);
+                    }
                 }
                 JsonEvent::EndObject => unimplemented!(),
-                _ => unreachable!(),
+                _ => unreachable!("Inside of an object"),
             },
-            JsonLdState::ObjectOrLiteralType => match event {
-                JsonEvent::String(t) => match NamedNode::new(t.as_ref()) {
-                    Ok(t) => {
-                        self.state
-                            .push(JsonLdState::StartObject { r#type: vec![t] });
-                        Ok(())
-                    }
-                    Err(e) => {
-                        self.state
-                            .push(JsonLdState::StartObject { r#type: Vec::new() });
-                        Err(JsonLdSyntaxError::msg_and_code(
-                            format!("@type value '{t}' must be a a valid IRI: {e}"),
-                            JsonLdErrorCode::InvalidTypeValue,
-                        ))
-                    }
-                },
-                JsonEvent::StartArray | JsonEvent::EndArray => unimplemented!(),
-                JsonEvent::Number(_)
-                | JsonEvent::Boolean(_)
-                | JsonEvent::Null
-                | JsonEvent::StartObject
-                | JsonEvent::EndObject
-                | JsonEvent::ObjectKey(_)
-                | JsonEvent::Eof => Err(JsonLdSyntaxError::msg_and_code(
-                    "A @type must be a string or an array of strings",
-                    JsonLdErrorCode::InvalidTypeValue,
-                )),
-            },
-            JsonLdState::Object { id, r#type } => match event {
-                JsonEvent::ObjectKey(key) => {
-                    self.state.push(JsonLdState::Object { id, r#type });
-                    if key.as_ref() == "@id" {
-                        self.state.push(JsonLdState::ObjectId);
-                        Ok(())
+            JsonLdExpansionState::ObjectType | JsonLdExpansionState::ObjectTypeArray { .. } => {
+                let (mut types, is_array) =
+                    if let JsonLdExpansionState::ObjectTypeArray { types } = state {
+                        (types, true)
                     } else {
-                        match NamedNode::new(key.as_ref()) {
-                            Ok(predicate) => {
-                                self.state.push(JsonLdState::ObjectPredicate { predicate });
-                                Ok(())
-                            }
-                            Err(e) => {
-                                self.state.push(JsonLdState::Skip);
-                                Err(JsonLdSyntaxError::msg(format!(
-                                    "Invalid predicate IRI '{key}': {e}"
-                                )))
+                        (Vec::new(), false)
+                    };
+                match event {
+                    JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                        // 13.4.4.1)
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "@type value must be a string",
+                            JsonLdErrorCode::InvalidTypeValue,
+                        ));
+                        if is_array {
+                            self.state
+                                .push(JsonLdExpansionState::ObjectTypeArray { types });
+                        } else {
+                            results.push(JsonLdEvent::StartObject { types });
+                            self.state.push(JsonLdExpansionState::General);
+                        }
+                    }
+                    JsonEvent::String(value) => {
+                        // 13.4.4.4)
+                        if let Some(iri) = self.expand_iri(value) {
+                            match iri {
+                                JsonLdIdOrKeyword::Id(id) => {
+                                    types.push(id.into());
+                                }
+                                JsonLdIdOrKeyword::Keyword(keyword) => {
+                                    errors.push(JsonLdSyntaxError::msg(
+                                        format!("{keyword} is not a supported by Oxigraph as a @type keyword"),
+                                    ));
+                                }
                             }
                         }
+                        if is_array {
+                            self.state
+                                .push(JsonLdExpansionState::ObjectTypeArray { types });
+                        } else {
+                            results.push(JsonLdEvent::StartObject { types });
+                            self.state.push(JsonLdExpansionState::General);
+                        }
+                        // TODO: fail here?
                     }
-                }
-                JsonEvent::EndObject => {
-                    // TODO: do it as soon as @id is emitted to get nicer output
-                    if let Some(subject) = self.current_subject() {
-                        for t in r#type {
-                            results.push(Quad::new(
-                                subject.clone(),
-                                rdf::TYPE,
-                                t,
-                                self.current_graph_name(),
+                    JsonEvent::StartArray => {
+                        self.state
+                            .push(JsonLdExpansionState::ObjectTypeArray { types });
+                        if is_array {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@type cannot contain a nested array",
+                                JsonLdErrorCode::InvalidTypeValue,
                             ));
-                        }
-                        let Some(predicate) = self.current_predicate() else {
-                            unreachable!("Subject without predicate")
-                        };
-                        results.push(Quad {
-                            subject,
-                            predicate,
-                            object: id.unwrap_or_else(|| BlankNode::default().into()).into(),
-                            graph_name: self.current_graph_name(),
-                        });
-                    }
-                    Ok(())
-                }
-                _ => unreachable!(),
-            },
-            JsonLdState::ObjectPredicate { predicate } => match event {
-                JsonEvent::String(value) => {
-                    let Some(subject) = self.current_subject() else {
-                        unreachable!("Predicate without subject")
-                    };
-                    results.push(Quad {
-                        subject,
-                        predicate,
-                        object: Literal::new_simple_literal(value).into(),
-                        graph_name: self.current_graph_name(),
-                    });
-                    Ok(())
-                }
-                JsonEvent::Number(_) => unimplemented!(),
-                JsonEvent::Boolean(_) => unimplemented!(),
-                JsonEvent::Null => Ok(()),
-                JsonEvent::StartArray => unimplemented!(),
-                JsonEvent::EndArray => unimplemented!(),
-                JsonEvent::StartObject => {
-                    self.state.push(JsonLdState::ObjectPredicate { predicate });
-                    self.state
-                        .push(JsonLdState::StartObject { r#type: Vec::new() });
-                    Ok(())
-                }
-                JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
-                    self.parse_event(event, results)
-                }
-            },
-            JsonLdState::ObjectId => {
-                let current_graph_name = self.current_graph_name();
-                let Some(JsonLdState::Object { id, r#type }) = self.state.last_mut() else {
-                    unreachable!();
-                };
-                if id.is_some() {
-                    return Err(JsonLdSyntaxError::msg_and_code(
-                        "An @id is already set for this object",
-                        JsonLdErrorCode::CollidingKeywords,
-                    ));
-                }
-                match event {
-                    JsonEvent::String(i) => {
-                        let i = parse_id(i)?;
-                        // We push types early
-                        for t in r#type.drain(..) {
-                            results.push(Quad::new(
-                                i.clone(),
-                                rdf::TYPE,
-                                t,
-                                current_graph_name.clone(),
-                            ));
-                        }
-                        *id = Some(i);
-                        Ok(())
-                    }
-                    JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
-                        Err(JsonLdSyntaxError::msg_and_code(
-                            "The value of @id must be a string",
-                            JsonLdErrorCode::InvalidIdValue,
-                        ))
-                    }
-                    JsonEvent::Null
-                    | JsonEvent::StartArray
-                    | JsonEvent::EndArray
-                    | JsonEvent::StartObject
-                    | JsonEvent::EndObject
-                    | JsonEvent::ObjectKey(_)
-                    | JsonEvent::Eof => unimplemented!(),
-                }
-            }
-            JsonLdState::Literal {
-                value,
-                language,
-                r#type,
-                fallback_type,
-            } => match event {
-                JsonEvent::ObjectKey(key) => {
-                    self.state.push(JsonLdState::Literal {
-                        value,
-                        language,
-                        r#type,
-                        fallback_type,
-                    });
-                    match key.as_ref() {
-                        "@value" => {
-                            self.state.push(JsonLdState::LiteralValue);
-                            Ok(())
-                        }
-                        "@language" => {
-                            self.state.push(JsonLdState::LiteralLanguage);
-                            Ok(())
-                        }
-                        "@type" => {
-                            self.state.push(JsonLdState::LiteralType);
-                            Ok(())
-                        }
-                        _ => {
-                            self.state.push(JsonLdState::Skip);
-                            Err(JsonLdSyntaxError::msg(
-                                "Only @language, @type and @value keys are allowed in literals",
-                            ))
+                            self.state.push(JsonLdExpansionState::SkipArray);
                         }
                     }
-                }
-                JsonEvent::EndObject => {
-                    let object = if let Some(language) = language {
-                        if fallback_type.is_some() {
-                            return Err(JsonLdSyntaxError::msg_and_code(
-                                "@language must be used only on string @value",
-                                JsonLdErrorCode::InvalidLanguageTaggedValue,
-                            ));
-                        }
-                        if !r#type.is_some_and(|t| t == rdf::LANG_STRING) {
-                            return Err(JsonLdSyntaxError::msg(
-                                "When @language is present, @type must not be set",
-                            ));
-                        }
-                        Literal::new_language_tagged_literal_unchecked(value, language)
-                    } else if let Some(r#type) = r#type {
-                        Literal::new_typed_literal(value, r#type)
-                    } else if let Some(fallback_type) = fallback_type {
-                        Literal::new_typed_literal(value, fallback_type)
-                    } else {
-                        Literal::new_simple_literal(value)
+                    JsonEvent::EndArray => {
+                        results.push(JsonLdEvent::StartObject { types });
+                        self.state.push(JsonLdExpansionState::General);
                     }
-                    .into();
-                    let Some(subject) = self.current_subject() else {
-                        return Ok(()); // TODO: is it ok to skip?
-                    };
-                    let Some(predicate) = self.current_predicate() else {
-                        unreachable!("No predicate when parsing a value")
-                    };
-                    results.push(Quad {
-                        subject,
-                        predicate,
-                        object,
-                        graph_name: self.current_graph_name(),
-                    });
-                    Ok(())
-                }
-                _ => unreachable!(),
-            },
-            JsonLdState::LiteralValue => {
-                let Some(JsonLdState::Literal {
-                    value,
-                    fallback_type,
-                    language,
-                    ..
-                }) = self.state.last_mut()
-                else {
-                    unreachable!();
-                };
-                if !value.is_empty() {
-                    return Err(JsonLdSyntaxError::msg_and_code(
-                        "An @value is already set for this object",
-                        JsonLdErrorCode::CollidingKeywords,
-                    ));
-                }
-                match event {
-                    JsonEvent::String(v) => {
-                        *value = vec![v.into_owned()];
-                        *fallback_type = Some(xsd::STRING);
-                        Ok(())
-                    }
-                    JsonEvent::Number(v) => {
-                        *value = vec![v.to_string()];
-                        *fallback_type = Some(guess_number_datatype(&v));
-                        if language.is_some() {
-                            return Err(JsonLdSyntaxError::msg_and_code(
-                                "@value must be a string if @language is set",
-                                JsonLdErrorCode::InvalidLanguageTaggedValue,
-                            ));
-                        }
-                        Ok(())
-                    }
-                    JsonEvent::Boolean(v) => {
-                        *value = vec![v.to_string()];
-                        *fallback_type = Some(xsd::BOOLEAN);
-                        if language.is_some() {
-                            return Err(JsonLdSyntaxError::msg_and_code(
-                                "@value must be a string if @language is set",
-                                JsonLdErrorCode::InvalidLanguageTaggedValue,
-                            ));
-                        }
-                        Ok(())
-                    }
-                    JsonEvent::Null
-                    | JsonEvent::StartArray
-                    | JsonEvent::EndArray
-                    | JsonEvent::StartObject
-                    | JsonEvent::EndObject
-                    | JsonEvent::ObjectKey(_)
-                    | JsonEvent::Eof => unimplemented!(),
-                }
-            }
-            JsonLdState::LiteralLanguage => {
-                let Some(JsonLdState::Literal { language, .. }) = self.state.last_mut() else {
-                    unreachable!();
-                };
-                if language.is_some() {
-                    return Err(JsonLdSyntaxError::msg_and_code(
-                        "A @language is already set for this object",
-                        JsonLdErrorCode::CollidingKeywords,
-                    ));
-                }
-                match event {
-                    JsonEvent::String(v) => {
-                        if let Err(e) = LanguageTag::parse(v.as_ref()) {
-                            return Err(JsonLdSyntaxError::msg_and_code(
-                                format!("Invalid language tag '{v}': {e}"),
-                                JsonLdErrorCode::InvalidLanguageTaggedString,
-                            ));
-                        }
-                        *language = Some(v.into_owned());
-                        Ok(())
-                    }
-                    JsonEvent::Number(_)
-                    | JsonEvent::Boolean(_)
-                    | JsonEvent::Null
-                    | JsonEvent::StartArray
-                    | JsonEvent::EndArray
-                    | JsonEvent::StartObject
-                    | JsonEvent::EndObject
-                    | JsonEvent::ObjectKey(_)
-                    | JsonEvent::Eof => Err(JsonLdSyntaxError::msg_and_code(
-                        "A literal language must be a string",
-                        JsonLdErrorCode::InvalidLanguageTaggedString,
-                    )),
-                }
-            }
-            JsonLdState::LiteralType => {
-                let Some(JsonLdState::Literal { r#type, .. }) = self.state.last_mut() else {
-                    unreachable!();
-                };
-                if r#type.is_some() {
-                    return Err(JsonLdSyntaxError::msg_and_code(
-                        "A @language is already set for this object",
-                        JsonLdErrorCode::CollidingKeywords,
-                    ));
-                }
-                match event {
-                    JsonEvent::String(t) => match NamedNode::new(t.as_ref()) {
-                        Ok(t) => {
-                            *r#type = Some(t);
-                            Ok(())
-                        }
-                        Err(e) => Err(JsonLdSyntaxError::msg_and_code(
-                            format!("@type value '{t}' must be a a valid IRI: {e}"),
+                    JsonEvent::StartObject => {
+                        // 13.4.4.1)
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "@type value must be a string",
                             JsonLdErrorCode::InvalidTypeValue,
-                        )),
-                    },
-                    JsonEvent::Number(_)
-                    | JsonEvent::Boolean(_)
-                    | JsonEvent::Null
-                    | JsonEvent::StartArray
-                    | JsonEvent::EndArray
-                    | JsonEvent::StartObject
-                    | JsonEvent::EndObject
-                    | JsonEvent::ObjectKey(_)
-                    | JsonEvent::Eof => Err(JsonLdSyntaxError::msg_and_code(
-                        "A literal type must be a string",
-                        JsonLdErrorCode::InvalidTypeValue,
-                    )),
+                        ));
+                        if is_array {
+                            self.state
+                                .push(JsonLdExpansionState::ObjectTypeArray { types });
+                        } else {
+                            results.push(JsonLdEvent::StartObject { types });
+                            self.state.push(JsonLdExpansionState::General);
+                        }
+                        self.state.push(JsonLdExpansionState::Skip);
+                    }
+                    JsonEvent::ObjectKey(_) | JsonEvent::EndObject | JsonEvent::Eof => {
+                        unreachable!()
+                    }
                 }
             }
-            JsonLdState::Skip => match event {
+            JsonLdExpansionState::Skip | JsonLdExpansionState::SkipArray => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
                 | JsonEvent::Boolean(_)
-                | JsonEvent::Null
-                | JsonEvent::EndArray
-                | JsonEvent::EndObject
-                | JsonEvent::Eof => Ok(()),
-                JsonEvent::StartArray | JsonEvent::StartObject | JsonEvent::ObjectKey(_) => {
-                    self.state.push(JsonLdState::Skip);
-                    self.state.push(JsonLdState::Skip);
-                    Ok(())
+                | JsonEvent::Null => {
+                    if matches!(state, JsonLdExpansionState::SkipArray) {
+                        self.state.push(JsonLdExpansionState::SkipArray);
+                    }
                 }
+                JsonEvent::EndArray | JsonEvent::EndObject => (),
+                JsonEvent::StartArray => {
+                    if matches!(state, JsonLdExpansionState::SkipArray) {
+                        self.state.push(JsonLdExpansionState::SkipArray);
+                    }
+                    self.state.push(JsonLdExpansionState::SkipArray);
+                }
+                JsonEvent::StartObject => {
+                    if matches!(state, JsonLdExpansionState::SkipArray) {
+                        self.state.push(JsonLdExpansionState::SkipArray);
+                    }
+                    self.state.push(JsonLdExpansionState::Skip);
+                }
+                JsonEvent::ObjectKey(_) => {
+                    self.state.push(JsonLdExpansionState::Skip);
+                    self.state.push(JsonLdExpansionState::Skip);
+                }
+                JsonEvent::Eof => unreachable!(),
             },
         }
     }
 
-    fn current_subject(&mut self) -> Option<Subject> {
-        for state in self.state.iter_mut().rev() {
-            if let JsonLdState::Object { id, .. } = state {
-                // TODO: is only valid in streaming
-                return Some(
-                    id.get_or_insert_with(|| BlankNode::default().into())
-                        .clone()
-                        .into(),
-                );
+    /// [IRI Expansion](https://www.w3.org/TR/json-ld-api/#iri-expansion)
+    fn expand_iri<'a>(&self, iri: Cow<'a, str>) -> Option<JsonLdIdOrKeyword<'a>> {
+        if let Some(suffix) = iri.strip_prefix('@') {
+            // 1)
+            match suffix {
+                "direction" => return Some(JsonLdIdOrKeyword::Keyword("value")),
+                "graph" => return Some(JsonLdIdOrKeyword::Keyword("value")),
+                "id" => return Some(JsonLdIdOrKeyword::Keyword("id")),
+                "language" => return Some(JsonLdIdOrKeyword::Keyword("value")),
+                "type" => return Some(JsonLdIdOrKeyword::Keyword("id")),
+                "value" => return Some(JsonLdIdOrKeyword::Keyword("value")),
+                _ if suffix.bytes().all(|b| b.is_ascii_alphabetic()) => {
+                    // 2)
+                    return None;
+                }
+                _ => (),
             }
         }
-        None
+        Some(JsonLdIdOrKeyword::Id(iri))
     }
 
-    fn current_predicate(&self) -> Option<NamedNode> {
-        for state in self.state.iter().rev() {
-            if let JsonLdState::ObjectPredicate { predicate } = state {
-                return Some(predicate.clone());
-            }
-        }
-        None
-    }
-
-    fn current_graph_name(&self) -> GraphName {
-        GraphName::DefaultGraph // TODO
-    }
-}
-
-fn parse_id(value: Cow<'_, str>) -> Result<NamedOrBlankNode, JsonLdSyntaxError> {
-    // TODO: lenient
-    Ok(if let Some(bnode_id) = value.strip_prefix("_:") {
-        BlankNode::new(bnode_id)
-            .map_err(|e| JsonLdSyntaxError::msg(format!("Invalid blank node @id '{value}': {e}")))?
-            .into()
-    } else {
-        NamedNode::new(&*value)
-            .map_err(|e| JsonLdSyntaxError::msg(format!("Invalid IRI @id '{value}': {e}")))?
-            .into()
-    })
-}
-
-fn guess_number_datatype(number: &str) -> NamedNodeRef<'static> {
-    if number.contains('e') || number.contains('E') {
-        xsd::DOUBLE
-    } else if number.contains('.') {
-        xsd::DECIMAL // TODO: this is false!
-    } else {
-        xsd::INTEGER
+    /// [Value Expansion](https://www.w3.org/TR/json-ld-api/#value-expansion)
+    fn expand_value(&mut self, value: JsonLdValue, results: &mut Vec<JsonLdEvent>) {
+        results.push(JsonLdEvent::StartObject { types: Vec::new() });
+        results.push(JsonLdEvent::Value(value));
+        results.push(JsonLdEvent::EndObject);
     }
 }
