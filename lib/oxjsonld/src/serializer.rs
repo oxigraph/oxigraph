@@ -390,10 +390,11 @@ impl InnerJsonLdWriter {
         if self.current_subject.is_none() {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("@id".into()));
+            #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
             output.push(JsonEvent::String(self.id_value(match quad.subject {
                 SubjectRef::NamedNode(iri) => iri.into(),
                 SubjectRef::BlankNode(bnode) => bnode.into(),
-                SubjectRef::Triple(_) => {
+                _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "JSON-LD does not support RDF-star yet",
@@ -445,6 +446,7 @@ impl InnerJsonLdWriter {
         output: &mut Vec<JsonEvent<'a>>,
     ) -> io::Result<()> {
         output.push(JsonEvent::StartObject);
+        #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
         match term {
             TermRef::NamedNode(iri) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));
@@ -465,7 +467,7 @@ impl InnerJsonLdWriter {
                     output.push(JsonEvent::String(self.id_value(literal.datatype().into())));
                 }
             }
-            TermRef::Triple(_) => {
+            _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "JSON-LD does not support RDF-star yet",
