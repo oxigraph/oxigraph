@@ -457,8 +457,6 @@ impl InnerJsonLdWriter {
                 output.push(JsonEvent::String(self.id_value(bnode.into())));
             }
             TermRef::Literal(literal) => {
-                output.push(JsonEvent::ObjectKey("@value".into()));
-                output.push(JsonEvent::String(literal.value().into()));
                 if let Some(language) = literal.language() {
                     output.push(JsonEvent::ObjectKey("@language".into()));
                     output.push(JsonEvent::String(language.into()));
@@ -466,6 +464,8 @@ impl InnerJsonLdWriter {
                     output.push(JsonEvent::ObjectKey("@type".into()));
                     output.push(JsonEvent::String(self.id_value(literal.datatype().into())));
                 }
+                output.push(JsonEvent::ObjectKey("@value".into()));
+                output.push(JsonEvent::String(literal.value().into()));
             }
             _ => {
                 return Err(io::Error::new(

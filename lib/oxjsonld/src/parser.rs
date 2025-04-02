@@ -439,7 +439,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
         JsonLdPrefixesIter {
             lifetime: PhantomData,
-            unchecked: self.inner.unchecked,
+            unchecked: self.inner.to_rdf.unchecked,
         }
     }
 
@@ -756,8 +756,7 @@ impl JsonLdToRdfConverter {
                 JsonLdEvent::StartProperty(_)
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::Id(_)
-                | JsonLdEvent::EndObject
-                | JsonLdEvent::Value { .. } => unreachable!(),
+                | JsonLdEvent::EndObject => unreachable!(),
             },
         }
     }
@@ -1000,10 +999,20 @@ enum JsonLdExpansionState {
     ElementArray,
     ObjectStart {
         types: Vec<String>,
+        id: Option<String>,
     },
-    ObjectType,
+    ObjectType {
+        types: Vec<String>,
+        id: Option<String>,
+    },
     ObjectTypeArray {
         types: Vec<String>,
+        id: Option<String>,
+    },
+    ObjectId {
+        types: Vec<String>,
+        id: Option<String>,
+        from_start: bool,
     },
     Object {
         in_property: bool,
@@ -1043,7 +1052,8 @@ impl JsonLdExpansionConverter {
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
         if self.state.len() > 4096 {
-            unimplemented!();
+            errors.push(JsonLdSyntaxError::msg("Too large state stack"));
+            return;
         }
         if event == JsonEvent::Eof {
             self.is_end = true;
@@ -1094,15 +1104,17 @@ impl JsonLdExpansionConverter {
                         if matches!(state, JsonLdExpansionState::ElementArray) {
                             self.state.push(JsonLdExpansionState::ElementArray);
                         }
-                        self.state
-                            .push(JsonLdExpansionState::ObjectStart { types: Vec::new() });
+                        self.state.push(JsonLdExpansionState::ObjectStart {
+                            types: Vec::new(),
+                            id: None,
+                        });
                     }
                     JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
                         unreachable!()
                     }
                 }
             }
-            JsonLdExpansionState::ObjectStart { types } => {
+            JsonLdExpansionState::ObjectStart { types, id } => {
                 match event {
                     JsonEvent::ObjectKey(key) => {
                         if let Some(id_or_keyword) = self.expand_iri(key) {
@@ -1116,7 +1128,8 @@ impl JsonLdExpansionConverter {
                                 }
                                 JsonLdIdOrKeyword::Keyword(keyword) => match keyword {
                                     "type" => {
-                                        self.state.push(JsonLdExpansionState::ObjectType);
+                                        self.state
+                                            .push(JsonLdExpansionState::ObjectType { id, types });
                                     }
                                     "value" => {
                                         if types.len() > 1 {
@@ -1129,11 +1142,27 @@ impl JsonLdExpansionConverter {
                                     }
                                     "language" => {
                                         if types.len() > 1 {
-                                            errors.push(JsonLdSyntaxError::msg_and_code("Only a single @type is allowed when @value is present", JsonLdErrorCode::InvalidTypedValue));
+                                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                                "Only a single @language is allowed",
+                                                JsonLdErrorCode::CollidingKeywords,
+                                            ));
                                         }
                                         self.state.push(JsonLdExpansionState::ValueLanguage {
                                             r#type: None,
                                             value: None,
+                                        });
+                                    }
+                                    "id" => {
+                                        if id.is_some() {
+                                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                                "Only a single @id is allowed",
+                                                JsonLdErrorCode::CollidingKeywords,
+                                            ));
+                                        }
+                                        self.state.push(JsonLdExpansionState::ObjectId {
+                                            types,
+                                            id,
+                                            from_start: true,
                                         });
                                     }
                                     _ => {
@@ -1141,27 +1170,34 @@ impl JsonLdExpansionConverter {
                                             "Unsupported JSON-LD keyword: @{keyword}"
                                         )));
                                         self.state
-                                            .push(JsonLdExpansionState::ObjectStart { types });
+                                            .push(JsonLdExpansionState::ObjectStart { types, id });
                                         self.state.push(JsonLdExpansionState::Skip);
                                     }
                                 },
                             }
                         } else {
-                            self.state.push(JsonLdExpansionState::ObjectStart { types });
+                            self.state
+                                .push(JsonLdExpansionState::ObjectStart { types, id });
                             self.state.push(JsonLdExpansionState::Skip);
                         }
                     }
-                    JsonEvent::EndObject => unimplemented!(),
+                    JsonEvent::EndObject => {
+                        results.push(JsonLdEvent::StartObject { types });
+                        if let Some(id) = id {
+                            results.push(JsonLdEvent::Id(id));
+                        }
+                        results.push(JsonLdEvent::EndObject);
+                    }
                     _ => unreachable!("Inside of an object"),
                 }
             }
-            JsonLdExpansionState::ObjectType | JsonLdExpansionState::ObjectTypeArray { .. } => {
-                let (mut types, is_array) =
-                    if let JsonLdExpansionState::ObjectTypeArray { types } = state {
-                        (types, true)
-                    } else {
-                        (Vec::new(), false)
-                    };
+            JsonLdExpansionState::ObjectType { .. }
+            | JsonLdExpansionState::ObjectTypeArray { .. } => {
+                let (mut types, id, is_array) = match state {
+                    JsonLdExpansionState::ObjectType { types, id } => (types, id, false),
+                    JsonLdExpansionState::ObjectTypeArray { types, id } => (types, id, true),
+                    _ => unreachable!(),
+                };
                 match event {
                     JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
                         // 13.4.4.1)
@@ -1171,9 +1207,10 @@ impl JsonLdExpansionConverter {
                         ));
                         if is_array {
                             self.state
-                                .push(JsonLdExpansionState::ObjectTypeArray { types });
+                                .push(JsonLdExpansionState::ObjectTypeArray { types, id });
                         } else {
-                            self.state.push(JsonLdExpansionState::ObjectStart { types });
+                            self.state
+                                .push(JsonLdExpansionState::ObjectStart { types, id });
                         }
                     }
                     JsonEvent::String(value) => {
@@ -1192,14 +1229,15 @@ impl JsonLdExpansionConverter {
                         }
                         if is_array {
                             self.state
-                                .push(JsonLdExpansionState::ObjectTypeArray { types });
+                                .push(JsonLdExpansionState::ObjectTypeArray { types, id });
                         } else {
-                            self.state.push(JsonLdExpansionState::ObjectStart { types });
+                            self.state
+                                .push(JsonLdExpansionState::ObjectStart { types, id });
                         }
                     }
                     JsonEvent::StartArray => {
                         self.state
-                            .push(JsonLdExpansionState::ObjectTypeArray { types });
+                            .push(JsonLdExpansionState::ObjectTypeArray { types, id });
                         if is_array {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 "@type cannot contain a nested array",
@@ -1209,7 +1247,8 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::EndArray => {
-                        self.state.push(JsonLdExpansionState::ObjectStart { types });
+                        self.state
+                            .push(JsonLdExpansionState::ObjectStart { types, id });
                     }
                     JsonEvent::StartObject => {
                         // 13.4.4.1)
@@ -1219,9 +1258,10 @@ impl JsonLdExpansionConverter {
                         ));
                         if is_array {
                             self.state
-                                .push(JsonLdExpansionState::ObjectTypeArray { types });
+                                .push(JsonLdExpansionState::ObjectTypeArray { types, id });
                         } else {
-                            self.state.push(JsonLdExpansionState::ObjectStart { types });
+                            self.state
+                                .push(JsonLdExpansionState::ObjectStart { types, id });
                         }
                         self.state.push(JsonLdExpansionState::Skip);
                     }
@@ -1230,6 +1270,73 @@ impl JsonLdExpansionConverter {
                     }
                 }
             }
+            JsonLdExpansionState::ObjectId {
+                types,
+                mut id,
+                from_start,
+            } => match event {
+                JsonEvent::String(new_id) => {
+                    if let Some(new_id) = self.expand_iri(new_id) {
+                        match new_id {
+                            JsonLdIdOrKeyword::Id(new_id) => id = Some(new_id.into()),
+                            JsonLdIdOrKeyword::Keyword(_) => {
+                                errors.push(JsonLdSyntaxError::msg(
+                                    "@id value must be an IRI or a blank node",
+                                ));
+                            }
+                        }
+                    }
+                    self.state.push(if from_start {
+                        JsonLdExpansionState::ObjectStart { types, id }
+                    } else {
+                        if let Some(id) = id {
+                            results.push(JsonLdEvent::Id(id));
+                        }
+                        JsonLdExpansionState::Object { in_property: false }
+                    })
+                }
+                JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@id value must be a string",
+                        JsonLdErrorCode::InvalidLanguageTaggedString,
+                    ));
+                    self.state.push(if from_start {
+                        JsonLdExpansionState::ObjectStart { types, id }
+                    } else {
+                        JsonLdExpansionState::Object { in_property: false }
+                    })
+                }
+                JsonEvent::StartArray => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@id value must be a string",
+                        JsonLdErrorCode::InvalidLanguageTaggedString,
+                    ));
+                    self.state.push(if from_start {
+                        JsonLdExpansionState::ObjectStart { types, id }
+                    } else {
+                        JsonLdExpansionState::Object { in_property: false }
+                    });
+                    self.state.push(JsonLdExpansionState::SkipArray);
+                }
+                JsonEvent::StartObject => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@id value must be a string",
+                        JsonLdErrorCode::InvalidLanguageTaggedString,
+                    ));
+                    self.state.push(if from_start {
+                        JsonLdExpansionState::ObjectStart { types, id }
+                    } else {
+                        JsonLdExpansionState::Object { in_property: false }
+                    });
+                    self.state.push(JsonLdExpansionState::Skip);
+                }
+                JsonEvent::EndArray
+                | JsonEvent::ObjectKey(_)
+                | JsonEvent::EndObject
+                | JsonEvent::Eof => {
+                    unreachable!()
+                }
+            },
             JsonLdExpansionState::Object { in_property } => {
                 if in_property {
                     results.push(JsonLdEvent::EndProperty);
@@ -1248,13 +1355,25 @@ impl JsonLdExpansionConverter {
                                     results.push(JsonLdEvent::StartProperty(id.into()));
                                 }
                                 JsonLdIdOrKeyword::Keyword(keyword) => {
-                                    // TODO: we do not support any keyword
-                                    self.state
-                                        .push(JsonLdExpansionState::Object { in_property: false });
-                                    self.state.push(JsonLdExpansionState::Skip);
-                                    errors.push(JsonLdSyntaxError::msg(format!(
-                                        "Unsupported keyword: {keyword}"
-                                    )));
+                                    match keyword {
+                                        "id" => {
+                                            self.state.push(JsonLdExpansionState::ObjectId {
+                                                types: Vec::new(),
+                                                id: None,
+                                                from_start: false,
+                                            });
+                                        }
+                                        _ => {
+                                            // TODO: we do not support any keyword
+                                            self.state.push(JsonLdExpansionState::Object {
+                                                in_property: false,
+                                            });
+                                            self.state.push(JsonLdExpansionState::Skip);
+                                            errors.push(JsonLdSyntaxError::msg(format!(
+                                                "Unsupported keyword: {keyword}"
+                                            )));
+                                        }
+                                    }
                                 }
                             }
                         } else {
@@ -1315,7 +1434,7 @@ impl JsonLdExpansionConverter {
                                         if language.is_some() {
                                             errors.push(JsonLdSyntaxError::msg_and_code(
                                                 "@language cannot be set multiple times",
-                                                JsonLdErrorCode::InvalidValueObject,
+                                                JsonLdErrorCode::CollidingKeywords,
                                             ));
                                             self.state.push(JsonLdExpansionState::Value {
                                                 r#type,
@@ -1334,7 +1453,7 @@ impl JsonLdExpansionConverter {
                                         if r#type.is_some() {
                                             errors.push(JsonLdSyntaxError::msg_and_code(
                                                 "@type cannot be set multiple times",
-                                                JsonLdErrorCode::InvalidValueObject,
+                                                JsonLdErrorCode::CollidingKeywords,
                                             ));
                                             self.state.push(JsonLdExpansionState::Value {
                                                 r#type,
@@ -1412,7 +1531,7 @@ impl JsonLdExpansionConverter {
                 }),
                 JsonEvent::Boolean(value) => self.state.push(JsonLdExpansionState::Value {
                     r#type,
-                    value: Some(JsonLdValue::Boolean(value.into())),
+                    value: Some(JsonLdValue::Boolean(value)),
                     language,
                 }),
                 JsonEvent::String(value) => self.state.push(JsonLdExpansionState::Value {
@@ -1613,8 +1732,8 @@ impl JsonLdExpansionConverter {
 fn test() {
     let mut count = 0;
     let input = r#"{
-            "@type": "http://example.com/foo",
             "@id": "http://example.com/s",
+            "@type": "http://example.com/foo",
             "http://example.com/p": {"@type": ["http://example.com/f"], "@value": 1.2}
         }"#;
     for q in JsonLdParser::new().for_slice(input.as_bytes()) {
