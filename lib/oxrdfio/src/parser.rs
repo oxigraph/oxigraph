@@ -264,7 +264,7 @@ impl RdfParser {
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.inner = match self.inner {
-            RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.unchecked()),
+            RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.lenient()),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.unchecked()),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.unchecked()),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p.unchecked()),

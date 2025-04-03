@@ -51,7 +51,7 @@ enum SyntaxErrorKind {
 }
 
 impl JsonLdSyntaxError {
-    ///     A string representing the particular error type, as described in the various algorithms in this document.
+    /// A string representing the particular error type, as described in the various algorithms in this document.
     pub fn code(&self) -> Option<JsonLdErrorCode> {
         match &self.0 {
             SyntaxErrorKind::Json(_) => None,
@@ -100,42 +100,158 @@ pub enum JsonLdErrorCode {
     /// Two properties which expand to the same keyword have been detected.
     /// This might occur if a keyword and an alias thereof are used at the same time.
     CollidingKeywords,
+    /// Multiple conflicting indexes have been found for the same node.
+    ConflictingIndexes,
+    /// Maximum number of @context URLs exceeded.
+    ContextOverflow,
+    /// A cycle in IRI mappings has been detected.
+    CyclicIriMapping,
     /// An @id entry was encountered whose value was not a string.
     InvalidIdValue,
+    /// An invalid value for @import has been found.
+    InvalidImportValue,
+    /// An included block contains an invalid value.
+    InvalidIncludedValue,
+    /// An @index entry was encountered whose value was not a string.
+    InvalidIndexValue,
+    /// An invalid value for @nest has been found.
+    InvalidNestValue,
+    /// An invalid value for @prefix has been found.
+    InvalidPrefixValue,
+    /// An invalid value for @propagate has been found.
+    InvalidPropagateValue,
+    /// An invalid value for @protected has been found.
+    InvalidProtectedValue,
+    /// An invalid value for an @reverse entry has been detected, i.e., the value was not a map.
+    InvalidReverseValue,
+    /// The @version entry was used in a context with an out of range value.
+    InvalidVersionValue,
+    /// The value of @direction is not "ltr", "rtl", or null and thus invalid.
+    InvalidBaseDirection,
     /// An invalid base IRI has been detected, i.e., it is neither an IRI nor null.
     InvalidBaseIri,
+    /// An @container entry was encountered whose value was not one of the following strings:
+    /// @list, @set, @language, @index, @id, @graph, or @type.
+    InvalidContainerMapping,
     /// An entry in a context is invalid due to processing mode incompatibility.
     InvalidContextEntry,
+    /// An attempt was made to nullify a context containing protected term definitions.
+    InvalidContextNullification,
+    /// The value of the default language is not a string or null and thus invalid.
+    InvalidDefaultLanguage,
     /// A local context contains a term that has an invalid or missing IRI mapping.
     InvalidIriMapping,
+    /// An invalid JSON literal was detected.
+    InvalidJsonLiteral,
+    /// An invalid keyword alias definition has been encountered.
+    InvalidKeywordAlias,
+    /// An invalid value in a language map has been detected.
+    /// It MUST be a string or an array of strings.
+    InvalidLanguageMapValue,
+    /// An @language entry in a term definition was encountered
+    /// whose value was neither a string nor null and thus invalid.
+    InvalidLanguageMapping,
     /// A language-tagged string with an invalid language value was detected.
     InvalidLanguageTaggedString,
     /// A number, true, or false with an associated language tag was detected.
     InvalidLanguageTaggedValue,
-    /// An invalid value for an @type entry has been detected, i.e., the value was neither a string nor an array of strings.
+    /// An invalid local context was detected.
+    InvalidLocalContext,
+    /// No valid context document has been found for a referenced remote context.
+    InvalidRemoteContext,
+    /// An invalid reverse property definition has been detected.
+    InvalidReverseProperty,
+    /// An invalid reverse property map has been detected.
+    /// No keywords apart from @context are allowed in reverse property maps.
+    InvalidReversePropertyMap,
+    /// An invalid value for a reverse property has been detected.
+    /// The value of an inverse property must be a node object.
+    InvalidReversePropertyValue,
+    /// The local context defined within a term definition is invalid.
+    InvalidScopedContext,
+    /// A set object or list object with disallowed entries has been detected.
+    InvalidSetOrListObject,
+    /// An invalid term definition has been detected.
+    InvalidTermDefinition,
+    /// An @type entry in a term definition was encountered whose value could not be expanded to an IRI.
+    InvalidTypeMapping,
+    /// An invalid value for an @type entry has been detected,
+    /// i.e., the value was neither a string nor an array of strings.
     InvalidTypeValue,
     /// A typed value with an invalid type was detected.
     InvalidTypedValue,
     /// A value object with disallowed entries has been detected.
     InvalidValueObject,
-    /// An invalid value for the @value entry of a value object has been detected, i.e., it is neither a scalar nor null.
+    /// An invalid value for the @value entry of a value object has been detected,
+    /// i.e., it is neither a scalar nor null.
     InvalidValueObjectValue,
+    /// An invalid vocabulary mapping has been detected, i.e., it is neither an IRI nor null.
+    InvalidVocabMapping,
+    /// When compacting an IRI would result in an IRI which could be confused with a compact IRI
+    /// (because its IRI scheme matches a term definition and it has no IRI authority).
+    IriConfusedWithPrefix,
+    /// A keyword redefinition has been detected.
+    KeywordRedefinition,
+    /// The document could not be loaded or parsed as JSON.
+    LoadingDocumentFailed,
+    /// There was a problem encountered loading a remote context.
+    LoadingRemoteContextFailed,
+    /// An attempt was made to change the processing mode which is incompatible with the previous specified version.
+    ProcessingModeConflict,
+    /// An attempt was made to redefine a protected term.
+    ProtectedTermRedefinition,
 }
 
 impl fmt::Display for JsonLdErrorCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::CollidingKeywords => "colliding keywords",
+            Self::ConflictingIndexes => "conflicting indexes",
+            Self::ContextOverflow => "context overflow",
+            Self::CyclicIriMapping => "cyclic IRI mapping",
             Self::InvalidIdValue => "invalid @id value",
+            Self::InvalidImportValue => "invalid @import value",
+            Self::InvalidIncludedValue => "invalid @included value",
+            Self::InvalidIndexValue => "invalid @index value",
+            Self::InvalidNestValue => "invalid @nest value",
+            Self::InvalidPrefixValue => "invalid @prefix value",
+            Self::InvalidPropagateValue => "invalid @propagate value",
+            Self::InvalidProtectedValue => "invalid @protected value",
+            Self::InvalidReverseValue => "invalid @reverse value",
+            Self::InvalidVersionValue => "invalid @version value",
+            Self::InvalidBaseDirection => "invalid base direction",
             Self::InvalidBaseIri => "invalid base IRI",
+            Self::InvalidContainerMapping => "invalid container mapping",
             Self::InvalidContextEntry => "invalid context entry",
+            Self::InvalidContextNullification => "invalid context nullification",
+            Self::InvalidDefaultLanguage => "invalid default language",
             Self::InvalidIriMapping => "invalid IRI mapping",
+            Self::InvalidJsonLiteral => "invalid JSON literal",
+            Self::InvalidKeywordAlias => "invalid keyword alias",
+            Self::InvalidLanguageMapValue => "invalid language map value",
+            Self::InvalidLanguageMapping => "invalid language mapping",
             Self::InvalidLanguageTaggedString => "invalid language-tagged string",
             Self::InvalidLanguageTaggedValue => "invalid language-tagged value",
+            Self::InvalidLocalContext => "invalid local context",
+            Self::InvalidRemoteContext => "invalid remote context",
+            Self::InvalidReverseProperty => "invalid reverse property",
+            Self::InvalidReversePropertyMap => "invalid reverse property map",
+            Self::InvalidReversePropertyValue => "invalid reverse property value",
+            Self::InvalidScopedContext => "invalid scoped context",
+            Self::InvalidSetOrListObject => "invalid set or list object",
+            Self::InvalidTermDefinition => "invalid term definition",
+            Self::InvalidTypeMapping => "invalid type mapping",
             Self::InvalidTypeValue => "invalid type value",
             Self::InvalidTypedValue => "invalid typed value",
             Self::InvalidValueObject => "invalid value object",
             Self::InvalidValueObjectValue => "invalid value object value",
+            Self::InvalidVocabMapping => "invalid vocab mapping",
+            Self::IriConfusedWithPrefix => "IRI confused with prefix",
+            Self::KeywordRedefinition => "keyword redefinition",
+            Self::LoadingDocumentFailed => "loading document failed",
+            Self::LoadingRemoteContextFailed => "loading remote context failed",
+            Self::ProcessingModeConflict => "processing mode conflict",
+            Self::ProtectedTermRedefinition => "protected term redefinition",
         })
     }
 }
