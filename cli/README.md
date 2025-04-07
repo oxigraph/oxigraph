@@ -257,7 +257,7 @@ Similarly, man pages are generated in the `target/{debug,release}/build/oxigraph
 
 ### From 0.2 to 0.3
 * The cli API has been completely rewritten. To start the server run `oxigraph serve --location MY_STORAGE` instead of `oxigraph --file MY_STORAGE`.
-* Fast data bulk loading is not supported using `oxigraph load --location MY_STORAGE --file MY_FILE`. The file format is guessed from the extension (`.nt`, `.ttl`, `.nq`...).
+* Fast data bulk loading is now supported using `oxigraph load --location MY_STORAGE --file MY_FILE`. The file format is guessed from the extension (`.nt`, `.ttl`, `.nq`, ...).
 * [RDF-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is now implemented.
 * All operations are now transactional using the "repeatable read" isolation level:
   the store only exposes changes that have been "committed" (i.e. no partial writes)
