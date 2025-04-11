@@ -974,10 +974,10 @@ impl JsonLdToRdfConverter {
 fn test() {
     let mut count = 0;
     let input = r#"{
-            "@context": {"@base": "http://example.com/", "@vocab": "http://example.org/"},
+            "@context": {"@base": "http://example.com/", "@vocab": "http://example.org/", "xsd": "http://xsd/"},
             "@id": "s",
             "@type": "foo",
-            "p": {"@type": ["f"], "@value": 1.2}
+            "p": {"@type": ["xsd:f"], "@value": 1.2}
         }"#;
     for q in JsonLdParser::new().for_slice(input.as_bytes()) {
         q.unwrap();
