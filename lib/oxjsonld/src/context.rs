@@ -1,5 +1,4 @@
 use crate::error::JsonLdErrorCode;
-use crate::expansion::JsonLdIdOrKeyword;
 use crate::JsonLdSyntaxError;
 use oxiri::Iri;
 use std::borrow::Cow;
@@ -51,6 +50,8 @@ pub struct JsonLdTermDefinition {
     pub protected: bool,
     pub reverse_property: bool,
     pub base_url: Option<Iri<String>>,
+    pub language_mapping: Option<String>,
+    pub type_mapping: Option<String>,
 }
 
 /// [Context Processing Algorithm](https://www.w3.org/TR/json-ld-api/#algorithm)
@@ -106,7 +107,12 @@ pub fn process_context(
                 continue;
             }
             // 5.2)
-            JsonNode::String(_) => unimplemented!(),
+            JsonNode::String(_) => {
+                errors.push(JsonLdSyntaxError::msg(
+                    "Loading remote contexts is not implemented yet",
+                ));
+                continue; // TODO
+            }
             // 5.3)
             JsonNode::Array(_) | JsonNode::Number(_) | JsonNode::Boolean(_) => {
                 errors.push(JsonLdSyntaxError::msg_and_code(
@@ -118,7 +124,7 @@ pub fn process_context(
             // 5.4)
             JsonNode::Map(context) => context,
         };
-        let mut key_values = Vec::new();
+        let mut key_values = HashMap::new();
         let mut protected = false;
         for (key, value) in context {
             match key.as_str() {
@@ -156,9 +162,9 @@ pub fn process_context(
                             "@import is only supported in JSON-LD 1.1",
                             JsonLdErrorCode::InvalidContextEntry,
                         ));
-                    } else {
-                        unimplemented!()
+                        continue;
                     }
+                    unimplemented!()
                 }
                 // 5.7)
                 "@base" => {
@@ -249,9 +255,9 @@ pub fn process_context(
                             "@direction is only supported in JSON-LD 1.1",
                             JsonLdErrorCode::InvalidContextEntry,
                         ));
-                    } else {
-                        unimplemented!()
+                        continue;
                     }
+                    unimplemented!()
                 }
                 // 5.11)
                 "@propagate" => {
@@ -261,9 +267,9 @@ pub fn process_context(
                             "@propagate is only supported in JSON-LD 1.1",
                             JsonLdErrorCode::InvalidContextEntry,
                         ));
-                    } else {
-                        unimplemented!()
+                        continue;
                     }
+                    unimplemented!()
                 }
                 // 5.13)
                 "@protected" => {
@@ -281,15 +287,17 @@ pub fn process_context(
                         )),
                     }
                 }
-                _ => key_values.push((key, value)),
+                _ => {
+                    key_values.insert(key, value);
+                }
             }
         }
         let mut defined = HashMap::new();
-        for (key, value) in key_values {
+        for term in key_values.keys() {
             create_term_definition(
                 &mut result,
-                key,
-                value,
+                &key_values,
+                term,
                 &mut defined,
                 base_url,
                 protected,
@@ -309,8 +317,8 @@ pub fn process_context(
 /// [Create Term Definition](https://www.w3.org/TR/json-ld-api/#create-term-definition)
 fn create_term_definition(
     active_context: &mut JsonLdContext,
-    term: String,
-    value: JsonNode,
+    local_context: &HashMap<String, JsonNode>,
+    term: &str,
     defined: &mut HashMap<String, bool>,
     base_url: Option<&Iri<String>>,
     protected: bool,
@@ -322,7 +330,7 @@ fn create_term_definition(
     errors: &mut Vec<JsonLdSyntaxError>,
 ) {
     // 1)
-    if let Some(defined_value) = defined.get(&term) {
+    if let Some(defined_value) = defined.get(term) {
         if !defined_value {
             errors.push(JsonLdSyntaxError::msg_and_code(
                 "Cyclic IRI mapping, ignoring",
@@ -339,7 +347,7 @@ fn create_term_definition(
         ));
         return;
     }
-    defined.insert(term.clone(), false);
+    defined.insert(term.into(), false);
     // 4)
     if term == "@type" {
         if processing_mode == JsonLdProcessingMode::JsonLd1_0 {
@@ -359,14 +367,20 @@ fn create_term_definition(
         return;
     }
     // 6)
-    let previous_definition = active_context.term_definitions.remove(&term);
-    let (value, simple_term) = match value {
+    let previous_definition = active_context.term_definitions.remove(term);
+    let (value, mut simple_term) = match local_context.get(term) {
         // 7)
-        JsonNode::Null => ([("@id".to_owned(), JsonNode::Null)].into(), true), // TODO: undefined
+        Some(JsonNode::Null) => (
+            Cow::Owned([("@id".to_owned(), JsonNode::Null)].into()),
+            true,
+        ), // TODO: undefined
         // 8)
-        JsonNode::String(id) => ([("@id".to_owned(), JsonNode::String(id))].into(), true),
+        Some(JsonNode::String(id)) => (
+            Cow::Owned([("@id".to_owned(), JsonNode::String(id.clone()))].into()),
+            true,
+        ),
         // 9)
-        JsonNode::Map(map) => (map, false),
+        Some(JsonNode::Map(map)) => (Cow::Borrowed(map), false),
         _ => {
             errors.push(JsonLdSyntaxError::msg_and_code(
                 "Term definition value must be null, a string or a map",
@@ -382,9 +396,11 @@ fn create_term_definition(
         protected,
         reverse_property: false,
         base_url: None,
+        language_mapping: None,
+        type_mapping: None,
     };
     let mut found_id = false;
-    for (key, value) in value {
+    for (key, value) in value.as_ref() {
         match key.as_str() {
             // 11)
             "@protected" => {
@@ -393,12 +409,19 @@ fn create_term_definition(
                         "@protected keyword can't be used in JSON-LD 1.0 @context",
                         JsonLdErrorCode::InvalidTermDefinition,
                     ));
-                } else {
-                    unimplemented!()
+                    continue;
                 }
+                unimplemented!()
             }
             // 12)
             "@type" => {
+                // 22) moved
+                if definition.language_mapping.is_some() {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "Both @language and @type can't be set at the same time",
+                        JsonLdErrorCode::InvalidLanguageMapping,
+                    ));
+                }
                 // 12.1)
                 let JsonNode::String(r#type) = value else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -407,10 +430,52 @@ fn create_term_definition(
                     ));
                     continue;
                 };
-                unimplemented!();
+                // 12.2)
+                let Some(r#type) = expand_iri(
+                    active_context,
+                    r#type.as_str().into(),
+                    false,
+                    true,
+                    Some(local_context),
+                    defined,
+                    processing_mode,
+                    lenient,
+                    errors,
+                ) else {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        format!("Invalid @type value in @context: {type}"),
+                        JsonLdErrorCode::InvalidTypeMapping,
+                    ));
+                    continue;
+                };
+                // 12.3)
+                if matches!(r#type.as_ref(), "@json" | "@none")
+                    && processing_mode == JsonLdProcessingMode::JsonLd1_0
+                {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        format!(
+                            "@type value {type} in a @context is only supported in JSON-LD 1.1"
+                        ),
+                        JsonLdErrorCode::InvalidTypeMapping,
+                    ));
+                }
+                // 12.4)
+                if has_keyword_form(&r#type)
+                    && !matches!(r#type.as_ref(), "@id" | "@json" | "@none" | "@vocab")
+                {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        format!("Invalid @type value in @context: {type}"),
+                        JsonLdErrorCode::InvalidTypeMapping,
+                    ));
+                }
+                // 12.5)
+                definition.type_mapping = Some(r#type.into());
             }
             // 13)
-            "@reverse" => unimplemented!(),
+            "@reverse" => {
+                errors.push(JsonLdSyntaxError::msg("@reverse is not implemented yet"));
+                // TODO
+            }
             // 14)
             "@id" => {
                 match value {
@@ -427,7 +492,58 @@ fn create_term_definition(
                         if has_keyword_form(&id) {
                             continue;
                         }
-                        unimplemented!()
+                        // 14.2.3)
+                        definition.iri_mapping = expand_iri(
+                            active_context,
+                            id.into(),
+                            false,
+                            true,
+                            Some(local_context),
+                            defined,
+                            processing_mode,
+                            lenient,
+                            errors,
+                        )
+                        .map(Into::into);
+                        // 14.2.4)
+                        if term
+                            .as_bytes()
+                            .get(1..term.len() - 1)
+                            .is_some_and(|t| t.contains(&b':'))
+                            || term.contains('/')
+                        {
+                            // 14.2.4.1)
+                            defined.insert(term.into(), true);
+                            let expended_term = expand_iri(
+                                active_context,
+                                term.into(),
+                                false,
+                                true,
+                                Some(local_context),
+                                defined,
+                                processing_mode,
+                                lenient,
+                                errors,
+                            );
+                            // 14.2.4.2)
+                            if expended_term.as_deref() != definition.iri_mapping.as_deref() {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("Inconsistent expansion of {term}"),
+                                    JsonLdErrorCode::InvalidIriMapping,
+                                ))
+                            }
+                        }
+                        // 14.2.5)
+                        if !term.contains(':') && !term.contains('/') {
+                            simple_term = true;
+                            if definition.iri_mapping.as_deref().is_some_and(|iri| {
+                                iri.ends_with(|c| {
+                                    matches!(c, ':' | '/' | '?' | '#' | '[' | ']' | '@')
+                                }) || iri.starts_with("_:")
+                            }) {
+                                definition.prefix_flag = true;
+                            }
+                        }
                     }
                     // 14.2.1)
                     _ => {
@@ -440,19 +556,77 @@ fn create_term_definition(
                 }
             }
             // 19)
-            "@container" => unimplemented!(),
+            "@container" => {
+                errors.push(JsonLdSyntaxError::msg("@container is not implemented yet"));
+                // TODO
+            }
             // 20)
-            "@index" => unimplemented!(),
+            "@index" => {
+                errors.push(JsonLdSyntaxError::msg("@index is not implemented yet"));
+                // TODO
+            }
             // 21)
-            "@context" => unimplemented!(),
+            "@context" => {
+                errors.push(JsonLdSyntaxError::msg(
+                    "@context in @context is not implemented yet",
+                )); // TODO
+            }
             // 22)
-            "@language" => unimplemented!(),
+            "@language" => {
+                if definition.type_mapping.is_some() {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "Both @language and @type can't be set at the same time",
+                        JsonLdErrorCode::InvalidLanguageMapping,
+                    ));
+                }
+                definition.language_mapping = match value {
+                    JsonNode::String(language) => Some(language.clone()),
+                    JsonNode::Null => None, // TODO: Some(None)?
+                    _ => {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "@language value must be a string or null",
+                            JsonLdErrorCode::InvalidLanguageMapping,
+                        ));
+                        continue;
+                    }
+                }
+            }
             // 23)
-            "@direction" => unimplemented!(),
+            "@direction" => {
+                // 23.1)
+                if processing_mode == JsonLdProcessingMode::JsonLd1_0 {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@direction is only supported in JSON-LD 1.1",
+                        JsonLdErrorCode::InvalidTermDefinition,
+                    ));
+                    continue;
+                }
+                unimplemented!()
+            }
             // 24)
-            "@nest" => unimplemented!(),
+            "@nest" => {
+                // 24.1)
+                if processing_mode == JsonLdProcessingMode::JsonLd1_0 {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@nest is only supported in JSON-LD 1.1",
+                        JsonLdErrorCode::InvalidTermDefinition,
+                    ));
+                    continue;
+                }
+                unimplemented!()
+            }
             // 25)
-            "@prefix" => unimplemented!(),
+            "@prefix" => {
+                // 25.1)
+                if processing_mode == JsonLdProcessingMode::JsonLd1_0 {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@direction is only supported in JSON-LD 1.1",
+                        JsonLdErrorCode::InvalidTermDefinition,
+                    ));
+                    continue;
+                }
+                unimplemented!()
+            }
             // 26)
             _ => errors.push(JsonLdSyntaxError::msg_and_code(
                 format!("Unexpected key in @context term definition '{key}'"),
@@ -461,12 +635,72 @@ fn create_term_definition(
         }
     }
     if !found_id {
-        if term.get(1..).is_some_and(|t| t.contains(':')) {
+        if let Some((prefix, suffix)) = term.split_once(':').and_then(|(prefix, suffix)| {
+            if prefix.is_empty() {
+                // We ignore the empty prefixes
+                suffix.split_once(':')
+            } else {
+                Some((prefix, suffix))
+            }
+        }) {
             // 15)
-            unimplemented!()
+            if local_context.contains_key(prefix) {
+                // 15.1)
+                create_term_definition(
+                    active_context,
+                    local_context,
+                    prefix,
+                    defined,
+                    base_url,
+                    false,
+                    false,
+                    remote_contexts,
+                    false,
+                    processing_mode,
+                    lenient, // Custom option to ignore invalid base IRIs
+                    errors,
+                )
+            }
+            if let Some(term_definition) = active_context.term_definitions.get(prefix) {
+                // 15.2)
+                if let Some(iri_mapping) = &term_definition.iri_mapping {
+                    definition.iri_mapping = Some(format!("{iri_mapping}{suffix}"));
+                } else {
+                    errors.push(JsonLdSyntaxError::msg(format!(
+                        "The prefix '{prefix}' is not associated with an IRI in the context"
+                    )));
+                }
+            } else {
+                // 15.3)
+                definition.iri_mapping = Some(term.into());
+            }
         } else if term.contains('/') {
             // 16)
-            unimplemented!()
+            if let Some(iri) = expand_iri(
+                active_context,
+                term.into(),
+                false,
+                true,
+                Some(local_context),
+                defined,
+                processing_mode,
+                lenient,
+                errors,
+            ) {
+                if has_keyword_form(&iri) {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        format!("Context term @id is not allowed to be a keyword, {iri} found"),
+                        JsonLdErrorCode::InvalidIriMapping,
+                    ))
+                } else if iri.starts_with("_:") {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        format!("Context term @id is not allowed to be a blank node, {iri} found"),
+                        JsonLdErrorCode::InvalidIriMapping,
+                    ))
+                } else {
+                    definition.iri_mapping = Some(iri.into());
+                }
+            }
         } else if term == "@type" {
             // 17)
             definition.iri_mapping = Some("@type".into());
@@ -506,11 +740,11 @@ fn create_term_definition(
     // 28)
     active_context
         .term_definitions
-        .insert(term.clone(), definition);
-    defined.insert(term, true);
+        .insert(term.into(), definition);
+    defined.insert(term.into(), true);
 }
 
-fn has_keyword_form(value: &str) -> bool {
+pub fn has_keyword_form(value: &str) -> bool {
     value
         .strip_prefix('@')
         .is_some_and(|suffix| suffix.bytes().all(|b| b.is_ascii_alphabetic()))
@@ -527,33 +761,33 @@ pub fn expand_iri<'a>(
     processing_mode: JsonLdProcessingMode,
     lenient: bool,
     errors: &mut Vec<JsonLdSyntaxError>,
-) -> Option<JsonLdIdOrKeyword<'a>> {
+) -> Option<Cow<'a, str>> {
     if let Some(suffix) = value.strip_prefix('@') {
         // 1)
         match suffix {
-            "base" => return Some(JsonLdIdOrKeyword::Keyword("base".into())),
-            "container" => return Some(JsonLdIdOrKeyword::Keyword("container".into())),
-            "context" => return Some(JsonLdIdOrKeyword::Keyword("context".into())),
-            "direction" => return Some(JsonLdIdOrKeyword::Keyword("direction".into())),
-            "graph" => return Some(JsonLdIdOrKeyword::Keyword("graph".into())),
-            "id" => return Some(JsonLdIdOrKeyword::Keyword("id".into())),
-            "import" => return Some(JsonLdIdOrKeyword::Keyword("import".into())),
-            "included" => return Some(JsonLdIdOrKeyword::Keyword("included".into())),
-            "index" => return Some(JsonLdIdOrKeyword::Keyword("index".into())),
-            "json" => return Some(JsonLdIdOrKeyword::Keyword("json".into())),
-            "language" => return Some(JsonLdIdOrKeyword::Keyword("language".into())),
-            "list" => return Some(JsonLdIdOrKeyword::Keyword("list".into())),
-            "nest" => return Some(JsonLdIdOrKeyword::Keyword("nest".into())),
-            "none" => return Some(JsonLdIdOrKeyword::Keyword("none".into())),
-            "prefix" => return Some(JsonLdIdOrKeyword::Keyword("prefix".into())),
-            "propagate" => return Some(JsonLdIdOrKeyword::Keyword("propagate".into())),
-            "protected" => return Some(JsonLdIdOrKeyword::Keyword("protected".into())),
-            "reverse" => return Some(JsonLdIdOrKeyword::Keyword("reverse".into())),
-            "set" => return Some(JsonLdIdOrKeyword::Keyword("set".into())),
-            "type" => return Some(JsonLdIdOrKeyword::Keyword("type".into())),
-            "value" => return Some(JsonLdIdOrKeyword::Keyword("value".into())),
-            "version" => return Some(JsonLdIdOrKeyword::Keyword("version".into())),
-            "vocab" => return Some(JsonLdIdOrKeyword::Keyword("vocab".into())),
+            "base" => return Some("@base".into()),
+            "container" => return Some("@container".into()),
+            "context" => return Some("@context".into()),
+            "direction" => return Some("@direction".into()),
+            "graph" => return Some("@graph".into()),
+            "id" => return Some("@id".into()),
+            "import" => return Some("@import".into()),
+            "included" => return Some("@included".into()),
+            "index" => return Some("@index".into()),
+            "json" => return Some("@json".into()),
+            "language" => return Some("@language".into()),
+            "list" => return Some("@list".into()),
+            "nest" => return Some("@nest".into()),
+            "none" => return Some("@none".into()),
+            "prefix" => return Some("@prefix".into()),
+            "propagate" => return Some("@propagate".into()),
+            "protected" => return Some("@protected".into()),
+            "reverse" => return Some("@reverse".into()),
+            "set" => return Some("@set".into()),
+            "type" => return Some("@type".into()),
+            "value" => return Some("@value".into()),
+            "version" => return Some("@version".into()),
+            "vocab" => return Some("@vocab".into()),
             _ if has_keyword_form(&value) => {
                 // 2)
                 return None;
@@ -563,12 +797,49 @@ pub fn expand_iri<'a>(
     }
     // 3)
     if let Some(local_context) = local_context {
-        if let Some(entry) = local_context.get(value.as_ref()) {
-            if defined.get(value.as_ref()) != Some(&true) {
+        if local_context.contains_key(value.as_ref()) && defined.get(value.as_ref()) != Some(&true)
+        {
+            create_term_definition(
+                active_context,
+                local_context,
+                &value,
+                defined,
+                None,
+                false,
+                false,
+                &mut Vec::new(),
+                false,
+                processing_mode,
+                lenient, // Custom option to ignore invalid base IRIs
+                errors,
+            )
+        }
+    }
+    if let Some(term_definition) = active_context.term_definitions.get(value.as_ref()) {
+        if let Some(iri_mapping) = &term_definition.iri_mapping {
+            // 4)
+            if let Some(keyword) = iri_mapping.strip_prefix('@') {
+                return Some(keyword.to_owned().into());
+            }
+            // 5)
+            if vocab {
+                return Some(iri_mapping.clone().into());
+            }
+        }
+    }
+    // 6.1)
+    if let Some((prefix, suffix)) = value.split_once(':') {
+        // 6.2)
+        if prefix == "_" || suffix.starts_with("//") {
+            return Some(value);
+        }
+        // 6.3)
+        if let Some(local_context) = local_context {
+            if local_context.contains_key(prefix) && defined.get(prefix) != Some(&true) {
                 create_term_definition(
                     active_context,
-                    value.clone().into(),
-                    entry.clone(),
+                    local_context,
+                    prefix,
                     defined,
                     None,
                     false,
@@ -581,83 +852,35 @@ pub fn expand_iri<'a>(
                 )
             }
         }
-    }
-    if let Some(term_definition) = active_context.term_definitions.get(value.as_ref()) {
-        if let Some(iri_mapping) = &term_definition.iri_mapping {
-            // 4)
-            if let Some(keyword) = iri_mapping.strip_prefix('@') {
-                return Some(JsonLdIdOrKeyword::Keyword(keyword.to_owned().into()));
-            }
-            // 5)
-            if vocab {
-                return Some(JsonLdIdOrKeyword::Id(iri_mapping.clone().into()));
-            }
-        }
-    }
-    // 6.1)
-    if let Some((prefix, suffix)) = value.split_once(':') {
-        // 6.2)
-        if prefix == "_" || suffix.starts_with("//") {
-            return Some(JsonLdIdOrKeyword::Id(value));
-        }
-        // 6.3)
-        if let Some(local_context) = local_context {
-            if let Some(entry) = local_context.get(prefix) {
-                if defined.get(prefix) != Some(&true) {
-                    create_term_definition(
-                        active_context,
-                        prefix.into(),
-                        entry.clone(),
-                        defined,
-                        None,
-                        false,
-                        false,
-                        &mut Vec::new(),
-                        false,
-                        processing_mode,
-                        lenient, // Custom option to ignore invalid base IRIs
-                        errors,
-                    )
-                }
-            }
-        }
         // 6.4)
         if let Some(term_definition) = active_context.term_definitions.get(value.as_ref()) {
             if let Some(iri_mapping) = &term_definition.iri_mapping {
                 if term_definition.prefix_flag {
-                    return Some(JsonLdIdOrKeyword::Id(
-                        format!("{iri_mapping}{suffix}").into(),
-                    ));
+                    return Some(format!("{iri_mapping}{suffix}").into());
                 }
             }
         }
         // 6.5)
         if Iri::parse(value.as_ref()).is_ok() {
-            return Some(JsonLdIdOrKeyword::Id(value));
+            return Some(value);
         }
     }
     // 7)
     if vocab {
         if let Some(vocabulary_mapping) = &active_context.vocabulary_mapping {
-            return Some(JsonLdIdOrKeyword::Id(
-                format!("{vocabulary_mapping}{value}").into(),
-            ));
+            return Some(format!("{vocabulary_mapping}{value}").into());
         }
     }
     // 8)
     if document_relative {
         if let Some(base_iri) = &active_context.base_iri {
             if lenient {
-                return Some(JsonLdIdOrKeyword::Id(
-                    base_iri.resolve_unchecked(&value).into_inner().into(),
-                ));
+                return Some(base_iri.resolve_unchecked(&value).into_inner().into());
             } else if let Ok(value) = base_iri.resolve(&value) {
-                return Some(JsonLdIdOrKeyword::Id(
-                    base_iri.resolve_unchecked(&value).into_inner().into(),
-                ));
+                return Some(base_iri.resolve_unchecked(&value).into_inner().into());
             }
         }
     }
 
-    Some(JsonLdIdOrKeyword::Id(value))
+    Some(value)
 }
