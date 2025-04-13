@@ -245,6 +245,9 @@ impl JsonLdExpansionConverter {
                             }
                             _ => {
                                 results.push(JsonLdEvent::StartObject { types });
+                                if let Some(id) = id {
+                                    results.push(JsonLdEvent::Id(id));
+                                }
                                 results.push(JsonLdEvent::StartProperty(iri.into()));
                                 self.state
                                     .push(JsonLdExpansionState::Object { in_property: true });
@@ -434,7 +437,7 @@ impl JsonLdExpansionConverter {
                                         .push(JsonLdExpansionState::Object { in_property: false });
                                     self.state.push(JsonLdExpansionState::Skip);
                                     errors.push(JsonLdSyntaxError::msg(format!(
-                                        "Unsupported keyword: {iri}"
+                                        "Unsupported JSON-LD keyword: {iri}"
                                     )));
                                 }
                                 _ => {

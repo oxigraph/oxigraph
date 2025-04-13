@@ -7,7 +7,7 @@ use json_ld::{IriBuf, JsonLdProcessor, RemoteDocumentReference};
 use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::future::Future;
 use std::pin::pin;
@@ -26,6 +26,8 @@ pub struct Test {
     pub service_data: Vec<(String, String)>,
     pub result: Option<String>,
     pub result_graph_data: Vec<(NamedNode, String)>,
+    pub expect_error_code: Option<String>,
+    pub option: HashMap<NamedNode, Term>,
 }
 
 impl fmt::Display for Test {
@@ -53,6 +55,9 @@ impl fmt::Display for Test {
         }
         if let Some(result) = &self.result {
             write!(f, " and expected result {result}")?;
+        }
+        for (k, v) in &self.option {
+            write!(f, " and option {k} set to {v}")?;
         }
         Ok(())
     }
@@ -280,6 +285,26 @@ impl TestManifest {
                 Some(_) => bail!("invalid result"),
                 None => (None, Vec::new()),
             };
+            let expect_error_code = match self
+                .graph
+                .object_for_subject_predicate(&test_node, jld::EXPECT_ERROR_CODE)
+            {
+                Some(TermRef::Literal(code)) => Some(code.value().to_owned()),
+                Some(_) => bail!("invalid expectErrorCode"),
+                None => None,
+            };
+            let option = match self
+                .graph
+                .object_for_subject_predicate(&test_node, jld::OPTION)
+            {
+                Some(TermRef::BlankNode(option)) => self
+                    .graph
+                    .triples_for_subject(option)
+                    .map(|t| (t.predicate.into_owned(), t.object.into_owned()))
+                    .collect(),
+                Some(_) => bail!("invalid option"),
+                None => HashMap::new(),
+            };
             return Ok(Some(Test {
                 id: test_node,
                 kinds,
@@ -293,6 +318,8 @@ impl TestManifest {
                 service_data,
                 result,
                 result_graph_data,
+                expect_error_code,
+                option,
             }));
         }
     }

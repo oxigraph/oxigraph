@@ -848,7 +848,7 @@ impl JsonLdToRdfConverter {
                 Ok(iri) => Some(iri),
                 Err(e) => {
                     errors.push(JsonLdSyntaxError::msg(format!(
-                        "Invalid IRI @id '{value}': {e}"
+                        "Invalid IRI '{value}': {e}"
                     )));
                     None
                 }
@@ -974,13 +974,12 @@ impl JsonLdToRdfConverter {
 fn test() {
     let mut count = 0;
     let input = r#"{
-            "@context": {"@base": "http://example.com/", "@vocab": "http://example.org/", "xsd": "http://xsd/"},
-            "@id": "s",
-            "@type": "foo",
-            "p": {"@type": ["xsd:f"], "@value": 1.2}
-        }"#;
+  "@context": {"foaf": "http://xmlns.com/foaf/0.1/"},
+  "@id": "http://greggkellogg.net/foaf#me",
+  "foaf:name": "Gregg Kellogg"
+}"#;
     for q in JsonLdParser::new().for_slice(input.as_bytes()) {
-        q.unwrap();
+        println!("{}", q.unwrap());
         count += 1;
     }
     assert_eq!(count, 2);

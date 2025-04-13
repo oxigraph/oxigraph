@@ -2,12 +2,14 @@ use crate::evaluator::TestEvaluator;
 use crate::files::{guess_rdf_format, load_dataset, load_n3, read_file, read_file_to_string};
 use crate::manifest::Test;
 use crate::report::{dataset_diff, format_diff};
+use crate::vocab::jld;
 use anyhow::{bail, ensure, Context, Result};
 use json_event_parser::{JsonEvent, SliceJsonParser};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{BlankNode, Dataset, Quad};
 use oxttl::n3::{N3Quad, N3Term};
+use std::collections::HashMap;
 
 pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     evaluator.register(
@@ -75,7 +77,7 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     );
     evaluator.register(
         "https://w3c.github.io/json-ld-api/tests/vocab#ToRDFTest",
-        |t| evaluate_eval_test(t, RdfFormat::JsonLd, false, false),
+        evaluate_jsonld_to_rdf_test,
     );
     evaluator.register(
         "http://www.w3.org/ns/rdftest#TestNTriplesPositiveC14N",
@@ -174,6 +176,52 @@ fn evaluate_eval_test(
     Ok(())
 }
 
+fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
+    if test
+        .kinds
+        .iter()
+        .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
+    {
+        let action = test.action.as_deref().context("No action found")?;
+        let mut actual_dataset = load_dataset(action, RdfFormat::JsonLd, false, false)
+            .with_context(|| format!("Parse error on file {action}"))?;
+        actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
+        let results = test.result.as_ref().context("No tests result found")?;
+        let mut expected_dataset = load_dataset(results, guess_rdf_format(results)?, false, false)
+            .with_context(|| format!("Parse error on file {results}"))?;
+        expected_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
+        ensure!(
+            expected_dataset == actual_dataset,
+            "The two files are not isomorphic. Diff:\n{}",
+            dataset_diff(&expected_dataset, &actual_dataset)
+        );
+        Ok(())
+    } else if test
+        .kinds
+        .iter()
+        .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
+    {
+        let action = test.action.as_deref().context("No action found")?;
+        let result = load_dataset(action, RdfFormat::JsonLd, false, false);
+        ensure!(
+            result.is_err(),
+            "Properly parsed file even if it should not"
+        ); // TODO: test error code
+        Ok(())
+    } else if test
+        .kinds
+        .iter()
+        .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
+    {
+        let action = test.action.as_deref().context("No action found")?;
+        load_dataset(action, RdfFormat::JsonLd, false, false)
+            .with_context(|| format!("Parse error on file {action}"))?;
+        Ok(())
+    } else {
+        bail!("Unknown JSON-LD test type: {:?}", test.kinds);
+    }
+}
+
 fn evaluate_jsonld_from_rdf_test(test: &Test) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
     let parser = RdfParser::from_format(guess_rdf_format(action)?).for_reader(read_file(action)?);
@@ -188,20 +236,11 @@ fn evaluate_jsonld_from_rdf_test(test: &Test) -> Result<()> {
     let expected_json = read_file_to_string(result)?;
 
     ensure!(
-        parse_json_to_events(&expected_json)? == parse_json_to_events(&actual_json)?,
+        are_json_equals(&expected_json, &actual_json)?,
         "Expected JSON:\n{expected_json}\nActual JSON:\n{actual_json}"
     );
 
     Ok(())
-}
-
-fn parse_json_to_events(json: &str) -> Result<Vec<JsonEvent<'_>>> {
-    let mut events = Vec::new();
-    let mut parser = SliceJsonParser::new(json.as_bytes());
-    while !events.ends_with(&[JsonEvent::Eof]) {
-        events.push(parser.parse_next()?);
-    }
-    Ok(events)
 }
 
 fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
@@ -266,4 +305,61 @@ fn n3_to_dataset(quads: Vec<N3Quad>) -> Dataset {
             })
         })
         .collect()
+}
+
+fn are_json_equals(left: &str, right: &str) -> Result<bool> {
+    #[derive(Eq, PartialEq)]
+    enum JsonNode {
+        Null,
+        Boolean(bool),
+        String(String),
+        Number(String),
+        Object(HashMap<String, JsonNode>),
+        Array(Vec<JsonNode>),
+    }
+
+    fn json_to_node(data: &str) -> Result<JsonNode> {
+        let mut stack = Vec::new();
+        let mut current_keys = Vec::new();
+        let mut parser = SliceJsonParser::new(data.as_bytes());
+        loop {
+            if let Some(node) = match parser.parse_next()? {
+                JsonEvent::String(s) => Some(JsonNode::String(s.into())),
+                JsonEvent::Number(n) => Some(JsonNode::Number(n.into())),
+                JsonEvent::Boolean(b) => Some(JsonNode::Boolean(b)),
+                JsonEvent::Null => Some(JsonNode::Null),
+                JsonEvent::StartArray => {
+                    stack.push(JsonNode::Array(Vec::new()));
+                    None
+                }
+                JsonEvent::EndArray | JsonEvent::EndObject => stack.pop(),
+                JsonEvent::StartObject => {
+                    stack.push(JsonNode::Object(HashMap::new()));
+                    None
+                }
+                JsonEvent::ObjectKey(key) => {
+                    current_keys.push(key.into());
+                    None
+                }
+                JsonEvent::Eof => None,
+            } {
+                match stack.pop() {
+                    Some(JsonNode::Array(mut l)) => {
+                        l.push(node);
+                        stack.push(JsonNode::Array(l));
+                    }
+                    Some(JsonNode::Object(mut o)) => {
+                        if let Some(k) = current_keys.pop() {
+                            o.insert(k, node);
+                        }
+                        stack.push(JsonNode::Object(o))
+                    }
+                    Some(_) => unreachable!(),
+                    None => return Ok(node),
+                }
+            }
+        }
+    }
+
+    Ok(json_to_node(left)? == json_to_node(right)?)
 }
