@@ -15,6 +15,11 @@ use tokio::io::AsyncWrite;
 
 /// A [JSON-LD](https://www.w3.org/TR/rdf-syntax-grammar/) serializer.
 ///
+/// Returns [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/).
+///
+/// It does not implement exactly the [RDF as JSON-LD Algorithm](https://www.w3.org/TR/json-ld-api/#serialize-rdf-as-json-ld-algorithm)
+/// to be a streaming serializer but aims at being close to it.
+///
 /// ```
 /// use oxrdf::{LiteralRef, NamedNodeRef, QuadRef};
 /// use oxrdf::vocab::rdf;
@@ -67,6 +72,9 @@ impl JsonLdSerializer {
         Ok(self)
     }
 
+    /// Allows to set the base IRI for serialization.
+    ///
+    /// Corresponds to the [`base` option from the logarithm specification](https://www.w3.org/TR/json-ld-api/#dom-jsonldoptions-base).
     /// ```
     /// use oxrdf::{NamedNodeRef, QuadRef};
     /// use oxjsonld::JsonLdSerializer;
@@ -462,7 +470,9 @@ impl InnerJsonLdWriter {
                     output.push(JsonEvent::String(language.into()));
                 } else if literal.datatype() != xsd::STRING {
                     output.push(JsonEvent::ObjectKey("@type".into()));
-                    output.push(JsonEvent::String(self.id_value(literal.datatype().into())));
+                    output.push(JsonEvent::String(
+                        self.type_value(literal.datatype().into()),
+                    ));
                 }
                 output.push(JsonEvent::ObjectKey("@value".into()));
                 output.push(JsonEvent::String(literal.value().into()));
@@ -480,7 +490,21 @@ impl InnerJsonLdWriter {
 
     fn id_value<'a>(&self, id: NamedOrBlankNodeRef<'a>) -> Cow<'a, str> {
         match id {
-            NamedOrBlankNodeRef::NamedNode(iri) => relative_iri(iri.as_str(), &self.base_iri),
+            NamedOrBlankNodeRef::NamedNode(iri) => {
+                if let Some(base_iri) = &self.base_iri {
+                    if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri.as_str())) {
+                        return relative.into_inner().into();
+                    }
+                }
+                iri.as_str().into()
+            }
+            NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
+        }
+    }
+
+    fn type_value<'a>(&self, id: NamedOrBlankNodeRef<'a>) -> Cow<'a, str> {
+        match id {
+            NamedOrBlankNodeRef::NamedNode(iri) => iri.as_str().into(),
             NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
         }
     }
@@ -505,13 +529,4 @@ impl InnerJsonLdWriter {
             output.push(JsonEvent::EndObject);
         }
     }
-}
-
-fn relative_iri<'a>(iri: &'a str, base_iri: &Option<Iri<String>>) -> Cow<'a, str> {
-    if let Some(base_iri) = base_iri {
-        if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri)) {
-            return relative.into_inner().into();
-        }
-    }
-    iri.into()
 }

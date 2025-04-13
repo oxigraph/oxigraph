@@ -51,7 +51,7 @@ enum SyntaxErrorKind {
 }
 
 impl JsonLdSyntaxError {
-    /// A string representing the particular error type, as described in the various algorithms in this document.
+    /// The [JSON-LD error code](https://www.w3.org/TR/json-ld-api/#dom-jsonlderrorcode) related to this error.
     pub fn code(&self) -> Option<JsonLdErrorCode> {
         match &self.0 {
             SyntaxErrorKind::Json(_) => None,
@@ -94,6 +94,7 @@ impl From<JsonSyntaxError> for JsonLdSyntaxError {
     }
 }
 
+/// A [JSON-LD error code](https://www.w3.org/TR/json-ld-api/#dom-jsonlderrorcode)
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum JsonLdErrorCode {

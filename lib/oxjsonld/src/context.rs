@@ -425,7 +425,7 @@ fn create_term_definition(
                 // 12.1)
                 let JsonNode::String(r#type) = value else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        "The value of @type in a @context must be a string",
+                        "The value of @type in a context must be a string",
                         JsonLdErrorCode::InvalidTypeMapping,
                     ));
                     continue;
@@ -453,9 +453,7 @@ fn create_term_definition(
                     && processing_mode == JsonLdProcessingMode::JsonLd1_0
                 {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        format!(
-                            "@type value {type} in a @context is only supported in JSON-LD 1.1"
-                        ),
+                        format!("@type value {type} in a context is only supported in JSON-LD 1.1"),
                         JsonLdErrorCode::InvalidTypeMapping,
                     ));
                 }
@@ -568,7 +566,7 @@ fn create_term_definition(
             // 21)
             "@context" => {
                 errors.push(JsonLdSyntaxError::msg(
-                    "@context in @context is not implemented yet",
+                    "@context in context is not implemented yet",
                 )); // TODO
             }
             // 22)
@@ -629,7 +627,7 @@ fn create_term_definition(
             }
             // 26)
             _ => errors.push(JsonLdSyntaxError::msg_and_code(
-                format!("Unexpected key in @context term definition '{key}'"),
+                format!("Unexpected key in term definition '{key}'"),
                 JsonLdErrorCode::InvalidTermDefinition,
             )),
         }
@@ -710,7 +708,7 @@ fn create_term_definition(
                 definition.iri_mapping = Some(format!("{vocabulary_mapping}{term}"));
             } else {
                 errors.push(JsonLdSyntaxError::msg_and_code(
-                    format!("No @vocab key to build an IRI from @context {term} term definition"),
+                    format!("No @vocab key to build an IRI from context {term} term definition"),
                     JsonLdErrorCode::InvalidIriMapping,
                 ))
             }
@@ -853,7 +851,7 @@ pub fn expand_iri<'a>(
             }
         }
         // 6.4)
-        if let Some(term_definition) = active_context.term_definitions.get(value.as_ref()) {
+        if let Some(term_definition) = active_context.term_definitions.get(prefix) {
             if let Some(iri_mapping) = &term_definition.iri_mapping {
                 if term_definition.prefix_flag {
                     return Some(format!("{iri_mapping}{suffix}").into());
