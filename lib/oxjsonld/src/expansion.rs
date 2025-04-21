@@ -30,8 +30,10 @@ pub enum JsonLdValue {
 }
 
 enum JsonLdExpansionState {
-    Element,
-    ElementArray,
+    Element {
+        active_property: Option<String>,
+        is_array: bool,
+    },
     ObjectStart {
         types: Vec<String>,
         id: Option<String>,
@@ -39,10 +41,7 @@ enum JsonLdExpansionState {
     ObjectType {
         types: Vec<String>,
         id: Option<String>,
-    },
-    ObjectTypeArray {
-        types: Vec<String>,
-        id: Option<String>,
+        is_array: bool,
     },
     ObjectId {
         types: Vec<String>,
@@ -73,8 +72,9 @@ enum JsonLdExpansionState {
         stack: Vec<BuildingObjectOrArrayNode>,
         end_state: JsonLdExpansionStateAfterToNode,
     },
-    Skip,
-    SkipArray,
+    Skip {
+        is_array: bool,
+    },
 }
 
 enum BuildingObjectOrArrayNode {
@@ -104,7 +104,10 @@ impl JsonLdExpansionConverter {
         processing_mode: JsonLdProcessingMode,
     ) -> Self {
         Self {
-            state: vec![JsonLdExpansionState::Element],
+            state: vec![JsonLdExpansionState::Element {
+                active_property: None,
+                is_array: false,
+            }],
             context: vec![(JsonLdContext::new_empty(base_url), 0)],
             is_end: false,
             lenient,
@@ -134,46 +137,91 @@ impl JsonLdExpansionConverter {
         // Large hack to fetch the last state but keep it if we are in an array
         let state = self.state.pop().expect("Empty stack");
         match state {
-            JsonLdExpansionState::Element | JsonLdExpansionState::ElementArray => {
+            JsonLdExpansionState::Element {
+                active_property,
+                is_array,
+            } => {
                 match event {
                     JsonEvent::Null => {
                         // 1)
-                        if matches!(state, JsonLdExpansionState::ElementArray) {
-                            self.state.push(JsonLdExpansionState::ElementArray);
+                        if is_array {
+                            self.state.push(JsonLdExpansionState::Element {
+                                active_property,
+                                is_array,
+                            });
                         }
                     }
                     JsonEvent::String(value) => {
                         // 4)
-                        if matches!(state, JsonLdExpansionState::ElementArray) {
-                            self.state.push(JsonLdExpansionState::ElementArray);
+                        if let Some(active_property) = &active_property {
+                            self.expand_value(
+                                active_property,
+                                JsonLdValue::String(value.into()),
+                                results,
+                                errors,
+                            );
                         }
-                        self.expand_value(JsonLdValue::String(value.into()), results);
+                        if is_array {
+                            self.state.push(JsonLdExpansionState::Element {
+                                active_property,
+                                is_array,
+                            });
+                        }
                     }
                     JsonEvent::Number(value) => {
                         // 4)
-                        if matches!(state, JsonLdExpansionState::ElementArray) {
-                            self.state.push(JsonLdExpansionState::ElementArray);
+                        if let Some(active_property) = &active_property {
+                            self.expand_value(
+                                active_property,
+                                JsonLdValue::Number(value.into()),
+                                results,
+                                errors,
+                            );
                         }
-                        self.expand_value(JsonLdValue::Number(value.into()), results);
+                        if is_array {
+                            self.state.push(JsonLdExpansionState::Element {
+                                active_property,
+                                is_array,
+                            });
+                        }
                     }
                     JsonEvent::Boolean(value) => {
                         // 4)
-                        if matches!(state, JsonLdExpansionState::ElementArray) {
-                            self.state.push(JsonLdExpansionState::ElementArray);
+                        if let Some(active_property) = &active_property {
+                            self.expand_value(
+                                active_property,
+                                JsonLdValue::Boolean(value),
+                                results,
+                                errors,
+                            );
                         }
-                        self.expand_value(JsonLdValue::Boolean(value), results);
+                        if is_array {
+                            self.state.push(JsonLdExpansionState::Element {
+                                active_property,
+                                is_array,
+                            });
+                        }
                     }
                     JsonEvent::StartArray => {
                         // 5)
-                        if matches!(state, JsonLdExpansionState::ElementArray) {
-                            self.state.push(JsonLdExpansionState::ElementArray);
+                        if is_array {
+                            self.state.push(JsonLdExpansionState::Element {
+                                active_property: active_property.clone(),
+                                is_array,
+                            });
                         }
-                        self.state.push(JsonLdExpansionState::ElementArray);
+                        self.state.push(JsonLdExpansionState::Element {
+                            active_property,
+                            is_array: true,
+                        });
                     }
                     JsonEvent::EndArray => (),
                     JsonEvent::StartObject => {
-                        if matches!(state, JsonLdExpansionState::ElementArray) {
-                            self.state.push(JsonLdExpansionState::ElementArray);
+                        if is_array {
+                            self.state.push(JsonLdExpansionState::Element {
+                                active_property,
+                                is_array,
+                            });
                         }
                         self.push_same_context();
                         self.state.push(JsonLdExpansionState::ObjectStart {
@@ -188,15 +236,18 @@ impl JsonLdExpansionConverter {
             }
             JsonLdExpansionState::ObjectStart { types, id } => match event {
                 JsonEvent::ObjectKey(key) => {
-                    if let Some(iri) = self.expand_iri(key, false, true, errors) {
+                    if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
                         match iri.as_ref() {
                             "@context" => self.state.push(JsonLdExpansionState::ToNode {
                                 stack: Vec::new(),
                                 end_state: JsonLdExpansionStateAfterToNode::Context,
                             }),
                             "@type" => {
-                                self.state
-                                    .push(JsonLdExpansionState::ObjectType { id, types });
+                                self.state.push(JsonLdExpansionState::ObjectType {
+                                    id,
+                                    types,
+                                    is_array: false,
+                                });
                             }
                             "@value" => {
                                 if types.len() > 1 {
@@ -241,23 +292,28 @@ impl JsonLdExpansionConverter {
                                 )));
                                 self.state
                                     .push(JsonLdExpansionState::ObjectStart { types, id });
-                                self.state.push(JsonLdExpansionState::Skip);
+                                self.state
+                                    .push(JsonLdExpansionState::Skip { is_array: false });
                             }
                             _ => {
                                 results.push(JsonLdEvent::StartObject { types });
                                 if let Some(id) = id {
                                     results.push(JsonLdEvent::Id(id));
                                 }
-                                results.push(JsonLdEvent::StartProperty(iri.into()));
+                                results.push(JsonLdEvent::StartProperty(iri.clone().into()));
                                 self.state
                                     .push(JsonLdExpansionState::Object { in_property: true });
-                                self.state.push(JsonLdExpansionState::Element);
+                                self.state.push(JsonLdExpansionState::Element {
+                                    active_property: Some(key.into()),
+                                    is_array: false,
+                                });
                             }
                         }
                     } else {
                         self.state
                             .push(JsonLdExpansionState::ObjectStart { types, id });
-                        self.state.push(JsonLdExpansionState::Skip);
+                        self.state
+                            .push(JsonLdExpansionState::Skip { is_array: false });
                     }
                 }
                 JsonEvent::EndObject => {
@@ -270,13 +326,11 @@ impl JsonLdExpansionConverter {
                 }
                 _ => unreachable!("Inside of an object"),
             },
-            JsonLdExpansionState::ObjectType { .. }
-            | JsonLdExpansionState::ObjectTypeArray { .. } => {
-                let (mut types, id, is_array) = match state {
-                    JsonLdExpansionState::ObjectType { types, id } => (types, id, false),
-                    JsonLdExpansionState::ObjectTypeArray { types, id } => (types, id, true),
-                    _ => unreachable!(),
-                };
+            JsonLdExpansionState::ObjectType {
+                mut types,
+                id,
+                is_array,
+            } => {
                 match event {
                     JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
                         // 13.4.4.1)
@@ -285,8 +339,11 @@ impl JsonLdExpansionConverter {
                             JsonLdErrorCode::InvalidTypeValue,
                         ));
                         if is_array {
-                            self.state
-                                .push(JsonLdExpansionState::ObjectTypeArray { types, id });
+                            self.state.push(JsonLdExpansionState::ObjectType {
+                                types,
+                                id,
+                                is_array,
+                            });
                         } else {
                             self.state
                                 .push(JsonLdExpansionState::ObjectStart { types, id });
@@ -304,22 +361,29 @@ impl JsonLdExpansionConverter {
                             }
                         }
                         if is_array {
-                            self.state
-                                .push(JsonLdExpansionState::ObjectTypeArray { types, id });
+                            self.state.push(JsonLdExpansionState::ObjectType {
+                                types,
+                                id,
+                                is_array,
+                            });
                         } else {
                             self.state
                                 .push(JsonLdExpansionState::ObjectStart { types, id });
                         }
                     }
                     JsonEvent::StartArray => {
-                        self.state
-                            .push(JsonLdExpansionState::ObjectTypeArray { types, id });
+                        self.state.push(JsonLdExpansionState::ObjectType {
+                            types,
+                            id,
+                            is_array: true,
+                        });
                         if is_array {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 "@type cannot contain a nested array",
                                 JsonLdErrorCode::InvalidTypeValue,
                             ));
-                            self.state.push(JsonLdExpansionState::SkipArray);
+                            self.state
+                                .push(JsonLdExpansionState::Skip { is_array: true });
                         }
                     }
                     JsonEvent::EndArray => {
@@ -333,13 +397,17 @@ impl JsonLdExpansionConverter {
                             JsonLdErrorCode::InvalidTypeValue,
                         ));
                         if is_array {
-                            self.state
-                                .push(JsonLdExpansionState::ObjectTypeArray { types, id });
+                            self.state.push(JsonLdExpansionState::ObjectType {
+                                types,
+                                id,
+                                is_array: true,
+                            });
                         } else {
                             self.state
                                 .push(JsonLdExpansionState::ObjectStart { types, id });
                         }
-                        self.state.push(JsonLdExpansionState::Skip);
+                        self.state
+                            .push(JsonLdExpansionState::Skip { is_array: false });
                     }
                     JsonEvent::ObjectKey(_) | JsonEvent::EndObject | JsonEvent::Eof => {
                         unreachable!()
@@ -391,7 +459,8 @@ impl JsonLdExpansionConverter {
                     } else {
                         JsonLdExpansionState::Object { in_property: false }
                     });
-                    self.state.push(JsonLdExpansionState::SkipArray);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: true });
                 }
                 JsonEvent::StartObject => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -403,7 +472,8 @@ impl JsonLdExpansionConverter {
                     } else {
                         JsonLdExpansionState::Object { in_property: false }
                     });
-                    self.state.push(JsonLdExpansionState::Skip);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
                 }
                 JsonEvent::EndArray
                 | JsonEvent::ObjectKey(_)
@@ -422,7 +492,8 @@ impl JsonLdExpansionConverter {
                         self.pop_context();
                     }
                     JsonEvent::ObjectKey(key) => {
-                        if let Some(iri) = self.expand_iri(key, false, true, errors) {
+                        if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors)
+                        {
                             match iri.as_ref() {
                                 "@id" => {
                                     self.state.push(JsonLdExpansionState::ObjectId {
@@ -435,7 +506,8 @@ impl JsonLdExpansionConverter {
                                     // TODO: we do not support any keyword
                                     self.state
                                         .push(JsonLdExpansionState::Object { in_property: false });
-                                    self.state.push(JsonLdExpansionState::Skip);
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
                                     errors.push(JsonLdSyntaxError::msg(format!(
                                         "Unsupported JSON-LD keyword: {iri}"
                                     )));
@@ -443,14 +515,18 @@ impl JsonLdExpansionConverter {
                                 _ => {
                                     self.state
                                         .push(JsonLdExpansionState::Object { in_property: true });
-                                    self.state.push(JsonLdExpansionState::Element);
+                                    self.state.push(JsonLdExpansionState::Element {
+                                        active_property: Some(key.clone().into()),
+                                        is_array: false,
+                                    });
                                     results.push(JsonLdEvent::StartProperty(iri.into()));
                                 }
                             }
                         } else {
                             self.state
                                 .push(JsonLdExpansionState::Object { in_property: false });
-                            self.state.push(JsonLdExpansionState::Skip);
+                            self.state
+                                .push(JsonLdExpansionState::Skip { is_array: false });
                         }
                     }
                     JsonEvent::Null
@@ -482,7 +558,8 @@ impl JsonLdExpansionConverter {
                                         value,
                                         language,
                                     });
-                                    self.state.push(JsonLdExpansionState::Skip);
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
                                 } else {
                                     self.state.push(JsonLdExpansionState::ValueValue {
                                         r#type,
@@ -501,7 +578,8 @@ impl JsonLdExpansionConverter {
                                         value,
                                         language,
                                     });
-                                    self.state.push(JsonLdExpansionState::Skip);
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
                                 } else {
                                     self.state.push(JsonLdExpansionState::ValueLanguage {
                                         r#type,
@@ -520,7 +598,8 @@ impl JsonLdExpansionConverter {
                                         value,
                                         language,
                                     });
-                                    self.state.push(JsonLdExpansionState::Skip);
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
                                 } else {
                                     self.state
                                         .push(JsonLdExpansionState::ValueType { value, language });
@@ -535,7 +614,8 @@ impl JsonLdExpansionConverter {
                                     value,
                                     language,
                                 });
-                                self.state.push(JsonLdExpansionState::Skip);
+                                self.state
+                                    .push(JsonLdExpansionState::Skip { is_array: false });
                             }
                             _ => {
                                 errors.push(JsonLdSyntaxError::msg_and_code(format!("Objects with @value cannot contain properties, {iri} found"), JsonLdErrorCode::InvalidValueObject));
@@ -544,13 +624,15 @@ impl JsonLdExpansionConverter {
                                     value,
                                     language,
                                 });
-                                self.state.push(JsonLdExpansionState::Skip);
+                                self.state
+                                    .push(JsonLdExpansionState::Skip { is_array: false });
                             }
                         }
                     } else {
                         self.state
                             .push(JsonLdExpansionState::Object { in_property: false });
-                        self.state.push(JsonLdExpansionState::Skip);
+                        self.state
+                            .push(JsonLdExpansionState::Skip { is_array: false });
                     }
                 }
                 JsonEvent::EndObject => {
@@ -615,7 +697,8 @@ impl JsonLdExpansionConverter {
                         value: None,
                         language,
                     });
-                    self.state.push(JsonLdExpansionState::SkipArray);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: true });
                 }
                 JsonEvent::StartObject => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -627,7 +710,8 @@ impl JsonLdExpansionConverter {
                         value: None,
                         language,
                     });
-                    self.state.push(JsonLdExpansionState::Skip);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
                 }
                 JsonEvent::EndArray
                 | JsonEvent::ObjectKey(_)
@@ -663,7 +747,8 @@ impl JsonLdExpansionConverter {
                         value,
                         language: None,
                     });
-                    self.state.push(JsonLdExpansionState::SkipArray);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: true });
                 }
                 JsonEvent::StartObject => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -675,7 +760,8 @@ impl JsonLdExpansionConverter {
                         value,
                         language: None,
                     });
-                    self.state.push(JsonLdExpansionState::Skip);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
                 }
                 JsonEvent::EndArray
                 | JsonEvent::ObjectKey(_)
@@ -711,7 +797,8 @@ impl JsonLdExpansionConverter {
                         value,
                         language,
                     });
-                    self.state.push(JsonLdExpansionState::SkipArray);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: true });
                 }
                 JsonEvent::StartObject => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -723,7 +810,8 @@ impl JsonLdExpansionConverter {
                         value,
                         language,
                     });
-                    self.state.push(JsonLdExpansionState::Skip);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
                 }
                 JsonEvent::EndArray
                 | JsonEvent::ObjectKey(_)
@@ -732,31 +820,35 @@ impl JsonLdExpansionConverter {
                     unreachable!()
                 }
             },
-            JsonLdExpansionState::Skip | JsonLdExpansionState::SkipArray => match event {
+            JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
                 | JsonEvent::Boolean(_)
                 | JsonEvent::Null => {
-                    if matches!(state, JsonLdExpansionState::SkipArray) {
-                        self.state.push(JsonLdExpansionState::SkipArray);
+                    if is_array {
+                        self.state.push(JsonLdExpansionState::Skip { is_array });
                     }
                 }
                 JsonEvent::EndArray | JsonEvent::EndObject => (),
                 JsonEvent::StartArray => {
-                    if matches!(state, JsonLdExpansionState::SkipArray) {
-                        self.state.push(JsonLdExpansionState::SkipArray);
+                    if is_array {
+                        self.state.push(JsonLdExpansionState::Skip { is_array });
                     }
-                    self.state.push(JsonLdExpansionState::SkipArray);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: true });
                 }
                 JsonEvent::StartObject => {
-                    if matches!(state, JsonLdExpansionState::SkipArray) {
-                        self.state.push(JsonLdExpansionState::SkipArray);
+                    if is_array {
+                        self.state.push(JsonLdExpansionState::Skip { is_array });
                     }
-                    self.state.push(JsonLdExpansionState::Skip);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
                 }
                 JsonEvent::ObjectKey(_) => {
-                    self.state.push(JsonLdExpansionState::Skip);
-                    self.state.push(JsonLdExpansionState::Skip);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
                 }
                 JsonEvent::Eof => unreachable!(),
             },
@@ -902,11 +994,61 @@ impl JsonLdExpansionConverter {
     }
 
     /// [Value Expansion](https://www.w3.org/TR/json-ld-api/#value-expansion)
-    fn expand_value(&mut self, value: JsonLdValue, results: &mut Vec<JsonLdEvent>) {
+    fn expand_value(
+        &mut self,
+        active_property: &str,
+        value: JsonLdValue,
+        results: &mut Vec<JsonLdEvent>,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        let active_context = self.context();
+        let mut r#type = None;
+        let mut language = None;
+        if let Some(term_definition) = active_context.term_definitions.get(active_property) {
+            if let Some(type_mapping) = &term_definition.type_mapping {
+                match type_mapping.as_ref() {
+                    // 1)
+                    "@id" => {
+                        if let JsonLdValue::String(value) = value {
+                            if let Some(id) = self.expand_iri(value.into(), true, false, errors) {
+                                results.push(JsonLdEvent::StartObject { types: Vec::new() });
+                                results.push(JsonLdEvent::Id(id.into()));
+                                results.push(JsonLdEvent::EndObject);
+                            }
+                            return;
+                        }
+                    }
+                    // 2)
+                    "@vocab" => {
+                        if let JsonLdValue::String(value) = value {
+                            if let Some(id) = self.expand_iri(value.into(), true, true, errors) {
+                                results.push(JsonLdEvent::StartObject { types: Vec::new() });
+                                results.push(JsonLdEvent::Id(id.into()));
+                                results.push(JsonLdEvent::EndObject);
+                            }
+                            return;
+                        }
+                    }
+                    // 4)
+                    "@none" => (),
+                    _ => {
+                        r#type = Some(type_mapping.clone());
+                    }
+                }
+            }
+            // 5)
+            if matches!(value, JsonLdValue::String(_)) {
+                language = term_definition.language_mapping.clone();
+            }
+        }
+        // 5)
+        if matches!(value, JsonLdValue::String(_)) && language.is_none() {
+            language = active_context.default_language.clone();
+        }
         results.push(JsonLdEvent::Value {
             value,
-            r#type: None,
-            language: None,
+            r#type,
+            language,
         });
     }
 
