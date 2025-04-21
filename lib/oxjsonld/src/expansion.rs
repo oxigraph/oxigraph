@@ -206,7 +206,7 @@ impl JsonLdExpansionConverter {
                                     ));
                                 }
                                 self.state.push(JsonLdExpansionState::ValueValue {
-                                    r#type: None,
+                                    r#type: types.into_iter().next(),
                                     language: None,
                                 });
                             }
@@ -294,7 +294,7 @@ impl JsonLdExpansionConverter {
                     }
                     JsonEvent::String(value) => {
                         // 13.4.4.4)
-                        if let Some(iri) = self.expand_iri(value, false, true, errors) {
+                        if let Some(iri) = self.expand_iri(value, true, true, errors) {
                             if has_keyword_form(&iri) {
                                 errors.push(JsonLdSyntaxError::msg(format!(
                                     "{iri} is not a valid value for @type"
@@ -853,13 +853,13 @@ impl JsonLdExpansionConverter {
         match state {
             JsonLdExpansionStateAfterToNode::Context => {
                 let context = process_context(
-                    &JsonLdContext::default(),
+                    self.context(),
                     node,
                     None,
                     &mut Vec::new(),
                     false,
                     true,
-                    JsonLdProcessingMode::JsonLd1_0, // TODO
+                    self.processing_mode, // TODO
                     self.lenient,
                     errors,
                 );

@@ -361,7 +361,7 @@ fn create_term_definition(
     } else if has_keyword_form(&term) {
         // 5)
         errors.push(JsonLdSyntaxError::msg_and_code(
-            format!("{term} keyword can't be redefined in @context"),
+            format!("{term} keyword can't be redefined in context"),
             JsonLdErrorCode::KeywordRedefinition,
         ));
         return;
@@ -443,7 +443,7 @@ fn create_term_definition(
                     errors,
                 ) else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        format!("Invalid @type value in @context: {type}"),
+                        format!("Invalid @type value in context: {type}"),
                         JsonLdErrorCode::InvalidTypeMapping,
                     ));
                     continue;
@@ -462,7 +462,7 @@ fn create_term_definition(
                     && !matches!(r#type.as_ref(), "@id" | "@json" | "@none" | "@vocab")
                 {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        format!("Invalid @type value in @context: {type}"),
+                        format!("Invalid @type value in context: {type}"),
                         JsonLdErrorCode::InvalidTypeMapping,
                     ));
                 }
