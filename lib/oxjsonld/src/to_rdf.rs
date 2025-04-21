@@ -13,14 +13,9 @@ use std::str;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
 
-/// A [JSON-LD](https://www.w3.org/TR/rdf-syntax-grammar/) streaming parser.
+/// A [JSON-LD](https://www.w3.org/TR/json-ld/) parser.
 ///
-/// It reads the file in streaming.
-/// It does not keep data in memory except a stack for handling nested XML tags, and a set of all
-/// seen `rdf:ID`s to detect duplicate ids and fail according to the specification.
-///
-/// Its performances are not optimized yet and hopefully could be significantly enhanced by reducing the
-/// number of allocations and copies done by the parser.
+/// TODO: document
 ///
 /// Count the number of people:
 /// ```
@@ -52,6 +47,7 @@ use tokio::io::AsyncRead;
 #[must_use]
 pub struct JsonLdParser {
     lenient: bool,
+    streaming: bool,
     base: Option<Iri<String>>,
 }
 
@@ -70,6 +66,15 @@ impl JsonLdParser {
     #[inline]
     pub fn lenient(mut self) -> Self {
         self.lenient = true;
+        self
+    }
+
+    /// Assumes the file follows [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) specification.
+    ///
+    /// It will skip some buffering to make parsing faster and memory consumption lower.
+    #[inline]
+    pub fn streaming(mut self) -> Self {
+        self.streaming = true;
         self
     }
 

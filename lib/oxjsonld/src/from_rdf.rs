@@ -13,12 +13,14 @@ use std::io::Write;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncWrite;
 
-/// A [JSON-LD](https://www.w3.org/TR/rdf-syntax-grammar/) serializer.
+/// A [JSON-LD](https://www.w3.org/TR/json-ld/) serializer.
 ///
 /// Returns [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/).
 ///
 /// It does not implement exactly the [RDF as JSON-LD Algorithm](https://www.w3.org/TR/json-ld-api/#serialize-rdf-as-json-ld-algorithm)
 /// to be a streaming serializer but aims at being close to it.
+///
+/// Features like `@json` and `@list` generation are not implemented.
 ///
 /// ```
 /// use oxrdf::{LiteralRef, NamedNodeRef, QuadRef};

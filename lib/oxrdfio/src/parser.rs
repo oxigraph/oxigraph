@@ -71,6 +71,7 @@ pub struct RdfParser {
 #[derive(Clone)]
 enum RdfParserKind {
     JsonLd(JsonLdParser),
+    StreamingJsonLd(JsonLdParser),
     N3(N3Parser),
     NQuads(NQuadsParser),
     NTriples(NTriplesParser),
@@ -85,9 +86,10 @@ impl RdfParser {
     pub fn from_format(format: RdfFormat) -> Self {
         Self {
             inner: match format {
-                RdfFormat::JsonLd | RdfFormat::StreamingJsonLd => {
-                    RdfParserKind::JsonLd(JsonLdParser::new())
-                } // TODO: streaming option
+                RdfFormat::JsonLd => RdfParserKind::JsonLd(JsonLdParser::new()),
+                RdfFormat::StreamingJsonLd => {
+                    RdfParserKind::StreamingJsonLd(JsonLdParser::new().streaming())
+                }
                 RdfFormat::N3 => RdfParserKind::N3(N3Parser::new()),
                 RdfFormat::NQuads => RdfParserKind::NQuads({
                     #[cfg(feature = "rdf-star")]
@@ -150,6 +152,7 @@ impl RdfParser {
     pub fn format(&self) -> RdfFormat {
         match &self.inner {
             RdfParserKind::JsonLd(_) => RdfFormat::JsonLd,
+            RdfParserKind::StreamingJsonLd(_) => RdfFormat::StreamingJsonLd,
             RdfParserKind::N3(_) => RdfFormat::N3,
             RdfParserKind::NQuads(_) => RdfFormat::NQuads,
             RdfParserKind::NTriples(_) => RdfFormat::NTriples,
@@ -179,6 +182,9 @@ impl RdfParser {
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
             RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.with_base_iri(base_iri)?),
+            RdfParserKind::StreamingJsonLd(p) => {
+                RdfParserKind::StreamingJsonLd(p.with_base_iri(base_iri)?)
+            }
             RdfParserKind::N3(p) => RdfParserKind::N3(p.with_base_iri(base_iri)?),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p),
@@ -265,6 +271,7 @@ impl RdfParser {
     pub fn unchecked(mut self) -> Self {
         self.inner = match self.inner {
             RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.lenient()),
+            RdfParserKind::StreamingJsonLd(p) => RdfParserKind::StreamingJsonLd(p.lenient()),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.unchecked()),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.unchecked()),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p.unchecked()),
@@ -295,7 +302,9 @@ impl RdfParser {
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderQuadParser<R> {
         ReaderQuadParser {
             inner: match self.inner {
-                RdfParserKind::JsonLd(p) => ReaderQuadParserKind::JsonLd(p.for_reader(reader)),
+                RdfParserKind::JsonLd(p) | RdfParserKind::StreamingJsonLd(p) => {
+                    ReaderQuadParserKind::JsonLd(p.for_reader(reader))
+                }
                 RdfParserKind::N3(p) => ReaderQuadParserKind::N3(p.for_reader(reader)),
                 RdfParserKind::NQuads(p) => ReaderQuadParserKind::NQuads(p.for_reader(reader)),
                 RdfParserKind::NTriples(p) => ReaderQuadParserKind::NTriples(p.for_reader(reader)),
@@ -337,7 +346,7 @@ impl RdfParser {
     ) -> TokioAsyncReaderQuadParser<R> {
         TokioAsyncReaderQuadParser {
             inner: match self.inner {
-                RdfParserKind::JsonLd(p) => {
+                RdfParserKind::JsonLd(p) | RdfParserKind::StreamingJsonLd(p) => {
                     TokioAsyncReaderQuadParserKind::JsonLd(p.for_tokio_async_reader(reader))
                 }
                 RdfParserKind::N3(p) => {
@@ -385,7 +394,9 @@ impl RdfParser {
     pub fn for_slice(self, slice: &[u8]) -> SliceQuadParser<'_> {
         SliceQuadParser {
             inner: match self.inner {
-                RdfParserKind::JsonLd(p) => SliceQuadParserKind::JsonLd(p.for_slice(slice)),
+                RdfParserKind::JsonLd(p) | RdfParserKind::StreamingJsonLd(p) => {
+                    SliceQuadParserKind::JsonLd(p.for_slice(slice))
+                }
                 RdfParserKind::N3(p) => SliceQuadParserKind::N3(p.for_slice(slice)),
                 RdfParserKind::NQuads(p) => SliceQuadParserKind::NQuads(p.for_slice(slice)),
                 RdfParserKind::NTriples(p) => SliceQuadParserKind::NTriples(p.for_slice(slice)),

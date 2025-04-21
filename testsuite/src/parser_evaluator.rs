@@ -177,13 +177,18 @@ fn evaluate_eval_test(
 }
 
 fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
+    let format = if test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST) {
+        RdfFormat::StreamingJsonLd
+    } else {
+        RdfFormat::JsonLd
+    };
     if test
         .kinds
         .iter()
         .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let mut actual_dataset = load_dataset(action, RdfFormat::JsonLd, false, false)
+        let mut actual_dataset = load_dataset(action, format, false, false)
             .with_context(|| format!("Parse error on file {action}"))?;
         actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
         let results = test.result.as_ref().context("No tests result found")?;
@@ -202,7 +207,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let result = load_dataset(action, RdfFormat::JsonLd, false, false);
+        let result = load_dataset(action, format, false, false);
         ensure!(
             result.is_err(),
             "Properly parsed file even if it should not"
@@ -214,7 +219,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        load_dataset(action, RdfFormat::JsonLd, false, false)
+        load_dataset(action, format, false, false)
             .with_context(|| format!("Parse error on file {action}"))?;
         Ok(())
     } else {
