@@ -486,12 +486,7 @@ fn create_term_definition(
                             continue;
                         }
                         found_id = true;
-                        // 14.2.2)
-                        if has_keyword_form(&id) {
-                            continue;
-                        }
-                        // 14.2.3)
-                        definition.iri_mapping = expand_iri(
+                        let Some(expanded) = expand_iri(
                             active_context,
                             id.into(),
                             false,
@@ -501,8 +496,12 @@ fn create_term_definition(
                             processing_mode,
                             lenient,
                             errors,
-                        )
-                        .map(Into::into);
+                        ) else {
+                            // 14.2.2)
+                            return;
+                        };
+                        // 14.2.3)
+                        definition.iri_mapping = Some(expanded.into());
                         // 14.2.4)
                         if term
                             .as_bytes()
@@ -760,38 +759,9 @@ pub fn expand_iri<'a>(
     lenient: bool,
     errors: &mut Vec<JsonLdSyntaxError>,
 ) -> Option<Cow<'a, str>> {
-    if let Some(suffix) = value.strip_prefix('@') {
+    if has_keyword_form(&value) {
         // 1)
-        match suffix {
-            "base" => return Some("@base".into()),
-            "container" => return Some("@container".into()),
-            "context" => return Some("@context".into()),
-            "direction" => return Some("@direction".into()),
-            "graph" => return Some("@graph".into()),
-            "id" => return Some("@id".into()),
-            "import" => return Some("@import".into()),
-            "included" => return Some("@included".into()),
-            "index" => return Some("@index".into()),
-            "json" => return Some("@json".into()),
-            "language" => return Some("@language".into()),
-            "list" => return Some("@list".into()),
-            "nest" => return Some("@nest".into()),
-            "none" => return Some("@none".into()),
-            "prefix" => return Some("@prefix".into()),
-            "propagate" => return Some("@propagate".into()),
-            "protected" => return Some("@protected".into()),
-            "reverse" => return Some("@reverse".into()),
-            "set" => return Some("@set".into()),
-            "type" => return Some("@type".into()),
-            "value" => return Some("@value".into()),
-            "version" => return Some("@version".into()),
-            "vocab" => return Some("@vocab".into()),
-            _ if has_keyword_form(&value) => {
-                // 2)
-                return None;
-            }
-            _ => (),
-        }
+        return is_keyword(&value).then_some(value);
     }
     // 3)
     if let Some(local_context) = local_context {
@@ -816,8 +786,8 @@ pub fn expand_iri<'a>(
     if let Some(term_definition) = active_context.term_definitions.get(value.as_ref()) {
         if let Some(iri_mapping) = &term_definition.iri_mapping {
             // 4)
-            if let Some(keyword) = iri_mapping.strip_prefix('@') {
-                return Some(keyword.to_owned().into());
+            if is_keyword(iri_mapping) {
+                return Some(iri_mapping.clone().into());
             }
             // 5)
             if vocab {
@@ -881,4 +851,33 @@ pub fn expand_iri<'a>(
     }
 
     Some(value)
+}
+
+fn is_keyword(value: &str) -> bool {
+    matches!(
+        value,
+        "@base"
+            | "@container"
+            | "@context"
+            | "@direction"
+            | "@graph"
+            | "@id"
+            | "@import"
+            | "@included"
+            | "@index"
+            | "@json"
+            | "@language"
+            | "@list"
+            | "@nest"
+            | "@none"
+            | "@prefix"
+            | "@propagate"
+            | "@protected"
+            | "@reverse"
+            | "@set"
+            | "@type"
+            | "@value"
+            | "@version"
+            | "@vocab"
+    )
 }

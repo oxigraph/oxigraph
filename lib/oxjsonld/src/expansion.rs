@@ -21,6 +21,8 @@ pub enum JsonLdEvent {
         r#type: Option<String>,
         language: Option<String>,
     },
+    StartGraph,
+    EndGraph,
 }
 
 pub enum JsonLdValue {
@@ -67,6 +69,11 @@ enum JsonLdExpansionState {
     ValueType {
         value: Option<JsonLdValue>,
         language: Option<String>,
+    },
+    Graph,
+    MaybeRootGraph {
+        buffer: Vec<JsonEvent<'static>>,
+        nesting: usize,
     },
     ToNode {
         stack: Vec<BuildingObjectOrArrayNode>,
@@ -286,6 +293,28 @@ impl JsonLdExpansionConverter {
                                     from_start: true,
                                 });
                             }
+                            "@graph" => {
+                                if id.is_none() && types.is_empty() && self.state.is_empty() {
+                                    // Likely graph only for @context, we ignore it
+                                    self.state.push(JsonLdExpansionState::MaybeRootGraph {
+                                        buffer: Vec::new(),
+                                        nesting: 1,
+                                    });
+                                } else {
+                                    results.push(JsonLdEvent::StartObject { types });
+                                    if let Some(id) = id {
+                                        results.push(JsonLdEvent::Id(id));
+                                    }
+                                    self.state
+                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state.push(JsonLdExpansionState::Graph);
+                                    self.state.push(JsonLdExpansionState::Element {
+                                        is_array: false,
+                                        active_property: None,
+                                    });
+                                    results.push(JsonLdEvent::StartGraph);
+                                }
+                            }
                             _ if has_keyword_form(&iri) => {
                                 errors.push(JsonLdSyntaxError::msg(format!(
                                     "Unsupported JSON-LD keyword: {iri}"
@@ -501,6 +530,16 @@ impl JsonLdExpansionConverter {
                                         id: None,
                                         from_start: false,
                                     });
+                                }
+                                "@graph" => {
+                                    self.state
+                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state.push(JsonLdExpansionState::Graph);
+                                    self.state.push(JsonLdExpansionState::Element {
+                                        is_array: false,
+                                        active_property: None,
+                                    });
+                                    results.push(JsonLdEvent::StartGraph);
                                 }
                                 _ if has_keyword_form(&iri) => {
                                     // TODO: we do not support any keyword
@@ -789,7 +828,7 @@ impl JsonLdExpansionConverter {
                 }
                 JsonEvent::StartArray => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@language value must be a string",
+                        "@type value must be a string",
                         JsonLdErrorCode::InvalidLanguageTaggedString,
                     ));
                     self.state.push(JsonLdExpansionState::Value {
@@ -802,7 +841,7 @@ impl JsonLdExpansionConverter {
                 }
                 JsonEvent::StartObject => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@language value must be a string",
+                        "@type value must be a string",
                         JsonLdErrorCode::InvalidLanguageTaggedString,
                     ));
                     self.state.push(JsonLdExpansionState::Value {
@@ -820,6 +859,72 @@ impl JsonLdExpansionConverter {
                     unreachable!()
                 }
             },
+            JsonLdExpansionState::Graph => {
+                results.push(JsonLdEvent::EndGraph);
+                self.convert_event(event, results, errors)
+            }
+            JsonLdExpansionState::MaybeRootGraph {
+                mut buffer,
+                mut nesting,
+            } => {
+                let event = to_owned_event(event);
+                match event {
+                    JsonEvent::String(_)
+                    | JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::Null => {
+                        buffer.push(event);
+                        self.state
+                            .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
+                    }
+                    JsonEvent::StartArray | JsonEvent::StartObject => {
+                        buffer.push(event);
+                        nesting += 1;
+                        self.state
+                            .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
+                    }
+                    JsonEvent::EndArray | JsonEvent::EndObject => {
+                        nesting -= 1;
+                        if nesting == 0 {
+                            // We are out of the root object without seeing other keys, we emit the graph as a default graph
+                            self.state.push(JsonLdExpansionState::Element {
+                                is_array: false,
+                                active_property: None,
+                            });
+                            for event in buffer {
+                                self.convert_event(event, results, errors);
+                            }
+                        } else {
+                            buffer.push(event);
+                            self.state
+                                .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
+                        }
+                    }
+                    JsonEvent::ObjectKey(_) => {
+                        if nesting == 1 {
+                            // Other key in the object, we know we are seeing an object
+                            results.push(JsonLdEvent::StartObject { types: Vec::new() });
+                            self.state
+                                .push(JsonLdExpansionState::Object { in_property: false });
+                            self.state.push(JsonLdExpansionState::Graph);
+                            self.state.push(JsonLdExpansionState::Element {
+                                is_array: false,
+                                active_property: None,
+                            });
+                            results.push(JsonLdEvent::StartGraph);
+                            for event in buffer {
+                                self.convert_event(event, results, errors);
+                            }
+                            self.convert_event(event, results, errors);
+                        } else {
+                            buffer.push(event);
+                            self.state
+                                .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
+                        }
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+            }
             JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
@@ -1076,5 +1181,20 @@ impl JsonLdExpansionConverter {
         if last_context.1 > 0 {
             self.context.push(last_context);
         }
+    }
+}
+
+fn to_owned_event(event: JsonEvent<'_>) -> JsonEvent<'static> {
+    match event {
+        JsonEvent::String(s) => JsonEvent::String(Cow::Owned(s.into())),
+        JsonEvent::Number(n) => JsonEvent::Number(Cow::Owned(n.into())),
+        JsonEvent::Boolean(b) => JsonEvent::Boolean(b),
+        JsonEvent::Null => JsonEvent::Null,
+        JsonEvent::StartArray => JsonEvent::StartArray,
+        JsonEvent::EndArray => JsonEvent::EndArray,
+        JsonEvent::StartObject => JsonEvent::StartObject,
+        JsonEvent::EndObject => JsonEvent::EndObject,
+        JsonEvent::ObjectKey(k) => JsonEvent::ObjectKey(Cow::Owned(k.into())),
+        JsonEvent::Eof => JsonEvent::Eof,
     }
 }

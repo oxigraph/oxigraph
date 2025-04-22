@@ -735,7 +735,9 @@ impl JsonLdToRdfConverter {
                     }
                     JsonLdEvent::StartProperty(_)
                     | JsonLdEvent::EndProperty
-                    | JsonLdEvent::Value { .. } => {
+                    | JsonLdEvent::Value { .. }
+                    | JsonLdEvent::StartGraph
+                    | JsonLdEvent::EndGraph => {
                         buffer.push(event);
                         self.state.push(JsonLdToRdfState::StartObject {
                             types,
@@ -745,19 +747,25 @@ impl JsonLdToRdfConverter {
                     }
                 }
             }
-            JsonLdToRdfState::Object(_) => match event {
+            JsonLdToRdfState::Object(id) => match event {
                 JsonLdEvent::Id(_) => {
                     unreachable!("Should have buffered before @id")
                 }
                 JsonLdEvent::EndObject => (),
                 JsonLdEvent::StartProperty(name) => {
-                    self.state.push(state);
+                    self.state.push(JsonLdToRdfState::Object(id));
                     self.state
                         .push(JsonLdToRdfState::Property(self.convert_named_node(name)));
                 }
+                JsonLdEvent::StartGraph => {
+                    let graph_name = id.clone().map(Into::into);
+                    self.state.push(JsonLdToRdfState::Object(id));
+                    self.state.push(JsonLdToRdfState::Graph(graph_name));
+                }
                 JsonLdEvent::StartObject { .. }
                 | JsonLdEvent::Value { .. }
-                | JsonLdEvent::EndProperty => unreachable!(),
+                | JsonLdEvent::EndProperty
+                | JsonLdEvent::EndGraph => unreachable!(),
             },
             JsonLdToRdfState::Property(_) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -783,9 +791,11 @@ impl JsonLdToRdfConverter {
                     )
                 }
                 JsonLdEvent::EndProperty => (),
-                JsonLdEvent::StartProperty(_) | JsonLdEvent::Id(_) | JsonLdEvent::EndObject => {
-                    unreachable!()
-                }
+                JsonLdEvent::StartProperty(_)
+                | JsonLdEvent::Id(_)
+                | JsonLdEvent::EndObject
+                | JsonLdEvent::StartGraph
+                | JsonLdEvent::EndGraph => unreachable!(),
             },
             JsonLdToRdfState::Graph(_) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -802,7 +812,11 @@ impl JsonLdToRdfConverter {
                 JsonLdEvent::Value { .. } => {
                     self.state.push(state);
                 }
-                JsonLdEvent::StartProperty(_)
+                JsonLdEvent::EndGraph => {
+                    // TODO
+                }
+                JsonLdEvent::StartGraph
+                | JsonLdEvent::StartProperty(_)
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::EndObject => unreachable!(),
@@ -946,7 +960,10 @@ impl JsonLdToRdfConverter {
                 JsonLdToRdfState::StartObject { .. } => {
                     unreachable!()
                 }
-                JsonLdToRdfState::Property(_) | JsonLdToRdfState::Graph(_) => (),
+                JsonLdToRdfState::Property(_) => (),
+                JsonLdToRdfState::Graph(_) => {
+                    return None;
+                }
             }
         }
         None
@@ -958,9 +975,10 @@ impl JsonLdToRdfConverter {
                 JsonLdToRdfState::Property(predicate) => {
                     return predicate.as_ref();
                 }
-                JsonLdToRdfState::StartObject { .. }
-                | JsonLdToRdfState::Object(_)
-                | JsonLdToRdfState::Graph(_) => (),
+                JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Object(_) => (),
+                JsonLdToRdfState::Graph(_) => {
+                    return None;
+                }
             }
         }
         None
@@ -985,11 +1003,62 @@ impl JsonLdToRdfConverter {
 fn test() {
     let mut count = 0;
     let input = r#"{
-  "@context": {"foaf": "http://xmlns.com/foaf/0.1/"},
-  "@id": "http://greggkellogg.net/foaf#me",
-  "foaf:name": "Gregg Kellogg"
-}"#;
-    for q in JsonLdParser::new().for_slice(input.as_bytes()) {
+  "@context": {
+    "authored": {
+      "@id": "http://example.org/vocab#authored",
+      "@type": "@id"
+    },
+    "contains": {
+      "@id": "http://example.org/vocab#contains",
+      "@type": "@id"
+    },
+    "contributor": "http://purl.org/dc/elements/1.1/contributor",
+    "description": "http://purl.org/dc/elements/1.1/description",
+    "name": "http://xmlns.com/foaf/0.1/name",
+    "title": {
+      "@id": "http://purl.org/dc/elements/1.1/title"
+    }
+  },
+  "@graph": [
+    {
+      "@id": "http://example.org/test#jane",
+      "name": "Jane",
+      "authored": {
+        "@graph": [
+          {
+            "@id": "http://example.org/test#chapter1",
+            "description": "Fun",
+            "title": "Chapter One"
+          },
+          {
+            "@id": "http://example.org/test#chapter2",
+            "description": "More fun",
+            "title": "Chapter Two"
+          }
+        ]
+      }
+    },
+    {
+      "@id": "http://example.org/test#john",
+      "name": "John"
+    },
+    {
+      "@id": "http://example.org/test#library",
+      "contains": {
+        "@id": "http://example.org/test#book",
+        "contains": "http://example.org/test#chapter",
+        "contributor": "Writer",
+        "title": "My Book"
+      }
+    }
+  ]
+}
+"#;
+    for q in JsonLdParser::new()
+        .with_base_iri("http://example.com/foo")
+        .unwrap()
+        .for_slice(input.as_bytes())
+    {
         println!("{}", q.unwrap());
         count += 1;
     }
