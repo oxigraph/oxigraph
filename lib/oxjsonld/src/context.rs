@@ -358,7 +358,7 @@ fn create_term_definition(
             return;
         }
         unimplemented!()
-    } else if has_keyword_form(&term) {
+    } else if has_keyword_form(term) {
         // 5)
         errors.push(JsonLdSyntaxError::msg_and_code(
             format!("{term} keyword can't be redefined in context"),
@@ -368,19 +368,15 @@ fn create_term_definition(
     }
     // 6)
     let previous_definition = active_context.term_definitions.remove(term);
-    let (value, mut simple_term) = match local_context.get(term) {
+    let value = match local_context.get(term) {
         // 7)
-        Some(JsonNode::Null) => (
-            Cow::Owned([("@id".to_owned(), JsonNode::Null)].into()),
-            true,
-        ), // TODO: undefined
+        Some(JsonNode::Null) => Cow::Owned([("@id".to_owned(), JsonNode::Null)].into()),
         // 8)
-        Some(JsonNode::String(id)) => (
-            Cow::Owned([("@id".to_owned(), JsonNode::String(id.clone()))].into()),
-            true,
-        ),
+        Some(JsonNode::String(id)) => {
+            Cow::Owned([("@id".to_owned(), JsonNode::String(id.clone()))].into())
+        }
         // 9)
-        Some(JsonNode::Map(map)) => (Cow::Borrowed(map), false),
+        Some(JsonNode::Map(map)) => Cow::Borrowed(map),
         _ => {
             errors.push(JsonLdSyntaxError::msg_and_code(
                 "Term definition value must be null, a string or a map",
@@ -531,15 +527,15 @@ fn create_term_definition(
                             }
                         }
                         // 14.2.5)
-                        if !term.contains(':') && !term.contains('/') {
-                            simple_term = true;
-                            if definition.iri_mapping.as_deref().is_some_and(|iri| {
+                        if !term.contains(':')
+                            && !term.contains('/')
+                            && definition.iri_mapping.as_deref().is_some_and(|iri| {
                                 iri.ends_with(|c| {
                                     matches!(c, ':' | '/' | '?' | '#' | '[' | ']' | '@')
                                 }) || iri.starts_with("_:")
-                            }) {
-                                definition.prefix_flag = true;
-                            }
+                            })
+                        {
+                            definition.prefix_flag = true;
                         }
                     }
                     // 14.2.1)

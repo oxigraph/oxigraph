@@ -214,6 +214,7 @@ impl JsonLdParser {
                 state: vec![JsonLdToRdfState::Graph(Some(GraphName::DefaultGraph))],
                 lenient: self.lenient,
             },
+            json_error: false,
         }
     }
 }
@@ -265,12 +266,16 @@ impl<R: Read> Iterator for ReaderJsonLdParser<R> {
                 return Some(Err(error.into()));
             } else if let Some(quad) = self.results.pop() {
                 return Some(Ok(quad));
-            } else if self.inner.expansion.is_end() {
+            } else if self.inner.is_end() {
                 return None;
             }
-            if let Err(e) = self.parse_step() {
+            let step = self.parse_step();
+            if let Err(e) = step {
                 return Some(Err(e));
             }
+            // We make sure to have data in the right order
+            self.results.reverse();
+            self.errors.reverse();
         }
     }
 }
@@ -335,11 +340,12 @@ impl<R: Read> ReaderJsonLdParser<R> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        self.inner.parse_event(
-            self.json_parser.parse_next()?,
-            &mut self.results,
-            &mut self.errors,
-        );
+        let event = self.json_parser.parse_next().map_err(|e| {
+            self.inner.json_error = true;
+            e
+        })?;
+        self.inner
+            .parse_event(event, &mut self.results, &mut self.errors);
         Ok(())
     }
 }
@@ -396,12 +402,15 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
                 return Some(Err(error.into()));
             } else if let Some(quad) = self.results.pop() {
                 return Some(Ok(quad));
-            } else if self.inner.expansion.is_end() {
+            } else if self.inner.is_end() {
                 return None;
             }
             if let Err(e) = self.parse_step().await {
                 return Some(Err(e));
             }
+            // We make sure to have data in the right order
+            self.results.reverse();
+            self.errors.reverse();
         }
     }
 
@@ -470,11 +479,12 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     }
 
     async fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        self.inner.parse_event(
-            self.json_parser.parse_next().await?,
-            &mut self.results,
-            &mut self.errors,
-        );
+        let event = self.json_parser.parse_next().await.map_err(|e| {
+            self.inner.json_error = true;
+            e
+        })?;
+        self.inner
+            .parse_event(event, &mut self.results, &mut self.errors);
         Ok(())
     }
 }
@@ -526,13 +536,16 @@ impl Iterator for SliceJsonLdParser<'_> {
                 return Some(Err(error));
             } else if let Some(quad) = self.results.pop() {
                 return Some(Ok(quad));
-            } else if self.inner.expansion.is_end() {
+            } else if self.inner.is_end() {
                 return None;
             }
             if let Err(e) = self.parse_step() {
                 // I/O errors cannot happen
                 return Some(Err(e));
             }
+            // We make sure to have data in the right order
+            self.results.reverse();
+            self.errors.reverse();
         }
     }
 }
@@ -597,11 +610,12 @@ impl SliceJsonLdParser<'_> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdSyntaxError> {
-        self.inner.parse_event(
-            self.json_parser.parse_next()?,
-            &mut self.results,
-            &mut self.errors,
-        );
+        let event = self.json_parser.parse_next().map_err(|e| {
+            self.inner.json_error = true;
+            e
+        })?;
+        self.inner
+            .parse_event(event, &mut self.results, &mut self.errors);
         Ok(())
     }
 }
@@ -623,7 +637,9 @@ impl<'a> Iterator for JsonLdPrefixesIter<'a> {
             let (prefix, term_definition) = self.term_definitions.next()?;
             if term_definition.prefix_flag {
                 if let Some(mapping) = &term_definition.iri_mapping {
-                    return Some((prefix, mapping));
+                    if self.lenient || Iri::parse(mapping.as_str()).is_ok() {
+                        return Some((prefix, mapping));
+                    }
                 }
             }
         }
@@ -639,6 +655,7 @@ struct InternalJsonLdParser {
     expansion: JsonLdExpansionConverter,
     expended_events: Vec<JsonLdEvent>,
     to_rdf: JsonLdToRdfConverter,
+    json_error: bool,
 }
 
 impl InternalJsonLdParser {
@@ -653,6 +670,10 @@ impl InternalJsonLdParser {
         for event in self.expended_events.drain(..) {
             self.to_rdf.convert_event(event, results);
         }
+    }
+
+    fn is_end(&self) -> bool {
+        self.json_error || self.expansion.is_end()
     }
 
     fn base_iri(&self) -> Option<&str> {
@@ -1003,70 +1024,4 @@ impl JsonLdToRdfConverter {
         }
         None
     }
-}
-
-#[test]
-fn test() {
-    let mut count = 0;
-    let input = r#"{
-  "@context": {
-    "authored": {
-      "@id": "http://example.org/vocab#authored",
-      "@type": "@id"
-    },
-    "contains": {
-      "@id": "http://example.org/vocab#contains",
-      "@type": "@id"
-    },
-    "contributor": "http://purl.org/dc/elements/1.1/contributor",
-    "description": "http://purl.org/dc/elements/1.1/description",
-    "name": "http://xmlns.com/foaf/0.1/name",
-    "title": {
-      "@id": "http://purl.org/dc/elements/1.1/title"
-    }
-  },
-  "@graph": [
-    {
-      "@id": "http://example.org/test#jane",
-      "name": "Jane",
-      "authored": {
-        "@graph": [
-          {
-            "@id": "http://example.org/test#chapter1",
-            "description": "Fun",
-            "title": "Chapter One"
-          },
-          {
-            "@id": "http://example.org/test#chapter2",
-            "description": "More fun",
-            "title": "Chapter Two"
-          }
-        ]
-      }
-    },
-    {
-      "@id": "http://example.org/test#john",
-      "name": "John"
-    },
-    {
-      "@id": "http://example.org/test#library",
-      "contains": {
-        "@id": "http://example.org/test#book",
-        "contains": "http://example.org/test#chapter",
-        "contributor": "Writer",
-        "title": "My Book"
-      }
-    }
-  ]
-}
-"#;
-    for q in JsonLdParser::new()
-        .with_base_iri("http://example.com/foo")
-        .unwrap()
-        .for_slice(input.as_bytes())
-    {
-        println!("{}", q.unwrap());
-        count += 1;
-    }
-    assert_eq!(count, 2);
 }

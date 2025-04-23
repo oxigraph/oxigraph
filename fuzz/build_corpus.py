@@ -13,6 +13,7 @@ for target, ext in [
     ("nquads", "nq"),
     ("trig", "trig"),
     ("rdf_xml", "rdf"),
+    ("jsonld", "jsonld")
 ]:
     target_dir = base / "fuzz" / "corpus" / target
     for f in base.rglob(f"*.{ext}"):

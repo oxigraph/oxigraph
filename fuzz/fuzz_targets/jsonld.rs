@@ -1,0 +1,133 @@
+#![no_main]
+
+use libfuzzer_sys::fuzz_target;
+use oxigraph_fuzz::count_quad_blank_nodes;
+use oxjsonld::{JsonLdParser, JsonLdSerializer};
+use oxrdf::graph::CanonicalizationAlgorithm;
+use oxrdf::{Dataset, Quad};
+
+fn parse(
+    input: &[u8],
+    lenient: bool,
+    streaming: bool,
+) -> (
+    Vec<Quad>,
+    Vec<String>,
+    Vec<(String, String)>,
+    Option<String>,
+) {
+    let mut quads = Vec::new();
+    let mut errors = Vec::new();
+    let mut parser = JsonLdParser::new()
+        .with_base_iri("http://example.com/")
+        .unwrap();
+    if lenient {
+        parser = parser.lenient();
+    }
+    if streaming {
+        parser = parser.streaming();
+    }
+    let mut parser = parser.for_slice(input);
+    // We read the first element to get the first context if it exist
+    if let Some(result) = parser.next() {
+        match result {
+            Ok(quad) => quads.push(quad),
+            Err(error) => errors.push(error.to_string()),
+        }
+    }
+    let prefixes = parser
+        .prefixes()
+        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+        .collect();
+    let base_iri = parser.base_iri().map(ToString::to_string);
+    for result in parser {
+        match result {
+            Ok(quad) => quads.push(quad),
+            Err(error) => errors.push(error.to_string()),
+        }
+    }
+    (quads, errors, prefixes, base_iri)
+}
+
+fn serialize_quads(
+    quads: &[Quad],
+    prefixes: Vec<(String, String)>,
+    base_iri: Option<String>,
+) -> Vec<u8> {
+    let mut serializer = JsonLdSerializer::new();
+    for (prefix_name, prefix_iri) in prefixes {
+        serializer = serializer.with_prefix(prefix_name, prefix_iri).unwrap();
+    }
+    if let Some(base_iri) = base_iri {
+        serializer = serializer.with_base_iri(base_iri).unwrap();
+    }
+    let mut serializer = serializer.for_writer(Vec::new());
+    for quad in quads {
+        serializer.serialize_quad(quad).unwrap();
+    }
+    serializer.finish().unwrap()
+}
+
+fuzz_target!(|data: &[u8]| {
+    // We parse with splitting
+    let (quads, errors, prefixes, base_iri) = parse(data, false, false);
+    let (quads_streaming, errors_streaming, _, _) = parse(data, false, true);
+    let (_, errors_lenient, _, _) = parse(data, true, false);
+    if errors_streaming.is_empty() {
+        assert!(errors.is_empty());
+    }
+    if errors.is_empty() {
+        assert!(errors_lenient.is_empty());
+    }
+
+    let bnodes_count = quads
+        .iter()
+        .map(|q| count_quad_blank_nodes(q.as_ref()))
+        .sum::<usize>();
+    if bnodes_count == 0 {
+        assert_eq!(
+            quads,
+            quads_streaming,
+            "Buffering:\n{}\nStreaming:\n{}",
+            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+            String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
+        );
+    } else if bnodes_count <= 4 {
+        let mut dataset = quads.iter().collect::<Dataset>();
+        let mut dataset_streaming = quads_streaming.iter().collect::<Dataset>();
+        dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
+        dataset_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
+        assert_eq!(
+            dataset,
+            dataset_streaming,
+            "Buffering:\n{}\nStreaming:\n{}",
+            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+            String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
+        );
+    }
+
+    // We serialize
+    let new_serialization = serialize_quads(&quads, prefixes, base_iri);
+
+    // We parse the serialization
+    let new_quads = JsonLdParser::new()
+        .streaming()
+        .for_slice(&new_serialization)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| {
+            format!(
+                "Error on {:?} from {quads:?} based on {:?}: {e}",
+                String::from_utf8_lossy(&new_serialization),
+                String::from_utf8_lossy(data)
+            )
+        })
+        .unwrap();
+
+    // We check the roundtrip has not changed anything
+    assert_eq!(
+        new_quads,
+        quads,
+        "{}",
+        String::from_utf8_lossy(&new_serialization)
+    );
+});

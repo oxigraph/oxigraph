@@ -65,7 +65,7 @@ impl JsonLdSyntaxError {
     pub fn location(&self) -> Option<Range<TextPosition>> {
         match &self.0 {
             SyntaxErrorKind::Json(e) => Some(e.location()),
-            SyntaxErrorKind::Msg { code, .. } => None,
+            SyntaxErrorKind::Msg { .. } => None,
         }
     }
 

@@ -1179,7 +1179,8 @@ impl JsonLdExpansionConverter {
             .pop()
             .expect("The context stack must not be empty");
         last_context.1 -= 1;
-        if last_context.1 > 0 {
+        if last_context.1 > 0 || self.context.is_empty() {
+            // We always keep a context to allow reading the root context at the end of the document
             self.context.push(last_context);
         }
     }

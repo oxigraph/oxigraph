@@ -472,9 +472,9 @@ impl InnerJsonLdWriter {
                     output.push(JsonEvent::String(language.into()));
                 } else if literal.datatype() != xsd::STRING {
                     output.push(JsonEvent::ObjectKey("@type".into()));
-                    output.push(JsonEvent::String(
-                        self.type_value(literal.datatype().into()),
-                    ));
+                    output.push(JsonEvent::String(Self::type_value(
+                        literal.datatype().into(),
+                    )));
                 }
                 output.push(JsonEvent::ObjectKey("@value".into()));
                 output.push(JsonEvent::String(literal.value().into()));
@@ -495,7 +495,13 @@ impl InnerJsonLdWriter {
             NamedOrBlankNodeRef::NamedNode(iri) => {
                 if let Some(base_iri) = &self.base_iri {
                     if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(iri.as_str())) {
-                        return relative.into_inner().into();
+                        let relative = relative.into_inner();
+                        // We check the relative IRI is not considered as absolute by IRI expansion
+                        if !relative.split_once(':').is_some_and(|(prefix, suffix)| {
+                            prefix == "_" || suffix.starts_with("//")
+                        }) {
+                            return relative.into();
+                        }
                     }
                 }
                 iri.as_str().into()
@@ -504,7 +510,7 @@ impl InnerJsonLdWriter {
         }
     }
 
-    fn type_value<'a>(&self, id: NamedOrBlankNodeRef<'a>) -> Cow<'a, str> {
+    fn type_value(id: NamedOrBlankNodeRef<'_>) -> Cow<'_, str> {
         match id {
             NamedOrBlankNodeRef::NamedNode(iri) => iri.as_str().into(),
             NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
@@ -512,6 +518,9 @@ impl InnerJsonLdWriter {
     }
 
     fn finish(&mut self, output: &mut Vec<JsonEvent<'static>>) {
+        if !self.started {
+            self.serialize_start(output);
+        }
         if self.current_predicate.is_some() {
             output.push(JsonEvent::EndArray)
         }
