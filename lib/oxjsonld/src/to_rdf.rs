@@ -1,4 +1,4 @@
-use crate::context::JsonLdProcessingMode;
+use crate::context::{JsonLdProcessingMode, JsonLdTermDefinition};
 use crate::error::{JsonLdParseError, JsonLdSyntaxError};
 use crate::expansion::{JsonLdEvent, JsonLdExpansionConverter, JsonLdValue};
 #[cfg(feature = "async-tokio")]
@@ -8,7 +8,6 @@ use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad};
 use std::io::Read;
-use std::marker::PhantomData;
 use std::str;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
@@ -309,10 +308,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
-        JsonLdPrefixesIter {
-            lifetime: PhantomData,
-            lenient: self.inner.to_rdf.lenient,
-        }
+        self.inner.prefixes()
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -335,7 +331,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        todo!()
+        self.inner.base_iri()
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
@@ -444,10 +440,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// # }
     /// ```
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
-        JsonLdPrefixesIter {
-            lifetime: PhantomData,
-            lenient: self.inner.to_rdf.lenient,
-        }
+        self.inner.prefixes()
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -473,7 +466,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// # }
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        todo!()
+        self.inner.base_iri()
     }
 
     async fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
@@ -577,10 +570,7 @@ impl SliceJsonLdParser<'_> {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
-        JsonLdPrefixesIter {
-            lifetime: PhantomData,
-            lenient: self.inner.to_rdf.lenient,
-        }
+        self.inner.prefixes()
     }
 
     /// The base IRI considered at the current step of the parsing.
@@ -603,7 +593,7 @@ impl SliceJsonLdParser<'_> {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
-        todo!()
+        self.inner.base_iri()
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdSyntaxError> {
@@ -620,7 +610,7 @@ impl SliceJsonLdParser<'_> {
 ///
 /// See [`ReaderJsonLdParser::prefixes`].
 pub struct JsonLdPrefixesIter<'a> {
-    lifetime: PhantomData<&'a ()>,
+    term_definitions: std::collections::hash_map::Iter<'a, String, JsonLdTermDefinition>,
     lenient: bool,
 }
 
@@ -629,12 +619,19 @@ impl<'a> Iterator for JsonLdPrefixesIter<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        loop {
+            let (prefix, term_definition) = self.term_definitions.next()?;
+            if term_definition.prefix_flag {
+                if let Some(mapping) = &term_definition.iri_mapping {
+                    return Some((prefix, mapping));
+                }
+            }
+        }
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        todo!()
+        (0, self.term_definitions.size_hint().1)
     }
 }
 
@@ -655,6 +652,17 @@ impl InternalJsonLdParser {
             .convert_event(event, &mut self.expended_events, errors);
         for event in self.expended_events.drain(..) {
             self.to_rdf.convert_event(event, results);
+        }
+    }
+
+    fn base_iri(&self) -> Option<&str> {
+        Some(self.expansion.context().base_iri.as_ref()?.as_str())
+    }
+
+    fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
+        JsonLdPrefixesIter {
+            term_definitions: self.expansion.context().term_definitions.iter(),
+            lenient: self.to_rdf.lenient,
         }
     }
 }
@@ -812,9 +820,7 @@ impl JsonLdToRdfConverter {
                 JsonLdEvent::Value { .. } => {
                     self.state.push(state);
                 }
-                JsonLdEvent::EndGraph => {
-                    // TODO
-                }
+                JsonLdEvent::EndGraph => (),
                 JsonLdEvent::StartGraph
                 | JsonLdEvent::StartProperty(_)
                 | JsonLdEvent::EndProperty

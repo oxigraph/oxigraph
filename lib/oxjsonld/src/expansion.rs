@@ -104,6 +104,7 @@ pub struct JsonLdExpansionConverter {
     processing_mode: JsonLdProcessingMode,
 }
 
+#[allow(clippy::expect_used, clippy::unwrap_in_result)]
 impl JsonLdExpansionConverter {
     pub fn new(
         base_url: Option<Iri<String>>,
@@ -1143,12 +1144,12 @@ impl JsonLdExpansionConverter {
             }
             // 5)
             if matches!(value, JsonLdValue::String(_)) {
-                language = term_definition.language_mapping.clone();
+                language.clone_from(&term_definition.language_mapping);
             }
         }
         // 5)
         if matches!(value, JsonLdValue::String(_)) && language.is_none() {
-            language = active_context.default_language.clone();
+            language.clone_from(&active_context.default_language);
         }
         results.push(JsonLdEvent::Value {
             value,
@@ -1157,7 +1158,7 @@ impl JsonLdExpansionConverter {
         });
     }
 
-    fn context(&self) -> &JsonLdContext {
+    pub fn context(&self) -> &JsonLdContext {
         &self
             .context
             .last()
