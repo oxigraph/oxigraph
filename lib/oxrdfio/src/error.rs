@@ -75,8 +75,19 @@ impl RdfSyntaxError {
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
         match &self.0 {
-            SyntaxErrorKind::JsonLd(_) => {
-                unimplemented!()
+            SyntaxErrorKind::JsonLd(e) => {
+                let location = e.location()?;
+                Some(
+                    TextPosition {
+                        line: location.start.line,
+                        column: location.start.column,
+                        offset: location.start.offset,
+                    }..TextPosition {
+                        line: location.end.line,
+                        column: location.end.column,
+                        offset: location.end.offset,
+                    },
+                )
             }
             SyntaxErrorKind::Turtle(e) => {
                 let location = e.location();

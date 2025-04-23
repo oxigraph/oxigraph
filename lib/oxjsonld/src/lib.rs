@@ -10,7 +10,7 @@ mod expansion;
 mod from_rdf;
 mod to_rdf;
 
-pub use error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError};
+pub use error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError, TextPosition};
 #[cfg(feature = "async-tokio")]
 pub use from_rdf::TokioAsyncWriterJsonLdSerializer;
 pub use from_rdf::{JsonLdSerializer, WriterJsonLdSerializer};

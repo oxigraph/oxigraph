@@ -1,5 +1,7 @@
+pub use json_event_parser::TextPosition;
 use json_event_parser::{JsonParseError, JsonSyntaxError};
 use std::fmt::Formatter;
+use std::ops::Range;
 use std::{fmt, io};
 
 /// Error returned during JSON-LD parsing.
@@ -56,6 +58,14 @@ impl JsonLdSyntaxError {
         match &self.0 {
             SyntaxErrorKind::Json(_) => None,
             SyntaxErrorKind::Msg { code, .. } => *code,
+        }
+    }
+
+    /// The location of the error inside of the file.
+    pub fn location(&self) -> Option<Range<TextPosition>> {
+        match &self.0 {
+            SyntaxErrorKind::Json(e) => Some(e.location()),
+            SyntaxErrorKind::Msg { code, .. } => None,
         }
     }
 
