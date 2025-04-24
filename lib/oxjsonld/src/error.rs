@@ -182,6 +182,8 @@ pub enum JsonLdErrorCode {
     InvalidScopedContext,
     /// A set object or list object with disallowed entries has been detected.
     InvalidSetOrListObject,
+    /// The key ordering is not compatible with the streaming profile.
+    InvalidStreamingKeyOrder,
     /// An invalid term definition has been detected.
     InvalidTermDefinition,
     /// An @type entry in a term definition was encountered whose value could not be expanded to an IRI.
@@ -250,6 +252,7 @@ impl fmt::Display for JsonLdErrorCode {
             Self::InvalidReversePropertyValue => "invalid reverse property value",
             Self::InvalidScopedContext => "invalid scoped context",
             Self::InvalidSetOrListObject => "invalid set or list object",
+            Self::InvalidStreamingKeyOrder => "invalid streaming key order",
             Self::InvalidTermDefinition => "invalid term definition",
             Self::InvalidTypeMapping => "invalid type mapping",
             Self::InvalidTypeValue => "invalid type value",

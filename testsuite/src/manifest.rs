@@ -26,7 +26,6 @@ pub struct Test {
     pub service_data: Vec<(String, String)>,
     pub result: Option<String>,
     pub result_graph_data: Vec<(NamedNode, String)>,
-    pub expect_error_code: Option<String>,
     pub option: HashMap<NamedNode, Term>,
 }
 
@@ -285,14 +284,6 @@ impl TestManifest {
                 Some(_) => bail!("invalid result"),
                 None => (None, Vec::new()),
             };
-            let expect_error_code = match self
-                .graph
-                .object_for_subject_predicate(&test_node, jld::EXPECT_ERROR_CODE)
-            {
-                Some(TermRef::Literal(code)) => Some(code.value().to_owned()),
-                Some(_) => bail!("invalid expectErrorCode"),
-                None => None,
-            };
             let option = match self
                 .graph
                 .object_for_subject_predicate(&test_node, jld::OPTION)
@@ -318,7 +309,6 @@ impl TestManifest {
                 service_data,
                 result,
                 result_graph_data,
-                expect_error_code,
                 option,
             }));
         }

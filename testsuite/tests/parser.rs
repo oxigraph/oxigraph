@@ -185,10 +185,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld",
         &[
-            // Streaming is too lenient
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tse01",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tse06",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tse08",
             // @context in @context
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tv006",
             // @list
@@ -196,6 +192,7 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0014",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0015",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0036",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter41",
             // @set
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te047",
             // float exp notation
@@ -218,6 +215,8 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te044",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te050",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te062",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter20",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter35",
             // @iri
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te005",
             // @id alias
@@ -248,6 +247,16 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te066",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te074",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0119",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter14",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter15",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter17",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter25",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter33",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter34",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter36",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter50",
+            // @index
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter31",
             // relative IRI resolution discrepancies
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0122",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0123",
@@ -381,6 +390,7 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te128",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te129",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te130",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter53",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tec01",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tec02",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tem01",

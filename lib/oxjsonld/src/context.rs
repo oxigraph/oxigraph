@@ -108,8 +108,9 @@ pub fn process_context(
             }
             // 5.2)
             JsonNode::String(_) => {
-                errors.push(JsonLdSyntaxError::msg(
+                errors.push(JsonLdSyntaxError::msg_and_code(
                     "Loading remote contexts is not implemented yet",
+                    JsonLdErrorCode::LoadingRemoteContextFailed,
                 ));
                 continue; // TODO
             }
@@ -613,7 +614,7 @@ fn create_term_definition(
                 // 25.1)
                 if processing_mode == JsonLdProcessingMode::JsonLd1_0 {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@direction is only supported in JSON-LD 1.1",
+                        "@prefix is only supported in JSON-LD 1.1",
                         JsonLdErrorCode::InvalidTermDefinition,
                     ));
                     continue;

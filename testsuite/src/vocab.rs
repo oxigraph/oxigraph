@@ -93,9 +93,6 @@ pub mod ut {
 pub mod jld {
     use oxigraph::model::NamedNodeRef;
 
-    pub const EXPECT_ERROR_CODE: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
-        "https://w3c.github.io/json-ld-api/tests/vocab#expectErrorCode",
-    );
     pub const NEGATIVE_EVALUATION_TEST: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "https://w3c.github.io/json-ld-api/tests/vocab#NegativeEvaluationTest",
     );

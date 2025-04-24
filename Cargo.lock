@@ -2272,6 +2272,7 @@ dependencies = [
  "json-ld",
  "oxigraph",
  "oxiri",
+ "oxjsonld",
  "oxttl",
  "spareval",
  "spargebra",

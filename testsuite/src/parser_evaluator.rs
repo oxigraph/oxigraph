@@ -8,6 +8,7 @@ use json_event_parser::{JsonEvent, SliceJsonParser};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{BlankNode, Dataset, Quad};
+use oxjsonld::{JsonLdParser, JsonLdSyntaxError};
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
 
@@ -177,18 +178,14 @@ fn evaluate_eval_test(
 }
 
 fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
-    let format = if test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST) {
-        RdfFormat::StreamingJsonLd
-    } else {
-        RdfFormat::JsonLd
-    };
+    let streaming = test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST);
     if test
         .kinds
         .iter()
         .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let mut actual_dataset = load_dataset(action, format, false, false)
+        let mut actual_dataset = parse_json_ld(action, streaming)?
             .with_context(|| format!("Parse error on file {action}"))?;
         actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
         let results = test.result.as_ref().context("No tests result found")?;
@@ -207,11 +204,20 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let result = load_dataset(action, format, false, false);
+        let result = parse_json_ld(action, streaming)?;
         ensure!(
             result.is_err(),
             "Properly parsed file even if it should not"
-        ); // TODO: test error code
+        );
+        let actual_error = result.unwrap_err();
+        let actual_error_code = actual_error.code().map(|c| c.to_string());
+        ensure!(
+            test.result == actual_error_code,
+            "Different error code, found {:?} with message '{}' instead of {:?}",
+            actual_error_code,
+            actual_error,
+            test.result,
+        );
         Ok(())
     } else if test
         .kinds
@@ -219,7 +225,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        load_dataset(action, format, false, false)
+        parse_json_ld(action, streaming)?
             .with_context(|| format!("Parse error on file {action}"))?;
         Ok(())
     } else {
@@ -310,6 +316,16 @@ fn n3_to_dataset(quads: Vec<N3Quad>) -> Dataset {
             })
         })
         .collect()
+}
+
+fn parse_json_ld(url: &str, streaming: bool) -> Result<Result<Dataset, JsonLdSyntaxError>> {
+    let mut parser = JsonLdParser::new().with_base_iri(url)?;
+    if streaming {
+        parser = parser.streaming();
+    }
+    Ok(parser
+        .for_slice(read_file_to_string(url)?.as_bytes())
+        .collect())
 }
 
 fn are_json_equals(left: &str, right: &str) -> Result<bool> {
