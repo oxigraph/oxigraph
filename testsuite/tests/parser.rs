@@ -253,12 +253,7 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             // relative IRI resolution discrepancies
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0122",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0123",
-            // base option
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te076",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te089",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te090",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te091",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tm005",
             // expandContext option
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te077",
             // normative option

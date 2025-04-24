@@ -7,7 +7,7 @@ use anyhow::{bail, ensure, Context, Result};
 use json_event_parser::{JsonEvent, SliceJsonParser};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
-use oxigraph::model::{BlankNode, Dataset, Quad};
+use oxigraph::model::{BlankNode, Dataset, Quad, Term};
 use oxjsonld::{JsonLdParser, JsonLdSyntaxError};
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
@@ -179,13 +179,20 @@ fn evaluate_eval_test(
 
 fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
     let streaming = test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST);
+    let base_url = test.option.get(&jld::BASE.into_owned()).and_then(|t| {
+        if let Term::NamedNode(i) = t {
+            Some(i.as_str())
+        } else {
+            None
+        }
+    });
     if test
         .kinds
         .iter()
         .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let mut actual_dataset = parse_json_ld(action, streaming)?
+        let mut actual_dataset = parse_json_ld(action, streaming, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
         actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
         let results = test.result.as_ref().context("No tests result found")?;
@@ -204,7 +211,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let result = parse_json_ld(action, streaming)?;
+        let result = parse_json_ld(action, streaming, base_url)?;
         ensure!(
             result.is_err(),
             "Properly parsed file even if it should not"
@@ -225,7 +232,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        parse_json_ld(action, streaming)?
+        parse_json_ld(action, streaming, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
         Ok(())
     } else {
@@ -318,8 +325,12 @@ fn n3_to_dataset(quads: Vec<N3Quad>) -> Dataset {
         .collect()
 }
 
-fn parse_json_ld(url: &str, streaming: bool) -> Result<Result<Dataset, JsonLdSyntaxError>> {
-    let mut parser = JsonLdParser::new().with_base_iri(url)?;
+fn parse_json_ld(
+    url: &str,
+    streaming: bool,
+    base_url: Option<&str>,
+) -> Result<Result<Dataset, JsonLdSyntaxError>> {
+    let mut parser = JsonLdParser::new().with_base_iri(base_url.unwrap_or(url))?;
     if streaming {
         parser = parser.streaming();
     }
