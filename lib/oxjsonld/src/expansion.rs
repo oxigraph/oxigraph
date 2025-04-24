@@ -759,23 +759,45 @@ impl JsonLdExpansionConverter {
                 }
                 JsonEvent::EndObject => {
                     if let Some(value) = value {
+                        let mut is_valid = true;
                         if language.is_some() && r#type.is_some() {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 "@type and @language cannot be used together",
                                 JsonLdErrorCode::InvalidValueObject,
-                            ))
+                            ));
+                            is_valid = false;
                         }
                         if language.is_some() && !matches!(value, JsonLdValue::String(_)) {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 "@language can be used only on a string @value",
                                 JsonLdErrorCode::InvalidLanguageTaggedValue,
-                            ))
+                            ));
+                            is_valid = false;
                         }
-                        results.push(JsonLdEvent::Value {
-                            value,
-                            r#type,
-                            language,
-                        })
+                        if let Some(r#type) = &r#type {
+                            if r#type.starts_with("_:") {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    "@type cannot be a blank node",
+                                    JsonLdErrorCode::InvalidTypedValue,
+                                ));
+                                is_valid = false;
+                            } else if !self.lenient {
+                                if let Err(e) = Iri::parse(r#type.as_str()) {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        format!("@type value '{type}' must be an IRI: {e}"),
+                                        JsonLdErrorCode::InvalidTypedValue,
+                                    ));
+                                    is_valid = false;
+                                }
+                            }
+                        }
+                        if is_valid {
+                            results.push(JsonLdEvent::Value {
+                                value,
+                                r#type,
+                                language,
+                            })
+                        }
                     }
                     self.pop_context();
                 }
@@ -893,11 +915,23 @@ impl JsonLdExpansionConverter {
                 }
             },
             JsonLdExpansionState::ValueType { value, language } => match event {
-                JsonEvent::String(t) => self.state.push(JsonLdExpansionState::Value {
-                    r#type: Some(t.into()),
-                    value,
-                    language,
-                }),
+                JsonEvent::String(t) => {
+                    let mut r#type = self.expand_iri(t, true, true, errors);
+                    if let Some(iri) = &r#type {
+                        if has_keyword_form(&iri) {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                format!("{iri} is not a valid value for @type"),
+                                JsonLdErrorCode::InvalidTypedValue,
+                            ));
+                            r#type = None
+                        }
+                    }
+                    self.state.push(JsonLdExpansionState::Value {
+                        r#type: r#type.map(Into::into),
+                        value,
+                        language,
+                    })
+                }
                 JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         "@type value must be a string when @value is present",

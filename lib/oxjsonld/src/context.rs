@@ -455,13 +455,22 @@ fn create_term_definition(
                     ));
                 }
                 // 12.4)
-                if has_keyword_form(&r#type)
-                    && !matches!(r#type.as_ref(), "@id" | "@json" | "@none" | "@vocab")
+                let is_keyword = has_keyword_form(&r#type);
+                if is_keyword && !matches!(r#type.as_ref(), "@id" | "@json" | "@none" | "@vocab")
+                    || r#type.starts_with("_:")
                 {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         format!("Invalid @type value in context: {type}"),
                         JsonLdErrorCode::InvalidTypeMapping,
                     ));
+                }
+                if !lenient && !is_keyword {
+                    if let Err(e) = Iri::parse(r#type.as_ref()) {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            format!("Invalid @type iri '{type}': {e}"),
+                            JsonLdErrorCode::InvalidTypeMapping,
+                        ));
+                    }
                 }
                 // 12.5)
                 definition.type_mapping = Some(r#type.into());
@@ -498,6 +507,13 @@ fn create_term_definition(
                             return;
                         };
                         // 14.2.3)
+                        if expanded == "@context" {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@context cannot be aliased with @id: @context",
+                                JsonLdErrorCode::InvalidKeywordAlias,
+                            ));
+                            return;
+                        }
                         definition.iri_mapping = Some(expanded.into());
                         // 14.2.4)
                         if term

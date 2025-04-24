@@ -226,13 +226,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te003",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te018",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te032",
-            // missing errors
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter13",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter19",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter23",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter26",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter40",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter51",
             // @reverse
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0031",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te078",
