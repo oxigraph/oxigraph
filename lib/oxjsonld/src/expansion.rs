@@ -1,5 +1,5 @@
 use crate::context::{
-    expand_iri, has_keyword_form, process_context, JsonLdContext, JsonLdProcessingMode, JsonNode,
+    has_keyword_form, JsonLdContext, JsonLdContextProcessor, JsonLdProcessingMode, JsonNode,
 };
 use crate::error::JsonLdErrorCode;
 use crate::JsonLdSyntaxError;
@@ -918,7 +918,7 @@ impl JsonLdExpansionConverter {
                 JsonEvent::String(t) => {
                     let mut r#type = self.expand_iri(t, true, true, errors);
                     if let Some(iri) = &r#type {
-                        if has_keyword_form(&iri) {
+                        if has_keyword_form(iri) {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 format!("{iri} is not a valid value for @type"),
                                 JsonLdErrorCode::InvalidTypedValue,
@@ -1166,15 +1166,17 @@ impl JsonLdExpansionConverter {
     ) {
         match state {
             JsonLdExpansionStateAfterToNode::Context => {
-                let context = process_context(
+                let context = JsonLdContextProcessor {
+                    processing_mode: self.processing_mode,
+                    lenient: self.lenient,
+                }
+                .process_context(
                     self.context(),
                     node,
                     None,
                     &mut Vec::new(),
                     false,
                     true,
-                    self.processing_mode, // TODO
-                    self.lenient,
                     errors,
                 );
                 self.context
@@ -1199,7 +1201,11 @@ impl JsonLdExpansionConverter {
         vocab: bool,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) -> Option<Cow<'a, str>> {
-        expand_iri(
+        JsonLdContextProcessor {
+            processing_mode: self.processing_mode,
+            lenient: self.lenient,
+        }
+        .expand_iri(
             &mut self
                 .context
                 .last_mut()
@@ -1210,8 +1216,6 @@ impl JsonLdExpansionConverter {
             vocab,
             None,
             &mut HashMap::new(),
-            self.processing_mode,
-            self.lenient,
             errors,
         )
     }
