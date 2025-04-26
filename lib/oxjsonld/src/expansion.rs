@@ -1,6 +1,6 @@
 use crate::context::{
-    has_keyword_form, JsonLdContext, JsonLdContextProcessor, JsonLdProcessingMode, JsonNode,
-    LoadDocumentOptions, RemoteDocument,
+    has_keyword_form, json_node_from_events, JsonLdContext, JsonLdContextProcessor,
+    JsonLdProcessingMode, LoadDocumentOptions, RemoteDocument,
 };
 use crate::error::JsonLdErrorCode;
 use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
@@ -43,6 +43,12 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
     },
     ObjectOrContainerStart {
+        active_property: Option<String>,
+        container: &'static [&'static str],
+    },
+    Context {
+        buffer: Vec<JsonEvent<'static>>,
+        depth: usize,
         active_property: Option<String>,
         container: &'static [&'static str],
     },
@@ -91,24 +97,9 @@ enum JsonLdExpansionState {
     List {
         needs_end_object: bool,
     },
-    ToNode {
-        stack: Vec<BuildingObjectOrArrayNode>,
-        end_state: JsonLdExpansionStateAfterToNode,
-    },
     Skip {
         is_array: bool,
     },
-}
-
-enum BuildingObjectOrArrayNode {
-    Object(HashMap<String, JsonNode>),
-    ObjectWithPendingKey(HashMap<String, JsonNode>, String),
-    Array(Vec<JsonNode>),
-}
-
-#[derive(Clone, Copy)]
-enum JsonLdExpansionStateAfterToNode {
-    Context,
 }
 
 /// Applies the [Expansion Algorithm](https://www.w3.org/TR/json-ld-api/#expansion-algorithms)
@@ -271,6 +262,12 @@ impl JsonLdExpansionConverter {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
                         match iri.as_ref() {
+                            "@context" => self.state.push(JsonLdExpansionState::Context {
+                                buffer: Vec::new(),
+                                depth: 0,
+                                active_property,
+                                container,
+                            }),
                             "@list" => {
                                 if active_property.is_some() {
                                     self.state.push(JsonLdExpansionState::List {
@@ -331,6 +328,59 @@ impl JsonLdExpansionConverter {
                 }
                 _ => unreachable!("Inside of an object"),
             },
+
+            JsonLdExpansionState::Context {
+                mut buffer,
+                mut depth,
+                active_property,
+                container,
+            } => {
+                match event {
+                    JsonEvent::String(_)
+                    | JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::Null
+                    | JsonEvent::ObjectKey(_) => buffer.push(to_owned_event(event)),
+                    JsonEvent::EndArray | JsonEvent::EndObject => {
+                        buffer.push(to_owned_event(event));
+                        depth -= 1;
+                    }
+                    JsonEvent::StartArray | JsonEvent::StartObject => {
+                        buffer.push(to_owned_event(event));
+                        depth += 1;
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+                if depth == 0 {
+                    let context = self.context_processor.process_context(
+                        self.context(),
+                        json_node_from_events(buffer.into_iter().map(Ok)).unwrap(),
+                        None,
+                        &mut Vec::new(),
+                        false,
+                        true,
+                        true,
+                        errors,
+                    );
+                    self.context
+                        .last_mut()
+                        .expect("Context stack must not be empty")
+                        .1 -= 1;
+                    self.context.push((context, 1));
+                    self.state
+                        .push(JsonLdExpansionState::ObjectOrContainerStart {
+                            active_property,
+                            container,
+                        });
+                } else {
+                    self.state.push(JsonLdExpansionState::Context {
+                        buffer,
+                        depth,
+                        active_property,
+                        container,
+                    });
+                }
+            }
             JsonLdExpansionState::ObjectStart {
                 types,
                 id,
@@ -341,16 +391,18 @@ impl JsonLdExpansionConverter {
                     if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
                         match iri.as_ref() {
                             "@context" => {
-                                if seen_type {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@context must be the first key of an object",
-                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                    ))
-                                }
-                                self.state.push(JsonLdExpansionState::ToNode {
-                                    stack: Vec::new(),
-                                    end_state: JsonLdExpansionStateAfterToNode::Context,
-                                })
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    "@context must be the first key of an object",
+                                    JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                ));
+                                self.state.push(JsonLdExpansionState::ObjectStart {
+                                    types,
+                                    id,
+                                    seen_type,
+                                    active_property,
+                                });
+                                self.state
+                                    .push(JsonLdExpansionState::Skip { is_array: false })
                             }
                             "@type" => {
                                 if seen_type && !self.lenient {
@@ -735,30 +787,35 @@ impl JsonLdExpansionConverter {
                                     });
                                     results.push(JsonLdEvent::StartGraph);
                                 }
-                                "@context" => errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@context must be the first key of an object",
-                                    JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                )),
-                                "@type" => {
-                                    // TODO: be nice and allow this if lenient
+                                "@context" => {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "@context must be the first key of an object",
+                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                    ));
                                     self.state
                                         .push(JsonLdExpansionState::Object { in_property: false });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
+                                "@type" => {
+                                    // TODO: be nice and allow this if lenient
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "@type must be the first key of an object or right after @context",
                                         JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                    ))
-                                }
-                                _ if has_keyword_form(&iri) => {
-                                    // TODO: we do not support any keyword
+                                    ));
                                     self.state
                                         .push(JsonLdExpansionState::Object { in_property: false });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
+                                _ if has_keyword_form(&iri) => {
                                     errors.push(JsonLdSyntaxError::msg(format!(
                                         "Unsupported JSON-LD keyword: {iri}"
                                     )));
+                                    self.state
+                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                                 _ => {
                                     let container = self
@@ -867,10 +924,19 @@ impl JsonLdExpansionConverter {
                                         .push(JsonLdExpansionState::ValueType { value, language });
                                 }
                             }
-                            "@context" => errors.push(JsonLdSyntaxError::msg_and_code(
-                                "@context must be the first key of an object",
-                                JsonLdErrorCode::InvalidStreamingKeyOrder,
-                            )),
+                            "@context" => {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    "@context must be the first key of an object",
+                                    JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                ));
+                                self.state.push(JsonLdExpansionState::Value {
+                                    r#type,
+                                    value,
+                                    language,
+                                });
+                                self.state
+                                    .push(JsonLdExpansionState::Skip { is_array: false });
+                            }
                             _ if has_keyword_form(&iri) => {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
                                     format!(
@@ -1246,120 +1312,6 @@ impl JsonLdExpansionConverter {
                 }
                 JsonEvent::Eof => unreachable!(),
             },
-            JsonLdExpansionState::ToNode {
-                mut stack,
-                end_state,
-            } => match event {
-                JsonEvent::String(value) => self.after_to_node_event(
-                    stack,
-                    end_state,
-                    JsonNode::String(value.into()),
-                    errors,
-                ),
-                JsonEvent::Number(value) => self.after_to_node_event(
-                    stack,
-                    end_state,
-                    JsonNode::Number(value.into()),
-                    errors,
-                ),
-                JsonEvent::Boolean(value) => {
-                    self.after_to_node_event(stack, end_state, JsonNode::Boolean(value), errors)
-                }
-                JsonEvent::Null => {
-                    self.after_to_node_event(stack, end_state, JsonNode::Null, errors)
-                }
-                JsonEvent::EndArray | JsonEvent::EndObject => {
-                    let value = match stack.pop() {
-                        Some(BuildingObjectOrArrayNode::Object(object)) => JsonNode::Map(object),
-                        Some(BuildingObjectOrArrayNode::Array(array)) => JsonNode::Array(array),
-                        _ => unreachable!(),
-                    };
-                    self.after_to_node_event(stack, end_state, value, errors)
-                }
-                JsonEvent::StartArray => {
-                    stack.push(BuildingObjectOrArrayNode::Array(Vec::new()));
-                    self.state
-                        .push(JsonLdExpansionState::ToNode { stack, end_state })
-                }
-                JsonEvent::StartObject => {
-                    stack.push(BuildingObjectOrArrayNode::Object(HashMap::new()));
-                    self.state
-                        .push(JsonLdExpansionState::ToNode { stack, end_state })
-                }
-                JsonEvent::ObjectKey(key) => {
-                    if let Some(BuildingObjectOrArrayNode::Object(object)) = stack.pop() {
-                        stack.push(BuildingObjectOrArrayNode::ObjectWithPendingKey(
-                            object,
-                            key.into(),
-                        ));
-                    }
-                    self.state
-                        .push(JsonLdExpansionState::ToNode { stack, end_state })
-                }
-                JsonEvent::Eof => unreachable!(),
-            },
-        }
-    }
-
-    fn after_to_node_event(
-        &mut self,
-        mut stack: Vec<BuildingObjectOrArrayNode>,
-        end_state: JsonLdExpansionStateAfterToNode,
-        new_value: JsonNode,
-        errors: &mut Vec<JsonLdSyntaxError>,
-    ) {
-        match stack.pop() {
-            Some(BuildingObjectOrArrayNode::ObjectWithPendingKey(mut object, key)) => {
-                object.insert(key, new_value);
-                stack.push(BuildingObjectOrArrayNode::Object(object));
-                self.state
-                    .push(JsonLdExpansionState::ToNode { stack, end_state });
-            }
-            Some(BuildingObjectOrArrayNode::Object(object)) => {
-                stack.push(BuildingObjectOrArrayNode::Object(object));
-                self.state
-                    .push(JsonLdExpansionState::ToNode { stack, end_state });
-            }
-            Some(BuildingObjectOrArrayNode::Array(mut array)) => {
-                array.push(new_value);
-                stack.push(BuildingObjectOrArrayNode::Array(array));
-                self.state
-                    .push(JsonLdExpansionState::ToNode { stack, end_state });
-            }
-            None => self.after_buffering(new_value, end_state, errors),
-        }
-    }
-
-    fn after_buffering(
-        &mut self,
-        node: JsonNode,
-        state: JsonLdExpansionStateAfterToNode,
-        errors: &mut Vec<JsonLdSyntaxError>,
-    ) {
-        match state {
-            JsonLdExpansionStateAfterToNode::Context => {
-                let context = self.context_processor.process_context(
-                    self.context(),
-                    node,
-                    None,
-                    &mut Vec::new(),
-                    false,
-                    true,
-                    true,
-                    errors,
-                );
-                self.context
-                    .last_mut()
-                    .expect("Context stack must not be empty")
-                    .1 -= 1;
-                self.context.push((context, 1));
-                self.state.push(JsonLdExpansionState::ObjectStart {
-                    types: Vec::new(),
-                    id: None,
-                    seen_type: false,
-                    active_property: None, // TODO: set it
-                })
-            }
         }
     }
 

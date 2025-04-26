@@ -3,8 +3,8 @@ use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::slice;
 use std::error::Error;
+use std::slice;
 use std::sync::{Arc, Mutex};
 
 type LoadDocumentCallback = dyn Fn(&str, &LoadDocumentOptions) -> Result<RemoteDocument, Box<dyn Error + Send + Sync>>
@@ -1133,7 +1133,6 @@ enum BuildingObjectOrArrayNode {
     Array(Vec<JsonNode>),
 }
 
-// TODO: reuse it
 pub fn json_node_from_events<'a>(
     events: impl IntoIterator<Item = Result<JsonEvent<'a>, JsonSyntaxError>>,
 ) -> Result<JsonNode, JsonSyntaxError> {
