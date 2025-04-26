@@ -43,6 +43,13 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
     },
     ObjectOrContainerStart {
+        buffer: HashMap<String, Vec<JsonEvent<'static>>>,
+        depth: usize,
+        current_key: Option<String>,
+        active_property: Option<String>,
+        container: &'static [&'static str],
+    },
+    ObjectOrContainerStartStreaming {
         active_property: Option<String>,
         container: &'static [&'static str],
     },
@@ -107,7 +114,9 @@ pub struct JsonLdExpansionConverter {
     state: Vec<JsonLdExpansionState>,
     context: Vec<(JsonLdContext, usize)>,
     is_end: bool,
+    streaming: bool,
     lenient: bool,
+    base_url: Option<Iri<String>>,
     context_processor: JsonLdContextProcessor,
 }
 
@@ -115,6 +124,7 @@ pub struct JsonLdExpansionConverter {
 impl JsonLdExpansionConverter {
     pub fn new(
         base_url: Option<Iri<String>>,
+        streaming: bool,
         lenient: bool,
         processing_mode: JsonLdProcessingMode,
     ) -> Self {
@@ -124,9 +134,11 @@ impl JsonLdExpansionConverter {
                 is_array: false,
                 container: &[],
             }],
-            context: vec![(JsonLdContext::new_empty(base_url), 0)],
+            context: vec![(JsonLdContext::new_empty(base_url.clone()), 0)],
             is_end: false,
+            streaming,
             lenient,
+            base_url,
             context_processor: JsonLdContextProcessor {
                 processing_mode,
                 lenient,
@@ -244,11 +256,20 @@ impl JsonLdExpansionConverter {
                             });
                         }
                         self.push_same_context();
-                        self.state
-                            .push(JsonLdExpansionState::ObjectOrContainerStart {
+                        self.state.push(if self.streaming {
+                            JsonLdExpansionState::ObjectOrContainerStartStreaming {
                                 active_property,
                                 container,
-                            });
+                            }
+                        } else {
+                            JsonLdExpansionState::ObjectOrContainerStart {
+                                buffer: HashMap::new(),
+                                depth: 1,
+                                current_key: None,
+                                active_property,
+                                container,
+                            }
+                        });
                     }
                     JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
                         unreachable!()
@@ -256,6 +277,108 @@ impl JsonLdExpansionConverter {
                 }
             }
             JsonLdExpansionState::ObjectOrContainerStart {
+                mut buffer,
+                mut depth,
+                mut current_key,
+                active_property,
+                container,
+            } => {
+                // We have to buffer everything to make sure we get the @context key even if it's at the end
+                match event {
+                    JsonEvent::String(_)
+                    | JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::Null => {
+                        buffer
+                            .get_mut(current_key.as_ref().unwrap())
+                            .unwrap()
+                            .push(to_owned_event(event));
+                    }
+                    JsonEvent::ObjectKey(key) => {
+                        if depth == 1 {
+                            buffer.insert(key.clone().into(), Vec::new());
+                            current_key = Some(key.into());
+                        } else {
+                            buffer
+                                .get_mut(current_key.as_ref().unwrap())
+                                .unwrap()
+                                .push(to_owned_event(JsonEvent::ObjectKey(key)));
+                        }
+                    }
+                    JsonEvent::EndArray | JsonEvent::EndObject => {
+                        if depth > 1 {
+                            buffer
+                                .get_mut(current_key.as_ref().unwrap())
+                                .unwrap()
+                                .push(to_owned_event(event));
+                        }
+                        depth -= 1;
+                    }
+                    JsonEvent::StartArray | JsonEvent::StartObject => {
+                        buffer
+                            .get_mut(current_key.as_ref().unwrap())
+                            .unwrap()
+                            .push(to_owned_event(event));
+                        depth += 1;
+                    }
+                    JsonEvent::Eof => unreachable!(),
+                }
+                if depth == 0 {
+                    // We first process the context
+                    if let Some(context) = buffer.remove("@context") {
+                        self.push_new_context(context, errors);
+                    }
+                    self.state
+                        .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                            active_property,
+                            container,
+                        });
+                    // We look for @type and @id
+                    let mut type_key = None;
+                    let mut id_key = None;
+                    for key in buffer.keys() {
+                        if let Some(expanded) = self.expand_iri(key.into(), false, true, errors) {
+                            match expanded.as_ref() {
+                                "@type" => type_key = Some(key.clone()),
+                                "@id" => id_key = Some(key.clone()),
+                                _ => (),
+                            }
+                        }
+                    }
+                    if let Some(type_key) = type_key {
+                        let type_value = buffer.remove(&type_key).unwrap();
+                        self.convert_event(JsonEvent::ObjectKey(type_key.into()), results, errors);
+                        for event in type_value {
+                            self.convert_event(event, results, errors);
+                        }
+                    }
+                    if let Some(id_key) = id_key {
+                        let id_value = buffer.remove(&id_key).unwrap();
+                        self.convert_event(JsonEvent::ObjectKey(id_key.into()), results, errors);
+                        for event in id_value {
+                            self.convert_event(event, results, errors);
+                        }
+                    }
+                    // Other keys
+                    for (key, events) in buffer {
+                        self.convert_event(JsonEvent::ObjectKey(key.into()), results, errors);
+                        for event in events {
+                            self.convert_event(event, results, errors);
+                        }
+                    }
+                    self.convert_event(JsonEvent::EndObject, results, errors);
+                } else {
+                    self.state
+                        .push(JsonLdExpansionState::ObjectOrContainerStart {
+                            buffer,
+                            depth,
+                            current_key,
+                            active_property,
+                            container,
+                        });
+                }
+            }
+            JsonLdExpansionState::ObjectOrContainerStartStreaming {
                 active_property,
                 container,
             } => match event {
@@ -328,7 +451,6 @@ impl JsonLdExpansionConverter {
                 }
                 _ => unreachable!("Inside of an object"),
             },
-
             JsonLdExpansionState::Context {
                 mut buffer,
                 mut depth,
@@ -352,23 +474,9 @@ impl JsonLdExpansionConverter {
                     JsonEvent::Eof => unreachable!(),
                 }
                 if depth == 0 {
-                    let context = self.context_processor.process_context(
-                        self.context(),
-                        json_node_from_events(buffer.into_iter().map(Ok)).unwrap(),
-                        None,
-                        &mut Vec::new(),
-                        false,
-                        true,
-                        true,
-                        errors,
-                    );
-                    self.context
-                        .last_mut()
-                        .expect("Context stack must not be empty")
-                        .1 -= 1;
-                    self.context.push((context, 1));
+                    self.push_new_context(buffer, errors);
                     self.state
-                        .push(JsonLdExpansionState::ObjectOrContainerStart {
+                        .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
                             active_property,
                             container,
                         });
@@ -390,20 +498,6 @@ impl JsonLdExpansionConverter {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
                         match iri.as_ref() {
-                            "@context" => {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@context must be the first key of an object",
-                                    JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                ));
-                                self.state.push(JsonLdExpansionState::ObjectStart {
-                                    types,
-                                    id,
-                                    seen_type,
-                                    active_property,
-                                });
-                                self.state
-                                    .push(JsonLdExpansionState::Skip { is_array: false })
-                            }
                             "@type" => {
                                 if seen_type && !self.lenient {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
@@ -418,29 +512,25 @@ impl JsonLdExpansionConverter {
                                     active_property,
                                 });
                             }
-                            "@value" => {
+                            "@value" | "@language" => {
                                 if types.len() > 1 {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "Only a single @type is allowed when @value is present",
                                         JsonLdErrorCode::InvalidTypedValue,
                                     ));
                                 }
-                                self.state.push(JsonLdExpansionState::ValueValue {
-                                    r#type: types.into_iter().next(),
-                                    language: None,
-                                });
-                            }
-                            "@language" => {
-                                if types.len() > 1 {
+                                if id.is_some() {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "Only a single @language is allowed",
-                                        JsonLdErrorCode::CollidingKeywords,
+                                        "@value and @id are incompatible",
+                                        JsonLdErrorCode::InvalidValueObject,
                                     ));
                                 }
-                                self.state.push(JsonLdExpansionState::ValueLanguage {
-                                    r#type: None,
+                                self.state.push(JsonLdExpansionState::Value {
+                                    r#type: types.into_iter().next(),
                                     value: None,
+                                    language: None,
                                 });
+                                self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                             }
                             "@id" => {
                                 if id.is_some() {
@@ -478,47 +568,22 @@ impl JsonLdExpansionConverter {
                                     results.push(JsonLdEvent::StartGraph);
                                 }
                             }
-                            "@list" => {
-                                if id.is_some() {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@list must be the last only of an object, @id found",
-                                        JsonLdErrorCode::InvalidSetOrListObject,
-                                    ));
-                                }
-                                if !types.is_empty() {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                            _ if has_keyword_form(&iri) => {
+                                errors.push(if iri == "@list" {
+                                    JsonLdSyntaxError::msg_and_code(
                                         "@list must be the last only of an object, @type found",
                                         JsonLdErrorCode::InvalidSetOrListObject,
-                                    ));
-                                }
-                                if self.state.last().is_some_and(|state| match state {
-                                    JsonLdExpansionState::Element {
-                                        active_property, ..
-                                    } => active_property.is_some(),
-                                    JsonLdExpansionState::Object { .. } => true,
-                                    _ => false,
-                                }) {
-                                    self.state.push(JsonLdExpansionState::List {
-                                        needs_end_object: true,
-                                    });
-                                    self.state.push(JsonLdExpansionState::Element {
-                                        is_array: false,
-                                        active_property,
-                                        container: &[],
-                                    });
-                                    results.push(JsonLdEvent::StartList);
+                                    )
+                                } else if iri == "@context" {
+                                    JsonLdSyntaxError::msg_and_code(
+                                        "@context must be the first key of an object",
+                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                    )
                                 } else {
-                                    // We don't have an active property, we skip the list
-                                    self.state
-                                        .push(JsonLdExpansionState::Skip { is_array: false });
-                                    self.state
-                                        .push(JsonLdExpansionState::Skip { is_array: false });
-                                }
-                            }
-                            _ if has_keyword_form(&iri) => {
-                                errors.push(JsonLdSyntaxError::msg(format!(
-                                    "Unsupported JSON-LD keyword: {iri}"
-                                )));
+                                    JsonLdSyntaxError::msg(format!(
+                                        "Unsupported JSON-LD keyword: {iri}"
+                                    ))
+                                });
                                 self.state.push(JsonLdExpansionState::ObjectStart {
                                     types,
                                     id,
@@ -1442,6 +1507,28 @@ impl JsonLdExpansionConverter {
             .last_mut()
             .expect("The context stack must not be empty")
             .1 += 1;
+    }
+
+    fn push_new_context(
+        &mut self,
+        context: Vec<JsonEvent<'static>>,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        let context = self.context_processor.process_context(
+            self.context(),
+            json_node_from_events(context.into_iter().map(Ok)).unwrap(),
+            self.base_url.as_ref(),
+            &mut Vec::new(),
+            false,
+            true,
+            true,
+            errors,
+        );
+        self.context
+            .last_mut()
+            .expect("Context stack must not be empty")
+            .1 -= 1;
+        self.context.push((context, 1));
     }
 
     fn pop_context(&mut self) {

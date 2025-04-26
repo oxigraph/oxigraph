@@ -318,7 +318,6 @@ impl TestManifest {
         if format == RdfFormat::JsonLd {
             let parser = JsonLdParser::new()
                 .with_base_iri(&url)?
-                .lenient() // TODO: non streaming!
                 .for_reader(read_file(&url)?)
                 .with_load_document_callback(|url, options| {
                     Ok(RemoteDocument {

@@ -237,6 +237,7 @@ impl JsonLdParser {
         InternalJsonLdParser {
             expansion: JsonLdExpansionConverter::new(
                 self.base,
+                self.streaming,
                 self.lenient,
                 JsonLdProcessingMode::JsonLd1_0,
             ),
@@ -1191,4 +1192,22 @@ impl JsonLdToRdfConverter {
         }
         None
     }
+}
+
+#[test]
+fn test() {
+    let mut count = 0;
+    let input = r#"{
+  "http://example/foo": {"@type": "http://example/type", "@language": "en", "@value": "bar"}
+}"#;
+    for q in JsonLdParser::new()
+        .with_base_iri("http://example.com/foo")
+        .unwrap()
+        .streaming()
+        .for_slice(input.as_bytes())
+    {
+        q.unwrap();
+        count += 1;
+    }
+    assert_eq!(count, 2);
 }

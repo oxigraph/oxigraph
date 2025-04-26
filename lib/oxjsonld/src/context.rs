@@ -144,27 +144,18 @@ impl JsonLdContextProcessor {
                 // 5.2)
                 JsonNode::String(context) => {
                     // 5.2.1)
-                    let context = if let Some(base_url) = base_url {
-                        match base_url.resolve(&context) {
-                            Ok(url) => url.into_inner(),
-                            Err(e) => {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    format!("Invalid remote context URL '{context}': {e}"),
-                                    JsonLdErrorCode::LoadingDocumentFailed,
-                                ));
-                                continue;
-                            }
-                        }
+                    let context = match if let Some(base_url) = base_url {
+                        base_url.resolve(&context)
                     } else {
-                        match Iri::parse(context.as_str()) {
-                            Ok(url) => url.into_inner().into(),
-                            Err(e) => {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    format!("Invalid remote context URL '{context}': {e}"),
-                                    JsonLdErrorCode::LoadingDocumentFailed,
-                                ));
-                                continue;
-                            }
+                        Iri::parse(context.clone())
+                    } {
+                        Ok(url) => url.into_inner(),
+                        Err(e) => {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                format!("Invalid remote context URL '{context}': {e}"),
+                                JsonLdErrorCode::LoadingDocumentFailed,
+                            ));
+                            continue;
                         }
                     };
                     // 5.2.2)
