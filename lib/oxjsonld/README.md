@@ -11,26 +11,36 @@ OxJSON-LD is a parser and serializer for [JSON-LD](https://www.w3.org/TR/json-ld
 
 The entry points of this library are the two [`JsonLdParser`] and [`JsonLdSerializer`] structs.
 
-TODO: notes
+The parser is a work in progress and only a few JSON-LD 1.0 features are supported at the moment.
 
-Usage example counting the number of people in a RDF/XML file:
+The parser supports two modes:
+- regular JSON-LD parsing that needs to buffer the full file into memory.
+- [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases. To enable it call the [`streaming`](JsonLdParser::streaming) method.
+
+Usage example counting the number of people in a JSON-LD file:
 
 ```rust
 use oxrdf::{NamedNodeRef, vocab::rdf};
-use oxjsonld::RdfXmlParser;
+use oxjsonld::JsonLdParser;
 
-let file = br#"<?xml version="1.0"?>
-<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
- <rdf:Description rdf:about="http://example.com/foo">
-   <rdf:type rdf:resource="http://schema.org/Person" />
-   <schema:name>Foo</schema:name>
- </rdf:Description>
- <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-</rdf:RDF>"#;
+let file = br#"{
+    "@context": {"schema": "http://schema.org/"},
+    "@graph": [
+        {
+            "@type": "schema:Person",
+            "@id": "http://example.com/foo",
+            "schema:name": "Foo"
+        },
+        {
+            "@type": "schema:Person",
+            "schema:name": "Bar"
+        }   
+    ]
+}"#;
 
 let schema_person = NamedNodeRef::new("http://schema.org/Person").unwrap();
 let mut count = 0;
-for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
+for triple in JsonLdParser::new().for_reader(file.as_ref()) {
     let triple = triple.unwrap();
     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
         count += 1;

@@ -19,11 +19,10 @@ use tokio::io::AsyncWrite;
 ///
 /// It does not implement exactly the [RDF as JSON-LD Algorithm](https://www.w3.org/TR/json-ld-api/#serialize-rdf-as-json-ld-algorithm)
 /// to be a streaming serializer but aims at being close to it.
-///
 /// Features like `@json` and `@list` generation are not implemented.
 ///
 /// ```
-/// use oxrdf::{LiteralRef, NamedNodeRef, QuadRef};
+/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
@@ -32,14 +31,16 @@ use tokio::io::AsyncWrite;
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
+///     GraphNameRef::DefaultGraph
 /// ))?;
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     GraphNameRef::DefaultGraph
 /// ))?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
 ///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -76,9 +77,9 @@ impl JsonLdSerializer {
 
     /// Allows to set the base IRI for serialization.
     ///
-    /// Corresponds to the [`base` option from the logarithm specification](https://www.w3.org/TR/json-ld-api/#dom-jsonldoptions-base).
+    /// Corresponds to the [`base` option from the algorithm specification](https://www.w3.org/TR/json-ld-api/#dom-jsonldoptions-base).
     /// ```
-    /// use oxrdf::{NamedNodeRef, QuadRef};
+    /// use oxrdf::{GraphNameRef, NamedNodeRef, QuadRef};
     /// use oxjsonld::JsonLdSerializer;
     ///
     /// let mut serializer = JsonLdSerializer::new()
@@ -89,14 +90,16 @@ impl JsonLdSerializer {
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    ///     GraphNameRef::DefaultGraph
     /// ))?;
     /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://example.com/ns#parent")?,
     ///     NamedNodeRef::new("http://example.com#other")?,
+    ///     GraphNameRef::DefaultGraph
     /// ))?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xml:base=\"http://example.com\" xmlns:ex=\"http://example.com/ns#\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<ex:Person rdf:about=\"#me\">\n\t\t<ex:parent rdf:resource=\"#other\"/>\n\t</ex:Person>\n</rdf:RDF>",
+    ///     b"{\"@context\":{\"@base\":\"http://example.com\",\"ex\":\"http://example.com/ns#\"},\"@graph\":[{\"@id\":\"#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"/ns#Person\"}],\"http://example.com/ns#parent\":[{\"@id\":\"#other\"}]}]}",
     ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -112,7 +115,7 @@ impl JsonLdSerializer {
     /// This writer does unbuffered writes.
     ///
     /// ```
-    /// use oxrdf::{LiteralRef, NamedNodeRef, QuadRef};
+    /// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
     /// use oxrdf::vocab::rdf;
     /// use oxjsonld::JsonLdSerializer;
     ///
@@ -121,14 +124,16 @@ impl JsonLdSerializer {
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
+    ///     GraphNameRef::DefaultGraph
     /// ))?;
     /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://schema.org/name")?,
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     GraphNameRef::DefaultGraph
     /// ))?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+    ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
     ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -148,7 +153,7 @@ impl JsonLdSerializer {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef};
+    /// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef, GraphNameRef};
     /// use oxrdf::vocab::rdf;
     /// use oxjsonld::JsonLdSerializer;
     ///
@@ -157,14 +162,16 @@ impl JsonLdSerializer {
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
+    ///     GraphNameRef::DefaultGraph
     /// )).await?;
     /// serializer.serialize_quad(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://schema.org/name")?,
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     GraphNameRef::DefaultGraph
     /// )).await?;
     /// assert_eq!(
-    ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+    ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
     ///     serializer.finish().await?.as_slice()
     /// );
     /// # Ok(())
@@ -200,7 +207,7 @@ impl JsonLdSerializer {
 /// Can be built using [`JsonLdSerializer::for_writer`].
 ///
 /// ```
-/// use oxrdf::{LiteralRef, NamedNodeRef, QuadRef};
+/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
@@ -209,14 +216,16 @@ impl JsonLdSerializer {
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
+///     GraphNameRef::DefaultGraph
 /// ))?;
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     GraphNameRef::DefaultGraph
 /// ))?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
 ///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -228,7 +237,7 @@ pub struct WriterJsonLdSerializer<W: Write> {
 }
 
 impl<W: Write> WriterJsonLdSerializer<W> {
-    /// Serializes an extra triple.
+    /// Serializes an extra quad.
     pub fn serialize_quad<'a>(&mut self, t: impl Into<QuadRef<'a>>) -> io::Result<()> {
         let mut buffer = Vec::new();
         self.inner.serialize_quad(t, &mut buffer)?;
@@ -258,7 +267,7 @@ impl<W: Write> WriterJsonLdSerializer<W> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef};
+/// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef, GraphNameRef};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
@@ -267,14 +276,16 @@ impl<W: Write> WriterJsonLdSerializer<W> {
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
+///     GraphNameRef::DefaultGraph
 /// )).await?;
 /// serializer.serialize_quad(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     GraphNameRef::DefaultGraph
 /// )).await?;
 /// assert_eq!(
-///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
+///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
 ///     serializer.finish().await?.as_slice()
 /// );
 /// # Ok(())
@@ -289,7 +300,7 @@ pub struct TokioAsyncWriterJsonLdSerializer<W: AsyncWrite + Unpin> {
 
 #[cfg(feature = "async-tokio")]
 impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonLdSerializer<W> {
-    /// Serializes an extra triple.
+    /// Serializes an extra quad.
     pub async fn serialize_quad<'a>(&mut self, t: impl Into<QuadRef<'a>>) -> io::Result<()> {
         let mut buffer = Vec::new();
         self.inner.serialize_quad(t, &mut buffer)?;

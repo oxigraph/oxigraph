@@ -17,22 +17,32 @@ use tokio::io::AsyncRead;
 
 /// A [JSON-LD](https://www.w3.org/TR/json-ld/) parser.
 ///
-/// TODO: document
+/// The parser is a work in progress and only a few JSON-LD 1.0 features are supported at the moment.
+///
+/// The parser supports two modes:
+/// - regular JSON-LD parsing that needs to buffer the full file into memory.
+/// - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases. To enable it call the [`streaming`](JsonLdParser::streaming) method.
 ///
 /// Count the number of people:
 /// ```
+/// use oxjsonld::JsonLdParser;
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
-/// use oxrdfxml::JsonLdParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
-/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-///  <rdf:Description rdf:about="http://example.com/foo">
-///    <rdf:type rdf:resource="http://schema.org/Person" />
-///    <schema:name>Foo</schema:name>
-///  </rdf:Description>
-///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-/// </rdf:RDF>"#;
+/// let file = br#"{
+///     "@context": {"schema": "http://schema.org/"},
+///     "@graph": [
+///         {
+///             "@type": "schema:Person",
+///             "@id": "http://example.com/foo",
+///             "schema:name": "Foo"
+///         },
+///         {
+///             "@type": "schema:Person",
+///             "schema:name": "Bar"
+///         }
+///     ]
+/// }"#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -90,18 +100,24 @@ impl JsonLdParser {
     ///
     /// Count the number of people:
     /// ```
+    /// use oxjsonld::JsonLdParser;
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
-    /// use oxrdfxml::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-    ///  <rdf:Description rdf:about="http://example.com/foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///    <schema:name>Foo</schema:name>
-    ///  </rdf:Description>
-    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/"},
+    ///     "@graph": [
+    ///         {
+    ///             "@type": "schema:Person",
+    ///             "@id": "http://example.com/foo",
+    ///             "schema:name": "Foo"
+    ///         },
+    ///         {
+    ///             "@type": "schema:Person",
+    ///             "schema:name": "Bar"
+    ///         }
+    ///     ]
+    /// }"#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
@@ -129,18 +145,24 @@ impl JsonLdParser {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use oxjsonld::JsonLdParser;
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
-    /// use oxrdfxml::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-    ///   <rdf:Description rdf:about="http://example.com/foo">
-    ///     <rdf:type rdf:resource="http://schema.org/Person" />
-    ///     <schema:name>Foo</schema:name>
-    ///   </rdf:Description>
-    ///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/"},
+    ///     "@graph": [
+    ///         {
+    ///             "@type": "schema:Person",
+    ///             "@id": "http://example.com/foo",
+    ///             "schema:name": "Foo"
+    ///         },
+    ///         {
+    ///             "@type": "schema:Person",
+    ///             "schema:name": "Bar"
+    ///         }
+    ///     ]
+    /// }"#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
@@ -172,18 +194,24 @@ impl JsonLdParser {
     ///
     /// Count the number of people:
     /// ```
+    /// use oxjsonld::JsonLdParser;
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
-    /// use oxrdfxml::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-    ///  <rdf:Description rdf:about="http://example.com/foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///    <schema:name>Foo</schema:name>
-    ///  </rdf:Description>
-    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/"},
+    ///     "@graph": [
+    ///         {
+    ///             "@type": "schema:Person",
+    ///             "@id": "http://example.com/foo",
+    ///             "schema:name": "Foo"
+    ///         },
+    ///         {
+    ///             "@type": "schema:Person",
+    ///             "schema:name": "Bar"
+    ///         }
+    ///     ]
+    /// }"#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
@@ -228,18 +256,24 @@ impl JsonLdParser {
 ///
 /// Count the number of people:
 /// ```
+/// use oxjsonld::JsonLdParser;
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
-/// use oxrdfxml::JsonLdParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
-/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-///  <rdf:Description rdf:about="http://example.com/foo">
-///    <rdf:type rdf:resource="http://schema.org/Person" />
-///    <schema:name>Foo</schema:name>
-///  </rdf:Description>
-///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-/// </rdf:RDF>"#;
+/// let file = br#"{
+///     "@context": {"schema": "http://schema.org/"},
+///     "@graph": [
+///         {
+///             "@type": "schema:Person",
+///             "@id": "http://example.com/foo",
+///             "schema:name": "Foo"
+///         },
+///         {
+///             "@type": "schema:Person",
+///             "schema:name": "Bar"
+///         }
+///     ]
+/// }"#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -290,7 +324,38 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// See [`LoadDocumentCallback`](https://www.w3.org/TR/json-ld-api/#loaddocumentcallback) API documentation.
     ///
     /// ```
-    /// todo!()
+    /// use oxjsonld::{JsonLdParser, RemoteDocument};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    ///
+    /// let file = br#"{
+    ///     "@context": "file://context.jsonld",
+    ///     "@type": "schema:Person",
+    ///     "@id": "http://example.com/foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for quad in JsonLdParser::new()
+    ///     .for_reader(file.as_ref())
+    ///     .with_load_document_callback(|url, _options| {
+    ///         assert_eq!(url, "file://context.jsonld");
+    ///         Ok(RemoteDocument {
+    ///             content_type: "application/ld+json".into(),
+    ///             document: br#"{"@context":{"schema": "http://schema.org/"}}"#.to_vec(),
+    ///             document_url: "file://context.jsonld".into(),
+    ///             profile: None,
+    ///         })
+    ///     })
+    /// {
+    ///     let quad = quad?;
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(1, count);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn with_load_document_callback(
         mut self,
@@ -310,16 +375,14 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
     /// ```
-    /// use oxrdfxml::JsonLdParser;
+    /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-    ///  <rdf:Description rdf:about="http://example.com/foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///    <schema:name>Foo</schema:name>
-    ///  </rdf:Description>
-    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
+    ///     "@type": "schema:Person",
+    ///     "@id": "foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
     ///
     /// let mut parser = JsonLdParser::new().for_reader(file.as_ref());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
@@ -327,10 +390,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// parser.next().unwrap()?; // We read the first quad
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
-    ///     [
-    ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
-    ///         ("schema", "http://schema.org/")
-    ///     ]
+    ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -341,14 +401,14 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// The base IRI considered at the current step of the parsing.
     ///
     /// ```
-    /// use oxrdfxml::JsonLdParser;
+    /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
-    ///  <rdf:Description rdf:about="foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///  </rdf:Description>
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
+    ///     "@type": "schema:Person",
+    ///     "@id": "foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
     ///
     /// let mut parser = JsonLdParser::new().for_reader(file.as_ref());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
@@ -380,18 +440,24 @@ impl<R: Read> ReaderJsonLdParser<R> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use oxjsonld::JsonLdParser;
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
-/// use oxrdfxml::JsonLdParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
-/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-///   <rdf:Description rdf:about="http://example.com/foo">
-///     <rdf:type rdf:resource="http://schema.org/Person" />
-///     <schema:name>Foo</schema:name>
-///   </rdf:Description>
-///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-/// </rdf:RDF>"#;
+/// let file = br#"{
+///     "@context": {"schema": "http://schema.org/"},
+///     "@graph": [
+///         {
+///             "@type": "schema:Person",
+///             "@id": "http://example.com/foo",
+///             "schema:name": "Foo"
+///         },
+///         {
+///             "@type": "schema:Person",
+///             "schema:name": "Bar"
+///         }
+///     ]
+/// }"#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -445,16 +511,14 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdfxml::JsonLdParser;
+    /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-    ///  <rdf:Description rdf:about="http://example.com/foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///    <schema:name>Foo</schema:name>
-    ///  </rdf:Description>
-    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
+    ///     "@type": "schema:Person",
+    ///     "@id": "foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
     ///
     /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
@@ -462,10 +526,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// parser.next().await.unwrap()?; // We read the first quad
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
-    ///     [
-    ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
-    ///         ("schema", "http://schema.org/")
-    ///     ]
+    ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Ok(())
     /// # }
@@ -479,14 +540,14 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdfxml::JsonLdParser;
+    /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
-    ///  <rdf:Description rdf:about="foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///  </rdf:Description>
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
+    ///     "@type": "schema:Person",
+    ///     "@id": "foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
     ///
     /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
@@ -517,18 +578,24 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
 ///
 /// Count the number of people:
 /// ```
+/// use oxjsonld::JsonLdParser;
 /// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
-/// use oxrdfxml::JsonLdParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
-/// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-///  <rdf:Description rdf:about="http://example.com/foo">
-///    <rdf:type rdf:resource="http://schema.org/Person" />
-///    <schema:name>Foo</schema:name>
-///  </rdf:Description>
-///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-/// </rdf:RDF>"#;
+/// let file = br#"{
+///     "@context": {"schema": "http://schema.org/"},
+///     "@graph": [
+///         {
+///             "@type": "schema:Person",
+///             "@id": "http://example.com/foo",
+///             "schema:name": "Foo"
+///         },
+///         {
+///             "@type": "schema:Person",
+///             "schema:name": "Bar"
+///         }
+///     ]
+/// }"#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
@@ -580,16 +647,14 @@ impl SliceJsonLdParser<'_> {
     /// It should be full at the end of the parsing (but if a prefix is overridden, only the latest version will be returned).
     ///
     /// ```
-    /// use oxrdfxml::JsonLdParser;
+    /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
-    ///  <rdf:Description rdf:about="http://example.com/foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///    <schema:name>Foo</schema:name>
-    ///  </rdf:Description>
-    ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
+    ///     "@type": "schema:Person",
+    ///     "@id": "foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
     ///
     /// let mut parser = JsonLdParser::new().for_slice(file);
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
@@ -597,10 +662,7 @@ impl SliceJsonLdParser<'_> {
     /// parser.next().unwrap()?; // We read the first quad
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
-    ///     [
-    ///         ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
-    ///         ("schema", "http://schema.org/")
-    ///     ]
+    ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -611,14 +673,14 @@ impl SliceJsonLdParser<'_> {
     /// The base IRI considered at the current step of the parsing.
     ///
     /// ```
-    /// use oxrdfxml::JsonLdParser;
+    /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
-    /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
-    ///  <rdf:Description rdf:about="foo">
-    ///    <rdf:type rdf:resource="http://schema.org/Person" />
-    ///  </rdf:Description>
-    /// </rdf:RDF>"#;
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
+    ///     "@type": "schema:Person",
+    ///     "@id": "foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
     ///
     /// let mut parser = JsonLdParser::new().for_slice(file);
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
