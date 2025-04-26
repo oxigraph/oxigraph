@@ -1,4 +1,6 @@
-use crate::context::{JsonLdProcessingMode, JsonLdTermDefinition};
+use crate::context::{
+    JsonLdProcessingMode, JsonLdTermDefinition, LoadDocumentOptions, RemoteDocument,
+};
 use crate::error::{JsonLdParseError, JsonLdSyntaxError};
 use crate::expansion::{JsonLdEvent, JsonLdExpansionConverter, JsonLdValue};
 #[cfg(feature = "async-tokio")]
@@ -7,6 +9,7 @@ use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
+use std::error::Error;
 use std::io::Read;
 use std::str;
 #[cfg(feature = "async-tokio")]
@@ -281,6 +284,25 @@ impl<R: Read> Iterator for ReaderJsonLdParser<R> {
 }
 
 impl<R: Read> ReaderJsonLdParser<R> {
+    /// Allows to set a callback to load remote document and contexts
+    ///
+    /// The first argument is the document URL.
+    /// See [`LoadDocumentCallback`](https://www.w3.org/TR/json-ld-api/#loaddocumentcallback) API documentation.
+    ///
+    /// ```
+    /// todo!()
+    /// ```
+    pub fn with_load_document_callback(
+        mut self,
+        callback: impl Fn(&str, &LoadDocumentOptions) -> Result<RemoteDocument, Box<dyn Error + Send + Sync>>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
+        self
+    }
+
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.

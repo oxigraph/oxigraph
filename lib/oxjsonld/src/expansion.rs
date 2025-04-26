@@ -1,12 +1,15 @@
 use crate::context::{
     has_keyword_form, JsonLdContext, JsonLdContextProcessor, JsonLdProcessingMode, JsonNode,
+    LoadDocumentOptions, RemoteDocument,
 };
 use crate::error::JsonLdErrorCode;
-use crate::JsonLdSyntaxError;
+use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::error::Error;
+use std::sync::{Arc, Mutex};
 
 pub enum JsonLdEvent {
     StartObject {
@@ -114,7 +117,7 @@ pub struct JsonLdExpansionConverter {
     context: Vec<(JsonLdContext, usize)>,
     is_end: bool,
     lenient: bool,
-    processing_mode: JsonLdProcessingMode,
+    context_processor: JsonLdContextProcessor,
 }
 
 #[allow(clippy::expect_used, clippy::unwrap_in_result)]
@@ -133,12 +136,29 @@ impl JsonLdExpansionConverter {
             context: vec![(JsonLdContext::new_empty(base_url), 0)],
             is_end: false,
             lenient,
-            processing_mode,
+            context_processor: JsonLdContextProcessor {
+                processing_mode,
+                lenient,
+                max_context_recursion: MAX_CONTEXT_RECURSION,
+                remote_context_cache: Arc::new(Mutex::new(HashMap::new())), /* TODO: share in the parser */
+                load_document_callback: None,
+            },
         }
     }
 
     pub fn is_end(&self) -> bool {
         self.is_end
+    }
+
+    pub fn with_load_document_callback(
+        mut self,
+        callback: impl Fn(&str, &LoadDocumentOptions) -> Result<RemoteDocument, Box<dyn Error + Send + Sync>>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.context_processor.load_document_callback = Some(Arc::new(callback));
+        self
     }
 
     pub fn convert_event(
@@ -1318,16 +1338,13 @@ impl JsonLdExpansionConverter {
     ) {
         match state {
             JsonLdExpansionStateAfterToNode::Context => {
-                let context = JsonLdContextProcessor {
-                    processing_mode: self.processing_mode,
-                    lenient: self.lenient,
-                }
-                .process_context(
+                let context = self.context_processor.process_context(
                     self.context(),
                     node,
                     None,
                     &mut Vec::new(),
                     false,
+                    true,
                     true,
                     errors,
                 );
@@ -1354,11 +1371,7 @@ impl JsonLdExpansionConverter {
         vocab: bool,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) -> Option<Cow<'a, str>> {
-        JsonLdContextProcessor {
-            processing_mode: self.processing_mode,
-            lenient: self.lenient,
-        }
-        .expand_iri(
+        self.context_processor.expand_iri(
             &mut self
                 .context
                 .last_mut()

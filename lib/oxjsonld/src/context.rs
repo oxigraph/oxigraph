@@ -1,9 +1,15 @@
-use crate::error::JsonLdErrorCode;
-use crate::JsonLdSyntaxError;
+use crate::error::{JsonLdErrorCode, JsonLdSyntaxError};
+use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::slice;
+use std::error::Error;
+use std::sync::{Arc, Mutex};
+
+type LoadDocumentCallback = dyn Fn(&str, &LoadDocumentOptions) -> Result<RemoteDocument, Box<dyn Error + Send + Sync>>
+    + Send
+    + Sync;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum JsonLdProcessingMode {
@@ -59,6 +65,27 @@ pub struct JsonLdTermDefinition {
 pub struct JsonLdContextProcessor {
     pub processing_mode: JsonLdProcessingMode,
     pub lenient: bool, // Custom option to ignore invalid base IRIs
+    pub max_context_recursion: usize,
+    pub remote_context_cache: Arc<Mutex<HashMap<String, (Option<Iri<String>>, JsonNode)>>>,
+    pub load_document_callback: Option<Arc<LoadDocumentCallback>>,
+}
+
+/// Used to pass various options to the LoadDocumentCallback.
+pub struct LoadDocumentOptions {
+    /// One or more IRIs to use in the request as a profile parameter.
+    pub request_profile: Vec<&'static str>,
+}
+
+/// Returned information about a remote JSON-LD document or context.
+pub struct RemoteDocument {
+    /// The Content-Type of the loaded document
+    pub content_type: String,
+    /// The retrieved document
+    pub document: Vec<u8>,
+    /// The final URL of the loaded document. This is important to handle HTTP redirects properly
+    pub document_url: String,
+    /// The value of any profile parameter retrieved as part of the original contentType.
+    pub profile: Option<String>,
 }
 
 impl JsonLdContextProcessor {
@@ -71,6 +98,7 @@ impl JsonLdContextProcessor {
         remote_contexts: &mut Vec<String>,
         override_protected: bool,
         mut propagate: bool,
+        validate_scoped_context: bool,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) -> JsonLdContext {
         // 1)
@@ -114,12 +142,133 @@ impl JsonLdContextProcessor {
                     continue;
                 }
                 // 5.2)
-                JsonNode::String(_) => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "Loading remote contexts is not implemented yet",
-                        JsonLdErrorCode::LoadingRemoteContextFailed,
-                    ));
-                    continue; // TODO
+                JsonNode::String(context) => {
+                    // 5.2.1)
+                    let context = if let Some(base_url) = base_url {
+                        match base_url.resolve(&context) {
+                            Ok(url) => url.into_inner(),
+                            Err(e) => {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("Invalid remote context URL '{context}': {e}"),
+                                    JsonLdErrorCode::LoadingDocumentFailed,
+                                ));
+                                continue;
+                            }
+                        }
+                    } else {
+                        match Iri::parse(context.as_str()) {
+                            Ok(url) => url.into_inner().into(),
+                            Err(e) => {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("Invalid remote context URL '{context}': {e}"),
+                                    JsonLdErrorCode::LoadingDocumentFailed,
+                                ));
+                                continue;
+                            }
+                        }
+                    };
+                    // 5.2.2)
+                    if !validate_scoped_context && remote_contexts.contains(&context) {
+                        continue;
+                    }
+                    // 5.2.3)
+                    if remote_contexts.len() >= self.max_context_recursion {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            format!(
+                                "This processor only allows {} remote context, threshold exceeded",
+                                self.max_context_recursion
+                            ),
+                            JsonLdErrorCode::ContextOverflow,
+                        ));
+                        continue;
+                    }
+                    remote_contexts.push(context.clone());
+                    let mut remote_context_cache = self.remote_context_cache.lock().unwrap(); // TODO: nest when targeting rust 2024
+                    let (loaded_context_base, loaded_context_content) =
+                        if let Some(loaded_context) = remote_context_cache.get(&context) {
+                            // 5.2.4)
+                            loaded_context.clone()
+                        } else {
+                            // 5.2.5)
+                            let Some(load_document_callback) = &self.load_document_callback else {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    "No LoadDocumentCallback has been set to load remote contexts",
+                                    JsonLdErrorCode::LoadingRemoteContextFailed,
+                                ));
+                                continue;
+                            };
+                            // TODO: request profile parameter
+                            let context_document = match load_document_callback(
+                                &context,
+                                &LoadDocumentOptions {
+                                    request_profile: vec!["http://www.w3.org/ns/json-ld#context"],
+                                },
+                            ) {
+                                Ok(document) => document,
+                                Err(e) => {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        format!("Failed to load remote context {context}: {e}"),
+                                        JsonLdErrorCode::LoadingRemoteContextFailed,
+                                    ));
+                                    continue;
+                                }
+                            };
+                            let parsed_document =
+                                match json_slice_to_node(&context_document.document) {
+                                    Ok(d) => d,
+                                    Err(e) => {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            format!(
+                                                "Failed to parse remote context {context}: {e}"
+                                            ),
+                                            JsonLdErrorCode::LoadingRemoteContextFailed,
+                                        ));
+                                        continue;
+                                    }
+                                };
+                            let JsonNode::Map(parsed_document) = parsed_document else {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("Remote context {context} must be a map"),
+                                    JsonLdErrorCode::InvalidRemoteContext,
+                                ));
+                                continue;
+                            };
+                            let Some(loaded_context) = parsed_document
+                                .into_iter()
+                                .find_map(|(k, v)| (k == "@context").then_some(v))
+                            else {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!(
+                                        "Remote context {context} must be contain a @context key"
+                                    ),
+                                    JsonLdErrorCode::InvalidRemoteContext,
+                                ));
+                                continue;
+                            };
+                            let document_url = Iri::parse(context_document.document_url).ok();
+                            remote_context_cache.insert(
+                                context.clone(),
+                                (document_url.clone(), loaded_context.clone()),
+                            );
+                            (document_url, loaded_context)
+                        };
+                    // 5.2.6)
+                    result = self.process_context(
+                        &result,
+                        loaded_context_content,
+                        loaded_context_base.as_ref(),
+                        remote_contexts,
+                        false,
+                        true,
+                        validate_scoped_context,
+                        errors,
+                    );
+                    assert_eq!(
+                        remote_contexts.pop(),
+                        Some(context),
+                        "The remote context stack is invalid"
+                    );
+                    continue;
                 }
                 // 5.3)
                 JsonNode::Array(_) | JsonNode::Number(_) | JsonNode::Boolean(_) => {
@@ -311,7 +460,6 @@ impl JsonLdContextProcessor {
                     protected,
                     override_protected,
                     remote_contexts,
-                    true,
                     errors,
                 )
             }
@@ -331,7 +479,6 @@ impl JsonLdContextProcessor {
         protected: bool,
         override_protected: bool,
         remote_contexts: &mut Vec<String>,
-        validate_scoped_context: bool,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
         // 1)
@@ -747,7 +894,6 @@ impl JsonLdContextProcessor {
                         false,
                         false,
                         remote_contexts,
-                        false,
                         errors,
                     )
                 }
@@ -865,7 +1011,6 @@ impl JsonLdContextProcessor {
                     false,
                     false,
                     &mut Vec::new(),
-                    false,
                     errors,
                 )
             }
@@ -900,7 +1045,6 @@ impl JsonLdContextProcessor {
                         false,
                         false,
                         &mut Vec::new(),
-                        false,
                         errors,
                     )
                 }
@@ -972,4 +1116,90 @@ fn is_keyword(value: &str) -> bool {
             | "@version"
             | "@vocab"
     )
+}
+
+fn json_slice_to_node(data: &[u8]) -> Result<JsonNode, JsonSyntaxError> {
+    let mut parser = SliceJsonParser::new(data);
+    json_node_from_events(std::iter::from_fn(|| match parser.parse_next() {
+        Ok(JsonEvent::Eof) => None,
+        Ok(event) => Some(Ok(event)),
+        Err(e) => Some(Err(e)),
+    }))
+}
+
+enum BuildingObjectOrArrayNode {
+    Object(HashMap<String, JsonNode>),
+    ObjectWithPendingKey(HashMap<String, JsonNode>, String),
+    Array(Vec<JsonNode>),
+}
+
+// TODO: reuse it
+pub fn json_node_from_events<'a>(
+    events: impl IntoIterator<Item = Result<JsonEvent<'a>, JsonSyntaxError>>,
+) -> Result<JsonNode, JsonSyntaxError> {
+    let mut stack = Vec::new();
+    for event in events {
+        if let Some(result) = match event? {
+            JsonEvent::String(value) => {
+                after_to_node_event(&mut stack, JsonNode::String(value.into()))
+            }
+            JsonEvent::Number(value) => {
+                after_to_node_event(&mut stack, JsonNode::Number(value.into()))
+            }
+            JsonEvent::Boolean(value) => after_to_node_event(&mut stack, JsonNode::Boolean(value)),
+            JsonEvent::Null => after_to_node_event(&mut stack, JsonNode::Null),
+            JsonEvent::EndArray | JsonEvent::EndObject => {
+                let value = match stack.pop() {
+                    Some(BuildingObjectOrArrayNode::Object(object)) => JsonNode::Map(object),
+                    Some(BuildingObjectOrArrayNode::Array(array)) => JsonNode::Array(array),
+                    _ => unreachable!(),
+                };
+                after_to_node_event(&mut stack, value)
+            }
+            JsonEvent::StartArray => {
+                stack.push(BuildingObjectOrArrayNode::Array(Vec::new()));
+                None
+            }
+            JsonEvent::StartObject => {
+                stack.push(BuildingObjectOrArrayNode::Object(HashMap::new()));
+                None
+            }
+            JsonEvent::ObjectKey(key) => {
+                if let Some(BuildingObjectOrArrayNode::Object(object)) = stack.pop() {
+                    stack.push(BuildingObjectOrArrayNode::ObjectWithPendingKey(
+                        object,
+                        key.into(),
+                    ));
+                }
+                None
+            }
+            JsonEvent::Eof => unreachable!(),
+        } {
+            return Ok(result);
+        }
+    }
+    unreachable!("The JSON emitted by the parser mut be valid")
+}
+
+fn after_to_node_event(
+    stack: &mut Vec<BuildingObjectOrArrayNode>,
+    new_value: JsonNode,
+) -> Option<JsonNode> {
+    match stack.pop() {
+        Some(BuildingObjectOrArrayNode::ObjectWithPendingKey(mut object, key)) => {
+            object.insert(key, new_value);
+            stack.push(BuildingObjectOrArrayNode::Object(object));
+            None
+        }
+        Some(BuildingObjectOrArrayNode::Object(object)) => {
+            stack.push(BuildingObjectOrArrayNode::Object(object));
+            None
+        }
+        Some(BuildingObjectOrArrayNode::Array(mut array)) => {
+            array.push(new_value);
+            stack.push(BuildingObjectOrArrayNode::Array(array));
+            None
+        }
+        None => Some(new_value),
+    }
 }

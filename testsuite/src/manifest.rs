@@ -1,17 +1,12 @@
-use crate::files::{guess_rdf_format, load_to_graph, JsonLdLoader};
+use crate::files::{guess_rdf_format, load_to_graph, read_file, read_file_to_string};
 use crate::vocab::*;
 use anyhow::{bail, Context, Result};
-use json_ld::rdf_types::generator::Blank;
-use json_ld::rdf_types::{LiteralType, Quad};
-use json_ld::{IriBuf, JsonLdProcessor, RemoteDocumentReference};
 use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
+use oxjsonld::{JsonLdParser, RemoteDocument};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
-use std::future::Future;
-use std::pin::pin;
-use std::task::{Poll, Waker};
 
 pub struct Test {
     pub id: NamedNode,
@@ -321,48 +316,23 @@ impl TestManifest {
         self.graph.clear();
         let format = guess_rdf_format(&url)?;
         if format == RdfFormat::JsonLd {
-            // TODO: hack to support JSON-Ld manifests
-            let mut generator = Blank::new();
-            let document = RemoteDocumentReference::iri(IriBuf::new(url.clone())?);
-            let Poll::Ready(mut rdf) = pin!(document.to_rdf(&mut generator, &JsonLdLoader))
-                .poll(&mut std::task::Context::from_waker(Waker::noop()))?
-            else {
-                bail!("Not ready future when parsing JSON-LD")
-            };
-
-            for Quad(s, p, o, _) in rdf.quads() {
-                self.graph.insert(TripleRef {
-                    subject: if s.is_iri() {
-                        NamedNodeRef::new_unchecked(s.as_str()).into()
-                    } else {
-                        BlankNodeRef::new_unchecked(s.as_str()).into()
-                    },
-                    predicate: NamedNodeRef::new_unchecked(p.as_str()),
-                    object: if let Some(o) = o.as_iri() {
-                        NamedNodeRef::new_unchecked(o.as_str()).into()
-                    } else if let Some(o) = o.as_blank() {
-                        BlankNodeRef::new_unchecked(o.as_str()).into()
-                    } else if let Some(o) = o.as_literal() {
-                        match &o.type_ {
-                            LiteralType::Any(t) => LiteralRef::new_typed_literal(
-                                o.as_str(),
-                                NamedNodeRef::new_unchecked(t.as_str()),
-                            ),
-                            LiteralType::LangString(l) => {
-                                LiteralRef::new_language_tagged_literal_unchecked(
-                                    o.as_value(),
-                                    l.as_str(),
-                                )
-                            }
-                        }
-                        .into()
-                    } else {
-                        unreachable!()
-                    },
+            let parser = JsonLdParser::new()
+                .with_base_iri(&url)?
+                .lenient() // TODO: non streaming!
+                .for_reader(read_file(&url)?)
+                .with_load_document_callback(|url, options| {
+                    Ok(RemoteDocument {
+                        content_type: "application/ld+json".into(),
+                        document: read_file_to_string(url)?.into_bytes(),
+                        document_url: url.into(),
+                        profile: options.request_profile.first().map(ToString::to_string),
+                    })
                 });
+            for quad in parser {
+                self.graph.insert(&quad?.into());
             }
         } else {
-            load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)?;
+            load_to_graph(&url, &mut self.graph, format, None, false)?;
         }
 
         let manifests = self

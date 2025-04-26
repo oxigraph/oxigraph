@@ -10,10 +10,13 @@ mod expansion;
 mod from_rdf;
 mod to_rdf;
 
-pub use error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError, TextPosition};
+pub use crate::context::{LoadDocumentOptions, RemoteDocument};
+pub use crate::error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError, TextPosition};
 #[cfg(feature = "async-tokio")]
-pub use from_rdf::TokioAsyncWriterJsonLdSerializer;
-pub use from_rdf::{JsonLdSerializer, WriterJsonLdSerializer};
+pub use crate::from_rdf::TokioAsyncWriterJsonLdSerializer;
+pub use crate::from_rdf::{JsonLdSerializer, WriterJsonLdSerializer};
 #[cfg(feature = "async-tokio")]
-pub use to_rdf::TokioAsyncReaderJsonLdParser;
-pub use to_rdf::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};
+pub use crate::to_rdf::TokioAsyncReaderJsonLdParser;
+pub use crate::to_rdf::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};
+
+const MAX_CONTEXT_RECURSION: usize = 8;
