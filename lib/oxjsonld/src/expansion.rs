@@ -23,6 +23,8 @@ pub enum JsonLdEvent {
     },
     StartGraph,
     EndGraph,
+    StartList,
+    EndList,
 }
 
 pub enum JsonLdValue {
@@ -40,11 +42,13 @@ enum JsonLdExpansionState {
         types: Vec<String>,
         id: Option<String>,
         seen_type: bool,
+        active_property: Option<String>,
     },
     ObjectType {
         types: Vec<String>,
         id: Option<String>,
         is_array: bool,
+        active_property: Option<String>,
     },
     ObjectId {
         types: Vec<String>,
@@ -75,6 +79,9 @@ enum JsonLdExpansionState {
     MaybeRootGraph {
         buffer: Vec<JsonEvent<'static>>,
         nesting: usize,
+    },
+    List {
+        needs_end_object: bool,
     },
     ToNode {
         stack: Vec<BuildingObjectOrArrayNode>,
@@ -228,7 +235,7 @@ impl JsonLdExpansionConverter {
                     JsonEvent::StartObject => {
                         if is_array {
                             self.state.push(JsonLdExpansionState::Element {
-                                active_property,
+                                active_property: active_property.clone(),
                                 is_array,
                             });
                         }
@@ -237,6 +244,7 @@ impl JsonLdExpansionConverter {
                             types: Vec::new(),
                             id: None,
                             seen_type: false,
+                            active_property,
                         });
                     }
                     JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
@@ -248,6 +256,7 @@ impl JsonLdExpansionConverter {
                 types,
                 id,
                 seen_type,
+                active_property,
             } => match event {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
@@ -275,6 +284,7 @@ impl JsonLdExpansionConverter {
                                     id,
                                     types,
                                     is_array: false,
+                                    active_property,
                                 });
                             }
                             "@value" => {
@@ -336,6 +346,42 @@ impl JsonLdExpansionConverter {
                                     results.push(JsonLdEvent::StartGraph);
                                 }
                             }
+                            "@list" => {
+                                if id.is_some() {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "@list must be the last only of an object, @id found",
+                                        JsonLdErrorCode::InvalidSetOrListObject,
+                                    ));
+                                }
+                                if !types.is_empty() {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "@list must be the last only of an object, @type found",
+                                        JsonLdErrorCode::InvalidSetOrListObject,
+                                    ));
+                                }
+                                if self.state.last().is_some_and(|state| match state {
+                                    JsonLdExpansionState::Element {
+                                        active_property, ..
+                                    } => active_property.is_some(),
+                                    JsonLdExpansionState::Object { .. } => true,
+                                    _ => false,
+                                }) {
+                                    self.state.push(JsonLdExpansionState::List {
+                                        needs_end_object: true,
+                                    });
+                                    self.state.push(JsonLdExpansionState::Element {
+                                        is_array: false,
+                                        active_property,
+                                    });
+                                    results.push(JsonLdEvent::StartList);
+                                } else {
+                                    // We don't have an active property, we skip the list
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
+                            }
                             _ if has_keyword_form(&iri) => {
                                 errors.push(JsonLdSyntaxError::msg(format!(
                                     "Unsupported JSON-LD keyword: {iri}"
@@ -344,6 +390,7 @@ impl JsonLdExpansionConverter {
                                     types,
                                     id,
                                     seen_type: true,
+                                    active_property,
                                 });
                                 self.state
                                     .push(JsonLdExpansionState::Skip { is_array: false });
@@ -353,13 +400,9 @@ impl JsonLdExpansionConverter {
                                 if let Some(id) = id {
                                     results.push(JsonLdEvent::Id(id));
                                 }
-                                results.push(JsonLdEvent::StartProperty(iri.clone().into()));
                                 self.state
-                                    .push(JsonLdExpansionState::Object { in_property: true });
-                                self.state.push(JsonLdExpansionState::Element {
-                                    active_property: Some(key.into()),
-                                    is_array: false,
-                                });
+                                    .push(JsonLdExpansionState::Object { in_property: false });
+                                self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                             }
                         }
                     } else {
@@ -367,6 +410,7 @@ impl JsonLdExpansionConverter {
                             types,
                             id,
                             seen_type: true,
+                            active_property,
                         });
                         self.state
                             .push(JsonLdExpansionState::Skip { is_array: false });
@@ -386,6 +430,7 @@ impl JsonLdExpansionConverter {
                 mut types,
                 id,
                 is_array,
+                active_property,
             } => {
                 match event {
                     JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
@@ -399,12 +444,14 @@ impl JsonLdExpansionConverter {
                                 types,
                                 id,
                                 is_array,
+                                active_property,
                             });
                         } else {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types,
                                 id,
                                 seen_type: true,
+                                active_property,
                             });
                         }
                     }
@@ -424,12 +471,14 @@ impl JsonLdExpansionConverter {
                                 types,
                                 id,
                                 is_array,
+                                active_property,
                             });
                         } else {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types,
                                 id,
                                 seen_type: true,
+                                active_property,
                             });
                         }
                     }
@@ -438,6 +487,7 @@ impl JsonLdExpansionConverter {
                             types,
                             id,
                             is_array: true,
+                            active_property,
                         });
                         if is_array {
                             errors.push(JsonLdSyntaxError::msg_and_code(
@@ -453,6 +503,7 @@ impl JsonLdExpansionConverter {
                             types,
                             id,
                             seen_type: true,
+                            active_property,
                         });
                     }
                     JsonEvent::StartObject => {
@@ -466,12 +517,14 @@ impl JsonLdExpansionConverter {
                                 types,
                                 id,
                                 is_array: true,
+                                active_property,
                             });
                         } else {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types,
                                 id,
                                 seen_type: true,
+                                active_property,
                             });
                         }
                         self.state
@@ -502,6 +555,7 @@ impl JsonLdExpansionConverter {
                             types,
                             id,
                             seen_type: true,
+                            active_property: None,
                         }
                     } else {
                         if let Some(id) = id {
@@ -520,6 +574,7 @@ impl JsonLdExpansionConverter {
                             types,
                             id,
                             seen_type: true,
+                            active_property: None,
                         }
                     } else {
                         JsonLdExpansionState::Object { in_property: false }
@@ -535,6 +590,7 @@ impl JsonLdExpansionConverter {
                             types,
                             id,
                             seen_type: true,
+                            active_property: None,
                         }
                     } else {
                         JsonLdExpansionState::Object { in_property: false }
@@ -552,6 +608,7 @@ impl JsonLdExpansionConverter {
                             types,
                             id,
                             seen_type: true,
+                            active_property: None,
                         }
                     } else {
                         JsonLdExpansionState::Object { in_property: false }
@@ -1042,6 +1099,29 @@ impl JsonLdExpansionConverter {
                     JsonEvent::Eof => unreachable!(),
                 }
             }
+            JsonLdExpansionState::List { needs_end_object } => {
+                results.push(JsonLdEvent::EndList);
+                if needs_end_object {
+                    match event {
+                        JsonEvent::EndObject => {
+                            self.pop_context();
+                        }
+                        JsonEvent::ObjectKey(k) => {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                format!("@list must be the last only of an object, {k} found"),
+                                JsonLdErrorCode::InvalidSetOrListObject,
+                            ));
+                            self.state
+                                .push(JsonLdExpansionState::List { needs_end_object });
+                            self.state
+                                .push(JsonLdExpansionState::Skip { is_array: false });
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    self.convert_event(event, results, errors)
+                }
+            }
             JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
@@ -1188,6 +1268,7 @@ impl JsonLdExpansionConverter {
                     types: Vec::new(),
                     id: None,
                     seen_type: false,
+                    active_property: None, // TODO: set it
                 })
             }
         }

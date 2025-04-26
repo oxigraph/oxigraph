@@ -187,12 +187,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
         &[
             // @context in @context
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#tv006",
-            // @list
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0013",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0014",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0015",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#t0036",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#ter41",
             // @set
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld#te047",
             // float exp notation

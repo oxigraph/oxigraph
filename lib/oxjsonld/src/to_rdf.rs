@@ -6,7 +6,7 @@ use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
 use std::io::Read;
 use std::str;
 #[cfg(feature = "async-tokio")]
@@ -698,6 +698,7 @@ enum JsonLdToRdfState {
     },
     Object(Option<NamedOrBlankNode>),
     Property(Option<NamedNode>),
+    List(Option<NamedOrBlankNode>),
     Graph(Option<GraphName>),
 }
 
@@ -762,11 +763,7 @@ impl JsonLdToRdfConverter {
                             nesting: nesting + 1,
                         });
                     }
-                    JsonLdEvent::StartProperty(_)
-                    | JsonLdEvent::EndProperty
-                    | JsonLdEvent::Value { .. }
-                    | JsonLdEvent::StartGraph
-                    | JsonLdEvent::EndGraph => {
+                    _ => {
                         buffer.push(event);
                         self.state.push(JsonLdToRdfState::StartObject {
                             types,
@@ -794,7 +791,9 @@ impl JsonLdToRdfConverter {
                 JsonLdEvent::StartObject { .. }
                 | JsonLdEvent::Value { .. }
                 | JsonLdEvent::EndProperty
-                | JsonLdEvent::EndGraph => unreachable!(),
+                | JsonLdEvent::EndGraph
+                | JsonLdEvent::StartList
+                | JsonLdEvent::EndList => unreachable!(),
             },
             JsonLdToRdfState::Property(_) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -820,9 +819,66 @@ impl JsonLdToRdfConverter {
                     )
                 }
                 JsonLdEvent::EndProperty => (),
+                JsonLdEvent::StartList => {
+                    self.state.push(state);
+                    self.state.push(JsonLdToRdfState::List(None));
+                }
                 JsonLdEvent::StartProperty(_)
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::EndObject
+                | JsonLdEvent::StartGraph
+                | JsonLdEvent::EndGraph
+                | JsonLdEvent::EndList => unreachable!(),
+            },
+            JsonLdToRdfState::List(current_node) => match event {
+                JsonLdEvent::StartObject { types } => {
+                    self.add_new_list_node_state(current_node, results);
+                    self.state.push(JsonLdToRdfState::StartObject {
+                        types: types
+                            .into_iter()
+                            .filter_map(|t| self.convert_named_node(t))
+                            .collect(),
+                        buffer: Vec::new(),
+                        nesting: 0,
+                    })
+                }
+                JsonLdEvent::Value {
+                    value,
+                    r#type,
+                    language,
+                } => {
+                    self.add_new_list_node_state(current_node, results);
+                    self.emit_quad_for_new_literal(
+                        self.convert_literal(value, language, r#type),
+                        results,
+                    )
+                }
+                JsonLdEvent::StartList => {
+                    self.add_new_list_node_state(current_node, results);
+                    self.state.push(JsonLdToRdfState::List(None));
+                }
+                JsonLdEvent::EndList => {
+                    if let Some(previous_node) = current_node {
+                        if let Some(graph_name) = self.last_graph_name() {
+                            results.push(Quad::new(
+                                previous_node,
+                                rdf::REST,
+                                rdf::NIL.into_owned(),
+                                graph_name.clone(),
+                            ));
+                        }
+                    } else {
+                        self.emit_quads_for_new_object(
+                            Some(&rdf::NIL.into_owned().into()),
+                            Vec::new(),
+                            results,
+                        )
+                    }
+                }
+                JsonLdEvent::EndObject
+                | JsonLdEvent::StartProperty(_)
+                | JsonLdEvent::EndProperty
+                | JsonLdEvent::Id(_)
                 | JsonLdEvent::StartGraph
                 | JsonLdEvent::EndGraph => unreachable!(),
             },
@@ -846,7 +902,9 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::StartProperty(_)
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::Id(_)
-                | JsonLdEvent::EndObject => unreachable!(),
+                | JsonLdEvent::EndObject
+                | JsonLdEvent::StartList
+                | JsonLdEvent::EndList => unreachable!(),
             },
         }
     }
@@ -895,6 +953,28 @@ impl JsonLdToRdfConverter {
             literal,
             graph_name.clone(),
         ))
+    }
+
+    fn add_new_list_node_state(
+        &mut self,
+        current_node: Option<NamedOrBlankNode>,
+        results: &mut Vec<Quad>,
+    ) {
+        let new_node = BlankNode::default();
+        if let Some(previous_node) = current_node {
+            if let Some(graph_name) = self.last_graph_name() {
+                results.push(Quad::new(
+                    previous_node,
+                    rdf::REST,
+                    new_node.clone(),
+                    graph_name.clone(),
+                ));
+            }
+        } else {
+            self.emit_quads_for_new_object(Some(&new_node.clone().into()), Vec::new(), results)
+        }
+        self.state
+            .push(JsonLdToRdfState::List(Some(new_node.into())));
     }
 
     fn convert_named_or_blank_node(&self, value: String) -> Option<NamedOrBlankNode> {
@@ -988,6 +1068,7 @@ impl JsonLdToRdfConverter {
                     unreachable!()
                 }
                 JsonLdToRdfState::Property(_) => (),
+                JsonLdToRdfState::List(id) => return id.as_ref(),
                 JsonLdToRdfState::Graph(_) => {
                     return None;
                 }
@@ -996,13 +1077,14 @@ impl JsonLdToRdfConverter {
         None
     }
 
-    fn last_predicate(&self) -> Option<&NamedNode> {
+    fn last_predicate(&self) -> Option<NamedNodeRef<'_>> {
         for state in self.state.iter().rev() {
             match state {
                 JsonLdToRdfState::Property(predicate) => {
-                    return predicate.as_ref();
+                    return predicate.as_ref().map(NamedNode::as_ref);
                 }
                 JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Object(_) => (),
+                JsonLdToRdfState::List(_) => return Some(rdf::FIRST),
                 JsonLdToRdfState::Graph(_) => {
                     return None;
                 }
@@ -1019,7 +1101,8 @@ impl JsonLdToRdfConverter {
                 }
                 JsonLdToRdfState::StartObject { .. }
                 | JsonLdToRdfState::Object(_)
-                | JsonLdToRdfState::Property(_) => (),
+                | JsonLdToRdfState::Property(_)
+                | JsonLdToRdfState::List(_) => (),
             }
         }
         None
