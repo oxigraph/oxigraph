@@ -924,7 +924,7 @@ impl JsonLdToRdfConverter {
         if let (Some(subject), Some(predicate)) = (self.last_subject(), self.last_predicate()) {
             results.push(Quad::new(
                 subject.clone(),
-                predicate.clone(),
+                predicate,
                 id.clone(),
                 graph_name.clone(),
             ))
@@ -949,7 +949,7 @@ impl JsonLdToRdfConverter {
         };
         results.push(Quad::new(
             subject.clone(),
-            predicate.clone(),
+            predicate,
             literal,
             graph_name.clone(),
         ))

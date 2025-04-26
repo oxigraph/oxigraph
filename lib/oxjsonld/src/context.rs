@@ -3,6 +3,7 @@ use crate::JsonLdSyntaxError;
 use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::slice;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum JsonLdProcessingMode {
@@ -50,6 +51,7 @@ pub struct JsonLdTermDefinition {
     pub protected: bool,
     pub reverse_property: bool,
     pub base_url: Option<Iri<String>>,
+    pub container_mapping: &'static [&'static str],
     pub language_mapping: Option<String>,
     pub type_mapping: Option<String>,
 }
@@ -395,6 +397,7 @@ impl JsonLdContextProcessor {
             protected,
             reverse_property: false,
             base_url: None,
+            container_mapping: &[],
             language_mapping: None,
             type_mapping: None,
         };
@@ -566,8 +569,88 @@ impl JsonLdContextProcessor {
                 }
                 // 19)
                 "@container" => {
-                    errors.push(JsonLdSyntaxError::msg("@container is not implemented yet"));
-                    // TODO
+                    // 19.1)
+                    let mut container_mapping = Vec::new();
+                    for value in if let JsonNode::Array(value) = value {
+                        if self.processing_mode == JsonLdProcessingMode::JsonLd1_0 {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                    "@container definition with multiple values is not supported in JSON-LD 1.0",
+                                    JsonLdErrorCode::InvalidContainerMapping,
+                                ));
+                            continue;
+                        }
+                        value.as_slice()
+                    } else {
+                        slice::from_ref(value)
+                    } {
+                        if let JsonNode::String(container) = value {
+                            container_mapping.push(container.as_str());
+                        } else {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                "@container value must be a string or an array of strings",
+                                JsonLdErrorCode::InvalidContainerMapping,
+                            ));
+                        }
+                    }
+                    container_mapping.sort_unstable();
+                    const ALLOWED_CONTAINER_MAPPINGS: &[&[&str]] = &[
+                        &["@index"],
+                        &["@language"],
+                        &["@list"],
+                        &["@set"],
+                        &["@index", "@set"],
+                        &["@language", "@set"],
+                        &["@graph"],
+                        &["@graph", "@id"],
+                        &["@graph", "@index"],
+                        &["@graph", "@id", "@set"],
+                        &["@graph", "@index", "@set"],
+                        &["@id"],
+                        &["@id", "@set"],
+                        &["@type"],
+                        &["@type", "@set"],
+                    ];
+                    let Some(container_mapping) = ALLOWED_CONTAINER_MAPPINGS
+                        .iter()
+                        .find_map(|c| (*c == container_mapping).then_some(*c))
+                    else {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "Not supported @container value combination",
+                            JsonLdErrorCode::InvalidContainerMapping,
+                        ));
+                        continue;
+                    };
+                    // 19.2)
+                    if self.processing_mode == JsonLdProcessingMode::JsonLd1_0 {
+                        let mut found = false;
+                        for bad in ["@graph", "@id", "@type"] {
+                            if container_mapping.contains(&bad) {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("{bad} container is not supported in JSON-LD 1.0"),
+                                    JsonLdErrorCode::InvalidContainerMapping,
+                                ));
+                                found = true;
+                            }
+                        }
+                        if found {
+                            continue;
+                        }
+                    }
+                    // 19.3)
+                    definition.container_mapping = container_mapping;
+                    // 19.4)
+                    if container_mapping.contains(&"@type") {
+                        if let Some(type_mapping) = &definition.type_mapping {
+                            if !["@id", "@vocab"].contains(&type_mapping.as_str()) {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!("Type mapping must be @id or @vocab, not {type_mapping} when used with @type container"),
+                                    JsonLdErrorCode::InvalidContainerMapping,
+                                ));
+                            }
+                        } else {
+                            definition.type_mapping = Some("@id".into());
+                        }
+                    }
                 }
                 // 20)
                 "@index" => {

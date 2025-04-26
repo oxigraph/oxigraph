@@ -37,6 +37,11 @@ enum JsonLdExpansionState {
     Element {
         active_property: Option<String>,
         is_array: bool,
+        container: &'static [&'static str],
+    },
+    ObjectOrContainerStart {
+        active_property: Option<String>,
+        container: &'static [&'static str],
     },
     ObjectStart {
         types: Vec<String>,
@@ -123,6 +128,7 @@ impl JsonLdExpansionConverter {
             state: vec![JsonLdExpansionState::Element {
                 active_property: None,
                 is_array: false,
+                container: &[],
             }],
             context: vec![(JsonLdContext::new_empty(base_url), 0)],
             is_end: false,
@@ -156,6 +162,7 @@ impl JsonLdExpansionConverter {
             JsonLdExpansionState::Element {
                 active_property,
                 is_array,
+                container,
             } => {
                 match event {
                     JsonEvent::Null => {
@@ -164,71 +171,56 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::Element {
                                 active_property,
                                 is_array,
+                                container,
                             });
                         }
                     }
-                    JsonEvent::String(value) => {
-                        // 4)
-                        if let Some(active_property) = &active_property {
-                            self.expand_value(
-                                active_property,
-                                JsonLdValue::String(value.into()),
-                                results,
-                                errors,
-                            );
-                        }
-                        if is_array {
-                            self.state.push(JsonLdExpansionState::Element {
-                                active_property,
-                                is_array,
-                            });
-                        }
-                    }
-                    JsonEvent::Number(value) => {
-                        // 4)
-                        if let Some(active_property) = &active_property {
-                            self.expand_value(
-                                active_property,
-                                JsonLdValue::Number(value.into()),
-                                results,
-                                errors,
-                            );
-                        }
-                        if is_array {
-                            self.state.push(JsonLdExpansionState::Element {
-                                active_property,
-                                is_array,
-                            });
-                        }
-                    }
-                    JsonEvent::Boolean(value) => {
-                        // 4)
-                        if let Some(active_property) = &active_property {
-                            self.expand_value(
-                                active_property,
-                                JsonLdValue::Boolean(value),
-                                results,
-                                errors,
-                            );
-                        }
-                        if is_array {
-                            self.state.push(JsonLdExpansionState::Element {
-                                active_property,
-                                is_array,
-                            });
-                        }
-                    }
+                    JsonEvent::String(value) => self.on_literal_value(
+                        JsonLdValue::String(value.into()),
+                        active_property,
+                        is_array,
+                        container,
+                        results,
+                        errors,
+                    ),
+                    JsonEvent::Number(value) => self.on_literal_value(
+                        JsonLdValue::Number(value.into()),
+                        active_property,
+                        is_array,
+                        container,
+                        results,
+                        errors,
+                    ),
+                    JsonEvent::Boolean(value) => self.on_literal_value(
+                        JsonLdValue::Boolean(value),
+                        active_property,
+                        is_array,
+                        container,
+                        results,
+                        errors,
+                    ),
                     JsonEvent::StartArray => {
                         // 5)
                         if is_array {
                             self.state.push(JsonLdExpansionState::Element {
                                 active_property: active_property.clone(),
                                 is_array,
+                                container,
                             });
+                        } else if container.contains(&"@list") {
+                            results.push(JsonLdEvent::StartList);
+                            self.state.push(JsonLdExpansionState::List {
+                                needs_end_object: false,
+                            })
+                        } else if !container.is_empty() {
+                            errors.push(JsonLdSyntaxError::msg(
+                                "Only @list container is supported yet",
+                            ));
                         }
                         self.state.push(JsonLdExpansionState::Element {
                             active_property,
                             is_array: true,
+                            container: &[],
                         });
                     }
                     JsonEvent::EndArray => (),
@@ -237,21 +229,88 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::Element {
                                 active_property: active_property.clone(),
                                 is_array,
+                                container,
                             });
                         }
                         self.push_same_context();
-                        self.state.push(JsonLdExpansionState::ObjectStart {
-                            types: Vec::new(),
-                            id: None,
-                            seen_type: false,
-                            active_property,
-                        });
+                        self.state
+                            .push(JsonLdExpansionState::ObjectOrContainerStart {
+                                active_property,
+                                container,
+                            });
                     }
                     JsonEvent::EndObject | JsonEvent::ObjectKey(_) | JsonEvent::Eof => {
                         unreachable!()
                     }
                 }
             }
+            JsonLdExpansionState::ObjectOrContainerStart {
+                active_property,
+                container,
+            } => match event {
+                JsonEvent::ObjectKey(key) => {
+                    if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
+                        match iri.as_ref() {
+                            "@list" => {
+                                if active_property.is_some() {
+                                    self.state.push(JsonLdExpansionState::List {
+                                        needs_end_object: true,
+                                    });
+                                    self.state.push(JsonLdExpansionState::Element {
+                                        is_array: false,
+                                        active_property,
+                                        container: &[],
+                                    });
+                                    results.push(JsonLdEvent::StartList);
+                                } else {
+                                    // We don't have an active property, we skip the list
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
+                            }
+                            _ => {
+                                if container.contains(&"@list") {
+                                    results.push(JsonLdEvent::StartList);
+                                    self.state.push(JsonLdExpansionState::List {
+                                        needs_end_object: false,
+                                    })
+                                } else if !container.is_empty() {
+                                    errors.push(JsonLdSyntaxError::msg(
+                                        "Only @list container is supported yet",
+                                    ));
+                                }
+                                self.state.push(JsonLdExpansionState::ObjectStart {
+                                    types: Vec::new(),
+                                    id: None,
+                                    seen_type: false,
+                                    active_property,
+                                });
+                                self.convert_event(JsonEvent::ObjectKey(key), results, errors)
+                            }
+                        }
+                    } else {
+                        self.state.push(JsonLdExpansionState::ObjectStart {
+                            types: Vec::new(),
+                            id: None,
+                            seen_type: false,
+                            active_property,
+                        });
+                        self.convert_event(JsonEvent::ObjectKey(key), results, errors)
+                    }
+                }
+                JsonEvent::EndObject => {
+                    self.state.push(JsonLdExpansionState::ObjectStart {
+                        types: Vec::new(),
+                        id: None,
+                        seen_type: false,
+                        active_property,
+                    });
+                    self.convert_event(JsonEvent::EndObject, results, errors)
+                }
+                _ => unreachable!("Inside of an object"),
+            },
             JsonLdExpansionState::ObjectStart {
                 types,
                 id,
@@ -342,6 +401,7 @@ impl JsonLdExpansionConverter {
                                     self.state.push(JsonLdExpansionState::Element {
                                         is_array: false,
                                         active_property: None,
+                                        container: &[],
                                     });
                                     results.push(JsonLdEvent::StartGraph);
                                 }
@@ -372,6 +432,7 @@ impl JsonLdExpansionConverter {
                                     self.state.push(JsonLdExpansionState::Element {
                                         is_array: false,
                                         active_property,
+                                        container: &[],
                                     });
                                     results.push(JsonLdEvent::StartList);
                                 } else {
@@ -650,6 +711,7 @@ impl JsonLdExpansionConverter {
                                     self.state.push(JsonLdExpansionState::Element {
                                         is_array: false,
                                         active_property: None,
+                                        container: &[],
                                     });
                                     results.push(JsonLdEvent::StartGraph);
                                 }
@@ -679,11 +741,19 @@ impl JsonLdExpansionConverter {
                                     )));
                                 }
                                 _ => {
+                                    let container = self
+                                        .context()
+                                        .term_definitions
+                                        .get(key.as_ref())
+                                        .map_or([].as_slice(), |term_definition| {
+                                            term_definition.container_mapping
+                                        });
                                     self.state
                                         .push(JsonLdExpansionState::Object { in_property: true });
                                     self.state.push(JsonLdExpansionState::Element {
                                         active_property: Some(key.clone().into()),
                                         is_array: false,
+                                        container,
                                     });
                                     results.push(JsonLdEvent::StartProperty(iri.into()));
                                 }
@@ -1064,6 +1134,7 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::Element {
                                 is_array: false,
                                 active_property: None,
+                                container: &[],
                             });
                             for event in buffer {
                                 self.convert_event(event, results, errors);
@@ -1084,6 +1155,7 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::Element {
                                 is_array: false,
                                 active_property: None,
+                                container: &[],
                             });
                             results.push(JsonLdEvent::StartGraph);
                             for event in buffer {
@@ -1299,6 +1371,38 @@ impl JsonLdExpansionConverter {
             &mut HashMap::new(),
             errors,
         )
+    }
+
+    fn on_literal_value(
+        &mut self,
+        value: JsonLdValue,
+        active_property: Option<String>,
+        is_array: bool,
+        container: &'static [&'static str],
+        results: &mut Vec<JsonLdEvent>,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        if !is_array {
+            if container.contains(&"@list") {
+                results.push(JsonLdEvent::StartList);
+            } else if !container.is_empty() {
+                errors.push(JsonLdSyntaxError::msg(
+                    "Only @list container is supported yet",
+                ));
+            }
+        }
+        if let Some(active_property) = &active_property {
+            self.expand_value(active_property, value, results, errors);
+        }
+        if is_array {
+            self.state.push(JsonLdExpansionState::Element {
+                active_property,
+                is_array,
+                container,
+            });
+        } else if container.contains(&"@list") {
+            results.push(JsonLdEvent::EndList);
+        }
     }
 
     /// [Value Expansion](https://www.w3.org/TR/json-ld-api/#value-expansion)
