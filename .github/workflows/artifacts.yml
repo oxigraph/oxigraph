@@ -117,7 +117,7 @@ jobs:
       - run: bash trim_rocksdb.sh
         working-directory: ./oxrocksdb-sys
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
       - run: uv sync --locked
@@ -200,7 +200,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           target: x86_64-apple-darwin
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
       - run: uv sync --locked --only-group build
@@ -229,7 +229,7 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
       - run: uv sync --locked --only-group build
