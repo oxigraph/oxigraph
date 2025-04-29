@@ -22,7 +22,8 @@ use tokio::io::AsyncRead;
 ///
 /// The parser supports two modes:
 /// - regular JSON-LD parsing that needs to buffer the full file into memory.
-/// - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases. To enable it call the [`streaming`](JsonLdParser::streaming) method.
+/// - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases.
+///   To enable it call the [`with_profile`](JsonLdParser::with_profile) method.
 ///
 /// Count the number of people:
 /// ```

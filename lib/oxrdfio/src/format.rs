@@ -224,13 +224,18 @@ impl RdfFormat {
         let subtype = subtype.trim();
         let subtype = subtype.strip_prefix("x-").unwrap_or(subtype);
 
-        let parameters = parameters
-            .split(';')
-            .map(|p| {
-                let (key, value) = p.split_once('=')?;
-                Some((key.trim(), value.trim()))
-            })
-            .collect::<Option<Vec<_>>>()?;
+        let parameters = parameters.trim();
+        let parameters = if parameters.is_empty() {
+            Vec::new()
+        } else {
+            parameters
+                .split(';')
+                .map(|p| {
+                    let (key, value) = p.split_once('=')?;
+                    Some((key.trim(), value.trim()))
+                })
+                .collect::<Option<Vec<_>>>()?
+        };
 
         for (candidate_subtype, mut candidate_id) in MEDIA_SUBTYPES {
             if candidate_subtype.eq_ignore_ascii_case(subtype) {
@@ -310,5 +315,50 @@ impl RdfFormat {
 impl fmt::Display for RdfFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_media_type() {
+        assert_eq!(RdfFormat::from_media_type("foo/bar"), None);
+        assert_eq!(RdfFormat::from_media_type("text/csv"), None);
+        assert_eq!(
+            RdfFormat::from_media_type("text/turtle"),
+            Some(RdfFormat::Turtle)
+        );
+        assert_eq!(
+            RdfFormat::from_media_type("application/x-turtle"),
+            Some(RdfFormat::Turtle)
+        );
+        assert_eq!(
+            RdfFormat::from_media_type("application/ld+json"),
+            Some(RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty()
+            })
+        );
+        assert_eq!(
+            RdfFormat::from_media_type("application/ld+json;profile=foo"),
+            Some(RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty()
+            })
+        );
+        assert_eq!(
+            RdfFormat::from_media_type(
+                "application/ld+json;profile=http://www.w3.org/ns/json-ld#streaming"
+            ),
+            Some(RdfFormat::JsonLd {
+                profile: JsonLdProfile::Streaming.into()
+            })
+        );
+        assert_eq!(
+            RdfFormat::from_media_type("application/ld+json ; profile = \" http://www.w3.org/ns/json-ld#streaming  http://www.w3.org/ns/json-ld#expanded \" "),
+            Some(RdfFormat::JsonLd {
+                profile: JsonLdProfile::Streaming | JsonLdProfile::Expanded
+            })
+        );
     }
 }

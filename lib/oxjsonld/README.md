@@ -15,7 +15,8 @@ The parser is a work in progress and only a few JSON-LD 1.0 features are support
 
 The parser supports two modes:
 - regular JSON-LD parsing that needs to buffer the full file into memory.
-- [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases. To enable it call the [`streaming`](JsonLdParser::streaming) method.
+- [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases.
+- To enable it call the [`with_profile`](JsonLdParser::with_profile) method.
 
 Usage example counting the number of people in a JSON-LD file:
 
