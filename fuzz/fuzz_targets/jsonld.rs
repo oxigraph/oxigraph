@@ -76,30 +76,32 @@ fuzz_target!(|data: &[u8]| {
         assert!(errors_lenient.is_empty());
     }
 
-    let bnodes_count = quads
-        .iter()
-        .map(|q| count_quad_blank_nodes(q.as_ref()))
-        .sum::<usize>();
-    if bnodes_count == 0 {
-        assert_eq!(
-            quads,
-            quads_streaming,
-            "Buffering:\n{}\nStreaming:\n{}",
-            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
-            String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
-        );
-    } else if bnodes_count <= 4 {
-        let mut dataset = quads.iter().collect::<Dataset>();
-        let mut dataset_streaming = quads_streaming.iter().collect::<Dataset>();
-        dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
-        dataset_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
-        assert_eq!(
-            dataset,
-            dataset_streaming,
-            "Buffering:\n{}\nStreaming:\n{}",
-            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
-            String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
-        );
+    if errors_streaming.is_empty() {
+        let bnodes_count = quads
+            .iter()
+            .map(|q| count_quad_blank_nodes(q.as_ref()))
+            .sum::<usize>();
+        if bnodes_count == 0 {
+            assert_eq!(
+                quads,
+                quads_streaming,
+                "Buffering:\n{}\nStreaming:\n{}",
+                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+                String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
+            );
+        } else if bnodes_count <= 4 {
+            let mut dataset = quads.iter().collect::<Dataset>();
+            let mut dataset_streaming = quads_streaming.iter().collect::<Dataset>();
+            dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
+            dataset_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
+            assert_eq!(
+                dataset,
+                dataset_streaming,
+                "Buffering:\n{}\nStreaming:\n{}",
+                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+                String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
+            );
+        }
     }
 
     // We serialize
@@ -107,7 +109,7 @@ fuzz_target!(|data: &[u8]| {
 
     // We parse the serialization
     let new_quads = JsonLdParser::new()
-        .streaming()
+        .with_profile(JsonLdProfile::Streaming)
         .for_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {

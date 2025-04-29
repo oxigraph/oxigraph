@@ -834,6 +834,7 @@ struct JsonLdToRdfConverter {
 
 impl JsonLdToRdfConverter {
     fn convert_event(&mut self, event: JsonLdEvent, results: &mut Vec<Quad>) {
+        #[allow(clippy::expect_used)]
         let state = self.state.pop().expect("Empty stack");
         match state {
             JsonLdToRdfState::StartObject {

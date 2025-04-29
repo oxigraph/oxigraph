@@ -1,3 +1,4 @@
+#![allow(clippy::unimplemented)] // TODO: remove me after implementing JSON-LD 1.1
 use crate::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use crate::{JsonLdProfile, JsonLdProfileSet};
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
@@ -459,6 +460,7 @@ impl JsonLdContextProcessor {
     }
 
     /// [Create Term Definition](https://www.w3.org/TR/json-ld-api/#create-term-definition)
+    #[allow(clippy::only_used_in_recursion)] // TODO: params will be useful for term-specific contexts
     fn create_term_definition(
         &self,
         active_context: &mut JsonLdContext,
@@ -706,6 +708,24 @@ impl JsonLdContextProcessor {
                 }
                 // 19)
                 "@container" => {
+                    const ALLOWED_CONTAINER_MAPPINGS: &[&[&str]] = &[
+                        &["@index"],
+                        &["@language"],
+                        &["@list"],
+                        &["@set"],
+                        &["@index", "@set"],
+                        &["@language", "@set"],
+                        &["@graph"],
+                        &["@graph", "@id"],
+                        &["@graph", "@index"],
+                        &["@graph", "@id", "@set"],
+                        &["@graph", "@index", "@set"],
+                        &["@id"],
+                        &["@id", "@set"],
+                        &["@type"],
+                        &["@type", "@set"],
+                    ];
+
                     // 19.1)
                     let mut container_mapping = Vec::new();
                     for value in if let JsonNode::Array(value) = value {
@@ -730,23 +750,6 @@ impl JsonLdContextProcessor {
                         }
                     }
                     container_mapping.sort_unstable();
-                    const ALLOWED_CONTAINER_MAPPINGS: &[&[&str]] = &[
-                        &["@index"],
-                        &["@language"],
-                        &["@list"],
-                        &["@set"],
-                        &["@index", "@set"],
-                        &["@language", "@set"],
-                        &["@graph"],
-                        &["@graph", "@id"],
-                        &["@graph", "@index"],
-                        &["@graph", "@id", "@set"],
-                        &["@graph", "@index", "@set"],
-                        &["@id"],
-                        &["@id", "@set"],
-                        &["@type"],
-                        &["@type", "@set"],
-                    ];
                     let Some(container_mapping) = ALLOWED_CONTAINER_MAPPINGS
                         .iter()
                         .find_map(|c| (*c == container_mapping).then_some(*c))
