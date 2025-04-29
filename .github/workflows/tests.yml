@@ -41,6 +41,8 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfxml
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/oxjsonld
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxttl
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfio
@@ -186,6 +188,8 @@ jobs:
         working-directory: ./lib/oxrdf
       - run: cargo test --target i686-unknown-linux-gnu --all-features
         working-directory: ./lib/oxrdfxml
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/oxjsonld
       - run: cargo test --target i686-unknown-linux-gnu --all-features
         working-directory: ./lib/oxttl
       - run: cargo test --target i686-unknown-linux-gnu --all-features
@@ -418,6 +422,7 @@ jobs:
           - target: "nquads"
           - target: "trig"
           - target: "rdf_xml"
+          - target: "jsonld"
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
