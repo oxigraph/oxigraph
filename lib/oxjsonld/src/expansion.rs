@@ -1527,22 +1527,22 @@ impl JsonLdExpansionConverter {
             true,
             errors,
         );
-        self.context
-            .last_mut()
-            .expect("Context stack must not be empty")
-            .1 -= 1;
+        if let Some((last_context, last_count)) = self.context.pop() {
+            if last_count > 1 {
+                self.context.push((last_context, last_count - 1));
+            }
+        }
         self.context.push((context, 1));
     }
 
     fn pop_context(&mut self) {
-        let mut last_context = self
-            .context
-            .pop()
-            .expect("The context stack must not be empty");
-        last_context.1 -= 1;
-        if last_context.1 > 0 || self.context.is_empty() {
+        let Some((last_context, mut last_count)) = self.context.pop() else {
+            return;
+        };
+        last_count -= 1;
+        if last_count > 0 || self.context.is_empty() {
             // We always keep a context to allow reading the root context at the end of the document
-            self.context.push(last_context);
+            self.context.push((last_context, last_count));
         }
     }
 }
