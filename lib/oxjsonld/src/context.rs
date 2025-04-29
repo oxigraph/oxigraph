@@ -1,4 +1,5 @@
 use crate::error::{JsonLdErrorCode, JsonLdSyntaxError};
+use crate::{JsonLdProfile, JsonLdProfileSet};
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use oxiri::Iri;
 use std::borrow::Cow;
@@ -7,7 +8,10 @@ use std::error::Error;
 use std::slice;
 use std::sync::{Arc, Mutex};
 
-type LoadDocumentCallback = dyn Fn(&str, &LoadDocumentOptions) -> Result<RemoteDocument, Box<dyn Error + Send + Sync>>
+type LoadDocumentCallback = dyn Fn(
+        &str,
+        &JsonLdLoadDocumentOptions,
+    ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
     + Send
     + Sync;
 
@@ -71,21 +75,17 @@ pub struct JsonLdContextProcessor {
 }
 
 /// Used to pass various options to the LoadDocumentCallback.
-pub struct LoadDocumentOptions {
+pub struct JsonLdLoadDocumentOptions {
     /// One or more IRIs to use in the request as a profile parameter.
-    pub request_profile: Vec<&'static str>,
+    pub request_profile: JsonLdProfileSet,
 }
 
 /// Returned information about a remote JSON-LD document or context.
-pub struct RemoteDocument {
-    /// The Content-Type of the loaded document
-    pub content_type: String,
+pub struct JsonLdRemoteDocument {
     /// The retrieved document
     pub document: Vec<u8>,
     /// The final URL of the loaded document. This is important to handle HTTP redirects properly
     pub document_url: String,
-    /// The value of any profile parameter retrieved as part of the original contentType.
-    pub profile: Option<String>,
 }
 
 impl JsonLdContextProcessor {
@@ -188,11 +188,10 @@ impl JsonLdContextProcessor {
                                 ));
                                 continue;
                             };
-                            // TODO: request profile parameter
                             let context_document = match load_document_callback(
                                 &context,
-                                &LoadDocumentOptions {
-                                    request_profile: vec!["http://www.w3.org/ns/json-ld#context"],
+                                &JsonLdLoadDocumentOptions {
+                                    request_profile: JsonLdProfile::Context.into(),
                                 },
                             ) {
                                 Ok(document) => document,

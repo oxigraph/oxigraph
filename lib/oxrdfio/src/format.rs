@@ -1,15 +1,14 @@
+use oxjsonld::{JsonLdProfile, JsonLdProfileSet};
 use std::fmt;
 
 /// RDF serialization formats.
 ///
-/// This enumeration is non exhaustive. New formats like JSON-LD might be added in the future.
+/// This enumeration is non exhaustive. New formats might be added in the future.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
 pub enum RdfFormat {
     /// [JSON-LD](https://www.w3.org/TR/json-ld/)
-    JsonLd,
-    /// [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/)
-    StreamingJsonLd,
+    JsonLd { profile: JsonLdProfileSet },
     /// [N3](https://w3c.github.io/N3/spec/)
     N3,
     /// [N-Quads](https://www.w3.org/TR/n-quads/)
@@ -38,7 +37,7 @@ impl RdfFormat {
     #[inline]
     pub const fn iri(self) -> &'static str {
         match self {
-            Self::JsonLd | Self::StreamingJsonLd => "https://www.w3.org/ns/formats/data/JSON-LD",
+            Self::JsonLd { .. } => "https://www.w3.org/ns/formats/data/JSON-LD",
             Self::N3 => "http://www.w3.org/ns/formats/N3",
             Self::NQuads => "http://www.w3.org/ns/formats/N-Quads",
             Self::NTriples => "http://www.w3.org/ns/formats/N-Triples",
@@ -58,7 +57,14 @@ impl RdfFormat {
     #[inline]
     pub const fn media_type(self) -> &'static str {
         match self {
-            Self::JsonLd | Self::StreamingJsonLd => "application/ld+json",
+            Self::JsonLd { profile } => {
+                // TODO: more combinations
+                if profile.contains(JsonLdProfile::Streaming) {
+                    "application/ld+json;profile=http://www.w3.org/ns/json-ld#streaming"
+                } else {
+                    "application/ld+json"
+                }
+            }
             Self::N3 => "text/n3",
             Self::NQuads => "application/n-quads",
             Self::NTriples => "application/n-triples",
@@ -78,7 +84,7 @@ impl RdfFormat {
     #[inline]
     pub const fn file_extension(self) -> &'static str {
         match self {
-            Self::JsonLd | Self::StreamingJsonLd => "jsonld",
+            Self::JsonLd { .. } => "jsonld",
             Self::N3 => "n3",
             Self::NQuads => "nq",
             Self::NTriples => "nt",
@@ -98,8 +104,14 @@ impl RdfFormat {
     #[inline]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::JsonLd => "JSON-LD",
-            Self::StreamingJsonLd => "Streaming JSON-LD",
+            Self::JsonLd { profile } => {
+                // TODO: more combinations
+                if profile.contains(JsonLdProfile::Streaming) {
+                    "JSON-LD Streaming"
+                } else {
+                    "JSON-LD"
+                }
+            }
             Self::N3 => "N3",
             Self::NQuads => "N-Quads",
             Self::NTriples => "N-Triples",
@@ -119,10 +131,7 @@ impl RdfFormat {
     /// ```
     #[inline]
     pub const fn supports_datasets(self) -> bool {
-        matches!(
-            self,
-            Self::JsonLd | Self::StreamingJsonLd | Self::NQuads | Self::TriG
-        )
+        matches!(self, Self::JsonLd { .. } | Self::NQuads | Self::TriG)
     }
 
     /// Checks if the formats supports [RDF-star quoted triples](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#dfn-quoted).
@@ -149,6 +158,7 @@ impl RdfFormat {
     ///
     /// Example:
     /// ```
+    /// use oxjsonld::JsonLdProfile;
     /// use oxrdfio::RdfFormat;
     ///
     /// assert_eq!(
@@ -159,16 +169,38 @@ impl RdfFormat {
     ///     RdfFormat::from_media_type(
     ///         "application/ld+json ; profile = http://www.w3.org/ns/json-ld#streaming"
     ///     ),
-    ///     Some(RdfFormat::StreamingJsonLd)
+    ///     Some(RdfFormat::JsonLd {
+    ///         profile: JsonLdProfile::Streaming.into()
+    ///     })
     /// )
     /// ```
     #[inline]
     pub fn from_media_type(media_type: &str) -> Option<Self> {
         const MEDIA_SUBTYPES: [(&str, RdfFormat); 14] = [
-            ("activity+json", RdfFormat::JsonLd),
-            ("json", RdfFormat::JsonLd),
-            ("ld+json", RdfFormat::JsonLd),
-            ("jsonld", RdfFormat::JsonLd),
+            (
+                "activity+json",
+                RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+            ),
+            (
+                "json",
+                RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+            ),
+            (
+                "ld+json",
+                RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+            ),
+            (
+                "jsonld",
+                RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+            ),
             ("n-quads", RdfFormat::NQuads),
             ("n-triples", RdfFormat::NTriples),
             ("n3", RdfFormat::N3),
@@ -203,17 +235,27 @@ impl RdfFormat {
         for (candidate_subtype, mut candidate_id) in MEDIA_SUBTYPES {
             if candidate_subtype.eq_ignore_ascii_case(subtype) {
                 // We have a look at parameters
-                for (key, value) in parameters {
-                    if key == "charset"
-                        && !UTF8_CHARSETS.iter().any(|c| c.eq_ignore_ascii_case(value))
-                    {
-                        return None; // No other charset than UTF-8 is supported
-                    }
-                    if candidate_id == RdfFormat::JsonLd
-                        && key == "profile"
-                        && value == "http://www.w3.org/ns/json-ld#streaming"
-                    {
-                        candidate_id = RdfFormat::StreamingJsonLd;
+                for (key, mut value) in parameters {
+                    match key {
+                        "charset" => {
+                            if !UTF8_CHARSETS.iter().any(|c| c.eq_ignore_ascii_case(value)) {
+                                return None; // No other charset than UTF-8 is supported
+                            }
+                        }
+                        "profile" => {
+                            // We remove enclosing double quotes
+                            if value.starts_with('"') && value.ends_with('"') {
+                                value = &value[1..value.len() - 1];
+                            }
+                            if let RdfFormat::JsonLd { profile } = &mut candidate_id {
+                                for value in value.split(' ') {
+                                    if let Some(value) = JsonLdProfile::from_iri(value.trim()) {
+                                        *profile |= value;
+                                    }
+                                }
+                            }
+                        }
+                        _ => (), // We ignore
                     }
                 }
                 return Some(candidate_id);
@@ -235,8 +277,18 @@ impl RdfFormat {
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
         const MEDIA_TYPES: [(&str, RdfFormat); 10] = [
-            ("json", RdfFormat::JsonLd),
-            ("jsonld", RdfFormat::JsonLd),
+            (
+                "json",
+                RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+            ),
+            (
+                "jsonld",
+                RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                },
+            ),
             ("n3", RdfFormat::N3),
             ("nq", RdfFormat::NQuads),
             ("nt", RdfFormat::NTriples),

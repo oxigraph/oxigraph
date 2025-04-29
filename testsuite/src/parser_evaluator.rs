@@ -8,7 +8,7 @@ use json_event_parser::{JsonEvent, SliceJsonParser};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{BlankNode, Dataset, Quad, Term};
-use oxjsonld::{JsonLdParser, JsonLdSyntaxError};
+use oxjsonld::{JsonLdParser, JsonLdProfile, JsonLdProfileSet, JsonLdSyntaxError};
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
 
@@ -178,7 +178,10 @@ fn evaluate_eval_test(
 }
 
 fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
-    let streaming = test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST);
+    let mut profile = JsonLdProfileSet::empty();
+    if test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST) {
+        profile |= JsonLdProfile::Streaming;
+    }
     let base_url = test.option.get(&jld::BASE.into_owned()).and_then(|t| {
         if let Term::NamedNode(i) = t {
             Some(i.as_str())
@@ -192,7 +195,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let mut actual_dataset = parse_json_ld(action, streaming, base_url)?
+        let mut actual_dataset = parse_json_ld(action, profile, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
         actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
         let results = test.result.as_ref().context("No tests result found")?;
@@ -211,7 +214,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let result = parse_json_ld(action, streaming, base_url)?;
+        let result = parse_json_ld(action, profile, base_url)?;
         ensure!(
             result.is_err(),
             "Properly parsed file even if it should not"
@@ -232,7 +235,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        parse_json_ld(action, streaming, base_url)?
+        parse_json_ld(action, profile, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
         Ok(())
     } else {
@@ -243,7 +246,10 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
 fn evaluate_jsonld_from_rdf_test(test: &Test) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
     let parser = RdfParser::from_format(guess_rdf_format(action)?).for_reader(read_file(action)?);
-    let mut serializer = RdfSerializer::from_format(RdfFormat::JsonLd).for_writer(Vec::new());
+    let mut serializer = RdfSerializer::from_format(RdfFormat::JsonLd {
+        profile: JsonLdProfileSet::empty(),
+    })
+    .for_writer(Vec::new());
     for quad in parser {
         let quad = quad?;
         serializer.serialize_quad(&quad)?;
@@ -327,14 +333,12 @@ fn n3_to_dataset(quads: Vec<N3Quad>) -> Dataset {
 
 fn parse_json_ld(
     url: &str,
-    streaming: bool,
+    profile: JsonLdProfileSet,
     base_url: Option<&str>,
 ) -> Result<Result<Dataset, JsonLdSyntaxError>> {
-    let mut parser = JsonLdParser::new().with_base_iri(base_url.unwrap_or(url))?;
-    if streaming {
-        parser = parser.streaming();
-    }
-    Ok(parser
+    Ok(JsonLdParser::new()
+        .with_profile(profile)
+        .with_base_iri(base_url.unwrap_or(url))?
         .for_slice(read_file_to_string(url)?.as_bytes())
         .collect())
 }

@@ -1,8 +1,9 @@
 use crate::context::{
-    JsonLdProcessingMode, JsonLdTermDefinition, LoadDocumentOptions, RemoteDocument,
+    JsonLdLoadDocumentOptions, JsonLdProcessingMode, JsonLdRemoteDocument, JsonLdTermDefinition,
 };
 use crate::error::{JsonLdParseError, JsonLdSyntaxError};
 use crate::expansion::{JsonLdEvent, JsonLdExpansionConverter, JsonLdValue};
+use crate::{JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
@@ -59,7 +60,7 @@ use tokio::io::AsyncRead;
 #[must_use]
 pub struct JsonLdParser {
     lenient: bool,
-    streaming: bool,
+    profile: JsonLdProfileSet,
     base: Option<Iri<String>>,
 }
 
@@ -81,15 +82,50 @@ impl JsonLdParser {
         self
     }
 
-    /// Assumes the file follows [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) specification.
+    /// Assume the given profile(s) during parsing.
     ///
-    /// It will skip some buffering to make parsing faster and memory consumption lower.
+    /// If you set the [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) profile ([`JsonLdProfile::Streaming`]),
+    /// the parser will skip some buffering to make parsing faster and memory consumption lower.
+    ///
+    /// ```
+    /// use oxjsonld::{JsonLdParser, JsonLdProfile};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    ///
+    /// let file = br#"{
+    ///     "@context": {"schema": "http://schema.org/"},
+    ///     "@graph": [
+    ///         {
+    ///             "@type": "schema:Person",
+    ///             "@id": "http://example.com/foo",
+    ///             "schema:name": "Foo"
+    ///         }
+    ///     ]
+    /// }"#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for quad in JsonLdParser::new()
+    ///     .with_profile(JsonLdProfile::Streaming)
+    ///     .for_slice(file)
+    /// {
+    ///     let quad = quad?;
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(1, count);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
     #[inline]
-    pub fn streaming(mut self) -> Self {
-        self.streaming = true;
+    pub fn with_profile(mut self, profile: impl Into<JsonLdProfileSet>) -> Self {
+        self.profile = profile.into();
         self
     }
 
+    /// Base IRI to use when expanding the document.
+    ///
+    /// It corresponds to the [`base` option from the algorithm specification](https://www.w3.org/TR/json-ld-api/#dom-jsonldoptions-base).
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.base = Some(Iri::parse(base_iri.into())?);
@@ -237,7 +273,7 @@ impl JsonLdParser {
         InternalJsonLdParser {
             expansion: JsonLdExpansionConverter::new(
                 self.base,
-                self.streaming,
+                self.profile.contains(JsonLdProfile::Streaming),
                 self.lenient,
                 JsonLdProcessingMode::JsonLd1_0,
             ),
@@ -322,10 +358,13 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// Allows to set a callback to load remote document and contexts
     ///
     /// The first argument is the document URL.
-    /// See [`LoadDocumentCallback`](https://www.w3.org/TR/json-ld-api/#loaddocumentcallback) API documentation.
+    ///
+    /// It corresponds to the [`documentLoader` option from the algorithm specification](https://www.w3.org/TR/json-ld11-api/#dom-jsonldoptions-documentloader).
+    ///
+    /// See [`LoadDocumentCallback` API documentation](https://www.w3.org/TR/json-ld-api/#loaddocumentcallback) for more details
     ///
     /// ```
-    /// use oxjsonld::{JsonLdParser, RemoteDocument};
+    /// use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
     /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
     ///
@@ -342,11 +381,9 @@ impl<R: Read> ReaderJsonLdParser<R> {
     ///     .for_reader(file.as_ref())
     ///     .with_load_document_callback(|url, _options| {
     ///         assert_eq!(url, "file://context.jsonld");
-    ///         Ok(RemoteDocument {
-    ///             content_type: "application/ld+json".into(),
+    ///         Ok(JsonLdRemoteDocument {
     ///             document: br#"{"@context":{"schema": "http://schema.org/"}}"#.to_vec(),
     ///             document_url: "file://context.jsonld".into(),
-    ///             profile: None,
     ///         })
     ///     })
     /// {
@@ -360,7 +397,10 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// ```
     pub fn with_load_document_callback(
         mut self,
-        callback: impl Fn(&str, &LoadDocumentOptions) -> Result<RemoteDocument, Box<dyn Error + Send + Sync>>
+        callback: impl Fn(
+                &str,
+                &JsonLdLoadDocumentOptions,
+            ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
             + Send
             + Sync
             + 'static,
@@ -1192,22 +1232,4 @@ impl JsonLdToRdfConverter {
         }
         None
     }
-}
-
-#[test]
-fn test() {
-    let mut count = 0;
-    let input = r#"{
-  "http://example/foo": {"@type": "http://example/type", "@language": "en", "@value": "bar"}
-}"#;
-    for q in JsonLdParser::new()
-        .with_base_iri("http://example.com/foo")
-        .unwrap()
-        .streaming()
-        .for_slice(input.as_bytes())
-    {
-        q.unwrap();
-        count += 1;
-    }
-    assert_eq!(count, 2);
 }

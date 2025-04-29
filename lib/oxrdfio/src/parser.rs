@@ -2,10 +2,13 @@
 
 pub use crate::error::RdfParseError;
 use crate::format::RdfFormat;
-use crate::RdfSyntaxError;
+use crate::{LoadedDocument, RdfSyntaxError};
 #[cfg(feature = "async-tokio")]
 use oxjsonld::TokioAsyncReaderJsonLdParser;
-use oxjsonld::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};
+use oxjsonld::{
+    JsonLdParser, JsonLdPrefixesIter, JsonLdProfileSet, JsonLdRemoteDocument, ReaderJsonLdParser,
+    SliceJsonLdParser,
+};
 use oxrdf::{BlankNode, GraphName, IriParseError, Quad, Subject, Term, Triple};
 #[cfg(feature = "async-tokio")]
 use oxrdfxml::TokioAsyncReaderRdfXmlParser;
@@ -26,6 +29,7 @@ use oxttl::trig::{ReaderTriGParser, SliceTriGParser, TriGParser, TriGPrefixesIte
 use oxttl::turtle::TokioAsyncReaderTurtleParser;
 use oxttl::turtle::{ReaderTurtleParser, SliceTurtleParser, TurtleParser, TurtlePrefixesIter};
 use std::collections::HashMap;
+use std::error::Error;
 use std::io::Read;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
@@ -70,8 +74,7 @@ pub struct RdfParser {
 
 #[derive(Clone)]
 enum RdfParserKind {
-    JsonLd(JsonLdParser),
-    StreamingJsonLd(JsonLdParser),
+    JsonLd(JsonLdParser, JsonLdProfileSet),
     N3(N3Parser),
     NQuads(NQuadsParser),
     NTriples(NTriplesParser),
@@ -86,9 +89,8 @@ impl RdfParser {
     pub fn from_format(format: RdfFormat) -> Self {
         Self {
             inner: match format {
-                RdfFormat::JsonLd => RdfParserKind::JsonLd(JsonLdParser::new()),
-                RdfFormat::StreamingJsonLd => {
-                    RdfParserKind::StreamingJsonLd(JsonLdParser::new().streaming())
+                RdfFormat::JsonLd { profile } => {
+                    RdfParserKind::JsonLd(JsonLdParser::new().with_profile(profile), profile)
                 }
                 RdfFormat::N3 => RdfParserKind::N3(N3Parser::new()),
                 RdfFormat::NQuads => RdfParserKind::NQuads({
@@ -151,8 +153,7 @@ impl RdfParser {
     /// ```
     pub fn format(&self) -> RdfFormat {
         match &self.inner {
-            RdfParserKind::JsonLd(_) => RdfFormat::JsonLd,
-            RdfParserKind::StreamingJsonLd(_) => RdfFormat::StreamingJsonLd,
+            RdfParserKind::JsonLd(_, profile) => RdfFormat::JsonLd { profile: *profile },
             RdfParserKind::N3(_) => RdfFormat::N3,
             RdfParserKind::NQuads(_) => RdfFormat::NQuads,
             RdfParserKind::NTriples(_) => RdfFormat::NTriples,
@@ -181,10 +182,7 @@ impl RdfParser {
     #[inline]
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
         self.inner = match self.inner {
-            RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.with_base_iri(base_iri)?),
-            RdfParserKind::StreamingJsonLd(p) => {
-                RdfParserKind::StreamingJsonLd(p.with_base_iri(base_iri)?)
-            }
+            RdfParserKind::JsonLd(p, f) => RdfParserKind::JsonLd(p.with_base_iri(base_iri)?, f),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.with_base_iri(base_iri)?),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p),
@@ -270,8 +268,7 @@ impl RdfParser {
     #[inline]
     pub fn unchecked(mut self) -> Self {
         self.inner = match self.inner {
-            RdfParserKind::JsonLd(p) => RdfParserKind::JsonLd(p.lenient()),
-            RdfParserKind::StreamingJsonLd(p) => RdfParserKind::StreamingJsonLd(p.lenient()),
+            RdfParserKind::JsonLd(p, f) => RdfParserKind::JsonLd(p.lenient(), f),
             RdfParserKind::N3(p) => RdfParserKind::N3(p.unchecked()),
             RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.unchecked()),
             RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p.unchecked()),
@@ -302,9 +299,7 @@ impl RdfParser {
     pub fn for_reader<R: Read>(self, reader: R) -> ReaderQuadParser<R> {
         ReaderQuadParser {
             inner: match self.inner {
-                RdfParserKind::JsonLd(p) | RdfParserKind::StreamingJsonLd(p) => {
-                    ReaderQuadParserKind::JsonLd(p.for_reader(reader))
-                }
+                RdfParserKind::JsonLd(p, _) => ReaderQuadParserKind::JsonLd(p.for_reader(reader)),
                 RdfParserKind::N3(p) => ReaderQuadParserKind::N3(p.for_reader(reader)),
                 RdfParserKind::NQuads(p) => ReaderQuadParserKind::NQuads(p.for_reader(reader)),
                 RdfParserKind::NTriples(p) => ReaderQuadParserKind::NTriples(p.for_reader(reader)),
@@ -346,7 +341,7 @@ impl RdfParser {
     ) -> TokioAsyncReaderQuadParser<R> {
         TokioAsyncReaderQuadParser {
             inner: match self.inner {
-                RdfParserKind::JsonLd(p) | RdfParserKind::StreamingJsonLd(p) => {
+                RdfParserKind::JsonLd(p, _) => {
                     TokioAsyncReaderQuadParserKind::JsonLd(p.for_tokio_async_reader(reader))
                 }
                 RdfParserKind::N3(p) => {
@@ -394,9 +389,7 @@ impl RdfParser {
     pub fn for_slice(self, slice: &[u8]) -> SliceQuadParser<'_> {
         SliceQuadParser {
             inner: match self.inner {
-                RdfParserKind::JsonLd(p) | RdfParserKind::StreamingJsonLd(p) => {
-                    SliceQuadParserKind::JsonLd(p.for_slice(slice))
-                }
+                RdfParserKind::JsonLd(p, _) => SliceQuadParserKind::JsonLd(p.for_slice(slice)),
                 RdfParserKind::N3(p) => SliceQuadParserKind::N3(p.for_slice(slice)),
                 RdfParserKind::NQuads(p) => SliceQuadParserKind::NQuads(p.for_slice(slice)),
                 RdfParserKind::NTriples(p) => SliceQuadParserKind::NTriples(p.for_slice(slice)),
@@ -561,6 +554,35 @@ impl<R: Read> ReaderQuadParser<R> {
             ReaderQuadParserKind::RdfXml(p) => p.base_iri(),
             ReaderQuadParserKind::NQuads(_) | ReaderQuadParserKind::NTriples(_) => None,
         }
+    }
+
+    pub fn with_document_loader(
+        mut self,
+        loader: impl Fn(&str) -> Result<LoadedDocument, Box<dyn Error + Send + Sync>>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.inner = match self.inner {
+            ReaderQuadParserKind::JsonLd(p) => {
+                ReaderQuadParserKind::JsonLd(p.with_load_document_callback(move |iri, _| {
+                    let response = loader(iri)?;
+                    if !matches!(response.format, RdfFormat::JsonLd { .. }) {
+                        return Err(format!(
+                            "The JSON-LD context format must be JSON-LD, {} found",
+                            response.format
+                        )
+                        .into());
+                    }
+                    Ok(JsonLdRemoteDocument {
+                        document: response.content,
+                        document_url: response.url,
+                    })
+                }))
+            }
+            i => i,
+        };
+        self
     }
 }
 

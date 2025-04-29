@@ -3,7 +3,7 @@
 use crate::format::RdfFormat;
 #[cfg(feature = "async-tokio")]
 use oxjsonld::TokioAsyncWriterJsonLdSerializer;
-use oxjsonld::{JsonLdSerializer, WriterJsonLdSerializer};
+use oxjsonld::{JsonLdProfile, JsonLdSerializer, WriterJsonLdSerializer};
 use oxrdf::{GraphNameRef, IriParseError, QuadRef, TripleRef};
 #[cfg(feature = "async-tokio")]
 use oxrdfxml::TokioAsyncWriterRdfXmlSerializer;
@@ -70,9 +70,7 @@ impl RdfSerializer {
     pub fn from_format(format: RdfFormat) -> Self {
         Self {
             inner: match format {
-                RdfFormat::JsonLd | RdfFormat::StreamingJsonLd => {
-                    RdfSerializerKind::JsonLd(JsonLdSerializer::new())
-                }
+                RdfFormat::JsonLd { .. } => RdfSerializerKind::JsonLd(JsonLdSerializer::new()),
                 RdfFormat::NQuads => RdfSerializerKind::NQuads(NQuadsSerializer::new()),
                 RdfFormat::NTriples => RdfSerializerKind::NTriples(NTriplesSerializer::new()),
                 RdfFormat::RdfXml => RdfSerializerKind::RdfXml(RdfXmlSerializer::new()),
@@ -96,7 +94,9 @@ impl RdfSerializer {
     /// ```
     pub fn format(&self) -> RdfFormat {
         match &self.inner {
-            RdfSerializerKind::JsonLd(_) => RdfFormat::StreamingJsonLd,
+            RdfSerializerKind::JsonLd(_) => RdfFormat::JsonLd {
+                profile: JsonLdProfile::Streaming.into(), // TODO: also expanded?
+            },
             RdfSerializerKind::NQuads(_) => RdfFormat::NQuads,
             RdfSerializerKind::NTriples(_) => RdfFormat::NTriples,
             RdfSerializerKind::RdfXml(_) => RdfFormat::RdfXml,

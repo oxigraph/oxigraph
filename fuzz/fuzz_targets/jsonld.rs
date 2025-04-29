@@ -2,7 +2,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use oxigraph_fuzz::count_quad_blank_nodes;
-use oxjsonld::{JsonLdParser, JsonLdSerializer};
+use oxjsonld::{JsonLdParser, JsonLdProfile, JsonLdSerializer};
 use oxrdf::graph::CanonicalizationAlgorithm;
 use oxrdf::{Dataset, Quad};
 
@@ -25,28 +25,24 @@ fn parse(
         parser = parser.lenient();
     }
     if streaming {
-        parser = parser.streaming();
+        parser = parser.with_profile(JsonLdProfile::Streaming);
     }
     let mut parser = parser.for_slice(input);
-    // We read the first element to get the first context if it exist
-    if let Some(result) = parser.next() {
+    for result in &mut parser {
         match result {
             Ok(quad) => quads.push(quad),
             Err(error) => errors.push(error.to_string()),
         }
     }
-    let prefixes = parser
-        .prefixes()
-        .map(|(k, v)| (k.to_owned(), v.to_owned()))
-        .collect();
-    let base_iri = parser.base_iri().map(ToString::to_string);
-    for result in parser {
-        match result {
-            Ok(quad) => quads.push(quad),
-            Err(error) => errors.push(error.to_string()),
-        }
-    }
-    (quads, errors, prefixes, base_iri)
+    (
+        quads,
+        errors,
+        parser
+            .prefixes()
+            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+            .collect(),
+        parser.base_iri().map(ToString::to_string),
+    )
 }
 
 fn serialize_quads(

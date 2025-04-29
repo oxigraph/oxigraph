@@ -1,10 +1,8 @@
-use crate::files::{guess_rdf_format, load_to_graph, read_file, read_file_to_string};
+use crate::files::{guess_rdf_format, load_to_graph};
 use crate::vocab::*;
 use anyhow::{bail, Context, Result};
-use oxigraph::io::RdfFormat;
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
-use oxjsonld::{JsonLdParser, RemoteDocument};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
@@ -314,25 +312,7 @@ impl TestManifest {
             return Ok(None);
         };
         self.graph.clear();
-        let format = guess_rdf_format(&url)?;
-        if format == RdfFormat::JsonLd {
-            let parser = JsonLdParser::new()
-                .with_base_iri(&url)?
-                .for_reader(read_file(&url)?)
-                .with_load_document_callback(|url, options| {
-                    Ok(RemoteDocument {
-                        content_type: "application/ld+json".into(),
-                        document: read_file_to_string(url)?.into_bytes(),
-                        document_url: url.into(),
-                        profile: options.request_profile.first().map(ToString::to_string),
-                    })
-                });
-            for quad in parser {
-                self.graph.insert(&quad?.into());
-            }
-        } else {
-            load_to_graph(&url, &mut self.graph, format, None, false)?;
-        }
+        load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)?;
 
         let manifests = self
             .graph
