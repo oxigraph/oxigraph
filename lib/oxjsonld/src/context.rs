@@ -6,6 +6,7 @@ use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::slice;
 use std::sync::{Arc, Mutex};
 
@@ -14,7 +15,9 @@ type LoadDocumentCallback = dyn Fn(
         &JsonLdLoadDocumentOptions,
     ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
     + Send
-    + Sync;
+    + Sync
+    + UnwindSafe
+    + RefUnwindSafe;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum JsonLdProcessingMode {

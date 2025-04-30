@@ -31,6 +31,7 @@ use oxttl::turtle::{ReaderTurtleParser, SliceTurtleParser, TurtleParser, TurtleP
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Read;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
 
@@ -561,6 +562,8 @@ impl<R: Read> ReaderQuadParser<R> {
         loader: impl Fn(&str) -> Result<LoadedDocument, Box<dyn Error + Send + Sync>>
             + Send
             + Sync
+            + UnwindSafe
+            + RefUnwindSafe
             + 'static,
     ) -> Self {
         self.inner = match self.inner {

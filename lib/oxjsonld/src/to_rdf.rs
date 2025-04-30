@@ -12,6 +12,7 @@ use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
 use std::error::Error;
 use std::io::Read;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::str;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncRead;
@@ -404,6 +405,8 @@ impl<R: Read> ReaderJsonLdParser<R> {
             ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
             + Send
             + Sync
+            + UnwindSafe
+            + RefUnwindSafe
             + 'static,
     ) -> Self {
         self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);

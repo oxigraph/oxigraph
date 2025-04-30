@@ -7,8 +7,10 @@ use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::Iri;
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::error::Error;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::sync::{Arc, Mutex};
 
 pub enum JsonLdEvent {
@@ -78,6 +80,7 @@ enum JsonLdExpansionState {
     },
     Object {
         in_property: bool,
+        has_emitted_id: bool,
     },
     Value {
         r#type: Option<String>,
@@ -161,6 +164,8 @@ impl JsonLdExpansionConverter {
             ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
             + Send
             + Sync
+            + UnwindSafe
+            + RefUnwindSafe
             + 'static,
     ) -> Self {
         self.context_processor.load_document_callback = Some(Arc::new(callback));
@@ -299,7 +304,17 @@ impl JsonLdExpansionConverter {
                     }
                     JsonEvent::ObjectKey(key) => {
                         if depth == 1 {
-                            buffer.insert(key.clone().into(), Vec::new());
+                            match buffer.entry(key.clone().into()) {
+                                Entry::Occupied(mut e) => {
+                                    errors.push(JsonLdSyntaxError::msg(format!(
+                                        "Duplicated key {key}"
+                                    )));
+                                    e.get_mut().clear(); // We override the previous value
+                                }
+                                Entry::Vacant(e) => {
+                                    e.insert(Vec::new());
+                                }
+                            }
                             current_key = Some(key.into());
                         } else {
                             buffer
@@ -557,11 +572,14 @@ impl JsonLdExpansionConverter {
                                     });
                                 } else {
                                     results.push(JsonLdEvent::StartObject { types });
+                                    let has_emitted_id = id.is_some();
                                     if let Some(id) = id {
                                         results.push(JsonLdEvent::Id(id));
                                     }
-                                    self.state
-                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property: false,
+                                        has_emitted_id,
+                                    });
                                     self.state.push(JsonLdExpansionState::Graph);
                                     self.state.push(JsonLdExpansionState::Element {
                                         is_array: false,
@@ -598,11 +616,14 @@ impl JsonLdExpansionConverter {
                             }
                             _ => {
                                 results.push(JsonLdEvent::StartObject { types });
+                                let has_emitted_id = id.is_some();
                                 if let Some(id) = id {
                                     results.push(JsonLdEvent::Id(id));
                                 }
-                                self.state
-                                    .push(JsonLdExpansionState::Object { in_property: false });
+                                self.state.push(JsonLdExpansionState::Object {
+                                    in_property: false,
+                                    has_emitted_id,
+                                });
                                 self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                             }
                         }
@@ -762,7 +783,10 @@ impl JsonLdExpansionConverter {
                         if let Some(id) = id {
                             results.push(JsonLdEvent::Id(id));
                         }
-                        JsonLdExpansionState::Object { in_property: false }
+                        JsonLdExpansionState::Object {
+                            in_property: false,
+                            has_emitted_id: true,
+                        }
                     })
                 }
                 JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
@@ -778,7 +802,10 @@ impl JsonLdExpansionConverter {
                             active_property: None,
                         }
                     } else {
-                        JsonLdExpansionState::Object { in_property: false }
+                        JsonLdExpansionState::Object {
+                            in_property: false,
+                            has_emitted_id: true,
+                        }
                     })
                 }
                 JsonEvent::StartArray => {
@@ -794,7 +821,10 @@ impl JsonLdExpansionConverter {
                             active_property: None,
                         }
                     } else {
-                        JsonLdExpansionState::Object { in_property: false }
+                        JsonLdExpansionState::Object {
+                            in_property: false,
+                            has_emitted_id: true,
+                        }
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: true });
@@ -812,7 +842,10 @@ impl JsonLdExpansionConverter {
                             active_property: None,
                         }
                     } else {
-                        JsonLdExpansionState::Object { in_property: false }
+                        JsonLdExpansionState::Object {
+                            in_property: false,
+                            has_emitted_id: true,
+                        }
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
@@ -824,7 +857,10 @@ impl JsonLdExpansionConverter {
                     unreachable!()
                 }
             },
-            JsonLdExpansionState::Object { in_property } => {
+            JsonLdExpansionState::Object {
+                in_property,
+                has_emitted_id,
+            } => {
                 if in_property {
                     results.push(JsonLdEvent::EndProperty);
                 }
@@ -838,15 +874,26 @@ impl JsonLdExpansionConverter {
                         {
                             match iri.as_ref() {
                                 "@id" => {
-                                    self.state.push(JsonLdExpansionState::ObjectId {
-                                        types: Vec::new(),
-                                        id: None,
-                                        from_start: false,
-                                    });
+                                    if has_emitted_id {
+                                        self.state.push(JsonLdExpansionState::Object {
+                                            in_property: false,
+                                            has_emitted_id: true,
+                                        });
+                                        self.state
+                                            .push(JsonLdExpansionState::Skip { is_array: false });
+                                    } else {
+                                        self.state.push(JsonLdExpansionState::ObjectId {
+                                            types: Vec::new(),
+                                            id: None,
+                                            from_start: false,
+                                        });
+                                    }
                                 }
                                 "@graph" => {
-                                    self.state
-                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property: false,
+                                        has_emitted_id,
+                                    });
                                     self.state.push(JsonLdExpansionState::Graph);
                                     self.state.push(JsonLdExpansionState::Element {
                                         is_array: false,
@@ -860,8 +907,10 @@ impl JsonLdExpansionConverter {
                                         "@context must be the first key of an object",
                                         JsonLdErrorCode::InvalidStreamingKeyOrder,
                                     ));
-                                    self.state
-                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property: false,
+                                        has_emitted_id,
+                                    });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
@@ -871,8 +920,10 @@ impl JsonLdExpansionConverter {
                                         "@type must be the first key of an object or right after @context",
                                         JsonLdErrorCode::InvalidStreamingKeyOrder,
                                     ));
-                                    self.state
-                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property: false,
+                                        has_emitted_id,
+                                    });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
@@ -880,8 +931,10 @@ impl JsonLdExpansionConverter {
                                     errors.push(JsonLdSyntaxError::msg(format!(
                                         "Unsupported JSON-LD keyword: {iri}"
                                     )));
-                                    self.state
-                                        .push(JsonLdExpansionState::Object { in_property: false });
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property: false,
+                                        has_emitted_id,
+                                    });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
@@ -893,8 +946,10 @@ impl JsonLdExpansionConverter {
                                         .map_or([].as_slice(), |term_definition| {
                                             term_definition.container_mapping
                                         });
-                                    self.state
-                                        .push(JsonLdExpansionState::Object { in_property: true });
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property: true,
+                                        has_emitted_id,
+                                    });
                                     self.state.push(JsonLdExpansionState::Element {
                                         active_property: Some(key.clone().into()),
                                         is_array: false,
@@ -904,8 +959,10 @@ impl JsonLdExpansionConverter {
                                 }
                             }
                         } else {
-                            self.state
-                                .push(JsonLdExpansionState::Object { in_property: false });
+                            self.state.push(JsonLdExpansionState::Object {
+                                in_property: false,
+                                has_emitted_id,
+                            });
                             self.state
                                 .push(JsonLdExpansionState::Skip { is_array: false });
                         }
@@ -1032,8 +1089,11 @@ impl JsonLdExpansionConverter {
                             }
                         }
                     } else {
-                        self.state
-                            .push(JsonLdExpansionState::Object { in_property: false });
+                        self.state.push(JsonLdExpansionState::Value {
+                            r#type,
+                            value,
+                            language,
+                        });
                         self.state
                             .push(JsonLdExpansionState::Skip { is_array: false });
                     }
@@ -1303,8 +1363,10 @@ impl JsonLdExpansionConverter {
                         if nesting == 1 {
                             // Other key in the object, we know we are seeing an object
                             results.push(JsonLdEvent::StartObject { types: Vec::new() });
-                            self.state
-                                .push(JsonLdExpansionState::Object { in_property: false });
+                            self.state.push(JsonLdExpansionState::Object {
+                                in_property: false,
+                                has_emitted_id: false,
+                            });
                             self.state.push(JsonLdExpansionState::Graph);
                             self.state.push(JsonLdExpansionState::Element {
                                 is_array: false,
@@ -1326,10 +1388,10 @@ impl JsonLdExpansionConverter {
                 }
             }
             JsonLdExpansionState::List { needs_end_object } => {
-                results.push(JsonLdEvent::EndList);
                 if needs_end_object {
                     match event {
                         JsonEvent::EndObject => {
+                            results.push(JsonLdEvent::EndList);
                             self.pop_context();
                         }
                         JsonEvent::ObjectKey(k) => {
@@ -1345,6 +1407,7 @@ impl JsonLdExpansionConverter {
                         _ => unreachable!(),
                     }
                 } else {
+                    results.push(JsonLdEvent::EndList);
                     self.convert_event(event, results, errors)
                 }
             }

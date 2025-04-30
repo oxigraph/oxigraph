@@ -25,23 +25,17 @@ impl TestEvaluator {
         manifest
             .map(|test| {
                 let test = test?;
-                let handlers = test
-                    .kinds
-                    .iter()
-                    .filter_map(|kind| self.handlers.get(kind.as_str()))
-                    .collect::<Vec<_>>();
-                if handlers.len() > 1 {
-                    bail!("The test {test} has multiple possible handlers")
-                }
-                if let Some(handler) = handlers.into_iter().next() {
-                    let outcome = handler(&test);
-                    return Ok(TestResult {
-                        test: test.id,
-                        outcome,
-                        date: OffsetDateTime::now_utc(),
-                    });
-                }
-                bail!("The test {test} is not supported")
+                Ok(TestResult {
+                    test: test.id.clone(),
+                    outcome: test
+                        .kinds
+                        .iter()
+                        .filter_map(|kind| self.handlers.get(kind.as_str()))
+                        .map(|h| h(&test))
+                        .reduce(Result::and)
+                        .unwrap_or_else(|| bail!("No handler found for test {}", test.id)),
+                    date: OffsetDateTime::now_utc(),
+                })
             })
             .collect()
     }

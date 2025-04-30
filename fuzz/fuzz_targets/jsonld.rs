@@ -4,19 +4,14 @@ use libfuzzer_sys::fuzz_target;
 use oxigraph_fuzz::count_quad_blank_nodes;
 use oxjsonld::{JsonLdParser, JsonLdProfile, JsonLdSerializer};
 use oxrdf::graph::CanonicalizationAlgorithm;
-use oxrdf::{Dataset, Quad};
+use oxrdf::Dataset;
 
 fn parse(
     input: &[u8],
     lenient: bool,
     streaming: bool,
-) -> (
-    Vec<Quad>,
-    Vec<String>,
-    Vec<(String, String)>,
-    Option<String>,
-) {
-    let mut quads = Vec::new();
+) -> (Dataset, Vec<String>, Vec<(String, String)>, Option<String>) {
+    let mut quads = Dataset::new();
     let mut errors = Vec::new();
     let mut parser = JsonLdParser::new()
         .with_base_iri("http://example.com/")
@@ -30,7 +25,9 @@ fn parse(
     let mut parser = parser.for_slice(input);
     for result in &mut parser {
         match result {
-            Ok(quad) => quads.push(quad),
+            Ok(quad) => {
+                quads.insert(&quad);
+            }
             Err(error) => errors.push(error.to_string()),
         }
     }
@@ -46,7 +43,7 @@ fn parse(
 }
 
 fn serialize_quads(
-    quads: &[Quad],
+    quads: &Dataset,
     prefixes: Vec<(String, String)>,
     base_iri: Option<String>,
 ) -> Vec<u8> {
@@ -66,8 +63,8 @@ fn serialize_quads(
 
 fuzz_target!(|data: &[u8]| {
     // We parse with splitting
-    let (quads, errors, prefixes, base_iri) = parse(data, false, false);
-    let (quads_streaming, errors_streaming, _, _) = parse(data, false, true);
+    let (mut quads, errors, prefixes, base_iri) = parse(data, false, false);
+    let (mut quads_streaming, errors_streaming, _, _) = parse(data, false, true);
     let (_, errors_lenient, _, _) = parse(data, true, false);
     if errors_streaming.is_empty() {
         assert!(errors.is_empty());
@@ -79,24 +76,14 @@ fuzz_target!(|data: &[u8]| {
     if errors_streaming.is_empty() {
         let bnodes_count = quads
             .iter()
-            .map(|q| count_quad_blank_nodes(q.as_ref()))
+            .map(|q| count_quad_blank_nodes(q))
             .sum::<usize>();
-        if bnodes_count == 0 {
+        if bnodes_count <= 4 {
+            quads.canonicalize(CanonicalizationAlgorithm::Unstable);
+            quads_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
             assert_eq!(
                 quads,
                 quads_streaming,
-                "Buffering:\n{}\nStreaming:\n{}",
-                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
-                String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
-            );
-        } else if bnodes_count <= 4 {
-            let mut dataset = quads.iter().collect::<Dataset>();
-            let mut dataset_streaming = quads_streaming.iter().collect::<Dataset>();
-            dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
-            dataset_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
-            assert_eq!(
-                dataset,
-                dataset_streaming,
                 "Buffering:\n{}\nStreaming:\n{}",
                 String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
                 String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
@@ -111,7 +98,7 @@ fuzz_target!(|data: &[u8]| {
     let new_quads = JsonLdParser::new()
         .with_profile(JsonLdProfile::Streaming)
         .for_slice(&new_serialization)
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<Result<Dataset, _>>()
         .map_err(|e| {
             format!(
                 "Error on {:?} from {quads:?} based on {:?}: {e}",

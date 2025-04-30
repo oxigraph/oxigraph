@@ -7,8 +7,6 @@ use std::fmt;
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[non_exhaustive]
 pub enum RdfFormat {
-    /// [JSON-LD](https://www.w3.org/TR/json-ld/)
-    JsonLd { profile: JsonLdProfileSet },
     /// [N3](https://w3c.github.io/N3/spec/)
     N3,
     /// [N-Quads](https://www.w3.org/TR/n-quads/)
@@ -21,6 +19,8 @@ pub enum RdfFormat {
     TriG,
     /// [Turtle](https://www.w3.org/TR/turtle/)
     Turtle,
+    /// [JSON-LD](https://www.w3.org/TR/json-ld/)
+    JsonLd { profile: JsonLdProfileSet },
 }
 
 impl RdfFormat {
