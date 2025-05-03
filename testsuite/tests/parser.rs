@@ -585,6 +585,10 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest.jsonld",
         &[
+            // We do not allow root @graph followed with other keys
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv017",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv019",
+            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv021",
             // @context in @context
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv006",
             // @set

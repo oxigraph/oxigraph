@@ -100,10 +100,7 @@ enum JsonLdExpansionState {
         language: Option<String>,
     },
     Graph,
-    MaybeRootGraph {
-        buffer: Vec<JsonEvent<'static>>,
-        nesting: usize,
-    },
+    RootGraph,
     List {
         needs_end_object: bool,
     },
@@ -351,14 +348,16 @@ impl JsonLdExpansionConverter {
                             active_property,
                             container,
                         });
-                    // We look for @type and @id
+                    // We look for @type, @id and @graph
                     let mut type_key = None;
                     let mut id_key = None;
+                    let mut graph_key = None;
                     for key in buffer.keys() {
                         if let Some(expanded) = self.expand_iri(key.into(), false, true, errors) {
                             match expanded.as_ref() {
                                 "@type" => type_key = Some(key.clone()),
                                 "@id" => id_key = Some(key.clone()),
+                                "@graph" => graph_key = Some(key.clone()),
                                 _ => (),
                             }
                         }
@@ -377,10 +376,18 @@ impl JsonLdExpansionConverter {
                             self.convert_event(event, results, errors);
                         }
                     }
+                    let graph_content = graph_key.as_ref().and_then(|k| buffer.remove(k));
                     // Other keys
                     for (key, events) in buffer {
                         self.convert_event(JsonEvent::ObjectKey(key.into()), results, errors);
                         for event in events {
+                            self.convert_event(event, results, errors);
+                        }
+                    }
+                    // @graph at the end
+                    if let Some(graph_key) = graph_key {
+                        self.convert_event(JsonEvent::ObjectKey(graph_key.into()), results, errors);
+                        for event in graph_content.unwrap_or_default() {
                             self.convert_event(event, results, errors);
                         }
                     }
@@ -565,11 +572,13 @@ impl JsonLdExpansionConverter {
                             }
                             "@graph" => {
                                 if id.is_none() && types.is_empty() && self.state.is_empty() {
-                                    // Likely graph only for @context, we ignore it
-                                    self.state.push(JsonLdExpansionState::MaybeRootGraph {
-                                        buffer: Vec::new(),
-                                        nesting: 1,
-                                    });
+                                    // Graph only for @context
+                                    self.state.push(JsonLdExpansionState::RootGraph);
+                                    self.state.push(JsonLdExpansionState::Element {
+                                        active_property: None,
+                                        is_array: false,
+                                        container: &[],
+                                    })
                                 } else {
                                     results.push(JsonLdEvent::StartObject { types });
                                     let has_emitted_id = id.is_some();
@@ -580,13 +589,7 @@ impl JsonLdExpansionConverter {
                                         in_property: false,
                                         has_emitted_id,
                                     });
-                                    self.state.push(JsonLdExpansionState::Graph);
-                                    self.state.push(JsonLdExpansionState::Element {
-                                        is_array: false,
-                                        active_property: None,
-                                        container: &[],
-                                    });
-                                    results.push(JsonLdEvent::StartGraph);
+                                    self.convert_event(JsonEvent::ObjectKey(key), results, errors);
                                 }
                             }
                             _ if has_keyword_form(&iri) => {
@@ -1321,72 +1324,21 @@ impl JsonLdExpansionConverter {
                 results.push(JsonLdEvent::EndGraph);
                 self.convert_event(event, results, errors)
             }
-            JsonLdExpansionState::MaybeRootGraph {
-                mut buffer,
-                mut nesting,
-            } => {
-                let event = to_owned_event(event);
-                match event {
-                    JsonEvent::String(_)
-                    | JsonEvent::Number(_)
-                    | JsonEvent::Boolean(_)
-                    | JsonEvent::Null => {
-                        buffer.push(event);
-                        self.state
-                            .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
-                    }
-                    JsonEvent::StartArray | JsonEvent::StartObject => {
-                        buffer.push(event);
-                        nesting += 1;
-                        self.state
-                            .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
-                    }
-                    JsonEvent::EndArray | JsonEvent::EndObject => {
-                        nesting -= 1;
-                        if nesting == 0 {
-                            // We are out of the root object without seeing other keys, we emit the graph as a default graph
-                            self.state.push(JsonLdExpansionState::Element {
-                                is_array: false,
-                                active_property: None,
-                                container: &[],
-                            });
-                            for event in buffer {
-                                self.convert_event(event, results, errors);
-                            }
-                        } else {
-                            buffer.push(event);
-                            self.state
-                                .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
-                        }
-                    }
-                    JsonEvent::ObjectKey(_) => {
-                        if nesting == 1 {
-                            // Other key in the object, we know we are seeing an object
-                            results.push(JsonLdEvent::StartObject { types: Vec::new() });
-                            self.state.push(JsonLdExpansionState::Object {
-                                in_property: false,
-                                has_emitted_id: false,
-                            });
-                            self.state.push(JsonLdExpansionState::Graph);
-                            self.state.push(JsonLdExpansionState::Element {
-                                is_array: false,
-                                active_property: None,
-                                container: &[],
-                            });
-                            results.push(JsonLdEvent::StartGraph);
-                            for event in buffer {
-                                self.convert_event(event, results, errors);
-                            }
-                            self.convert_event(event, results, errors);
-                        } else {
-                            buffer.push(event);
-                            self.state
-                                .push(JsonLdExpansionState::MaybeRootGraph { buffer, nesting });
-                        }
-                    }
-                    JsonEvent::Eof => unreachable!(),
+            JsonLdExpansionState::RootGraph => match event {
+                JsonEvent::ObjectKey(key) => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        format!(
+                            "@graph must be the last property of the object, found {key} after it"
+                        ),
+                        JsonLdErrorCode::InvalidStreamingKeyOrder,
+                    ));
+                    self.state.push(JsonLdExpansionState::RootGraph);
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
                 }
-            }
+                JsonEvent::EndObject => (),
+                _ => unreachable!(),
+            },
             JsonLdExpansionState::List { needs_end_object } => {
                 if needs_end_object {
                     match event {
