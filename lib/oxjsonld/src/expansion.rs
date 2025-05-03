@@ -7,7 +7,6 @@ use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::Iri;
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::error::Error;
 use std::panic::{RefUnwindSafe, UnwindSafe};
@@ -45,7 +44,7 @@ enum JsonLdExpansionState {
         container: &'static [&'static str],
     },
     ObjectOrContainerStart {
-        buffer: HashMap<String, Vec<JsonEvent<'static>>>,
+        buffer: Vec<(String, Vec<JsonEvent<'static>>)>,
         depth: usize,
         current_key: Option<String>,
         active_property: Option<String>,
@@ -268,7 +267,7 @@ impl JsonLdExpansionConverter {
                             }
                         } else {
                             JsonLdExpansionState::ObjectOrContainerStart {
-                                buffer: HashMap::new(),
+                                buffer: Vec::new(),
                                 depth: 1,
                                 current_key: None,
                                 active_property,
@@ -294,100 +293,84 @@ impl JsonLdExpansionConverter {
                     | JsonEvent::Number(_)
                     | JsonEvent::Boolean(_)
                     | JsonEvent::Null => {
-                        buffer
-                            .get_mut(current_key.as_ref().unwrap())
-                            .unwrap()
-                            .push(to_owned_event(event));
+                        buffer.last_mut().unwrap().1.push(to_owned_event(event));
                     }
                     JsonEvent::ObjectKey(key) => {
                         if depth == 1 {
-                            match buffer.entry(key.clone().into()) {
-                                Entry::Occupied(mut e) => {
-                                    errors.push(JsonLdSyntaxError::msg(format!(
-                                        "Duplicated key {key}"
-                                    )));
-                                    e.get_mut().clear(); // We override the previous value
-                                }
-                                Entry::Vacant(e) => {
-                                    e.insert(Vec::new());
-                                }
-                            }
+                            buffer.push((key.clone().into(), Vec::new()));
                             current_key = Some(key.into());
                         } else {
                             buffer
-                                .get_mut(current_key.as_ref().unwrap())
+                                .last_mut()
                                 .unwrap()
+                                .1
                                 .push(to_owned_event(JsonEvent::ObjectKey(key)));
                         }
                     }
                     JsonEvent::EndArray | JsonEvent::EndObject => {
                         if depth > 1 {
-                            buffer
-                                .get_mut(current_key.as_ref().unwrap())
-                                .unwrap()
-                                .push(to_owned_event(event));
+                            buffer.last_mut().unwrap().1.push(to_owned_event(event));
                         }
                         depth -= 1;
                     }
                     JsonEvent::StartArray | JsonEvent::StartObject => {
-                        buffer
-                            .get_mut(current_key.as_ref().unwrap())
-                            .unwrap()
-                            .push(to_owned_event(event));
+                        buffer.last_mut().unwrap().1.push(to_owned_event(event));
                         depth += 1;
                     }
                     JsonEvent::Eof => unreachable!(),
                 }
                 if depth == 0 {
-                    // We first process the context
-                    if let Some(context) = buffer.remove("@context") {
-                        self.push_new_context(context, errors);
+                    // We look for @context @type, @id and @graph
+                    let mut context_value = None;
+                    let mut type_data = None;
+                    let mut id_data = None;
+                    let mut graph_data = Vec::new();
+                    let mut other_data = Vec::with_capacity(buffer.len());
+                    for (key, value) in buffer {
+                        let expanded = self.expand_iri(key.as_str().into(), false, true, errors);
+                        match expanded.as_deref() {
+                            Some("@context") => {
+                                if context_value.is_some() {
+                                    errors.push(JsonLdSyntaxError::msg("@context is defined twice"))
+                                }
+                                context_value = Some(value);
+                            }
+                            Some("@type") => {
+                                if type_data.is_some() {
+                                    errors.push(JsonLdSyntaxError::msg("@type is defined twice"))
+                                }
+                                type_data = Some((key, value));
+                            }
+                            Some("@id") => {
+                                if id_data.is_some() {
+                                    errors.push(JsonLdSyntaxError::msg("@id is defined twice"))
+                                }
+                                id_data = Some((key, value));
+                            }
+                            Some("@graph") => {
+                                graph_data.push((key, value));
+                            }
+                            _ => other_data.push((key, value)),
+                        }
                     }
                     self.state
                         .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
                             active_property,
                             container,
                         });
-                    // We look for @type, @id and @graph
-                    let mut type_key = None;
-                    let mut id_key = None;
-                    let mut graph_key = None;
-                    for key in buffer.keys() {
-                        if let Some(expanded) = self.expand_iri(key.into(), false, true, errors) {
-                            match expanded.as_ref() {
-                                "@type" => type_key = Some(key.clone()),
-                                "@id" => id_key = Some(key.clone()),
-                                "@graph" => graph_key = Some(key.clone()),
-                                _ => (),
-                            }
-                        }
+
+                    // We first process @context, @type and @id then other then graph
+                    if let Some(context) = context_value {
+                        self.push_new_context(context, errors);
                     }
-                    if let Some(type_key) = type_key {
-                        let type_value = buffer.remove(&type_key).unwrap();
-                        self.convert_event(JsonEvent::ObjectKey(type_key.into()), results, errors);
-                        for event in type_value {
-                            self.convert_event(event, results, errors);
-                        }
-                    }
-                    if let Some(id_key) = id_key {
-                        let id_value = buffer.remove(&id_key).unwrap();
-                        self.convert_event(JsonEvent::ObjectKey(id_key.into()), results, errors);
-                        for event in id_value {
-                            self.convert_event(event, results, errors);
-                        }
-                    }
-                    let graph_content = graph_key.as_ref().and_then(|k| buffer.remove(k));
-                    // Other keys
-                    for (key, events) in buffer {
+                    for (key, value) in type_data
+                        .into_iter()
+                        .chain(id_data)
+                        .chain(other_data)
+                        .chain(graph_data)
+                    {
                         self.convert_event(JsonEvent::ObjectKey(key.into()), results, errors);
-                        for event in events {
-                            self.convert_event(event, results, errors);
-                        }
-                    }
-                    // @graph at the end
-                    if let Some(graph_key) = graph_key {
-                        self.convert_event(JsonEvent::ObjectKey(graph_key.into()), results, errors);
-                        for event in graph_content.unwrap_or_default() {
+                        for event in value {
                             self.convert_event(event, results, errors);
                         }
                     }
@@ -878,6 +861,7 @@ impl JsonLdExpansionConverter {
                             match iri.as_ref() {
                                 "@id" => {
                                     if has_emitted_id {
+                                        errors.push(JsonLdSyntaxError::msg("Duplicated @id key"));
                                         self.state.push(JsonLdExpansionState::Object {
                                             in_property: false,
                                             has_emitted_id: true,
