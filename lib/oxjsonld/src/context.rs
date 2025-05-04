@@ -32,7 +32,7 @@ pub enum JsonNode {
     Boolean(bool),
     Null,
     Array(Vec<JsonNode>),
-    Map(HashMap<String, JsonNode>),
+    Object(HashMap<String, JsonNode>),
 }
 
 #[derive(Default, Clone)]
@@ -108,7 +108,7 @@ impl JsonLdContextProcessor {
         // 1)
         let mut result = active_context.clone();
         // 2)
-        if let JsonNode::Map(local_context) = &local_context {
+        if let JsonNode::Object(local_context) = &local_context {
             if let Some(propagate_node) = local_context.get("@propagate") {
                 if let JsonNode::Boolean(new) = propagate_node {
                     propagate = *new;
@@ -220,7 +220,7 @@ impl JsonLdContextProcessor {
                                         continue;
                                     }
                                 };
-                            let JsonNode::Map(parsed_document) = parsed_document else {
+                            let JsonNode::Object(parsed_document) = parsed_document else {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
                                     format!("Remote context {context} must be a map"),
                                     JsonLdErrorCode::InvalidRemoteContext,
@@ -273,7 +273,7 @@ impl JsonLdContextProcessor {
                     continue;
                 }
                 // 5.4)
-                JsonNode::Map(context) => context,
+                JsonNode::Object(context) => context,
             };
             let mut key_values = HashMap::new();
             let mut protected = false;
@@ -523,7 +523,7 @@ impl JsonLdContextProcessor {
                 Cow::Owned([("@id".to_owned(), JsonNode::String(id.clone()))].into())
             }
             // 9)
-            Some(JsonNode::Map(map)) => Cow::Borrowed(map),
+            Some(JsonNode::Object(map)) => Cow::Borrowed(map),
             _ => {
                 errors.push(JsonLdSyntaxError::msg_and_code(
                     "Term definition value must be null, a string or a map",
@@ -1145,7 +1145,7 @@ pub fn json_node_from_events<'a>(
             JsonEvent::Null => after_to_node_event(&mut stack, JsonNode::Null),
             JsonEvent::EndArray | JsonEvent::EndObject => {
                 let value = match stack.pop() {
-                    Some(BuildingObjectOrArrayNode::Object(object)) => JsonNode::Map(object),
+                    Some(BuildingObjectOrArrayNode::Object(object)) => JsonNode::Object(object),
                     Some(BuildingObjectOrArrayNode::Array(array)) => JsonNode::Array(array),
                     _ => unreachable!(),
                 };
