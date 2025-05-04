@@ -187,11 +187,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
         &[
             // blank node
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te068",
-            // float exp notation
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0022",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0035",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te031",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te061",
             // @container
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0025",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te004",
