@@ -1,5 +1,8 @@
 use crate::model::{PyQuad, PyTriple};
-use oxigraph::io::{RdfFormat, RdfParseError, RdfParser, RdfSerializer, ReaderQuadParser};
+use oxigraph::io::{
+    JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParseError, RdfParser, RdfSerializer,
+    ReaderQuadParser,
+};
 use oxigraph::model::QuadRef;
 use pyo3::exceptions::{PyDeprecationWarning, PySyntaxError, PyValueError};
 use pyo3::intern;
@@ -260,6 +263,20 @@ pub struct PyRdfFormat {
 
 #[pymethods]
 impl PyRdfFormat {
+    /// `JSON-LD <https://www.w3.org/TR/json-ld/>`_
+    #[classattr]
+    const JSON_LD: Self = Self {
+        inner: RdfFormat::JsonLd {
+            profile: JsonLdProfileSet::empty(),
+        },
+    };
+    /// `Streaming JSON-LD <https://www.w3.org/TR/json-ld11-streaming/>`_
+    #[classattr]
+    const STREAMING_JSON_LD: Self = Self {
+        inner: RdfFormat::JsonLd {
+            profile: JsonLdProfileSet::from_profile(JsonLdProfile::Streaming),
+        },
+    };
     /// `N3 <https://w3c.github.io/N3/spec/>`_
     #[classattr]
     const N3: Self = Self {

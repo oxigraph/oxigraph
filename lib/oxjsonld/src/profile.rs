@@ -111,6 +111,13 @@ impl JsonLdProfileSet {
         Self { value: 0 }
     }
 
+    #[inline]
+    pub const fn from_profile(profile: JsonLdProfile) -> Self {
+        Self {
+            value: profile.to_bit(),
+        }
+    }
+
     /// Checks if this profile list contains the given profile.
     #[inline]
     pub const fn contains(self, profile: JsonLdProfile) -> bool {
