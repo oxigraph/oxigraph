@@ -23,3 +23,6 @@
 [submodule "cli/templates/yasgui"]
 	path = cli/templates/yasgui
 	url = https://github.com/oxigraph/yasgui-release.git
+[submodule "testsuite/SPARQL-exists"]
+	path = testsuite/SPARQL-exists
+	url = git@github.com:afs/SPARQL-exists.git

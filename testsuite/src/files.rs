@@ -18,6 +18,8 @@ pub fn read_file(url: &str) -> Result<impl Read> {
             )
         } else if url.starts_with("http://drobilla.net/sw/serd/test/") {
             url.replace("http://drobilla.net/sw/serd/test/", "serd-tests/")
+        } else if url.starts_with("https://github.com/afs/SPARQL-exists/") {
+            url.replace("https://github.com/afs/SPARQL-exists", "SPARQL-exists/")
         } else {
             bail!("Not supported url for file: {url}")
         });
