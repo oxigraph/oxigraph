@@ -820,7 +820,7 @@ impl InternalJsonLdParser {
 
 enum JsonLdToRdfState {
     StartObject {
-        types: Vec<NamedNode>,
+        types: Vec<NamedOrBlankNode>,
         /// Events before the @id event
         buffer: Vec<JsonLdEvent>,
         /// Nesting level of objects, useful during buffering
@@ -932,7 +932,7 @@ impl JsonLdToRdfConverter {
                     self.state.push(JsonLdToRdfState::StartObject {
                         types: types
                             .into_iter()
-                            .filter_map(|t| self.convert_named_node(t))
+                            .filter_map(|t| self.convert_named_or_blank_node(t))
                             .collect(),
                         buffer: Vec::new(),
                         nesting: 0,
@@ -967,7 +967,7 @@ impl JsonLdToRdfConverter {
                     self.state.push(JsonLdToRdfState::StartObject {
                         types: types
                             .into_iter()
-                            .filter_map(|t| self.convert_named_node(t))
+                            .filter_map(|t| self.convert_named_or_blank_node(t))
                             .collect(),
                         buffer: Vec::new(),
                         nesting: 0,
@@ -1019,7 +1019,7 @@ impl JsonLdToRdfConverter {
                     self.state.push(JsonLdToRdfState::StartObject {
                         types: types
                             .into_iter()
-                            .filter_map(|t| self.convert_named_node(t))
+                            .filter_map(|t| self.convert_named_or_blank_node(t))
                             .collect(),
                         buffer: Vec::new(),
                         nesting: 0,
@@ -1043,7 +1043,7 @@ impl JsonLdToRdfConverter {
     fn emit_quads_for_new_object(
         &self,
         id: Option<&NamedOrBlankNode>,
-        types: Vec<NamedNode>,
+        types: Vec<NamedOrBlankNode>,
         results: &mut Vec<Quad>,
     ) {
         let Some(id) = id else {

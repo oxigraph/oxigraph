@@ -185,8 +185,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/json-ld-api/tests/toRdf-manifest.jsonld",
         &[
-            // blank node
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te068",
             // @container
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0025",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te004",
@@ -202,6 +200,7 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te044",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te050",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te062",
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#ter35",
             // @set
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te047",
             // @iri
@@ -214,10 +213,7 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             // null in context
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te003",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te032",
-            // @context @language
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te018",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te022",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#ter35",
             // @reverse
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0031",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0119",
@@ -244,7 +240,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             // relative IRI resolution discrepancies
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0122",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0123",
-            //"https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te062",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te091",
             // expandContext
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te077",
@@ -588,11 +583,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#tv006",
             // @set
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te047",
-            // float exp notation
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0022",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0035",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te031",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te061",
             // @container
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te004",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te015",
