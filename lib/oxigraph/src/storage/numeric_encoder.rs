@@ -9,6 +9,7 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::mem::discriminant;
 use std::str;
+#[cfg(feature = "rdf-star")]
 use std::sync::Arc;
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
@@ -101,6 +102,7 @@ pub enum EncodedTerm {
     DurationLiteral(Duration),
     YearMonthDurationLiteral(YearMonthDuration),
     DayTimeDurationLiteral(DayTimeDuration),
+    #[cfg(feature = "rdf-star")]
     Triple(Arc<EncodedTriple>),
 }
 
@@ -208,6 +210,7 @@ impl PartialEq for EncodedTerm {
                 (Self::DayTimeDurationLiteral(a), Self::DayTimeDurationLiteral(b)) => {
                     a.is_identical_with(*b)
                 }
+                #[cfg(feature = "rdf-star")]
                 (Self::Triple(a), Self::Triple(b)) => a == b,
                 (_, _) => unreachable!(),
             }
@@ -273,6 +276,7 @@ impl Hash for EncodedTerm {
             Self::DurationLiteral(value) => value.hash(state),
             Self::YearMonthDurationLiteral(value) => value.hash(state),
             Self::DayTimeDurationLiteral(value) => value.hash(state),
+            #[cfg(feature = "rdf-star")]
             Self::Triple(value) => value.hash(state),
         }
     }
@@ -416,6 +420,7 @@ impl From<SubjectRef<'_>> for EncodedTerm {
         match term {
             SubjectRef::NamedNode(named_node) => named_node.into(),
             SubjectRef::BlankNode(blank_node) => blank_node.into(),
+            #[cfg(feature = "rdf-star")]
             SubjectRef::Triple(triple) => triple.as_ref().into(),
         }
     }
@@ -427,6 +432,7 @@ impl From<TermRef<'_>> for EncodedTerm {
             TermRef::NamedNode(named_node) => named_node.into(),
             TermRef::BlankNode(blank_node) => blank_node.into(),
             TermRef::Literal(literal) => literal.into(),
+            #[cfg(feature = "rdf-star")]
             TermRef::Triple(triple) => triple.as_ref().into(),
         }
     }
@@ -442,12 +448,14 @@ impl From<GraphNameRef<'_>> for EncodedTerm {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<TripleRef<'_>> for EncodedTerm {
     fn from(triple: TripleRef<'_>) -> Self {
         Self::Triple(Arc::new(triple.into()))
     }
 }
 
+#[cfg(feature = "rdf-star")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct EncodedTriple {
     pub subject: EncodedTerm,
@@ -455,6 +463,7 @@ pub struct EncodedTriple {
     pub object: EncodedTerm,
 }
 
+#[cfg(feature = "rdf-star")]
 impl EncodedTriple {
     pub fn new(subject: EncodedTerm, predicate: EncodedTerm, object: EncodedTerm) -> Self {
         Self {
@@ -465,6 +474,7 @@ impl EncodedTriple {
     }
 }
 
+#[cfg(feature = "rdf-star")]
 impl From<TripleRef<'_>> for EncodedTriple {
     fn from(triple: TripleRef<'_>) -> Self {
         Self {
@@ -585,6 +595,7 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
             | EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
             _ => Err(CorruptionError::from_encoded_term(encoded, &term).into()),
         },
+        #[cfg(feature = "rdf-star")]
         TermRef::Triple(triple) => {
             if let EncodedTerm::Triple(encoded) = encoded {
                 insert_term(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
@@ -679,6 +690,7 @@ pub trait Decoder: StrLookup {
                 "A literal has been found instead of a subject node",
             )
             .into()),
+            #[cfg(feature = "rdf-star")]
             Term::Triple(triple) => Ok(Subject::Triple(triple)),
         }
     }
@@ -694,6 +706,7 @@ pub trait Decoder: StrLookup {
                 "A literal has been found instead of a named or blank node",
             )
             .into()),
+            #[cfg(feature = "rdf-star")]
             Term::Triple(_) => Err(CorruptionError::msg(
                 "A triple has been found instead of a named or blank node",
             )
@@ -711,12 +724,14 @@ pub trait Decoder: StrLookup {
             Term::Literal(_) => {
                 Err(CorruptionError::msg("A literal has been found instead of a named node").into())
             }
+            #[cfg(feature = "rdf-star")]
             Term::Triple(_) => {
                 Err(CorruptionError::msg("A triple has been found instead of a named node").into())
             }
         }
     }
 
+    #[cfg(feature = "rdf-star")]
     fn decode_triple(&self, encoded: &EncodedTriple) -> Result<Triple, StorageError> {
         Ok(Triple::new(
             self.decode_subject(&encoded.subject)?,
@@ -741,6 +756,7 @@ pub trait Decoder: StrLookup {
                             CorruptionError::msg("A literal is not a valid graph name").into()
                         )
                     }
+                    #[cfg(feature = "rdf-star")]
                     Term::Triple(_) => {
                         return Err(
                             CorruptionError::msg("A triple is not a valid graph name").into()
@@ -830,6 +846,7 @@ impl<S: StrLookup> Decoder for S {
             EncodedTerm::DurationLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::YearMonthDurationLiteral(value) => Ok(Literal::from(*value).into()),
             EncodedTerm::DayTimeDurationLiteral(value) => Ok(Literal::from(*value).into()),
+            #[cfg(feature = "rdf-star")]
             EncodedTerm::Triple(triple) => Ok(self.decode_triple(triple)?.into()),
         }
     }
