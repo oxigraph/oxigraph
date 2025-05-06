@@ -203,8 +203,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#ter35",
             // @set
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te047",
-            // @iri
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te005",
             // @index
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#ter31",
             // @reverse
@@ -589,8 +587,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te044",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te050",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#ter35",
-            // @iri
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te005",
             // @reverse
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0031",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te078",

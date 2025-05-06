@@ -508,10 +508,12 @@ impl JsonLdContextProcessor {
             unimplemented!()
         } else if has_keyword_form(term) {
             // 5)
-            errors.push(JsonLdSyntaxError::msg_and_code(
-                format!("{term} keyword can't be redefined in context"),
-                JsonLdErrorCode::KeywordRedefinition,
-            ));
+            if is_keyword(term) {
+                errors.push(JsonLdSyntaxError::msg_and_code(
+                    format!("{term} keyword can't be redefined in context"),
+                    JsonLdErrorCode::KeywordRedefinition,
+                ));
+            }
             return;
         }
         // 6)
