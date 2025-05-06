@@ -29,6 +29,8 @@ pub enum JsonLdEvent {
     EndGraph,
     StartList,
     EndList,
+    StartSet,
+    EndSet,
 }
 
 pub enum JsonLdValue {
@@ -101,8 +103,9 @@ enum JsonLdExpansionState {
     Index,
     Graph,
     RootGraph,
-    List {
+    ListOrSet {
         needs_end_object: bool,
+        end_event: Option<JsonLdEvent>,
     },
     Skip {
         is_array: bool,
@@ -237,12 +240,19 @@ impl JsonLdExpansionConverter {
                             });
                         } else if container.contains(&"@list") {
                             results.push(JsonLdEvent::StartList);
-                            self.state.push(JsonLdExpansionState::List {
+                            self.state.push(JsonLdExpansionState::ListOrSet {
                                 needs_end_object: false,
+                                end_event: Some(JsonLdEvent::EndList),
+                            })
+                        } else if container.contains(&"@set") {
+                            results.push(JsonLdEvent::StartSet);
+                            self.state.push(JsonLdExpansionState::ListOrSet {
+                                needs_end_object: false,
+                                end_event: Some(JsonLdEvent::EndSet),
                             })
                         } else if !container.is_empty() {
                             errors.push(JsonLdSyntaxError::msg(
-                                "Only @list container is supported yet",
+                                "Only @list and @set containers are supported yet",
                             ));
                         }
                         self.state.push(JsonLdExpansionState::Element {
@@ -400,10 +410,20 @@ impl JsonLdExpansionConverter {
                                 active_property,
                                 container,
                             }),
+                            "@index" => {
+                                self.state.push(
+                                    JsonLdExpansionState::ObjectOrContainerStartStreaming {
+                                        active_property,
+                                        container,
+                                    },
+                                );
+                                self.state.push(JsonLdExpansionState::Index);
+                            }
                             "@list" => {
                                 if active_property.is_some() {
-                                    self.state.push(JsonLdExpansionState::List {
+                                    self.state.push(JsonLdExpansionState::ListOrSet {
                                         needs_end_object: true,
+                                        end_event: Some(JsonLdEvent::EndList),
                                     });
                                     self.state.push(JsonLdExpansionState::Element {
                                         is_array: false,
@@ -419,15 +439,37 @@ impl JsonLdExpansionConverter {
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                             }
+                            "@set" => {
+                                let has_property = active_property.is_some();
+                                self.state.push(JsonLdExpansionState::ListOrSet {
+                                    needs_end_object: true,
+                                    end_event: has_property.then_some(JsonLdEvent::EndSet),
+                                });
+                                self.state.push(JsonLdExpansionState::Element {
+                                    is_array: false,
+                                    active_property,
+                                    container: &[],
+                                });
+                                if has_property {
+                                    results.push(JsonLdEvent::StartSet);
+                                }
+                            }
                             _ => {
                                 if container.contains(&"@list") {
                                     results.push(JsonLdEvent::StartList);
-                                    self.state.push(JsonLdExpansionState::List {
+                                    self.state.push(JsonLdExpansionState::ListOrSet {
                                         needs_end_object: false,
-                                    })
+                                        end_event: Some(JsonLdEvent::EndList),
+                                    });
+                                } else if container.contains(&"@set") {
+                                    results.push(JsonLdEvent::StartSet);
+                                    self.state.push(JsonLdExpansionState::ListOrSet {
+                                        needs_end_object: false,
+                                        end_event: Some(JsonLdEvent::EndSet),
+                                    });
                                 } else if !container.is_empty() {
                                     errors.push(JsonLdSyntaxError::msg(
-                                        "Only @list container is supported yet",
+                                        "Only @list and @set containers are supported yet",
                                     ));
                                 }
                                 self.state.push(JsonLdExpansionState::ObjectStart {
@@ -881,15 +923,15 @@ impl JsonLdExpansionConverter {
                                 }
                                 "@index" => {
                                     self.state.push(JsonLdExpansionState::Object {
-                                        in_property,
+                                        in_property: false,
                                         has_emitted_id,
                                     });
                                     self.state.push(JsonLdExpansionState::Index);
                                 }
                                 _ if has_keyword_form(&iri) => {
-                                    errors.push(if iri == "@list" {
+                                    errors.push(if iri == "@list" || iri == "@set" {
                                         JsonLdSyntaxError::msg_and_code(
-                                            "@list must be the only key of an object",
+                                            "@list and @set must be the only keys of an object",
                                             JsonLdErrorCode::InvalidSetOrListObject,
                                         )
                                     } else if iri == "@context" {
@@ -1344,27 +1386,42 @@ impl JsonLdExpansionConverter {
                 JsonEvent::EndObject => (),
                 _ => unreachable!(),
             },
-            JsonLdExpansionState::List { needs_end_object } => {
+            JsonLdExpansionState::ListOrSet {
+                needs_end_object,
+                end_event,
+            } => {
                 if needs_end_object {
                     match event {
                         JsonEvent::EndObject => {
-                            results.push(JsonLdEvent::EndList);
+                            results.extend(end_event);
                             self.pop_context();
                         }
-                        JsonEvent::ObjectKey(k) => {
-                            errors.push(JsonLdSyntaxError::msg_and_code(
-                                format!("@list must be the last only of an object, {k} found"),
-                                JsonLdErrorCode::InvalidSetOrListObject,
-                            ));
-                            self.state
-                                .push(JsonLdExpansionState::List { needs_end_object });
-                            self.state
-                                .push(JsonLdExpansionState::Skip { is_array: false });
+                        JsonEvent::ObjectKey(key) => {
+                            self.state.push(JsonLdExpansionState::ListOrSet {
+                                needs_end_object,
+                                end_event,
+                            });
+                            if let Some(iri) =
+                                self.expand_iri(key.as_ref().into(), false, true, errors)
+                            {
+                                if iri == "@index" {
+                                    self.state.push(JsonLdExpansionState::Index);
+                                } else {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        format!(
+                                            "@list must be the only key of an object, {key} found"
+                                        ),
+                                        JsonLdErrorCode::InvalidSetOrListObject,
+                                    ));
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
+                            }
                         }
                         _ => unreachable!(),
                     }
                 } else {
-                    results.push(JsonLdEvent::EndList);
+                    results.extend(end_event);
                     self.convert_event(event, results, errors)
                 }
             }
@@ -1438,9 +1495,11 @@ impl JsonLdExpansionConverter {
         if !is_array {
             if container.contains(&"@list") {
                 results.push(JsonLdEvent::StartList);
+            } else if container.contains(&"@set") {
+                results.push(JsonLdEvent::StartSet);
             } else if !container.is_empty() {
                 errors.push(JsonLdSyntaxError::msg(
-                    "Only @list container is supported yet",
+                    "Only @list and @set containers are supported yet",
                 ));
             }
         }
@@ -1455,6 +1514,8 @@ impl JsonLdExpansionConverter {
             });
         } else if container.contains(&"@list") {
             results.push(JsonLdEvent::EndList);
+        } else if container.contains(&"@set") {
+            results.push(JsonLdEvent::EndSet);
         }
     }
 
@@ -1511,7 +1572,7 @@ impl JsonLdExpansionConverter {
         } else {
             // 5)
             if matches!(value, JsonLdValue::String(_)) && language.is_none() {
-                language = active_context.default_language.clone();
+                language.clone_from(&active_context.default_language);
             }
         }
         results.push(JsonLdEvent::Value {

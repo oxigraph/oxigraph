@@ -924,7 +924,9 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::EndGraph
                 | JsonLdEvent::StartList
-                | JsonLdEvent::EndList => unreachable!(),
+                | JsonLdEvent::EndList
+                | JsonLdEvent::StartSet
+                | JsonLdEvent::EndSet => unreachable!(),
             },
             JsonLdToRdfState::Property(_) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -953,6 +955,9 @@ impl JsonLdToRdfConverter {
                 JsonLdEvent::StartList => {
                     self.state.push(state);
                     self.state.push(JsonLdToRdfState::List(None));
+                }
+                JsonLdEvent::StartSet | JsonLdEvent::EndSet => {
+                    self.state.push(state);
                 }
                 JsonLdEvent::StartProperty(_)
                 | JsonLdEvent::Id(_)
@@ -1006,6 +1011,10 @@ impl JsonLdToRdfConverter {
                         )
                     }
                 }
+                JsonLdEvent::StartSet | JsonLdEvent::EndSet => {
+                    // TODO: this is bad
+                    self.state.push(JsonLdToRdfState::List(current_node));
+                }
                 JsonLdEvent::EndObject
                 | JsonLdEvent::StartProperty(_)
                 | JsonLdEvent::EndProperty
@@ -1035,7 +1044,9 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::EndObject
                 | JsonLdEvent::StartList
-                | JsonLdEvent::EndList => unreachable!(),
+                | JsonLdEvent::EndList
+                | JsonLdEvent::StartSet
+                | JsonLdEvent::EndSet => unreachable!(),
             },
         }
     }
