@@ -98,6 +98,7 @@ enum JsonLdExpansionState {
         value: Option<JsonLdValue>,
         language: Option<String>,
     },
+    Index,
     Graph,
     RootGraph,
     List {
@@ -553,52 +554,16 @@ impl JsonLdExpansionConverter {
                                     from_start: true,
                                 });
                             }
-                            "@graph" => {
-                                if id.is_none() && types.is_empty() && self.state.is_empty() {
-                                    // Graph only for @context
-                                    self.state.push(JsonLdExpansionState::RootGraph);
-                                    self.state.push(JsonLdExpansionState::Element {
-                                        active_property: None,
-                                        is_array: false,
-                                        container: &[],
-                                    })
-                                } else {
-                                    results.push(JsonLdEvent::StartObject { types });
-                                    let has_emitted_id = id.is_some();
-                                    if let Some(id) = id {
-                                        results.push(JsonLdEvent::Id(id));
-                                    }
-                                    self.state.push(JsonLdExpansionState::Object {
-                                        in_property: false,
-                                        has_emitted_id,
-                                    });
-                                    self.convert_event(JsonEvent::ObjectKey(key), results, errors);
-                                }
-                            }
-                            _ if has_keyword_form(&iri) => {
-                                errors.push(if iri == "@list" {
-                                    JsonLdSyntaxError::msg_and_code(
-                                        "@list must be the last only of an object, @type found",
-                                        JsonLdErrorCode::InvalidSetOrListObject,
-                                    )
-                                } else if iri == "@context" {
-                                    JsonLdSyntaxError::msg_and_code(
-                                        "@context must be the first key of an object",
-                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                    )
-                                } else {
-                                    JsonLdSyntaxError::msg(format!(
-                                        "Unsupported JSON-LD keyword: {iri}"
-                                    ))
-                                });
-                                self.state.push(JsonLdExpansionState::ObjectStart {
-                                    types,
-                                    id,
-                                    seen_type: true,
-                                    active_property,
-                                });
-                                self.state
-                                    .push(JsonLdExpansionState::Skip { is_array: false });
+                            "@graph"
+                                if id.is_none() && types.is_empty() && self.state.is_empty() =>
+                            {
+                                // Graph only for @context
+                                self.state.push(JsonLdExpansionState::RootGraph);
+                                self.state.push(JsonLdExpansionState::Element {
+                                    active_property: None,
+                                    is_array: false,
+                                    container: &[],
+                                })
                             }
                             _ => {
                                 results.push(JsonLdEvent::StartObject { types });
@@ -914,10 +879,29 @@ impl JsonLdExpansionConverter {
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
+                                "@index" => {
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property,
+                                        has_emitted_id,
+                                    });
+                                    self.state.push(JsonLdExpansionState::Index);
+                                }
                                 _ if has_keyword_form(&iri) => {
-                                    errors.push(JsonLdSyntaxError::msg(format!(
-                                        "Unsupported JSON-LD keyword: {iri}"
-                                    )));
+                                    errors.push(if iri == "@list" {
+                                        JsonLdSyntaxError::msg_and_code(
+                                            "@list must be the only key of an object",
+                                            JsonLdErrorCode::InvalidSetOrListObject,
+                                        )
+                                    } else if iri == "@context" {
+                                        JsonLdSyntaxError::msg_and_code(
+                                            "@context must be the first key of an object",
+                                            JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                        )
+                                    } else {
+                                        JsonLdSyntaxError::msg(format!(
+                                            "Unsupported JSON-LD keyword: {iri}"
+                                        ))
+                                    });
                                     self.state.push(JsonLdExpansionState::Object {
                                         in_property: false,
                                         has_emitted_id,
@@ -1048,6 +1032,14 @@ impl JsonLdExpansionConverter {
                                 });
                                 self.state
                                     .push(JsonLdExpansionState::Skip { is_array: false });
+                            }
+                            "@index" => {
+                                self.state.push(JsonLdExpansionState::Value {
+                                    r#type,
+                                    value,
+                                    language,
+                                });
+                                self.state.push(JsonLdExpansionState::Index);
                             }
                             _ if has_keyword_form(&iri) => {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
@@ -1303,6 +1295,35 @@ impl JsonLdExpansionConverter {
                 | JsonEvent::Eof => {
                     unreachable!()
                 }
+            },
+            JsonLdExpansionState::Index => match event {
+                JsonEvent::String(_) => (), // TODO: properly emit if we implement expansion output
+                JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@index value must be a string",
+                        JsonLdErrorCode::InvalidIndexValue,
+                    ));
+                }
+                JsonEvent::StartArray => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@index value must be a string",
+                        JsonLdErrorCode::InvalidIndexValue,
+                    ));
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: true });
+                }
+                JsonEvent::StartObject => {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@index value must be a string",
+                        JsonLdErrorCode::InvalidIndexValue,
+                    ));
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
+                }
+                JsonEvent::EndObject
+                | JsonEvent::EndArray
+                | JsonEvent::ObjectKey(_)
+                | JsonEvent::Eof => unreachable!(),
             },
             JsonLdExpansionState::Graph => {
                 results.push(JsonLdEvent::EndGraph);
