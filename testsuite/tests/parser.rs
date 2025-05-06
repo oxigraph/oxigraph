@@ -205,15 +205,8 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te047",
             // @iri
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te005",
-            // @id alias
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te006",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te051",
             // @index
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#ter31",
-            // null in context
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te003",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te032",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te018",
             // @reverse
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0031",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0119",
@@ -598,13 +591,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#ter35",
             // @iri
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te005",
-            // @id alias
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te006",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te051",
-            // null in context
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te003",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te018",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te032",
             // @reverse
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0031",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te078",

@@ -766,7 +766,7 @@ impl<'a> Iterator for JsonLdPrefixesIter<'a> {
         loop {
             let (prefix, term_definition) = self.term_definitions.next()?;
             if term_definition.prefix_flag {
-                if let Some(mapping) = &term_definition.iri_mapping {
+                if let Some(Some(mapping)) = &term_definition.iri_mapping {
                     if self.lenient || Iri::parse(mapping.as_str()).is_ok() {
                         return Some((prefix, mapping));
                     }

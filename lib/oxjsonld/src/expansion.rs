@@ -1482,12 +1482,16 @@ impl JsonLdExpansionConverter {
             }
             // 5)
             if matches!(value, JsonLdValue::String(_)) {
-                language.clone_from(&term_definition.language_mapping);
+                language = term_definition
+                    .language_mapping
+                    .clone()
+                    .unwrap_or_else(|| active_context.default_language.clone());
             }
-        }
-        // 5)
-        if matches!(value, JsonLdValue::String(_)) && language.is_none() {
-            language.clone_from(&active_context.default_language);
+        } else {
+            // 5)
+            if matches!(value, JsonLdValue::String(_)) && language.is_none() {
+                language = active_context.default_language.clone();
+            }
         }
         results.push(JsonLdEvent::Value {
             value,

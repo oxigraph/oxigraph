@@ -60,13 +60,14 @@ impl JsonLdContext {
 
 #[derive(Clone)]
 pub struct JsonLdTermDefinition {
-    pub iri_mapping: Option<String>,
+    // In the fields, None is unset Some(None) is set to null
+    pub iri_mapping: Option<Option<String>>,
     pub prefix_flag: bool,
     pub protected: bool,
     pub reverse_property: bool,
     pub base_url: Option<Iri<String>>,
     pub container_mapping: &'static [&'static str],
-    pub language_mapping: Option<String>,
+    pub language_mapping: Option<Option<String>>,
     pub type_mapping: Option<String>,
 }
 
@@ -634,6 +635,7 @@ impl JsonLdContextProcessor {
                         // 14.1)
                         JsonNode::Null => {
                             found_id = true;
+                            definition.iri_mapping = Some(None);
                         }
                         JsonNode::String(id) => {
                             if id == term {
@@ -660,7 +662,7 @@ impl JsonLdContextProcessor {
                                 ));
                                 return;
                             }
-                            definition.iri_mapping = Some(expanded.into());
+                            definition.iri_mapping = Some(Some(expanded.into()));
                             // 14.2.4)
                             if term
                                 .as_bytes()
@@ -680,7 +682,9 @@ impl JsonLdContextProcessor {
                                     errors,
                                 );
                                 // 14.2.4.2)
-                                if expended_term.as_deref() != definition.iri_mapping.as_deref() {
+                                if expended_term.as_deref()
+                                    != definition.iri_mapping.as_ref().and_then(|o| o.as_deref())
+                                {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         format!("Inconsistent expansion of {term}"),
                                         JsonLdErrorCode::InvalidIriMapping,
@@ -690,10 +694,12 @@ impl JsonLdContextProcessor {
                             // 14.2.5)
                             if !term.contains(':')
                                 && !term.contains('/')
-                                && definition.iri_mapping.as_deref().is_some_and(|iri| {
-                                    iri.ends_with(|c| {
-                                        matches!(c, ':' | '/' | '?' | '#' | '[' | ']' | '@')
-                                    }) || iri.starts_with("_:")
+                                && definition.iri_mapping.as_ref().is_some_and(|iri| {
+                                    iri.as_ref().is_some_and(|iri| {
+                                        iri.ends_with(|c| {
+                                            matches!(c, ':' | '/' | '?' | '#' | '[' | ']' | '@')
+                                        }) || iri.starts_with("_:")
+                                    })
                                 })
                             {
                                 definition.prefix_flag = true;
@@ -814,9 +820,9 @@ impl JsonLdContextProcessor {
                             JsonLdErrorCode::InvalidLanguageMapping,
                         ));
                     }
-                    definition.language_mapping = match value {
+                    definition.language_mapping = Some(match value {
                         JsonNode::String(language) => Some(language.clone()),
-                        JsonNode::Null => None, // TODO: Some(None)?
+                        JsonNode::Null => None,
                         _ => {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 "@language value must be a string or null",
@@ -824,7 +830,7 @@ impl JsonLdContextProcessor {
                             ));
                             continue;
                         }
-                    }
+                    })
                 }
                 // 23)
                 "@direction" => {
@@ -895,8 +901,8 @@ impl JsonLdContextProcessor {
                 }
                 if let Some(term_definition) = active_context.term_definitions.get(prefix) {
                     // 15.2)
-                    if let Some(iri_mapping) = &term_definition.iri_mapping {
-                        definition.iri_mapping = Some(format!("{iri_mapping}{suffix}"));
+                    if let Some(Some(iri_mapping)) = &term_definition.iri_mapping {
+                        definition.iri_mapping = Some(Some(format!("{iri_mapping}{suffix}")));
                     } else {
                         errors.push(JsonLdSyntaxError::msg(format!(
                             "The prefix '{prefix}' is not associated with an IRI in the context"
@@ -904,7 +910,7 @@ impl JsonLdContextProcessor {
                     }
                 } else {
                     // 15.3)
-                    definition.iri_mapping = Some(term.into());
+                    definition.iri_mapping = Some(Some(term.into()));
                 }
             } else if term.contains('/') {
                 // 16)
@@ -930,16 +936,16 @@ impl JsonLdContextProcessor {
                             JsonLdErrorCode::InvalidIriMapping,
                         ))
                     } else {
-                        definition.iri_mapping = Some(iri.into());
+                        definition.iri_mapping = Some(Some(iri.into()));
                     }
                 }
             } else if term == "@type" {
                 // 17)
-                definition.iri_mapping = Some("@type".into());
+                definition.iri_mapping = Some(Some("@type".into()));
             } else {
                 // 18)
                 if let Some(vocabulary_mapping) = &active_context.vocabulary_mapping {
-                    definition.iri_mapping = Some(format!("{vocabulary_mapping}{term}"));
+                    definition.iri_mapping = Some(Some(format!("{vocabulary_mapping}{term}")));
                 } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         format!(
@@ -1013,6 +1019,7 @@ impl JsonLdContextProcessor {
         }
         if let Some(term_definition) = active_context.term_definitions.get(value.as_ref()) {
             if let Some(iri_mapping) = &term_definition.iri_mapping {
+                let iri_mapping = iri_mapping.as_ref()?;
                 // 4)
                 if is_keyword(iri_mapping) {
                     return Some(iri_mapping.clone().into());
@@ -1047,7 +1054,7 @@ impl JsonLdContextProcessor {
             }
             // 6.4)
             if let Some(term_definition) = active_context.term_definitions.get(prefix) {
-                if let Some(iri_mapping) = &term_definition.iri_mapping {
+                if let Some(Some(iri_mapping)) = &term_definition.iri_mapping {
                     if term_definition.prefix_flag {
                         return Some(format!("{iri_mapping}{suffix}").into());
                     }
