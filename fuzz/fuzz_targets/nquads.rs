@@ -82,7 +82,7 @@ fuzz_target!(|data: &[u8]| {
     // We check the roundtrip has not changed anything
     assert_eq!(new_quads, quads);
 
-    // We parse with Quad::from_str if there is no comments
+    // We parse with Quad::from_str if there are no comments
     if !data_without_breaks.contains(&b'#') {
         match str::from_utf8(&data_without_breaks)
             .map_err(|e| e.to_string())
