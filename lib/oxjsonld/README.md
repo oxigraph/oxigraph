@@ -11,12 +11,14 @@ OxJSON-LD is a parser and serializer for [JSON-LD](https://www.w3.org/TR/json-ld
 
 The entry points of this library are the two [`JsonLdParser`] and [`JsonLdSerializer`] structs.
 
-The parser is a work in progress and only a few JSON-LD 1.0 features are supported at the moment.
+The parser is a work in progress.
+Only JSON-LD 1.0 is supported at the moment,
+not including `@reverse` and `@container`.
 
 The parser supports two modes:
 - regular JSON-LD parsing that needs to buffer the full file into memory.
 - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases.
-- To enable it call the [`with_profile`](JsonLdParser::with_profile) method.
+- To enable it, call the [`with_profile(JsonLdProfile::Streaming)`](JsonLdParser::with_profile) method.
 
 Usage example counting the number of people in a JSON-LD file:
 

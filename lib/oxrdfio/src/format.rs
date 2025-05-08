@@ -107,7 +107,7 @@ impl RdfFormat {
             Self::JsonLd { profile } => {
                 // TODO: more combinations
                 if profile.contains(JsonLdProfile::Streaming) {
-                    "JSON-LD Streaming"
+                    "Streaming JSON-LD"
                 } else {
                     "JSON-LD"
                 }
@@ -281,7 +281,7 @@ impl RdfFormat {
     /// ```
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
-        const MEDIA_TYPES: [(&str, RdfFormat); 10] = [
+        const EXTENSIONS: [(&str, RdfFormat); 10] = [
             (
                 "json",
                 RdfFormat::JsonLd {
@@ -303,7 +303,7 @@ impl RdfFormat {
             ("txt", RdfFormat::NTriples),
             ("xml", RdfFormat::RdfXml),
         ];
-        for (candidate_extension, candidate_id) in MEDIA_TYPES {
+        for (candidate_extension, candidate_id) in EXTENSIONS {
             if candidate_extension.eq_ignore_ascii_case(extension) {
                 return Some(candidate_id);
             }

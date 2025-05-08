@@ -20,12 +20,14 @@ use tokio::io::AsyncRead;
 
 /// A [JSON-LD](https://www.w3.org/TR/json-ld/) parser.
 ///
-/// The parser is a work in progress and only a few JSON-LD 1.0 features are supported at the moment.
+/// The parser is a work in progress.
+/// Only JSON-LD 1.0 is supported at the moment,
+/// not including `@reverse` and `@container`.
 ///
 /// The parser supports two modes:
 /// - regular JSON-LD parsing that needs to buffer the full file into memory.
 /// - [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) that can avoid buffering in a few cases.
-///   To enable it call the [`with_profile`](JsonLdParser::with_profile) method.
+///   To enable it call the [`with_profile(JsonLdProfile::Streaming)`](JsonLdParser::with_profile) method.
 ///
 /// Count the number of people:
 /// ```
