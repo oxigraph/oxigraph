@@ -607,6 +607,15 @@ impl JsonLdExpansionConverter {
                                     container: &[],
                                 })
                             }
+                            "@index" => {
+                                self.state.push(JsonLdExpansionState::ObjectStart {
+                                    types,
+                                    id,
+                                    seen_type,
+                                    active_property,
+                                });
+                                self.state.push(JsonLdExpansionState::Index);
+                            }
                             _ => {
                                 results.push(JsonLdEvent::StartObject { types });
                                 let has_emitted_id = id.is_some();
