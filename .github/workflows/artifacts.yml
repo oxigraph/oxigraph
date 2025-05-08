@@ -124,6 +124,7 @@ jobs:
         working-directory: ./python
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
+      - run: rm -r target/wheels
       - run: uv run maturin sdist
         working-directory: ./python
       - uses: actions/upload-artifact@v4
@@ -209,14 +210,11 @@ jobs:
         working-directory: ./python
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: uv run maturin build --release --target universal2-apple-darwin --features abi3
-        working-directory: ./python
+      - run: rm -rf target/wheels
       - run: uv run maturin build --release --target x86_64-apple-darwin --features abi3
         working-directory: ./python
-        if: github.event_name == 'release'
       - run: uv run maturin build --release --target aarch64-apple-darwin --features abi3
         working-directory: ./python
-        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_macos
@@ -238,6 +236,7 @@ jobs:
         working-directory: ./python
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
+      - run: rm -rf target/wheels
       - run: uv run maturin build --features abi3
         working-directory: ./python
       - uses: actions/upload-artifact@v4

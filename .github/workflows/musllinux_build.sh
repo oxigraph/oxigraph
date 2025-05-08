@@ -8,6 +8,7 @@ cd python
 uv sync --locked --only-group build
 uv run maturin develop --release --features abi3
 uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
+rm -rf ../target/wheels
 uv run maturin build --release --features abi3 --compatibility musllinux_1_2
 if [ %for_each_version% ]; then
   for VERSION in 8 9 10 11 12 13 13t; do
