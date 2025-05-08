@@ -41,6 +41,8 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfxml
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: ./lib/oxjsonld
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxttl
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxrdfio
@@ -155,7 +157,7 @@ jobs:
           path: rocksdb
           key: ${{ runner.os }}-rocksdb-8.0.0
       - run: bash .github/workflows/install_rocksdb.sh
-      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli --exclude spareval
+      - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli --exclude oxjsonld --exclude oxrdfio
 
   test_os:
     strategy:
@@ -186,6 +188,8 @@ jobs:
         working-directory: ./lib/oxrdf
       - run: cargo test --target i686-unknown-linux-gnu --all-features
         working-directory: ./lib/oxrdfxml
+      - run: cargo test --target i686-unknown-linux-gnu --all-features
+        working-directory: ./lib/oxjsonld
       - run: cargo test --target i686-unknown-linux-gnu --all-features
         working-directory: ./lib/oxttl
       - run: cargo test --target i686-unknown-linux-gnu --all-features
@@ -418,6 +422,7 @@ jobs:
           - target: "nquads"
           - target: "trig"
           - target: "rdf_xml"
+          - target: "jsonld"
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:

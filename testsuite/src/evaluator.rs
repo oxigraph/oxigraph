@@ -1,6 +1,6 @@
 use crate::manifest::Test;
 use crate::report::TestResult;
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use std::collections::HashMap;
 use time::OffsetDateTime;
 
@@ -25,14 +25,15 @@ impl TestEvaluator {
         manifest
             .map(|test| {
                 let test = test?;
-                let outcome = if let Some(handler) = self.handlers.get(test.kind.as_str()) {
-                    handler(&test)
-                } else {
-                    Err(anyhow!("The test type {} is not supported", test.kind))
-                };
                 Ok(TestResult {
-                    test: test.id,
-                    outcome,
+                    test: test.id.clone(),
+                    outcome: test
+                        .kinds
+                        .iter()
+                        .filter_map(|kind| self.handlers.get(kind.as_str()))
+                        .map(|h| h(&test))
+                        .reduce(Result::and)
+                        .unwrap_or_else(|| bail!("No handler found for test {}", test.id)),
                     date: OffsetDateTime::now_utc(),
                 })
             })

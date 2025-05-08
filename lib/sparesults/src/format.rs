@@ -151,7 +151,7 @@ impl QueryResultsFormat {
     /// ```
     #[inline]
     pub fn from_extension(extension: &str) -> Option<Self> {
-        const MEDIA_TYPES: [(&str, QueryResultsFormat); 7] = [
+        const EXTENSIONS: [(&str, QueryResultsFormat); 7] = [
             ("csv", QueryResultsFormat::Csv),
             ("json", QueryResultsFormat::Json),
             ("srj", QueryResultsFormat::Json),
@@ -160,7 +160,7 @@ impl QueryResultsFormat {
             ("txt", QueryResultsFormat::Csv),
             ("xml", QueryResultsFormat::Xml),
         ];
-        for (candidate_extension, candidate_id) in MEDIA_TYPES {
+        for (candidate_extension, candidate_id) in EXTENSIONS {
             if candidate_extension.eq_ignore_ascii_case(extension) {
                 return Some(candidate_id);
             }

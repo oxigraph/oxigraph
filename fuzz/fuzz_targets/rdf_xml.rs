@@ -55,8 +55,8 @@ fuzz_target!(|data: &[u8]| {
     let (triples, errors, prefixes, base_iri) = parse(data, false);
 
     // We test also unchecked if valid
+    let (triples_unchecked, errors_unchecked, _, _) = parse(data, true);
     if errors.is_empty() {
-        let (triples_unchecked, errors_unchecked, _, _) = parse(data, true);
         assert!(errors_unchecked.is_empty());
 
         let bnodes_count = triples.iter().map(count_triple_blank_nodes).sum::<usize>();

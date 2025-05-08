@@ -3,6 +3,7 @@ members = [
     "cli",
     "js",
     "lib/oxigraph",
+    "lib/oxjsonld",
     "lib/oxrdf",
     "lib/oxrdfio",
     "lib/oxrdfxml",
@@ -48,13 +49,13 @@ geojson = "0.24"
 getrandom = "0.2.8"
 hex = "0.4"
 js-sys = "0.3.60"
-json-event-parser = "0.2.1"
+json-event-parser = "0.2.2"
 libc = "0.2.147"
 md-5 = "0.10"
 memchr = "2.5"
 oxhttp = "0.2.0"
 oxilangtag = "0.1"
-oxiri = "0.2.8"
+oxiri = "0.2.11"
 peg = "0.8"
 pkg-config = "0.3.25"
 predicates = ">=2.0, <4.0"
@@ -78,6 +79,7 @@ wkt = "0.13"
 
 # Internal dependencies
 oxigraph = { version = "=0.4.9", path = "lib/oxigraph" }
+oxjsonld = { version = "=0.1.0", path = "lib/oxjsonld" }
 oxrdf = { version = "=0.2.4", path = "lib/oxrdf" }
 oxrdfio = { version = "=0.1.7", path = "lib/oxrdfio" }
 oxrdfxml = { version = "=0.1.6", path = "lib/oxrdfxml" }

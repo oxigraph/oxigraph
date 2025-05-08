@@ -15,6 +15,7 @@ anyhow = "1.0.72"
 libfuzzer-sys = "0.4"
 oxiri = "0.2"
 oxigraph = { path = "../lib/oxigraph", default-features = false }
+oxjsonld.path = "../lib/oxjsonld"
 oxrdf = { path = "../lib/oxrdf", features = ["rdf-star"] }
 oxrdfxml.path = "../lib/oxrdfxml"
 oxttl = { path = "../lib/oxttl", features = ["rdf-star"] }
@@ -28,6 +29,10 @@ codegen-units = 1
 debug = true
 
 [workspace]
+
+[[bin]]
+name = "jsonld"
+path = "fuzz_targets/jsonld.rs"
 
 [[bin]]
 name = "nquads"

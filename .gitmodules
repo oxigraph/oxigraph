@@ -23,3 +23,9 @@
 [submodule "cli/templates/yasgui"]
 	path = cli/templates/yasgui
 	url = https://github.com/oxigraph/yasgui-release.git
+[submodule "testsuite/json-ld-streaming"]
+	path = testsuite/json-ld-streaming
+	url = https://github.com/w3c/json-ld-streaming.git
+[submodule "testsuite/json-ld-api"]
+	path = testsuite/json-ld-api
+	url = https://github.com/w3c/json-ld-api.git

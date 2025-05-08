@@ -384,6 +384,9 @@ jobs:
         working-directory: ./lib/oxrdfxml
         continue-on-error: true
       - run: cargo publish
+        working-directory: ./lib/oxjsonld
+        continue-on-error: true
+      - run: cargo publish
         working-directory: ./lib/oxttl
         continue-on-error: true
       - run: cargo publish

@@ -1526,8 +1526,10 @@ dependencies = [
  "anyhow",
  "clap",
  "codspeed-criterion-compat",
+ "json-event-parser",
  "oxigraph",
  "oxiri",
+ "oxjsonld",
  "oxttl",
  "spareval",
  "spargebra",
@@ -1553,6 +1555,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
+name = "oxjsonld"
+version = "0.1.0"
+dependencies = [
+ "json-event-parser",
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "thiserror 2.0.12",
+ "tokio",
+]
+
+[[package]]
 name = "oxrdf"
 version = "0.2.4"
 dependencies = [
@@ -1567,6 +1581,7 @@ dependencies = [
 name = "oxrdfio"
 version = "0.1.7"
 dependencies = [
+ "oxjsonld",
  "oxrdf",
  "oxrdfxml",
  "oxttl",

@@ -12,6 +12,16 @@ pub enum RdfParseError {
     Syntax(#[from] RdfSyntaxError),
 }
 
+impl From<oxjsonld::JsonLdParseError> for RdfParseError {
+    #[inline]
+    fn from(error: oxjsonld::JsonLdParseError) -> Self {
+        match error {
+            oxjsonld::JsonLdParseError::Syntax(e) => Self::Syntax(e.into()),
+            oxjsonld::JsonLdParseError::Io(e) => Self::Io(e),
+        }
+    }
+}
+
 impl From<oxttl::TurtleParseError> for RdfParseError {
     #[inline]
     fn from(error: oxttl::TurtleParseError) -> Self {
@@ -51,6 +61,8 @@ pub struct RdfSyntaxError(#[from] SyntaxErrorKind);
 #[derive(Debug, thiserror::Error)]
 enum SyntaxErrorKind {
     #[error(transparent)]
+    JsonLd(#[from] oxjsonld::JsonLdSyntaxError),
+    #[error(transparent)]
     Turtle(#[from] oxttl::TurtleSyntaxError),
     #[error(transparent)]
     RdfXml(#[from] oxrdfxml::RdfXmlSyntaxError),
@@ -63,6 +75,20 @@ impl RdfSyntaxError {
     #[inline]
     pub fn location(&self) -> Option<Range<TextPosition>> {
         match &self.0 {
+            SyntaxErrorKind::JsonLd(e) => {
+                let location = e.location()?;
+                Some(
+                    TextPosition {
+                        line: location.start.line,
+                        column: location.start.column,
+                        offset: location.start.offset,
+                    }..TextPosition {
+                        line: location.end.line,
+                        column: location.end.column,
+                        offset: location.end.offset,
+                    },
+                )
+            }
             SyntaxErrorKind::Turtle(e) => {
                 let location = e.location();
                 Some(
@@ -86,6 +112,13 @@ impl RdfSyntaxError {
     }
 }
 
+impl From<oxjsonld::JsonLdSyntaxError> for RdfSyntaxError {
+    #[inline]
+    fn from(error: oxjsonld::JsonLdSyntaxError) -> Self {
+        Self(SyntaxErrorKind::JsonLd(error))
+    }
+}
+
 impl From<oxttl::TurtleSyntaxError> for RdfSyntaxError {
     #[inline]
     fn from(error: oxttl::TurtleSyntaxError) -> Self {
@@ -104,6 +137,7 @@ impl From<RdfSyntaxError> for io::Error {
     #[inline]
     fn from(error: RdfSyntaxError) -> Self {
         match error.0 {
+            SyntaxErrorKind::JsonLd(error) => error.into(),
             SyntaxErrorKind::Turtle(error) => error.into(),
             SyntaxErrorKind::RdfXml(error) => error.into(),
             SyntaxErrorKind::Msg(msg) => Self::new(io::ErrorKind::InvalidData, msg),

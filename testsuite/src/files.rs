@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use oxigraph::io::{RdfFormat, RdfParser};
+use oxigraph::io::{LoadedDocument, RdfFormat, RdfParser};
 use oxigraph::model::{Dataset, Graph};
 use oxttl::n3::N3Quad;
 use oxttl::N3Parser;
@@ -37,8 +37,17 @@ pub fn load_to_graph(
     base_iri: Option<&str>,
     ignore_errors: bool,
 ) -> Result<()> {
-    let parser = RdfParser::from_format(format).with_base_iri(base_iri.unwrap_or(url))?;
-    for t in parser.for_reader(read_file(url)?) {
+    let parser = RdfParser::from_format(format)
+        .with_base_iri(base_iri.unwrap_or(url))?
+        .for_reader(read_file(url)?)
+        .with_document_loader(|url| {
+            Ok(LoadedDocument {
+                content: read_file_to_string(url)?.into_bytes(),
+                url: url.into(),
+                format: guess_rdf_format(url)?,
+            })
+        });
+    for t in parser {
         match t {
             Ok(t) => {
                 graph.insert(&t.into());

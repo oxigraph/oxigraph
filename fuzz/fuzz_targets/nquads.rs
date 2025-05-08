@@ -52,8 +52,8 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!(errors, errors_without_split);
 
     // We test also unchecked if valid
+    let (quads_unchecked, errors_unchecked) = parse(data.split(|c| *c == 0xFF), true);
     if errors.is_empty() {
-        let (quads_unchecked, errors_unchecked) = parse(data.split(|c| *c == 0xFF), true);
         assert!(errors_unchecked.is_empty());
         assert_eq!(quads, quads_unchecked);
     }

@@ -15,10 +15,11 @@ rust-version.workspace = true
 
 [features]
 default = []
-async-tokio = ["dep:tokio", "oxrdfxml/async-tokio", "oxttl/async-tokio"]
+async-tokio = ["dep:tokio", "oxrdfxml/async-tokio", "oxttl/async-tokio", "oxjsonld/async-tokio"]
 rdf-star = ["oxrdf/rdf-star", "oxttl/rdf-star"]
 
 [dependencies]
+oxjsonld.workspace = true
 oxrdf.workspace = true
 oxrdfxml.workspace = true
 oxttl.workspace = true

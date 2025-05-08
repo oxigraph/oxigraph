@@ -3,12 +3,12 @@ use crate::vocab::*;
 use anyhow::{bail, Context, Result};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 pub struct Test {
     pub id: NamedNode,
-    pub kind: NamedNode,
+    pub kinds: Vec<NamedNode>,
     pub name: Option<String>,
     pub comment: Option<String>,
     pub action: Option<String>,
@@ -19,11 +19,14 @@ pub struct Test {
     pub service_data: Vec<(String, String)>,
     pub result: Option<String>,
     pub result_graph_data: Vec<(NamedNode, String)>,
+    pub option: HashMap<NamedNode, Term>,
 }
 
 impl fmt::Display for Test {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.kind)?;
+        for kind in &self.kinds {
+            write!(f, "{kind}")?;
+        }
         if let Some(name) = &self.name {
             write!(f, " named \"{name}\"")?;
         }
@@ -44,6 +47,9 @@ impl fmt::Display for Test {
         }
         if let Some(result) = &self.result {
             write!(f, " and expected result {result}")?;
+        }
+        for (k, v) in &self.option {
+            write!(f, " and option {k} set to {v}")?;
         }
         Ok(())
     }
@@ -105,17 +111,20 @@ impl TestManifest {
             } else {
                 None
             };
-            let kind = if let Some(TermRef::NamedNode(c)) = self
+            let kinds = self
                 .graph
-                .object_for_subject_predicate(&test_node, rdf::TYPE)
-            {
-                c.into_owned()
-            } else {
-                bail!(
-                    "The test {test_node} named {} has no rdf:type",
-                    name.as_deref().unwrap_or("")
-                );
-            };
+                .objects_for_subject_predicate(&test_node, rdf::TYPE)
+                .map(|c| {
+                    if let TermRef::NamedNode(c) = c {
+                        Ok(c.into_owned())
+                    } else {
+                        bail!(
+                            "The test {test_node} named {} has no rdf:type",
+                            name.as_deref().unwrap_or("")
+                        )
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?;
             let comment = if let Some(TermRef::Literal(c)) = self
                 .graph
                 .object_for_subject_predicate(&test_node, rdfs::COMMENT)
@@ -264,12 +273,25 @@ impl TestManifest {
                         })
                         .collect::<Result<_, _>>()?,
                 ),
+                Some(TermRef::Literal(l)) => (Some(l.value().to_owned()), Vec::new()),
                 Some(_) => bail!("invalid result"),
                 None => (None, Vec::new()),
             };
+            let option = match self
+                .graph
+                .object_for_subject_predicate(&test_node, jld::OPTION)
+            {
+                Some(TermRef::BlankNode(option)) => self
+                    .graph
+                    .triples_for_subject(option)
+                    .map(|t| (t.predicate.into_owned(), t.object.into_owned()))
+                    .collect(),
+                Some(_) => bail!("invalid option"),
+                None => HashMap::new(),
+            };
             return Ok(Some(Test {
                 id: test_node,
-                kind,
+                kinds,
                 name,
                 comment,
                 action,
@@ -280,6 +302,7 @@ impl TestManifest {
                 service_data,
                 result,
                 result_graph_data,
+                option,
             }));
         }
     }

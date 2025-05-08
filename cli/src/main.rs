@@ -6,7 +6,7 @@ use clap::Parser;
 use flate2::read::MultiGzDecoder;
 use oxhttp::model::{Body, HeaderName, HeaderValue, Method, Request, Response, Status};
 use oxhttp::Server;
-use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
+use oxigraph::io::{JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
@@ -35,7 +35,7 @@ use std::str::FromStr;
 use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
 use std::{fmt, fs, str};
-use url::form_urlencoded;
+use url::{form_urlencoded, Url};
 
 mod cli;
 mod service_description;
@@ -586,7 +586,23 @@ fn do_convert<R: Read, W: Write>(
     if lenient {
         parser = parser.unchecked();
     }
-    let mut parser = parser.for_reader(reader);
+    let mut parser = parser.for_reader(reader).with_document_loader(|url| {
+        let url = Url::parse(url)?;
+        let Ok(path) = url.to_file_path() else {
+            return Err(Box::new(io::Error::other("The URL is not a file path")));
+        };
+        Ok(LoadedDocument {
+            url: url.to_string(),
+            content: fs::read(&path)?,
+            format: path
+                .extension()
+                .and_then(OsStr::to_str)
+                .and_then(RdfFormat::from_extension)
+                .unwrap_or(RdfFormat::JsonLd {
+                    profile: JsonLdProfileSet::empty(),
+                }), // TODO: is it a good fallback?
+        })
+    });
     let first = parser.next(); // We read the first element to get prefixes and the base IRI
     if let Some(base_iri) = to_base.or_else(|| parser.base_iri()) {
         serializer = serializer
@@ -2190,6 +2206,25 @@ mod tests {
             .write_stdin("@base <http://example.com/> . <s> <p> <o> .")
             .assert()
             .stdout("@base <http://example.com> .\n</s> </p> </o> .\n");
+    }
+
+    #[test]
+    fn cli_convert_with_context() -> Result<()> {
+        let context_file = NamedTempFile::new("context.jsonld")?;
+        context_file.write_str("{\"@context\":{\"@vocab\":\"http://schema.org/\"}}")?;
+        cli_command()
+            .arg("convert")
+            .arg("--from-format")
+            .arg("jsonld")
+            .arg("--to-format")
+            .arg("nt")
+            .write_stdin(format!(
+                "{{\"@context\":\"{}\",\"@id\":\"http://example.com\",\"name\":\"example\"}}",
+                Url::from_file_path(context_file.path()).unwrap()
+            ))
+            .assert()
+            .stdout("<http://example.com> <http://schema.org/name> \"example\" .\n");
+        Ok(())
     }
 
     #[test]
