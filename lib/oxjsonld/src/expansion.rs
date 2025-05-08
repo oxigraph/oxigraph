@@ -937,6 +937,17 @@ impl JsonLdExpansionConverter {
                                     });
                                     self.state.push(JsonLdExpansionState::Index);
                                 }
+                                "@reverse" => {
+                                    errors.push(JsonLdSyntaxError::msg(
+                                        "@reverse is not supported yet",
+                                    ));
+                                    self.state.push(JsonLdExpansionState::Object {
+                                        in_property: false,
+                                        has_emitted_id,
+                                    });
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
                                 _ if has_keyword_form(&iri) => {
                                     errors.push(if iri == "@list" || iri == "@set" {
                                         JsonLdSyntaxError::msg_and_code(
