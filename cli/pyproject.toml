@@ -1,0 +1,24 @@
+[project]
+name = "oxigraph"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+]
+dynamic = ["version"]
+
+[project.urls]
+Changelog = "https://github.com/oxigraph/oxigraph/blob/main/CHANGELOG.md"
+Documentation = "https://oxigraph.org/"
+Homepage = "https://oxigraph.org/"
+Source = "https://github.com/oxigraph/oxigraph/tree/main/cli"
+Tracker = "https://github.com/oxigraph/oxigraph/issues"
+
+[build-system]
+requires = ["maturin~=1.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+bindings = "bin"
