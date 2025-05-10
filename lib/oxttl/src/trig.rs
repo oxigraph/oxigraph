@@ -1239,7 +1239,7 @@ impl fmt::Display for TurtleTerm<'_> {
                 };
                 if inline {
                     f.write_str(value)
-                } else if v.is_plain() {
+                } else if v.language().is_some() || v.datatype() == xsd::STRING {
                     write!(f, "{v}")
                 } else {
                     write!(

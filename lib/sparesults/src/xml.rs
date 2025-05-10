@@ -1,7 +1,7 @@
 //! Implementation of [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/)
 
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
-use oxrdf::vocab::rdf;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
 use quick_xml::escape::{escape, unescape};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
@@ -196,7 +196,7 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
             let mut start = BytesStart::new("literal");
             if let Some(language) = literal.language() {
                 start.push_attribute(("xml:lang", language));
-            } else if !literal.is_plain() {
+            } else if literal.datatype() != xsd::STRING {
                 start.push_attribute(("datatype", literal.datatype().as_str()))
             }
             output.push(Event::Start(start));

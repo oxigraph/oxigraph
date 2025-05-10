@@ -1,5 +1,6 @@
 //! Interning of RDF elements using Rodeo
 
+use crate::vocab::xsd;
 use crate::*;
 use std::collections::hash_map::{Entry, HashMap, RandomState};
 use std::hash::{BuildHasher, Hasher};
@@ -187,15 +188,13 @@ pub enum InternedLiteral {
 impl InternedLiteral {
     pub fn encoded_into(literal: LiteralRef<'_>, interner: &mut Interner) -> Self {
         let value_id = interner.get_or_intern(literal.value());
-        if literal.is_plain() {
-            if let Some(language) = literal.language() {
-                Self::LanguageTaggedString {
-                    value_id,
-                    language_id: interner.get_or_intern(language),
-                }
-            } else {
-                Self::String { value_id }
+        if let Some(language) = literal.language() {
+            Self::LanguageTaggedString {
+                value_id,
+                language_id: interner.get_or_intern(language),
             }
+        } else if literal.datatype() == xsd::STRING {
+            Self::String { value_id }
         } else {
             Self::TypedLiteral {
                 value_id,
@@ -206,15 +205,13 @@ impl InternedLiteral {
 
     pub fn encoded_from(literal: LiteralRef<'_>, interner: &Interner) -> Option<Self> {
         let value_id = interner.get(literal.value())?;
-        Some(if literal.is_plain() {
-            if let Some(language) = literal.language() {
-                Self::LanguageTaggedString {
-                    value_id,
-                    language_id: interner.get(language)?,
-                }
-            } else {
-                Self::String { value_id }
+        Some(if let Some(language) = literal.language() {
+            Self::LanguageTaggedString {
+                value_id,
+                language_id: interner.get(language)?,
             }
+        } else if literal.datatype() == xsd::STRING {
+            Self::String { value_id }
         } else {
             Self::TypedLiteral {
                 value_id,
