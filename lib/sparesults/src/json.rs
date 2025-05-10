@@ -4,7 +4,7 @@ use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJsonSerializer};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::{TokioAsyncReaderJsonParser, TokioAsyncWriterJsonSerializer};
-use oxrdf::vocab::rdf;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
@@ -198,7 +198,7 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
             if let Some(language) = literal.language() {
                 output.push(JsonEvent::ObjectKey("xml:lang".into()));
                 output.push(JsonEvent::String(language.into()));
-            } else if !literal.is_plain() {
+            } else if literal.datatype() != xsd::STRING {
                 output.push(JsonEvent::ObjectKey("datatype".into()));
                 output.push(JsonEvent::String(literal.datatype().as_str().into()));
             }
