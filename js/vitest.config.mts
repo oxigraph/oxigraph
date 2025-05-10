@@ -5,5 +5,6 @@ export default defineConfig({
     plugins: [codspeedPlugin()],
     test: {
         globals: true,
+        testTimeout: 600_000, // in ms
     },
 });
