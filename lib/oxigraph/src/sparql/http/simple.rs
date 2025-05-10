@@ -1,9 +1,11 @@
 use oxhttp::model::{Body, HeaderName, Method, Request};
-use std::io::{Error, ErrorKind, Result};
+use std::io::{Error, ErrorKind, Read, Result};
+use std::sync::Arc;
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct Client {
-    client: oxhttp::Client,
+    client: Arc<oxhttp::Client>,
 }
 
 impl Client {
@@ -15,10 +17,12 @@ impl Client {
         if let Some(timeout) = timeout {
             client = client.with_global_timeout(timeout);
         }
-        Self { client }
+        Self {
+            client: Arc::new(client),
+        }
     }
 
-    pub fn get(&self, url: &str, accept: &'static str) -> Result<(String, Body)> {
+    pub fn get(&self, url: &str, accept: &'static str) -> Result<(String, impl Read)> {
         let request = Request::builder(Method::GET, url.parse().map_err(invalid_input_error)?)
             .with_header(HeaderName::ACCEPT, accept)
             .map_err(invalid_input_error)?
