@@ -127,6 +127,9 @@ jobs:
       - run: rm -r target/wheels
       - run: uv run maturin sdist
         working-directory: ./python
+      - run: uvx maturin sdist
+        working-directory: ./cli
+        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_sdist
@@ -204,8 +207,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
-      - run: uv sync --locked --only-group build
-        working-directory: ./python
       - run: uv run maturin develop --release --features abi3
         working-directory: ./python
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
@@ -215,6 +216,12 @@ jobs:
         working-directory: ./python
       - run: uv run maturin build --release --target aarch64-apple-darwin --features abi3
         working-directory: ./python
+      - run: uvx maturin build --release --target x86_64-apple-darwin
+        working-directory: ./cli
+        if: github.event_name == 'release'
+      - run: uvx maturin build --release --target aarch64-apple-darwin
+        working-directory: ./cli
+        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_macos
@@ -230,15 +237,15 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
-      - run: uv sync --locked --only-group build
-        working-directory: ./python
       - run: uv run maturin develop --release --features abi3
         working-directory: ./python
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: rm -rf target/wheels
-      - run: uv run maturin build --features abi3
+      - run: uv run maturin build --release --features abi3
         working-directory: ./python
+      - run: uvx maturin build --release
+        working-directory: ./cli
+        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_windows

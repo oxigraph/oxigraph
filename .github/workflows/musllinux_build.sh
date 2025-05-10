@@ -5,7 +5,6 @@ chmod +x rustup-init
 ./rustup-init -y --profile minimal
 source "$HOME/.cargo/env"
 cd python
-uv sync --locked --only-group build
 uv run maturin develop --release --features abi3
 uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
 rm -rf ../target/wheels
