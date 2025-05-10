@@ -6,6 +6,7 @@ use crate::sparql::http::Client;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
 use crate::storage::StorageWriter;
 use oxiri::Iri;
+use oxrdfio::LoadedDocument;
 use rustc_hash::FxHashMap;
 use sparesults::QuerySolution;
 use spareval::{QueryEvaluator, QueryResults};
@@ -17,6 +18,7 @@ use spargebra::term::{
 };
 use spargebra::{GraphUpdateOperation, Query};
 use std::io;
+use std::io::Read;
 
 pub fn evaluate_update<'a, 'b: 'a>(
     transaction: &'a mut StorageWriter<'b>,
@@ -162,6 +164,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             GraphName::NamedNode(graph_name) => graph_name.into(),
             GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
         };
+        let client = self.client.clone();
         let parser = RdfParser::from_format(format)
             .rename_blank_nodes()
             .without_named_graphs()
@@ -172,8 +175,23 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                     io::ErrorKind::InvalidInput,
                     format!("Invalid URL: {from}: {e}"),
                 )))
-            })?;
-        for q in parser.for_reader(body) {
+            })?
+            .for_reader(body)
+            .with_document_loader(move |url| {
+                let (content_type, mut body) = client.get(
+                    url,
+                    "application/n-triples, text/turtle, application/rdf+xml, application/ld+json",
+                )?;
+                let mut content = Vec::new();
+                body.read_to_end(&mut content)?;
+                Ok(LoadedDocument {
+                    url: url.into(),
+                    content,
+                    format: RdfFormat::from_media_type(&content_type)
+                        .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?,
+                })
+            });
+        for q in parser {
             self.transaction.insert(q?.as_ref())?;
         }
         Ok(())
