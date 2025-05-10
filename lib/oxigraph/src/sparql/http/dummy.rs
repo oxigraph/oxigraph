@@ -3,6 +3,7 @@
 use std::io::{Empty, Error, ErrorKind, Result};
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct Client;
 
 impl Client {
