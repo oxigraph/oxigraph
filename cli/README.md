@@ -9,9 +9,9 @@ Oxigraph CLI
 
 Oxigraph CLI is a graph database implementing the [SPARQL](https://www.w3.org/TR/sparql11-overview/) standard.
 It is packaged as a command-line tool allowing to manipulate RDF files, query them using SPARQL...
-It also allows to spawn a HTTP server on top of the database.
+It also allows spawning an HTTP server on top of the database.
 
-Oxigraph is in heavy development and SPARQL query evaluation has not been optimized yet.
+Oxigraph is in heavy development, and SPARQL query evaluation has not been optimized yet.
 
 Oxigraph provides different installation methods for Oxigraph CLI:
 * [`cargo install`](#installation) (multiplatform)
