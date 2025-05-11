@@ -10,7 +10,7 @@ OxRDF I/O
 OxRDF I/O is a set of parsers and serializers for RDF.
 
 It supports:
-* Work-in-progress [JSON-LD 1.0](https://www.w3.org/TR/json-ld/) using [`oxjsonld`](https://crates.io/crates/oxjsonld)
+* [JSON-LD 1.0](https://www.w3.org/TR/json-ld/) using [`oxjsonld`](https://crates.io/crates/oxjsonld)
 * [N3](https://w3c.github.io/N3/spec/) using [`oxttl`](https://crates.io/crates/oxttl)
 * [N-Quads](https://www.w3.org/TR/n-quads/) using [`oxttl`](https://crates.io/crates/oxttl)
 * [N-Triples](https://www.w3.org/TR/n-triples/) using [`oxttl`](https://crates.io/crates/oxttl)

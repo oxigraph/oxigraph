@@ -14,6 +14,7 @@ Pyoxigraph offers two stores with [SPARQL 1.1](https://www.w3.org/TR/sparql11-ov
 One of the store is in-memory, and the other one is disk based.
 
 It also provides a set of utility functions for reading, writing and processing RDF files in
+[JSON-LD 1.0](https://www.w3.org/TR/json-ld/),
 [Turtle](https://www.w3.org/TR/turtle/),
 [TriG](https://www.w3.org/TR/trig/),
 [N-Triples](https://www.w3.org/TR/n-triples/),

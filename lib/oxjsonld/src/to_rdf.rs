@@ -21,7 +21,7 @@ use tokio::io::AsyncRead;
 /// A [JSON-LD](https://www.w3.org/TR/json-ld/) parser.
 ///
 /// The parser is a work in progress.
-/// Only JSON-LD 1.0 is supported at the moment, not including `@reverse`.
+/// Only JSON-LD 1.0 is supported at the moment. JSON-LD 1.1 is not supported yet.
 ///
 /// The parser supports two modes:
 /// - regular JSON-LD parsing that needs to buffer the full file into memory.
@@ -828,7 +828,10 @@ enum JsonLdToRdfState {
         nesting: usize,
     },
     Object(Option<NamedOrBlankNode>),
-    Property(Option<NamedNode>),
+    Property {
+        id: Option<NamedNode>,
+        reverse: bool,
+    },
     List(Option<NamedOrBlankNode>),
     Graph(Option<GraphName>),
 }
@@ -910,10 +913,16 @@ impl JsonLdToRdfConverter {
                     unreachable!("Should have buffered before @id")
                 }
                 JsonLdEvent::EndObject => (),
-                JsonLdEvent::StartProperty(name) => {
+                JsonLdEvent::StartProperty { name, reverse } => {
                     self.state.push(JsonLdToRdfState::Object(id));
-                    self.state
-                        .push(JsonLdToRdfState::Property(self.convert_named_node(name)));
+                    self.state.push(JsonLdToRdfState::Property {
+                        id: if self.has_defined_last_predicate() {
+                            self.convert_named_node(name)
+                        } else {
+                            None // We do not want to emit if one of the parent property is not emitted
+                        },
+                        reverse,
+                    });
                 }
                 JsonLdEvent::StartGraph => {
                     let graph_name = id.clone().map(Into::into);
@@ -929,7 +938,7 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::StartSet
                 | JsonLdEvent::EndSet => unreachable!(),
             },
-            JsonLdToRdfState::Property(_) => match event {
+            JsonLdToRdfState::Property { .. } => match event {
                 JsonLdEvent::StartObject { types } => {
                     self.state.push(state);
                     self.state.push(JsonLdToRdfState::StartObject {
@@ -960,7 +969,7 @@ impl JsonLdToRdfConverter {
                 JsonLdEvent::StartSet | JsonLdEvent::EndSet => {
                     self.state.push(state);
                 }
-                JsonLdEvent::StartProperty(_)
+                JsonLdEvent::StartProperty { .. }
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::EndObject
                 | JsonLdEvent::StartGraph
@@ -1017,7 +1026,7 @@ impl JsonLdToRdfConverter {
                     self.state.push(JsonLdToRdfState::List(current_node));
                 }
                 JsonLdEvent::EndObject
-                | JsonLdEvent::StartProperty(_)
+                | JsonLdEvent::StartProperty { .. }
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::StartGraph
@@ -1040,7 +1049,7 @@ impl JsonLdToRdfConverter {
                 }
                 JsonLdEvent::EndGraph => (),
                 JsonLdEvent::StartGraph
-                | JsonLdEvent::StartProperty(_)
+                | JsonLdEvent::StartProperty { .. }
                 | JsonLdEvent::EndProperty
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::EndObject
@@ -1064,13 +1073,14 @@ impl JsonLdToRdfConverter {
         let Some(graph_name) = self.last_graph_name() else {
             return;
         };
-        if let (Some(subject), Some(predicate)) = (self.last_subject(), self.last_predicate()) {
-            results.push(Quad::new(
-                subject.clone(),
-                predicate,
-                id.clone(),
-                graph_name.clone(),
-            ))
+        if let (Some(subject), Some((predicate, reverse))) =
+            (self.last_subject(), self.last_predicate())
+        {
+            results.push(if reverse {
+                Quad::new(id.clone(), predicate, subject.clone(), graph_name.clone())
+            } else {
+                Quad::new(subject.clone(), predicate, id.clone(), graph_name.clone())
+            })
         }
         for t in types {
             results.push(Quad::new(id.clone(), rdf::TYPE, t, graph_name.clone()))
@@ -1087,9 +1097,12 @@ impl JsonLdToRdfConverter {
         let Some(subject) = self.last_subject() else {
             return;
         };
-        let Some(predicate) = self.last_predicate() else {
+        let Some((predicate, reverse)) = self.last_predicate() else {
             return;
         };
+        if reverse {
+            return;
+        }
         results.push(Quad::new(
             subject.clone(),
             predicate,
@@ -1210,7 +1223,7 @@ impl JsonLdToRdfConverter {
                 JsonLdToRdfState::StartObject { .. } => {
                     unreachable!()
                 }
-                JsonLdToRdfState::Property(_) => (),
+                JsonLdToRdfState::Property { .. } => (),
                 JsonLdToRdfState::List(id) => return id.as_ref(),
                 JsonLdToRdfState::Graph(_) => {
                     return None;
@@ -1220,20 +1233,29 @@ impl JsonLdToRdfConverter {
         None
     }
 
-    fn last_predicate(&self) -> Option<NamedNodeRef<'_>> {
+    fn last_predicate(&self) -> Option<(NamedNodeRef<'_>, bool)> {
         for state in self.state.iter().rev() {
             match state {
-                JsonLdToRdfState::Property(predicate) => {
-                    return predicate.as_ref().map(NamedNode::as_ref);
+                JsonLdToRdfState::Property { id, reverse } => {
+                    return Some((id.as_ref()?.as_ref(), *reverse));
                 }
                 JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Object(_) => (),
-                JsonLdToRdfState::List(_) => return Some(rdf::FIRST),
+                JsonLdToRdfState::List(_) => return Some((rdf::FIRST, false)),
                 JsonLdToRdfState::Graph(_) => {
                     return None;
                 }
             }
         }
         None
+    }
+
+    fn has_defined_last_predicate(&self) -> bool {
+        for state in self.state.iter().rev() {
+            if let JsonLdToRdfState::Property { id, .. } = state {
+                return id.is_some();
+            }
+        }
+        true
     }
 
     fn last_graph_name(&self) -> Option<&GraphName> {
@@ -1244,7 +1266,7 @@ impl JsonLdToRdfConverter {
                 }
                 JsonLdToRdfState::StartObject { .. }
                 | JsonLdToRdfState::Object(_)
-                | JsonLdToRdfState::Property(_)
+                | JsonLdToRdfState::Property { .. }
                 | JsonLdToRdfState::List(_) => (),
             }
         }
