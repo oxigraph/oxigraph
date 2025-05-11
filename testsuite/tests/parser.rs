@@ -188,10 +188,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             // @language @container
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te030",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te035",
-            // @index @container
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te036",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te040",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te044",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#ter35",
             // @reverse
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0031",
@@ -564,10 +560,6 @@ fn jsonld_to_rdf_streaming_testsuite() -> Result<()> {
             // @language @container
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te030",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te035",
-            // @index @container
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te036",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te040",
-            "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#te044",
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#ter35",
             // @reverse
             "https://w3c.github.io/json-ld-streaming/tests/stream-toRdf-manifest#t0031",

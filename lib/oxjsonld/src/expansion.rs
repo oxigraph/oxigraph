@@ -103,9 +103,12 @@ enum JsonLdExpansionState {
     Index,
     Graph,
     RootGraph,
-    ListOrSet {
+    ListOrSetContainer {
         needs_end_object: bool,
         end_event: Option<JsonLdEvent>,
+    },
+    IndexContainer {
+        active_property: Option<String>,
     },
     Skip {
         is_array: bool,
@@ -240,20 +243,16 @@ impl JsonLdExpansionConverter {
                             });
                         } else if container.contains(&"@list") {
                             results.push(JsonLdEvent::StartList);
-                            self.state.push(JsonLdExpansionState::ListOrSet {
+                            self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                 needs_end_object: false,
                                 end_event: Some(JsonLdEvent::EndList),
                             })
                         } else if container.contains(&"@set") {
                             results.push(JsonLdEvent::StartSet);
-                            self.state.push(JsonLdExpansionState::ListOrSet {
+                            self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                 needs_end_object: false,
                                 end_event: Some(JsonLdEvent::EndSet),
                             })
-                        } else if !container.is_empty() {
-                            errors.push(JsonLdSyntaxError::msg(
-                                "Only @list and @set containers are supported yet",
-                            ));
                         }
                         self.state.push(JsonLdExpansionState::Element {
                             active_property,
@@ -269,6 +268,10 @@ impl JsonLdExpansionConverter {
                                 is_array,
                                 container,
                             });
+                        } else if container.contains(&"@index") {
+                            self.state
+                                .push(JsonLdExpansionState::IndexContainer { active_property });
+                            return;
                         }
                         self.push_same_context();
                         self.state.push(if self.streaming {
@@ -421,7 +424,7 @@ impl JsonLdExpansionConverter {
                             }
                             "@list" => {
                                 if active_property.is_some() {
-                                    self.state.push(JsonLdExpansionState::ListOrSet {
+                                    self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                         needs_end_object: true,
                                         end_event: Some(JsonLdEvent::EndList),
                                     });
@@ -441,7 +444,7 @@ impl JsonLdExpansionConverter {
                             }
                             "@set" => {
                                 let has_property = active_property.is_some();
-                                self.state.push(JsonLdExpansionState::ListOrSet {
+                                self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                     needs_end_object: true,
                                     end_event: has_property.then_some(JsonLdEvent::EndSet),
                                 });
@@ -457,20 +460,16 @@ impl JsonLdExpansionConverter {
                             _ => {
                                 if container.contains(&"@list") {
                                     results.push(JsonLdEvent::StartList);
-                                    self.state.push(JsonLdExpansionState::ListOrSet {
+                                    self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                         needs_end_object: false,
                                         end_event: Some(JsonLdEvent::EndList),
                                     });
                                 } else if container.contains(&"@set") {
                                     results.push(JsonLdEvent::StartSet);
-                                    self.state.push(JsonLdExpansionState::ListOrSet {
+                                    self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                         needs_end_object: false,
                                         end_event: Some(JsonLdEvent::EndSet),
                                     });
-                                } else if !container.is_empty() {
-                                    errors.push(JsonLdSyntaxError::msg(
-                                        "Only @list and @set containers are supported yet",
-                                    ));
                                 }
                                 self.state.push(JsonLdExpansionState::ObjectStart {
                                     types: Vec::new(),
@@ -1406,7 +1405,7 @@ impl JsonLdExpansionConverter {
                 JsonEvent::EndObject => (),
                 _ => unreachable!(),
             },
-            JsonLdExpansionState::ListOrSet {
+            JsonLdExpansionState::ListOrSetContainer {
                 needs_end_object,
                 end_event,
             } => {
@@ -1417,7 +1416,7 @@ impl JsonLdExpansionConverter {
                             self.pop_context();
                         }
                         JsonEvent::ObjectKey(key) => {
-                            self.state.push(JsonLdExpansionState::ListOrSet {
+                            self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                 needs_end_object,
                                 end_event,
                             });
@@ -1445,6 +1444,21 @@ impl JsonLdExpansionConverter {
                     self.convert_event(event, results, errors)
                 }
             }
+            JsonLdExpansionState::IndexContainer { active_property } => match event {
+                JsonEvent::EndObject => (),
+                JsonEvent::ObjectKey(_) => {
+                    // TODO: emit @index
+                    self.state.push(JsonLdExpansionState::IndexContainer {
+                        active_property: active_property.clone(),
+                    });
+                    self.state.push(JsonLdExpansionState::Element {
+                        active_property,
+                        is_array: false,
+                        container: &[],
+                    })
+                }
+                _ => unreachable!(),
+            },
             JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
                 | JsonEvent::Number(_)
@@ -1517,10 +1531,6 @@ impl JsonLdExpansionConverter {
                 results.push(JsonLdEvent::StartList);
             } else if container.contains(&"@set") {
                 results.push(JsonLdEvent::StartSet);
-            } else if !container.is_empty() {
-                errors.push(JsonLdSyntaxError::msg(
-                    "Only @list and @set containers are supported yet",
-                ));
             }
         }
         if let Some(active_property) = &active_property {
