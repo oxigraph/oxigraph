@@ -38,6 +38,7 @@ use tokio::io::AsyncRead;
 /// Parsers for RDF serialization formats.
 ///
 /// It currently supports the following formats:
+/// * [JSON-LD 1.0](https://www.w3.org/TR/json-ld/) ([`RdfFormat::JsonLd`])
 /// * [N3](https://w3c.github.io/N3/spec/) ([`RdfFormat::N3`])
 /// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`RdfFormat::NQuads`])
 /// * [N-Triples](https://www.w3.org/TR/n-triples/) ([`RdfFormat::NTriples`])

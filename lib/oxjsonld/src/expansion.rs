@@ -17,7 +17,10 @@ pub enum JsonLdEvent {
         types: Vec<String>,
     },
     EndObject,
-    StartProperty(String),
+    StartProperty {
+        name: String,
+        reverse: bool,
+    },
     EndProperty,
     Id(String),
     Value {
@@ -44,6 +47,7 @@ enum JsonLdExpansionState {
         active_property: Option<String>,
         is_array: bool,
         container: &'static [&'static str],
+        reverse: bool,
     },
     ObjectOrContainerStart {
         buffer: Vec<(String, Vec<JsonEvent<'static>>)>,
@@ -51,37 +55,47 @@ enum JsonLdExpansionState {
         current_key: Option<String>,
         active_property: Option<String>,
         container: &'static [&'static str],
+        reverse: bool,
     },
     ObjectOrContainerStartStreaming {
         active_property: Option<String>,
         container: &'static [&'static str],
+        reverse: bool,
     },
     Context {
         buffer: Vec<JsonEvent<'static>>,
         depth: usize,
         active_property: Option<String>,
         container: &'static [&'static str],
+        reverse: bool,
     },
     ObjectStart {
         types: Vec<String>,
         id: Option<String>,
         seen_type: bool,
         active_property: Option<String>,
+        reverse: bool,
     },
     ObjectType {
         types: Vec<String>,
         id: Option<String>,
         is_array: bool,
         active_property: Option<String>,
+        reverse: bool,
     },
     ObjectId {
         types: Vec<String>,
         id: Option<String>,
         from_start: bool,
+        reverse: bool,
     },
     Object {
         in_property: bool,
         has_emitted_id: bool,
+    },
+    ReverseStart,
+    Reverse {
+        in_property: bool,
     },
     Value {
         r#type: Option<String>,
@@ -144,6 +158,7 @@ impl JsonLdExpansionConverter {
                 active_property: None,
                 is_array: false,
                 container: &[],
+                reverse: false,
             }],
             context: vec![(JsonLdContext::new_empty(base_url.clone()), 0)],
             is_end: false,
@@ -202,6 +217,7 @@ impl JsonLdExpansionConverter {
                 active_property,
                 is_array,
                 container,
+                reverse,
             } => {
                 match event {
                     JsonEvent::Null => {
@@ -211,6 +227,7 @@ impl JsonLdExpansionConverter {
                                 active_property,
                                 is_array,
                                 container,
+                                reverse,
                             });
                         }
                     }
@@ -219,6 +236,7 @@ impl JsonLdExpansionConverter {
                         active_property,
                         is_array,
                         container,
+                        reverse,
                         results,
                         errors,
                     ),
@@ -227,6 +245,7 @@ impl JsonLdExpansionConverter {
                         active_property,
                         is_array,
                         container,
+                        reverse,
                         results,
                         errors,
                     ),
@@ -235,6 +254,7 @@ impl JsonLdExpansionConverter {
                         active_property,
                         is_array,
                         container,
+                        reverse,
                         results,
                         errors,
                     ),
@@ -245,8 +265,15 @@ impl JsonLdExpansionConverter {
                                 active_property: active_property.clone(),
                                 is_array,
                                 container,
+                                reverse,
                             });
                         } else if container.contains(&"@list") {
+                            if reverse {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    "Lists are not allowed inside of reverse properties",
+                                    JsonLdErrorCode::InvalidReversePropertyValue,
+                                ))
+                            }
                             results.push(JsonLdEvent::StartList);
                             self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                 needs_end_object: false,
@@ -263,6 +290,7 @@ impl JsonLdExpansionConverter {
                             active_property,
                             is_array: true,
                             container: &[],
+                            reverse,
                         });
                     }
                     JsonEvent::EndArray => (),
@@ -272,6 +300,7 @@ impl JsonLdExpansionConverter {
                                 active_property: active_property.clone(),
                                 is_array,
                                 container,
+                                reverse,
                             });
                         } else if container.contains(&"@index") {
                             self.state
@@ -286,6 +315,7 @@ impl JsonLdExpansionConverter {
                             JsonLdExpansionState::ObjectOrContainerStartStreaming {
                                 active_property,
                                 container,
+                                reverse,
                             }
                         } else {
                             JsonLdExpansionState::ObjectOrContainerStart {
@@ -294,6 +324,7 @@ impl JsonLdExpansionConverter {
                                 current_key: None,
                                 active_property,
                                 container,
+                                reverse,
                             }
                         });
                     }
@@ -308,6 +339,7 @@ impl JsonLdExpansionConverter {
                 mut current_key,
                 active_property,
                 container,
+                reverse,
             } => {
                 // We have to buffer everything to make sure we get the @context key even if it's at the end
                 match event {
@@ -379,6 +411,7 @@ impl JsonLdExpansionConverter {
                         .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
                             active_property,
                             container,
+                            reverse,
                         });
 
                     // We first process @context, @type and @id then other then graph
@@ -405,12 +438,14 @@ impl JsonLdExpansionConverter {
                             current_key,
                             active_property,
                             container,
+                            reverse,
                         });
                 }
             }
             JsonLdExpansionState::ObjectOrContainerStartStreaming {
                 active_property,
                 container,
+                reverse,
             } => match event {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
@@ -420,18 +455,26 @@ impl JsonLdExpansionConverter {
                                 depth: 0,
                                 active_property,
                                 container,
+                                reverse,
                             }),
                             "@index" => {
                                 self.state.push(
                                     JsonLdExpansionState::ObjectOrContainerStartStreaming {
                                         active_property,
                                         container,
+                                        reverse,
                                     },
                                 );
                                 self.state.push(JsonLdExpansionState::Index);
                             }
                             "@list" => {
                                 if active_property.is_some() {
+                                    if reverse {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "Lists are not allowed inside of reverse properties",
+                                            JsonLdErrorCode::InvalidReversePropertyValue,
+                                        ))
+                                    }
                                     self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                         needs_end_object: true,
                                         end_event: Some(JsonLdEvent::EndList),
@@ -440,6 +483,7 @@ impl JsonLdExpansionConverter {
                                         is_array: false,
                                         active_property,
                                         container: &[],
+                                        reverse: false,
                                     });
                                     results.push(JsonLdEvent::StartList);
                                 } else {
@@ -460,6 +504,7 @@ impl JsonLdExpansionConverter {
                                     is_array: false,
                                     active_property,
                                     container: &[],
+                                    reverse: false,
                                 });
                                 if has_property {
                                     results.push(JsonLdEvent::StartSet);
@@ -484,6 +529,7 @@ impl JsonLdExpansionConverter {
                                     id: None,
                                     seen_type: false,
                                     active_property,
+                                    reverse,
                                 });
                                 self.convert_event(JsonEvent::ObjectKey(key), results, errors)
                             }
@@ -494,6 +540,7 @@ impl JsonLdExpansionConverter {
                             id: None,
                             seen_type: false,
                             active_property,
+                            reverse,
                         });
                         self.convert_event(JsonEvent::ObjectKey(key), results, errors)
                     }
@@ -504,6 +551,7 @@ impl JsonLdExpansionConverter {
                         id: None,
                         seen_type: false,
                         active_property,
+                        reverse,
                     });
                     self.convert_event(JsonEvent::EndObject, results, errors)
                 }
@@ -514,6 +562,7 @@ impl JsonLdExpansionConverter {
                 mut depth,
                 active_property,
                 container,
+                reverse,
             } => {
                 match event {
                     JsonEvent::String(_)
@@ -537,6 +586,7 @@ impl JsonLdExpansionConverter {
                         .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
                             active_property,
                             container,
+                            reverse,
                         });
                 } else {
                     self.state.push(JsonLdExpansionState::Context {
@@ -544,6 +594,7 @@ impl JsonLdExpansionConverter {
                         depth,
                         active_property,
                         container,
+                        reverse,
                     });
                 }
             }
@@ -552,6 +603,7 @@ impl JsonLdExpansionConverter {
                 id,
                 seen_type,
                 active_property,
+                reverse,
             } => match event {
                 JsonEvent::ObjectKey(key) => {
                     if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
@@ -568,6 +620,7 @@ impl JsonLdExpansionConverter {
                                     types,
                                     is_array: false,
                                     active_property,
+                                    reverse,
                                 });
                             }
                             "@value" | "@language" => {
@@ -582,6 +635,12 @@ impl JsonLdExpansionConverter {
                                         "@value and @id are incompatible",
                                         JsonLdErrorCode::InvalidValueObject,
                                     ));
+                                }
+                                if reverse {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "Literals are not allowed inside of reverse properties",
+                                        JsonLdErrorCode::InvalidReversePropertyValue,
+                                    ))
                                 }
                                 self.state.push(JsonLdExpansionState::Value {
                                     r#type: types.into_iter().next(),
@@ -601,6 +660,7 @@ impl JsonLdExpansionConverter {
                                     types,
                                     id,
                                     from_start: true,
+                                    reverse,
                                 });
                             }
                             "@graph"
@@ -612,6 +672,7 @@ impl JsonLdExpansionConverter {
                                     active_property: None,
                                     is_array: false,
                                     container: &[],
+                                    reverse: false,
                                 })
                             }
                             "@index" => {
@@ -620,6 +681,7 @@ impl JsonLdExpansionConverter {
                                     id,
                                     seen_type,
                                     active_property,
+                                    reverse,
                                 });
                                 self.state.push(JsonLdExpansionState::Index);
                             }
@@ -642,6 +704,7 @@ impl JsonLdExpansionConverter {
                             id,
                             seen_type: true,
                             active_property,
+                            reverse,
                         });
                         self.state
                             .push(JsonLdExpansionState::Skip { is_array: false });
@@ -662,6 +725,7 @@ impl JsonLdExpansionConverter {
                 id,
                 is_array,
                 active_property,
+                reverse,
             } => {
                 match event {
                     JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
@@ -676,6 +740,7 @@ impl JsonLdExpansionConverter {
                                 id,
                                 is_array,
                                 active_property,
+                                reverse,
                             });
                         } else {
                             self.state.push(JsonLdExpansionState::ObjectStart {
@@ -683,6 +748,7 @@ impl JsonLdExpansionConverter {
                                 id,
                                 seen_type: true,
                                 active_property,
+                                reverse,
                             });
                         }
                     }
@@ -703,6 +769,7 @@ impl JsonLdExpansionConverter {
                                 id,
                                 is_array,
                                 active_property,
+                                reverse,
                             });
                         } else {
                             self.state.push(JsonLdExpansionState::ObjectStart {
@@ -710,6 +777,7 @@ impl JsonLdExpansionConverter {
                                 id,
                                 seen_type: true,
                                 active_property,
+                                reverse,
                             });
                         }
                     }
@@ -719,6 +787,7 @@ impl JsonLdExpansionConverter {
                             id,
                             is_array: true,
                             active_property,
+                            reverse,
                         });
                         if is_array {
                             errors.push(JsonLdSyntaxError::msg_and_code(
@@ -735,6 +804,7 @@ impl JsonLdExpansionConverter {
                             id,
                             seen_type: true,
                             active_property,
+                            reverse,
                         });
                     }
                     JsonEvent::StartObject => {
@@ -749,6 +819,7 @@ impl JsonLdExpansionConverter {
                                 id,
                                 is_array: true,
                                 active_property,
+                                reverse,
                             });
                         } else {
                             self.state.push(JsonLdExpansionState::ObjectStart {
@@ -756,6 +827,7 @@ impl JsonLdExpansionConverter {
                                 id,
                                 seen_type: true,
                                 active_property,
+                                reverse,
                             });
                         }
                         self.state
@@ -770,8 +842,9 @@ impl JsonLdExpansionConverter {
                 types,
                 mut id,
                 from_start,
-            } => match event {
-                JsonEvent::String(new_id) => {
+                reverse,
+            } => {
+                if let JsonEvent::String(new_id) = event {
                     if let Some(new_id) = self.expand_iri(new_id, true, false, errors) {
                         if has_keyword_form(&new_id) {
                             errors.push(JsonLdSyntaxError::msg(
@@ -787,6 +860,7 @@ impl JsonLdExpansionConverter {
                             id,
                             seen_type: true,
                             active_property: None,
+                            reverse,
                         }
                     } else {
                         if let Some(id) = id {
@@ -797,8 +871,7 @@ impl JsonLdExpansionConverter {
                             has_emitted_id: true,
                         }
                     })
-                }
-                JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         "@id value must be a string",
                         JsonLdErrorCode::InvalidIdValue,
@@ -809,46 +882,7 @@ impl JsonLdExpansionConverter {
                             id,
                             seen_type: true,
                             active_property: None,
-                        }
-                    } else {
-                        JsonLdExpansionState::Object {
-                            in_property: false,
-                            has_emitted_id: true,
-                        }
-                    })
-                }
-                JsonEvent::StartArray => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@id value must be a string",
-                        JsonLdErrorCode::InvalidIdValue,
-                    ));
-                    self.state.push(if from_start {
-                        JsonLdExpansionState::ObjectStart {
-                            types,
-                            id,
-                            seen_type: true,
-                            active_property: None,
-                        }
-                    } else {
-                        JsonLdExpansionState::Object {
-                            in_property: false,
-                            has_emitted_id: true,
-                        }
-                    });
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: true });
-                }
-                JsonEvent::StartObject => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@id value must be a string",
-                        JsonLdErrorCode::InvalidIdValue,
-                    ));
-                    self.state.push(if from_start {
-                        JsonLdExpansionState::ObjectStart {
-                            types,
-                            id,
-                            seen_type: true,
-                            active_property: None,
+                            reverse,
                         }
                     } else {
                         JsonLdExpansionState::Object {
@@ -858,14 +892,9 @@ impl JsonLdExpansionConverter {
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.convert_event(event, results, errors);
                 }
-                JsonEvent::EndArray
-                | JsonEvent::ObjectKey(_)
-                | JsonEvent::EndObject
-                | JsonEvent::Eof => {
-                    unreachable!()
-                }
-            },
+            }
             JsonLdExpansionState::Object {
                 in_property,
                 has_emitted_id,
@@ -896,6 +925,7 @@ impl JsonLdExpansionConverter {
                                             types: Vec::new(),
                                             id: None,
                                             from_start: false,
+                                            reverse: false,
                                         });
                                     }
                                 }
@@ -909,6 +939,7 @@ impl JsonLdExpansionConverter {
                                         is_array: false,
                                         active_property: None,
                                         container: &[],
+                                        reverse: false,
                                     });
                                     results.push(JsonLdEvent::StartGraph);
                                 }
@@ -945,15 +976,11 @@ impl JsonLdExpansionConverter {
                                     self.state.push(JsonLdExpansionState::Index);
                                 }
                                 "@reverse" => {
-                                    errors.push(JsonLdSyntaxError::msg(
-                                        "@reverse is not supported yet",
-                                    ));
                                     self.state.push(JsonLdExpansionState::Object {
                                         in_property: false,
                                         has_emitted_id,
                                     });
-                                    self.state
-                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                    self.state.push(JsonLdExpansionState::ReverseStart);
                                 }
                                 _ if has_keyword_form(&iri) => {
                                     errors.push(if iri == "@list" || iri == "@set" {
@@ -979,12 +1006,15 @@ impl JsonLdExpansionConverter {
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
                                 _ => {
-                                    let container = self
+                                    let (container, reverse) = self
                                         .context()
                                         .term_definitions
                                         .get(key.as_ref())
-                                        .map_or([].as_slice(), |term_definition| {
-                                            term_definition.container_mapping
+                                        .map_or(([].as_slice(), false), |term_definition| {
+                                            (
+                                                term_definition.container_mapping,
+                                                term_definition.reverse_property,
+                                            )
                                         });
                                     self.state.push(JsonLdExpansionState::Object {
                                         in_property: true,
@@ -994,8 +1024,12 @@ impl JsonLdExpansionConverter {
                                         active_property: Some(key.clone().into()),
                                         is_array: false,
                                         container,
+                                        reverse,
                                     });
-                                    results.push(JsonLdEvent::StartProperty(iri.into()));
+                                    results.push(JsonLdEvent::StartProperty {
+                                        name: iri.into(),
+                                        reverse,
+                                    });
                                 }
                             }
                         } else {
@@ -1003,6 +1037,82 @@ impl JsonLdExpansionConverter {
                                 in_property: false,
                                 has_emitted_id,
                             });
+                            self.state
+                                .push(JsonLdExpansionState::Skip { is_array: false });
+                        }
+                    }
+                    JsonEvent::Null
+                    | JsonEvent::String(_)
+                    | JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::StartArray
+                    | JsonEvent::EndArray
+                    | JsonEvent::StartObject
+                    | JsonEvent::Eof => unreachable!(),
+                }
+            }
+            JsonLdExpansionState::ReverseStart => {
+                if matches!(event, JsonEvent::StartObject) {
+                    self.state
+                        .push(JsonLdExpansionState::Reverse { in_property: false });
+                } else {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "@reverse value must be a JSON object",
+                        JsonLdErrorCode::InvalidReverseValue,
+                    ));
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.convert_event(event, results, errors);
+                }
+            }
+            JsonLdExpansionState::Reverse { in_property } => {
+                if in_property {
+                    results.push(JsonLdEvent::EndProperty);
+                }
+                match event {
+                    JsonEvent::EndObject => (),
+                    JsonEvent::ObjectKey(key) => {
+                        if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors)
+                        {
+                            if has_keyword_form(&iri) {
+                                errors.push(JsonLdSyntaxError::msg_and_code(
+                                    format!(
+                                        "@reverse object value cannot contain any keyword, found {iri}",
+                                    ),
+                                    JsonLdErrorCode::InvalidReversePropertyMap,
+                                ));
+                                self.state
+                                    .push(JsonLdExpansionState::Reverse { in_property: false });
+                                self.state
+                                    .push(JsonLdExpansionState::Skip { is_array: false });
+                            } else {
+                                let (container, reverse) = self
+                                    .context()
+                                    .term_definitions
+                                    .get(key.as_ref())
+                                    .map_or(([].as_slice(), false), |term_definition| {
+                                        (
+                                            term_definition.container_mapping,
+                                            term_definition.reverse_property,
+                                        )
+                                    });
+                                let reverse = !reverse; // We are in @reverse
+                                self.state
+                                    .push(JsonLdExpansionState::Reverse { in_property: true });
+                                self.state.push(JsonLdExpansionState::Element {
+                                    active_property: Some(key.clone().into()),
+                                    is_array: false,
+                                    container,
+                                    reverse,
+                                });
+                                results.push(JsonLdEvent::StartProperty {
+                                    name: iri.into(),
+                                    reverse,
+                                });
+                            }
+                        } else {
+                            self.state
+                                .push(JsonLdExpansionState::Reverse { in_property: false });
                             self.state
                                 .push(JsonLdExpansionState::Skip { is_array: false });
                         }
@@ -1220,22 +1330,9 @@ impl JsonLdExpansionConverter {
                     value: Some(JsonLdValue::String(value.into())),
                     language,
                 }),
-                JsonEvent::StartArray => {
+                _ => {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@type cannot contain an array",
-                        JsonLdErrorCode::InvalidValueObjectValue,
-                    ));
-                    self.state.push(JsonLdExpansionState::Value {
-                        r#type,
-                        value: None,
-                        language,
-                    });
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: true });
-                }
-                JsonEvent::StartObject => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@type cannot contain an object",
+                        "@value value must be a string, number, boolean or null",
                         JsonLdErrorCode::InvalidValueObjectValue,
                     ));
                     self.state.push(JsonLdExpansionState::Value {
@@ -1245,47 +1342,19 @@ impl JsonLdExpansionConverter {
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
-                }
-                JsonEvent::EndArray
-                | JsonEvent::ObjectKey(_)
-                | JsonEvent::EndObject
-                | JsonEvent::Eof => {
-                    unreachable!()
+                    self.convert_event(event, results, errors);
                 }
             },
-            JsonLdExpansionState::ValueLanguage { value, r#type } => match event {
-                JsonEvent::String(language) => self.state.push(JsonLdExpansionState::Value {
-                    r#type,
-                    value,
-                    language: Some(language.into()),
-                }),
-                JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@language value must be a string",
-                        JsonLdErrorCode::InvalidLanguageTaggedString,
-                    ));
+            JsonLdExpansionState::ValueLanguage { value, r#type } => {
+                if let JsonEvent::String(language) = event {
                     self.state.push(JsonLdExpansionState::Value {
                         r#type,
                         value,
-                        language: None,
+                        language: Some(language.into()),
                     })
-                }
-                JsonEvent::StartArray => {
+                } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@language value must be a string",
-                        JsonLdErrorCode::InvalidLanguageTaggedString,
-                    ));
-                    self.state.push(JsonLdExpansionState::Value {
-                        r#type,
-                        value,
-                        language: None,
-                    });
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: true });
-                }
-                JsonEvent::StartObject => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@language value must be a string",
+                        "@value value must be a string",
                         JsonLdErrorCode::InvalidLanguageTaggedString,
                     ));
                     self.state.push(JsonLdExpansionState::Value {
@@ -1295,16 +1364,11 @@ impl JsonLdExpansionConverter {
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.convert_event(event, results, errors);
                 }
-                JsonEvent::EndArray
-                | JsonEvent::ObjectKey(_)
-                | JsonEvent::EndObject
-                | JsonEvent::Eof => {
-                    unreachable!()
-                }
-            },
-            JsonLdExpansionState::ValueType { value, language } => match event {
-                JsonEvent::String(t) => {
+            }
+            JsonLdExpansionState::ValueType { value, language } => {
+                if let JsonEvent::String(t) = event {
                     let mut r#type = self.expand_iri(t, true, true, errors);
                     if let Some(iri) = &r#type {
                         if has_keyword_form(iri) {
@@ -1320,8 +1384,7 @@ impl JsonLdExpansionConverter {
                         value,
                         language,
                     })
-                }
-                JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         "@type value must be a string when @value is present",
                         JsonLdErrorCode::InvalidTypedValue,
@@ -1330,70 +1393,25 @@ impl JsonLdExpansionConverter {
                         r#type: None,
                         value,
                         language,
-                    })
-                }
-                JsonEvent::StartArray => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@type value must be a string",
-                        JsonLdErrorCode::InvalidLanguageTaggedString,
-                    ));
-                    self.state.push(JsonLdExpansionState::Value {
-                        r#type: None,
-                        value,
-                        language,
-                    });
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: true });
-                }
-                JsonEvent::StartObject => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@type value must be a string",
-                        JsonLdErrorCode::InvalidLanguageTaggedString,
-                    ));
-                    self.state.push(JsonLdExpansionState::Value {
-                        r#type: None,
-                        value,
-                        language,
                     });
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.convert_event(event, results, errors);
                 }
-                JsonEvent::EndArray
-                | JsonEvent::ObjectKey(_)
-                | JsonEvent::EndObject
-                | JsonEvent::Eof => {
-                    unreachable!()
-                }
-            },
-            JsonLdExpansionState::Index => match event {
-                JsonEvent::String(_) => (), // TODO: properly emit if we implement expansion output
-                JsonEvent::Null | JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@index value must be a string",
-                        JsonLdErrorCode::InvalidIndexValue,
-                    ));
-                }
-                JsonEvent::StartArray => {
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "@index value must be a string",
-                        JsonLdErrorCode::InvalidIndexValue,
-                    ));
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: true });
-                }
-                JsonEvent::StartObject => {
+            }
+            JsonLdExpansionState::Index => {
+                if let JsonEvent::String(_) = event {
+                    // TODO: properly emit if we implement expansion output
+                } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         "@index value must be a string",
                         JsonLdErrorCode::InvalidIndexValue,
                     ));
                     self.state
                         .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.convert_event(event, results, errors);
                 }
-                JsonEvent::EndObject
-                | JsonEvent::EndArray
-                | JsonEvent::ObjectKey(_)
-                | JsonEvent::Eof => unreachable!(),
-            },
+            }
             JsonLdExpansionState::Graph => {
                 results.push(JsonLdEvent::EndGraph);
                 self.convert_event(event, results, errors)
@@ -1463,6 +1481,7 @@ impl JsonLdExpansionConverter {
                         active_property,
                         is_array: false,
                         container: &[],
+                        reverse: false,
                     })
                 }
                 _ => unreachable!(),
@@ -1503,34 +1522,6 @@ impl JsonLdExpansionConverter {
                         language: (language != "@none").then_some(language),
                     })
                 }
-                JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
-                    if is_array {
-                        self.state
-                            .push(JsonLdExpansionState::LanguageContainerValue {
-                                language,
-                                is_array,
-                            });
-                    }
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "The values in a @language map must be null or strings",
-                        JsonLdErrorCode::InvalidLanguageMapValue,
-                    ))
-                }
-                JsonEvent::StartObject => {
-                    if is_array {
-                        self.state
-                            .push(JsonLdExpansionState::LanguageContainerValue {
-                                language,
-                                is_array,
-                            });
-                    }
-                    errors.push(JsonLdSyntaxError::msg_and_code(
-                        "The values in a @language map must be null or strings",
-                        JsonLdErrorCode::InvalidLanguageMapValue,
-                    ));
-                    self.state
-                        .push(JsonLdExpansionState::Skip { is_array: false })
-                }
                 JsonEvent::StartArray => {
                     self.state
                         .push(JsonLdExpansionState::LanguageContainerValue {
@@ -1547,7 +1538,22 @@ impl JsonLdExpansionConverter {
                     }
                 }
                 JsonEvent::EndArray => (),
-                _ => unreachable!(),
+                _ => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::LanguageContainerValue {
+                                language,
+                                is_array,
+                            });
+                    }
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "The values in a @language map must be null or strings",
+                        JsonLdErrorCode::InvalidLanguageMapValue,
+                    ));
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false });
+                    self.convert_event(event, results, errors);
+                }
             },
             JsonLdExpansionState::Skip { is_array } => match event {
                 JsonEvent::String(_)
@@ -1613,24 +1619,32 @@ impl JsonLdExpansionConverter {
         active_property: Option<String>,
         is_array: bool,
         container: &'static [&'static str],
+        reverse: bool,
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
         if !is_array {
             if container.contains(&"@list") {
+                if reverse {
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "Lists are not allowed inside of reverse properties",
+                        JsonLdErrorCode::InvalidReversePropertyValue,
+                    ))
+                }
                 results.push(JsonLdEvent::StartList);
             } else if container.contains(&"@set") {
                 results.push(JsonLdEvent::StartSet);
             }
         }
         if let Some(active_property) = &active_property {
-            self.expand_value(active_property, value, results, errors);
+            self.expand_value(active_property, value, reverse, results, errors);
         }
         if is_array {
             self.state.push(JsonLdExpansionState::Element {
                 active_property,
                 is_array,
                 container,
+                reverse,
             });
         } else if container.contains(&"@list") {
             results.push(JsonLdEvent::EndList);
@@ -1644,6 +1658,7 @@ impl JsonLdExpansionConverter {
         &mut self,
         active_property: &str,
         value: JsonLdValue,
+        reverse: bool,
         results: &mut Vec<JsonLdEvent>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
@@ -1694,6 +1709,12 @@ impl JsonLdExpansionConverter {
             if matches!(value, JsonLdValue::String(_)) && language.is_none() {
                 language.clone_from(&active_context.default_language);
             }
+        }
+        if reverse {
+            errors.push(JsonLdSyntaxError::msg_and_code(
+                "Literals are not allowed inside of reverse properties",
+                JsonLdErrorCode::InvalidReversePropertyValue,
+            ))
         }
         results.push(JsonLdEvent::Value {
             value,

@@ -546,8 +546,7 @@ impl JsonLdContextProcessor {
             language_mapping: None,
             type_mapping: None,
         };
-        let mut found_id = false;
-        for (key, value) in value.as_ref() {
+        for (key, key_value) in value.as_ref() {
             match key.as_str() {
                 // 11)
                 "@protected" => {
@@ -562,15 +561,8 @@ impl JsonLdContextProcessor {
                 }
                 // 12)
                 "@type" => {
-                    // 22) moved
-                    if definition.language_mapping.is_some() {
-                        errors.push(JsonLdSyntaxError::msg_and_code(
-                            "Both @language and @type can't be set at the same time",
-                            JsonLdErrorCode::InvalidLanguageMapping,
-                        ));
-                    }
                     // 12.1)
-                    let JsonNode::String(r#type) = value else {
+                    let JsonNode::String(r#type) = key_value else {
                         errors.push(JsonLdSyntaxError::msg_and_code(
                             "The value of @type in a context must be a string",
                             JsonLdErrorCode::InvalidTypeMapping,
@@ -628,22 +620,80 @@ impl JsonLdContextProcessor {
                 }
                 // 13)
                 "@reverse" => {
-                    errors.push(JsonLdSyntaxError::msg("@reverse is not implemented yet"));
-                    // TODO
+                    // 13.1)
+                    if value.contains_key("@id") {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "@reverse and @id cannot be used together in a context",
+                            JsonLdErrorCode::InvalidReverseProperty,
+                        ));
+                        continue;
+                    }
+                    if value.contains_key("@nest") {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "@reverse and @nest cannot be used together in a context",
+                            JsonLdErrorCode::InvalidReverseProperty,
+                        ));
+                        continue;
+                    }
+                    // 13.2)
+                    let JsonNode::String(value) = key_value else {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "@reverse value must be a string in a context",
+                            JsonLdErrorCode::InvalidIriMapping,
+                        ));
+                        continue;
+                    };
+                    // 13.4)
+                    if let Some(iri) = self.expand_iri(
+                        active_context,
+                        value.into(),
+                        false,
+                        true,
+                        Some(local_context),
+                        defined,
+                        errors,
+                    ) {
+                        if self.lenient && !has_keyword_form(&iri)
+                            || !self.lenient
+                                && (iri.starts_with("_:") || Iri::parse(iri.as_ref()).is_ok())
+                        {
+                            definition.iri_mapping = Some(Some(iri.into()));
+                        } else {
+                            errors.push(JsonLdSyntaxError::msg_and_code(
+                                format!("{iri} is not a valid IRI or blank node"),
+                                JsonLdErrorCode::InvalidIriMapping,
+                            ));
+                            definition.iri_mapping = Some(None);
+                        }
+                    } else {
+                        definition.iri_mapping = Some(None);
+                    }
+                    definition.iri_mapping = Some(
+                        self.expand_iri(
+                            active_context,
+                            value.into(),
+                            false,
+                            true,
+                            Some(local_context),
+                            defined,
+                            errors,
+                        )
+                        .map(Into::into),
+                    );
+                    // 13.6)
+                    definition.reverse_property = true;
                 }
                 // 14)
                 "@id" => {
-                    match value {
+                    match key_value {
                         // 14.1)
                         JsonNode::Null => {
-                            found_id = true;
                             definition.iri_mapping = Some(None);
                         }
                         JsonNode::String(id) => {
                             if id == term {
                                 continue;
                             }
-                            found_id = true;
                             let Some(expanded) = self.expand_iri(
                                 active_context,
                                 id.into(),
@@ -654,7 +704,8 @@ impl JsonLdContextProcessor {
                                 errors,
                             ) else {
                                 // 14.2.2)
-                                return;
+                                definition.iri_mapping = Some(None);
+                                continue;
                             };
                             // 14.2.3)
                             if expanded == "@context" {
@@ -662,7 +713,7 @@ impl JsonLdContextProcessor {
                                     "@context cannot be aliased with @id: @context",
                                     JsonLdErrorCode::InvalidKeywordAlias,
                                 ));
-                                return;
+                                continue;
                             }
                             definition.iri_mapping = Some(Some(expanded.into()));
                             // 14.2.4)
@@ -709,7 +760,7 @@ impl JsonLdContextProcessor {
                         }
                         // 14.2.1)
                         _ => {
-                            found_id = true;
+                            definition.iri_mapping = Some(None);
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                 "@id value must be a string",
                                 JsonLdErrorCode::InvalidIriMapping,
@@ -739,7 +790,7 @@ impl JsonLdContextProcessor {
 
                     // 19.1)
                     let mut container_mapping = Vec::new();
-                    for value in if let JsonNode::Array(value) = value {
+                    for value in if let JsonNode::Array(value) = key_value {
                         if self.processing_mode == JsonLdProcessingMode::JsonLd1_0 {
                             errors.push(JsonLdSyntaxError::msg_and_code(
                                     "@container definition with multiple values is not supported in JSON-LD 1.0",
@@ -749,7 +800,7 @@ impl JsonLdContextProcessor {
                         }
                         value.as_slice()
                     } else {
-                        slice::from_ref(value)
+                        slice::from_ref(key_value)
                     } {
                         if let JsonNode::String(container) = value {
                             container_mapping.push(container.as_str());
@@ -816,13 +867,13 @@ impl JsonLdContextProcessor {
                 }
                 // 22)
                 "@language" => {
-                    if definition.type_mapping.is_some() {
+                    if value.contains_key("@type") {
                         errors.push(JsonLdSyntaxError::msg_and_code(
                             "Both @language and @type can't be set at the same time",
                             JsonLdErrorCode::InvalidLanguageMapping,
                         ));
                     }
-                    definition.language_mapping = Some(match value {
+                    definition.language_mapping = Some(match key_value {
                         JsonNode::String(language) => Some(language.clone()),
                         JsonNode::Null => None,
                         _ => {
@@ -877,7 +928,16 @@ impl JsonLdContextProcessor {
                 )),
             }
         }
-        if !found_id {
+        // 13.5)
+        if definition.reverse_property
+            && !matches!(definition.container_mapping, [] | ["@index" | "@set"])
+        {
+            errors.push(JsonLdSyntaxError::msg_and_code(
+                "@reverse is only compatible with @index or @set containers",
+                JsonLdErrorCode::InvalidReverseProperty,
+            ))
+        }
+        if definition.iri_mapping.is_none() {
             if let Some((prefix, suffix)) = term.split_once(':').and_then(|(prefix, suffix)| {
                 if prefix.is_empty() {
                     // We ignore the empty prefixes

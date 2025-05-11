@@ -27,6 +27,7 @@ use tokio::io::AsyncWrite;
 /// A serializer for RDF serialization formats.
 ///
 /// It currently supports the following formats:
+/// * [JSON-LD](https://www.w3.org/TR/json-ld/) ([`RdfFormat::JsonLd`])
 /// * [N3](https://w3c.github.io/N3/spec/) ([`RdfFormat::N3`])
 /// * [N-Quads](https://www.w3.org/TR/n-quads/) ([`RdfFormat::NQuads`])
 /// * [canonical](https://www.w3.org/TR/n-triples/#canonical-ntriples) [N-Triples](https://www.w3.org/TR/n-triples/) ([`RdfFormat::NTriples`])

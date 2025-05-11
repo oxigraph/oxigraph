@@ -112,7 +112,7 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!(
         new_quads,
         quads,
-        "{}",
-        String::from_utf8_lossy(&new_serialization)
+        "{}\n{new_quads}\n{quads}",
+        String::from_utf8_lossy(&new_serialization),
     );
 });

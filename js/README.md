@@ -230,6 +230,7 @@ The method arguments are:
    - `no_transaction`: disables transactional guarantees: if the file has a syntax error, the start of it might be loaded into the store even if parsing fails.
 
 The available formats are:
+* [JSON-LD 1.0](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
 * [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
 * [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
 * [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
@@ -257,6 +258,7 @@ The method argument is a single object, `options`, with the following options (a
 - `from_named_graph`: for triple serialization formats, the name of the named graph the triple should be loaded from as a `NamedNode`, `BlankNode` or `DefaultGraph`..
 
 The available formats are:
+* [JSON-LD](https://www.w3.org/TR/json-ld/): `application/ld+json` or `jsonld`
 * [Turtle](https://www.w3.org/TR/turtle/): `text/turtle` or `ttl`
 * [TriG](https://www.w3.org/TR/trig/): `application/trig` or `trig`
 * [N-Triples](https://www.w3.org/TR/n-triples/): `application/n-triples` or `nt`
