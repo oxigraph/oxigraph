@@ -110,6 +110,11 @@ enum JsonLdExpansionState {
     IndexContainer {
         active_property: Option<String>,
     },
+    LanguageContainer,
+    LanguageContainerValue {
+        language: String,
+        is_array: bool,
+    },
     Skip {
         is_array: bool,
     },
@@ -271,6 +276,9 @@ impl JsonLdExpansionConverter {
                         } else if container.contains(&"@index") {
                             self.state
                                 .push(JsonLdExpansionState::IndexContainer { active_property });
+                            return;
+                        } else if container.contains(&"@language") {
+                            self.state.push(JsonLdExpansionState::LanguageContainer);
                             return;
                         }
                         self.push_same_context();
@@ -1457,6 +1465,88 @@ impl JsonLdExpansionConverter {
                         container: &[],
                     })
                 }
+                _ => unreachable!(),
+            },
+            JsonLdExpansionState::LanguageContainer => match event {
+                JsonEvent::EndObject => (),
+                JsonEvent::ObjectKey(language) => {
+                    self.state.push(JsonLdExpansionState::LanguageContainer);
+                    self.state
+                        .push(JsonLdExpansionState::LanguageContainerValue {
+                            language: language.into(),
+                            is_array: false,
+                        })
+                }
+                _ => unreachable!(),
+            },
+            JsonLdExpansionState::LanguageContainerValue { language, is_array } => match event {
+                JsonEvent::Null => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::LanguageContainerValue {
+                                language,
+                                is_array,
+                            });
+                    }
+                }
+                JsonEvent::String(value) => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::LanguageContainerValue {
+                                language: language.clone(),
+                                is_array,
+                            });
+                    }
+                    results.push(JsonLdEvent::Value {
+                        value: JsonLdValue::String(value.into()),
+                        r#type: None,
+                        language: (language != "@none").then_some(language),
+                    })
+                }
+                JsonEvent::Number(_) | JsonEvent::Boolean(_) => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::LanguageContainerValue {
+                                language,
+                                is_array,
+                            });
+                    }
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "The values in a @language map must be null or strings",
+                        JsonLdErrorCode::InvalidLanguageMapValue,
+                    ))
+                }
+                JsonEvent::StartObject => {
+                    if is_array {
+                        self.state
+                            .push(JsonLdExpansionState::LanguageContainerValue {
+                                language,
+                                is_array,
+                            });
+                    }
+                    errors.push(JsonLdSyntaxError::msg_and_code(
+                        "The values in a @language map must be null or strings",
+                        JsonLdErrorCode::InvalidLanguageMapValue,
+                    ));
+                    self.state
+                        .push(JsonLdExpansionState::Skip { is_array: false })
+                }
+                JsonEvent::StartArray => {
+                    self.state
+                        .push(JsonLdExpansionState::LanguageContainerValue {
+                            language,
+                            is_array: true,
+                        });
+                    if is_array {
+                        errors.push(JsonLdSyntaxError::msg_and_code(
+                            "The values in a @language map must be null or strings",
+                            JsonLdErrorCode::InvalidLanguageMapValue,
+                        ));
+                        self.state
+                            .push(JsonLdExpansionState::Skip { is_array: true })
+                    }
+                }
+                JsonEvent::EndArray => (),
                 _ => unreachable!(),
             },
             JsonLdExpansionState::Skip { is_array } => match event {
