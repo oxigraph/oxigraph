@@ -35,7 +35,7 @@ fn parse_nt(c: &mut Criterion) {
     group.bench_function("parse BSBM explore 1000 unchecked", |b| {
         b.iter(|| {
             for r in RdfParser::from_format(RdfFormat::NTriples)
-                .unchecked()
+                .lenient()
                 .for_slice(&data)
             {
                 r.unwrap();
@@ -45,7 +45,7 @@ fn parse_nt(c: &mut Criterion) {
     group.bench_function("parse BSBM explore 1000 unchecked with Read", |b| {
         b.iter(|| {
             for r in RdfParser::from_format(RdfFormat::NTriples)
-                .unchecked()
+                .lenient()
                 .for_reader(data.as_slice())
             {
                 r.unwrap();
@@ -95,10 +95,7 @@ fn do_load(store: &Store, data: &[u8]) {
 fn do_bulk_load(store: &Store, data: &[u8]) {
     store
         .bulk_loader()
-        .load_from_reader(
-            RdfParser::from_format(RdfFormat::NTriples).unchecked(),
-            data,
-        )
+        .load_from_reader(RdfParser::from_format(RdfFormat::NTriples).lenient(), data)
         .unwrap();
     store.optimize().unwrap();
 }

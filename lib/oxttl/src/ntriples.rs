@@ -40,7 +40,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[derive(Default, Clone)]
 #[must_use]
 pub struct NTriplesParser {
-    unchecked: bool,
+    lenient: bool,
     #[cfg(feature = "rdf-star")]
     with_quoted_triples: bool,
 }
@@ -56,11 +56,17 @@ impl NTriplesParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.    ///
+    /// Note that if the file is actually not valid, the parser might emit broken RDF.    ///
     #[inline]
-    pub fn unchecked(mut self) -> Self {
-        self.unchecked = true;
+    pub fn lenient(mut self) -> Self {
+        self.lenient = true;
         self
+    }
+
+    #[deprecated(note = "Use `lenient()` instead")]
+    #[inline]
+    pub fn unchecked(self) -> Self {
+        self.lenient()
     }
 
     /// Enables [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star).
@@ -168,7 +174,7 @@ impl NTriplesParser {
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
-                self.unchecked,
+                self.lenient,
             )
             .into_iter(),
         }
@@ -265,7 +271,7 @@ impl NTriplesParser {
                 false,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
-                self.unchecked,
+                self.lenient,
             ),
         }
     }
@@ -709,9 +715,9 @@ mod tests {
     use oxrdf::{Literal, NamedNode};
 
     #[test]
-    fn unchecked_parsing() {
+    fn lenient_parsing() {
         let triples = NTriplesParser::new()
-            .unchecked()
+            .lenient()
             .for_reader(r#"<foo> <bar> "baz"@toolonglangtag ."#.as_bytes())
             .collect::<Result<Vec<_>, _>>()
             .unwrap();

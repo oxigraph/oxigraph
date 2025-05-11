@@ -209,7 +209,7 @@ impl From<Quad> for N3Quad {
 #[derive(Default, Clone)]
 #[must_use]
 pub struct N3Parser {
-    unchecked: bool,
+    lenient: bool,
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
 }
@@ -225,11 +225,17 @@ impl N3Parser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, the parser might emit broken RDF.
     #[inline]
-    pub fn unchecked(mut self) -> Self {
-        self.unchecked = true;
+    pub fn lenient(mut self) -> Self {
+        self.lenient = true;
         self
+    }
+
+    #[deprecated(note = "Use `lenient()` instead")]
+    #[inline]
+    pub fn unchecked(self) -> Self {
+        self.lenient()
     }
 
     #[inline]
@@ -402,7 +408,7 @@ impl N3Parser {
             parser: N3Recognizer::new_parser(
                 Vec::new(),
                 false,
-                self.unchecked,
+                self.lenient,
                 self.base,
                 self.prefixes,
             ),
