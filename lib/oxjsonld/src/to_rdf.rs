@@ -21,8 +21,7 @@ use tokio::io::AsyncRead;
 /// A [JSON-LD](https://www.w3.org/TR/json-ld/) parser.
 ///
 /// The parser is a work in progress.
-/// Only JSON-LD 1.0 is supported at the moment,
-/// not including `@reverse` and `@container`.
+/// Only JSON-LD 1.0 is supported at the moment, not including `@reverse`.
 ///
 /// The parser supports two modes:
 /// - regular JSON-LD parsing that needs to buffer the full file into memory.
