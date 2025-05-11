@@ -44,7 +44,7 @@ pub struct N3LexerOptions {
 
 pub struct N3Lexer {
     mode: N3LexerMode,
-    unchecked: bool,
+    lenient: bool,
 }
 
 // TODO: there are a lot of 'None' (missing data) returned even if the stream is ending!!!
@@ -172,8 +172,8 @@ impl TokenRecognizer for N3Lexer {
 }
 
 impl N3Lexer {
-    pub fn new(mode: N3LexerMode, unchecked: bool) -> Self {
-        Self { mode, unchecked }
+    pub fn new(mode: N3LexerMode, lenient: bool) -> Self {
+        Self { mode, lenient }
     }
 
     fn recognize_iri(
@@ -217,7 +217,7 @@ impl N3Lexer {
         let iri = string_from_utf8(iri, position.clone())?;
         Ok(N3Token::IriRef(
             if let Some(base_iri) = options.base_iri.as_ref() {
-                if self.unchecked {
+                if self.lenient {
                     base_iri.resolve_unchecked(&iri)
                 } else {
                     base_iri
@@ -225,7 +225,7 @@ impl N3Lexer {
                         .map_err(|e| (position, e.to_string()))?
                 }
                 .into_inner()
-            } else if self.unchecked {
+            } else if self.lenient {
                 iri
             } else {
                 Iri::parse(iri)
@@ -375,7 +375,7 @@ impl N3Lexer {
                         } else if c == '\\' {
                             i += 1;
                             let a = char::from(*data.get(i)?);
-                            if self.unchecked
+                            if self.lenient
                                 || matches!(
                                     a,
                                     '_' | '~'
@@ -425,14 +425,14 @@ impl N3Lexer {
                             {
                                 return Some((0, Ok((Cow::Borrowed(""), false))));
                             }
-                            if !self.unchecked {
+                            if !self.lenient {
                                 might_be_invalid_iri |=
                                     Self::is_possible_pn_chars_base_but_not_valid_iri(c)
                                         || c == ':';
                             }
                             i += consumed;
                         } else if Self::is_possible_pn_chars(c) || c == ':' {
-                            if !self.unchecked {
+                            if !self.lenient {
                                 might_be_invalid_iri |=
                                     Self::is_possible_pn_chars_base_but_not_valid_iri(c)
                                         || c == ':';
@@ -576,7 +576,7 @@ impl N3Lexer {
         position: Range<usize>,
     ) -> Result<N3Token<'a>, TokenRecognizerError> {
         let lang_tag = str_from_utf8(lang_tag, position.clone())?;
-        Ok(N3Token::LangTag(if self.unchecked {
+        Ok(N3Token::LangTag(if self.lenient {
             lang_tag
         } else {
             LanguageTag::parse(lang_tag)
@@ -595,7 +595,7 @@ impl N3Lexer {
         let mut i = 1;
         loop {
             let mut end = memchr2(delimiter, b'\\', &data[i..])?;
-            if !self.unchecked {
+            if !self.lenient {
                 // We check also line jumps
                 if let Some(line_jump_end) = memchr2(b'\n', b'\r', &data[i..i + end]) {
                     end = line_jump_end;
@@ -796,7 +796,7 @@ impl N3Lexer {
             b'u' => match Self::recognize_hex_char(&data[2..], 4, 'u', position) {
                 Ok(c) => Some((5, Ok(c?))),
                 Err(e) => {
-                    if self.unchecked {
+                    if self.lenient {
                         match Self::recognize_utf16_surrogate_pair(&data[2..], position) {
                             Ok(c) => Some((11, Ok(c?))),
                             Err(e) => Some((5, Err(e))),

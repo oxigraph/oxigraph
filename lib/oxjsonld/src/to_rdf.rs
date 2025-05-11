@@ -78,7 +78,7 @@ impl JsonLdParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, the parser might emit broken RDF.
     #[inline]
     pub fn lenient(mut self) -> Self {
         self.lenient = true;

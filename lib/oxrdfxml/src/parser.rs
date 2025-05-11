@@ -54,7 +54,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 #[derive(Default, Clone)]
 #[must_use]
 pub struct RdfXmlParser {
-    unchecked: bool,
+    lenient: bool,
     base: Option<Iri<String>>,
 }
 
@@ -69,11 +69,17 @@ impl RdfXmlParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, the parser might emit broken RDF.
     #[inline]
-    pub fn unchecked(mut self) -> Self {
-        self.unchecked = true;
+    pub fn lenient(mut self) -> Self {
+        self.lenient = true;
         self
+    }
+
+    #[deprecated(note = "Use `lenient()` instead")]
+    #[inline]
+    pub fn unchecked(self) -> Self {
+        self.lenient()
     }
 
     #[inline]
@@ -210,7 +216,7 @@ impl RdfXmlParser {
             in_literal_depth: 0,
             known_rdf_id: HashSet::default(),
             is_end: false,
-            unchecked: self.unchecked,
+            lenient: self.lenient,
         }
     }
 }
@@ -305,7 +311,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.prefixes(),
             decoder: self.parser.reader.decoder(),
-            unchecked: self.parser.unchecked,
+            lenient: self.parser.lenient,
         }
     }
 
@@ -443,7 +449,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.prefixes(),
             decoder: self.parser.reader.decoder(),
-            unchecked: self.parser.unchecked,
+            lenient: self.parser.lenient,
         }
     }
 
@@ -580,7 +586,7 @@ impl SliceRdfXmlParser<'_> {
         RdfXmlPrefixesIter {
             inner: self.parser.reader.prefixes(),
             decoder: self.parser.reader.decoder(),
-            unchecked: self.parser.unchecked,
+            lenient: self.parser.lenient,
         }
     }
 
@@ -628,7 +634,7 @@ impl SliceRdfXmlParser<'_> {
 pub struct RdfXmlPrefixesIter<'a> {
     inner: PrefixIter<'a>,
     decoder: Decoder,
-    unchecked: bool,
+    lenient: bool,
 }
 
 impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
@@ -648,7 +654,7 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                         let Ok(Cow::Borrowed(name)) = unescape_with(name, |_| None) else {
                             continue;
                         };
-                        if !self.unchecked && !is_nc_name(name) {
+                        if !self.lenient && !is_nc_name(name) {
                             continue; // We don't return invalid prefixes
                         }
                         name
@@ -661,7 +667,7 @@ impl<'a> Iterator for RdfXmlPrefixesIter<'a> {
                     let Ok(Cow::Borrowed(value)) = unescape_with(value, |_| None) else {
                         continue;
                     };
-                    if !self.unchecked && Iri::parse(value).is_err() {
+                    if !self.lenient && Iri::parse(value).is_err() {
                         continue; // We don't return invalid prefixes
                     }
                     value
@@ -766,7 +772,7 @@ struct InternalRdfXmlParser<R> {
     in_literal_depth: usize,
     known_rdf_id: HashSet<String>,
     is_end: bool,
-    unchecked: bool,
+    lenient: bool,
 }
 
 impl<R> InternalRdfXmlParser<R> {
@@ -899,7 +905,7 @@ impl<R> InternalRdfXmlParser<R> {
             if attribute.key.as_ref().starts_with(b"xml") {
                 if attribute.key.as_ref() == b"xml:lang" {
                     let tag = self.convert_attribute(&attribute)?.to_ascii_lowercase();
-                    language = Some(if self.unchecked {
+                    language = Some(if self.lenient {
                         tag
                     } else {
                         LanguageTag::parse(tag.to_ascii_lowercase())
@@ -908,7 +914,7 @@ impl<R> InternalRdfXmlParser<R> {
                     });
                 } else if attribute.key.as_ref() == b"xml:base" {
                     let iri = self.convert_attribute(&attribute)?;
-                    base_iri = Some(if self.unchecked {
+                    base_iri = Some(if self.lenient {
                         Iri::parse_unchecked(iri.clone())
                     } else {
                         Iri::parse(iri.clone())
@@ -979,7 +985,7 @@ impl<R> InternalRdfXmlParser<R> {
         let id_attr = match id_attr {
             Some(iri) => {
                 let iri = self.resolve_iri(base_iri.as_ref(), iri)?;
-                if !self.unchecked {
+                if !self.lenient {
                     if self.known_rdf_id.contains(iri.as_str()) {
                         return Err(RdfXmlSyntaxError::msg(format!(
                             "{iri} has already been used as rdf:ID value"
@@ -1518,7 +1524,7 @@ impl<R> InternalRdfXmlParser<R> {
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
         if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
             Ok(NamedNode::new_unchecked(
-                if self.unchecked {
+                if self.lenient {
                     base_iri.resolve_unchecked(&relative_iri)
                 } else {
                     base_iri
@@ -1533,7 +1539,7 @@ impl<R> InternalRdfXmlParser<R> {
     }
 
     fn parse_iri(&self, relative_iri: String) -> Result<NamedNode, RdfXmlSyntaxError> {
-        Ok(NamedNode::new_unchecked(if self.unchecked {
+        Ok(NamedNode::new_unchecked(if self.lenient {
             relative_iri
         } else {
             Iri::parse(relative_iri.clone())

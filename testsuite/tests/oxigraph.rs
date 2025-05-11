@@ -22,9 +22,9 @@ fn oxigraph_parser_recovery_testsuite() -> Result<()> {
 
 #[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
-fn oxigraph_parser_unchecked_testsuite() -> Result<()> {
+fn oxigraph_parser_lenient_testsuite() -> Result<()> {
     check_testsuite(
-        "https://github.com/oxigraph/oxigraph/tests/parser-unchecked/manifest.ttl",
+        "https://github.com/oxigraph/oxigraph/tests/parser-lenient/manifest.ttl",
         &[],
     )
 }
