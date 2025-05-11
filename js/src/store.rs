@@ -42,6 +42,7 @@ export class Store {
             no_transaction?: boolean;
             to_graph_name?: BlankNode | DefaultGraph | NamedNode;
             unchecked?: boolean;
+            lenient?: boolean;
         }
     ): void;
 
@@ -340,6 +341,7 @@ impl JsStore {
         let mut parsed_base_iri = None;
         let mut parsed_to_graph_name = None;
         let mut unchecked = false;
+        let mut lenient = false;
         let mut no_transaction = false;
         if let Some(format_str) = options.as_string() {
             // Backward compatibility with format as a string
@@ -356,6 +358,7 @@ impl JsStore {
             let to_graph_name_js = Reflect::get(options, &JsValue::from_str("to_graph_name"))?;
             parsed_to_graph_name = FROM_JS.with(|c| c.to_optional_term(&to_graph_name_js))?;
             unchecked = Reflect::get(options, &JsValue::from_str("unchecked"))?.is_truthy();
+            lenient = Reflect::get(options, &JsValue::from_str("lenient"))?.is_truthy();
             no_transaction =
                 Reflect::get(options, &JsValue::from_str("no_transaction"))?.is_truthy();
         }
@@ -378,7 +381,12 @@ impl JsStore {
             parser = parser.with_base_iri(base_iri).map_err(JsError::from)?;
         }
         if unchecked {
-            parser = parser.unchecked();
+            console_warn!(
+                "The `unchecked` option in Store.load is deprecated, please use `lenient` instead"
+            );
+            parser = parser.lenient();
+        } else if lenient {
+            parser = parser.lenient();
         }
         Ok(if no_transaction {
             self.store

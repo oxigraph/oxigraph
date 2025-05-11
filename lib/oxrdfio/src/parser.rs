@@ -266,19 +266,25 @@ impl RdfParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, the parser might emit broken RDF.
     #[inline]
-    pub fn unchecked(mut self) -> Self {
+    pub fn lenient(mut self) -> Self {
         self.inner = match self.inner {
             RdfParserKind::JsonLd(p, f) => RdfParserKind::JsonLd(p.lenient(), f),
-            RdfParserKind::N3(p) => RdfParserKind::N3(p.unchecked()),
-            RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.unchecked()),
-            RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p.unchecked()),
-            RdfParserKind::RdfXml(p) => RdfParserKind::RdfXml(p.unchecked()),
-            RdfParserKind::TriG(p) => RdfParserKind::TriG(p.unchecked()),
-            RdfParserKind::Turtle(p) => RdfParserKind::Turtle(p.unchecked()),
+            RdfParserKind::N3(p) => RdfParserKind::N3(p.lenient()),
+            RdfParserKind::NTriples(p) => RdfParserKind::NTriples(p.lenient()),
+            RdfParserKind::NQuads(p) => RdfParserKind::NQuads(p.lenient()),
+            RdfParserKind::RdfXml(p) => RdfParserKind::RdfXml(p.lenient()),
+            RdfParserKind::TriG(p) => RdfParserKind::TriG(p.lenient()),
+            RdfParserKind::Turtle(p) => RdfParserKind::Turtle(p.lenient()),
         };
         self
+    }
+
+    #[deprecated(note = "Use `lenient()` instead")]
+    #[inline]
+    pub fn unchecked(self) -> Self {
+        self.lenient()
     }
 
     /// Parses from a [`Read`] implementation and returns an iterator of quads.

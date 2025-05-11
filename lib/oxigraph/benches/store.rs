@@ -72,7 +72,7 @@ fn do_parse(c: &mut Criterion, format: RdfFormat, data: &[u8]) {
     });
     group.bench_function(format!("parse {format} BSBM explore 1000 unchecked"), |b| {
         b.iter(|| {
-            for r in RdfParser::from_format(format).unchecked().for_slice(data) {
+            for r in RdfParser::from_format(format).lenient().for_slice(data) {
                 r.unwrap();
             }
         })
@@ -81,7 +81,7 @@ fn do_parse(c: &mut Criterion, format: RdfFormat, data: &[u8]) {
         format!("parse {format} BSBM explore 1000 unchecked with Read"),
         |b| {
             b.iter(|| {
-                for r in RdfParser::from_format(format).unchecked().for_reader(data) {
+                for r in RdfParser::from_format(format).lenient().for_reader(data) {
                     r.unwrap();
                 }
             })
@@ -138,10 +138,7 @@ fn do_load(store: &Store, data: &[u8]) {
 fn do_bulk_load(store: &Store, data: &[u8]) {
     store
         .bulk_loader()
-        .load_from_reader(
-            RdfParser::from_format(RdfFormat::NTriples).unchecked(),
-            data,
-        )
+        .load_from_reader(RdfParser::from_format(RdfFormat::NTriples).lenient(), data)
         .unwrap();
     store.optimize().unwrap();
 }

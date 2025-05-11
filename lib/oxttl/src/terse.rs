@@ -976,13 +976,13 @@ impl TriGRecognizer {
         is_ending: bool,
         with_graph_name: bool,
         #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
-        unchecked: bool,
+        lenient: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::Turtle, unchecked),
+                N3Lexer::new(N3LexerMode::Turtle, lenient),
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
