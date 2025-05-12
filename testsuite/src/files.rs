@@ -73,11 +73,11 @@ pub fn load_to_dataset(
     dataset: &mut Dataset,
     format: RdfFormat,
     ignore_errors: bool,
-    unchecked: bool,
+    lenient: bool,
 ) -> Result<()> {
     let mut parser = RdfParser::from_format(format).with_base_iri(url)?;
-    if unchecked {
-        parser = parser.unchecked();
+    if lenient {
+        parser = parser.lenient();
     }
     for q in parser.for_reader(read_file(url)?) {
         match q {

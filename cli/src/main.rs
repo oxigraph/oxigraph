@@ -550,7 +550,7 @@ fn bulk_load(
             .with_context(|| format!("Invalid base IRI {base_iri}"))?;
     }
     if lenient {
-        parser = parser.unchecked();
+        parser = parser.lenient();
     }
     loader.load_from_reader(parser, reader)?;
     Ok(())
@@ -584,7 +584,7 @@ fn do_convert<R: Read, W: Write>(
     to_base: Option<&str>,
 ) -> anyhow::Result<W> {
     if lenient {
-        parser = parser.unchecked();
+        parser = parser.lenient();
     }
     let mut parser = parser.for_reader(reader).with_document_loader(|url| {
         let url = Url::parse(url)?;
@@ -1539,7 +1539,7 @@ fn web_load_graph(
         .without_named_graphs()
         .with_default_graph(to_graph_name.clone());
     if url_query_parameter(request, "lenient").is_some() {
-        parser = parser.unchecked();
+        parser = parser.lenient();
     }
     if let Some(base_iri) = base_iri {
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
@@ -1559,7 +1559,7 @@ fn web_load_dataset(
 ) -> Result<(), HttpError> {
     let mut parser = RdfParser::from_format(format);
     if url_query_parameter(request, "lenient").is_some() {
-        parser = parser.unchecked();
+        parser = parser.lenient();
     }
     if url_query_parameter(request, "no_transaction").is_some() {
         web_bulk_loader(store, request).load_from_reader(parser, request.body_mut())

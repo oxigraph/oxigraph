@@ -50,7 +50,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[derive(Default, Clone)]
 #[must_use]
 pub struct TriGParser {
-    unchecked: bool,
+    lenient: bool,
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
     #[cfg(feature = "rdf-star")]
@@ -68,11 +68,17 @@ impl TriGParser {
     ///
     /// It will skip some validations.
     ///
-    /// Note that if the file is actually not valid, broken RDF might be emitted by the parser.
+    /// Note that if the file is actually not valid, the parser might emit broken RDF.
     #[inline]
-    pub fn unchecked(mut self) -> Self {
-        self.unchecked = true;
+    pub fn lenient(mut self) -> Self {
+        self.lenient = true;
         self
+    }
+
+    #[deprecated(note = "Use `lenient()` instead")]
+    #[inline]
+    pub fn unchecked(self) -> Self {
+        self.lenient()
     }
 
     #[inline]
@@ -206,7 +212,7 @@ impl TriGParser {
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
-                self.unchecked,
+                self.lenient,
                 self.base,
                 self.prefixes,
             )
@@ -260,7 +266,7 @@ impl TriGParser {
                 true,
                 #[cfg(feature = "rdf-star")]
                 self.with_quoted_triples,
-                self.unchecked,
+                self.lenient,
                 self.base,
                 self.prefixes,
             ),

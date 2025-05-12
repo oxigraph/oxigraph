@@ -355,11 +355,11 @@ impl NQuadsRecognizer {
         is_ending: bool,
         with_graph_name: bool,
         #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
-        unchecked: bool,
+        lenient: bool,
     ) -> Parser<B, Self> {
         Parser::new(
             Lexer::new(
-                N3Lexer::new(N3LexerMode::NTriples, unchecked),
+                N3Lexer::new(N3LexerMode::NTriples, lenient),
                 data,
                 is_ending,
                 MIN_BUFFER_SIZE,
