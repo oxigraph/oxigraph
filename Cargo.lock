@@ -1559,7 +1559,6 @@ name = "oxjsonld"
 version = "0.1.0"
 dependencies = [
  "json-event-parser",
- "oxilangtag",
  "oxiri",
  "oxrdf",
  "thiserror 2.0.12",
