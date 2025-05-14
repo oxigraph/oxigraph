@@ -19,7 +19,6 @@ async-tokio = ["dep:tokio", "json-event-parser/async-tokio"]
 
 [dependencies]
 json-event-parser.workspace = true
-oxilangtag.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
 thiserror.workspace = true
