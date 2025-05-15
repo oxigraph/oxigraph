@@ -1461,6 +1461,9 @@ impl JsonLdExpansionConverter {
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
                                 }
+                            } else {
+                                self.state
+                                    .push(JsonLdExpansionState::Skip { is_array: false });
                             }
                         }
                         _ => unreachable!(),
