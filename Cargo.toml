@@ -22,7 +22,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.4.9"
+version = "0.4.10"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
@@ -75,22 +75,22 @@ time = "0.3"
 tokio = "1.29"
 url = "2.4"
 wasm-bindgen = "0.2.83"
-wkt = "0.13"
+wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.4.9", path = "lib/oxigraph" }
+oxigraph = { version = "=0.4.10", path = "lib/oxigraph" }
 oxjsonld = { version = "=0.1.0", path = "lib/oxjsonld" }
 oxrdf = { version = "=0.2.4", path = "lib/oxrdf" }
-oxrdfio = { version = "=0.1.7", path = "lib/oxrdfio" }
-oxrdfxml = { version = "=0.1.6", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.4.9", path = "./oxrocksdb-sys" }
+oxrdfio = { version = "=0.1.8", path = "lib/oxrdfio" }
+oxrdfxml = { version = "=0.1.7", path = "lib/oxrdfxml" }
+oxrocksdb-sys = { version = "=0.4.10", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "=0.2.2", path = "lib/oxsdatatypes" }
-oxttl = { version = "=0.1.7", path = "lib/oxttl" }
+oxttl = { version = "=0.1.8", path = "lib/oxttl" }
 spargebra = { version = "=0.3.5", path = "lib/spargebra" }
-spargeo = { version = "=0.1.6", path = "lib/spargeo" }
-sparesults = { version = "=0.2.4", path = "lib/sparesults" }
+spargeo = { version = "=0.1.7", path = "lib/spargeo" }
+sparesults = { version = "=0.2.5", path = "lib/sparesults" }
 sparopt = { version = "=0.2.1", path = "lib/sparopt" }
-spareval = { version = "=0.1.3", path = "lib/spareval" }
+spareval = { version = "=0.1.4", path = "lib/spareval" }
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
