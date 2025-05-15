@@ -318,6 +318,18 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterRdfXmlSerializer<W> {
     }
 }
 
+const RESERVED_SYNTAX_TERMS: [&str; 9] = [
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#Description",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#li",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#RDF",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#ID",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#about",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#parseType",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#resource",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#nodeID",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#datatype",
+];
+
 pub struct InnerRdfXmlWriter {
     current_subject: Option<Subject>,
     current_resource_tag: Option<String>,
@@ -350,13 +362,17 @@ impl InnerRdfXmlWriter {
 
             let (mut description_open, with_type_tag) = if triple.predicate == rdf::TYPE {
                 if let TermRef::NamedNode(t) = triple.object {
-                    let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(t);
-                    let mut description_open = BytesStart::new(prop_qname.clone());
-                    if let Some(prop_xmlns) = prop_xmlns {
-                        description_open.push_attribute(prop_xmlns);
+                    if RESERVED_SYNTAX_TERMS.contains(&t.as_str()) {
+                        (BytesStart::new("rdf:Description"), false)
+                    } else {
+                        let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(t);
+                        let mut description_open = BytesStart::new(prop_qname.clone());
+                        if let Some(prop_xmlns) = prop_xmlns {
+                            description_open.push_attribute(prop_xmlns);
+                        }
+                        self.current_resource_tag = Some(prop_qname.into_owned());
+                        (description_open, true)
                     }
-                    self.current_resource_tag = Some(prop_qname.into_owned());
-                    (description_open, true)
                 } else {
                     (BytesStart::new("rdf:Description"), false)
                 }
@@ -383,6 +399,12 @@ impl InnerRdfXmlWriter {
             }
         }
 
+        if RESERVED_SYNTAX_TERMS.contains(&triple.predicate.as_str()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "RDF/XML reserved syntax term is not allowed as a predicate",
+            ));
+        }
         let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(triple.predicate);
         let mut property_open = BytesStart::new(prop_qname.clone());
         if let Some(prop_xmlns) = prop_xmlns {

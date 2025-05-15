@@ -4,6 +4,7 @@ use libfuzzer_sys::fuzz_target;
 use oxrdf::graph::CanonicalizationAlgorithm;
 use oxrdf::{Graph, Subject, Term, Triple};
 use oxrdfxml::{RdfXmlParser, RdfXmlSerializer};
+use std::io::ErrorKind;
 
 fn parse(
     data: &[u8],
@@ -81,7 +82,12 @@ fuzz_target!(|data: &[u8]| {
     }
     let mut serializer = serializer.for_writer(Vec::new());
     for triple in &triples {
-        serializer.serialize_triple(triple).unwrap();
+        if let Err(e) = serializer.serialize_triple(triple) {
+            if e.kind() == ErrorKind::InvalidInput {
+                return; // Our serializer is strict and might reject some parsing outputs
+            }
+            panic!("Serialization failed with {e}")
+        }
     }
     let new_serialization = serializer.finish().unwrap();
 
