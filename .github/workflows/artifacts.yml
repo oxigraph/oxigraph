@@ -133,7 +133,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_sdist
-          path: target/wheels/*.tar.gz
+          path: target/wheels/pyoxigraph-*.tar.gz
 
   wheel_linux_x86_64:
     runs-on: ubuntu-latest
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_x86_64_linux_gnu
-          path: target/wheels/*.whl
+          path: target/wheels/pyoxigraph-*.whl
 
   wheel_linux_aarch64:
     runs-on: ubuntu-24.04-arm
@@ -161,7 +161,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_aarch64_linux_gnu
-          path: target/wheels/*.whl
+          path: target/wheels/pyoxigraph-*.whl
 
   wheel_linux_musl_x86_64:
     runs-on: ubuntu-latest
@@ -170,12 +170,12 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/x86_64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/musllinux_build_script.sh
+      - run: sed 's/%arch%/x86_64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/true/g' > .github/workflows/musllinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/musllinux_1_2_x86_64 /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_x86_64_linux_musl
-          path: target/wheels/*.whl
+          path: target/wheels/pyoxigraph-*.whl
 
   wheel_linux_musl_aarch64:
     runs-on: ubuntu-24.04-arm
@@ -184,12 +184,12 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/aarch64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/musllinux_build_script.sh
+      - run: sed 's/%arch%/aarch64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/true/g' > .github/workflows/musllinux_build_script.sh
       - run: docker run -v "$(pwd)":/workdir --platform linux/aarch64 quay.io/pypa/musllinux_1_2_aarch64 /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_aarch64_linux_musl
-          path: target/wheels/*.whl
+          path: target/wheels/pyoxigraph-*.whl
 
   wheel_mac:
     runs-on: macos-latest
@@ -225,7 +225,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_macos
-          path: target/wheels/*.whl
+          path: target/wheels/pyoxigraph-*.whl
 
   wheel_windows:
     runs-on: windows-latest
@@ -249,10 +249,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_windows
-          path: target/wheels/*.whl
+          path: target/wheels/pyoxigraph-*.whl
 
   publish_pypi:
-    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment:
       name: pypi
