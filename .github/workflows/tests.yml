@@ -491,28 +491,6 @@ jobs:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
 
-  codspeed_js:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup-rust
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: "js/package.json"
-      - run: npm install
-        working-directory: ./js
-      - run: npm run build-node
-        working-directory: ./js
-      - uses: CodSpeedHQ/action@v3
-        with:
-          run: npx vitest bench
-          token: ${{ secrets.CODSPEED_TOKEN }}
-          working-directory: ./js
-
   codecov:
     runs-on: ubuntu-latest
     steps:
