@@ -30,6 +30,25 @@ pub enum Command {
         #[arg(long)]
         union_default_graph: bool,
     },
+    /// Execute SPARQL operations in single operation or interactive REPL mode
+    Execute {
+        /// Directory in which the data should be persisted
+        ///
+        /// If not present, an in-memory storage will be used.
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
+        location: Option<PathBuf>,
+        /// If the SPARQL queries should look for triples in all the dataset graphs by default (ie. without `GRAPH` operations)
+        ///
+        /// This is equivalent as setting the union-default-graph option in all SPARQL queries
+        #[arg(long)]
+        union_default_graph: bool,
+        /// Run in interactive REPL mode
+        ///
+        /// In this mode, commands are read from stdin and results are written to stdout continuously.
+        /// The format is: QUERY <sparql>, UPDATE <sparql>, or EXIT to quit.
+        #[arg(short, long)]
+        interactive: bool,
+    },
     /// Start Oxigraph HTTP server in read-only mode
     ///
     /// It allows to read the database while other processes are also reading it.

@@ -67,6 +67,27 @@ pub fn main() -> anyhow::Result<()> {
             cors,
             union_default_graph,
         ),
+        Command::Execute {
+            location,
+            union_default_graph,
+            interactive,
+        } => {
+            let store = if let Some(location) = location {
+                Store::open(location)
+            } else {
+                Store::new()
+            }?;
+            
+            if interactive {
+                // Interactive REPL mode - reading from stdin and writing to stdout
+                execute_interactive(store, union_default_graph)
+            } else {
+                // Single operation mode - reading from stdin
+                let mut input = String::new();
+                stdin().read_to_string(&mut input)?;
+                execute(store, union_default_graph, input)
+            }
+        },
         Command::ServeReadOnly {
             location,
             bind,
@@ -1715,6 +1736,146 @@ fn systemd_notify_ready() -> io::Result<()> {
     if let Some(path) = env::var_os("NOTIFY_SOCKET") {
         UnixDatagram::unbound()?.send_to(b"READY=1", path)?;
     }
+    Ok(())
+}
+
+fn execute_interactive(store: Store, union_default_graph: bool) -> anyhow::Result<()> {
+    use std::io::{BufRead, Write};
+    use anyhow::Context;
+    
+    let stdin = stdin();
+    let stdout = stdout();
+    let mut stdin_lock = stdin.lock();
+    let mut stdout_lock = stdout.lock();
+    let mut line = String::new();
+
+    // Print welcome message (this is for interactive use, Elixir might ignore it)
+    writeln!(stdout_lock, "Oxigraph REPL mode. Enter commands, one per line:")?;
+    writeln!(stdout_lock, "- To run SPARQL queries: QUERY <sparql query>")?;
+    writeln!(stdout_lock, "- To run SPARQL updates: UPDATE <sparql update>")?;
+    writeln!(stdout_lock, "- To exit: EXIT or press Ctrl+D")?;
+    stdout_lock.flush()?;
+
+    while stdin_lock.read_line(&mut line)? > 0 {
+        let trimmed_line = line.trim();
+        
+        if trimmed_line.is_empty() {
+            line.clear();
+            continue;
+        }
+        
+        if trimmed_line.eq_ignore_ascii_case("EXIT") {
+            writeln!(stdout_lock, r#"{{"status":"success", "message":"Exiting..."}}"#)?;
+            stdout_lock.flush()?;
+            break;
+        }
+        
+        let command_result: anyhow::Result<()> = if let Some(query) = trimmed_line.strip_prefix("QUERY ") {
+            handle_query(&store, query, union_default_graph, &mut stdout_lock)
+        } else if let Some(update) = trimmed_line.strip_prefix("UPDATE ") {
+            handle_update(&store, update, &mut stdout_lock)
+        } else {
+            writeln!(stdout_lock, r#"{{"status":"error", "message":"Unknown command. Use QUERY <sparql>, UPDATE <sparql>, or EXIT"}}"#)
+                .context("Failed to write unknown command message to stdout")
+        };
+        
+        if let Err(e) = command_result {
+            let error_message = e.to_string().replace('\\', "\\\\").replace('"', "\\\"");
+            // Attempt to write the error as JSON. If this itself fails, the error will propagate.
+            writeln!(stdout_lock, r#"{{"status":"error", "message":"{}"}}"#, error_message)
+                .context(format!("Additionally, failed to write error JSON to stdout for original error: {}", e))?;
+        }
+        
+        stdout_lock.flush()?;
+        line.clear();
+    }
+
+    Ok(())
+}
+
+fn handle_query(
+    store: &Store, 
+    query: &str, 
+    union_default_graph: bool,
+    stdout_lock: &mut impl Write
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    let mut query_obj = Query::parse(query, None)?;
+    
+    if union_default_graph {
+        query_obj.dataset_mut().set_default_graph_as_union();
+    }
+    
+    match store.query_opt(query_obj, default_query_options())? {
+        QueryResults::Solutions(solutions) => {
+            let mut buf = Vec::new();
+            let mut serializer = QueryResultsSerializer::from_format(QueryResultsFormat::Json)
+                .serialize_solutions_to_writer(&mut buf, solutions.variables().to_vec())?;
+            for solution in solutions {
+                serializer.serialize(&solution?)?;
+            }
+            serializer.finish()?.flush()?;
+            let solutions_json = String::from_utf8(buf).context("Failed to convert solutions JSON to UTF-8")?;
+            writeln!(stdout_lock, r#"{{"status":"success", "results":{}}}"#, solutions_json)?;
+        }
+        QueryResults::Boolean(value) => {
+            writeln!(stdout_lock, r#"{{"status":"success", "results":{{"boolean":{}}}}}"#, value)?;
+        }
+        QueryResults::Graph(triples) => {
+            let mut results_json_array = String::from("[");
+            let mut first = true;
+            for triple_result in triples {
+                let triple = triple_result?;
+                if !first {
+                    results_json_array.push(',');
+                }
+                first = false;
+                // Basic escaping for string literals within JSON.
+                let s = triple.subject.to_string().replace('\\', "\\\\").replace('"', "\\\"");
+                let p = triple.predicate.to_string().replace('\\', "\\\\").replace('"', "\\\"");
+                let o = triple.object.to_string().replace('\\', "\\\\").replace('"', "\\\"");
+                results_json_array.push_str(&format!(r#"{{"subject":"{}","predicate":"{}","object":"{}"}}"#, s, p, o));
+            }
+            results_json_array.push(']');
+            writeln!(stdout_lock, r#"{{"status":"success", "results":{}}}"#, results_json_array)?;
+        }
+    }
+    
+    Ok(())
+}
+
+fn handle_update(
+    store: &Store, 
+    update: &str, 
+    stdout_lock: &mut impl Write
+) -> anyhow::Result<()> {
+    let update_obj = Update::parse(update, None)?;
+    store.update_opt(update_obj, default_query_options())?;
+    writeln!(stdout_lock, r#"{{"status":"success"}}"#)?;
+    Ok(())
+}
+
+fn execute(store: Store, union_default_graph: bool, operation: String) -> anyhow::Result<()> {
+    let stdout = stdout();
+    let mut stdout_lock = stdout.lock();
+
+    let command_result: anyhow::Result<()> = if let Some(query) = operation.strip_prefix("QUERY ") {
+        handle_query(&store, query, union_default_graph, &mut stdout_lock)
+    } else if let Some(update) = operation.strip_prefix("UPDATE ") {
+        handle_update(&store, update, &mut stdout_lock)
+    } else {
+        writeln!(stdout_lock, r#"{{"status":"error", "message":"Unknown command. Use QUERY <sparql> or UPDATE <sparql>"}}"#)
+            .context("Failed to write unknown command message to stdout")
+    };
+
+    if let Err(e) = command_result {
+        let error_message = e.to_string().replace('\\', "\\\\").replace('"', "\\\"");
+        // Attempt to write the error as JSON. If this itself fails, the error will propagate.
+        writeln!(stdout_lock, r#"{{"status":"error", "message":"{}"}}"#, error_message)
+            .context(format!("Additionally, failed to write error JSON to stdout for original error: {}", e))?;
+    }
+
+    stdout_lock.flush()?;
     Ok(())
 }
 
