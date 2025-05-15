@@ -1,3 +1,21 @@
+## [0.4.10] - 2025-05-15
+
+### Added
+- `oxjsonld` crate with JSON-LD 1.0 parsing and serialization.
+  It is exposed in all APIs (Rust, Python, JS, CLI and HTTP server).
+  A faster [Streaming JSON-LD](https://www.w3.org/TR/json-ld11-streaming/) parsing is also available if the `http://www.w3.org/ns/json-ld#streaming` profile is enabled.
+- `oxigraph` binary is now distributed on Pypi.
+
+## Changed
+- Linux pre-built binaries now require at least Ubuntu 22.04.
+- CLI: `convert` method `lenient` option now works properly.
+- RDF/XML: reduces copies inside the parser.
+- RDF/XML: do not serialize triples with reserved syntax terms.
+- Turtle: improve some error messages.
+- N-Triples: improve error recovery by always restarting at the next line.
+- Upgrades to RocksDB 10.2.1.
+
+
 ## [0.4.9] - 2025-03-09
 
 ### Changed
