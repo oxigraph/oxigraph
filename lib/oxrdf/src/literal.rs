@@ -208,20 +208,10 @@ impl<'de> Deserialize<'de> for Literal {
         match (datatype, language) {
             (Some(datatype), None) => Ok(Literal::new_typed_literal(
                 value,
-                if cfg!(feature = "serde-unvalidated") {
-                    NamedNode::new_unchecked(datatype)
-                } else {
-                    NamedNode::new(datatype).map_err(de::Error::custom)?
-                },
+                NamedNode::new(datatype).map_err(de::Error::custom)?,
             )),
             (None, Some(language)) => {
-                if cfg!(feature = "serde-unvalidated") {
-                    Ok(Literal::new_language_tagged_literal_unchecked(
-                        value, language,
-                    ))
-                } else {
-                    Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
-                }
+                Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
             }
             _ => Ok(Literal::new_simple_literal(value)),
         }
@@ -809,21 +799,13 @@ mod tests {
         let mut de = serde_json::Deserializer::from_str(j);
         let deserialized = Literal::deserialize(&mut de);
 
-        if cfg!(feature = "serde-unvalidated") {
-            assert!(deserialized.is_ok());
-        } else {
-            assert!(deserialized.is_err());
-        }
+        assert!(deserialized.is_err());
 
         let j = r#"{"value":"true","language":"bo2"}"#;
         let mut de = serde_json::Deserializer::from_str(j);
         let deserialized = Literal::deserialize(&mut de);
 
-        if cfg!(feature = "serde-unvalidated") {
-            assert!(deserialized.is_ok());
-        } else {
-            assert!(deserialized.is_err());
-        }
+        assert!(deserialized.is_err());
     }
 
     // This helper function will only compile if T implements DeserializeOwned.

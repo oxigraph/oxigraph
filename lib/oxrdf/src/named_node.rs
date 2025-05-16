@@ -1,6 +1,6 @@
 use oxiri::{Iri, IriParseError};
-#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
-use serde::{de, de::MapAccess, de::Visitor, ser::SerializeStruct, Deserializer, Serializer};
+#[cfg(all(feature = "serde"))]
+use serde::{de, de::MapAccess, de::Visitor, Deserializer};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -19,20 +19,16 @@ use std::fmt;
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[cfg_attr(feature = "serde", derive(Serialize))]
-#[cfg_attr(
-    all(feature = "serde", feature = "serde-unvalidated"),
-    derive(Deserialize)
-)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
     #[cfg_attr(feature = "serde", serde(rename = "value"))]
     iri: String,
 }
 
-#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
+#[cfg(all(feature = "serde"))]
 struct NamedNodeVisitor;
 
-#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
+#[cfg(all(feature = "serde"))]
 impl<'de> Visitor<'de> for NamedNodeVisitor {
     type Value = NamedNode;
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -49,15 +45,11 @@ impl<'de> Visitor<'de> for NamedNodeVisitor {
             }
             return Err(de::Error::missing_field("value"));
         }
-        if cfg!(not(feature = "serde-unvalidated")) {
-            Ok(NamedNode::new(map.next_value::<String>()?).map_err(de::Error::custom)?)
-        } else {
-            Ok(NamedNode::new_unchecked(map.next_value::<String>()?))
-        }
+        Ok(NamedNode::new_unchecked(map.next_value::<String>()?))
     }
 }
 
-#[cfg(all(feature = "serde", not(feature = "serde-unvalidated")))]
+#[cfg(all(feature = "serde"))]
 impl<'de> Deserialize<'de> for NamedNode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -312,11 +304,7 @@ mod tests {
         let mut de = serde_json::Deserializer::from_str(j);
         let deserialized = NamedNode::deserialize(&mut de);
 
-        if cfg!(feature = "serde-unvalidated") {
-            assert!(deserialized.is_ok());
-        } else {
-            assert!(deserialized.is_err());
-        }
+        assert!(deserialized.is_err());
     }
 
     #[test]
