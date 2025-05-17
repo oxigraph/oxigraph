@@ -1,10 +1,10 @@
 //! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
 
 pub use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term, Triple, Variable};
-use std::fmt;
-use std::fmt::Write;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fmt::Write;
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
