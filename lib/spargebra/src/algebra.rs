@@ -3,6 +3,8 @@
 use crate::term::*;
 use oxrdf::LiteralRef;
 use std::fmt;
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -100,6 +102,7 @@ impl From<NamedNode> for PropertyPathExpression {
 
 /// An [expression](https://www.w3.org/TR/sparql11-query/#expressions).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Expression {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -320,6 +323,7 @@ fn write_arg_list(
 
 /// A function name.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Function {
     Str,
     Lang,
@@ -1121,6 +1125,7 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
 
 /// A set function used in aggregates (c.f. [`GraphPattern::Group`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum AggregateExpression {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
     CountSolutions { distinct: bool },
@@ -1226,6 +1231,7 @@ impl fmt::Display for AggregateExpression {
 
 /// An aggregate function name.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum AggregateFunction {
     /// [Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount) with *.
     Count,
@@ -1279,6 +1285,7 @@ impl fmt::Display for AggregateFunction {
 
 /// An ordering comparator used by [`GraphPattern::OrderBy`].
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum OrderExpression {
     /// Ascending order
     Asc(Expression),
@@ -1315,6 +1322,7 @@ impl fmt::Display for OrderExpression {
 
 /// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 
 pub struct QueryDataset {
     pub default: Vec<NamedNode>,
