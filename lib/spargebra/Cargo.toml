@@ -18,7 +18,7 @@ default = []
 rdf-star = ["oxrdf/rdf-star"]
 sep-0002 = []
 sep-0006 = []
-serde = ["dep:serde", "oxrdf/serde"]
+serde = ["dep:serde", "oxrdf/serde", "oxiri/serde"]
 
 [dependencies]
 oxilangtag.workspace = true

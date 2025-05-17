@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// A [SPARQL query](https://www.w3.org/TR/sparql11-query/) owned variable.
 ///
@@ -11,7 +13,9 @@ use std::fmt;
 /// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Variable {
+    #[cfg_attr(feature = "serde", serde(rename = "value"))]
     name: String,
 }
 
