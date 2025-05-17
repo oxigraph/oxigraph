@@ -6,9 +6,7 @@ license.workspace = true
 readme = "README.md"
 keywords = ["RDFXML", "XML", "RDF"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxrdfxml"
-description = """
-Parser and serializer for the RDF/XML format
-"""
+description = "Parser and serializer for the RDF/XML format"
 documentation = "https://docs.rs/oxrdfxml"
 edition.workspace = true
 rust-version.workspace = true

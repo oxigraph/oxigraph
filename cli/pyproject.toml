@@ -7,6 +7,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Rust",
 ]
+readme = { file = "README.md", content-type = "text/markdown" }
 dynamic = ["version"]
 
 [project.urls]

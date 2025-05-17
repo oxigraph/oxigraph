@@ -6,9 +6,7 @@ license.workspace = true
 readme = "README.md"
 keywords = ["RDF"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxrdf"
-description = """
-A library providing basic data structures related to RDF
-"""
+description = "Basic data structures related to RDF"
 documentation = "https://docs.rs/oxrdf"
 edition.workspace = true
 rust-version.workspace = true

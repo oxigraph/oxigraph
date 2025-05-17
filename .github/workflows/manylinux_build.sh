@@ -18,6 +18,6 @@ if [ %for_each_version% ]; then
   for VERSION in 9 10 11; do
     uv run maturin build --release --interpreter "pypy3.$VERSION" --compatibility manylinux2014
   done
-  cd ../cli
-  uvx maturin build --release --no-default-features --features rustls-native,geosparql --compatibility manylinux2014
 fi
+cd ../cli
+uvx maturin build --release --no-default-features --features rustls-native,geosparql --compatibility manylinux2014

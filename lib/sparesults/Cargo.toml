@@ -6,9 +6,7 @@ license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparesults"
-description = """
-SPARQL query results formats parsers and serializers
-"""
+description = "SPARQL query results formats parsers and serializers"
 documentation = "https://docs.rs/sparesults"
 edition.workspace = true
 rust-version.workspace = true

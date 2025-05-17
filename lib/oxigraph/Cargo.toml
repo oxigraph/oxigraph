@@ -9,9 +9,7 @@ categories = ["database-implementations"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxigraph"
 homepage = "https://oxigraph.org/"
 documentation = "https://docs.rs/oxigraph"
-description = """
-a SPARQL database and RDF toolkit
-"""
+description = "SPARQL database and RDF toolkit"
 edition.workspace = true
 rust-version.workspace = true
 

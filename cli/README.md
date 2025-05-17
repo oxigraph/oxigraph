@@ -17,6 +17,7 @@ Oxigraph provides different installation methods for Oxigraph CLI:
 * [`cargo install`](#installation) (multiplatform)
 * [A Docker image](#using-a-docker-image)
 * [A Homebrew formula](#homebrew)
+* [A Pypi package](https://pypi.org/project/oxigraph): with [UV](https://docs.astral.sh/uv/) just run `uvx oxigraph`
 * [A conda-forge package](https://anaconda.org/conda-forge/oxigraph-server)
 * [Pre-built binaries](https://github.com/oxigraph/oxigraph/releases/latest)
 
@@ -38,7 +39,7 @@ Note that Oxigraph CLI was previously named Oxigraph Server before version 0.4. 
 
 You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
-To download, build and install the latest released version run `cargo install oxigraph-cli`.
+To download, build, and install the latest released version run `cargo install oxigraph-cli`.
 There is no need to clone the git repository.
 
 To compile the command-line tool from source, clone this git repository including its submodules (`git clone --recursive https://github.com/oxigraph/oxigraph.git`), and execute `cargo build --release` in the `cli` directory to compile the full binary after having downloaded its dependencies.

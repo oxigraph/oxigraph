@@ -5,6 +5,10 @@ on:
     branches:
       - main
       - next
+  pull_request:
+    branches:
+      - main
+      - next
   release:
     types:
       - published
@@ -14,100 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  binary_linux:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup-rust
-        with:
-          target: aarch64-unknown-linux-gnu
-      - run: |
-          sudo apt-get update && sudo apt-get install -y g++-aarch64-linux-gnu
-          mkdir .cargo
-          echo -e "[target.aarch64-unknown-linux-gnu]\nlinker = \"aarch64-linux-gnu-gcc\"" >> .cargo/config.toml
-      - run: cargo build --release --no-default-features --features rustls-native,geosparql
-        working-directory: ./cli
-      - run: cargo build --release --target aarch64-unknown-linux-gnu --no-default-features --features rustls-native,geosparql
-        working-directory: ./cli
-        env:
-          BINDGEN_EXTRA_CLANG_ARGS: --sysroot /usr/aarch64-linux-gnu
-      - uses: actions/upload-artifact@v4
-        with:
-          name: oxigraph_x86_64_linux_gnu
-          path: target/release/oxigraph
-      - uses: actions/upload-artifact@v4
-        with:
-          name: oxigraph_aarch64_linux_gnu
-          path: target/aarch64-unknown-linux-gnu/release/oxigraph
-      - run: mv target/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_x86_64_linux_gnu
-        if: github.event_name == 'release'
-      - run: mv target/aarch64-unknown-linux-gnu/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_aarch64_linux_gnu
-        if: github.event_name == 'release'
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            oxigraph_${{ github.event.release.tag_name }}_x86_64_linux_gnu
-            oxigraph_${{ github.event.release.tag_name }}_aarch64_linux_gnu
-        if: github.event_name == 'release'
-
-  binary_mac:
-    runs-on: macos-latest
-    env:
-      DEVELOPER_DIR: '/Applications/Xcode.app/Contents/Developer'
-      SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
-      MACOSX_DEPLOYMENT_TARGET: '10.14'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup-rust
-        with:
-          target: x86_64-apple-darwin
-      - run: cargo build --release --target x86_64-apple-darwin
-        working-directory: ./cli
-      - run: cargo build --release --target aarch64-apple-darwin
-        working-directory: ./cli
-      - uses: actions/upload-artifact@v4
-        with:
-          name: oxigraph_x86_64_apple
-          path: target/x86_64-apple-darwin/release/oxigraph
-      - uses: actions/upload-artifact@v4
-        with:
-          name: oxigraph_aarch64_apple
-          path: target/aarch64-apple-darwin/release/oxigraph
-      - run: mv target/x86_64-apple-darwin/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_x86_64_apple
-        if: github.event_name == 'release'
-      - run: mv target/aarch64-apple-darwin/release/oxigraph oxigraph_${{ github.event.release.tag_name }}_aarch64_apple
-        if: github.event_name == 'release'
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            oxigraph_${{ github.event.release.tag_name }}_x86_64_apple
-            oxigraph_${{ github.event.release.tag_name }}_aarch64_apple
-        if: github.event_name == 'release'
-
-  binary_windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup-rust
-      - run: cargo build --release
-        working-directory: ./cli
-      - uses: actions/upload-artifact@v4
-        with:
-          name: oxigraph_x86_64_windows_msvc
-          path: target/release/oxigraph.exe
-      - run: mv target/release/oxigraph.exe oxigraph_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
-        if: github.event_name == 'release'
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: oxigraph_${{ github.event.release.tag_name }}_x86_64_windows_msvc.exe
-        if: github.event_name == 'release'
-
   python_sdist:
     runs-on: ubuntu-latest
     steps:
@@ -129,81 +39,103 @@ jobs:
         working-directory: ./python
       - run: uvx maturin sdist
         working-directory: ./cli
-        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
         with:
           name: pyoxigraph_sdist
           path: target/wheels/pyoxigraph-*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxigraph_pypi_sdist
+          path: target/wheels/oxigraph-*.tar.gz
+      - run: uvx twine check target/wheels/*
 
-  wheel_linux_x86_64:
-    runs-on: ubuntu-latest
+  wheel_linux:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    continue-on-error: true
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/x86_64/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || ''}}/g' > .github/workflows/manylinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux2014_x86_64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: sed 's/%arch%/${{ matrix.arch }}/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || ''}}/g' > .github/workflows/manylinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux2014_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: pyoxigraph_x86_64_linux_gnu
+          name: pyoxigraph_${{ matrix.arch }}_linux_gnu
           path: target/wheels/pyoxigraph-*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxigraph_pypi_${{ matrix.arch }}_linux_gnu
+          path: target/wheels/oxigraph-*.whl
+      - run: unzip target/wheels/oxigraph-*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxigraph_${{ matrix.arch }}_linux_gnu
+          path: oxigraph-*.data/scripts/oxigraph
+      - run: mv oxigraph-*.data/scripts/oxigraph oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_linux_gnu
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_linux_gnu
+        if: github.event_name == 'release'
+      - run: uvx twine check target/wheels/*
 
-  wheel_linux_aarch64:
-    runs-on: ubuntu-24.04-arm
+  wheel_linux_musl:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    continue-on-error: true
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
       - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/aarch64/g' .github/workflows/manylinux_build.sh | sed 's/%for_each_version%/${{ github.event_name == 'release' || '' }}/g' > .github/workflows/manylinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir quay.io/pypa/manylinux2014_aarch64 /bin/bash /workdir/.github/workflows/manylinux_build_script.sh
+      - run: sed 's/%arch%/${{ matrix.arch }}/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/true/g' > .github/workflows/musllinux_build_script.sh
+      - run: docker run -v "$(pwd)":/workdir --platform linux/${{ matrix.arch }} quay.io/pypa/musllinux_1_2_${{ matrix.arch }} /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: pyoxigraph_aarch64_linux_gnu
+          name: pyoxigraph_${{ matrix.arch }}_linux_musl
           path: target/wheels/pyoxigraph-*.whl
-
-  wheel_linux_musl_x86_64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/x86_64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/true/g' > .github/workflows/musllinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir --platform linux/x86_64 quay.io/pypa/musllinux_1_2_x86_64 /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pyoxigraph_x86_64_linux_musl
-          path: target/wheels/pyoxigraph-*.whl
-
-  wheel_linux_musl_aarch64:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup-rust
-      - run: sed 's/%arch%/aarch64/g' .github/workflows/musllinux_build.sh | sed 's/%for_each_version%/true/g' > .github/workflows/musllinux_build_script.sh
-      - run: docker run -v "$(pwd)":/workdir --platform linux/aarch64 quay.io/pypa/musllinux_1_2_aarch64 /bin/bash /workdir/.github/workflows/musllinux_build_script.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pyoxigraph_aarch64_linux_musl
-          path: target/wheels/pyoxigraph-*.whl
+      - run: uvx twine check target/wheels/*
 
   wheel_mac:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-13
+            deployment_target: '10.14'
+          - arch: aarch64
+            runner: macos-latest
+            deployment_target: '11.0'
+    continue-on-error: true
+    runs-on: ${{ matrix.runner }}
     env:
-      DEVELOPER_DIR: '/Applications/Xcode.app/Contents/Developer'
-      SDKROOT: '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
-      MACOSX_DEPLOYMENT_TARGET: '10.14'
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-        with:
-          target: x86_64-apple-darwin
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
@@ -212,23 +144,42 @@ jobs:
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: rm -rf target/wheels
-      - run: uv run maturin build --release --target x86_64-apple-darwin --features abi3
+      - run: uv run maturin build --release --features abi3
         working-directory: ./python
-      - run: uv run maturin build --release --target aarch64-apple-darwin --features abi3
-        working-directory: ./python
-      - run: uvx maturin build --release --target x86_64-apple-darwin
+      - run: uvx maturin build --release
         working-directory: ./cli
-        if: github.event_name == 'release'
-      - run: uvx maturin build --release --target aarch64-apple-darwin
-        working-directory: ./cli
-        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
         with:
-          name: pyoxigraph_macos
+          name: pyoxigraph_apple_${{ matrix.arch }}
           path: target/wheels/pyoxigraph-*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxigraph_pypi_apple_${{ matrix.arch }}
+          path: target/wheels/oxigraph-*.whl
+      - run: unzip target/wheels/oxigraph-*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxigraph_${{ matrix.arch }}_apple
+          path: oxigraph-*.data/scripts/oxigraph
+      - run: mv oxigraph-*.data/scripts/oxigraph oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_apple
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_apple
+        if: github.event_name == 'release'
+      - run: uvx twine check target/wheels/*
 
   wheel_windows:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: windows-latest
+          #- arch: aarch64 TODO: blocked by https://github.com/actions/partner-runner-images/issues/77
+          #  runner: windows-11-arm
+    continue-on-error: true
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -245,13 +196,30 @@ jobs:
         working-directory: ./python
       - run: uvx maturin build --release
         working-directory: ./cli
-        if: github.event_name == 'release'
       - uses: actions/upload-artifact@v4
         with:
-          name: pyoxigraph_windows
+          name: pyoxigraph_windows_${{ matrix.arch }}
           path: target/wheels/pyoxigraph-*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxigraph_pypi_windows_${{ matrix.arch }}
+          path: target/wheels/oxigraph-*.whl
+      - run: unzip target/wheels/oxigraph-*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oxigraph_${{ matrix.arch }}_windows
+          path: oxigraph-*.data/scripts/oxigraph.exe
+      - run: mv oxigraph-*.data/scripts/oxigraph.exe oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_windows_msvc.exe
+        if: github.event_name == 'release'
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_windows_msvc.exe
+        if: github.event_name == 'release'
+      - run: uvx twine check target/wheels/*
 
-  publish_pypi:
+  publish_pyoxigraph_pypi:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -262,10 +230,8 @@ jobs:
       - python_sdist
       - wheel_windows
       - wheel_mac
-      - wheel_linux_x86_64
-      - wheel_linux_aarch64
-      - wheel_linux_musl_x86_64
-      - wheel_linux_musl_aarch64
+      - wheel_linux
+      - wheel_linux_musl
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -277,8 +243,34 @@ jobs:
           packages-dir: dist
           skip-existing: true
 
+  publish_oxigraph_pypi:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/oxigraph
+    permissions:
+      id-token: write
+    needs:
+      - python_sdist
+      - wheel_windows
+      - wheel_mac
+      - wheel_linux
+      - wheel_linux_musl
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: oxigraph_pypi_*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true
+
   npm_tarball:
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
     permissions:
       contents: read
       id-token: write
@@ -309,6 +301,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
     permissions:
       id-token: write
       packages: write

@@ -6,9 +6,7 @@ license.workspace = true
 readme = "README.md"
 keywords = ["JSON-LD", "RDF"]
 repository = "https://github.com/oxigraph/oxigraph/tree/master/lib/oxjsonld"
-description = """
-Work in progress parser and serializer for the JSON-LD format
-"""
+description = "Parser and serializer for the JSON-LD 1.0 format"
 documentation = "https://docs.rs/oxjsonld"
 edition.workspace = true
 rust-version.workspace = true

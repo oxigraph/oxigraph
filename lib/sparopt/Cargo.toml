@@ -7,9 +7,7 @@ readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparopt"
 documentation = "https://docs.rs/sparopt"
-description = """
-A SPARQL optimizer
-"""
+description = "SPARQL optimizer"
 edition.workspace = true
 rust-version.workspace = true
 
