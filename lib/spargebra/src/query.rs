@@ -327,8 +327,8 @@ mod tests {
     mod serde_tests {
         use super::super::*;
         use serde_json;
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
         fn calculate_hash<T: Hash>(t: &T) -> u64 {
             let mut hasher = DefaultHasher::new();
