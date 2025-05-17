@@ -327,7 +327,14 @@ mod tests {
     mod serde_tests {
         use super::super::*;
         use serde_json;
-        // use std::hash::Hash;
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+
+        fn calculate_hash<T: Hash>(t: &T) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            t.hash(&mut hasher);
+            hasher.finish()
+        }
 
         #[test]
         fn test_select_query_serialization() {
@@ -338,7 +345,7 @@ mod tests {
 
             assert_eq!(query, deserialized);
             // Check the hashes match
-            // assert_eq!(query.hash(), deserialized.hash());
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
         }
 
         #[test]
@@ -351,7 +358,7 @@ mod tests {
 
             assert_eq!(query, deserialized);
             // Check the hashes match
-            // assert_eq!(query.hash(), deserialized.hash());
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
         }
 
         #[test]
@@ -363,7 +370,7 @@ mod tests {
 
             assert_eq!(query, deserialized);
             // Check the hashes match
-            // assert_eq!(query.hash(), deserialized.hash());
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
         }
 
         #[test]
@@ -375,7 +382,7 @@ mod tests {
 
             assert_eq!(query, deserialized);
             // Check the hashes match
-            // assert_eq!(query.hash(), deserialized.hash());
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
         }
 
         #[test]
@@ -396,7 +403,7 @@ mod tests {
 
             assert_eq!(query, deserialized);
             // Check the hashes match
-            // assert_eq!(query.hash(), deserialized.hash());
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
         }
     }
 }
