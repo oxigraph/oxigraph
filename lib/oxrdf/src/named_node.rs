@@ -45,7 +45,7 @@ impl<'de> Visitor<'de> for NamedNodeVisitor {
             }
             return Err(de::Error::missing_field("value"));
         }
-        Ok(NamedNode::new_unchecked(map.next_value::<String>()?))
+        Ok(NamedNode::new(map.next_value::<String>()?).map_err(de::Error::custom)?)
     }
 }
 
@@ -55,7 +55,7 @@ impl<'de> Deserialize<'de> for NamedNode {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_struct("BlankNode", &["value"], NamedNodeVisitor)
+        deserializer.deserialize_struct("NamedNode", &["value"], NamedNodeVisitor)
     }
 }
 

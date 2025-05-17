@@ -155,7 +155,7 @@ impl<'de> Visitor<'de> for BlankNodeVisitor {
             }
             return Err(de::Error::missing_field("value"));
         }
-        Ok(BlankNode::new_unchecked(map.next_value::<String>()?))
+        Ok(BlankNode::new(map.next_value::<String>()?).map_err(de::Error::custom)?)
     }
 }
 
