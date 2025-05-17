@@ -1,12 +1,12 @@
 use crate::named_node::{NamedNode, NamedNodeRef};
 use crate::vocab::{rdf, xsd};
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
 #[cfg(feature = "serde")]
 use serde::{de, ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(feature = "borsh")]
-use borsh::{BorshDeserialize, BorshSerialize};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;

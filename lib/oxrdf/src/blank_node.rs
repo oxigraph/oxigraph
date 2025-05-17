@@ -1,12 +1,12 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use rand::random;
 #[cfg(feature = "serde")]
 use serde::{
     de, de::MapAccess, de::Visitor, ser::SerializeStruct, Deserialize, Deserializer, Serialize,
     Serializer,
 };
-#[cfg(feature = "borsh")]
-use borsh::{BorshDeserialize, BorshSerialize};
 use std::io::Write;
 use std::{fmt, str};
 

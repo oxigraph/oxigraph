@@ -1,10 +1,10 @@
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "serde")]
 use serde::{de, de::MapAccess, de::Visitor, Deserializer};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "borsh")]
-use borsh::{BorshDeserialize, BorshSerialize};
 use std::cmp::Ordering;
 use std::fmt;
 

@@ -1,11 +1,11 @@
 use crate::algebra::*;
 use crate::parser::{parse_query, SparqlSyntaxError};
 use crate::term::*;
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use oxiri::Iri;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "borsh")]
-use borsh::{BorshDeserialize, BorshSerialize};
 use std::fmt;
 use std::str::FromStr;
 
