@@ -797,6 +797,7 @@ impl From<NamedNodePattern> for GraphNamePattern {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct TriplePattern {
     pub subject: TermPattern,
