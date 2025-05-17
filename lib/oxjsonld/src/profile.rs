@@ -91,6 +91,7 @@ impl JsonLdProfile {
 ///
 /// ```
 /// use oxjsonld::{JsonLdProfile, JsonLdProfileSet};
+///
 /// let mut profile_set = JsonLdProfileSet::empty();
 /// profile_set |= JsonLdProfile::Expanded;
 /// profile_set |= JsonLdProfile::Streaming;
@@ -231,5 +232,49 @@ impl BitOrAssign<JsonLdProfile> for JsonLdProfileSet {
     #[inline]
     fn bitor_assign(&mut self, rhs: JsonLdProfile) {
         *self |= JsonLdProfileSet::from(rhs);
+    }
+}
+
+/// JSON-LD [processing mode](https://www.w3.org/TR/json-ld11/#dfn-processing-mode)
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
+pub enum JsonLdProcessingMode {
+    #[default]
+    JsonLd1_0,
+    JsonLd1_1, // TODO: Move to 1.1 when implemented
+}
+
+impl JsonLdProcessingMode {
+    /// The string identifier.
+    ///
+    /// ```
+    /// use oxjsonld::JsonLdProcessingMode;
+    ///
+    /// assert_eq!(JsonLdProcessingMode::JsonLd1_0.as_str(), "json-ld-1.0");
+    /// ```
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            JsonLdProcessingMode::JsonLd1_0 => "json-ld-1.0",
+            JsonLdProcessingMode::JsonLd1_1 => "json-ld-1.1",
+        }
+    }
+
+    /// From a string identifier.
+    ///
+    /// ```
+    /// use oxjsonld::JsonLdProcessingMode;
+    ///
+    /// assert_eq!(
+    ///     JsonLdProcessingMode::from_id("json-ld-1.1"),
+    ///     Some(JsonLdProcessingMode::JsonLd1_1)
+    /// );
+    /// ```
+    #[inline]
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "json-ld-1.0" => Some(JsonLdProcessingMode::JsonLd1_0),
+            "json-ld-1.1" => Some(JsonLdProcessingMode::JsonLd1_1),
+            _ => None,
+        }
     }
 }

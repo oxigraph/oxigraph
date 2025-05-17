@@ -8,7 +8,10 @@ use json_event_parser::{JsonEvent, SliceJsonParser};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{BlankNode, Dataset, Quad, Term};
-use oxjsonld::{JsonLdParser, JsonLdProfile, JsonLdProfileSet, JsonLdSyntaxError};
+use oxjsonld::{
+    JsonLdParser, JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet, JsonLdRemoteDocument,
+    JsonLdSyntaxError,
+};
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
 
@@ -182,6 +185,16 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
     if test.kinds.iter().any(|t| t.as_ref() == jld::STREAM_TEST) {
         profile |= JsonLdProfile::Streaming;
     }
+    let mut processing_mode = JsonLdProcessingMode::JsonLd1_1;
+    if let Some(opt) = test.option.get(&jld::PROCESSING_MODE.into_owned()) {
+        let Term::Literal(opt) = opt else {
+            bail!("The processingMode must be a literal");
+        };
+        let Some(opt) = JsonLdProcessingMode::from_id(opt.value()) else {
+            bail!("The processingMode '{}' is not supported", opt.value());
+        };
+        processing_mode = opt;
+    }
     let base_url = test.option.get(&jld::BASE.into_owned()).and_then(|t| {
         if let Term::NamedNode(i) = t {
             Some(i.as_str())
@@ -195,7 +208,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let mut actual_dataset = parse_json_ld(action, profile, base_url)?
+        let mut actual_dataset = parse_json_ld(action, profile, processing_mode, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
         actual_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
         let results = test.result.as_ref().context("No tests result found")?;
@@ -214,7 +227,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::NEGATIVE_EVALUATION_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        let result = parse_json_ld(action, profile, base_url)?;
+        let result = parse_json_ld(action, profile, processing_mode, base_url)?;
         ensure!(
             result.is_err(),
             "Properly parsed file even if it should not"
@@ -235,7 +248,7 @@ fn evaluate_jsonld_to_rdf_test(test: &Test) -> Result<()> {
         .any(|t| t.as_ref() == jld::POSITIVE_SYNTAX_TEST)
     {
         let action = test.action.as_deref().context("No action found")?;
-        parse_json_ld(action, profile, base_url)?
+        parse_json_ld(action, profile, processing_mode, base_url)?
             .with_context(|| format!("Parse error on file {action}"))?;
         Ok(())
     } else {
@@ -334,12 +347,20 @@ fn n3_to_dataset(quads: Vec<N3Quad>) -> Dataset {
 fn parse_json_ld(
     url: &str,
     profile: JsonLdProfileSet,
+    processing_mode: JsonLdProcessingMode,
     base_url: Option<&str>,
 ) -> Result<Result<Dataset, JsonLdSyntaxError>> {
     Ok(JsonLdParser::new()
         .with_profile(profile)
+        .with_processing_mode(processing_mode)
         .with_base_iri(base_url.unwrap_or(url))?
         .for_slice(read_file_to_string(url)?.as_bytes())
+        .with_load_document_callback(|url, _| {
+            Ok(JsonLdRemoteDocument {
+                document: read_file_to_string(url)?.into(),
+                document_url: url.into(),
+            })
+        })
         .collect())
 }
 

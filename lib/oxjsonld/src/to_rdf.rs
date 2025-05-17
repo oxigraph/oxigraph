@@ -1,9 +1,7 @@
-use crate::context::{
-    JsonLdLoadDocumentOptions, JsonLdProcessingMode, JsonLdRemoteDocument, JsonLdTermDefinition,
-};
+use crate::context::{JsonLdLoadDocumentOptions, JsonLdRemoteDocument, JsonLdTermDefinition};
 use crate::error::{JsonLdParseError, JsonLdSyntaxError};
 use crate::expansion::{JsonLdEvent, JsonLdExpansionConverter, JsonLdValue};
-use crate::{JsonLdProfile, JsonLdProfileSet};
+use crate::profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async-tokio")]
 use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
@@ -63,6 +61,7 @@ use tokio::io::AsyncRead;
 #[derive(Default, Clone)]
 #[must_use]
 pub struct JsonLdParser {
+    processing_mode: JsonLdProcessingMode,
     lenient: bool,
     profile: JsonLdProfileSet,
     base: Option<Iri<String>>,
@@ -124,6 +123,14 @@ impl JsonLdParser {
     #[inline]
     pub fn with_profile(mut self, profile: impl Into<JsonLdProfileSet>) -> Self {
         self.profile = profile.into();
+        self
+    }
+
+    /// Set the [processing mode](https://www.w3.org/TR/json-ld11/#dfn-processing-mode) of the parser.
+    #[inline]
+    #[doc(hidden)] // TODO: expose after implementing JSON-LD 1.1
+    pub fn with_processing_mode(mut self, processing_mode: JsonLdProcessingMode) -> Self {
+        self.processing_mode = processing_mode;
         self
     }
 
@@ -279,7 +286,7 @@ impl JsonLdParser {
                 self.base,
                 self.profile.contains(JsonLdProfile::Streaming),
                 self.lenient,
-                JsonLdProcessingMode::JsonLd1_0,
+                self.processing_mode,
             ),
             expended_events: Vec::new(),
             to_rdf: JsonLdToRdfConverter {
@@ -359,7 +366,7 @@ impl<R: Read> Iterator for ReaderJsonLdParser<R> {
 }
 
 impl<R: Read> ReaderJsonLdParser<R> {
-    /// Allows to set a callback to load remote document and contexts
+    /// Allows setting a callback to load remote documents and contexts
     ///
     /// The first argument is the document URL.
     ///
@@ -687,6 +694,62 @@ impl Iterator for SliceJsonLdParser<'_> {
 }
 
 impl SliceJsonLdParser<'_> {
+    /// Allows setting a callback to load remote documents and contexts
+    ///
+    /// The first argument is the document URL.
+    ///
+    /// It corresponds to the [`documentLoader` option from the algorithm specification](https://www.w3.org/TR/json-ld11-api/#dom-jsonldoptions-documentloader).
+    ///
+    /// See [`LoadDocumentCallback` API documentation](https://www.w3.org/TR/json-ld-api/#loaddocumentcallback) for more details
+    ///
+    /// ```
+    /// use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    ///
+    /// let file = br#"{
+    ///     "@context": "file://context.jsonld",
+    ///     "@type": "schema:Person",
+    ///     "@id": "http://example.com/foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for quad in JsonLdParser::new()
+    ///     .for_slice(file)
+    ///     .with_load_document_callback(|url, _options| {
+    ///         assert_eq!(url, "file://context.jsonld");
+    ///         Ok(JsonLdRemoteDocument {
+    ///             document: br#"{"@context":{"schema": "http://schema.org/"}}"#.to_vec(),
+    ///             document_url: "file://context.jsonld".into(),
+    ///         })
+    ///     })
+    /// {
+    ///     let quad = quad?;
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(1, count);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn with_load_document_callback(
+        mut self,
+        callback: impl Fn(
+                &str,
+                &JsonLdLoadDocumentOptions,
+            ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
+            + Send
+            + Sync
+            + UnwindSafe
+            + RefUnwindSafe
+            + 'static,
+    ) -> Self {
+        self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
+        self
+    }
+
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.
