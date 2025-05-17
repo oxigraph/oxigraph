@@ -1,6 +1,8 @@
 //! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
 
 pub use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term, Triple, Variable};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Write;
 
@@ -8,6 +10,7 @@ use std::fmt::Write;
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GroundSubject {
     NamedNode(NamedNode),
     #[cfg(feature = "rdf-star")]
@@ -86,6 +89,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GroundTerm {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -177,6 +181,7 @@ impl From<GroundTerm> for Term {
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GroundTriple {
     pub subject: GroundSubject,
     pub predicate: NamedNode,
@@ -416,6 +421,7 @@ impl TryFrom<Quad> for GroundQuad {
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NamedNodePattern {
     NamedNode(NamedNode),
     Variable(Variable),
@@ -469,6 +475,7 @@ impl TryFrom<NamedNodePattern> for NamedNode {
 
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -798,6 +805,7 @@ impl From<NamedNodePattern> for GraphNamePattern {
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TriplePattern {
     pub subject: TermPattern,
     pub predicate: NamedNodePattern,
