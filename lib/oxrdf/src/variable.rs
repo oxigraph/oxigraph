@@ -1,7 +1,7 @@
-use std::cmp::Ordering;
-use std::fmt;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::fmt;
 
 /// A [SPARQL query](https://www.w3.org/TR/sparql11-query/) owned variable.
 ///
