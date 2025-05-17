@@ -16,6 +16,8 @@ pub use error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError, TextPositi
 #[cfg(feature = "async-tokio")]
 pub use from_rdf::TokioAsyncWriterJsonLdSerializer;
 pub use from_rdf::{JsonLdSerializer, WriterJsonLdSerializer};
+#[doc(hidden)]
+pub use profile::JsonLdProcessingMode;
 pub use profile::{JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async-tokio")]
 pub use to_rdf::TokioAsyncReaderJsonLdParser;

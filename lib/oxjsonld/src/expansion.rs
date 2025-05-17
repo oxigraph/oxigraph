@@ -1,8 +1,9 @@
 use crate::context::{
     has_keyword_form, json_node_from_events, JsonLdContext, JsonLdContextProcessor,
-    JsonLdLoadDocumentOptions, JsonLdProcessingMode, JsonLdRemoteDocument,
+    JsonLdLoadDocumentOptions, JsonLdRemoteDocument,
 };
 use crate::error::JsonLdErrorCode;
+use crate::profile::JsonLdProcessingMode;
 use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::Iri;

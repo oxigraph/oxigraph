@@ -106,6 +106,8 @@ pub mod jld {
     pub const POSITIVE_SYNTAX_TEST: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "https://w3c.github.io/json-ld-api/tests/vocab#PositiveSyntaxTest",
     );
+    pub const PROCESSING_MODE: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("https://w3c.github.io/json-ld-api/tests/vocab#processingMode");
     pub const STREAM_TEST: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("https://w3c.github.io/json-ld-api/tests/vocab#StreamTest");
 }
