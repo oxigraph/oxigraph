@@ -17,6 +17,7 @@ rust-version.workspace = true
 default = []
 rdf-star = []
 serde = ["dep:serde"]
+borsh = ["dep:borsh"]
 
 [dependencies]
 oxilangtag.workspace = true

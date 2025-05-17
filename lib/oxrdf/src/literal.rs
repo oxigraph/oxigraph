@@ -5,6 +5,8 @@ use oxilangtag::{LanguageTag, LanguageTagParseError};
 use oxsdatatypes::*;
 #[cfg(feature = "serde")]
 use serde::{de, ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -34,9 +36,11 @@ use std::fmt::Write;
 /// # Result::<_, LanguageTagParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 pub struct Literal(LiteralContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 enum LiteralContent {
     String(String),
     LanguageTaggedString { value: String, language: String },
@@ -823,5 +827,14 @@ mod tests {
     fn test_literal_deserialize_owned() {
         // If Literal does not implement DeserializeOwned, this call will fail to compile.
         assert_deserialize_owned::<Literal>();
+    }
+
+    #[test]
+    #[cfg(feature = "borsh")]
+    fn test_literal_borsh() {
+        let l = Literal::new_simple_literal("foo");
+        let serialized = l.try_to_vec().unwrap();
+        let deserialized: Literal = BorshDeserialize::try_from_slice(&serialized).unwrap();
+        assert_eq!(l, deserialized);
     }
 }

@@ -158,6 +158,7 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Subject {
@@ -393,6 +394,7 @@ impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum Term {
@@ -794,6 +796,7 @@ impl<'a> From<TermRef<'a>> for Term {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
     pub subject: Subject,
@@ -1882,5 +1885,41 @@ mod tests {
         assert_deserialize_owned::<Term>();
         assert_deserialize_owned::<Triple>();
         assert_deserialize_owned::<Quad>();
+    }
+
+    #[test]
+    #[cfg(feature = "borsh")]
+    fn test_triple_borsh() {
+        let t = Triple::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/o"),
+        );
+        let serialized = t.try_to_vec().unwrap();
+        let deserialized: Triple = BorshDeserialize::try_from_slice(&serialized).unwrap();
+        assert_eq!(t, deserialized);
+    }
+
+    #[test]
+    #[cfg(feature = "borsh")]
+    fn test_quad_borsh() {
+        let q = Quad::new(
+            NamedNode::new_unchecked("http://example.com/s"),
+            NamedNode::new_unchecked("http://example.com/p"),
+            NamedNode::new_unchecked("http://example.com/o"),
+            GraphName::DefaultGraph,
+        );
+        let serialized = q.try_to_vec().unwrap();
+        let deserialized: Quad = BorshDeserialize::try_from_slice(&serialized).unwrap();
+        assert_eq!(q, deserialized);
+    }
+
+    #[test]
+    #[cfg(feature = "borsh")]
+    fn test_subject_borsh() {
+        let s = Subject::NamedNode(NamedNode::new_unchecked("http://example.com/s"));
+        let serialized = s.try_to_vec().unwrap();
+        let deserialized: Subject = BorshDeserialize::try_from_slice(&serialized).unwrap();
+        assert_eq!(s, deserialized);
     }
 }

@@ -5,6 +5,8 @@ use serde::{
     de, de::MapAccess, de::Visitor, ser::SerializeStruct, Deserialize, Deserializer, Serialize,
     Serializer,
 };
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use std::io::Write;
 use std::{fmt, str};
 
@@ -23,9 +25,11 @@ use std::{fmt, str};
 /// # Result::<_,oxrdf::BlankNodeIdParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 pub struct BlankNode(BlankNodeContent);
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 enum BlankNodeContent {
     Named(String),
     Anonymous { id: [u8; 16], str: IdStr },
@@ -525,5 +529,14 @@ mod tests {
     fn test_blank_node_deserialize_owned() {
         // If BlankNode does not implement DeserializeOwned, this call will fail to compile.
         assert_deserialize_owned::<BlankNode>();
+    }
+
+    #[test]
+    #[cfg(feature = "borsh")]
+    fn test_blank_node_borsh() {
+        let b = BlankNode::new_from_unique_id(0x42);
+        let serialized = b.try_to_vec().unwrap();
+        let deserialized: BlankNode = BorshDeserialize::try_from_slice(&serialized).unwrap();
+        assert_eq!(b, deserialized);
     }
 }

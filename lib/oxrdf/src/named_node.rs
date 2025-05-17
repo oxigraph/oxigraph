@@ -3,6 +3,8 @@ use oxiri::{Iri, IriParseError};
 use serde::{de, de::MapAccess, de::Visitor, Deserializer};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -19,6 +21,7 @@ use std::fmt;
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
     #[cfg_attr(feature = "serde", serde(rename = "value"))]
@@ -344,5 +347,14 @@ mod tests {
             "http://example.org/",
             NamedNode::new("http://example.org/").unwrap().iri
         );
+    }
+
+    #[test]
+    #[cfg(feature = "borsh")]
+    fn test_named_node_borsh() {
+        let n = NamedNode::new("http://example.org/").unwrap();
+        let serialized = n.try_to_vec().unwrap();
+        let deserialized: NamedNode = BorshDeserialize::try_from_slice(&serialized).unwrap();
+        assert_eq!(n, deserialized);
     }
 }

@@ -4,6 +4,8 @@ use crate::term::*;
 use oxiri::Iri;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "borsh")]
+use borsh::{BorshDeserialize, BorshSerialize};
 use std::fmt;
 use std::str::FromStr;
 
@@ -23,6 +25,7 @@ use std::str::FromStr;
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshDeserialize, BorshSerialize))]
 pub enum Query {
     /// [SELECT](https://www.w3.org/TR/sparql11-query/#select).
     Select {
@@ -403,6 +406,20 @@ mod tests {
 
             assert_eq!(query, deserialized);
             // Check the hashes match
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
+        }
+    }
+
+    #[cfg(feature = "borsh")]
+    mod borsh_tests {
+        use super::super::*;
+
+        #[test]
+        fn test_query_borsh() {
+            let query = Query::parse("SELECT * WHERE { ?s ?p ?o . }", None).unwrap();
+            let serialized = query.try_to_vec().unwrap();
+            let deserialized: Query = BorshDeserialize::try_from_slice(&serialized).unwrap();
+            assert_eq!(query, deserialized);
             assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
         }
     }

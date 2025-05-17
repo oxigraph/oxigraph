@@ -19,6 +19,7 @@ rdf-star = ["oxrdf/rdf-star"]
 sep-0002 = []
 sep-0006 = []
 serde = ["dep:serde", "oxrdf/serde", "oxiri/serde"]
+borsh = ["dep:borsh", "oxrdf/borsh"]
 
 [dependencies]
 oxilangtag.workspace = true
@@ -28,6 +29,7 @@ peg.workspace = true
 rand.workspace = true
 thiserror.workspace = true
 serde = { version = "1.0.217", features = ["derive"], optional = true }
+borsh = { version = "1.5.7", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 # Ideally this would be an optional dependency, used only when the `serde` feature is enabled.
