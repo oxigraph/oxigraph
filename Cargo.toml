@@ -56,7 +56,7 @@ md-5 = "0.10"
 memchr = "2.5"
 oxhttp = "0.2.0"
 oxilangtag = "0.1"
-oxiri = "0.2.11"
+oxiri = { git = "https://github.com/oxigraph/oxiri", rev = "cf5e8755a796a1de9b610550119ba0f66e54e15c" }
 peg = "0.8"
 pkg-config = "0.3.25"
 predicates = ">=2.0, <4.0"

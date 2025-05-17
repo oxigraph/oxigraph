@@ -13,7 +13,7 @@ rocksdb = ["oxigraph/rocksdb"]
 [dependencies]
 anyhow = "1.0.72"
 libfuzzer-sys = "0.4"
-oxiri = "0.2"
+oxiri = { git = "https://github.com/oxigraph/oxiri", rev = "cf5e8755a796a1de9b610550119ba0f66e54e15c" }
 oxigraph = { path = "../lib/oxigraph", default-features = false }
 oxjsonld.path = "../lib/oxjsonld"
 oxrdf = { path = "../lib/oxrdf", features = ["rdf-star"] }
