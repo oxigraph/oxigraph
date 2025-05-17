@@ -175,7 +175,7 @@ jobs:
   test_features:
     strategy:
       matrix:
-        features: [ "serde" ]
+        features: [ "serde", "borsh" ]
     runs-on: linux-latest
     steps:
       - uses: actions/checkout@v4
