@@ -1258,12 +1258,7 @@ pub struct Quad {
     pub object: Term,
 
     /// The name of the RDF [graph](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-graph) in which the triple is.
-    #[cfg_attr(
-        feature = "serde",
-        serde(
-            rename = "graph",
-        )
-    )]
+    #[cfg_attr(feature = "serde", serde(rename = "graph",))]
     pub graph_name: GraphName,
 }
 
@@ -1435,9 +1430,9 @@ mod tests {
     use super::*;
 
     #[cfg(feature = "serde")]
-    use serde_json::json;
-    #[cfg(feature = "serde")]
     use serde::de::DeserializeOwned;
+    #[cfg(feature = "serde")]
+    use serde_json::json;
 
     #[test]
     fn triple_from_terms() -> Result<(), TryFromTermError> {

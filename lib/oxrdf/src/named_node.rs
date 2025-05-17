@@ -1,5 +1,5 @@
 use oxiri::{Iri, IriParseError};
-#[cfg(all(feature = "serde"))]
+#[cfg(feature = "serde")]
 use serde::{de, de::MapAccess, de::Visitor, Deserializer};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -25,10 +25,10 @@ pub struct NamedNode {
     iri: String,
 }
 
-#[cfg(all(feature = "serde"))]
+#[cfg(feature = "serde")]
 struct NamedNodeVisitor;
 
-#[cfg(all(feature = "serde"))]
+#[cfg(feature = "serde")]
 impl<'de> Visitor<'de> for NamedNodeVisitor {
     type Value = NamedNode;
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -49,7 +49,7 @@ impl<'de> Visitor<'de> for NamedNodeVisitor {
     }
 }
 
-#[cfg(all(feature = "serde"))]
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for NamedNode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

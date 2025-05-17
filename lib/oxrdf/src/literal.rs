@@ -756,7 +756,10 @@ mod tests {
         assert_eq!("{\"value\":\"foo\",\"language\":\"en\"}", j);
         let mut de = serde_json::Deserializer::from_str(&j);
         let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(node, Literal::new_language_tagged_literal("foo", "en").unwrap());
+        assert_eq!(
+            node,
+            Literal::new_language_tagged_literal("foo", "en").unwrap()
+        );
     }
 
     #[test]
@@ -788,7 +791,10 @@ mod tests {
         assert_eq!("{\"value\":\"foo\",\"language\":\"en\"}", j);
         let mut de = serde_json::Deserializer::from_reader(j.as_bytes());
         let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(node, Literal::new_language_tagged_literal("foo", "en").unwrap());
+        assert_eq!(
+            node,
+            Literal::new_language_tagged_literal("foo", "en").unwrap()
+        );
     }
 
     // Test for serde validation errors

@@ -14,7 +14,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-oxrdf = { workspace = true, features = ["serde", "rdf-star", "serde-unvalidated"] }
+oxrdf = { workspace = true, features = ["serde", "rdf-star"] }
 criterion = { version = "0.5.1", features = ["html_reports"] }
 
 [dev-dependencies]

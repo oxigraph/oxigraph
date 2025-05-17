@@ -405,9 +405,9 @@ pub struct BlankNodeIdParseError;
 mod tests {
     use super::*;
     #[cfg(feature = "serde")]
-    use serde_json;
-    #[cfg(feature = "serde")]
     use serde::de::DeserializeOwned;
+    #[cfg(feature = "serde")]
+    use serde_json;
     #[cfg(not(target_family = "wasm"))]
     use std::mem::{align_of, size_of};
 
@@ -513,10 +513,7 @@ mod tests {
         }
 
         assert!(deserialized.is_ok());
-        assert_eq!(
-            deserialized.unwrap(),
-            BlankNode::new("abc").unwrap()
-        );
+        assert_eq!(deserialized.unwrap(), BlankNode::new("abc").unwrap());
     }
 
     // This helper function will only compile if T implements DeserializeOwned.
