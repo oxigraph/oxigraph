@@ -558,6 +558,44 @@ impl<R: Read> ReaderQuadParser<R> {
         }
     }
 
+    /// A callback to load remote documents during parsing like JSON-LD contexts.
+    ///
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
+    ///
+    /// let file = br#"{
+    ///     "@context": "file://context.jsonld",
+    ///     "@type": "schema:Person",
+    ///     "@id": "http://example.com/foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for quad in RdfParser::from_format(RdfFormat::JsonLd {
+    ///     profile: JsonLdProfileSet::empty(),
+    /// })
+    /// .for_reader(file.as_slice())
+    /// .with_document_loader(|url| {
+    ///     assert_eq!(url, "file://context.jsonld");
+    ///     Ok(LoadedDocument {
+    ///         url: "file://context.jsonld".into(),
+    ///         content: br#"{"@context":{"schema": "http://schema.org/"}}"#.to_vec(),
+    ///         format: RdfFormat::JsonLd {
+    ///             profile: JsonLdProfile::Context.into(),
+    ///         },
+    ///     })
+    /// }) {
+    ///     let quad = quad?;
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(1, count);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
     pub fn with_document_loader(
         mut self,
         loader: impl Fn(&str) -> Result<LoadedDocument, Box<dyn Error + Send + Sync>>
@@ -590,7 +628,7 @@ impl<R: Read> ReaderQuadParser<R> {
     }
 }
 
-/// Parses a RDF file from a Tokio [`AsyncRead`] implementation.
+/// Parses an RDF file from a Tokio [`AsyncRead`] implementation.
 ///
 /// Can be built using [`RdfParser::for_tokio_async_reader`].
 ///
@@ -815,6 +853,75 @@ impl Iterator for SliceQuadParser<'_> {
 }
 
 impl SliceQuadParser<'_> {
+    /// A callback to load remote documents during parsing like JSON-LD contexts.
+    ///
+    /// ```
+    /// use oxrdf::vocab::rdf;
+    /// use oxrdf::NamedNodeRef;
+    /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
+    ///
+    /// let file = br#"{
+    ///     "@context": "file://context.jsonld",
+    ///     "@type": "schema:Person",
+    ///     "@id": "http://example.com/foo",
+    ///     "schema:name": "Foo"
+    /// }"#;
+    ///
+    /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
+    /// let mut count = 0;
+    /// for quad in RdfParser::from_format(RdfFormat::JsonLd {
+    ///     profile: JsonLdProfileSet::empty(),
+    /// })
+    /// .for_slice(file)
+    /// .with_document_loader(|url| {
+    ///     assert_eq!(url, "file://context.jsonld");
+    ///     Ok(LoadedDocument {
+    ///         url: "file://context.jsonld".into(),
+    ///         content: br#"{"@context":{"schema": "http://schema.org/"}}"#.to_vec(),
+    ///         format: RdfFormat::JsonLd {
+    ///             profile: JsonLdProfile::Context.into(),
+    ///         },
+    ///     })
+    /// }) {
+    ///     let quad = quad?;
+    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///         count += 1;
+    ///     }
+    /// }
+    /// assert_eq!(1, count);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn with_document_loader(
+        mut self,
+        loader: impl Fn(&str) -> Result<LoadedDocument, Box<dyn Error + Send + Sync>>
+            + Send
+            + Sync
+            + UnwindSafe
+            + RefUnwindSafe
+            + 'static,
+    ) -> Self {
+        self.inner = match self.inner {
+            SliceQuadParserKind::JsonLd(p) => {
+                SliceQuadParserKind::JsonLd(p.with_load_document_callback(move |iri, _| {
+                    let response = loader(iri)?;
+                    if !matches!(response.format, RdfFormat::JsonLd { .. }) {
+                        return Err(format!(
+                            "The JSON-LD context format must be JSON-LD, {} found",
+                            response.format
+                        )
+                        .into());
+                    }
+                    Ok(JsonLdRemoteDocument {
+                        document: response.content,
+                        document_url: response.url,
+                    })
+                }))
+            }
+            i => i,
+        };
+        self
+    }
+
     /// The list of IRI prefixes considered at the current step of the parsing.
     ///
     /// This method returns (prefix name, prefix value) tuples.

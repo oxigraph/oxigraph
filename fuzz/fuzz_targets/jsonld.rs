@@ -2,7 +2,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use oxigraph_fuzz::count_quad_blank_nodes;
-use oxjsonld::{JsonLdParser, JsonLdProfile, JsonLdSerializer};
+use oxjsonld::{JsonLdParser, JsonLdProcessingMode, JsonLdProfile, JsonLdSerializer};
 use oxrdf::graph::CanonicalizationAlgorithm;
 use oxrdf::Dataset;
 
@@ -10,10 +10,12 @@ fn parse(
     input: &[u8],
     lenient: bool,
     streaming: bool,
+    processing_mode: JsonLdProcessingMode,
 ) -> (Dataset, Vec<String>, Vec<(String, String)>, Option<String>) {
     let mut quads = Dataset::new();
     let mut errors = Vec::new();
     let mut parser = JsonLdParser::new()
+        .with_processing_mode(processing_mode)
         .with_base_iri("http://example.com/")
         .unwrap();
     if lenient {
@@ -63,21 +65,27 @@ fn serialize_quads(
 
 fuzz_target!(|data: &[u8]| {
     // We parse with splitting
-    let (mut quads, errors, prefixes, base_iri) = parse(data, false, false);
-    let (mut quads_streaming, errors_streaming, _, _) = parse(data, false, true);
-    let (_, errors_lenient, _, _) = parse(data, true, false);
+    let (mut quads, errors, prefixes, base_iri) =
+        parse(data, false, false, JsonLdProcessingMode::JsonLd1_1);
+    let (mut quads_streaming, errors_streaming, _, _) =
+        parse(data, false, true, JsonLdProcessingMode::JsonLd1_1);
+    let (mut quads_lenient_1_1, errors_lenient_1_1, _, _) =
+        parse(data, true, false, JsonLdProcessingMode::JsonLd1_1);
+    let (mut quads_lenient_1_0, _, _, _) =
+        parse(data, true, false, JsonLdProcessingMode::JsonLd1_0);
     if errors_streaming.is_empty() {
         assert!(errors.is_empty());
     }
     if errors.is_empty() {
-        assert!(errors_lenient.is_empty());
+        assert!(errors_lenient_1_1.is_empty());
     }
 
+    let bnodes_count = quads
+        .iter()
+        .map(|q| count_quad_blank_nodes(q))
+        .sum::<usize>();
+
     if errors_streaming.is_empty() {
-        let bnodes_count = quads
-            .iter()
-            .map(|q| count_quad_blank_nodes(q))
-            .sum::<usize>();
         if bnodes_count <= 4 {
             quads.canonicalize(CanonicalizationAlgorithm::Unstable);
             quads_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
@@ -89,6 +97,18 @@ fuzz_target!(|data: &[u8]| {
                 String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
             );
         }
+    }
+
+    if bnodes_count <= 4 {
+        quads_lenient_1_1.canonicalize(CanonicalizationAlgorithm::Unstable);
+        quads_lenient_1_0.canonicalize(CanonicalizationAlgorithm::Unstable);
+        assert_eq!(
+            quads_lenient_1_1,
+            quads_lenient_1_0,
+            "Lenient 1.1:\n{}\nLenient 1.0:\n{}",
+            String::from_utf8_lossy(&serialize_quads(&quads_lenient_1_1, Vec::new(), None)),
+            String::from_utf8_lossy(&serialize_quads(&quads_lenient_1_0, Vec::new(), None))
+        );
     }
 
     // We serialize

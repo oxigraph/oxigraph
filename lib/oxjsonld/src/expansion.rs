@@ -1,8 +1,9 @@
 use crate::context::{
     has_keyword_form, json_node_from_events, JsonLdContext, JsonLdContextProcessor,
-    JsonLdLoadDocumentOptions, JsonLdProcessingMode, JsonLdRemoteDocument,
+    JsonLdLoadDocumentOptions, JsonLdRemoteDocument,
 };
 use crate::error::JsonLdErrorCode;
+use crate::profile::JsonLdProcessingMode;
 use crate::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
 use oxiri::Iri;
@@ -72,7 +73,7 @@ enum JsonLdExpansionState {
     ObjectStart {
         types: Vec<String>,
         id: Option<String>,
-        seen_type: bool,
+        seen_id: bool,
         active_property: Option<String>,
         reverse: bool,
     },
@@ -527,7 +528,7 @@ impl JsonLdExpansionConverter {
                                 self.state.push(JsonLdExpansionState::ObjectStart {
                                     types: Vec::new(),
                                     id: None,
-                                    seen_type: false,
+                                    seen_id: false,
                                     active_property,
                                     reverse,
                                 });
@@ -538,7 +539,7 @@ impl JsonLdExpansionConverter {
                         self.state.push(JsonLdExpansionState::ObjectStart {
                             types: Vec::new(),
                             id: None,
-                            seen_type: false,
+                            seen_id: false,
                             active_property,
                             reverse,
                         });
@@ -549,7 +550,7 @@ impl JsonLdExpansionConverter {
                     self.state.push(JsonLdExpansionState::ObjectStart {
                         types: Vec::new(),
                         id: None,
-                        seen_type: false,
+                        seen_id: false,
                         active_property,
                         reverse,
                     });
@@ -601,7 +602,7 @@ impl JsonLdExpansionConverter {
             JsonLdExpansionState::ObjectStart {
                 types,
                 id,
-                seen_type,
+                seen_id,
                 active_property,
                 reverse,
             } => match event {
@@ -609,7 +610,7 @@ impl JsonLdExpansionConverter {
                     if let Some(iri) = self.expand_iri(key.as_ref().into(), false, true, errors) {
                         match iri.as_ref() {
                             "@type" => {
-                                if seen_type && !self.lenient {
+                                if seen_id && !self.lenient {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
                                         "@type must be the first key of an object or right after @context",
                                         JsonLdErrorCode::InvalidStreamingKeyOrder,
@@ -679,7 +680,7 @@ impl JsonLdExpansionConverter {
                                 self.state.push(JsonLdExpansionState::ObjectStart {
                                     types,
                                     id,
-                                    seen_type,
+                                    seen_id,
                                     active_property,
                                     reverse,
                                 });
@@ -702,7 +703,7 @@ impl JsonLdExpansionConverter {
                         self.state.push(JsonLdExpansionState::ObjectStart {
                             types,
                             id,
-                            seen_type: true,
+                            seen_id,
                             active_property,
                             reverse,
                         });
@@ -746,7 +747,7 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types,
                                 id,
-                                seen_type: true,
+                                seen_id: false,
                                 active_property,
                                 reverse,
                             });
@@ -775,7 +776,7 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types,
                                 id,
-                                seen_type: true,
+                                seen_id: false,
                                 active_property,
                                 reverse,
                             });
@@ -802,7 +803,7 @@ impl JsonLdExpansionConverter {
                         self.state.push(JsonLdExpansionState::ObjectStart {
                             types,
                             id,
-                            seen_type: true,
+                            seen_id: false,
                             active_property,
                             reverse,
                         });
@@ -825,7 +826,7 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::ObjectStart {
                                 types,
                                 id,
-                                seen_type: true,
+                                seen_id: false,
                                 active_property,
                                 reverse,
                             });
@@ -853,24 +854,27 @@ impl JsonLdExpansionConverter {
                         } else {
                             id = Some(new_id.into());
                         }
-                    }
-                    self.state.push(if from_start {
-                        JsonLdExpansionState::ObjectStart {
-                            types,
-                            id,
-                            seen_type: true,
-                            active_property: None,
-                            reverse,
-                        }
+                        self.state.push(if from_start {
+                            JsonLdExpansionState::ObjectStart {
+                                types,
+                                id,
+                                seen_id: true,
+                                active_property: None,
+                                reverse,
+                            }
+                        } else {
+                            if let Some(id) = id {
+                                results.push(JsonLdEvent::Id(id));
+                            }
+                            JsonLdExpansionState::Object {
+                                in_property: false,
+                                has_emitted_id: true,
+                            }
+                        })
                     } else {
-                        if let Some(id) = id {
-                            results.push(JsonLdEvent::Id(id));
-                        }
-                        JsonLdExpansionState::Object {
-                            in_property: false,
-                            has_emitted_id: true,
-                        }
-                    })
+                        self.state
+                            .push(JsonLdExpansionState::Skip { is_array: false });
+                    }
                 } else {
                     errors.push(JsonLdSyntaxError::msg_and_code(
                         "@id value must be a string",
@@ -880,7 +884,7 @@ impl JsonLdExpansionConverter {
                         JsonLdExpansionState::ObjectStart {
                             types,
                             id,
-                            seen_type: true,
+                            seen_id: true,
                             active_property: None,
                             reverse,
                         }
