@@ -6,6 +6,7 @@ use std::fmt;
 
 /// A [property path expression](https://www.w3.org/TR/sparql11-query/#defn_PropertyPathExpr).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PropertyPathExpression {
     NamedNode(NamedNode),
     Reverse(Box<Self>),
@@ -516,6 +517,7 @@ impl fmt::Display for Function {
 
 /// A SPARQL query [graph pattern](https://www.w3.org/TR/sparql11-query/#sparqlQuery).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GraphPattern {
     /// A [basic graph pattern](https://www.w3.org/TR/sparql11-query/#defn_BasicGraphPattern).
     Bgp { patterns: Vec<TriplePattern> },
@@ -1313,6 +1315,7 @@ impl fmt::Display for OrderExpression {
 
 /// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+
 pub struct QueryDataset {
     pub default: Vec<NamedNode>,
     pub named: Option<Vec<NamedNode>>,

@@ -18,6 +18,7 @@ default = []
 rdf-star = ["oxrdf/rdf-star"]
 sep-0002 = []
 sep-0006 = []
+serde = ["dep:serde", "oxrdf/serde"]
 
 [dependencies]
 oxilangtag.workspace = true
@@ -26,6 +27,14 @@ oxrdf.workspace = true
 peg.workspace = true
 rand.workspace = true
 thiserror.workspace = true
+serde = { version = "1.0.217", features = ["derive"], optional = true }
+
+[dev-dependencies]
+# Ideally this would be an optional dependency, used only when the `serde` feature is enabled.
+
+# However, optional dev-dependencies are not currently supported by cargo.
+# See https://github.com/rust-lang/cargo/issues/1596
+serde_json = { version = "1.0.134" }
 
 [lints]
 workspace = true
