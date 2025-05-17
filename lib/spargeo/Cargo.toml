@@ -7,9 +7,7 @@ readme = "README.md"
 keywords = ["GeoSPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargeo"
 documentation = "https://docs.rs/spargeo"
-description = """
-Implementation of GeoSPARQL functions
-"""
+description = "GeoSPARQL functions"
 edition.workspace = true
 rust-version.workspace = true
 

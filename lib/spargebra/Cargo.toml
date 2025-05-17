@@ -7,9 +7,7 @@ readme = "README.md"
 keywords = ["SPARQL"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/spargebra"
 documentation = "https://docs.rs/spargebra"
-description = """
-A SPARQL parser
-"""
+description = "SPARQL parser"
 edition.workspace = true
 rust-version.workspace = true
 

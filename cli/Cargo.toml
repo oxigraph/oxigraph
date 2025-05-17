@@ -8,9 +8,7 @@ keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["command-line-utilities", "database"]
 repository = "https://github.com/oxigraph/oxigraph/tree/main/cli"
 homepage = "https://oxigraph.org/cli/"
-description = """
-Oxigraph CLI tool and SPARQL HTTP server
-"""
+description = "Oxigraph CLI tool and SPARQL HTTP server"
 edition.workspace = true
 rust-version.workspace = true
 
