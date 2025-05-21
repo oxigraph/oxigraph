@@ -255,9 +255,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.2.22"
+version = "1.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32db95edf998450acc7881c932f94cd9b05c87b4b2599e8bab064753da4acfd1"
+checksum = "5f4ac86a9e5bc1e2b3449ab9d7d3a6a405e3d1bb28d7b9be8614f55846ae3766"
 dependencies = [
  "jobserver",
  "libc",
@@ -1034,9 +1034,9 @@ checksum = "00210d6893afc98edb752b664b8890f0ef174c8adbb8d0be9710fa66fbbf72d3"
 
 [[package]]
 name = "icu_properties"
-version = "2.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2549ca8c7241c82f59c80ba2a6f415d931c5b58d24fb8412caa1a1f02c49139a"
+checksum = "016c619c1eeb94efb86809b015c58f479963de65bdb6253345c1a1276f22e32b"
 dependencies = [
  "displaydoc",
  "icu_collections",
@@ -1050,9 +1050,9 @@ dependencies = [
 
 [[package]]
 name = "icu_properties_data"
-version = "2.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8197e866e47b68f8f7d95249e172903bec06004b18b2937f1095d40a0c57de04"
+checksum = "298459143998310acd25ffe6810ed544932242d3f07083eee1084d83a71bd632"
 
 [[package]]
 name = "icu_provider"
@@ -1431,7 +1431,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "bzip2",
  "codspeed-criterion-compat",
@@ -1452,12 +1452,12 @@ dependencies = [
  "sparesults",
  "spareval",
  "spargebra",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "oxigraph-cli"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1478,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "oxigraph-js"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -1552,7 +1552,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "tokio",
 ]
 
@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "oxrocksdb-sys"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "bindgen",
  "cc",
@@ -1828,7 +1828,7 @@ dependencies = [
 
 [[package]]
 name = "pyoxigraph"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "oxigraph",
  "pyo3",
@@ -2259,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "spargeo"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "geo",
  "geojson",

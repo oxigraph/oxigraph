@@ -1,3 +1,9 @@
+## [0.4.11] - 2025-05-21
+
+### Changed
+- Bumps to RocksDB 10.3.0 and fixes a compilation issue with GCC 13+
+
+
 ## [0.4.10] - 2025-05-15
 
 ### Added
