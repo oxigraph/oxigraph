@@ -25,7 +25,7 @@ use std::cmp::{max, min};
 use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufWriter, Read, Write};
+use std::io::{self, stdin, stdout, BufRead, BufWriter, Read, Write};
 use std::net::ToSocketAddrs;
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixDatagram;
@@ -47,6 +47,198 @@ const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
 const YASGUI_JS: &str = include_str!("../templates/yasgui/yasgui.min.js");
 const YASGUI_CSS: &str = include_str!("../templates/yasgui/yasgui.min.css");
 const LOGO: &str = include_str!("../logo.svg");
+
+fn handle_query(
+    store: Option<&Store>,
+    location: Option<std::path::PathBuf>,
+    query: Option<String>,
+    query_file: Option<std::path::PathBuf>,
+    query_base: Option<&str>,
+    results_file: Option<std::path::PathBuf>,
+    results_format: Option<&str>,
+    explain: bool,
+    explain_file: Option<std::path::PathBuf>,
+    stats: bool,
+    union_default_graph: bool,
+) -> anyhow::Result<()> {
+    if store.is_none() && location.is_none() {
+        bail!("Either store or location must be provided");
+    }
+    if store.is_some() && location.is_some() {
+        bail!("Only one of store or location can be provided");
+    }
+    let query = if let Some(query) = query {
+        query
+    } else if let Some(query_file) = query_file {
+        fs::read_to_string(&query_file)
+            .with_context(|| format!("Not able to read query file {}", query_file.display()))?
+    } else {
+        io::read_to_string(stdin().lock())?
+    };
+    let mut query = Query::parse(&query, query_base.as_deref())?;
+    if union_default_graph {
+        query.dataset_mut().set_default_graph_as_union();
+    }
+    // Execute the query using either the provided store or by opening a new one
+    let (results, explanation) = if let Some(store) = store {
+        store.explain_query_opt(query, default_query_options(), stats)?
+    } else {
+        // We already validated that location is Some if store is None
+        let store = Store::open_read_only(location.unwrap())?;
+        store.explain_query_opt(query, default_query_options(), stats)?
+    };
+    let print_result = (|| {
+        match results? {
+            QueryResults::Solutions(solutions) => {
+                let format = if let Some(name) = results_format {
+                    if let Some(format) = QueryResultsFormat::from_extension(&name) {
+                        format
+                    } else if let Some(format) = QueryResultsFormat::from_media_type(&name) {
+                        format
+                    } else {
+                        bail!("The file format '{name}' is unknown")
+                    }
+                } else if let Some(results_file) = &results_file {
+                    format_from_path(results_file, |ext| {
+                        QueryResultsFormat::from_extension(ext)
+                            .with_context(|| format!("The file extension '{ext}' is unknown"))
+                    })?
+                } else {
+                    bail!("The --results-format option must be set when writing to stdout")
+                };
+                if let Some(results_file) = results_file {
+                    let mut serializer = QueryResultsSerializer::from_format(format)
+                        .serialize_solutions_to_writer(
+                            BufWriter::new(File::create(results_file)?),
+                            solutions.variables().to_vec(),
+                        )?;
+                    for solution in solutions {
+                        serializer.serialize(&solution?)?;
+                    }
+                    close_file_writer(serializer.finish()?)?;
+                } else {
+                    let mut serializer = QueryResultsSerializer::from_format(format)
+                        .serialize_solutions_to_writer(
+                            stdout().lock(),
+                            solutions.variables().to_vec(),
+                        )?;
+                    for solution in solutions {
+                        serializer.serialize(&solution?)?;
+                    }
+                    serializer.finish()?.flush()?;
+                }
+            }
+            QueryResults::Boolean(result) => {
+                let format = if let Some(name) = results_format {
+                    if let Some(format) = QueryResultsFormat::from_extension(&name) {
+                        format
+                    } else if let Some(format) = QueryResultsFormat::from_media_type(&name) {
+                        format
+                    } else {
+                        bail!("The file format '{name}' is unknown")
+                    }
+                } else if let Some(results_file) = &results_file {
+                    format_from_path(results_file, |ext| {
+                        QueryResultsFormat::from_extension(ext)
+                            .with_context(|| format!("The file extension '{ext}' is unknown"))
+                    })?
+                } else {
+                    bail!("The --results-format option must be set when writing to stdout")
+                };
+                if let Some(results_file) = results_file {
+                    close_file_writer(
+                        QueryResultsSerializer::from_format(format).serialize_boolean_to_writer(
+                            BufWriter::new(File::create(results_file)?),
+                            result,
+                        )?,
+                    )?;
+                } else {
+                    QueryResultsSerializer::from_format(format)
+                        .serialize_boolean_to_writer(stdout().lock(), result)?
+                        .flush()?;
+                }
+            }
+            QueryResults::Graph(triples) => {
+                let format = if let Some(name) = &results_format {
+                    rdf_format_from_name(name)
+                } else if let Some(results_file) = &results_file {
+                    rdf_format_from_path(results_file)
+                } else {
+                    bail!("The --results-format option must be set when writing to stdout")
+                }?;
+                let serializer = RdfSerializer::from_format(format);
+                if let Some(results_file) = results_file {
+                    let mut serializer =
+                        serializer.for_writer(BufWriter::new(File::create(results_file)?));
+                    for triple in triples {
+                        serializer.serialize_triple(triple?.as_ref())?;
+                    }
+                    close_file_writer(serializer.finish()?)?;
+                } else {
+                    let mut serializer = serializer.for_writer(stdout().lock());
+                    for triple in triples {
+                        serializer.serialize_triple(triple?.as_ref())?;
+                    }
+                    serializer.finish()?.flush()?;
+                }
+            }
+        }
+        Ok(())
+    })();
+    if let Some(explain_file) = explain_file {
+        let mut file = BufWriter::new(File::create(&explain_file)?);
+        match explain_file.extension().and_then(OsStr::to_str) {
+            Some("json") => {
+                explanation.write_in_json(&mut file)?;
+            }
+            Some("txt") => {
+                write!(file, "{explanation:?}")?;
+            }
+            _ => bail!(
+                "The given explanation file {} must have an extension that is .json or .txt",
+                explain_file.display()
+            ),
+        }
+        close_file_writer(file)?;
+    } else if explain || stats {
+        eprintln!("{explanation:#?}");
+    }
+    print_result
+}
+
+fn handle_update(
+    store: Option<&Store>,
+    location: Option<std::path::PathBuf>,
+    update: Option<String>,
+    update_file: Option<std::path::PathBuf>,
+    update_base: Option<&str>,
+) -> anyhow::Result<()> {
+    if store.is_none() && location.is_none() {
+        bail!("Either store or location must be provided");
+    }
+    if store.is_some() && location.is_some() {
+        bail!("Only one of store or location can be provided");
+    }
+    let update = if let Some(update) = update {
+        update
+    } else if let Some(update_file) = update_file {
+        fs::read_to_string(&update_file)
+            .with_context(|| format!("Not able to read update file {}", update_file.display()))?
+    } else {
+        io::read_to_string(stdin().lock())?
+    };
+    let update = Update::parse(&update, update_base.as_deref())?;
+    if let Some(store) = store {
+        store.update_opt(update, default_query_options())?;
+        store.flush()?;
+    } else {
+        let store = Store::open(location.unwrap())?;
+        store.update_opt(update, default_query_options())?;
+        store.flush()?;
+    }
+
+    Ok(())
+}
 
 pub fn main() -> anyhow::Result<()> {
     let matches = Args::parse();
@@ -264,169 +456,120 @@ pub fn main() -> anyhow::Result<()> {
             explain_file,
             stats,
             union_default_graph,
-        } => {
-            let query = if let Some(query) = query {
-                query
-            } else if let Some(query_file) = query_file {
-                fs::read_to_string(&query_file).with_context(|| {
-                    format!("Not able to read query file {}", query_file.display())
-                })?
-            } else {
-                io::read_to_string(stdin().lock())?
-            };
-            let mut query = Query::parse(&query, query_base.as_deref())?;
-            if union_default_graph {
-                query.dataset_mut().set_default_graph_as_union();
-            }
-            let store = Store::open_read_only(location)?;
-            let (results, explanation) =
-                store.explain_query_opt(query, default_query_options(), stats)?;
-            let print_result = (|| {
-                match results? {
-                    QueryResults::Solutions(solutions) => {
-                        let format = if let Some(name) = results_format {
-                            if let Some(format) = QueryResultsFormat::from_extension(&name) {
-                                format
-                            } else if let Some(format) = QueryResultsFormat::from_media_type(&name)
-                            {
-                                format
-                            } else {
-                                bail!("The file format '{name}' is unknown")
-                            }
-                        } else if let Some(results_file) = &results_file {
-                            format_from_path(results_file, |ext| {
-                                QueryResultsFormat::from_extension(ext).with_context(|| {
-                                    format!("The file extension '{ext}' is unknown")
-                                })
-                            })?
-                        } else {
-                            bail!("The --results-format option must be set when writing to stdout")
-                        };
-                        if let Some(results_file) = results_file {
-                            let mut serializer = QueryResultsSerializer::from_format(format)
-                                .serialize_solutions_to_writer(
-                                    BufWriter::new(File::create(results_file)?),
-                                    solutions.variables().to_vec(),
-                                )?;
-                            for solution in solutions {
-                                serializer.serialize(&solution?)?;
-                            }
-                            close_file_writer(serializer.finish()?)?;
-                        } else {
-                            let mut serializer = QueryResultsSerializer::from_format(format)
-                                .serialize_solutions_to_writer(
-                                    stdout().lock(),
-                                    solutions.variables().to_vec(),
-                                )?;
-                            for solution in solutions {
-                                serializer.serialize(&solution?)?;
-                            }
-                            serializer.finish()?.flush()?;
-                        }
-                    }
-                    QueryResults::Boolean(result) => {
-                        let format = if let Some(name) = results_format {
-                            if let Some(format) = QueryResultsFormat::from_extension(&name) {
-                                format
-                            } else if let Some(format) = QueryResultsFormat::from_media_type(&name)
-                            {
-                                format
-                            } else {
-                                bail!("The file format '{name}' is unknown")
-                            }
-                        } else if let Some(results_file) = &results_file {
-                            format_from_path(results_file, |ext| {
-                                QueryResultsFormat::from_extension(ext).with_context(|| {
-                                    format!("The file extension '{ext}' is unknown")
-                                })
-                            })?
-                        } else {
-                            bail!("The --results-format option must be set when writing to stdout")
-                        };
-                        if let Some(results_file) = results_file {
-                            close_file_writer(
-                                QueryResultsSerializer::from_format(format)
-                                    .serialize_boolean_to_writer(
-                                        BufWriter::new(File::create(results_file)?),
-                                        result,
-                                    )?,
-                            )?;
-                        } else {
-                            QueryResultsSerializer::from_format(format)
-                                .serialize_boolean_to_writer(stdout().lock(), result)?
-                                .flush()?;
-                        }
-                    }
-                    QueryResults::Graph(triples) => {
-                        let format = if let Some(name) = &results_format {
-                            rdf_format_from_name(name)
-                        } else if let Some(results_file) = &results_file {
-                            rdf_format_from_path(results_file)
-                        } else {
-                            bail!("The --results-format option must be set when writing to stdout")
-                        }?;
-                        let serializer = RdfSerializer::from_format(format);
-                        if let Some(results_file) = results_file {
-                            let mut serializer =
-                                serializer.for_writer(BufWriter::new(File::create(results_file)?));
-                            for triple in triples {
-                                serializer.serialize_triple(triple?.as_ref())?;
-                            }
-                            close_file_writer(serializer.finish()?)?;
-                        } else {
-                            let mut serializer = serializer.for_writer(stdout().lock());
-                            for triple in triples {
-                                serializer.serialize_triple(triple?.as_ref())?;
-                            }
-                            serializer.finish()?.flush()?;
-                        }
-                    }
-                }
-                Ok(())
-            })();
-            if let Some(explain_file) = explain_file {
-                let mut file = BufWriter::new(File::create(&explain_file)?);
-                match explain_file
-                    .extension()
-                    .and_then(OsStr::to_str) {
-                    Some("json") => {
-                        explanation.write_in_json(&mut file)?;
-                    },
-                    Some("txt") => {
-                        write!(file, "{explanation:?}")?;
-                    },
-                    _ => bail!("The given explanation file {} must have an extension that is .json or .txt", explain_file.display())
-                }
-                close_file_writer(file)?;
-            } else if explain || stats {
-                eprintln!("{explanation:#?}");
-            }
-            print_result
-        }
+        } => handle_query(
+            None,
+            Some(location),
+            query,
+            query_file,
+            query_base.as_deref(),
+            results_file,
+            results_format.as_deref(),
+            explain,
+            explain_file,
+            stats,
+            union_default_graph,
+        ),
         Command::Update {
             location,
             update,
             update_file,
             update_base,
-        } => {
-            let update = if let Some(update) = update {
-                update
-            } else if let Some(update_file) = update_file {
-                fs::read_to_string(&update_file).with_context(|| {
-                    format!("Not able to read update file {}", update_file.display())
-                })?
-            } else {
-                io::read_to_string(stdin().lock())?
-            };
-            let update = Update::parse(&update, update_base.as_deref())?;
-            let store = Store::open(location)?;
-            store.update_opt(update, default_query_options())?;
-            store.flush()?;
-            Ok(())
-        }
+        } => handle_update(
+            None,
+            Some(location),
+            update,
+            update_file,
+            update_base.as_deref(),
+        ),
         Command::Optimize { location } => {
             let store = Store::open(location)?;
             store.optimize()?;
+            Ok(())
+        }
+        Command::Interactive {
+            location,
+            query_base,
+            results_format,
+            union_default_graph,
+            update_base,
+            quiet,
+        } => {
+            // Open the store once at the beginning
+            let store = Store::open(location)?;
+            let stdin = stdin();
+            let mut stdout = stdout();
+            let mut input = String::new();
+
+            if !quiet {
+                eprintln!("Oxigraph interactive mode. Type 'query', 'update', 'clear', or 'exit'.");
+            }
+            loop {
+                input.clear();
+                if !quiet {
+                    write!(stdout, "oxigraph> ")?;
+                    stdout.flush()?;
+                }
+                if stdin.lock().read_line(&mut input)? == 0 {
+                    break;
+                }
+                let trimmed = input.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let mut parts = trimmed.splitn(2, char::is_whitespace);
+                let cmd = parts.next().unwrap_or("");
+                let rest = parts.next().unwrap_or("").trim();
+                match cmd.to_ascii_lowercase().as_str() {
+                    "query" => {
+                        if let Err(e) = handle_query(
+                            Some(&store),
+                            None,
+                            Some(rest.to_string()),
+                            None,
+                            query_base.as_deref(),
+                            None,
+                            results_format.as_deref(),
+                            false,
+                            None,
+                            false,
+                            union_default_graph,
+                        ) {
+                            eprintln!("Error: {e:?}");
+                        }
+                    }
+                    "update" => {
+                        if let Err(e) = handle_update(
+                            Some(&store),
+                            None,
+                            Some(rest.to_string()),
+                            None,
+                            update_base.as_deref(),
+                        ) {
+                            eprintln!("Error: {e:?}");
+                        }
+                    }
+                    "clear" => {
+                        if !quiet {
+                            // Cross-platform clear screen
+                            #[cfg(windows)]
+                            {
+                                std::process::Command::new("cmd")
+                                    .args(["/C", "cls"])
+                                    .status()
+                                    .ok();
+                            }
+                            #[cfg(not(windows))]
+                            {
+                                std::process::Command::new("clear").status().ok();
+                            }
+                        }
+                    }
+                    "exit" | "quit" => break,
+                    _ => {
+                        eprintln!("Unknown command. Use 'query', 'update', 'clear', or 'exit'.");
+                    }
+                }
+            }
             Ok(())
         }
         Command::Convert {
