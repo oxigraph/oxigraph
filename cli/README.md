@@ -37,7 +37,7 @@ Note that Oxigraph CLI was previously named Oxigraph Server before version 0.4. 
 
 ## Installation
 
-You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install).
+You need to have [a recent stable version of Rust and Cargo installed](https://www.rust-lang.org/tools/install) as well as Clang and LLVM for the RocksDB Rust bindings.
 
 To download, build, and install the latest released version run `cargo install oxigraph-cli`.
 There is no need to clone the git repository.
