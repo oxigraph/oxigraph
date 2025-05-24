@@ -17,7 +17,8 @@ members = [
     "lib/sparql-smith",
     "oxrocksdb-sys",
     "python",
-    "testsuite"
+    "testsuite",
+    "bench/criterion"
 ]
 resolver = "2"
 
