@@ -763,6 +763,8 @@ mod tests {
         );
     }
 
+    // This test is required to make sure that we are not borrowing any strings
+    // when deserializing a Literal.
     #[test]
     #[cfg(feature = "serde")]
     fn test_serde_from_reader() {

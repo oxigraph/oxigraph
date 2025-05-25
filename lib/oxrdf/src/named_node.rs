@@ -30,8 +30,8 @@ impl<'de> Deserialize<'de> for NamedNode {
         D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        struct NNode<'a> {
-            value: &'a str,
+        struct NNode {
+            value: String,
         }
         let iri = NNode::deserialize(deserializer)?;
         Self::new(iri.value).map_err(de::Error::custom)
@@ -286,6 +286,8 @@ mod tests {
         assert!(deserialized.is_err());
     }
 
+    // This test is required to make sure that we are not borrowing any strings
+    // when deserializing a NamedNode.
     #[test]
     #[cfg(feature = "serde")]
     fn as_str_partial_reader() {

@@ -142,8 +142,8 @@ impl<'de> Deserialize<'de> for BlankNode {
         D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        struct BNode<'a> {
-            value: &'a str,
+        struct BNode {
+            value: String,
         }
         let bnode = BNode::deserialize(deserializer)?;
         Self::new(bnode.value).map_err(de::Error::custom)
@@ -480,6 +480,8 @@ mod tests {
         assert!(b4.is_err());
     }
 
+    // This test is required to make sure that we are not borrowing any strings
+    // when deserializing a BlankNode.
     #[test]
     #[cfg(feature = "serde")]
     fn as_str_partial_reader() {
