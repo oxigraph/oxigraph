@@ -136,36 +136,17 @@ impl Serialize for BlankNode {
 }
 
 #[cfg(feature = "serde")]
-struct BlankNodeVisitor;
-
-#[cfg(feature = "serde")]
-impl<'de> Visitor<'de> for BlankNodeVisitor {
-    type Value = BlankNode;
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("struct BlankNode")
-    }
-    fn visit_map<V>(self, mut map: V) -> Result<BlankNode, V::Error>
-    where
-        V: MapAccess<'de>,
-    {
-        let key = map.next_key::<String>()?;
-        if key != Some("value".to_string()) {
-            if let Some(val) = key {
-                return Err(de::Error::unknown_field(&val, &["value"]));
-            }
-            return Err(de::Error::missing_field("value"));
-        }
-        Ok(BlankNode::new(map.next_value::<String>()?).map_err(de::Error::custom)?)
-    }
-}
-
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for BlankNode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_struct("BlankNode", &["value"], BlankNodeVisitor)
+        #[derive(Deserialize)]
+        struct BNode<'a> {
+            value: &'a str
+        }
+        let bnode = BNode::deserialize(deserializer)?;
+        Self::new(bnode.value).map_err(de::Error::custom)
     }
 }
 
