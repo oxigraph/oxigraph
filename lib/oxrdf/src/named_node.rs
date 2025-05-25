@@ -33,7 +33,7 @@ impl<'de> Deserialize<'de> for NamedNode {
     {
         #[derive(Deserialize)]
         struct NNode<'a> {
-            value: &'a str
+            value: &'a str,
         }
         let iri = NNode::deserialize(deserializer)?;
         Self::new(iri.value).map_err(de::Error::custom)

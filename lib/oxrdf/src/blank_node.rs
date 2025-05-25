@@ -143,7 +143,7 @@ impl<'de> Deserialize<'de> for BlankNode {
     {
         #[derive(Deserialize)]
         struct BNode<'a> {
-            value: &'a str
+            value: &'a str,
         }
         let bnode = BNode::deserialize(deserializer)?;
         Self::new(bnode.value).map_err(de::Error::custom)
