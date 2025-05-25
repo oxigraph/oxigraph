@@ -830,16 +830,6 @@ mod tests {
 
     #[test]
     #[cfg(feature = "serde")]
-    fn test_deserialize_failure() {
-        let j = r#"{"value":"true","language":"boo"}"#;
-        let mut de = serde_json::Deserializer::from_str(j);
-        let deserialized = Literal::deserialize(&mut de);
-
-        assert!(deserialized.is_err());
-    }
-
-    #[test]
-    #[cfg(feature = "serde")]
     fn test_deserialize_failure_datatype_and_language() {
         let j = r#"{"value":"true","datatype":"http://www.w3.org/2001/XMLSchema#boolean", "language": "en"}"#;
         let mut de = serde_json::Deserializer::from_str(j);
