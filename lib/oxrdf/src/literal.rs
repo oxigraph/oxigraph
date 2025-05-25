@@ -187,19 +187,17 @@ impl Serialize for Literal {
 }
 
 #[cfg(feature = "serde")]
-#[derive(Deserialize)]
-struct LiteralValue {
-    value: String,
-    language: Option<String>,
-    datatype: Option<String>,
-}
-
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Literal {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
+        #[derive(Deserialize)]
+        struct LiteralValue {
+            value: String,
+            language: Option<String>,
+            datatype: Option<String>,
+        }
         let LiteralValue {
             value,
             language,
@@ -213,7 +211,10 @@ impl<'de> Deserialize<'de> for Literal {
             (None, Some(language)) => {
                 Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
             }
-            _ => Ok(Literal::new_simple_literal(value)),
+            (None, None) => Ok(Literal::new_simple_literal(value)),
+            _ => Err(de::Error::custom(
+                "Invalid literal format: Literal can only have one of datatype or language",
+            )),
         }
     }
 }
@@ -823,5 +824,29 @@ mod tests {
     fn test_literal_deserialize_owned() {
         // If Literal does not implement DeserializeOwned, this call will fail to compile.
         assert_deserialize_owned::<Literal>();
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_deserialize_failure() {
+        let j = r#"{"value":"true","language":"boo"}"#;
+        let mut de = serde_json::Deserializer::from_str(j);
+        let deserialized = Literal::deserialize(&mut de);
+
+        assert!(deserialized.is_err());
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_deserialize_failure_datatype_and_language() {
+        let j = r#"{"value":"true","datatype":"http://www.w3.org/2001/XMLSchema#boolean", "language": "en"}"#;
+        let mut de = serde_json::Deserializer::from_str(j);
+        let deserialized = Literal::deserialize(&mut de);
+
+        assert!(deserialized.is_err());
+        assert_eq!(
+            deserialized.unwrap_err().to_string(),
+            "Invalid literal format: Literal can only have one of datatype or language"
+        );
     }
 }
