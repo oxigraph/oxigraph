@@ -1,6 +1,6 @@
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "serde")]
-use serde::{de, de::MapAccess, de::Visitor, Deserializer};
+use serde::{de, Deserializer};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -26,36 +26,17 @@ pub struct NamedNode {
 }
 
 #[cfg(feature = "serde")]
-struct NamedNodeVisitor;
-
-#[cfg(feature = "serde")]
-impl<'de> Visitor<'de> for NamedNodeVisitor {
-    type Value = NamedNode;
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("struct NamedNode")
-    }
-    fn visit_map<V>(self, mut map: V) -> Result<NamedNode, V::Error>
-    where
-        V: MapAccess<'de>,
-    {
-        let key = map.next_key::<String>()?;
-        if key != Some("value".to_string()) {
-            if let Some(val) = key {
-                return Err(de::Error::unknown_field(&val, &["value"]));
-            }
-            return Err(de::Error::missing_field("value"));
-        }
-        Ok(NamedNode::new(map.next_value::<String>()?).map_err(de::Error::custom)?)
-    }
-}
-
-#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for NamedNode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_struct("NamedNode", &["value"], NamedNodeVisitor)
+        #[derive(Deserialize)]
+        struct NNode<'a> {
+            value: &'a str
+        }
+        let iri = NNode::deserialize(deserializer)?;
+        Self::new(iri.value).map_err(de::Error::custom)
     }
 }
 
