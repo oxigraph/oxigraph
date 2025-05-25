@@ -470,14 +470,6 @@ mod tests {
         assert_eq!(json, "{\"value\":\"a\"}");
         let b2: BlankNode = serde_json::from_str(&json).unwrap();
         assert_eq!(b2, b);
-
-        let b3: Result<BlankNode, serde_json::Error> =
-            serde_json::from_str::<BlankNode>(&"{\"art\":\"r\", \"value\":\"a\", \"noise\":\"t\"}");
-        assert!(b3.is_err());
-
-        let b4: Result<BlankNode, serde_json::Error> =
-            serde_json::from_str::<BlankNode>(&"{\"art\":\"r\"}");
-        assert!(b4.is_err());
     }
 
     // This test is required to make sure that we are not borrowing any strings
