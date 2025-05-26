@@ -469,7 +469,7 @@ mod tests {
     fn as_str_partial_reader() {
         let j = serde_json::to_string(&BlankNode::new("abc").unwrap()).unwrap();
 
-        let mut de = serde_json::Deserializer::from_reader(&j.as_bytes());
+        let mut de = serde_json::Deserializer::from_reader(j.as_bytes());
         let deserialized = BlankNode::deserialize(&mut de);
 
         if let Err(e) = deserialized {
