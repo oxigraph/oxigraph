@@ -1581,7 +1581,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/o"),
         );
         let jsn = serde_json::to_string(&triple)?;
-        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, triple);
 
         // Test triples with all possible combinations of terms
@@ -1591,7 +1591,7 @@ mod tests {
             Literal::new_simple_literal("foo"),
         );
         let jsn = serde_json::to_string(&triple)?;
-        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, triple);
 
         let triple = Triple::new(
@@ -1601,7 +1601,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&triple).unwrap();
-        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, triple);
 
         Ok(())
@@ -1647,7 +1647,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&triple)?;
-        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, triple);
 
         Ok(())
@@ -1743,7 +1743,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/g"),
         );
         let jsn = serde_json::to_string(&quad)?;
-        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, quad);
 
         // Test quads with all possible combinations of terms
@@ -1754,7 +1754,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/g"),
         );
         let jsn = serde_json::to_string(&quad)?;
-        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, quad);
 
         let quad = Quad::new(
@@ -1765,7 +1765,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&quad).unwrap();
-        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, quad);
 
         // Test quads with blank node graph name
@@ -1776,7 +1776,7 @@ mod tests {
             BlankNode::new("foo").unwrap(),
         );
         let jsn = serde_json::to_string(&quad)?;
-        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, quad);
 
         // Test quads with default graph name
@@ -1787,7 +1787,7 @@ mod tests {
             GraphName::DefaultGraph,
         );
         let jsn = serde_json::to_string(&quad)?;
-        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, quad);
 
         Ok(())
@@ -1835,7 +1835,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&quad)?;
-        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_bytes())?;
         assert_eq!(deserialized, quad);
 
         Ok(())
@@ -1856,7 +1856,7 @@ mod tests {
     fn test_serde_term_from_reader() {
         let b: Term = BlankNode::new("foo").unwrap().into();
         let json = serde_json::to_string(&b).unwrap();
-        let b2: Term = serde_json::from_reader(&json.as_slice()).unwrap();
+        let b2: Term = serde_json::from_reader(&json.as_bytes()).unwrap();
         assert_eq!(b2, Term::BlankNode(BlankNode::new("foo").unwrap()));
     }
 
