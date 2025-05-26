@@ -1856,7 +1856,7 @@ mod tests {
     fn test_serde_term_from_reader() {
         let b: Term = BlankNode::new("foo").unwrap().into();
         let json = serde_json::to_string(&b).unwrap();
-        let b2: Term = serde_json::from_reader(&jsn.as_slice()).unwrap();
+        let b2: Term = serde_json::from_reader(&json.as_slice()).unwrap();
         assert_eq!(b2, Term::BlankNode(BlankNode::new("foo").unwrap()));
     }
 
