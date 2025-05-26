@@ -1581,8 +1581,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/o"),
         );
         let jsn = serde_json::to_string(&triple)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Triple = serde_json::from_reader(reader)?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, triple);
 
         // Test triples with all possible combinations of terms
@@ -1592,8 +1591,7 @@ mod tests {
             Literal::new_simple_literal("foo"),
         );
         let jsn = serde_json::to_string(&triple)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Triple = serde_json::from_reader(reader)?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, triple);
 
         let triple = Triple::new(
@@ -1603,8 +1601,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&triple).unwrap();
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Triple = serde_json::from_reader(reader)?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, triple);
 
         Ok(())
@@ -1650,8 +1647,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&triple)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Triple = serde_json::from_reader(reader)?;
+        let deserialized: Triple = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, triple);
 
         Ok(())
@@ -1747,8 +1743,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/g"),
         );
         let jsn = serde_json::to_string(&quad)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Quad = serde_json::from_reader(reader)?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, quad);
 
         // Test quads with all possible combinations of terms
@@ -1759,8 +1754,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/g"),
         );
         let jsn = serde_json::to_string(&quad)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Quad = serde_json::from_reader(reader)?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, quad);
 
         let quad = Quad::new(
@@ -1771,8 +1765,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&quad).unwrap();
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Quad = serde_json::from_reader(reader)?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, quad);
 
         // Test quads with blank node graph name
@@ -1783,8 +1776,7 @@ mod tests {
             BlankNode::new("foo").unwrap(),
         );
         let jsn = serde_json::to_string(&quad)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Quad = serde_json::from_reader(reader)?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, quad);
 
         // Test quads with default graph name
@@ -1795,8 +1787,7 @@ mod tests {
             GraphName::DefaultGraph,
         );
         let jsn = serde_json::to_string(&quad)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Quad = serde_json::from_reader(reader)?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, quad);
 
         Ok(())
@@ -1844,8 +1835,7 @@ mod tests {
         );
 
         let jsn = serde_json::to_string(&quad)?;
-        let reader = std::io::Cursor::new(jsn.as_bytes());
-        let deserialized: Quad = serde_json::from_reader(reader)?;
+        let deserialized: Quad = serde_json::from_reader(&jsn.as_slice())?;
         assert_eq!(deserialized, quad);
 
         Ok(())
@@ -1866,8 +1856,7 @@ mod tests {
     fn test_serde_term_from_reader() {
         let b: Term = BlankNode::new("foo").unwrap().into();
         let json = serde_json::to_string(&b).unwrap();
-        let reader = std::io::Cursor::new(json.as_bytes());
-        let b2: Term = serde_json::from_reader(reader).unwrap();
+        let b2: Term = serde_json::from_reader(&jsn.as_slice()).unwrap();
         assert_eq!(b2, Term::BlankNode(BlankNode::new("foo").unwrap()));
     }
 

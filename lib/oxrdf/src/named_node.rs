@@ -292,9 +292,8 @@ mod tests {
     #[cfg(feature = "serde")]
     fn as_str_partial_reader() {
         let j = serde_json::to_string(&NamedNode::new("http://example.org/").unwrap()).unwrap();
-        let reader = std::io::Cursor::new(j.into_bytes());
 
-        let mut de = serde_json::Deserializer::from_reader(reader);
+        let mut de = serde_json::Deserializer::from_reader(&j.as_slice());
         let deserialized = NamedNode::deserialize(&mut de);
 
         if let Err(e) = deserialized {
