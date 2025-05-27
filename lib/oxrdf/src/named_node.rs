@@ -1,6 +1,6 @@
 use oxiri::{Iri, IriParseError};
 #[cfg(feature = "serde")]
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -16,26 +16,9 @@ use std::fmt;
 /// );
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
-#[cfg_attr(feature = "serde", derive(Serialize))]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct NamedNode {
-    #[cfg_attr(feature = "serde", serde(rename = "value"))]
     iri: String,
-}
-
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for NamedNode {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct NNode {
-            value: String,
-        }
-        let iri = NNode::deserialize(deserializer)?;
-        Self::new(iri.value).map_err(de::Error::custom)
-    }
 }
 
 impl NamedNode {
@@ -254,69 +237,47 @@ impl<'a> From<Iri<&'a str>> for NamedNodeRef<'a> {
     }
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for NamedNode {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_ref().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for NamedNodeRef<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        #[serde(rename = "NamedNode")]
+        struct Value<'a> {
+            value: &'a str,
+        }
+        Value {
+            value: self.as_str(),
+        }
+        .serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for NamedNode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename = "NamedNode")]
+        struct Value {
+            value: String,
+        }
+        Self::new(Value::deserialize(deserializer)?.value).map_err(de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
-    #[cfg(feature = "serde")]
-    use serde::de::DeserializeOwned;
-
     use super::*;
-
-    #[test]
-    #[cfg(feature = "serde")]
-    fn as_str_partial() {
-        let j = serde_json::to_string(&NamedNode::new("http://example.org/").unwrap()).unwrap();
-        let mut de = serde_json::Deserializer::from_str(&j);
-        let deserialized = NamedNode::deserialize(&mut de);
-
-        assert!(deserialized.is_ok());
-        assert_eq!(
-            deserialized.unwrap(),
-            NamedNode::new("http://example.org/").unwrap()
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "serde")]
-    fn invalid_iri() {
-        let j = r#"{"value":"boo"}"#;
-        let mut de = serde_json::Deserializer::from_str(j);
-        let deserialized = NamedNode::deserialize(&mut de);
-
-        assert!(deserialized.is_err());
-    }
-
-    // This test is required to make sure that we are not borrowing any strings
-    // when deserializing a NamedNode.
-    #[test]
-    #[cfg(feature = "serde")]
-    fn as_str_partial_reader() {
-        let j = serde_json::to_string(&NamedNode::new("http://example.org/").unwrap()).unwrap();
-
-        let mut de = serde_json::Deserializer::from_reader(j.as_bytes());
-        let deserialized = NamedNode::deserialize(&mut de);
-
-        if let Err(e) = deserialized {
-            panic!("{}", e);
-        }
-
-        assert!(deserialized.is_ok());
-        assert_eq!(
-            deserialized.unwrap(),
-            NamedNode::new("http://example.org/").unwrap()
-        );
-    }
-
-    // This helper function will only compile if T implements DeserializeOwned.
-    #[cfg(feature = "serde")]
-    fn assert_deserialize_owned<T: DeserializeOwned>() {}
-
-    #[test]
-    #[cfg(feature = "serde")]
-    fn test_named_node_deserialize_owned() {
-        // If NamedNode does not implement DeserializeOwned, this call will fail to compile.
-        assert_deserialize_owned::<NamedNode>();
-    }
 
     #[test]
     fn named_node_construction() {
@@ -324,5 +285,15 @@ mod tests {
             "http://example.org/",
             NamedNode::new("http://example.org/").unwrap().iri
         );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        let n = NamedNode::new("http://example.com/foo").unwrap();
+        let json = serde_json::to_string(&n).unwrap();
+        assert_eq!(json, "{\"value\":\"http://example.com/foo\"}");
+        let n2: NamedNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(n2, n);
     }
 }

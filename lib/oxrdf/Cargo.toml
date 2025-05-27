@@ -22,13 +22,13 @@ oxiri.workspace = true
 oxsdatatypes = { workspace = true, optional = true }
 rand.workspace = true
 thiserror.workspace = true
-serde = { version = "1.0.217", features = ["derive"], optional = true}
+serde = { workspace = true, features = ["derive"], optional = true }
 
 [dev-dependencies]
-# Ideally this would be an optional dependency, used only when the `serde` feature is enabled.
-# However, optional dev-dependencies are not currently supported by cargo.
+# Ideally, this would be an optional dependency, used only when the `serde` feature is enabled.
+# However, cargo does not currently support optional dev-dependencies.
 # See https://github.com/rust-lang/cargo/issues/1596
-serde_json = { version = "1.0.134" }
+serde_json.workspace = true
 
 [lints]
 workspace = true
