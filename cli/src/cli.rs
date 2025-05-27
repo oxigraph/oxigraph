@@ -262,4 +262,25 @@ pub enum Command {
         #[arg(long, value_hint = ValueHint::Url)]
         to_graph: Option<String>,
     },
+    /// Start an interactive CLI for SPARQL query and update
+    Interactive {
+        /// Directory in which Oxigraph data are persisted
+        #[arg(short, long, value_hint = ValueHint::DirPath)]
+        location: PathBuf,
+        /// Base IRI of the query (optional, used for queries)
+        #[arg(long, value_hint = ValueHint::Url)]
+        query_base: Option<String>,
+        /// The results format (optional, used for queries)
+        #[arg(long)]
+        results_format: Option<String>,
+        /// If the SPARQL queries should look for triples in all the dataset graphs by default (ie. without `GRAPH` operations)
+        #[arg(long)]
+        union_default_graph: bool,
+        /// Base IRI of the update (optional, used for updates)
+        #[arg(long, value_hint = ValueHint::Url)]
+        update_base: Option<String>,
+        /// Suppress all output except the response generated
+        #[arg(short, long)]
+        quiet: bool,
+    },
 }
