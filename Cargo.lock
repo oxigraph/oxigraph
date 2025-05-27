@@ -1541,7 +1541,9 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
- "thiserror 2.0.12",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
