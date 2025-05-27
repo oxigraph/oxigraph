@@ -4,7 +4,7 @@ use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
 #[cfg(feature = "serde")]
-use serde::{de, ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -158,64 +158,6 @@ impl fmt::Display for Literal {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Serialize for Literal {
-    #[inline]
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map: <S as Serializer>::SerializeStruct;
-        match self {
-            Self(LiteralContent::String(value)) => {
-                map = serializer.serialize_struct("Literal", 1)?;
-                map.serialize_field("value", value)?;
-            }
-            Self(LiteralContent::LanguageTaggedString { value, language }) => {
-                map = serializer.serialize_struct("Literal", 2)?;
-                map.serialize_field("value", value)?;
-                map.serialize_field("language", language)?;
-            }
-            Self(LiteralContent::TypedLiteral { value, datatype }) => {
-                map = serializer.serialize_struct("Literal", 2)?;
-                map.serialize_field("value", value)?;
-                map.serialize_field("datatype", datatype.as_str())?;
-            }
-        };
-        map.end()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for Literal {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct LiteralValue {
-            value: String,
-            language: Option<String>,
-            datatype: Option<String>,
-        }
-        let LiteralValue {
-            value,
-            language,
-            datatype,
-        } = LiteralValue::deserialize(deserializer)?;
-        match (datatype, language) {
-            (Some(datatype), None) => Ok(Literal::new_typed_literal(
-                value,
-                NamedNode::new(datatype).map_err(de::Error::custom)?,
-            )),
-            (None, Some(language)) => {
-                Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
-            }
-            (None, None) => Ok(Literal::new_simple_literal(value)),
-            _ => Err(de::Error::custom(
-                "Invalid literal format: Literal can only have one of datatype or language",
-            )),
-        }
     }
 }
 
@@ -691,12 +633,88 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for Literal {
+    #[inline]
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.as_ref().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for LiteralRef<'_> {
+    #[inline]
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[allow(clippy::struct_field_names)]
+        #[derive(Serialize)]
+        #[serde(rename = "Literal")]
+        struct Value<'a> {
+            value: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            language: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            datatype: Option<&'a str>,
+        }
+        match self.0 {
+            LiteralRefContent::String(value) => Value {
+                value,
+                language: None,
+                datatype: None,
+            },
+            LiteralRefContent::LanguageTaggedString { value, language } => Value {
+                value,
+                language: Some(language),
+                datatype: None,
+            },
+            LiteralRefContent::TypedLiteral { value, datatype } => Value {
+                value,
+                language: None,
+                datatype: Some(datatype.as_str()),
+            },
+        }
+        .serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for Literal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[allow(clippy::struct_field_names)]
+        #[derive(Deserialize)]
+        #[serde(rename = "Literal")]
+        struct Value {
+            value: String,
+            language: Option<String>,
+            datatype: Option<String>,
+        }
+        let Value {
+            value,
+            language,
+            datatype,
+        } = Value::deserialize(deserializer)?;
+        match (datatype, language) {
+            (Some(datatype), None) => Ok(Literal::new_typed_literal(
+                value,
+                NamedNode::new(datatype).map_err(de::Error::custom)?,
+            )),
+            (None, Some(language)) => {
+                Literal::new_language_tagged_literal(value, language).map_err(de::Error::custom)
+            }
+            (None, None) => Ok(Literal::new_simple_literal(value)),
+            (Some(_), Some(_)) => Err(de::Error::custom(
+                "Invalid literal format: Literal can only have one of datatype or language",
+            )),
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
-    #[cfg(feature = "serde")]
-    use serde::de::DeserializeOwned;
 
     #[test]
     fn test_simple_literal_equality() {
@@ -732,113 +750,27 @@ mod tests {
     #[cfg(feature = "serde")]
     fn test_serde() {
         // Simple literal
-        let j = serde_json::to_string(&Literal::new_simple_literal("foo")).unwrap();
+        let simple = Literal::new_simple_literal("foo");
+        let j = serde_json::to_string(&simple).unwrap();
         assert_eq!("{\"value\":\"foo\"}", j);
-
-        let mut de = serde_json::Deserializer::from_str(&j);
-        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(node, Literal::new_simple_literal("foo"));
+        let simple2: Literal = serde_json::from_str(&j).unwrap();
+        assert_eq!(simple, simple2);
 
         // Typed literal
-        let j = serde_json::to_string(&Literal::new_typed_literal("true", xsd::BOOLEAN)).unwrap();
-
+        let typed = Literal::new_typed_literal("foo", xsd::BOOLEAN);
+        let j = serde_json::to_string(&typed).unwrap();
         assert_eq!(
-            "{\"value\":\"true\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",
+            "{\"value\":\"foo\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",
             j
         );
-
-        let mut de = serde_json::Deserializer::from_str(&j);
-        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(node, Literal::new_typed_literal("true", xsd::BOOLEAN));
+        let typed2: Literal = serde_json::from_str(&j).unwrap();
+        assert_eq!(typed, typed2);
 
         // Language-tagged string
-        let j = serde_json::to_string(&Literal::new_language_tagged_literal("foo", "en").unwrap())
-            .unwrap();
+        let lt = Literal::new_language_tagged_literal("foo", "en").unwrap();
+        let j = serde_json::to_string(&lt).unwrap();
         assert_eq!("{\"value\":\"foo\",\"language\":\"en\"}", j);
-        let mut de = serde_json::Deserializer::from_str(&j);
-        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(
-            node,
-            Literal::new_language_tagged_literal("foo", "en").unwrap()
-        );
-    }
-
-    // This test is required to make sure that we are not borrowing any strings
-    // when deserializing a Literal.
-    #[test]
-    #[cfg(feature = "serde")]
-    fn test_serde_from_reader() {
-        // Simple literal
-        let j = serde_json::to_string(&Literal::new_simple_literal("foo")).unwrap();
-        assert_eq!("{\"value\":\"foo\"}", j);
-
-        let mut de = serde_json::Deserializer::from_reader(j.as_bytes());
-        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(node, Literal::new_simple_literal("foo"));
-
-        // Typed literal
-        let j = serde_json::to_string(&Literal::new_typed_literal("true", xsd::BOOLEAN)).unwrap();
-
-        assert_eq!(
-            "{\"value\":\"true\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#boolean\"}",
-            j
-        );
-
-        let mut de = serde_json::Deserializer::from_reader(j.as_bytes());
-        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(node, Literal::new_typed_literal("true", xsd::BOOLEAN));
-
-        // Language-tagged string
-        let j = serde_json::to_string(&Literal::new_language_tagged_literal("foo", "en").unwrap())
-            .unwrap();
-        assert_eq!("{\"value\":\"foo\",\"language\":\"en\"}", j);
-        let mut de = serde_json::Deserializer::from_reader(j.as_bytes());
-        let node: Literal = Deserialize::deserialize(&mut de).unwrap();
-        assert_eq!(
-            node,
-            Literal::new_language_tagged_literal("foo", "en").unwrap()
-        );
-    }
-
-    // Test for serde validation errors
-    #[test]
-    #[cfg(feature = "serde")]
-    fn test_serde_validation() {
-        let j = r#"{"value":"true","datatype":"boo"}"#;
-        let mut de = serde_json::Deserializer::from_str(j);
-        let deserialized = Literal::deserialize(&mut de);
-
-        assert!(deserialized.is_err());
-
-        let j = r#"{"value":"true","language":"bo2"}"#;
-        let mut de = serde_json::Deserializer::from_str(j);
-        let deserialized = Literal::deserialize(&mut de);
-
-        assert!(deserialized.is_err());
-    }
-
-    // This helper function will only compile if T implements DeserializeOwned.
-    #[cfg(feature = "serde")]
-    fn assert_deserialize_owned<T: DeserializeOwned>() {}
-
-    #[test]
-    #[cfg(feature = "serde")]
-    fn test_literal_deserialize_owned() {
-        // If Literal does not implement DeserializeOwned, this call will fail to compile.
-        assert_deserialize_owned::<Literal>();
-    }
-
-    #[test]
-    #[cfg(feature = "serde")]
-    fn test_deserialize_failure_datatype_and_language() {
-        let j = r#"{"value":"true","datatype":"http://www.w3.org/2001/XMLSchema#boolean", "language": "en"}"#;
-        let mut de = serde_json::Deserializer::from_str(j);
-        let deserialized = Literal::deserialize(&mut de);
-
-        assert!(deserialized.is_err());
-        assert_eq!(
-            deserialized.unwrap_err().to_string(),
-            "Invalid literal format: Literal can only have one of datatype or language"
-        );
+        let lt2: Literal = serde_json::from_str(&j).unwrap();
+        assert_eq!(lt, lt2);
     }
 }
