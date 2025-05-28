@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
 
 project = "pyoxigraph"
 copyright = f"{datetime.date.today().year}, Oxigraph contributors"
-author = pyoxigraph.__author__
 version = pyoxigraph.__version__
 release = pyoxigraph.__version__
 
