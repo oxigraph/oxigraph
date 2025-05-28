@@ -1056,7 +1056,7 @@ impl From<NamedOrBlankNodeRef<'_>> for GraphName {
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
+#[cfg_attr(feature = "serde", serde(tag = "type"))]
 pub enum GraphNameRef<'a> {
     #[cfg_attr(feature = "serde", serde(rename = "uri"))]
     NamedNode(NamedNodeRef<'a>),
