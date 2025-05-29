@@ -190,6 +190,8 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#t0123",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te062",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te091",
+            // Weird @base IRI support
+            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli12",
             // expandContext
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#te077",
             // produceGeneralizedRdf
@@ -280,14 +282,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin07",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin08",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tin09",
-            // @list edge cases
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli05",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli06",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli07",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli08",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli09",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli10",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tli12",
             // @container @id
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm001",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tm002",

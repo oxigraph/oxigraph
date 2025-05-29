@@ -268,7 +268,8 @@ impl JsonLdExpansionConverter {
                                 container,
                                 reverse,
                             });
-                        } else if container.contains(&"@list") {
+                        }
+                        if container.contains(&"@list") {
                             if reverse {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
                                     "Lists are not allowed inside of reverse properties",
@@ -280,7 +281,8 @@ impl JsonLdExpansionConverter {
                                 needs_end_object: false,
                                 end_event: Some(JsonLdEvent::EndList),
                             })
-                        } else if container.contains(&"@set") {
+                        }
+                        if container.contains(&"@set") && !is_array {
                             results.push(JsonLdEvent::StartSet);
                             self.state.push(JsonLdExpansionState::ListOrSetContainer {
                                 needs_end_object: false,
@@ -290,7 +292,7 @@ impl JsonLdExpansionConverter {
                         self.state.push(JsonLdExpansionState::Element {
                             active_property,
                             is_array: true,
-                            container: &[],
+                            container,
                             reverse,
                         });
                     }
@@ -315,7 +317,7 @@ impl JsonLdExpansionConverter {
                         self.state.push(if self.streaming {
                             JsonLdExpansionState::ObjectOrContainerStartStreaming {
                                 active_property,
-                                container,
+                                container: if is_array { &[] } else { container },
                                 reverse,
                             }
                         } else {
@@ -324,7 +326,7 @@ impl JsonLdExpansionConverter {
                                 depth: 1,
                                 current_key: None,
                                 active_property,
-                                container,
+                                container: if is_array { &[] } else { container },
                                 reverse,
                             }
                         });
