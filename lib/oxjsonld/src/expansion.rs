@@ -1527,9 +1527,8 @@ impl JsonLdExpansionConverter {
                         value: JsonLdValue::String(value.into()),
                         r#type: None,
                         language: (language != "@none"
-                            && self
-                                .expand_iri(language.as_str().into(), false, false, errors)
-                                .is_none_or(|t| t != "@none"))
+                            && self.expand_iri(language.as_str().into(), false, false, errors)
+                                != Some("@none".into()))
                         .then_some(language),
                     })
                 }

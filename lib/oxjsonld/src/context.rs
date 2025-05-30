@@ -1015,6 +1015,12 @@ impl JsonLdContextProcessor {
                     JsonLdErrorCode::InvalidTermDefinition,
                 ));
             }
+            if !definition.container_mapping.contains(&"@index") {
+                errors.push(JsonLdSyntaxError::msg_and_code(
+                    "@index inside of term definitions is only allowed when @container is set to @index",
+                    JsonLdErrorCode::InvalidTermDefinition,
+                ));
+            }
             // 20.2)
             let JsonNode::String(index) = key_value else {
                 errors.push(JsonLdSyntaxError::msg_and_code(

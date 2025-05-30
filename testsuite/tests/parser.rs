@@ -320,9 +320,6 @@ fn jsonld_to_rdf_testsuite() -> Result<()> {
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tn007",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tn008",
             // @container @index
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi02",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi03",
-            "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi04",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi05",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi06",
             "https://w3c.github.io/json-ld-api/tests/toRdf-manifest#tpi07",
