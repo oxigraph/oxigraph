@@ -1526,7 +1526,11 @@ impl JsonLdExpansionConverter {
                     results.push(JsonLdEvent::Value {
                         value: JsonLdValue::String(value.into()),
                         r#type: None,
-                        language: (language != "@none").then_some(language),
+                        language: (language != "@none"
+                            && self
+                                .expand_iri(language.as_str().into(), false, false, errors)
+                                .is_none_or(|t| t != "@none"))
+                        .then_some(language),
                     })
                 }
                 JsonEvent::StartArray => {
