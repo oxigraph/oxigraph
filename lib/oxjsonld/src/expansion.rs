@@ -316,10 +316,7 @@ impl JsonLdExpansionConverter {
                         // We push the same context, maybe updated if there is a term definition
                         self.push_same_context();
                         if let Some(active_property) = &active_property {
-                            self.push_new_property_scoped_context_if_it_exist(
-                                active_property,
-                                errors,
-                            )
+                            self.push_new_scoped_context_if_it_exist(active_property, errors)
                         }
                         self.state.push(if self.streaming {
                             JsonLdExpansionState::ObjectOrContainerStartStreaming {
@@ -763,6 +760,8 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::String(value) => {
+                        // 11.2)
+                        self.push_new_scoped_context_if_it_exist(&value, errors);
                         // 13.4.4.4)
                         if let Some(iri) = self.expand_iri(value, true, true, errors) {
                             if has_keyword_form(&iri) {
@@ -1778,13 +1777,13 @@ impl JsonLdExpansionConverter {
         ));
     }
 
-    fn push_new_property_scoped_context_if_it_exist(
+    fn push_new_scoped_context_if_it_exist(
         &mut self,
-        active_property: &str,
+        term: &str,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
         let active_context = self.context();
-        let Some(term_definition) = active_context.term_definitions.get(active_property) else {
+        let Some(term_definition) = active_context.term_definitions.get(term) else {
             return;
         };
         let Some(scoped_context) = &term_definition.context else {
