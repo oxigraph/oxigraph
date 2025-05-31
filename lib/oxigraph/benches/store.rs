@@ -3,7 +3,7 @@
 use bzip2::read::MultiBzDecoder;
 use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion, Throughput};
 use oxhttp::model::{Method, Request, Status, Url};
-use oxigraph::io::{RdfFormat, RdfParser};
+use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
 use oxigraph::store::Store;
 use rand::random;
@@ -13,45 +13,88 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::str;
 
-fn parse_nt(c: &mut Criterion) {
+fn parse_bsbm(c: &mut Criterion) {
     let data = read_bz2_data("https://zenodo.org/records/12663333/files/dataset-1000.nt.bz2");
-    let mut group = c.benchmark_group("parse");
+    do_parse(c, RdfFormat::NTriples, &data);
+    do_parse(
+        c,
+        RdfFormat::Turtle,
+        &convert_from_nt(&data, RdfFormat::Turtle),
+    );
+    do_parse(
+        c,
+        RdfFormat::RdfXml,
+        &convert_from_nt(&data, RdfFormat::RdfXml),
+    );
+    do_parse(
+        c,
+        RdfFormat::JsonLd {
+            profile: JsonLdProfileSet::empty(),
+        },
+        &convert_from_nt(
+            &data,
+            RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty(),
+            },
+        ),
+    );
+    do_parse(
+        c,
+        RdfFormat::JsonLd {
+            profile: JsonLdProfile::Streaming.into(),
+        },
+        &convert_from_nt(
+            &data,
+            RdfFormat::JsonLd {
+                profile: JsonLdProfile::Streaming.into(),
+            },
+        ),
+    );
+}
+
+fn do_parse(c: &mut Criterion, format: RdfFormat, data: &[u8]) {
+    let mut group = c.benchmark_group(format!("parse {format}"));
     group.throughput(Throughput::Bytes(data.len() as u64));
     group.sample_size(50);
-    group.bench_function("parse BSBM explore 1000", |b| {
+    group.bench_function(format!("parse {format} BSBM explore 1000"), |b| {
         b.iter(|| {
-            for r in RdfParser::from_format(RdfFormat::NTriples).for_slice(&data) {
+            for r in RdfParser::from_format(format).for_slice(data) {
                 r.unwrap();
             }
         })
     });
-    group.bench_function("parse BSBM explore 1000 with Read", |b| {
+    group.bench_function(format!("parse {format} BSBM explore 1000 with Read"), |b| {
         b.iter(|| {
-            for r in RdfParser::from_format(RdfFormat::NTriples).for_reader(data.as_slice()) {
+            for r in RdfParser::from_format(format).for_reader(data) {
                 r.unwrap();
             }
         })
     });
-    group.bench_function("parse BSBM explore 1000 unchecked", |b| {
+    group.bench_function(format!("parse {format} BSBM explore 1000 unchecked"), |b| {
         b.iter(|| {
-            for r in RdfParser::from_format(RdfFormat::NTriples)
-                .unchecked()
-                .for_slice(&data)
-            {
+            for r in RdfParser::from_format(format).unchecked().for_slice(data) {
                 r.unwrap();
             }
         })
     });
-    group.bench_function("parse BSBM explore 1000 unchecked with Read", |b| {
-        b.iter(|| {
-            for r in RdfParser::from_format(RdfFormat::NTriples)
-                .unchecked()
-                .for_reader(data.as_slice())
-            {
-                r.unwrap();
-            }
-        })
-    });
+    group.bench_function(
+        format!("parse {format} BSBM explore 1000 unchecked with Read"),
+        |b| {
+            b.iter(|| {
+                for r in RdfParser::from_format(format).unchecked().for_reader(data) {
+                    r.unwrap();
+                }
+            })
+        },
+    );
+}
+
+fn convert_from_nt(data: &[u8], to_format: RdfFormat) -> Vec<u8> {
+    let mut serializer = RdfSerializer::from_format(to_format).for_writer(Vec::new());
+    for quad in RdfParser::from_format(RdfFormat::NTriples).for_slice(data) {
+        serializer.serialize_quad(&quad.unwrap()).unwrap();
+    }
+    serializer.finish().unwrap()
 }
 
 fn store_load(c: &mut Criterion) {
@@ -250,7 +293,7 @@ fn sparql_parsing(c: &mut Criterion) {
     });
 }
 
-criterion_group!(parse, parse_nt);
+criterion_group!(parse, parse_bsbm);
 criterion_group!(store, sparql_parsing, store_query_and_update, store_load);
 
 criterion_main!(parse, store);
