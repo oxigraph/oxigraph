@@ -313,7 +313,14 @@ impl JsonLdExpansionConverter {
                             self.state.push(JsonLdExpansionState::LanguageContainer);
                             return;
                         }
+                        // We push the same context, maybe updated if there is a term definition
                         self.push_same_context();
+                        if let Some(active_property) = &active_property {
+                            self.push_new_property_scoped_context_if_it_exist(
+                                active_property,
+                                errors,
+                            )
+                        }
                         self.state.push(if self.streaming {
                             JsonLdExpansionState::ObjectOrContainerStartStreaming {
                                 active_property,
@@ -417,9 +424,9 @@ impl JsonLdExpansionConverter {
                             reverse,
                         });
 
-                    // We first process @context, @type and @id then other then graph
+                    // We first process @context, @type and @id, then the others, then @graph
                     if let Some(context) = context_value {
-                        self.push_new_context(context, errors);
+                        self.push_new_explicit_context(context, errors);
                     }
                     for (key, value) in type_data
                         .into_iter()
@@ -584,7 +591,7 @@ impl JsonLdExpansionConverter {
                     JsonEvent::Eof => unreachable!(),
                 }
                 if depth == 0 {
-                    self.push_new_context(buffer, errors);
+                    self.push_new_explicit_context(buffer, errors);
                     self.state
                         .push(JsonLdExpansionState::ObjectOrContainerStartStreaming {
                             active_property,
@@ -1754,12 +1761,12 @@ impl JsonLdExpansionConverter {
             .1 += 1;
     }
 
-    fn push_new_context(
+    fn push_new_explicit_context(
         &mut self,
         context: Vec<JsonEvent<'static>>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) {
-        let context = self.context_processor.process_context(
+        self.push_new_context(self.context_processor.process_context(
             self.context(),
             json_node_from_events(context.into_iter().map(Ok)).unwrap(),
             self.base_url.as_ref(),
@@ -1768,7 +1775,34 @@ impl JsonLdExpansionConverter {
             true,
             true,
             errors,
-        );
+        ));
+    }
+
+    fn push_new_property_scoped_context_if_it_exist(
+        &mut self,
+        active_property: &str,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) {
+        let active_context = self.context();
+        let Some(term_definition) = active_context.term_definitions.get(active_property) else {
+            return;
+        };
+        let Some(scoped_context) = &term_definition.context else {
+            return;
+        };
+        self.push_new_context(self.context_processor.process_context(
+            active_context,
+            scoped_context.clone(),
+            term_definition.base_url.as_ref(),
+            &mut Vec::new(),
+            true,
+            true,
+            true,
+            errors,
+        ));
+    }
+
+    fn push_new_context(&mut self, context: JsonLdContext) {
         if let Some((last_context, last_count)) = self.context.pop() {
             if last_count > 1 {
                 self.context.push((last_context, last_count - 1));
