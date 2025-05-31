@@ -315,6 +315,12 @@ impl JsonLdExpansionConverter {
                         }
                         // We push the same context, maybe updated if there is a term definition
                         self.push_same_context();
+                        // 7)
+                        if let Some(previous_context) = &self.context().previous_context {
+                            // TODO: should not be executed everywhere
+                            self.push_new_context(previous_context.as_ref().clone());
+                        }
+                        // 8)
                         if let Some(active_property) = &active_property {
                             self.push_new_scoped_context_if_it_exist(active_property, errors)
                         }
@@ -649,6 +655,7 @@ impl JsonLdExpansionConverter {
                                         JsonLdErrorCode::InvalidReversePropertyValue,
                                     ))
                                 }
+                                let types = self.process_types(types, errors);
                                 self.state.push(JsonLdExpansionState::Value {
                                     r#type: types.into_iter().next(),
                                     value: None,
@@ -693,7 +700,9 @@ impl JsonLdExpansionConverter {
                                 self.state.push(JsonLdExpansionState::Index);
                             }
                             _ => {
-                                results.push(JsonLdEvent::StartObject { types });
+                                results.push(JsonLdEvent::StartObject {
+                                    types: self.process_types(types, errors),
+                                });
                                 let has_emitted_id = id.is_some();
                                 if let Some(id) = id {
                                     results.push(JsonLdEvent::Id(id));
@@ -718,7 +727,9 @@ impl JsonLdExpansionConverter {
                     }
                 }
                 JsonEvent::EndObject => {
-                    results.push(JsonLdEvent::StartObject { types });
+                    results.push(JsonLdEvent::StartObject {
+                        types: self.process_types(types, errors),
+                    });
                     if let Some(id) = id {
                         results.push(JsonLdEvent::Id(id));
                     }
@@ -760,18 +771,7 @@ impl JsonLdExpansionConverter {
                         }
                     }
                     JsonEvent::String(value) => {
-                        // 11.2)
-                        self.push_new_scoped_context_if_it_exist(&value, errors);
-                        // 13.4.4.4)
-                        if let Some(iri) = self.expand_iri(value, true, true, errors) {
-                            if has_keyword_form(&iri) {
-                                errors.push(JsonLdSyntaxError::msg(format!(
-                                    "{iri} is not a valid value for @type"
-                                )));
-                            } else {
-                                types.push(iri.into());
-                            }
-                        }
+                        types.push(value.into());
                         if is_array {
                             self.state.push(JsonLdExpansionState::ObjectType {
                                 types,
@@ -1743,6 +1743,68 @@ impl JsonLdExpansionConverter {
             r#type,
             language,
         });
+    }
+
+    fn process_types(
+        &mut self,
+        mut types: Vec<String>,
+        errors: &mut Vec<JsonLdSyntaxError>,
+    ) -> Vec<String> {
+        types.sort();
+        let mut type_scoped_context = None;
+        let types = types
+            .into_iter()
+            .filter_map(|t| {
+                // 11.2)
+                if let Some(term_definition) = type_scoped_context
+                    .as_ref()
+                    .unwrap_or_else(|| self.context())
+                    .term_definitions
+                    .get(&t)
+                {
+                    if let Some(scoped_context) = &term_definition.context {
+                        type_scoped_context = Some(self.context_processor.process_context(
+                            self.context(),
+                            scoped_context.clone(),
+                            term_definition.base_url.as_ref(),
+                            &mut Vec::new(),
+                            true,
+                            false,
+                            true,
+                            errors,
+                        ));
+                    }
+                }
+
+                // 13.4.4.4)
+                let iri = self.context_processor.expand_iri(
+                    type_scoped_context.as_mut().unwrap_or_else(|| {
+                        &mut self
+                            .context
+                            .last_mut()
+                            .expect("The context stack must not be empty")
+                            .0
+                    }),
+                    t.into(),
+                    true,
+                    true,
+                    None,
+                    &mut HashMap::new(),
+                    errors,
+                )?;
+                if has_keyword_form(&iri) {
+                    errors.push(JsonLdSyntaxError::msg(format!(
+                        "{iri} is not a valid value for @type"
+                    )));
+                    return None;
+                }
+                Some(iri.into())
+            })
+            .collect();
+        if let Some(typed_scoped_context) = type_scoped_context {
+            self.push_new_context(typed_scoped_context);
+        }
+        types
     }
 
     pub fn context(&self) -> &JsonLdContext {

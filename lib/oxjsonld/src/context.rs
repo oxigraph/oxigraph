@@ -142,7 +142,11 @@ impl JsonLdContextProcessor {
                         }
                     }
                     // 5.1.2)
+                    let old_result = result;
                     result = JsonLdContext::new_empty(active_context.original_base_url.clone());
+                    if !propagate {
+                        result.previous_context = Some(Box::new(old_result));
+                    }
                     // 5.1.3)
                     continue;
                 }
