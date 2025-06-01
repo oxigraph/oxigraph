@@ -1771,31 +1771,45 @@ impl JsonLdExpansionConverter {
         types: Vec<String>,
         errors: &mut Vec<JsonLdSyntaxError>,
     ) -> Vec<String> {
-        // We first apply typed scoped contexts
+        // 10)
+        let type_scoped_context = &mut self
+            .context
+            .last_mut()
+            .expect("The context stack must not be empty")
+            .0;
+        // 11)
         let mut sorted_types = types.clone();
         sorted_types.sort_unstable();
-        // 11.2)
-        for r#type in sorted_types {
-            if let Some(term_definition) = self.context().term_definitions.get(&r#type) {
-                if let Some(scoped_context) = &term_definition.context {
-                    self.push_new_context(self.context_processor.process_context(
-                        self.context(),
-                        scoped_context.clone(),
-                        term_definition.base_url.as_ref(),
-                        &mut Vec::new(),
-                        true,
-                        false,
-                        true,
-                        errors,
-                    ));
-                }
-            }
-        }
-        types
+        let mut active_context = None;
+        let types = types
             .into_iter()
             .filter_map(|r#type| {
+                // 11.2)
+                if let Some(term_definition) = type_scoped_context.term_definitions.get(&r#type) {
+                    if let Some(scoped_context) = &term_definition.context {
+                        active_context = Some(self.context_processor.process_context(
+                            active_context.as_ref().unwrap_or(type_scoped_context),
+                            scoped_context.clone(),
+                            term_definition.base_url.as_ref(),
+                            &mut Vec::new(),
+                            true,
+                            false,
+                            true,
+                            errors,
+                        ));
+                    }
+                }
+
                 // 13.4.4.4)
-                let iri = self.expand_iri(r#type.into(), true, true, errors)?;
+                let iri = self.context_processor.expand_iri(
+                    type_scoped_context,
+                    r#type.into(),
+                    true,
+                    true,
+                    None,
+                    &mut HashMap::new(),
+                    errors,
+                )?;
                 if has_keyword_form(&iri) {
                     errors.push(JsonLdSyntaxError::msg(format!(
                         "{iri} is not a valid value for @type"
@@ -1804,7 +1818,11 @@ impl JsonLdExpansionConverter {
                 }
                 Some(iri.into())
             })
-            .collect()
+            .collect();
+        if let Some(active_context) = active_context {
+            self.push_new_context(active_context);
+        }
+        types
     }
 
     pub fn context(&self) -> &JsonLdContext {

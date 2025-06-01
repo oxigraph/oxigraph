@@ -1512,4 +1512,35 @@ mod tests {
             Some(RdfJsonNumber::Double("0.0E0".into()))
         );
     }
+
+    #[test]
+    fn test() {
+        let input = r#"
+{
+  "@context": {
+    "@vocab": "http://example/",
+    "foo": "http://example/foo",
+    "Type": {
+      "@context": [
+        null
+      ]
+    }
+  },
+  "foo": "will-exist",
+  "p": {
+    "@type": "Type",
+    "foo": "will-not-exist"
+  }
+}
+
+"#;
+        for q in JsonLdParser::new()
+            .with_base_iri("http://oxigraph/foo")
+            .unwrap()
+            .with_processing_mode(JsonLdProcessingMode::JsonLd1_1)
+            .for_slice(input.as_bytes())
+        {
+            println!("{}", q.unwrap());
+        }
+    }
 }
