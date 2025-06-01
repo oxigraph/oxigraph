@@ -281,7 +281,7 @@ impl RdfParser {
         self
     }
 
-    #[deprecated(note = "Use `lenient()` instead")]
+    #[deprecated(note = "Use `lenient()` instead", since = "0.2.0")]
     #[inline]
     pub fn unchecked(self) -> Self {
         self.lenient()
