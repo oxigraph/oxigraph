@@ -1,5 +1,7 @@
 //! Implementation of [SPARQL Query Results XML Format](https://www.w3.org/TR/rdf-sparql-XMLres/)
 
+#![allow(clippy::large_enum_variant)]
+
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
@@ -235,7 +237,6 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
     }
 }
 
-#[expect(clippy::large_enum_variant)]
 pub enum ReaderXmlQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -299,7 +300,6 @@ impl<R: Read> ReaderXmlSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-#[expect(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderXmlQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -370,7 +370,6 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderXmlSolutionsParser<R> {
     }
 }
 
-#[expect(clippy::large_enum_variant)]
 pub enum SliceXmlQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -451,7 +450,6 @@ impl SliceXmlSolutionsParser<'_> {
     }
 }
 
-#[expect(clippy::large_enum_variant)]
 enum XmlInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -955,7 +953,7 @@ fn build_literal(
                     _ => {
                         return Err(QueryResultsSyntaxError::msg(format!(
                             "Invalid its:dir value '{direction}', expecting 'ltr' or 'rtl'"
-                        )))
+                        )));
                     }
                 },
             )

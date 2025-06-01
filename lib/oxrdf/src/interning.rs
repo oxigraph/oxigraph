@@ -53,11 +53,7 @@ impl Interner {
 
     fn hash(&self, value: &str) -> u64 {
         let hash = self.hasher.hash_one(value);
-        if hash == u64::MAX {
-            0
-        } else {
-            hash
-        }
+        if hash == u64::MAX { 0 } else { hash }
     }
 
     fn resolve(&self, key: Key) -> &str {

@@ -11,7 +11,7 @@ use rand::random;
 use std::env::temp_dir;
 use std::error::Error;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-use std::fs::{create_dir_all, remove_dir_all, File};
+use std::fs::{File, create_dir_all, remove_dir_all};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::io::Write;
 use std::iter::empty;
@@ -501,14 +501,18 @@ fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
 
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
-    assert!(Command::new("git")
-        .args(["clean", "-fX", dir])
-        .status()?
-        .success());
-    assert!(Command::new("git")
-        .args(["checkout", "HEAD", "--", dir])
-        .status()?
-        .success());
+    assert!(
+        Command::new("git")
+            .args(["clean", "-fX", dir])
+            .status()?
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .args(["checkout", "HEAD", "--", dir])
+            .status()?
+            .success()
+    );
     Ok(())
 }
 

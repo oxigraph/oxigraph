@@ -355,7 +355,9 @@ mod tests {
             })
         );
         assert_eq!(
-            RdfFormat::from_media_type("application/ld+json ; profile = \" http://www.w3.org/ns/json-ld#streaming  http://www.w3.org/ns/json-ld#expanded \" "),
+            RdfFormat::from_media_type(
+                "application/ld+json ; profile = \" http://www.w3.org/ns/json-ld#streaming  http://www.w3.org/ns/json-ld#expanded \" "
+            ),
             Some(RdfFormat::JsonLd {
                 profile: JsonLdProfile::Streaming | JsonLdProfile::Expanded
             })

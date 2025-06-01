@@ -1,23 +1,23 @@
 //! A [N3](https://w3c.github.io/N3/spec/) streaming parser implemented by [`N3Parser`].
 
-use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
+use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name};
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{
     Lexer, Parser, ReaderIterator, RuleRecognizer, RuleRecognizerError, SliceIterator,
     TokenOrLineJump, TurtleSyntaxError,
 };
-use crate::{TurtleParseError, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
+use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
 use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "rdf-star")]
 use oxrdf::Triple;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
     BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Subject, Term,
     Variable,
 };
-use std::collections::hash_map::Iter;
 use std::collections::HashMap;
+use std::collections::hash_map::Iter;
 use std::fmt;
 use std::io::Read;
 #[cfg(feature = "async-tokio")]
@@ -183,8 +183,8 @@ impl From<Quad> for N3Quad {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNode;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -295,8 +295,8 @@ impl N3Parser {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNode;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -334,8 +334,8 @@ impl N3Parser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNode;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -368,8 +368,8 @@ impl N3Parser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNode;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::n3::{N3Parser, N3Term};
     ///
     /// let file: [&[u8]; 5] = [
@@ -422,8 +422,8 @@ impl N3Parser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNode;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -473,6 +473,7 @@ impl<R: Read> ReaderN3Parser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> N3PrefixesIter<'_> {
@@ -525,8 +526,8 @@ impl<R: Read> Iterator for ReaderN3Parser<R> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNode;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -587,6 +588,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderN3Parser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -613,6 +615,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderN3Parser<R> {
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -633,8 +636,8 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderN3Parser<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNode;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -684,6 +687,7 @@ impl SliceN3Parser<'_> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> N3PrefixesIter<'_> {
@@ -734,8 +738,8 @@ impl Iterator for SliceN3Parser<'_> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNode;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::n3::{N3Parser, N3Term};
 ///
 /// let file: [&[u8]; 5] = [
@@ -822,6 +826,7 @@ impl LowLevelN3Parser {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> N3PrefixesIter<'_> {
@@ -846,6 +851,7 @@ impl LowLevelN3Parser {
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {

@@ -3,8 +3,8 @@
 use libfuzzer_sys::fuzz_target;
 use oxigraph_fuzz::count_quad_blank_nodes;
 use oxjsonld::{JsonLdParser, JsonLdProcessingMode, JsonLdProfile, JsonLdSerializer};
-use oxrdf::graph::CanonicalizationAlgorithm;
 use oxrdf::Dataset;
+use oxrdf::graph::CanonicalizationAlgorithm;
 
 fn parse(
     input: &[u8],
@@ -85,18 +85,16 @@ fuzz_target!(|data: &[u8]| {
         .map(|q| count_quad_blank_nodes(q))
         .sum::<usize>();
 
-    if errors_streaming.is_empty() {
-        if bnodes_count <= 4 {
-            quads.canonicalize(CanonicalizationAlgorithm::Unstable);
-            quads_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
-            assert_eq!(
-                quads,
-                quads_streaming,
-                "Buffering:\n{}\nStreaming:\n{}",
-                String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
-                String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
-            );
-        }
+    if errors_streaming.is_empty() && bnodes_count <= 4 {
+        quads.canonicalize(CanonicalizationAlgorithm::Unstable);
+        quads_streaming.canonicalize(CanonicalizationAlgorithm::Unstable);
+        assert_eq!(
+            quads,
+            quads_streaming,
+            "Buffering:\n{}\nStreaming:\n{}",
+            String::from_utf8_lossy(&serialize_quads(&quads, Vec::new(), None)),
+            String::from_utf8_lossy(&serialize_quads(&quads_streaming, Vec::new(), None))
+        );
     }
 
     if bnodes_count <= 4 {

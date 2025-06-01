@@ -1,9 +1,9 @@
 use anyhow::Result;
 use oxigraph::model::{Dataset, NamedNode};
 use std::fmt::Write;
-use text_diff::{diff, Difference};
-use time::format_description::well_known::Rfc3339;
+use text_diff::{Difference, diff};
 use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 #[derive(Debug)]
 pub struct TestResult {

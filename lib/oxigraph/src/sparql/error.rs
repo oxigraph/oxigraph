@@ -1,7 +1,7 @@
 use crate::io::RdfParseError;
 use crate::model::NamedNode;
-use crate::sparql::results::QueryResultsParseError as ResultsParseError;
 use crate::sparql::SparqlSyntaxError;
+use crate::sparql::results::QueryResultsParseError as ResultsParseError;
 use crate::store::{CorruptionError, StorageError};
 use spareval::QueryEvaluationError;
 use std::convert::Infallible;

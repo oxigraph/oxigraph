@@ -29,8 +29,8 @@ use tokio::io::AsyncRead;
 /// Count the number of people:
 /// ```
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 ///
 /// let file = br#"{
 ///     "@context": {"schema": "http://schema.org/"},
@@ -92,8 +92,8 @@ impl JsonLdParser {
     ///
     /// ```
     /// use oxjsonld::{JsonLdParser, JsonLdProfile};
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
     ///     "@context": {"schema": "http://schema.org/"},
@@ -148,8 +148,8 @@ impl JsonLdParser {
     /// Count the number of people:
     /// ```
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
     ///     "@context": {"schema": "http://schema.org/"},
@@ -193,8 +193,8 @@ impl JsonLdParser {
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
     ///     "@context": {"schema": "http://schema.org/"},
@@ -242,8 +242,8 @@ impl JsonLdParser {
     /// Count the number of people:
     /// ```
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
     ///     "@context": {"schema": "http://schema.org/"},
@@ -305,8 +305,8 @@ impl JsonLdParser {
 /// Count the number of people:
 /// ```
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 ///
 /// let file = br#"{
 ///     "@context": {"schema": "http://schema.org/"},
@@ -376,8 +376,8 @@ impl<R: Read> ReaderJsonLdParser<R> {
     ///
     /// ```
     /// use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
     ///     "@context": "file://context.jsonld",
@@ -409,14 +409,14 @@ impl<R: Read> ReaderJsonLdParser<R> {
     pub fn with_load_document_callback(
         mut self,
         callback: impl Fn(
-                &str,
-                &JsonLdLoadDocumentOptions,
-            ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-            + Send
-            + Sync
-            + UnwindSafe
-            + RefUnwindSafe
-            + 'static,
+            &str,
+            &JsonLdLoadDocumentOptions,
+        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
     ) -> Self {
         self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
         self
@@ -446,6 +446,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {
@@ -494,8 +495,8 @@ impl<R: Read> ReaderJsonLdParser<R> {
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 ///
 /// let file = br#"{
 ///     "@context": {"schema": "http://schema.org/"},
@@ -581,6 +582,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -631,8 +633,8 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
 /// Count the number of people:
 /// ```
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 ///
 /// let file = br#"{
 ///     "@context": {"schema": "http://schema.org/"},
@@ -702,8 +704,8 @@ impl SliceJsonLdParser<'_> {
     ///
     /// ```
     /// use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
     ///     "@context": "file://context.jsonld",
@@ -735,14 +737,14 @@ impl SliceJsonLdParser<'_> {
     pub fn with_load_document_callback(
         mut self,
         callback: impl Fn(
-                &str,
-                &JsonLdLoadDocumentOptions,
-            ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-            + Send
-            + Sync
-            + UnwindSafe
-            + RefUnwindSafe
-            + 'static,
+            &str,
+            &JsonLdLoadDocumentOptions,
+        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
     ) -> Self {
         self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
         self
@@ -772,6 +774,7 @@ impl SliceJsonLdParser<'_> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> JsonLdPrefixesIter<'_> {

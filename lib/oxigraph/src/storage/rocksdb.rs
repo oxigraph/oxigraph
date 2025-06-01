@@ -1,13 +1,13 @@
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
 use crate::storage::binary_encoder::{
-    decode_term, encode_term, encode_term_pair, encode_term_quad, encode_term_triple,
-    write_gosp_quad, write_gpos_quad, write_gspo_quad, write_osp_quad, write_ospg_quad,
-    write_pos_quad, write_posg_quad, write_spo_quad, write_spog_quad, write_term, QuadEncoding,
-    LATEST_STORAGE_VERSION, WRITTEN_TERM_MAX_SIZE,
+    LATEST_STORAGE_VERSION, QuadEncoding, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
+    encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad, write_gpos_quad,
+    write_gspo_quad, write_osp_quad, write_ospg_quad, write_pos_quad, write_posg_quad,
+    write_spo_quad, write_spog_quad, write_term,
 };
 pub use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
+    Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
 use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
@@ -1278,7 +1278,7 @@ impl<'a> FileBulkLoader<'a> {
                                 return Err(CorruptionError::new(
                                     "Default graph this not the default graph",
                                 )
-                                .into())
+                                .into());
                             }
                         },
                         &encoded.graph_name,

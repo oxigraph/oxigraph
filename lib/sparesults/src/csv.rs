@@ -595,7 +595,9 @@ fn inner_read_first_line(
         for v in line.split('\t') {
             let v = v.trim();
             if v.is_empty() {
-                return Err(QueryResultsSyntaxError::msg("Empty column on the first row. The first row should be a list of variables like ?foo or $bar"));
+                return Err(QueryResultsSyntaxError::msg(
+                    "Empty column on the first row. The first row should be a list of variables like ?foo or $bar",
+                ));
             }
             let variable = Variable::from_str(v).map_err(|e| {
                 QueryResultsSyntaxError::msg(format!("Invalid variable declaration '{v}': {e}"))
@@ -894,7 +896,7 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             );
         }
-        #[cfg_attr(not(feature = "sparql-12"), allow(unused_mut))]
+        #[cfg_attr(not(feature = "sparql-12"), expect(unused_mut))]
         let mut expected = "x,literal\r\nhttp://example/x,String\r\nhttp://example/x,\"String-with-dquote\"\"\"\r\n_:b0,Blank node\r\n,Missing 'x'\r\n,\r\nhttp://example/x,\r\n_:b1,String-with-lang\r\n_:b1,123\r\n,\"escape,\t\r\n\"\r\n".to_owned();
         #[cfg(feature = "sparql-12")]
         {
@@ -919,7 +921,7 @@ mod tests {
                     .filter_map(|(v, s)| s.as_ref().map(|s| (v.as_ref(), s.as_ref()))),
             );
         }
-        #[cfg_attr(not(feature = "sparql-12"), allow(unused_mut))]
+        #[cfg_attr(not(feature = "sparql-12"), expect(unused_mut))]
         let mut expected = "?x\t?literal\n<http://example/x>\t\"String\"\n<http://example/x>\t\"String-with-dquote\\\"\"\n_:b0\t\"Blank node\"\n\t\"Missing 'x'\"\n\t\n<http://example/x>\t\n_:b1\t\"String-with-lang\"@en\n_:b1\t123\n\t\"escape,\\t\\r\\n\"\n".to_owned();
         #[cfg(feature = "sparql-12")]
         {

@@ -11,11 +11,11 @@ use oxigraph::sparql::{
     EvaluationError, Query, QueryOptions, QueryResults, QuerySolution, QuerySolutionIter,
     QueryTripleIter, Variable,
 };
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyTuple;
-use pyo3::IntoPyObjectExt;
 #[cfg(feature = "geosparql")]
 use spargeo::register_geosparql_functions;
 use std::collections::HashMap;
@@ -58,9 +58,10 @@ pub fn parse_query(
                 .dataset_mut()
                 .set_default_graph(vec![default_graph.into()]);
         } else {
-            return Err(PyValueError::new_err(
-                format!("The query() method default_graph argument should be a NamedNode, a BlankNode, the DefaultGraph or a not empty list of them. {} found", default_graph.get_type()
-                )));
+            return Err(PyValueError::new_err(format!(
+                "The query() method default_graph argument should be a NamedNode, a BlankNode, the DefaultGraph or a not empty list of them. {} found",
+                default_graph.get_type()
+            )));
         }
     }
 
@@ -181,6 +182,7 @@ impl PyQuerySolution {
         .map(|term| PyTerm::from(term.clone()))
     }
 
+    #[allow(clippy::unnecessary_to_owned, clippy::allow_attributes)] // TODO: Rust 1.85 false positive
     fn __iter__(&self) -> SolutionValueIter {
         SolutionValueIter {
             inner: self.inner.values().to_vec().into_iter(),
@@ -234,7 +236,7 @@ pub struct PyQuerySolutions {
     inner: PyQuerySolutionsVariant,
 }
 
-#[expect(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant, clippy::allow_attributes)]
 enum PyQuerySolutionsVariant {
     Query(UngilQuerySolutionIter),
     Reader {
@@ -714,7 +716,9 @@ fn lookup_query_results_format(
         return match format {
             PyQueryResultsFormatInput::Object(format) => Ok(format.inner),
             PyQueryResultsFormatInput::MediaType(media_type) => {
-                deprecation_warning("Using a string to specify a query results format is deprecated, please use a QueryResultsFormat object instead.")?;
+                deprecation_warning(
+                    "Using a string to specify a query results format is deprecated, please use a QueryResultsFormat object instead.",
+                )?;
                 QueryResultsFormat::from_media_type(&media_type).ok_or_else(|| {
                     PyValueError::new_err(format!(
                         "The media type {media_type} is not supported by pyoxigraph"

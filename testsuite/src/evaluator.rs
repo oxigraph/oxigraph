@@ -1,6 +1,6 @@
 use crate::manifest::Test;
 use crate::report::TestResult;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::collections::HashMap;
 use time::OffsetDateTime;
 

@@ -1,9 +1,9 @@
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
+use crate::storage::CorruptionError;
 pub use crate::storage::error::StorageError;
 use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup,
+    Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
-use crate::storage::CorruptionError;
 use dashmap::iter::Iter;
 use dashmap::mapref::entry::Entry;
 use dashmap::{DashMap, DashSet};
@@ -1148,14 +1148,16 @@ mod tests {
 
         // We add the quads again but rollback
         let snapshot = storage.snapshot();
-        assert!(storage
-            .transaction(|mut writer| {
-                writer.insert(default_quad);
-                writer.insert(named_graph_quad);
-                writer.insert_named_graph(example2.into());
-                Err::<(), _>(StorageError::Other("foo".into()))
-            })
-            .is_err());
+        assert!(
+            storage
+                .transaction(|mut writer| {
+                    writer.insert(default_quad);
+                    writer.insert(named_graph_quad);
+                    writer.insert_named_graph(example2.into());
+                    Err::<(), _>(StorageError::Other("foo".into()))
+                })
+                .is_err()
+        );
         assert!(!snapshot.contains(&encoded_default_quad));
         assert!(!snapshot.contains(&encoded_named_graph_quad));
         assert!(!snapshot.contains_named_graph(&encoded_example));

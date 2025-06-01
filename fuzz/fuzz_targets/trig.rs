@@ -22,7 +22,7 @@ fn parse<'a>(
         .with_base_iri("http://example.com/")
         .unwrap();
     if unchecked {
-        parser = parser.unchecked();
+        parser = parser.lenient();
     }
     let mut parser = parser.low_level();
     for chunk in chunks {

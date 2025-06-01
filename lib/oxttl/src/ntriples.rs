@@ -1,12 +1,12 @@
 //! A [N-Triples](https://www.w3.org/TR/n-triples/) streaming parser implemented by [`NTriplesParser`]
 //! and a serializer implemented by [`NTriplesSerializer`].
 
+use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::get_ntriples_file_chunks;
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxrdf::{Triple, TripleRef};
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]

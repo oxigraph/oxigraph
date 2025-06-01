@@ -719,7 +719,7 @@ fn unescape_iriref(mut input: &str) -> Result<String, &'static str> {
             Some(_) => {
                 return Err(
                     "IRIs are only allowed to contain escape sequences \\uXXXX and \\UXXXXXXXX",
-                )
+                );
             }
             None => return Err("IRIs are not allowed to end with a '\'"),
         };

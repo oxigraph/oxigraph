@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::{console_warn, format_err};
-use js_sys::{try_iter, Array, Map, Reflect};
+use js_sys::{Array, Map, Reflect, try_iter};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
@@ -183,9 +183,9 @@ impl JsStore {
                         .collect::<Result<Vec<GraphName>, _>>()?,
                 )
             } else {
-                Some(vec![FROM_JS
-                    .with(|c| c.to_term(&js_default_graph))?
-                    .try_into()?])
+                Some(vec![
+                    FROM_JS.with(|c| c.to_term(&js_default_graph))?.try_into()?,
+                ])
             };
 
             let js_named_graphs = Reflect::get(options, &JsValue::from_str("named_graphs"))?;
@@ -225,7 +225,7 @@ impl JsStore {
             query.dataset_mut().set_available_named_graphs(named_graphs);
         }
 
-        #[cfg_attr(not(feature = "geosparql"), allow(unused_mut))]
+        #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
         let mut options = QueryOptions::default();
         #[cfg(feature = "geosparql")]
         {
@@ -317,7 +317,7 @@ impl JsStore {
 
         let update = Update::parse(update, base_iri.as_deref()).map_err(JsError::from)?;
 
-        #[cfg_attr(not(feature = "geosparql"), allow(unused_mut))]
+        #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
         let mut options = QueryOptions::default();
         #[cfg(feature = "geosparql")]
         {
@@ -346,7 +346,9 @@ impl JsStore {
         let mut no_transaction = false;
         if let Some(format_str) = options.as_string() {
             // Backward compatibility with format as a string
-            console_warn!("The format should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt'}})");
+            console_warn!(
+                "The format should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt'}})"
+            );
             format = Some(rdf_format(&format_str)?);
         } else if !options.is_undefined() && !options.is_null() {
             if let Some(format_str) =
@@ -366,11 +368,15 @@ impl JsStore {
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.load(my_content, {{format: 'nt'}}"))?;
         if let Some(base_iri) = convert_base_iri(base_iri)? {
-            console_warn!("The base_iri should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', base_iri: 'http//example.com'}})");
+            console_warn!(
+                "The base_iri should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', base_iri: 'http//example.com'}})"
+            );
             parsed_base_iri = Some(base_iri);
         }
         if let Some(to_graph_name) = FROM_JS.with(|c| c.to_optional_term(to_graph_name))? {
-            console_warn!("The target graph name should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', to_graph_name: 'http//example.com'}})");
+            console_warn!(
+                "The target graph name should be passed to Store.load in an option dictionary like store.load(my_content, {{format: 'nt', to_graph_name: 'http//example.com'}})"
+            );
             parsed_to_graph_name = Some(to_graph_name);
         }
 
@@ -405,7 +411,9 @@ impl JsStore {
         let mut parsed_from_graph_name = None;
         if let Some(format_str) = options.as_string() {
             // Backward compatibility with format as a string
-            console_warn!("The format should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt'}})");
+            console_warn!(
+                "The format should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt'}})"
+            );
             format = Some(rdf_format(&format_str)?);
         } else if !options.is_undefined() && !options.is_null() {
             if let Some(format_str) =
@@ -419,7 +427,9 @@ impl JsStore {
         let format = format
             .ok_or_else(|| format_err!("The format option should be provided as a second argument of Store.load like store.dump({{format: 'nt'}}"))?;
         if let Some(from_graph_name) = FROM_JS.with(|c| c.to_optional_term(from_graph_name))? {
-            console_warn!("The source graph name should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt', from_graph_name: 'http//example.com'}})");
+            console_warn!(
+                "The source graph name should be passed to Store.dump in an option dictionary like store.dump({{format: 'nt', from_graph_name: 'http//example.com'}})"
+            );
             parsed_from_graph_name = Some(from_graph_name);
         }
 

@@ -629,7 +629,7 @@ impl N3Lexer {
                                     "The allowed base directions are --ltr and --rtl, found --{}",
                                     String::from_utf8_lossy(direction)
                                 ),
-                            ))
+                            ));
                         }
                     })
                 })
@@ -1037,7 +1037,7 @@ impl N3Lexer {
                     position..=position,
                     "Invalid UTF-8 character encoding",
                 )
-                    .into()))
+                    .into()));
             }
         }
 

@@ -2,9 +2,9 @@
 use json_event_parser::TokioAsyncWriterJsonSerializer;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::xsd;
 #[cfg(feature = "rdf-12")]
 use oxrdf::BaseDirection;
+use oxrdf::vocab::xsd;
 use oxrdf::{
     GraphName, GraphNameRef, NamedNode, NamedOrBlankNodeRef, QuadRef, Subject, SubjectRef, TermRef,
 };
@@ -423,7 +423,7 @@ impl InnerJsonLdWriter {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "JSON-LD does not support RDF-star yet",
-                    ))
+                    ));
                 }
             })));
             self.current_subject = Some(quad.subject.into_owned());
@@ -513,7 +513,7 @@ impl InnerJsonLdWriter {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "JSON-LD does not support RDF-star yet",
-                ))
+                ));
             }
         }
         output.push(JsonEvent::EndObject);

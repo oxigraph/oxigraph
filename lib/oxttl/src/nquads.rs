@@ -1,12 +1,12 @@
 //! A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser implemented by [`NQuadsParser`]
 //! and a serializer implemented by [`NQuadsSerializer`].
 
+use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::get_ntriples_file_chunks;
 use crate::line_formats::NQuadsRecognizer;
 #[cfg(feature = "async-tokio")]
 use crate::toolkit::TokioAsyncReaderIterator;
 use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, TurtleSyntaxError};
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxrdf::{Quad, QuadRef};
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]

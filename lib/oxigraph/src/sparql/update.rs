@@ -83,11 +83,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 destination,
             } => {
                 if let Err(error) = self.eval_load(source, destination) {
-                    if *silent {
-                        Ok(())
-                    } else {
-                        Err(error)
-                    }
+                    if *silent { Ok(()) } else { Err(error) }
                 } else {
                     Ok(())
                 }

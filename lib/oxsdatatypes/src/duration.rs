@@ -866,7 +866,7 @@ fn duration_parts(input: &str) -> Result<(DurationParts, &str), ParseDurationErr
                 None => {
                     return Err(ParseDurationError::msg(
                         "Numbers in durations must be followed by a type character",
-                    ))
+                    ));
                 }
             }
             input = &left[1..];
@@ -963,14 +963,16 @@ pub struct DurationOverflowError;
 
 /// The year-month and the day-time components of a [`Duration`] have an opposite sign.
 #[derive(Debug, Clone, Copy, thiserror::Error)]
-#[error("The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign")]
+#[error(
+    "The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign"
+)]
 pub struct OppositeSignInDurationComponentsError;
 
 impl From<OppositeSignInDurationComponentsError> for ParseDurationError {
     #[inline]
     fn from(_: OppositeSignInDurationComponentsError) -> Self {
         Self {
-            msg: "The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign"
+            msg: "The xsd:yearMonthDuration and xsd:dayTimeDuration components of a xsd:duration can't have opposite sign",
         }
     }
 }

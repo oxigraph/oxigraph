@@ -606,7 +606,9 @@ pub fn lookup_rdf_format(
         return match format {
             PyRdfFormatInput::Object(format) => Ok(format.inner),
             PyRdfFormatInput::MediaType(media_type) => {
-                deprecation_warning("Using string to specify a RDF format is deprecated, please use a RdfFormat object instead.")?;
+                deprecation_warning(
+                    "Using string to specify a RDF format is deprecated, please use a RdfFormat object instead.",
+                )?;
                 RdfFormat::from_media_type(&media_type).ok_or_else(|| {
                     PyValueError::new_err(format!(
                         "The media type {media_type} is not supported by pyoxigraph"

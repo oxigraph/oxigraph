@@ -27,8 +27,8 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -92,8 +92,8 @@ impl RdfXmlParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlParser;
     ///
     /// let file = br#"<?xml version="1.0"?>
@@ -130,8 +130,8 @@ impl RdfXmlParser {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlParser;
     ///
     /// let file = br#"<?xml version="1.0"?>
@@ -172,8 +172,8 @@ impl RdfXmlParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlParser;
     ///
     /// let file = br#"<?xml version="1.0"?>
@@ -227,8 +227,8 @@ impl RdfXmlParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -305,6 +305,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     ///         ("schema", "http://schema.org/")
     ///     ]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
@@ -361,8 +362,8 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -442,6 +443,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     ///         ("schema", "http://schema.org/")
     ///     ]
     /// ); // There are now prefixes
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -501,8 +503,8 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -580,6 +582,7 @@ impl SliceRdfXmlParser<'_> {
     ///         ("schema", "http://schema.org/")
     ///     ]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
@@ -1295,17 +1298,17 @@ impl<R> InternalRdfXmlParser<R> {
             (Some(_), Some(_), _) => {
                 return Err(RdfXmlSyntaxError::msg(
                     "Not both rdf:ID and rdf:nodeID could be set at the same time",
-                ))
+                ));
             }
             (_, Some(_), Some(_)) => {
                 return Err(RdfXmlSyntaxError::msg(
                     "Not both rdf:nodeID and rdf:resource could be set at the same time",
-                ))
+                ));
             }
             (Some(_), _, Some(_)) => {
                 return Err(RdfXmlSyntaxError::msg(
                     "Not both rdf:ID and rdf:resource could be set at the same time",
-                ))
+                ));
             }
         };
 

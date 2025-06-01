@@ -1,9 +1,9 @@
 use oxigraph::model::vocab::{rdf, xsd};
 use oxigraph::model::*;
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyTuple};
-use pyo3::IntoPyObjectExt;
 use std::vec::IntoIter;
 
 /// An RDF `node identified by an IRI <https://www.w3.org/TR/rdf11-concepts/#dfn-iri>`_.
