@@ -146,7 +146,7 @@ pub struct JsonLdExpansionConverter {
     context_processor: JsonLdContextProcessor,
 }
 
-#[allow(clippy::expect_used, clippy::unwrap_in_result)]
+#[expect(clippy::expect_used, clippy::unwrap_in_result)]
 impl JsonLdExpansionConverter {
     pub fn new(
         base_url: Option<Iri<String>>,

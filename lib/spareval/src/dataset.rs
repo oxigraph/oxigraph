@@ -125,7 +125,7 @@ impl QueryableDataset for Dataset {
     ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, Infallible>>> {
         // Awful implementation, please don't take it as an example
 
-        #[allow(clippy::unnecessary_wraps)]
+        #[expect(clippy::unnecessary_wraps)]
         fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<Dataset>, Infallible> {
             Ok(InternalQuad {
                 subject: quad.subject.into(),
@@ -178,8 +178,8 @@ impl QueryableDataset for Dataset {
         let quads: Vec<_> = if let Some(subject) = subject {
             self.quads_for_subject(subject)
                 .filter(|q| {
-                    predicate.map_or(true, |t| t == q.predicate)
-                        && object.map_or(true, |t| t == q.object)
+                    predicate.is_none_or(|t| t == q.predicate)
+                        && object.is_none_or(|t| t == q.object)
                         && graph_name
                             .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
                 })
@@ -188,7 +188,7 @@ impl QueryableDataset for Dataset {
         } else if let Some(object) = object {
             self.quads_for_object(object)
                 .filter(|q| {
-                    predicate.map_or(true, |t| t == q.predicate)
+                    predicate.is_none_or(|t| t == q.predicate)
                         && graph_name
                             .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
                 })

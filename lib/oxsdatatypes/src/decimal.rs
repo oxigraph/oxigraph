@@ -402,7 +402,7 @@ impl TryFrom<Double> for Decimal {
     type Error = TooLargeForDecimalError;
 
     #[inline]
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     fn try_from(value: Double) -> Result<Self, Self::Error> {
         let shifted = f64::from(value) * (DECIMAL_PART_POW as f64);
         if (i128::MIN as f64) <= shifted && shifted <= (i128::MAX as f64) {
@@ -417,7 +417,6 @@ impl TryFrom<Double> for Decimal {
 
 impl From<Decimal> for Float {
     #[inline]
-    #[allow(clippy::cast_precision_loss)]
     fn from(value: Decimal) -> Self {
         Double::from(value).into()
     }
@@ -425,7 +424,7 @@ impl From<Decimal> for Float {
 
 impl From<Decimal> for Double {
     #[inline]
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(clippy::cast_precision_loss)]
     fn from(value: Decimal) -> Self {
         let mut value = value.value;
         let mut shift = DECIMAL_PART_POW;
@@ -534,7 +533,7 @@ impl FromStr for Decimal {
 
 impl fmt::Display for Decimal {
     /// Formats the decimal following its canonical representation.
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.value == 0 {
             return if let Some(width) = f.width() {
@@ -646,7 +645,7 @@ impl From<TooLargeForDecimalError> for ParseDecimalError {
 pub struct TooLargeForDecimalError;
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
 

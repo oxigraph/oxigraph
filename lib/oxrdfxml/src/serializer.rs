@@ -125,7 +125,6 @@ impl RdfXmlSerializer {
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unused_self)]
     pub fn for_writer<W: Write>(self, writer: W) -> WriterRdfXmlSerializer<W> {
         WriterRdfXmlSerializer {
             writer: Writer::new_with_indent(writer, b'\t', 1),
@@ -162,7 +161,6 @@ impl RdfXmlSerializer {
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::unused_self)]
     #[cfg(feature = "async-tokio")]
     pub fn for_tokio_async_writer<W: AsyncWrite + Unpin>(
         self,
@@ -379,7 +377,11 @@ impl InnerRdfXmlWriter {
             } else {
                 (BytesStart::new("rdf:Description"), false)
             };
-            #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
+            #[allow(
+                unreachable_patterns,
+                clippy::match_wildcard_for_single_variants,
+                clippy::allow_attributes
+            )]
             match triple.subject {
                 SubjectRef::NamedNode(node) => description_open
                     .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri))),
@@ -410,7 +412,11 @@ impl InnerRdfXmlWriter {
         if let Some(prop_xmlns) = prop_xmlns {
             property_open.push_attribute(prop_xmlns);
         }
-        #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
+        #[allow(
+            unreachable_patterns,
+            clippy::match_wildcard_for_single_variants,
+            clippy::allow_attributes
+        )]
         let content = match triple.object {
             TermRef::NamedNode(node) => {
                 property_open
@@ -545,7 +551,7 @@ fn relative_iri<'a>(iri: &'a str, base_iri: &Option<Iri<String>>) -> Cow<'a, str
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use std::error::Error;

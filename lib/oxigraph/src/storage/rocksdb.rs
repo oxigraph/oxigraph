@@ -1118,7 +1118,6 @@ impl RocksDbStorageBulkLoader {
         self
     }
 
-    #[allow(clippy::trait_duplication_in_bounds)]
     pub fn load<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<Quad, EI>>,

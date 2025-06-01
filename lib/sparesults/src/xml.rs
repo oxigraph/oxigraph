@@ -156,7 +156,7 @@ impl InnerXmlSolutionsSerializer {
         Self {}
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn write<'a>(
         &self,
         output: &mut Vec<Event<'a>>,
@@ -173,7 +173,7 @@ impl InnerXmlSolutionsSerializer {
         output.push(Event::End(BytesEnd::new("result")));
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn finish(self, output: &mut Vec<Event<'_>>) {
         output.push(Event::End(BytesEnd::new("results")));
         output.push(Event::End(BytesEnd::new("sparql")));
@@ -235,7 +235,7 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum ReaderXmlQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -299,7 +299,7 @@ impl<R: Read> ReaderXmlSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderXmlQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -370,7 +370,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderXmlSolutionsParser<R> {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum SliceXmlQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -451,7 +451,7 @@ impl SliceXmlSolutionsParser<'_> {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum XmlInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -631,7 +631,6 @@ struct XmlInnerSolutionsParser {
 }
 
 impl XmlInnerSolutionsParser {
-    #[allow(clippy::unwrap_in_result)]
     pub fn read_event(
         &mut self,
         event: Event<'_>,

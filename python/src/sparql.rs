@@ -181,7 +181,6 @@ impl PyQuerySolution {
         .map(|term| PyTerm::from(term.clone()))
     }
 
-    #[allow(clippy::unnecessary_to_owned)]
     fn __iter__(&self) -> SolutionValueIter {
         SolutionValueIter {
             inner: self.inner.values().to_vec().into_iter(),
@@ -195,7 +194,7 @@ impl PyQuerySolution {
 
     /// :type memo: typing.Any
     /// :rtype: QuerySolution
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
@@ -235,7 +234,7 @@ pub struct PyQuerySolutions {
     inner: PyQuerySolutionsVariant,
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum PyQuerySolutionsVariant {
     Query(UngilQuerySolutionIter),
     Reader {
@@ -246,7 +245,7 @@ enum PyQuerySolutionsVariant {
 
 struct UngilQuerySolutionIter(QuerySolutionIter);
 
-#[allow(unsafe_code)]
+#[expect(unsafe_code)]
 // SAFETY: To derive Ungil
 unsafe impl Send for UngilQuerySolutionIter {}
 
@@ -446,7 +445,7 @@ pub struct PyQueryTriples {
 
 struct UngilQueryTripleIter(QueryTripleIter);
 
-#[allow(unsafe_code)]
+#[expect(unsafe_code)]
 // SAFETY: To derive Ungil
 unsafe impl Send for UngilQueryTripleIter {}
 
@@ -701,7 +700,7 @@ impl PyQueryResultsFormat {
 
     /// :type memo: typing.Any
     /// :rtype: QueryResultsFormat
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }

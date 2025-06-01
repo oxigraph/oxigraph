@@ -624,7 +624,7 @@ struct TsvInnerSolutionsParser {
 }
 
 impl TsvInnerSolutionsParser {
-    #[allow(clippy::unwrap_in_result)]
+    #[expect(clippy::unwrap_in_result)]
     pub fn parse_next(
         &self,
         line: &str,
@@ -715,7 +715,7 @@ impl LineReader {
         }
     }
 
-    #[allow(clippy::unwrap_in_result)]
+    #[expect(clippy::unwrap_in_result)]
     fn next_line_from_reader<'a>(
         &mut self,
         buffer: &'a mut Vec<u8>,
@@ -757,7 +757,6 @@ impl LineReader {
     }
 
     #[cfg(feature = "async-tokio")]
-    #[allow(clippy::unwrap_in_result)]
     async fn next_line_from_tokio_async_read<'a>(
         &mut self,
         buffer: &'a mut Vec<u8>,
@@ -798,7 +797,7 @@ impl LineReader {
         result
     }
 
-    #[allow(clippy::unwrap_in_result)]
+    #[expect(clippy::unwrap_in_result)]
     fn next_line_from_slice<'a>(
         &mut self,
         slice: &'a [u8],
@@ -817,7 +816,7 @@ impl LineReader {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use std::error::Error;

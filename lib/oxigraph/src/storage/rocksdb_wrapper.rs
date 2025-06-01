@@ -826,7 +826,7 @@ impl Reader {
         Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
     }
 
-    #[allow(clippy::iter_not_returning_iterator)]
+    #[expect(clippy::iter_not_returning_iterator)]
     pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter, StorageError> {
         self.scan_prefix(column_family, &[])
     }
@@ -1013,7 +1013,7 @@ impl Deref for PinnableSlice {
     fn deref(&self) -> &Self::Target {
         unsafe {
             let mut len = 0;
-            let val = rocksdb_pinnableslice_value(self.0, &mut len);
+            let val = rocksdb_pinnableslice_value(self.0, &raw mut len);
             slice::from_raw_parts(val.cast(), len)
         }
     }
@@ -1093,7 +1093,6 @@ impl Drop for Iter {
     }
 }
 
-#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for Iter {}
 
 unsafe impl Sync for Iter {}
@@ -1121,7 +1120,7 @@ impl Iter {
         if self.is_valid() {
             unsafe {
                 let mut len = 0;
-                let val = rocksdb_iter_key(self.inner, &mut len);
+                let val = rocksdb_iter_key(self.inner, &raw mut len);
                 Some(slice::from_raw_parts(val.cast(), len))
             }
         } else {
@@ -1258,7 +1257,7 @@ fn available_file_descriptors() -> io::Result<Option<libc::rlim_t>> {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit) } == 0 {
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut rlimit) } == 0 {
         Ok(Some(min(rlimit.rlim_cur, rlimit.rlim_max)))
     } else {
         Err(io::Error::last_os_error())

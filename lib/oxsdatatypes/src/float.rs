@@ -155,7 +155,7 @@ impl From<Boolean> for Float {
 
 impl From<Integer> for Float {
     #[inline]
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(clippy::cast_precision_loss)]
     fn from(value: Integer) -> Self {
         (i64::from(value) as f32).into()
     }
@@ -163,7 +163,7 @@ impl From<Integer> for Float {
 
 impl From<Double> for Float {
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     fn from(value: Double) -> Self {
         Self {
             value: f64::from(value) as f32,
@@ -246,7 +246,7 @@ impl Div for Float {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
 

@@ -374,7 +374,7 @@ impl RuleRecognizer for NQuadsRecognizer {
 }
 
 impl NQuadsRecognizer {
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[cfg_attr(feature = "rdf-star", expect(clippy::fn_params_excessive_bools))]
     pub fn new_parser<B>(
         data: B,
         is_ending: bool,

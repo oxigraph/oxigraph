@@ -262,7 +262,6 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unused_self)]
     pub fn low_level(self) -> LowLevelNTriplesParser {
         LowLevelNTriplesParser {
             parser: NQuadsRecognizer::new_parser(
@@ -488,7 +487,7 @@ impl LowLevelNTriplesParser {
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
-#[allow(clippy::empty_structs_with_brackets)]
+#[expect(clippy::empty_structs_with_brackets)]
 pub struct NTriplesSerializer {}
 
 impl NTriplesSerializer {
@@ -578,7 +577,7 @@ impl NTriplesSerializer {
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub fn low_level(self) -> LowLevelNTriplesSerializer {
         LowLevelNTriplesSerializer {}
     }
@@ -694,12 +693,12 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterNTriplesSerializer<W> {
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[allow(clippy::empty_structs_with_brackets)]
+#[expect(clippy::empty_structs_with_brackets)]
 pub struct LowLevelNTriplesSerializer {}
 
 impl LowLevelNTriplesSerializer {
     /// Writes an extra triple.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub fn serialize_triple<'a>(
         &mut self,
         t: impl Into<TripleRef<'a>>,

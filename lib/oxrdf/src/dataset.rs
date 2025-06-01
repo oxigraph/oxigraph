@@ -185,7 +185,6 @@ impl Dataset {
             .map(move |q| self.decode_spog(q))
     }
 
-    #[allow(clippy::map_identity)]
     fn interned_quads_for_subject(
         &self,
         subject: &InternedSubject,
@@ -840,7 +839,7 @@ impl Dataset {
         }
     }
 
-    #[allow(clippy::needless_collect)]
+    #[expect(clippy::needless_collect)]
     fn map_blank_nodes(
         &mut self,
         bnode_mapping: &HashMap<InternedBlankNode, BlankNode>,

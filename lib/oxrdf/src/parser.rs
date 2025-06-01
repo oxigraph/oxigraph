@@ -472,7 +472,7 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
         ));
     }
     let s = s.trim();
-    #[allow(unused_variables)]
+    #[allow(unused_variables, clippy::allow_attributes)]
     if let Some(remain) = s.strip_prefix("<<") {
         #[cfg(feature = "rdf-star")]
         {

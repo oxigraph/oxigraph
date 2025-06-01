@@ -1435,7 +1435,7 @@ fn can_be_escaped_in_local_name(c: char) -> bool {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use oxrdf::BlankNodeRef;

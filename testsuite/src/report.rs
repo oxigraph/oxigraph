@@ -50,7 +50,7 @@ pub(super) fn format_diff(expected: &str, actual: &str, kind: &str) -> String {
     ret
 }
 
-#[allow(unused_must_use)]
+#[expect(unused_must_use)]
 pub fn build_report(results: impl IntoIterator<Item = TestResult>) -> String {
     let mut buffer = String::new();
     writeln!(&mut buffer, "@prefix dc: <http://purl.org/dc/terms/> .");

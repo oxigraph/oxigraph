@@ -339,7 +339,7 @@ enum RawOperation {
     Update(String),
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum Operation {
     Query(Query),

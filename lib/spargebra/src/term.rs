@@ -881,7 +881,7 @@ pub struct GroundTriplePattern {
 
 impl GroundTriplePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    #[allow(dead_code)]
+    #[cfg(feature = "rdf-star")]
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;

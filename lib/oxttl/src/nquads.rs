@@ -262,7 +262,6 @@ impl NQuadsParser {
     /// assert_eq!(2, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unused_self)]
     pub fn low_level(self) -> LowLevelNQuadsParser {
         LowLevelNQuadsParser {
             parser: NQuadsRecognizer::new_parser(
@@ -489,7 +488,7 @@ impl LowLevelNQuadsParser {
 /// ```
 #[derive(Default, Clone)]
 #[must_use]
-#[allow(clippy::empty_structs_with_brackets)]
+#[expect(clippy::empty_structs_with_brackets)]
 pub struct NQuadsSerializer {}
 
 impl NQuadsSerializer {
@@ -582,7 +581,7 @@ impl NQuadsSerializer {
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub fn low_level(self) -> LowLevelNQuadsSerializer {
         LowLevelNQuadsSerializer {}
     }
@@ -700,12 +699,12 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterNQuadsSerializer<W> {
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[allow(clippy::empty_structs_with_brackets)]
+#[expect(clippy::empty_structs_with_brackets)]
 pub struct LowLevelNQuadsSerializer {}
 
 impl LowLevelNQuadsSerializer {
     /// Writes an extra quad.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub fn serialize_quad<'a>(
         &mut self,
         q: impl Into<QuadRef<'a>>,

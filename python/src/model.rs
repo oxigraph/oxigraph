@@ -99,7 +99,7 @@ impl PyNamedNode {
 
     /// :type memo: typing.Any
     /// :rtype: NamedNode
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
@@ -207,7 +207,7 @@ impl PyBlankNode {
 
     /// :type memo: typing.Any
     /// :rtype: BlankNode
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
@@ -365,7 +365,7 @@ impl PyLiteral {
 
     /// :type memo: typing.Any
     /// :rtype: Literal
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
@@ -414,7 +414,7 @@ impl PyDefaultGraph {
 
     /// :type memo: typing.Any
     /// :rtype: DefaultGraph
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
@@ -645,7 +645,7 @@ impl PyTriple {
 
     /// :type memo: typing.Any
     /// :rtype: Triple
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
@@ -864,7 +864,7 @@ impl PyQuad {
 
     /// :type memo: typing.Any
     /// :rtype: Quad
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }
@@ -948,7 +948,7 @@ impl PyVariable {
 
     /// :type memo: typing.Any
     /// :rtype: Variable
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }

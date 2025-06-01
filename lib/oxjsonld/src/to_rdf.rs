@@ -476,9 +476,8 @@ impl<R: Read> ReaderJsonLdParser<R> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        let event = self.json_parser.parse_next().map_err(|e| {
+        let event = self.json_parser.parse_next().inspect_err(|_| {
             self.inner.json_error = true;
-            e
         })?;
         self.inner
             .parse_event(event, &mut self.results, &mut self.errors);
@@ -616,9 +615,8 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     }
 
     async fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        let event = self.json_parser.parse_next().await.map_err(|e| {
+        let event = self.json_parser.parse_next().await.inspect_err(|_| {
             self.inner.json_error = true;
-            e
         })?;
         self.inner
             .parse_event(event, &mut self.results, &mut self.errors);
@@ -804,9 +802,8 @@ impl SliceJsonLdParser<'_> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdSyntaxError> {
-        let event = self.json_parser.parse_next().map_err(|e| {
+        let event = self.json_parser.parse_next().inspect_err(|_| {
             self.inner.json_error = true;
-            e
         })?;
         self.inner
             .parse_event(event, &mut self.results, &mut self.errors);
@@ -906,7 +903,7 @@ struct JsonLdToRdfConverter {
 
 impl JsonLdToRdfConverter {
     fn convert_event(&mut self, event: JsonLdEvent, results: &mut Vec<Quad>) {
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used)]
         let state = self.state.pop().expect("Empty stack");
         match state {
             JsonLdToRdfState::StartObject {

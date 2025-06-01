@@ -475,7 +475,6 @@ impl JsonLdContextProcessor {
     }
 
     /// [Create Term Definition](https://www.w3.org/TR/json-ld-api/#create-term-definition)
-    #[allow(clippy::only_used_in_recursion)] // TODO: params will be useful for term-specific contexts
     fn create_term_definition(
         &self,
         active_context: &mut JsonLdContext,

@@ -350,7 +350,7 @@ impl VariableTypes {
     }
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct VariableType {
     pub undef: bool,
@@ -446,7 +446,7 @@ impl BitOr for VariableType {
 impl BitAnd for VariableType {
     type Output = Self;
 
-    #[allow(clippy::nonminimal_bool)]
+    #[expect(clippy::nonminimal_bool)]
     fn bitand(self, rhs: Self) -> Self {
         Self {
             undef: self.undef && rhs.undef,

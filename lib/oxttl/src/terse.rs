@@ -19,7 +19,7 @@ pub struct TriGRecognizer {
     cur_graph: GraphName,
 }
 
-#[allow(clippy::partial_pub_fields)]
+#[expect(clippy::partial_pub_fields)]
 pub struct TriGRecognizerContext {
     pub lexer_options: N3LexerOptions,
     pub with_graph_name: bool,
@@ -1004,7 +1004,7 @@ impl RuleRecognizer for TriGRecognizer {
 }
 
 impl TriGRecognizer {
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[cfg_attr(feature = "rdf-star", expect(clippy::fn_params_excessive_bools))]
     pub fn new_parser<B>(
         data: B,
         is_ending: bool,

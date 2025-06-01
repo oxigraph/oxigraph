@@ -39,7 +39,7 @@ impl StrHash {
 
 impl Hash for StrHash {
     #[inline]
-    #[allow(clippy::host_endian_bytes)]
+    #[expect(clippy::host_endian_bytes)]
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u128(u128::from_ne_bytes(self.hash))
     }
@@ -1208,7 +1208,7 @@ impl Hasher for StrHashHasher {
     }
 
     #[inline]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     fn write_u128(&mut self, i: u128) {
         self.value = i as u64;
     }

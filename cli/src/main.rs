@@ -49,7 +49,7 @@ mod service_description;
 const MAX_SPARQL_BODY_SIZE: u64 = 1024 * 1024 * 128; // 128MB
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
 const HTML_ROOT_PAGE: &str = include_str!("../templates/query.html");
-#[allow(clippy::large_include_file)]
+#[expect(clippy::large_include_file)]
 const YASGUI_JS: &str = include_str!("../templates/yasgui/yasgui.min.js");
 const YASGUI_CSS: &str = include_str!("../templates/yasgui/yasgui.min.css");
 const LOGO: &str = include_str!("../logo.svg");
@@ -115,7 +115,7 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 None
             };
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(clippy::cast_precision_loss)]
             if file.is_empty() {
                 // We read from stdin
                 let start = Instant::now();
@@ -1732,7 +1732,7 @@ fn systemd_notify_ready() -> io::Result<()> {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use anyhow::Result;

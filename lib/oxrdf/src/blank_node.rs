@@ -392,7 +392,6 @@ impl<'de> Deserialize<'de> for BlankNode {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     #[cfg(not(target_family = "wasm"))]

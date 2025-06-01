@@ -56,7 +56,7 @@ impl MemoryStorage {
             }),
             id2str: Arc::new(DashMap::default()),
             version_counter: Arc::new(AtomicUsize::new(0)),
-            #[allow(clippy::mutex_atomic)]
+            #[expect(clippy::mutex_atomic)]
             transaction_counter: Arc::new(Mutex::new(usize::MAX >> 1)),
         }
     }
@@ -68,7 +68,7 @@ impl MemoryStorage {
         }
     }
 
-    #[allow(clippy::unwrap_in_result)]
+    #[expect(clippy::unwrap_in_result)]
     pub fn transaction<T, E: Error + 'static + From<StorageError>>(
         &self,
         f: impl for<'a> Fn(MemoryStorageWriter<'a>) -> Result<T, E>,
@@ -241,7 +241,7 @@ impl MemoryStorageReader {
         }
     }
 
-    #[allow(unsafe_code)]
+    #[expect(unsafe_code)]
     pub fn named_graphs(&self) -> MemoryDecodingGraphIterator {
         MemoryDecodingGraphIterator {
             reader: self.clone(),
@@ -265,7 +265,7 @@ impl MemoryStorageReader {
     }
 
     /// Validates that all the storage invariants held in the data
-    #[allow(clippy::unwrap_in_result)]
+    #[expect(clippy::unwrap_in_result)]
     pub fn validate(&self) -> Result<(), StorageError> {
         // All used named graphs are in graph set
         let expected_quad_len = self.storage.content.quad_set.len() as u64;
@@ -802,7 +802,7 @@ impl MemoryStorageBulkLoader {
         self
     }
 
-    #[allow(clippy::unwrap_in_result)]
+    #[expect(clippy::unwrap_in_result)]
     pub fn load<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<Quad, EI>>,
@@ -1025,7 +1025,7 @@ fn pop_boxed_slice<T: Copy>(slice: &[T]) -> Box<[T]> {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use oxrdf::NamedNodeRef;

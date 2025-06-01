@@ -175,7 +175,7 @@ impl From<Boolean> for Double {
 
 impl From<Integer> for Double {
     #[inline]
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(clippy::cast_precision_loss)]
     fn from(value: Integer) -> Self {
         (i64::from(value) as f64).into()
     }
@@ -256,7 +256,7 @@ impl Div for Double {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
 
