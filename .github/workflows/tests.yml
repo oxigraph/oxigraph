@@ -92,8 +92,12 @@ jobs:
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --no-default-features -- -D warnings -D clippy::all
         working-directory: ./js
+        env:
+          RUSTFLAGS: --cfg getrandom_backend="wasm_js"
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown -- -D warnings -D clippy::all
         working-directory: ./js
+        env:
+          RUSTFLAGS: --cfg getrandom_backend="wasm_js"
 
   clippy_wasip1:
     runs-on: ubuntu-latest
@@ -138,8 +142,10 @@ jobs:
           version: 1.87.0
           target: wasm32-unknown-unknown
           component: clippy
-      - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --features getrandom/custom --features oxsdatatypes/custom-now -- -D warnings -D clippy::all
+      - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --features oxsdatatypes/custom-now -- -D warnings -D clippy::all
         working-directory: ./lib/oxigraph
+        env:
+          RUSTFLAGS: --cfg getrandom_backend="custom"
 
   deny:
     runs-on: ubuntu-latest
@@ -161,7 +167,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: rocksdb
-          key: ${{ runner.os }}-rocksdb-8.0.0
+          key: ${{ runner.os }}-rocksdb-9.10.0
       - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo semver-checks check-release --exclude oxrocksdb-sys --exclude oxigraph-js --exclude pyoxigraph --exclude oxigraph-testsuite --exclude oxigraph-cli
 
