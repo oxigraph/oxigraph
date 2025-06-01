@@ -14,8 +14,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// A [N-Quads](https://www.w3.org/TR/n-quads/) streaming parser.
 ///
-/// Support for [N-Quads-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-quads-star) is available behind the `rdf-star` feature and the [`NQuadsParser::with_quoted_triples`] option.
-///
 /// Count the number of people:
 /// ```
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
@@ -41,8 +39,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[must_use]
 pub struct NQuadsParser {
     lenient: bool,
-    #[cfg(feature = "rdf-star")]
-    with_quoted_triples: bool,
 }
 
 impl NQuadsParser {
@@ -67,14 +63,6 @@ impl NQuadsParser {
     #[inline]
     pub fn unchecked(self) -> Self {
         self.lenient()
-    }
-
-    /// Enables [N-Quads-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-quads-star).
-    #[cfg(feature = "rdf-star")]
-    #[inline]
-    pub fn with_quoted_triples(mut self) -> Self {
-        self.with_quoted_triples = true;
-        self
     }
 
     /// Parses a N-Quads file from a [`Read`] implementation.
@@ -168,15 +156,7 @@ impl NQuadsParser {
     /// ```
     pub fn for_slice(self, slice: &[u8]) -> SliceNQuadsParser<'_> {
         SliceNQuadsParser {
-            inner: NQuadsRecognizer::new_parser(
-                slice,
-                true,
-                true,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
-                self.lenient,
-            )
-            .into_iter(),
+            inner: NQuadsRecognizer::new_parser(slice, true, true, self.lenient).into_iter(),
         }
     }
 
@@ -264,14 +244,7 @@ impl NQuadsParser {
     /// ```
     pub fn low_level(self) -> LowLevelNQuadsParser {
         LowLevelNQuadsParser {
-            parser: NQuadsRecognizer::new_parser(
-                Vec::new(),
-                false,
-                true,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
-                self.lenient,
-            ),
+            parser: NQuadsRecognizer::new_parser(Vec::new(), false, true, self.lenient),
         }
     }
 }
@@ -465,8 +438,6 @@ impl LowLevelNQuadsParser {
 }
 
 /// A [N-Quads](https://www.w3.org/TR/n-quads/) serializer.
-///
-/// Support for [N-Quads-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-quads-star) is available behind the `rdf-star` feature.
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};

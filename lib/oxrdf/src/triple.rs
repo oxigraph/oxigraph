@@ -153,7 +153,7 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
     }
 }
 
-/// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node)  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
+/// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node),  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-12` feature is enabled).
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -162,7 +162,7 @@ pub enum Subject {
     NamedNode(NamedNode),
     #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNode),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(Box<Triple>),
 }
 
@@ -177,7 +177,7 @@ impl Subject {
         self.as_ref().is_blank_node()
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         self.as_ref().is_triple()
@@ -188,7 +188,7 @@ impl Subject {
         match self {
             Self::NamedNode(node) => SubjectRef::NamedNode(node.as_ref()),
             Self::BlankNode(node) => SubjectRef::BlankNode(node.as_ref()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => SubjectRef::Triple(triple),
         }
     }
@@ -229,7 +229,7 @@ impl From<BlankNodeRef<'_>> for Subject {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<Triple> for Subject {
     #[inline]
     fn from(node: Triple) -> Self {
@@ -237,7 +237,7 @@ impl From<Triple> for Subject {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<Box<Triple>> for Subject {
     #[inline]
     fn from(node: Box<Triple>) -> Self {
@@ -245,7 +245,7 @@ impl From<Box<Triple>> for Subject {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<TripleRef<'_>> for Subject {
     #[inline]
     fn from(node: TripleRef<'_>) -> Self {
@@ -270,7 +270,7 @@ impl From<NamedOrBlankNodeRef<'_>> for Subject {
     }
 }
 
-/// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
+/// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-12` feature is enabled).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
@@ -279,7 +279,7 @@ pub enum SubjectRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNodeRef<'a>),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(&'a Triple),
 }
 
@@ -294,7 +294,7 @@ impl SubjectRef<'_> {
         matches!(self, Self::BlankNode(_))
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         matches!(self, Self::Triple(_))
@@ -305,7 +305,7 @@ impl SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => Subject::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Subject::BlankNode(node.into_owned()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => Subject::Triple(Box::new(triple.clone())),
         }
     }
@@ -317,7 +317,7 @@ impl fmt::Display for SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => write!(f, "<<{triple}>>"),
         }
     }
@@ -351,7 +351,7 @@ impl<'a> From<&'a BlankNode> for SubjectRef<'a> {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl<'a> From<&'a Triple> for SubjectRef<'a> {
     #[inline]
     fn from(node: &'a Triple) -> Self {
@@ -392,7 +392,7 @@ impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
 
 /// An owned RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 ///
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-12` feature is enabled).
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
@@ -402,7 +402,7 @@ pub enum Term {
     #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNode),
     Literal(Literal),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(Box<Triple>),
 }
 
@@ -422,7 +422,7 @@ impl Term {
         self.as_ref().is_literal()
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         self.as_ref().is_triple()
@@ -434,7 +434,7 @@ impl Term {
             Self::NamedNode(node) => TermRef::NamedNode(node.as_ref()),
             Self::BlankNode(node) => TermRef::BlankNode(node.as_ref()),
             Self::Literal(literal) => TermRef::Literal(literal.as_ref()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => TermRef::Triple(triple),
         }
     }
@@ -489,7 +489,7 @@ impl From<LiteralRef<'_>> for Term {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<Triple> for Term {
     #[inline]
     fn from(triple: Triple) -> Self {
@@ -497,7 +497,7 @@ impl From<Triple> for Term {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<Box<Triple>> for Term {
     #[inline]
     fn from(node: Box<Triple>) -> Self {
@@ -505,7 +505,7 @@ impl From<Box<Triple>> for Term {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<TripleRef<'_>> for Term {
     #[inline]
     fn from(triple: TripleRef<'_>) -> Self {
@@ -536,7 +536,7 @@ impl From<Subject> for Term {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Subject::Triple(triple) => Self::Triple(triple),
         }
     }
@@ -605,7 +605,7 @@ impl TryFrom<Term> for Subject {
         match term {
             Term::NamedNode(term) => Ok(Self::NamedNode(term)),
             Term::BlankNode(term) => Ok(Self::BlankNode(term)),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Term::Triple(term) => Ok(Self::Triple(term)),
             Term::Literal(_) => Err(TryFromTermError {
                 term,
@@ -617,7 +617,7 @@ impl TryFrom<Term> for Subject {
 
 /// A borrowed RDF [term](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term)
 ///
-/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-star` feature is enabled).
+/// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-12` feature is enabled).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
@@ -627,7 +627,7 @@ pub enum TermRef<'a> {
     #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNodeRef<'a>),
     Literal(LiteralRef<'a>),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(&'a Triple),
 }
 
@@ -647,7 +647,7 @@ impl TermRef<'_> {
         matches!(self, Self::Literal(_))
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     #[inline]
     pub fn is_triple(&self) -> bool {
         matches!(self, Self::Triple(_))
@@ -659,7 +659,7 @@ impl TermRef<'_> {
             Self::NamedNode(node) => Term::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Term::BlankNode(node.into_owned()),
             Self::Literal(literal) => Term::Literal(literal.into_owned()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => Term::Triple(Box::new(triple.clone())),
         }
     }
@@ -672,7 +672,7 @@ impl fmt::Display for TermRef<'_> {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
             Self::Literal(literal) => literal.fmt(f),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => {
                 write!(f, "<<{triple}>>")
             }
@@ -722,7 +722,7 @@ impl<'a> From<&'a Literal> for TermRef<'a> {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl<'a> From<&'a Triple> for TermRef<'a> {
     #[inline]
     fn from(node: &'a Triple) -> Self {
@@ -753,7 +753,7 @@ impl<'a> From<SubjectRef<'a>> for TermRef<'a> {
         match node {
             SubjectRef::NamedNode(node) => node.into(),
             SubjectRef::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             SubjectRef::Triple(triple) => triple.into(),
         }
     }
@@ -1503,7 +1503,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "serde")]
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     fn serde_star() -> Result<(), serde_json::Error> {
         let triple = Triple::new(
             NamedNode::new_unchecked("http://example.com/s"),
@@ -1668,7 +1668,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "serde")]
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     fn serde_quad_star() -> Result<(), serde_json::Error> {
         let quad = Quad::new(
             NamedNode::new_unchecked("http://example.com/s"),

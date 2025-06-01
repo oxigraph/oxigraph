@@ -14,8 +14,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// A [N-Triples](https://www.w3.org/TR/n-triples/) streaming parser.
 ///
-/// Support for [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star) is available behind the `rdf-star` feature and the [`NTriplesParser::with_quoted_triples`] option.
-///
 /// Count the number of people:
 /// ```
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
@@ -41,8 +39,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 #[must_use]
 pub struct NTriplesParser {
     lenient: bool,
-    #[cfg(feature = "rdf-star")]
-    with_quoted_triples: bool,
 }
 
 impl NTriplesParser {
@@ -67,14 +63,6 @@ impl NTriplesParser {
     #[inline]
     pub fn unchecked(self) -> Self {
         self.lenient()
-    }
-
-    /// Enables [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star).
-    #[cfg(feature = "rdf-star")]
-    #[inline]
-    pub fn with_quoted_triples(mut self) -> Self {
-        self.with_quoted_triples = true;
-        self
     }
 
     /// Parses a N-Triples file from a [`Read`] implementation.
@@ -168,15 +156,7 @@ impl NTriplesParser {
     /// ```
     pub fn for_slice(self, slice: &[u8]) -> SliceNTriplesParser<'_> {
         SliceNTriplesParser {
-            inner: NQuadsRecognizer::new_parser(
-                slice,
-                true,
-                false,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
-                self.lenient,
-            )
-            .into_iter(),
+            inner: NQuadsRecognizer::new_parser(slice, true, false, self.lenient).into_iter(),
         }
     }
 
@@ -264,14 +244,7 @@ impl NTriplesParser {
     /// ```
     pub fn low_level(self) -> LowLevelNTriplesParser {
         LowLevelNTriplesParser {
-            parser: NQuadsRecognizer::new_parser(
-                Vec::new(),
-                false,
-                false,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
-                self.lenient,
-            ),
+            parser: NQuadsRecognizer::new_parser(Vec::new(), false, false, self.lenient),
         }
     }
 }
@@ -465,8 +438,6 @@ impl LowLevelNTriplesParser {
 }
 
 /// A [canonical](https://www.w3.org/TR/n-triples/#canonical-ntriples) [N-Triples](https://www.w3.org/TR/n-triples/) serializer.
-///
-/// Support for [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star) is available behind the `rdf-star` feature.
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, TripleRef};

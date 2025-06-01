@@ -1,12 +1,12 @@
 use crate::storage::error::{CorruptionError, StorageError};
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash};
 use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
 use std::io::Read;
 use std::mem::size_of;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use std::sync::Arc;
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -50,7 +50,7 @@ const TYPE_G_MONTH_LITERAL: u8 = 41;
 const TYPE_DURATION_LITERAL: u8 = 42;
 const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 43;
 const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 44;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 const TYPE_TRIPLE: u8 = 48;
 #[cfg(feature = "rdf-12")]
 const TYPE_LTR_SMALL_SMALL_DIR_LANG_STRING_LITERAL: u8 = 56;
@@ -516,7 +516,7 @@ impl<R: Read> TermReader for R {
                     DayTimeDuration::from_be_bytes(buffer),
                 ))
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             TYPE_TRIPLE => Ok(EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.read_term()?,
                 predicate: self.read_term()?,
@@ -804,7 +804,7 @@ pub fn write_term(sink: &mut Vec<u8>, term: &EncodedTerm) {
             sink.push(TYPE_DAY_TIME_DURATION_LITERAL);
             sink.extend_from_slice(&value.to_be_bytes())
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "rdf-12")]
         EncodedTerm::Triple(value) => {
             sink.push(TYPE_TRIPLE);
             write_term(sink, &value.subject);
@@ -963,7 +963,7 @@ mod tests {
                 NamedNode::new_unchecked("http://foo.com"),
             )
             .into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Triple::new(
                 NamedNode::new_unchecked("http://foo.com"),
                 NamedNode::new_unchecked("http://bar.com"),

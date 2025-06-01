@@ -3,7 +3,7 @@ use oxrdf::BaseDirection;
 use oxrdf::{
     BlankNode, Dataset, GraphNameRef, Literal, NamedNode, QuadRef, SubjectRef, Term, TermRef,
 };
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 use oxrdf::{Subject, Triple};
 use oxsdatatypes::{Boolean, DateTime, Decimal, Double, Float, Integer};
 #[cfg(feature = "sep-0002")]
@@ -144,7 +144,7 @@ impl QueryableDataset for Dataset {
                 TermRef::NamedNode(s) => SubjectRef::from(s),
                 TermRef::BlankNode(s) => s.into(),
                 TermRef::Literal(_) => return Box::new(empty()),
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 TermRef::Triple(s) => s.into(),
             })
         } else {
@@ -166,7 +166,7 @@ impl QueryableDataset for Dataset {
                     TermRef::NamedNode(s) => s.into(),
                     TermRef::BlankNode(s) => s.into(),
                     TermRef::Literal(_) => return Box::new(empty()),
-                    #[cfg(feature = "rdf-star")]
+                    #[cfg(feature = "sparql-12")]
                     TermRef::Triple(_) => return Box::new(empty()),
                 }
             } else {
@@ -278,7 +278,7 @@ pub enum ExpressionTerm {
         value: String,
         datatype: NamedNode,
     },
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple(Box<ExpressionTriple>),
 }
 
@@ -336,7 +336,7 @@ impl PartialEq for ExpressionTerm {
                         datatype: rd,
                     },
                 ) => lv == rv && ld == rd,
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 (Self::Triple(l), Self::Triple(r)) => l == r,
                 (_, _) => unreachable!(),
             }
@@ -387,7 +387,7 @@ impl Hash for ExpressionTerm {
             #[cfg(feature = "sep-0002")]
             ExpressionTerm::DayTimeDurationLiteral(v) => v.hash(state),
             ExpressionTerm::OtherTypedLiteral { value, datatype } => (value, datatype).hash(state),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             ExpressionTerm::Triple(v) => v.hash(state),
         }
     }
@@ -433,7 +433,7 @@ impl From<Term> for ExpressionTerm {
                     }
                 }
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Term::Triple(t) => Self::Triple(Box::new((*t).into())),
         }
     }
@@ -487,7 +487,7 @@ impl From<ExpressionTerm> for Term {
             ExpressionTerm::OtherTypedLiteral { value, datatype } => {
                 Literal::new_typed_literal(value, datatype).into()
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             ExpressionTerm::Triple(t) => Triple::from(*t).into(),
         }
     }
@@ -592,7 +592,7 @@ fn parse_typed_literal(value: &str, datatype: &str) -> Option<ExpressionTerm> {
     })
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ExpressionTriple {
     pub subject: ExpressionSubject,
@@ -600,7 +600,7 @@ pub struct ExpressionTriple {
     pub object: ExpressionTerm,
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<ExpressionTriple> for ExpressionTerm {
     #[inline]
     fn from(triple: ExpressionTriple) -> Self {
@@ -608,7 +608,7 @@ impl From<ExpressionTriple> for ExpressionTerm {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<Triple> for ExpressionTriple {
     #[inline]
     fn from(triple: Triple) -> Self {
@@ -620,7 +620,7 @@ impl From<Triple> for ExpressionTriple {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<ExpressionTriple> for Triple {
     #[inline]
     fn from(triple: ExpressionTriple) -> Self {
@@ -632,7 +632,7 @@ impl From<ExpressionTriple> for Triple {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl ExpressionTriple {
     pub fn new(
         subject: ExpressionTerm,
@@ -665,7 +665,7 @@ impl ExpressionTriple {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ExpressionSubject {
     NamedNode(NamedNode),
@@ -673,7 +673,7 @@ pub enum ExpressionSubject {
     Triple(Box<ExpressionTriple>),
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<ExpressionSubject> for ExpressionTerm {
     #[inline]
     fn from(subject: ExpressionSubject) -> Self {
@@ -685,7 +685,7 @@ impl From<ExpressionSubject> for ExpressionTerm {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<ExpressionSubject> for Subject {
     #[inline]
     fn from(subject: ExpressionSubject) -> Self {
@@ -697,7 +697,7 @@ impl From<ExpressionSubject> for Subject {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<Subject> for ExpressionSubject {
     #[inline]
     fn from(subject: Subject) -> Self {

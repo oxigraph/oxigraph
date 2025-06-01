@@ -12,7 +12,7 @@ fn parse<'a>(
 ) -> (Vec<Quad>, Vec<String>) {
     let mut quads = Vec::new();
     let mut errors = Vec::new();
-    let mut parser = NQuadsParser::new().with_quoted_triples();
+    let mut parser = NQuadsParser::new();
     if unchecked {
         parser = parser.lenient();
     }
@@ -67,7 +67,6 @@ fuzz_target!(|data: &[u8]| {
 
     // We parse the serialization
     let new_quads = NQuadsParser::new()
-        .with_quoted_triples()
         .for_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {

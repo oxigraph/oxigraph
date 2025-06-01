@@ -448,7 +448,7 @@ impl From<NamedOrBlankNode> for PyNamedOrBlankNode {
 pub enum PySubject {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(PyTriple),
 }
 
@@ -457,7 +457,7 @@ impl From<PySubject> for Subject {
         match node {
             PySubject::NamedNode(node) => node.into(),
             PySubject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             PySubject::Triple(triple) => triple.into(),
         }
     }
@@ -468,7 +468,7 @@ impl From<Subject> for PySubject {
         match node {
             Subject::NamedNode(node) => Self::NamedNode(node.into()),
             Subject::BlankNode(node) => Self::BlankNode(node.into()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Subject::Triple(triple) => Self::Triple(triple.as_ref().clone().into()),
         }
     }
@@ -479,7 +479,7 @@ pub enum PyTerm {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
     Literal(PyLiteral),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(PyTriple),
 }
 
@@ -489,7 +489,7 @@ impl From<PyTerm> for Term {
             PyTerm::NamedNode(node) => node.into(),
             PyTerm::BlankNode(node) => node.into(),
             PyTerm::Literal(literal) => literal.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             PyTerm::Triple(triple) => triple.into(),
         }
     }
@@ -501,7 +501,7 @@ impl From<Term> for PyTerm {
             Term::NamedNode(node) => Self::NamedNode(node.into()),
             Term::BlankNode(node) => Self::BlankNode(node.into()),
             Term::Literal(literal) => Self::Literal(literal.into()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Term::Triple(triple) => Self::Triple(triple.as_ref().clone().into()),
         }
     }
@@ -548,14 +548,14 @@ impl<'a> From<&'a PyTriple> for TripleRef<'a> {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<PyTriple> for Subject {
     fn from(triple: PyTriple) -> Self {
         triple.inner.into()
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<PyTriple> for Term {
     fn from(triple: PyTriple) -> Self {
         triple.inner.into()
@@ -987,7 +987,7 @@ impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
 pub enum PySubjectRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(PyRef<'a, PyTriple>),
 }
 
@@ -996,7 +996,7 @@ impl<'a> From<&'a PySubjectRef<'a>> for SubjectRef<'a> {
         match value {
             PySubjectRef::NamedNode(value) => value.inner.as_ref().into(),
             PySubjectRef::BlankNode(value) => value.inner.as_ref().into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             PySubjectRef::Triple(value) => (&value.inner).into(),
         }
     }
@@ -1007,7 +1007,7 @@ pub enum PyTermRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
     Literal(PyRef<'a, PyLiteral>),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(PyRef<'a, PyTriple>),
 }
 
@@ -1017,7 +1017,7 @@ impl<'a> From<&'a PyTermRef<'a>> for TermRef<'a> {
             PyTermRef::NamedNode(value) => value.inner.as_ref().into(),
             PyTermRef::BlankNode(value) => value.inner.as_ref().into(),
             PyTermRef::Literal(value) => value.inner.as_ref().into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             PyTermRef::Triple(value) => (&value.inner).into(),
         }
     }
@@ -1070,7 +1070,7 @@ pub fn term_repr(term: TermRef<'_>, buffer: &mut String) {
         TermRef::NamedNode(node) => named_node_repr(node, buffer),
         TermRef::BlankNode(node) => blank_node_repr(node, buffer),
         TermRef::Literal(literal) => literal_repr(literal, buffer),
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "rdf-12")]
         TermRef::Triple(triple) => triple_repr(triple.as_ref(), buffer),
     }
 }

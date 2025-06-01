@@ -20,8 +20,6 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 /// A [Turtle](https://www.w3.org/TR/turtle/) streaming parser.
 ///
-/// Support for [Turtle-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#turtle-star) is available behind the `rdf-star` feature and the [`TurtleParser::with_quoted_triples`] option.
-///
 /// Count the number of people:
 /// ```
 /// use oxrdf::NamedNodeRef;
@@ -52,8 +50,6 @@ pub struct TurtleParser {
     lenient: bool,
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
-    #[cfg(feature = "rdf-star")]
-    with_quoted_triples: bool,
 }
 
 impl TurtleParser {
@@ -95,14 +91,6 @@ impl TurtleParser {
         self.prefixes
             .insert(prefix_name.into(), Iri::parse(prefix_iri.into())?);
         Ok(self)
-    }
-
-    /// Enables [Turtle-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#turtle-star).
-    #[cfg(feature = "rdf-star")]
-    #[inline]
-    pub fn with_quoted_triples(mut self) -> Self {
-        self.with_quoted_triples = true;
-        self
     }
 
     /// Parses a Turtle file from a [`Read`] implementation.
@@ -209,8 +197,6 @@ impl TurtleParser {
                 slice,
                 true,
                 false,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
                 self.lenient,
                 self.base,
                 self.prefixes,
@@ -325,8 +311,6 @@ impl TurtleParser {
                 Vec::new(),
                 false,
                 false,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
                 self.lenient,
                 self.base,
                 self.prefixes,
@@ -802,8 +786,6 @@ impl<'a> Iterator for TurtlePrefixesIter<'a> {
 }
 
 /// A [Turtle](https://www.w3.org/TR/turtle/) serializer.
-///
-/// Support for [Turtle-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#turtle-star) is available behind the `rdf-star` feature.
 ///
 /// ```
 /// use oxrdf::vocab::rdf;

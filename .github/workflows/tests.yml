@@ -58,7 +58,7 @@ jobs:
         working-directory: ./lib/sparopt
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/spareval
-      - run: cargo clippy --all-targets --features rdf-star -- -D warnings -D clippy::all
+      - run: cargo clippy --all-targets --features sparql-12 -- -D warnings -D clippy::all
         working-directory: ./lib/spareval
       - run: cargo clippy --all-targets --features sep-0002 -- -D warnings -D clippy::all
         working-directory: ./lib/spareval

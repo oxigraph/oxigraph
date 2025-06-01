@@ -95,47 +95,11 @@ impl RdfParser {
                     RdfParserKind::JsonLd(JsonLdParser::new().with_profile(profile), profile)
                 }
                 RdfFormat::N3 => RdfParserKind::N3(N3Parser::new()),
-                RdfFormat::NQuads => RdfParserKind::NQuads({
-                    #[cfg(feature = "rdf-star")]
-                    {
-                        NQuadsParser::new().with_quoted_triples()
-                    }
-                    #[cfg(not(feature = "rdf-star"))]
-                    {
-                        NQuadsParser::new()
-                    }
-                }),
-                RdfFormat::NTriples => RdfParserKind::NTriples({
-                    #[cfg(feature = "rdf-star")]
-                    {
-                        NTriplesParser::new().with_quoted_triples()
-                    }
-                    #[cfg(not(feature = "rdf-star"))]
-                    {
-                        NTriplesParser::new()
-                    }
-                }),
+                RdfFormat::NQuads => RdfParserKind::NQuads(NQuadsParser::new()),
+                RdfFormat::NTriples => RdfParserKind::NTriples(NTriplesParser::new()),
                 RdfFormat::RdfXml => RdfParserKind::RdfXml(RdfXmlParser::new()),
-                RdfFormat::TriG => RdfParserKind::TriG({
-                    #[cfg(feature = "rdf-star")]
-                    {
-                        TriGParser::new().with_quoted_triples()
-                    }
-                    #[cfg(not(feature = "rdf-star"))]
-                    {
-                        TriGParser::new()
-                    }
-                }),
-                RdfFormat::Turtle => RdfParserKind::Turtle({
-                    #[cfg(feature = "rdf-star")]
-                    {
-                        TurtleParser::new().with_quoted_triples()
-                    }
-                    #[cfg(not(feature = "rdf-star"))]
-                    {
-                        TurtleParser::new()
-                    }
-                }),
+                RdfFormat::TriG => RdfParserKind::TriG(TriGParser::new()),
+                RdfFormat::Turtle => RdfParserKind::Turtle(TurtleParser::new()),
             },
             default_graph: GraphName::DefaultGraph,
             without_named_graphs: false,
@@ -1070,7 +1034,7 @@ impl QuadMapper {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => self.map_blank_node(node).into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Subject::Triple(triple) => self.map_triple(*triple).into(),
         }
     }
@@ -1080,7 +1044,7 @@ impl QuadMapper {
             Term::NamedNode(node) => node.into(),
             Term::BlankNode(node) => self.map_blank_node(node).into(),
             Term::Literal(literal) => literal.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Term::Triple(triple) => self.map_triple(*triple).into(),
         }
     }
@@ -1134,7 +1098,7 @@ impl QuadMapper {
                 N3Term::Literal(_) => Err(RdfSyntaxError::msg(
                     "literals are not allowed in regular RDF subjects",
                 )),
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 N3Term::Triple(s) => Ok(self.map_triple(*s).into()),
                 N3Term::Variable(_) => Err(RdfSyntaxError::msg(
                     "variables are not allowed in regular RDF subjects",
@@ -1148,7 +1112,7 @@ impl QuadMapper {
                 N3Term::Literal(_) => Err(RdfSyntaxError::msg(
                     "literals are not allowed in regular RDF predicates",
                 )),
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 N3Term::Triple(_) => Err(RdfSyntaxError::msg(
                     "quoted triples are not allowed in regular RDF predicates",
                 )),
@@ -1160,7 +1124,7 @@ impl QuadMapper {
                 N3Term::NamedNode(o) => Ok(o.into()),
                 N3Term::BlankNode(o) => Ok(self.map_blank_node(o).into()),
                 N3Term::Literal(o) => Ok(o.into()),
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 N3Term::Triple(o) => Ok(self.map_triple(*o).into()),
                 N3Term::Variable(_) => Err(RdfSyntaxError::msg(
                     "variables are not allowed in regular RDF objects",

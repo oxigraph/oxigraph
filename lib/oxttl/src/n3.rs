@@ -9,7 +9,7 @@ use crate::toolkit::{
 };
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, TurtleParseError};
 use oxiri::{Iri, IriParseError};
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
@@ -29,7 +29,7 @@ pub enum N3Term {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     Triple(Box<Triple>),
     Variable(Variable),
 }
@@ -41,7 +41,7 @@ impl fmt::Display for N3Term {
             Self::NamedNode(term) => term.fmt(f),
             Self::BlankNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Self::Triple(term) => term.fmt(f),
             Self::Variable(term) => term.fmt(f),
         }
@@ -76,7 +76,7 @@ impl From<Literal> for N3Term {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<Triple> for N3Term {
     #[inline]
     fn from(triple: Triple) -> Self {
@@ -84,7 +84,7 @@ impl From<Triple> for N3Term {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 impl From<Box<Triple>> for N3Term {
     #[inline]
     fn from(node: Box<Triple>) -> Self {
@@ -108,7 +108,7 @@ impl From<Subject> for N3Term {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Subject::Triple(triple) => Self::Triple(triple),
         }
     }
@@ -121,7 +121,7 @@ impl From<Term> for N3Term {
             Term::NamedNode(node) => node.into(),
             Term::BlankNode(node) => node.into(),
             Term::Literal(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Term::Triple(triple) => Self::Triple(triple),
         }
     }

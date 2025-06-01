@@ -1758,8 +1758,8 @@ mod tests {
         command.arg("--features").arg("rocksdb-pkg-config");
         #[cfg(feature = "geosparql")]
         command.arg("--features").arg("geosparql");
-        #[cfg(feature = "rdf-star")]
-        command.arg("--features").arg("rdf-star");
+        #[cfg(feature = "rdf-12")]
+        command.arg("--features").arg("rdf-12");
         command.arg("--");
         command
     }

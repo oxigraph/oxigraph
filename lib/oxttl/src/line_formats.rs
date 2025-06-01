@@ -3,7 +3,7 @@
 use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
 
@@ -16,8 +16,6 @@ pub struct NQuadsRecognizer {
 
 pub struct NQuadsRecognizerContext {
     with_graph_name: bool,
-    #[cfg(feature = "rdf-star")]
-    with_quoted_triples: bool,
     lexer_options: N3LexerOptions,
 }
 
@@ -35,9 +33,9 @@ enum NQuadsState {
     },
     ExpectLineJump,
     RecoverToLineJump,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     AfterQuotedSubject,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     AfterQuotedObject,
 }
 
@@ -88,8 +86,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self.stack.push(NQuadsState::ExpectPredicate);
                         self
                     }
-                    #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::Punctuation("<<") => {
                         self.stack.push(NQuadsState::AfterQuotedSubject);
                         self.stack.push(NQuadsState::ExpectSubject);
                         self
@@ -156,8 +154,8 @@ impl RuleRecognizer for NQuadsRecognizer {
                             .push(NQuadsState::ExpectLiteralAnnotationOrGraphNameOrDot { value });
                         self
                     }
-                    #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::Punctuation("<<") => {
                         self.stack.push(NQuadsState::AfterQuotedObject);
                         self.stack.push(NQuadsState::ExpectSubject);
                         self
@@ -314,7 +312,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 );
                 self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             NQuadsState::AfterQuotedSubject => {
                 let triple = Triple {
                     subject: self.subjects.pop().unwrap(),
@@ -325,7 +323,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 self.stack.push(NQuadsState::ExpectPredicate);
                 self.recognize_next(token, context, results, errors)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             NQuadsState::AfterQuotedObject => {
                 let triple = Triple {
                     subject: self.subjects.pop().unwrap(),
@@ -374,12 +372,10 @@ impl RuleRecognizer for NQuadsRecognizer {
 }
 
 impl NQuadsRecognizer {
-    #[cfg_attr(feature = "rdf-star", expect(clippy::fn_params_excessive_bools))]
     pub fn new_parser<B>(
         data: B,
         is_ending: bool,
         with_graph_name: bool,
-        #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
         lenient: bool,
     ) -> Parser<B, Self> {
         Parser::new(
@@ -399,8 +395,6 @@ impl NQuadsRecognizer {
             },
             NQuadsRecognizerContext {
                 with_graph_name,
-                #[cfg(feature = "rdf-star")]
-                with_quoted_triples,
                 lexer_options: N3LexerOptions::default(),
             },
         )

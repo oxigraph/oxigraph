@@ -584,14 +584,14 @@ impl Dataset {
             if let InternedSubject::BlankNode(bnode) = s {
                 bnodes.insert(*bnode);
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             if let InternedSubject::Triple(triple) = s {
                 Self::triple_blank_nodes(triple, &mut bnodes);
             }
             if let InternedTerm::BlankNode(bnode) = o {
                 bnodes.insert(*bnode);
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             if let InternedTerm::Triple(triple) = o {
                 Self::triple_blank_nodes(triple, &mut bnodes);
             }
@@ -602,7 +602,7 @@ impl Dataset {
         bnodes
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     fn triple_blank_nodes(triple: &InternedTriple, bnodes: &mut HashSet<InternedBlankNode>) {
         if let InternedSubject::BlankNode(bnode) = &triple.subject {
             bnodes.insert(*bnode);
@@ -622,14 +622,14 @@ impl Dataset {
             if let InternedSubject::BlankNode(bnode) = &quad.0 {
                 map.entry(*bnode).or_default().push(quad.clone());
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             if let InternedSubject::Triple(t) = &quad.0 {
                 Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, &mut map);
             }
             if let InternedTerm::BlankNode(bnode) = &quad.2 {
                 map.entry(*bnode).or_default().push(quad.clone());
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             if let InternedTerm::Triple(t) = &quad.2 {
                 Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, &mut map);
             }
@@ -640,7 +640,7 @@ impl Dataset {
         map
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     fn add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(
         quad: &(
             InternedSubject,
@@ -742,7 +742,7 @@ impl Dataset {
             InternedSubject::BlankNode(bnode) => {
                 Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             InternedSubject::Triple(triple) => {
                 self.hash_triple(triple, current_blank_node, bnodes_hash)
             }
@@ -761,7 +761,7 @@ impl Dataset {
                 Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
             }
             InternedTerm::Literal(literal) => Self::hash_tuple(literal.decode_from(&self.interner)),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             InternedTerm::Triple(triple) => {
                 self.hash_triple(triple, current_blank_node, bnodes_hash)
             }
@@ -785,7 +785,7 @@ impl Dataset {
         }
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     fn hash_triple(
         &self,
         triple: &InternedTriple,
@@ -858,7 +858,7 @@ impl Dataset {
                                 &mut self.interner,
                             ))
                         }
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "rdf-12")]
                         InternedSubject::Triple(triple) => {
                             InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
                                 self.map_triple_blank_nodes(&triple, bnode_mapping).as_ref(),
@@ -875,7 +875,7 @@ impl Dataset {
                                 &mut self.interner,
                             ))
                         }
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "rdf-12")]
                         InternedTerm::Triple(triple) => {
                             InternedTerm::Triple(Box::new(InternedTriple::encoded_into(
                                 self.map_triple_blank_nodes(&triple, bnode_mapping).as_ref(),
@@ -897,7 +897,7 @@ impl Dataset {
             .collect()
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     fn map_triple_blank_nodes(
         &mut self,
         triple: &InternedTriple,

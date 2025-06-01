@@ -220,7 +220,7 @@ fn write_xml_term<'a>(output: &mut Vec<Event<'a>>, term: TermRef<'a>) {
             )));
             output.push(Event::End(BytesEnd::new("literal")));
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         TermRef::Triple(triple) => {
             output.push(Event::Start(BytesStart::new("triple")));
             output.push(Event::Start(BytesStart::new("subject")));
@@ -868,7 +868,7 @@ impl XmlInnerSolutionsParser {
                     Ok(None)
                 }
                 State::Triple => {
-                    #[cfg(feature = "rdf-star")]
+                    #[cfg(feature = "sparql-12")]
                     if let (Some(subject), Some(predicate), Some(object)) = (
                         self.subject_stack.pop(),
                         self.predicate_stack.pop(),
@@ -907,10 +907,10 @@ impl XmlInnerSolutionsParser {
                         )
                         .into())
                     }
-                    #[cfg(not(feature = "rdf-star"))]
+                    #[cfg(not(feature = "sparql-12"))]
                     {
                         Err(QueryResultsSyntaxError::msg(
-                            "The <triple> tag is only supported with RDF-star",
+                            "The <triple> tag is only supported in RDF 1.2",
                         )
                         .into())
                     }

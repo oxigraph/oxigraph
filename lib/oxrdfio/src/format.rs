@@ -134,16 +134,9 @@ impl RdfFormat {
         matches!(self, Self::JsonLd { .. } | Self::NQuads | Self::TriG)
     }
 
-    /// Checks if the formats supports [RDF-star quoted triples](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#dfn-quoted).
-    ///
-    /// ```
-    /// use oxrdfio::RdfFormat;
-    ///
-    /// assert_eq!(RdfFormat::NTriples.supports_rdf_star(), true);
-    /// assert_eq!(RdfFormat::RdfXml.supports_rdf_star(), false);
-    /// ```
+    #[deprecated(note = "All format will soon support RDF 1.2", since = "0.2.0")]
     #[inline]
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     pub const fn supports_rdf_star(self) -> bool {
         matches!(
             self,

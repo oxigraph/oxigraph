@@ -217,7 +217,7 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
             }
             output.push(JsonEvent::EndObject);
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         TermRef::Triple(triple) => {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("type".into()));
@@ -857,11 +857,11 @@ struct JsonInnerTermReader {
     #[cfg(feature = "sparql-12")]
     direction: Option<String>,
     datatype: Option<NamedNode>,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     subject: Option<Term>,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     predicate: Option<Term>,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     object: Option<Term>,
 }
 
@@ -876,13 +876,13 @@ enum JsonInnerTermReaderState {
     #[cfg(feature = "sparql-12")]
     BaseDirection,
     Datatype,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     InValue,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Subject(Box<JsonInnerTermReader>),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Predicate(Box<JsonInnerTermReader>),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Object(Box<JsonInnerTermReader>),
 }
 
@@ -890,7 +890,7 @@ enum TermType {
     Uri,
     BNode,
     Literal,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple,
 }
 
@@ -1013,7 +1013,7 @@ impl JsonInnerTermReader {
                                 }
                             }.into()))
                         }
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         Some(TermType::Triple) => Ok(Some(
                             Triple::new(
                                 match self.subject.take().ok_or_else(|| {
@@ -1070,7 +1070,7 @@ impl JsonInnerTermReader {
                             self.term_type = Some(TermType::Literal);
                             Ok(None)
                         }
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         "triple" => {
                             self.term_type = Some(TermType::Triple);
                             Ok(None)
@@ -1089,7 +1089,7 @@ impl JsonInnerTermReader {
                     self.state = JsonInnerTermReaderState::Middle;
                     Ok(None)
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 JsonEvent::StartObject => {
                     self.state = JsonInnerTermReaderState::InValue;
                     Ok(None)
@@ -1143,7 +1143,7 @@ impl JsonInnerTermReader {
 
                 result
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             JsonInnerTermReaderState::InValue => match event {
                 JsonEvent::ObjectKey(object_key) => {
                     self.state = match object_key.as_ref() {
@@ -1164,7 +1164,7 @@ impl JsonInnerTermReader {
                 }
                 _ => unreachable!(),
             },
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             JsonInnerTermReaderState::Subject(inner_state) => {
                 if let Some(term) = inner_state.read_event(event)? {
                     self.state = JsonInnerTermReaderState::InValue;
@@ -1172,7 +1172,7 @@ impl JsonInnerTermReader {
                 }
                 Ok(None)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             JsonInnerTermReaderState::Predicate(inner_state) => {
                 if let Some(term) = inner_state.read_event(event)? {
                     self.state = JsonInnerTermReaderState::InValue;
@@ -1180,7 +1180,7 @@ impl JsonInnerTermReader {
                 }
                 Ok(None)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             JsonInnerTermReaderState::Object(inner_state) => {
                 if let Some(term) = inner_state.read_event(event)? {
                     self.state = JsonInnerTermReaderState::InValue;

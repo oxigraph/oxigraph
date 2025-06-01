@@ -1,5 +1,5 @@
 use crate::sparql::QueryDataset;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
@@ -7,7 +7,7 @@ use crate::storage::numeric_encoder::{
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxrdf::Term;
 use oxsdatatypes::Boolean;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use spareval::ExpressionTriple;
 use spareval::{ExpressionTerm, InternalQuad, QueryableDataset};
 use std::cell::RefCell;
@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use std::sync::Arc;
 
 pub struct DatasetView {
@@ -241,13 +241,13 @@ impl QueryableDataset for DatasetView {
             EncodedTerm::DayTimeDurationLiteral(value) => {
                 ExpressionTerm::DayTimeDurationLiteral(value)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             EncodedTerm::Triple(t) => ExpressionTriple::new(
                 self.externalize_expression_term(t.subject.clone())?,
                 self.externalize_expression_term(t.predicate.clone())?,
                 self.externalize_expression_term(t.object.clone())?,
             )
-            .ok_or_else(|| CorruptionError::msg("Invalid RDF-star triple term in the storage"))?
+            .ok_or_else(|| CorruptionError::msg("Invalid triple term in the storage"))?
             .into(),
             _ => self.decode_term(&term)?.into(), // No escape
         })
@@ -278,7 +278,7 @@ impl QueryableDataset for DatasetView {
             ExpressionTerm::DayTimeDurationLiteral(value) => {
                 EncodedTerm::DayTimeDurationLiteral(value)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             ExpressionTerm::Triple(t) => EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.internalize_expression_term(t.subject.into())?,
                 predicate: self.internalize_expression_term(t.predicate.into())?,

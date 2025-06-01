@@ -18,7 +18,7 @@ It supports:
 * [TriG](https://www.w3.org/TR/trig/) using [`oxttl`](https://crates.io/crates/oxttl)
 * [Turtle](https://www.w3.org/TR/turtle/) using [`oxttl`](https://crates.io/crates/oxttl)
 
-Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is also available behind the `rdf-star`feature for [Turtle-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#turtle-star), [TriG-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#trig-star), [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star) and [N-Quads-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-quads-star).
+Support for [RDF 1.2](https://www.w3.org/TR/rdf12-concepts/) is available behind the `rdf-12` feature.
 
 It is designed as a low level parser compatible with both synchronous and asynchronous I/O (behind the `async-tokio` feature).
 

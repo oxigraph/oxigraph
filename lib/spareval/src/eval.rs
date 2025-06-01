@@ -1,5 +1,5 @@
 use crate::CustomFunctionRegistry;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 use crate::dataset::{ExpressionSubject, ExpressionTriple};
 use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 use crate::error::QueryEvaluationError;
@@ -21,7 +21,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet, FxHasher};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 use spargebra::algebra::{AggregateFunction, Function, PropertyPathExpression};
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 use spargebra::term::GroundTriple;
 use spargebra::term::{
     GroundTerm, GroundTermPattern, NamedNodePattern, TermPattern, TriplePattern,
@@ -460,7 +460,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                         GroundTerm::Literal(literal) => {
                                             self.encode_term(literal.clone())
                                         }
-                                        #[cfg(feature = "rdf-star")]
+                                        #[cfg(feature = "sparql-12")]
                                         GroundTerm::Triple(triple) => self.encode_triple(triple),
                                     }?,
                                 );
@@ -529,7 +529,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                 Rc::new(move |from| {
                     let input_subject = match subject_selector.get_pattern_value(
                         &from,
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         &dataset,
                     ) {
                         Ok(value) => value,
@@ -537,7 +537,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     };
                     let input_predicate = match predicate_selector.get_pattern_value(
                         &from,
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         &dataset,
                     ) {
                         Ok(value) => value,
@@ -545,7 +545,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     };
                     let input_object = match object_selector.get_pattern_value(
                         &from,
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         &dataset,
                     ) {
                         Ok(value) => value,
@@ -554,7 +554,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     let input_graph_name = if let Some(graph_name_selector) = &graph_name_selector {
                         match graph_name_selector.get_pattern_value(
                             &from,
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             &dataset,
                         ) {
                             Ok(value) => value,
@@ -574,7 +574,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     let predicate_selector = predicate_selector.clone();
                     let object_selector = object_selector.clone();
                     let graph_name_selector = graph_name_selector.clone();
-                    #[cfg(feature = "rdf-star")]
+                    #[cfg(feature = "sparql-12")]
                     let dataset = dataset.clone();
                     Box::new(
                         iter.map(move |quad| {
@@ -584,7 +584,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 &subject_selector,
                                 quad.subject,
                                 &mut new_tuple,
-                                #[cfg(feature = "rdf-star")]
+                                #[cfg(feature = "sparql-12")]
                                 &dataset,
                             )? {
                                 return Ok(None);
@@ -593,7 +593,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 &predicate_selector,
                                 quad.predicate,
                                 &mut new_tuple,
-                                #[cfg(feature = "rdf-star")]
+                                #[cfg(feature = "sparql-12")]
                                 &dataset,
                             )? {
                                 return Ok(None);
@@ -602,7 +602,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 &object_selector,
                                 quad.object,
                                 &mut new_tuple,
-                                #[cfg(feature = "rdf-star")]
+                                #[cfg(feature = "sparql-12")]
                                 &dataset,
                             )? {
                                 return Ok(None);
@@ -615,7 +615,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                     graph_name_selector,
                                     quad_graph_name,
                                     &mut new_tuple,
-                                    #[cfg(feature = "rdf-star")]
+                                    #[cfg(feature = "sparql-12")]
                                     &dataset,
                                 )? {
                                     return Ok(None);
@@ -669,7 +669,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                 Rc::new(move |from| {
                     let input_subject = match subject_selector.get_pattern_value(
                         &from,
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         &dataset,
                     ) {
                         Ok(value) => value,
@@ -680,7 +680,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     };
                     let input_object = match object_selector.get_pattern_value(
                         &from,
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         &dataset,
                     ) {
                         Ok(value) => value,
@@ -689,7 +689,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     let input_graph_name = if let Some(graph_name_selector) = &graph_name_selector {
                         match graph_name_selector.get_pattern_value(
                             &from,
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             &dataset,
                         ) {
                             Ok(value) => value,
@@ -714,7 +714,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         (Some(input_subject), None, Some(input_graph_name)) => {
                             let object_selector = object_selector.clone();
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             let dataset = dataset.clone();
                             Box::new(
                                 path_eval
@@ -730,7 +730,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -742,7 +742,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         (None, Some(input_object), Some(input_graph_name)) => {
                             let subject_selector = subject_selector.clone();
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             let dataset = dataset.clone();
                             Box::new(
                                 path_eval
@@ -758,7 +758,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -771,7 +771,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         (None, None, Some(input_graph_name)) => {
                             let subject_selector = subject_selector.clone();
                             let object_selector = object_selector.clone();
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             let dataset = dataset.clone();
                             Box::new(
                                 path_eval
@@ -783,7 +783,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -792,7 +792,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -804,7 +804,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         (Some(input_subject), Some(input_object), None) => {
                             let graph_name_selector = graph_name_selector.clone();
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             let dataset = dataset.clone();
                             Box::new(
                                 path_eval
@@ -826,7 +826,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
-                                                #[cfg(feature = "rdf-star")]
+                                                #[cfg(feature = "sparql-12")]
                                                 &dataset,
                                             )? {
                                                 return Ok(None);
@@ -840,7 +840,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         (Some(input_subject), None, None) => {
                             let object_selector = object_selector.clone();
                             let graph_name_selector = graph_name_selector.clone();
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             let dataset = dataset.clone();
                             Box::new(
                                 path_eval
@@ -852,7 +852,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -867,7 +867,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
-                                                #[cfg(feature = "rdf-star")]
+                                                #[cfg(feature = "sparql-12")]
                                                 &dataset,
                                             )? {
                                                 return Ok(None);
@@ -881,7 +881,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         (None, Some(input_object), None) => {
                             let subject_selector = subject_selector.clone();
                             let graph_name_selector = graph_name_selector.clone();
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             let dataset = dataset.clone();
                             Box::new(
                                 path_eval
@@ -893,7 +893,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -908,7 +908,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
-                                                #[cfg(feature = "rdf-star")]
+                                                #[cfg(feature = "sparql-12")]
                                                 &dataset,
                                             )? {
                                                 return Ok(None);
@@ -923,7 +923,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             let subject_selector = subject_selector.clone();
                             let object_selector = object_selector.clone();
                             let graph_name_selector = graph_name_selector.clone();
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             let dataset = dataset.clone();
                             Box::new(
                                 path_eval
@@ -935,7 +935,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -944,7 +944,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
-                                            #[cfg(feature = "rdf-star")]
+                                            #[cfg(feature = "sparql-12")]
                                             &dataset,
                                         )? {
                                             return Ok(None);
@@ -959,7 +959,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
-                                                #[cfg(feature = "rdf-star")]
+                                                #[cfg(feature = "sparql-12")]
                                                 &dataset,
                                             )? {
                                                 return Ok(None);
@@ -986,7 +986,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                 Rc::new(move |from| {
                     let input_graph_name = match graph_name_selector.get_pattern_value(
                         &from,
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         &dataset,
                     ) {
                         Ok(value) => value,
@@ -1000,7 +1000,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                     } else {
                         let graph_name_selector = graph_name_selector.clone();
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         let dataset = dataset.clone();
                         Box::new(
                             dataset
@@ -1012,7 +1012,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                         &graph_name_selector,
                                         graph_name,
                                         &mut new_tuple,
-                                        #[cfg(feature = "rdf-star")]
+                                        #[cfg(feature = "sparql-12")]
                                         &dataset,
                                     )? {
                                         return Ok(None);
@@ -1596,7 +1596,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         let service_name = service_name
             .get_pattern_value(
                 from,
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 &self.dataset,
             )?
             .ok_or(QueryEvaluationError::UnboundService)?;
@@ -2282,7 +2282,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             Term::NamedNode(term) => term.into_string(),
                             Term::BlankNode(_) => return None,
                             Term::Literal(term) => term.destruct().0,
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             Term::Triple(_) => return None,
                         }))
                     })
@@ -2298,7 +2298,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                                 return None;
                             }
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             ExpressionTerm::Triple(_) => return None,
                             _ => String::new(),
                         }))
@@ -2353,7 +2353,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                                 return None;
                             }
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             ExpressionTerm::Triple(_) => return None,
                             _ => String::new(),
                         }))
@@ -2404,7 +2404,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                                 return None;
                             }
-                            #[cfg(feature = "rdf-star")]
+                            #[cfg(feature = "sparql-12")]
                             ExpressionTerm::Triple(_) => return None,
                         }))
                     })
@@ -3114,7 +3114,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                                     false
                                 }
-                                #[cfg(feature = "rdf-star")]
+                                #[cfg(feature = "sparql-12")]
                                 ExpressionTerm::Triple(_) => false,
                                 _ => true,
                             }
@@ -3200,7 +3200,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         })
                     }
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 Function::Triple => {
                     let s =
                         self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
@@ -3212,7 +3212,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         Some(ExpressionTriple::new(s(tuple)?, p(tuple)?, o(tuple)?)?.into())
                     })
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 Function::Subject => {
                     let e =
                         self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
@@ -3224,7 +3224,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                     })
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 Function::Predicate => {
                     let e =
                         self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
@@ -3236,7 +3236,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                     })
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 Function::Object => {
                     let e =
                         self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
@@ -3248,7 +3248,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                     })
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 Function::IsTriple => {
                     let e =
                         self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
@@ -3282,7 +3282,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                     Term::NamedNode(term) => term.into_string(),
                                     Term::BlankNode(_) => return None,
                                     Term::Literal(term) => term.destruct().0,
-                                    #[cfg(feature = "rdf-star")]
+                                    #[cfg(feature = "sparql-12")]
                                     Term::Triple(_) => return None,
                                 }))
                             })
@@ -3514,7 +3514,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         self.dataset.internalize_term(term.into())
     }
 
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     fn encode_triple(
         &self,
         triple: &GroundTriple,
@@ -4138,7 +4138,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             | ExpressionTerm::LangStringLiteral { .. } => Some(false),
             #[cfg(feature = "sparql-12")]
             ExpressionTerm::DirLangStringLiteral { .. } => Some(false),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             ExpressionTerm::Triple(_) => Some(false),
             _ => None,
         },
@@ -4250,7 +4250,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
             ExpressionTerm::OtherTypedLiteral { .. } => None,
             _ => Some(false),
         },
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         ExpressionTerm::Triple(a) => {
             if let ExpressionTerm::Triple(b) = b {
                 triple_equals(a, b)
@@ -4261,7 +4261,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 fn triple_equals(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<bool> {
     Some(
         match &a.subject {
@@ -4294,7 +4294,7 @@ fn cmp_terms(a: Option<&ExpressionTerm>, b: Option<&ExpressionTerm>) -> Ordering
                     ExpressionTerm::NamedNode(b) => a.as_str().cmp(b.as_str()),
                     _ => Ordering::Less,
                 },
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 ExpressionTerm::Triple(a) => match b {
                     ExpressionTerm::Triple(b) => cmp_triples(a, b),
                     _ => Ordering::Greater,
@@ -4303,7 +4303,7 @@ fn cmp_terms(a: Option<&ExpressionTerm>, b: Option<&ExpressionTerm>) -> Ordering
                     ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
                         Ordering::Greater
                     }
-                    #[cfg(feature = "rdf-star")]
+                    #[cfg(feature = "sparql-12")]
                     ExpressionTerm::Triple(_) => Ordering::Less,
                     _ => {
                         if let Some(ord) = partial_cmp_literals(a, b) {
@@ -4329,19 +4329,19 @@ fn cmp_terms(a: Option<&ExpressionTerm>, b: Option<&ExpressionTerm>) -> Ordering
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 fn cmp_triples(a: &ExpressionTriple, b: &ExpressionTriple) -> Ordering {
     match match &a.subject {
         ExpressionSubject::BlankNode(a) => match &b.subject {
             ExpressionSubject::BlankNode(b) => a.as_str().cmp(b.as_str()),
             ExpressionSubject::NamedNode(_) => Ordering::Less,
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             ExpressionSubject::Triple(_) => Ordering::Less,
         },
         ExpressionSubject::NamedNode(a) => match &b.subject {
             ExpressionSubject::BlankNode(_) => Ordering::Greater,
             ExpressionSubject::NamedNode(b) => a.as_str().cmp(b.as_str()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             ExpressionSubject::Triple(_) => Ordering::Less,
         },
         ExpressionSubject::Triple(a) => match &b.subject {
@@ -4362,7 +4362,7 @@ fn partial_cmp(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Ordering> {
     if a == b {
         return Some(Ordering::Equal);
     }
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     if let ExpressionTerm::Triple(a) = a {
         return if let ExpressionTerm::Triple(b) = b {
             partial_cmp_triples(a, b)
@@ -4533,7 +4533,7 @@ fn partial_cmp_literals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Orderi
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 fn partial_cmp_triples(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<Ordering> {
     // We compare subjects
     match (&a.subject, &b.subject) {
@@ -4739,7 +4739,7 @@ impl NumericBinaryOperands {
 enum TupleSelector<D: QueryableDataset> {
     Constant(D::InternalTerm),
     Variable(usize),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     TriplePattern(Rc<TripleTupleSelector<D>>),
 }
 
@@ -4759,7 +4759,7 @@ impl<D: QueryableDataset> TupleSelector<D> {
             GroundTermPattern::Literal(term) => {
                 Self::Constant(dataset.internalize_term(term.as_ref().into())?)
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             GroundTermPattern::Triple(triple) => {
                 match (
                     Self::from_ground_term_pattern(&triple.subject, variables, dataset)?,
@@ -4808,16 +4808,16 @@ impl<D: QueryableDataset> TupleSelector<D> {
         })
     }
 
-    #[cfg_attr(not(feature = "rdf-star"), expect(clippy::unnecessary_wraps))]
+    #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
     fn get_pattern_value(
         &self,
         tuple: &InternalTuple<D>,
-        #[cfg(feature = "rdf-star")] dataset: &EvalDataset<D>,
+        #[cfg(feature = "sparql-12")] dataset: &EvalDataset<D>,
     ) -> Result<Option<D::InternalTerm>, QueryEvaluationError> {
         Ok(match self {
             Self::Constant(c) => Some(c.clone()),
             Self::Variable(v) => tuple.get(*v).cloned(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::TriplePattern(triple) => {
                 let Some(subject) = triple.subject.get_pattern_value(tuple, dataset)? else {
                     return Ok(None);
@@ -4849,25 +4849,25 @@ impl<D: QueryableDataset> Clone for TupleSelector<D> {
         match self {
             Self::Constant(c) => Self::Constant(c.clone()),
             Self::Variable(v) => Self::Variable(*v),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::TriplePattern(t) => Self::TriplePattern(Rc::clone(t)),
         }
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 struct TripleTupleSelector<D: QueryableDataset> {
     subject: TupleSelector<D>,
     predicate: TupleSelector<D>,
     object: TupleSelector<D>,
 }
 
-#[cfg_attr(not(feature = "rdf-star"), expect(clippy::unnecessary_wraps))]
+#[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
 fn put_pattern_value<D: QueryableDataset>(
     selector: &TupleSelector<D>,
     value: D::InternalTerm,
     tuple: &mut InternalTuple<D>,
-    #[cfg(feature = "rdf-star")] dataset: &EvalDataset<D>,
+    #[cfg(feature = "sparql-12")] dataset: &EvalDataset<D>,
 ) -> Result<bool, QueryEvaluationError> {
     Ok(match selector {
         TupleSelector::Constant(c) => *c == value,
@@ -4879,7 +4879,7 @@ fn put_pattern_value<D: QueryableDataset>(
                 true
             }
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         TupleSelector::TriplePattern(triple) => {
             let ExpressionTerm::Triple(value) = dataset.externalize_expression_term(value)? else {
                 return Ok(false);
@@ -5977,13 +5977,13 @@ impl<D: QueryableDataset> Iterator for ConstructIterator<D> {
                         };
                         // We allocate new blank nodes for each solution,
                         // triples with blank nodes are likely to be new.
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         let new_triple = triple.subject.is_blank_node()
                             || triple.subject.is_triple()
                             || triple.object.is_blank_node()
                             || triple.object.is_triple()
                             || self.already_emitted_results.insert(triple.clone());
-                        #[cfg(not(feature = "rdf-star"))]
+                        #[cfg(not(feature = "sparql-12"))]
                         let new_triple = triple.subject.is_blank_node()
                             || triple.object.is_blank_node()
                             || self.already_emitted_results.insert(triple.clone());
@@ -6020,12 +6020,12 @@ pub enum TripleTemplateValue {
     Constant(Term),
     BlankNode(usize),
     Variable(usize),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple(Box<TripleTemplate>),
 }
 
 impl TripleTemplateValue {
-    #[cfg_attr(not(feature = "rdf-star"), expect(clippy::unnecessary_wraps))]
+    #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
     fn from_term_or_variable(
         term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,
@@ -6036,7 +6036,7 @@ impl TripleTemplateValue {
             TermPattern::NamedNode(node) => Self::Constant(node.clone().into()),
             TermPattern::BlankNode(bnode) => Self::BlankNode(bnode_key(bnodes, bnode)),
             TermPattern::Literal(literal) => Self::Constant(literal.clone().into()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             TermPattern::Triple(triple) => {
                 match (
                     Self::from_term_or_variable(&triple.subject, variables, bnodes)?,
@@ -6099,7 +6099,7 @@ fn get_triple_template_value<D: QueryableDataset>(
             }
             Some(bnodes[*bnode].clone().into())
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         TripleTemplateValue::Triple(triple) => Some(
             Triple {
                 subject: get_triple_template_value(&triple.subject, tuple, bnodes, dataset)?

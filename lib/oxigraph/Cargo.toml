@@ -15,7 +15,6 @@ rust-version.workspace = true
 
 [features]
 default = ["rocksdb"]
-rdf-star = ["oxrdfio/rdf-star", "spareval/rdf-star"]
 rocksdb = ["oxrocksdb-sys"]
 js = ["getrandom/js", "oxsdatatypes/js", "js-sys"]
 http-client = ["oxhttp"]

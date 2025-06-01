@@ -150,7 +150,7 @@ fn write_csv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
             output.push_str(bnode.as_str())
         }
         TermRef::Literal(literal) => write_escaped_csv_string(output, literal.value()),
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         TermRef::Triple(triple) => {
             write_csv_term(output, &triple.subject);
             output.push(' ');
@@ -333,7 +333,7 @@ fn write_tsv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
                 }
             }
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         TermRef::Triple(triple) => {
             output.push_str("<< ");
             write_tsv_term(output, &triple.subject);
