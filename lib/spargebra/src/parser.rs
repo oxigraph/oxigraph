@@ -1052,7 +1052,7 @@ parser! {
             let (delete, insert) = c;
             let mut delete = delete.unwrap_or_default();
             let mut insert = insert.unwrap_or_default();
-            #[allow(clippy::shadow_same)]
+            #[expect(clippy::shadow_same)]
             let mut pattern = pattern;
 
             let mut using = if u.is_empty() {

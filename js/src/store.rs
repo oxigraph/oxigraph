@@ -76,7 +76,6 @@ pub struct JsStore {
 #[wasm_bindgen(js_class = Store)]
 impl JsStore {
     #[wasm_bindgen(constructor)]
-    #[allow(clippy::use_self)]
     pub fn new(quads: &JsValue) -> Result<JsStore, JsValue> {
         console_error_panic_hook::set_once();
 

@@ -630,7 +630,6 @@ impl fmt::Display for GraphPattern {
                 object,
             } => write!(f, "{subject} {path} {object} ."),
             Self::Join { left, right } => {
-                #[allow(clippy::match_same_arms)]
                 match right.as_ref() {
                     Self::LeftJoin { .. }
                     | Self::Minus { .. }
@@ -956,7 +955,6 @@ impl GraphPattern {
     }
 
     fn lookup_in_scope_variables<'a>(&'a self, callback: &mut impl FnMut(&'a Variable)) {
-        #[allow(clippy::match_same_arms)]
         match self {
             Self::Bgp { patterns } => {
                 for pattern in patterns {

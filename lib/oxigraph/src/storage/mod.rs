@@ -40,7 +40,7 @@ enum StorageKind {
 }
 
 impl Storage {
-    #[allow(clippy::unnecessary_wraps)]
+    #[expect(clippy::unnecessary_wraps)]
     pub fn new() -> Result<Self, StorageError> {
         Ok(Self {
             kind: StorageKind::Memory(MemoryStorage::new()),
@@ -144,7 +144,10 @@ enum StorageReaderKind {
     Memory(MemoryStorageReader),
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[cfg_attr(
+    not(all(not(target_family = "wasm"), feature = "rocksdb")),
+    expect(clippy::unnecessary_wraps)
+)]
 impl StorageReader {
     pub fn len(&self) -> Result<usize, StorageError> {
         match &self.kind {
@@ -292,7 +295,10 @@ enum StorageWriterKind<'a> {
     Memory(MemoryStorageWriter<'a>),
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[cfg_attr(
+    not(all(not(target_family = "wasm"), feature = "rocksdb")),
+    expect(clippy::unnecessary_wraps)
+)]
 impl StorageWriter<'_> {
     pub fn reader(&self) -> StorageReader {
         match &self.kind {
@@ -411,7 +417,10 @@ enum StorageBulkLoaderKind {
     Memory(MemoryStorageBulkLoader),
 }
 impl StorageBulkLoader {
-    #[allow(unused_variables)]
+    #[cfg_attr(
+        not(all(not(target_family = "wasm"), feature = "rocksdb")),
+        expect(unused_variables)
+    )]
     pub fn with_num_threads(self, num_threads: usize) -> Self {
         match self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -424,7 +433,7 @@ impl StorageBulkLoader {
         }
     }
 
-    #[allow(unused_variables)]
+    #[allow(unused_variables, clippy::allow_attributes)]
     pub fn with_max_memory_size_in_megabytes(self, max_memory_size: usize) -> Self {
         match self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -451,7 +460,6 @@ impl StorageBulkLoader {
         }
     }
 
-    #[allow(clippy::trait_duplication_in_bounds)]
     pub fn load<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<Quad, EI>>,

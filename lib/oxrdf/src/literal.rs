@@ -175,7 +175,7 @@ impl Literal {
     #[inline]
     #[deprecated(note = "Plain literal concept is removed in RDF 1.1")]
     pub fn is_plain(&self) -> bool {
-        #[allow(deprecated)]
+        #[expect(deprecated)]
         self.as_ref().is_plain()
     }
 
@@ -823,7 +823,7 @@ impl Serialize for Literal {
 impl Serialize for LiteralRef<'_> {
     #[inline]
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        #[allow(clippy::struct_field_names)]
+        #[expect(clippy::struct_field_names)]
         #[derive(Serialize)]
         #[serde(rename = "Literal")]
         struct Value<'a> {
@@ -880,7 +880,7 @@ impl<'de> Deserialize<'de> for Literal {
     where
         D: Deserializer<'de>,
     {
-        #[allow(clippy::struct_field_names)]
+        #[expect(clippy::struct_field_names)]
         #[derive(Deserialize)]
         #[serde(rename = "Literal")]
         struct Value {
@@ -918,7 +918,6 @@ impl<'de> Deserialize<'de> for Literal {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
 

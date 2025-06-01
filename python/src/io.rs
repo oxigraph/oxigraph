@@ -428,7 +428,7 @@ impl PyRdfFormat {
 
     /// :type memo: typing.Any
     /// :rtype: RdfFormat
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }

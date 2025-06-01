@@ -197,7 +197,7 @@ impl FromStr for Duration {
 }
 
 impl fmt::Display for Duration {
-    #[allow(clippy::many_single_char_names)]
+    #[expect(clippy::many_single_char_names)]
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ym = self.year_month.months;
@@ -490,21 +490,19 @@ impl DayTimeDuration {
     }
 
     /// [fn:days-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-days-from-duration)
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     #[inline]
     pub fn days(self) -> i64 {
         (self.seconds.as_i128() / 86400) as i64
     }
 
     /// [fn:hours-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-hours-from-duration)
-    #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub fn hours(self) -> i64 {
         ((self.seconds.as_i128() % 86400) / 3600) as i64
     }
 
     /// [fn:minutes-from-duration](https://www.w3.org/TR/xpath-functions-31/#func-minutes-from-duration)
-    #[allow(clippy::cast_possible_truncation)]
     #[inline]
     pub fn minutes(self) -> i64 {
         ((self.seconds.as_i128() % 3600) / 60) as i64
@@ -978,7 +976,7 @@ impl From<OppositeSignInDurationComponentsError> for ParseDurationError {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use std::error::Error;
@@ -1116,7 +1114,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::neg_cmp_op_on_partial_ord)]
     fn cmp() -> Result<(), ParseDurationError> {
         assert!(Duration::from_str("P1Y1D")? < Duration::from_str("P13MT25H")?);
         assert!(YearMonthDuration::from_str("P1Y")? < YearMonthDuration::from_str("P13M")?);

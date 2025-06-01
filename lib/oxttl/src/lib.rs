@@ -24,5 +24,5 @@ pub use crate::turtle::{TurtleParser, TurtleSerializer};
 
 pub(crate) const MIN_BUFFER_SIZE: usize = 4096;
 pub(crate) const MAX_BUFFER_SIZE: usize = 4096 * 4096;
-#[allow(clippy::decimal_literal_representation)]
+#[expect(clippy::decimal_literal_representation)]
 pub(crate) const MIN_PARALLEL_CHUNK_SIZE: usize = 16384;

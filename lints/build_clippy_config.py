@@ -4,10 +4,11 @@ from urllib.request import urlopen
 
 import tomlkit
 
-TARGET_VERSION = "1.82.0"
+TARGET_VERSION = "1.83.0"
 LINT_BLACKLIST = {
     "absolute_paths",  # TODO: might be nice
     "alloc_instead_of_core",
+    "allow_attributes_without_reason",
     "arithmetic_side_effects",  # TODO: might be nice
     "as_conversions",
     "big_endian_bytes",
@@ -46,6 +47,7 @@ LINT_BLACKLIST = {
     "pub_use",
     "pub_with_shorthand",
     "question_mark_used",
+    "ref_option", # TODO: might be nice
     "self_named_module_files",  # TODO: might be nice
     "semicolon_if_nothing_returned",  # TODO: might be nice
     "semicolon_outside_block",
@@ -60,6 +62,7 @@ LINT_BLACKLIST = {
     "too_many_lines",
     "separated_literal_suffix",
     "unreachable",  # TODO: might be nice
+    "unused_trait_names", # TODO: might be nice
     "unwrap_used",  # TODO: might be nice to use expect instead
     "wildcard_enum_match_arm",  # TODO: might be nice
     "wildcard_imports",  # TODO: might be nice

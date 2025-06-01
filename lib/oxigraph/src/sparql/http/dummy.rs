@@ -11,7 +11,7 @@ impl Client {
         Self
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub fn get(&self, _url: &str, _accept: &'static str) -> Result<(String, Empty)> {
         Err(Error::new(
             ErrorKind::Unsupported,
@@ -19,7 +19,7 @@ impl Client {
         ))
     }
 
-    #[allow(clippy::unused_self, clippy::needless_pass_by_value)]
+    #[expect(clippy::unused_self)]
     pub fn post(
         &self,
         _url: &str,

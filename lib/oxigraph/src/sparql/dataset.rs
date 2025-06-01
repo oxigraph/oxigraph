@@ -67,7 +67,7 @@ impl QueryableDataset for DatasetView {
                     .dataset
                     .named
                     .as_ref()
-                    .map_or(true, |d| d.contains(graph_name))
+                    .is_none_or(|d| d.contains(graph_name))
                 {
                     Box::new(
                         self.reader

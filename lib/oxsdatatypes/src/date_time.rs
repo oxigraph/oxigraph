@@ -1,4 +1,4 @@
-#![allow(clippy::expect_used)]
+#![expect(clippy::expect_used)]
 
 use crate::{DayTimeDuration, Decimal, Duration, YearMonthDuration};
 use std::cmp::{min, Ordering};
@@ -1670,7 +1670,7 @@ impl Timestamp {
         }
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     #[inline]
     #[must_use]
     fn year_month_day(&self) -> (i64, u8, u8) {
@@ -1744,7 +1744,7 @@ impl Timestamp {
         day
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(clippy::cast_possible_truncation)]
     #[inline]
     #[must_use]
     fn hour(&self) -> u8 {
@@ -1754,7 +1754,7 @@ impl Timestamp {
             / 3600) as u8
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(clippy::cast_possible_truncation)]
     #[inline]
     #[must_use]
     fn minute(&self) -> u8 {
@@ -1860,7 +1860,7 @@ impl Timestamp {
 }
 
 #[cfg(feature = "custom-now")]
-#[allow(unsafe_code)]
+#[expect(unsafe_code)]
 pub fn since_unix_epoch() -> Duration {
     extern "Rust" {
         fn custom_ox_now() -> Duration;
@@ -2420,7 +2420,7 @@ pub struct InvalidTimezoneError {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use std::error::Error;
@@ -2737,7 +2737,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::neg_cmp_op_on_partial_ord)]
+    #[expect(clippy::neg_cmp_op_on_partial_ord)]
     fn cmp() -> Result<(), ParseDateTimeError> {
         assert!(Date::from_str("2004-12-25Z")? < Date::from_str("2004-12-25-05:00")?);
         assert!(!(Date::from_str("2004-12-25-12:00")? < Date::from_str("2004-12-26+12:00")?));
@@ -3144,7 +3144,7 @@ mod tests {
     #[cfg(feature = "custom-now")]
     #[test]
     fn custom_now() {
-        #[allow(unsafe_code)]
+        #[expect(unsafe_code)]
         #[no_mangle]
         extern "Rust" fn custom_ox_now() -> Duration {
             Duration::default()

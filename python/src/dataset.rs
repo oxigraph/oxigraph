@@ -50,7 +50,7 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_subject(NamedNode('http://example.com')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn quads_for_subject(&self, subject: PySubjectRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
@@ -72,7 +72,7 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_predicate(NamedNode('http://example.com/p')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn quads_for_predicate(&self, predicate: PyNamedNodeRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
@@ -94,7 +94,7 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_object(Literal('1')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn quads_for_object(&self, object: PyTermRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
@@ -116,7 +116,7 @@ impl PyDataset {
     /// >>> store = Dataset([Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g'))])
     /// >>> list(store.quads_for_graph_name(NamedNode('http://example.com/g')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn quads_for_graph_name(&self, graph_name: PyGraphNameRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
@@ -300,7 +300,7 @@ impl PyCanonicalizationAlgorithm {
 
     /// :type memo: typing.Any
     /// :rtype: CanonicalizationAlgorithm
-    #[allow(unused_variables)]
+    #[expect(unused_variables)]
     fn __deepcopy__<'a>(slf: PyRef<'a, Self>, memo: &'_ Bound<'_, PyAny>) -> PyRef<'a, Self> {
         slf
     }

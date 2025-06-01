@@ -140,7 +140,6 @@ impl JsonLdSerializer {
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    #[allow(clippy::unused_self)]
     pub fn for_writer<W: Write>(self, writer: W) -> WriterJsonLdSerializer<W> {
         WriterJsonLdSerializer {
             writer: WriterJsonSerializer::new(writer),
@@ -179,7 +178,6 @@ impl JsonLdSerializer {
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::unused_self)]
     #[cfg(feature = "async-tokio")]
     pub fn for_tokio_async_writer<W: AsyncWrite + Unpin>(
         self,
@@ -413,7 +411,11 @@ impl InnerJsonLdWriter {
         if self.current_subject.is_none() {
             output.push(JsonEvent::StartObject);
             output.push(JsonEvent::ObjectKey("@id".into()));
-            #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
+            #[allow(
+                unreachable_patterns,
+                clippy::match_wildcard_for_single_variants,
+                clippy::allow_attributes
+            )]
             output.push(JsonEvent::String(self.id_value(match quad.subject {
                 SubjectRef::NamedNode(iri) => iri.into(),
                 SubjectRef::BlankNode(bnode) => bnode.into(),
@@ -469,7 +471,11 @@ impl InnerJsonLdWriter {
         output: &mut Vec<JsonEvent<'a>>,
     ) -> io::Result<()> {
         output.push(JsonEvent::StartObject);
-        #[allow(clippy::match_wildcard_for_single_variants, unreachable_patterns)]
+        #[allow(
+            unreachable_patterns,
+            clippy::match_wildcard_for_single_variants,
+            clippy::allow_attributes
+        )]
         match term {
             TermRef::NamedNode(iri) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));

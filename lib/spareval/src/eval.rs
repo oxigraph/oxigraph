@@ -1399,7 +1399,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                 let (mut child, child_stats) =
                     self.graph_pattern_evaluator(inner, encoded_variables);
                 stat_children.push(child_stats);
-                #[allow(clippy::shadow_same)]
+                #[expect(clippy::shadow_same)]
                 let start = *start;
                 if start > 0 {
                     child = Rc::new(move |from| Box::new(child(from).skip(start)));
@@ -1547,7 +1547,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                 inner,
                 silent,
             } => {
-                #[allow(clippy::shadow_same)]
+                #[expect(clippy::shadow_same)]
                 let silent = *silent;
                 let service_name = match TupleSelector::from_named_node_pattern(
                     name,
@@ -4012,7 +4012,7 @@ impl Accumulator for AvgAccumulator {
 }
 
 #[derive(Default)]
-#[allow(clippy::option_option)]
+#[expect(clippy::option_option)]
 struct MinAccumulator {
     min: Option<Option<ExpressionTerm>>,
 }
@@ -4034,7 +4034,7 @@ impl Accumulator for MinAccumulator {
 }
 
 #[derive(Default)]
-#[allow(clippy::option_option)]
+#[expect(clippy::option_option)]
 struct MaxAccumulator {
     max: Option<Option<ExpressionTerm>>,
 }
@@ -4055,7 +4055,7 @@ impl Accumulator for MaxAccumulator {
     }
 }
 
-#[allow(clippy::option_option)]
+#[expect(clippy::option_option)]
 struct GroupConcatAccumulator {
     concat: Option<String>,
     language: Option<Option<LanguageWithMaybeBaseDirection>>,
@@ -4820,7 +4820,7 @@ impl<D: QueryableDataset> TupleSelector<D> {
         })
     }
 
-    #[cfg_attr(not(feature = "rdf-star"), allow(clippy::unnecessary_wraps))]
+    #[cfg_attr(not(feature = "rdf-star"), expect(clippy::unnecessary_wraps))]
     fn get_pattern_value(
         &self,
         tuple: &InternalTuple<D>,
@@ -4874,7 +4874,7 @@ struct TripleTupleSelector<D: QueryableDataset> {
     object: TupleSelector<D>,
 }
 
-#[cfg_attr(not(feature = "rdf-star"), allow(clippy::unnecessary_wraps))]
+#[cfg_attr(not(feature = "rdf-star"), expect(clippy::unnecessary_wraps))]
 fn put_pattern_value<D: QueryableDataset>(
     selector: &TupleSelector<D>,
     value: D::InternalTerm,
@@ -6037,7 +6037,7 @@ pub enum TripleTemplateValue {
 }
 
 impl TripleTemplateValue {
-    #[cfg_attr(not(feature = "rdf-star"), allow(clippy::unnecessary_wraps))]
+    #[cfg_attr(not(feature = "rdf-star"), expect(clippy::unnecessary_wraps))]
     fn from_term_or_variable(
         term_or_variable: &TermPattern,
         variables: &mut Vec<Variable>,

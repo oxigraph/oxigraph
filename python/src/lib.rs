@@ -20,7 +20,7 @@ use pyo3::prelude::*;
 /// Oxigraph Python bindings
 #[pymodule]
 pub mod pyoxigraph {
-    #[allow(non_upper_case_globals)]
+    #[expect(non_upper_case_globals)]
     #[pymodule_export]
     const __version__: &str = env!("CARGO_PKG_VERSION");
     #[pymodule_export]

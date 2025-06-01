@@ -17,7 +17,6 @@ macro_rules! console_warn {
 
 #[wasm_bindgen]
 extern "C" {
-    #[allow(unsafe_code)]
     #[wasm_bindgen(js_namespace = console)]
     pub(crate) fn warn(s: &str);
 }

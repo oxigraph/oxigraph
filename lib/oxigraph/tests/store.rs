@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 use std::process::Command;
 
-#[allow(clippy::non_ascii_literal)]
+#[expect(clippy::non_ascii_literal)]
 const DATA: &str = r#"
 @prefix schema: <http://schema.org/> .
 @prefix wd: <http://www.wikidata.org/entity/> .
@@ -37,7 +37,7 @@ wd:Q90 a schema:City ;
     schema:postalCode "75001" .
 "#;
 
-#[allow(clippy::non_ascii_literal)]
+#[expect(clippy::non_ascii_literal)]
 const GRAPH_DATA: &str = r#"
 @prefix schema: <http://schema.org/> .
 @prefix wd: <http://www.wikidata.org/entity/> .

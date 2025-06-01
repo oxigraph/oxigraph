@@ -44,7 +44,7 @@ impl<S: Into<String>> From<S> for RuleRecognizerError {
     }
 }
 
-#[allow(clippy::partial_pub_fields)]
+#[expect(clippy::partial_pub_fields)]
 pub struct Parser<B, RR: RuleRecognizer> {
     lexer: Lexer<B, RR::TokenRecognizer>,
     state: Option<RR>,
@@ -154,7 +154,7 @@ impl<'a, RR: RuleRecognizer> IntoIterator for Parser<&'a [u8], RR> {
     }
 }
 
-#[allow(clippy::partial_pub_fields)]
+#[expect(clippy::partial_pub_fields)]
 pub struct ReaderIterator<R: Read, RR: RuleRecognizer> {
     reader: R,
     pub parser: Parser<Vec<u8>, RR>,

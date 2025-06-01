@@ -30,11 +30,11 @@ mod format;
 pub mod read;
 pub mod write;
 
-#[allow(deprecated)]
+#[expect(deprecated)]
 pub use self::format::{DatasetFormat, GraphFormat};
-#[allow(deprecated)]
+#[expect(deprecated)]
 pub use self::read::{DatasetParser, GraphParser};
-#[allow(deprecated)]
+#[expect(deprecated)]
 pub use self::write::{DatasetSerializer, GraphSerializer};
 pub use oxrdfio::{
     JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParseError, RdfParser,

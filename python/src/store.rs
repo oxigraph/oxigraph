@@ -195,7 +195,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')))
     /// >>> list(store.quads_for_pattern(NamedNode('http://example.com'), None, None, None))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (subject, predicate, object, graph_name = None))]
     fn quads_for_pattern(
         &self,
@@ -269,7 +269,7 @@ impl PyStore {
     ) -> PyResult<Bound<'py, PyAny>> {
         pub struct UngilQueryResults(QueryResults);
 
-        #[allow(unsafe_code)]
+        #[expect(unsafe_code)]
         // SAFETY: To derive Ungil
         unsafe impl Send for UngilQueryResults {}
 
@@ -395,7 +395,7 @@ impl PyStore {
     /// >>> store.load(input='<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
     fn load(
         &self,
@@ -465,7 +465,7 @@ impl PyStore {
     /// >>> store.bulk_load(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/", to_graph=NamedNode("http://example.com/g"))
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
     fn bulk_load(
         &self,
@@ -539,7 +539,7 @@ impl PyStore {
     /// >>> store.dump(output, RdfFormat.TURTLE, from_graph=NamedNode("http://example.com/g"), prefixes={"ex": "http://example.com/"}, base_iri="http://example.com")
     /// >>> output.getvalue()
     /// b'@base <http://example.com> .\n@prefix ex: </> .\n<> ex:p "1" .\n'
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     #[pyo3(signature = (output = None, format = None, *, from_graph = None, prefixes = None, base_iri = None))]
     fn dump(
         &self,
@@ -614,7 +614,7 @@ impl PyStore {
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
     /// >>> store.contains_named_graph(NamedNode('http://example.com/g'))
     /// True
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn contains_named_graph(
         &self,
         graph_name: PyGraphNameRef<'_>,
@@ -642,7 +642,7 @@ impl PyStore {
     /// >>> store.add_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn add_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphNameRef::from(&graph_name);
         py.allow_threads(|| {
@@ -673,7 +673,7 @@ impl PyStore {
     /// []
     /// >>> list(store.named_graphs())
     /// [<NamedNode value=http://example.com/g>]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn clear_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphNameRef::from(&graph_name);
         py.allow_threads(|| {
@@ -697,7 +697,7 @@ impl PyStore {
     /// >>> store.remove_graph(NamedNode('http://example.com/g'))
     /// >>> list(store.named_graphs())
     /// []
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn remove_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphNameRef::from(&graph_name);
         py.allow_threads(|| {

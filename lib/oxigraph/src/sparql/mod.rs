@@ -26,7 +26,6 @@ pub use spareval::QueryExplanation;
 pub use spargebra::SparqlSyntaxError;
 use std::time::Duration;
 
-#[allow(clippy::needless_pass_by_value)]
 pub(crate) fn evaluate_query(
     reader: StorageReader,
     query: impl TryInto<Query, Error = impl Into<EvaluationError>>,

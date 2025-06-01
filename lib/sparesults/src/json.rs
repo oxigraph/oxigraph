@@ -149,7 +149,7 @@ impl InnerJsonSolutionsSerializer {
         Self {}
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn write<'a>(
         &self,
         output: &mut Vec<JsonEvent<'a>>,
@@ -163,7 +163,7 @@ impl InnerJsonSolutionsSerializer {
         output.push(JsonEvent::EndObject);
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn finish(self, output: &mut Vec<JsonEvent<'_>>) {
         output.push(JsonEvent::EndArray);
         output.push(JsonEvent::EndObject);
@@ -234,7 +234,7 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -290,7 +290,7 @@ impl<R: Read> ReaderJsonSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderJsonQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -350,7 +350,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum SliceJsonQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -405,7 +405,7 @@ impl SliceJsonSolutionsParser<'_> {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
 enum JsonInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -414,7 +414,7 @@ enum JsonInnerQueryResults {
     Boolean(bool),
 }
 
-#[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
 enum JsonInnerSolutions {
     Reader(JsonInnerSolutionsParser),
     Iterator(JsonBufferedSolutionsIterator),
@@ -430,7 +430,7 @@ struct JsonInnerReader {
     solutions_read: bool,
 }
 
-#[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
 enum JsonInnerReaderState {
     Start,
     InRootObject,
@@ -457,7 +457,6 @@ enum JsonInnerReaderState {
     },
 }
 
-#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Copy)]
 enum JsonInnerReaderStateAfterIgnore {
     InRootObject,
@@ -740,7 +739,7 @@ impl JsonInnerReader {
                     Err(QueryResultsSyntaxError::msg("Unexpected boolean value"))
                 }
             }
-            #[allow(clippy::ref_patterns)]
+            #[expect(clippy::ref_patterns)]
             JsonInnerReaderState::Ignore { level, ref after } => {
                 let level = match event {
                     JsonEvent::StartArray | JsonEvent::StartObject => *level + 1,
@@ -782,8 +781,7 @@ struct JsonInnerSolutionsParser {
     mapping: HashMap<String, usize>,
     new_bindings: Vec<Option<Term>>,
 }
-
-#[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
 enum JsonInnerSolutionsParserState {
     BeforeSolution,
     BetweenSolutionTerms,
@@ -904,7 +902,7 @@ enum TermType {
 }
 
 impl JsonInnerTermReader {
-    #[allow(clippy::collapsible_else_if)]
+    #[cfg_attr(not(feature = "rdf-star"), expect(clippy::collapsible_else_if))]
     fn read_event(
         &mut self,
         event: JsonEvent<'_>,

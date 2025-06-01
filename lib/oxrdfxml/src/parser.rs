@@ -1275,7 +1275,6 @@ impl<R> InternalRdfXmlParser<R> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_node_elt(
         &self,
         iri: NamedNode,
