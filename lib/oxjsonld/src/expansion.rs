@@ -315,14 +315,35 @@ impl JsonLdExpansionConverter {
                         }
                         // We push the same context, maybe updated if there is a term definition
                         self.push_same_context();
+                        // 3)
+                        let active_scoped_term_definition =
+                            active_property.as_ref().and_then(|active_property| {
+                                self.context()
+                                    .term_definitions
+                                    .get(active_property)
+                                    .cloned()
+                            });
                         // 7)
                         if let Some(previous_context) = &self.context().previous_context {
                             // TODO: should not be executed everywhere
                             self.push_new_context(previous_context.as_ref().clone());
                         }
                         // 8)
-                        if let Some(active_property) = &active_property {
-                            self.push_new_scoped_context_if_it_exist(active_property, errors)
+                        if let Some(active_scoped_term_definition) = active_scoped_term_definition {
+                            if let Some(active_property_scoped_context) =
+                                active_scoped_term_definition.context
+                            {
+                                self.push_new_context(self.context_processor.process_context(
+                                    self.context(),
+                                    active_property_scoped_context,
+                                    active_scoped_term_definition.base_url.as_ref(),
+                                    &mut Vec::new(),
+                                    true,
+                                    true,
+                                    true,
+                                    errors,
+                                ));
+                            }
                         }
                         self.state.push(if self.streaming {
                             JsonLdExpansionState::ObjectOrContainerStartStreaming {
@@ -1833,30 +1854,6 @@ impl JsonLdExpansionConverter {
             self.base_url.as_ref(),
             &mut Vec::new(),
             false,
-            true,
-            true,
-            errors,
-        ));
-    }
-
-    fn push_new_scoped_context_if_it_exist(
-        &mut self,
-        term: &str,
-        errors: &mut Vec<JsonLdSyntaxError>,
-    ) {
-        let active_context = self.context();
-        let Some(term_definition) = active_context.term_definitions.get(term) else {
-            return;
-        };
-        let Some(scoped_context) = &term_definition.context else {
-            return;
-        };
-        self.push_new_context(self.context_processor.process_context(
-            active_context,
-            scoped_context.clone(),
-            term_definition.base_url.as_ref(),
-            &mut Vec::new(),
-            true,
             true,
             true,
             errors,
