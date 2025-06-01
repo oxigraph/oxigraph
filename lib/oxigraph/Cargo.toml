@@ -16,7 +16,7 @@ rust-version.workspace = true
 [features]
 default = ["rocksdb"]
 rocksdb = ["oxrocksdb-sys"]
-js = ["getrandom/js", "oxsdatatypes/js", "js-sys"]
+js = ["getrandom/wasm_js", "oxsdatatypes/js", "js-sys"]
 http-client = ["oxhttp"]
 http-client-native-tls = ["http-client", "oxhttp/native-tls"]
 http-client-rustls-webpki = ["http-client", "oxhttp/rustls-ring-webpki"]
