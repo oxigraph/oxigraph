@@ -23,6 +23,9 @@ pub mod pyoxigraph {
     #[expect(non_upper_case_globals)]
     #[pymodule_export]
     const __version__: &str = env!("CARGO_PKG_VERSION");
+    #[cfg(feature = "rdf-12")]
+    #[pymodule_export]
+    use super::PyBaseDirection;
     #[pymodule_export]
     use super::{
         PyBlankNode, PyCanonicalizationAlgorithm, PyDataset, PyDefaultGraph, PyLiteral,

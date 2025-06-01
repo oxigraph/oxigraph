@@ -112,7 +112,7 @@ impl Literal {
     pub fn new_directional_language_tagged_literal(
         value: impl Into<String>,
         language: impl Into<String>,
-        direction: BaseDirection,
+        direction: impl Into<BaseDirection>,
     ) -> Result<Self, LanguageTagParseError> {
         let mut language = language.into();
         language.make_ascii_lowercase();
@@ -135,12 +135,12 @@ impl Literal {
     pub fn new_directional_language_tagged_literal_unchecked(
         value: impl Into<String>,
         language: impl Into<String>,
-        direction: BaseDirection,
+        direction: impl Into<BaseDirection>,
     ) -> Self {
         Self(LiteralContent::DirectionalLanguageTaggedString {
             value: value.into(),
             language: language.into(),
-            direction,
+            direction: direction.into(),
         })
     }
 
@@ -157,6 +157,15 @@ impl Literal {
     #[inline]
     pub fn language(&self) -> Option<&str> {
         self.as_ref().language()
+    }
+
+    /// The literal [base direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction) if it is a [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction).
+    ///
+    /// The two possible base directions are left-to-right (`ltr`) and right-to-left (`rtl`).
+    #[cfg(feature = "rdf-12")]
+    #[inline]
+    pub fn direction(&self) -> Option<BaseDirection> {
+        self.as_ref().direction()
     }
 
     /// The literal [datatype](https://www.w3.org/TR/rdf11-concepts/#dfn-datatype-iri).
