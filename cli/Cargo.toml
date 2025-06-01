@@ -18,14 +18,13 @@ path = "src/main.rs"
 doc = false
 
 [features]
-default = ["native-tls", "geosparql", "rdf-star"]
-rdf-star = ["oxigraph/rdf-star"]
+default = ["native-tls", "geosparql", "rdf-12"]
 native-tls = ["oxigraph/http-client-native-tls"]
+rdf-12 = ["oxigraph/rdf-12"]
 rocksdb-pkg-config = ["oxigraph/rocksdb-pkg-config"]
 rustls-native = ["oxigraph/http-client-rustls-native"]
 rustls-webpki = ["oxigraph/http-client-rustls-webpki"]
 geosparql = ["dep:spargeo"]
-rdf-12 = ["oxigraph/rdf-12"]
 
 [dependencies]
 anyhow.workspace = true

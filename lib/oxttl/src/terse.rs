@@ -4,7 +4,7 @@ use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Subject, Term};
@@ -23,8 +23,6 @@ pub struct TriGRecognizer {
 pub struct TriGRecognizerContext {
     pub lexer_options: N3LexerOptions,
     pub with_graph_name: bool,
-    #[cfg(feature = "rdf-star")]
-    pub with_quoted_triples: bool,
     prefixes: HashMap<String, Iri<String>>,
 }
 
@@ -208,8 +206,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::SubjectCollectionBeginning);
                         self
                     }
-                    #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::Punctuation("<<") => {
                         self.stack.push(TriGState::ExpectDot);
                         self.stack.push(TriGState::PredicateObjectList);
                         self.stack.push(TriGState::SubjectQuotedTripleEnd);
@@ -380,8 +378,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::SubjectCollectionBeginning);
                         self
                     }
-                    #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::Punctuation("<<") => {
                         self.stack.push(TriGState::PredicateObjectList);
                         self.stack.push(TriGState::SubjectQuotedTripleEnd);
                         self.stack.push(TriGState::QuotedObject);
@@ -486,7 +484,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::Object);
                         self
                     }
-                    #[cfg(feature = "rdf-star")]
+                    #[cfg(feature = "rdf-12")]
                     N3Token::Punctuation("{|") => {
                         let triple = Triple::new(
                             self.cur_subject.last().unwrap().clone(),
@@ -503,7 +501,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
                     }
                 },
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 TriGState::AnnotationEnd => {
                     self.cur_subject.pop();
                     self.stack.push(TriGState::ObjectsListAfterAnnotation);
@@ -513,7 +511,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.error(errors, "Annotations should end with '|}'")
                     }
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 TriGState::ObjectsListAfterAnnotation => {
                     if token == N3Token::Punctuation(",") {
                         self.stack.push(TriGState::ObjectsListEnd);
@@ -636,8 +634,8 @@ impl RuleRecognizer for TriGRecognizer {
                         self.emit_quad(results);
                         self
                     }
-                    #[cfg(feature = "rdf-star")]
-                    N3Token::Punctuation("<<") if context.with_quoted_triples => {
+                    #[cfg(feature = "rdf-12")]
+                    N3Token::Punctuation("<<") => {
                         self.stack
                             .push(TriGState::ObjectQuotedTripleEnd { emit: true });
                         self.stack.push(TriGState::QuotedObject);
@@ -795,7 +793,7 @@ impl RuleRecognizer for TriGRecognizer {
                         .recognize_next(TokenOrLineJump::Token(token), context, results, errors),
                 },
                 // [27t]  quotedTriple  ::=  '<<' qtSubject verb qtObject '>>'
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 TriGState::SubjectQuotedTripleEnd => {
                     let triple = Triple::new(
                         self.cur_subject.pop().unwrap(),
@@ -812,7 +810,7 @@ impl RuleRecognizer for TriGRecognizer {
                         )
                     }
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 TriGState::ObjectQuotedTripleEnd { emit } => {
                     let triple = Triple::new(
                         self.cur_subject.pop().unwrap(),
@@ -833,7 +831,7 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                 }
                 // [28t]  qtSubject  ::=  iri | BlankNode | quotedTriple
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 TriGState::QuotedSubject => match token {
                     N3Token::Punctuation("[") => {
                         self.cur_subject.push(BlankNode::default().into());
@@ -878,7 +876,7 @@ impl RuleRecognizer for TriGRecognizer {
                     ),
                 },
                 // [29t]  qtObject  ::=  iri | BlankNode | literal | quotedTriple
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 TriGState::QuotedObject => match token {
                     N3Token::Punctuation("[") => {
                         self.cur_object.push(BlankNode::default().into());
@@ -949,7 +947,7 @@ impl RuleRecognizer for TriGRecognizer {
                     }
                     _ => self.error(errors, "TOKEN is not a valid RDF quoted triple object"),
                 },
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 TriGState::QuotedAnonEnd => {
                     if token == N3Token::Punctuation("]") {
                         self
@@ -1004,12 +1002,10 @@ impl RuleRecognizer for TriGRecognizer {
 }
 
 impl TriGRecognizer {
-    #[cfg_attr(feature = "rdf-star", expect(clippy::fn_params_excessive_bools))]
     pub fn new_parser<B>(
         data: B,
         is_ending: bool,
         with_graph_name: bool,
-        #[cfg(feature = "rdf-star")] with_quoted_triples: bool,
         lenient: bool,
         base_iri: Option<Iri<String>>,
         prefixes: HashMap<String, Iri<String>>,
@@ -1032,8 +1028,6 @@ impl TriGRecognizer {
             },
             TriGRecognizerContext {
                 with_graph_name,
-                #[cfg(feature = "rdf-star")]
-                with_quoted_triples,
                 prefixes,
                 lexer_options: N3LexerOptions { base_iri },
             },
@@ -1094,9 +1088,9 @@ enum TriGState {
     PredicateObjectListPossibleContinuation,
     ObjectsList,
     ObjectsListEnd,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     AnnotationEnd,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     ObjectsListAfterAnnotation,
     Verb,
     Object,
@@ -1112,16 +1106,16 @@ enum TriGState {
         value: String,
         emit: bool,
     },
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     SubjectQuotedTripleEnd,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     ObjectQuotedTripleEnd {
         emit: bool,
     },
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     QuotedSubject,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     QuotedObject,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "rdf-12")]
     QuotedAnonEnd,
 }

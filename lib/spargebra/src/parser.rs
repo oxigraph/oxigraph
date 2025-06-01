@@ -107,15 +107,15 @@ fn add_to_triple_patterns(
     patterns: &mut Vec<TriplePattern>,
 ) -> Result<(), &'static str> {
     let triple = TriplePattern::new(subject, predicate, object.term);
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     for (p, os) in object.annotations {
         for o in os {
             add_to_triple_patterns(triple.clone().into(), p.clone(), o, patterns)?
         }
     }
-    #[cfg(not(feature = "rdf-star"))]
+    #[cfg(not(feature = "sparql-12"))]
     if !object.annotations.is_empty() {
-        return Err("Embedded triples are only available in SPARQL-star");
+        return Err("Embedded triples are only available in SPARQL 1.2");
     }
     patterns.push(triple);
     Ok(())
@@ -190,15 +190,15 @@ fn add_triple_to_triple_or_path_patterns(
     patterns: &mut Vec<TripleOrPathPattern>,
 ) -> Result<(), &'static str> {
     let triple = TriplePattern::new(subject, predicate, object.term);
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     for (p, os) in object.annotations {
         for o in os {
             add_to_triple_or_path_patterns(triple.clone().into(), p.clone(), o, patterns)?
         }
     }
-    #[cfg(not(feature = "rdf-star"))]
+    #[cfg(not(feature = "sparql-12"))]
     if !object.annotations.is_empty() {
-        return Err("Embedded triples are only available in SPARQL-star");
+        return Err("Embedded triples are only available in SPARQL 1.2");
     }
     patterns.push(triple.into());
     Ok(())
@@ -1295,8 +1295,8 @@ parser! {
 
         rule DataBlockValue() -> Option<GroundTerm> =
             t:QuotedTripleData() {?
-                #[cfg(feature = "rdf-star")]{Ok(Some(t.into()))}
-                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(Some(t.into()))}
+                #[cfg(not(feature = "sparql-12"))]{Err("Embedded triples are only available in SPARQL 1.2")}
             } /
             i:iri() { Some(i.into()) } /
             l:RDFLiteral() { Some(l.into()) } /
@@ -1661,8 +1661,8 @@ parser! {
         rule VarOrTerm() -> TermPattern =
             v:Var() { v.into() } /
             t:QuotedTriple() {?
-                #[cfg(feature = "rdf-star")]{Ok(t.into())}
-                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(t.into())}
+                #[cfg(not(feature = "sparql-12"))]{Err("Embedded triples are only available in SPARQL 1.2")}
             } /
             t:GraphTerm() { t.into() }
 
@@ -1688,8 +1688,8 @@ parser! {
             l:NumericLiteral() { l.into() } /
             l:BooleanLiteral() { l.into() } /
             t:QuotedTripleData() {?
-                #[cfg(feature = "rdf-star")]{Ok(t.into())}
-                #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(t.into())}
+                #[cfg(not(feature = "sparql-12"))]{Err("Embedded triples are only available in SPARQL 1.2")}
             }
 
         rule VarOrIri() -> NamedNodePattern =
@@ -1786,8 +1786,8 @@ parser! {
             v:Var() { v.into() }
 
         rule ExprQuotedTriple() -> Expression = "<<" _ s:ExprVarOrTerm() _ p:Verb() _ o:ExprVarOrTerm() _ ">>" {?
-            #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p.into(), o]))}
-            #[cfg(not(feature = "rdf-star"))]{Err("Embedded triples are only available in SPARQL-star")}
+            #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p.into(), o]))}
+            #[cfg(not(feature = "sparql-12"))]{Err("Embedded triples are only available in SPARQL 1.2")}
         }
 
         rule BrackettedExpression() -> Expression = "(" _ e:Expression() _ ")" { e }
@@ -1864,24 +1864,24 @@ parser! {
             ExistsFunc() /
             NotExistsFunc() /
             i("TRIPLE") "(" _ s:Expression() _ "," _ p:Expression() "," _ o:Expression() ")" {?
-                #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p, o]))}
-                #[cfg(not(feature = "rdf-star"))]{Err("The TRIPLE function is only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p, o]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The TRIPLE function is only available in SPARQL 1.2")}
             } /
             i("SUBJECT") "(" _ e:Expression() _ ")" {?
-                #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::Subject, vec![e]))}
-                #[cfg(not(feature = "rdf-star"))]{Err("The SUBJECT function is only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Subject, vec![e]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The SUBJECT function is only available in SPARQL 1.2")}
             } /
             i("PREDICATE") "(" _ e:Expression() _ ")" {?
-                #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::Predicate, vec![e]))}
-                #[cfg(not(feature = "rdf-star"))]{Err("The PREDICATE function is only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Predicate, vec![e]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The PREDICATE function is only available in SPARQL 1.2")}
             } /
             i("OBJECT") "(" _ e:Expression() _ ")" {?
-                #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::Object, vec![e]))}
-                #[cfg(not(feature = "rdf-star"))]{Err("The OBJECT function is only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Object, vec![e]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The OBJECT function is only available in SPARQL 1.2")}
             } /
             i("isTriple") "(" _ e:Expression() _ ")" {?
-                #[cfg(feature = "rdf-star")]{Ok(Expression::FunctionCall(Function::IsTriple, vec![e]))}
-                #[cfg(not(feature = "rdf-star"))]{Err("The isTriple function is only available in SPARQL-star")}
+                #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::IsTriple, vec![e]))}
+                #[cfg(not(feature = "sparql-12"))]{Err("The isTriple function is only available in SPARQL 1.2")}
             } /
             i("ADJUST") "("  _ a:Expression() _ "," _ b:Expression() _ ")" {?
                 #[cfg(feature = "sep-0002")]{Ok(Expression::FunctionCall(Function::Adjust, vec![a, b]))}

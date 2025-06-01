@@ -36,7 +36,7 @@ if let QueryResults::Solutions(solutions) = results.unwrap() {
 ```
 
 ## Cargo features
-- `rdf-star`: enables [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#sparql-star).
+- `sparql-12`: enables [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) changes.
 - `sep-0002`: enables the [`SEP-0002`](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0002/sep-0002.md) (`ADJUST` function and a lot of arithmetic on `xsd:date`, `xsd:time`, `xsd:yearMonthDuration` and `xsd:dayTimeDuration`).
 - `sep-0006`: enables the [`SEP-0006`](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0006/sep-0006.md) (`LATERAL` keyword). 
 - `calendar-ext`: arithmetic on `xsd:gYear`, `xsd:gYearMonth`, `xsd:gMonth`, `xsd:gMonthDay` and `xsd:gDay`.

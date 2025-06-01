@@ -121,7 +121,7 @@ pub fn infer_graph_pattern_types(
                     match binding[i] {
                         Some(GroundTerm::NamedNode(_)) => t.named_node = true,
                         Some(GroundTerm::Literal(_)) => t.literal = true,
-                        #[cfg(feature = "rdf-star")]
+                        #[cfg(feature = "sparql-12")]
                         Some(GroundTerm::Triple(_)) => t.triple = true,
                         None => t.undef = true,
                     }
@@ -163,7 +163,7 @@ fn add_ground_term_pattern_types(
             },
         )
     }
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     if let GroundTermPattern::Triple(t) = pattern {
         add_ground_term_pattern_types(&t.subject, types, false);
         if let NamedNodePattern::Variable(v) = &t.predicate {
@@ -183,7 +183,7 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
         Expression::FunctionCall(Function::Datatype | Function::Iri, _) => {
             VariableType::NAMED_NODE | VariableType::UNDEF
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         Expression::FunctionCall(Function::Predicate, _) => {
             VariableType::NAMED_NODE | VariableType::UNDEF
         }
@@ -263,7 +263,7 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
         Expression::FunctionCall(Function::Adjust, _) => {
             VariableType::LITERAL | VariableType::UNDEF
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         Expression::FunctionCall(Function::IsTriple, _) => {
             VariableType::LITERAL | VariableType::UNDEF
         }
@@ -290,13 +290,13 @@ pub fn infer_expression_type(expression: &Expression, types: &VariableTypes) -> 
             }
             t
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         Expression::FunctionCall(Function::Triple, _) => VariableType::TRIPLE | VariableType::UNDEF,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         Expression::FunctionCall(Function::Subject, _) => {
             VariableType::SUBJECT | VariableType::UNDEF
         }
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         Expression::FunctionCall(Function::Object, _) => VariableType::TERM | VariableType::UNDEF,
         Expression::FunctionCall(Function::Custom(_), _) => VariableType::ANY,
     }
@@ -357,7 +357,7 @@ pub struct VariableType {
     pub named_node: bool,
     pub blank_node: bool,
     pub literal: bool,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     pub triple: bool,
 }
 
@@ -367,7 +367,7 @@ impl VariableType {
         named_node: true,
         blank_node: true,
         literal: true,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         triple: true,
     };
     const BLANK_NODE: Self = Self {
@@ -375,7 +375,7 @@ impl VariableType {
         named_node: false,
         blank_node: true,
         literal: false,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         triple: false,
     };
     const LITERAL: Self = Self {
@@ -383,7 +383,7 @@ impl VariableType {
         named_node: false,
         blank_node: false,
         literal: true,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         triple: false,
     };
     const NAMED_NODE: Self = Self {
@@ -391,7 +391,7 @@ impl VariableType {
         named_node: true,
         blank_node: false,
         literal: false,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         triple: false,
     };
     const SUBJECT: Self = Self {
@@ -399,7 +399,7 @@ impl VariableType {
         named_node: true,
         blank_node: true,
         literal: false,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         triple: true,
     };
     const TERM: Self = Self {
@@ -407,10 +407,10 @@ impl VariableType {
         named_node: true,
         blank_node: true,
         literal: true,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         triple: true,
     };
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     const TRIPLE: Self = Self {
         undef: false,
         named_node: false,
@@ -423,7 +423,7 @@ impl VariableType {
         named_node: false,
         blank_node: false,
         literal: false,
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "sparql-12")]
         triple: false,
     };
 }
@@ -437,7 +437,7 @@ impl BitOr for VariableType {
             named_node: self.named_node || rhs.named_node,
             blank_node: self.blank_node || rhs.blank_node,
             literal: self.literal || rhs.literal,
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             triple: self.triple || rhs.triple,
         }
     }
@@ -459,7 +459,7 @@ impl BitAnd for VariableType {
             literal: self.literal && rhs.literal
                 || (self.undef && rhs.literal)
                 || (self.literal && rhs.undef),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             triple: self.triple && rhs.triple
                 || (self.undef && rhs.triple)
                 || (self.triple && rhs.undef),

@@ -366,15 +366,15 @@ pub enum Function {
     IsLiteral,
     IsNumeric,
     Regex,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Subject,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Predicate,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Object,
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     IsTriple,
     #[cfg(feature = "sparql-12")]
     LangDir,
@@ -439,15 +439,15 @@ impl Function {
             Self::IsLiteral => f.write_str("isliteral"),
             Self::IsNumeric => f.write_str("isnumeric"),
             Self::Regex => f.write_str("regex"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple => f.write_str("triple"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Subject => f.write_str("subject"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Predicate => f.write_str("predicate"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Object => f.write_str("object"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::IsTriple => f.write_str("istriple"),
             #[cfg(feature = "sparql-12")]
             Function::LangDir => f.write_str("langdir"),
@@ -513,15 +513,15 @@ impl fmt::Display for Function {
             Self::IsLiteral => f.write_str("isLITERAL"),
             Self::IsNumeric => f.write_str("isNUMERIC"),
             Self::Regex => f.write_str("REGEX"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple => f.write_str("TRIPLE"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Subject => f.write_str("SUBJECT"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Predicate => f.write_str("PREDICATE"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Object => f.write_str("OBJECT"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::IsTriple => f.write_str("isTRIPLE"),
             #[cfg(feature = "sparql-12")]
             Function::LangDir => f.write_str("LANGDIR"),
@@ -967,14 +967,14 @@ impl GraphPattern {
                 if let TermPattern::Variable(s) = subject {
                     callback(s);
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 if let TermPattern::Triple(s) = subject {
                     lookup_triple_pattern_variables(s, callback)
                 }
                 if let TermPattern::Variable(o) = object {
                     callback(o);
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "sparql-12")]
                 if let TermPattern::Triple(o) = object {
                     lookup_triple_pattern_variables(o, callback)
                 }
@@ -1037,7 +1037,7 @@ fn lookup_triple_pattern_variables<'a>(
     if let TermPattern::Variable(s) = &pattern.subject {
         callback(s);
     }
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     if let TermPattern::Triple(s) = &pattern.subject {
         lookup_triple_pattern_variables(s, callback)
     }
@@ -1047,7 +1047,7 @@ fn lookup_triple_pattern_variables<'a>(
     if let TermPattern::Variable(o) = &pattern.object {
         callback(o);
     }
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     if let TermPattern::Triple(o) = &pattern.object {
         lookup_triple_pattern_variables(o, callback)
     }

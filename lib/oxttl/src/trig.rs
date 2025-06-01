@@ -21,8 +21,6 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 /// A [TriG](https://www.w3.org/TR/trig/) streaming parser.
 ///
-/// Support for [TriG-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#trig-star) is available behind the `rdf-star` feature and the [`TriGParser::with_quoted_triples`] option.
-///
 /// Count the number of people:
 /// ```
 /// use oxrdf::NamedNodeRef;
@@ -53,8 +51,6 @@ pub struct TriGParser {
     lenient: bool,
     base: Option<Iri<String>>,
     prefixes: HashMap<String, Iri<String>>,
-    #[cfg(feature = "rdf-star")]
-    with_quoted_triples: bool,
 }
 
 impl TriGParser {
@@ -96,14 +92,6 @@ impl TriGParser {
         self.prefixes
             .insert(prefix_name.into(), Iri::parse(prefix_iri.into())?);
         Ok(self)
-    }
-
-    /// Enables [TriG-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#trig-star).
-    #[cfg(feature = "rdf-star")]
-    #[inline]
-    pub fn with_quoted_triples(mut self) -> Self {
-        self.with_quoted_triples = true;
-        self
     }
 
     /// Parses a TriG file from a [`Read`] implementation.
@@ -210,8 +198,6 @@ impl TriGParser {
                 slice,
                 true,
                 true,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
                 self.lenient,
                 self.base,
                 self.prefixes,
@@ -264,8 +250,6 @@ impl TriGParser {
                 Vec::new(),
                 false,
                 true,
-                #[cfg(feature = "rdf-star")]
-                self.with_quoted_triples,
                 self.lenient,
                 self.base,
                 self.prefixes,
@@ -741,8 +725,6 @@ impl<'a> Iterator for TriGPrefixesIter<'a> {
 }
 
 /// A [TriG](https://www.w3.org/TR/trig/) serializer.
-///
-/// Support for [TriG-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#trig-star) is available behind the `rdf-star` feature.
 ///
 /// ```
 /// use oxrdf::{NamedNodeRef, QuadRef};
@@ -1281,7 +1263,7 @@ impl fmt::Display for TurtleTerm<'_> {
                     }
                 }
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             TermRef::Triple(t) => {
                 write!(
                     f,

@@ -9,7 +9,7 @@ mod error;
 mod eval;
 mod model;
 mod service;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 pub use crate::error::QueryEvaluationError;

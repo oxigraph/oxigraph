@@ -10,7 +10,7 @@ use std::fmt::Write;
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundSubject {
     NamedNode(NamedNode),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple(Box<GroundTriple>),
 }
 
@@ -19,7 +19,7 @@ impl fmt::Display for GroundSubject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(
                 f,
                 "<<{} {} {}>>",
@@ -36,7 +36,7 @@ impl From<NamedNode> for GroundSubject {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<GroundTriple> for GroundSubject {
     #[inline]
     fn from(triple: GroundTriple) -> Self {
@@ -52,7 +52,7 @@ impl TryFrom<Subject> for GroundSubject {
         match subject {
             Subject::NamedNode(t) => Ok(t.into()),
             Subject::BlankNode(_) => Err(()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Subject::Triple(t) => Ok(GroundTriple::try_from(*t)?.into()),
         }
     }
@@ -62,7 +62,7 @@ impl From<GroundSubject> for Subject {
     fn from(subject: GroundSubject) -> Self {
         match subject {
             GroundSubject::NamedNode(t) => t.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             GroundSubject::Triple(t) => Triple::from(*t).into(),
         }
     }
@@ -76,7 +76,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
         match term {
             GroundTerm::NamedNode(t) => Ok(t.into()),
             GroundTerm::Literal(_) => Err(()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             GroundTerm::Triple(t) => Ok((*t).into()),
         }
     }
@@ -89,7 +89,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
 pub enum GroundTerm {
     NamedNode(NamedNode),
     Literal(Literal),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple(Box<GroundTriple>),
 }
 
@@ -99,7 +99,7 @@ impl fmt::Display for GroundTerm {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::Literal(literal) => literal.fmt(f),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(
                 f,
                 "<<{} {} {}>>",
@@ -123,7 +123,7 @@ impl From<Literal> for GroundTerm {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<GroundTriple> for GroundTerm {
     #[inline]
     fn from(triple: GroundTriple) -> Self {
@@ -140,7 +140,7 @@ impl TryFrom<Term> for GroundTerm {
             Term::NamedNode(t) => Ok(t.into()),
             Term::BlankNode(_) => Err(()),
             Term::Literal(t) => Ok(t.into()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Term::Triple(t) => Ok(GroundTriple::try_from(*t)?.into()),
         }
     }
@@ -152,7 +152,7 @@ impl From<GroundTerm> for Term {
         match term {
             GroundTerm::NamedNode(t) => t.into(),
             GroundTerm::Literal(l) => l.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             GroundTerm::Triple(t) => Triple::from(*t).into(),
         }
     }
@@ -473,7 +473,7 @@ pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Literal(Literal),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple(Box<TriplePattern>),
     Variable(Variable),
 }
@@ -485,7 +485,7 @@ impl TermPattern {
             Self::NamedNode(term) => write!(f, "{term}"),
             Self::BlankNode(term) => write!(f, "{term}"),
             Self::Literal(term) => write!(f, "{term}"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => triple.fmt_sse(f),
             Self::Variable(var) => write!(f, "{var}"),
         }
@@ -499,7 +499,7 @@ impl fmt::Display for TermPattern {
             Self::NamedNode(term) => term.fmt(f),
             Self::BlankNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(f, "<<{triple}>>"),
             Self::Variable(var) => var.fmt(f),
         }
@@ -527,7 +527,7 @@ impl From<Literal> for TermPattern {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<TriplePattern> for TermPattern {
     #[inline]
     fn from(triple: TriplePattern) -> Self {
@@ -547,7 +547,7 @@ impl From<Subject> for TermPattern {
         match subject {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Subject::Triple(t) => TriplePattern::from(*t).into(),
         }
     }
@@ -560,7 +560,7 @@ impl From<Term> for TermPattern {
             Term::NamedNode(node) => node.into(),
             Term::BlankNode(node) => node.into(),
             Term::Literal(literal) => literal.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Term::Triple(t) => TriplePattern::from(*t).into(),
         }
     }
@@ -582,7 +582,7 @@ impl From<GroundTermPattern> for TermPattern {
         match element {
             GroundTermPattern::NamedNode(node) => node.into(),
             GroundTermPattern::Literal(literal) => literal.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             GroundTermPattern::Triple(t) => TriplePattern::from(*t).into(),
             GroundTermPattern::Variable(variable) => variable.into(),
         }
@@ -597,7 +597,7 @@ impl TryFrom<TermPattern> for Subject {
         match term {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
             TermPattern::Literal(_) | TermPattern::Variable(_) => Err(()),
         }
@@ -613,7 +613,7 @@ impl TryFrom<TermPattern> for Term {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
             TermPattern::Literal(t) => Ok(t.into()),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
             TermPattern::Variable(_) => Err(()),
         }
@@ -625,7 +625,7 @@ pub enum GroundTermPattern {
     NamedNode(NamedNode),
     Literal(Literal),
     Variable(Variable),
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     Triple(Box<GroundTriplePattern>),
 }
 
@@ -636,7 +636,7 @@ impl GroundTermPattern {
             Self::NamedNode(term) => write!(f, "{term}"),
             Self::Literal(term) => write!(f, "{term}"),
             Self::Variable(var) => write!(f, "{var}"),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => triple.fmt_sse(f),
         }
     }
@@ -649,7 +649,7 @@ impl fmt::Display for GroundTermPattern {
             Self::NamedNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
             Self::Variable(var) => var.fmt(f),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(f, "<<{triple}>>"),
         }
     }
@@ -669,7 +669,7 @@ impl From<Literal> for GroundTermPattern {
     }
 }
 
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "sparql-12")]
 impl From<GroundTriplePattern> for GroundTermPattern {
     #[inline]
     fn from(triple: GroundTriplePattern) -> Self {
@@ -689,7 +689,7 @@ impl From<GroundSubject> for GroundTermPattern {
     fn from(term: GroundSubject) -> Self {
         match term {
             GroundSubject::NamedNode(node) => node.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             GroundSubject::Triple(triple) => GroundTriplePattern::from(*triple).into(),
         }
     }
@@ -700,7 +700,7 @@ impl From<GroundTerm> for GroundTermPattern {
         match term {
             GroundTerm::NamedNode(node) => node.into(),
             GroundTerm::Literal(literal) => literal.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             GroundTerm::Triple(triple) => GroundTriplePattern::from(*triple).into(),
         }
     }
@@ -725,7 +725,7 @@ impl TryFrom<TermPattern> for GroundTermPattern {
             TermPattern::NamedNode(named_node) => named_node.into(),
             TermPattern::BlankNode(_) => return Err(()),
             TermPattern::Literal(literal) => literal.into(),
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "sparql-12")]
             TermPattern::Triple(triple) => GroundTriplePattern::try_from(*triple)?.into(),
             TermPattern::Variable(variable) => variable.into(),
         })
@@ -881,7 +881,7 @@ pub struct GroundTriplePattern {
 
 impl GroundTriplePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
-    #[cfg(feature = "rdf-star")]
+    #[cfg(feature = "sparql-12")]
     pub(crate) fn fmt_sse(&self, f: &mut impl Write) -> fmt::Result {
         f.write_str("(triple ")?;
         self.subject.fmt_sse(f)?;

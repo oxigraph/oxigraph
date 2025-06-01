@@ -9,7 +9,7 @@ OxTTL
 
 Oxttl is a set of parsers and serializers for [Turtle](https://www.w3.org/TR/turtle/), [TriG](https://www.w3.org/TR/trig/), [N-Triples](https://www.w3.org/TR/n-triples/), [N-Quads](https://www.w3.org/TR/n-quads/) and [N3](https://w3c.github.io/N3/spec/).
 
-Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html) is also available behind the `rdf-star`feature for all languages but N3 ([Turtle-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#turtle-star), [TriG-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#trig-star), [N-Triples-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-triples-star) and [N-Quads-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#n-quads-star))
+Support for [RDF 1.2](https://www.w3.org/TR/rdf12-concepts/) is available behind the `rdf-12` feature for all languages but N3.
 
 It is designed as a low level parser compatible with both synchronous and asynchronous I/O.
 

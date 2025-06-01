@@ -422,7 +422,7 @@ impl InnerJsonLdWriter {
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        "JSON-LD does not support RDF-star yet",
+                        "JSON-LD does not support RDF 1.2 yet",
                     ));
                 }
             })));
@@ -512,7 +512,7 @@ impl InnerJsonLdWriter {
             _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "JSON-LD does not support RDF-star yet",
+                    "JSON-LD does not support RDF 1.2 yet",
                 ));
             }
         }

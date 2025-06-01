@@ -1,6 +1,6 @@
 #[cfg(feature = "rdf-12")]
 use crate::BaseDirection;
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 use crate::Subject;
 use crate::vocab::xsd;
 use crate::{
@@ -214,7 +214,7 @@ impl FromStr for Quad {
                     "Literals are not allowed in graph name position",
                 ));
             }
-            #[cfg(feature = "rdf-star")]
+            #[cfg(feature = "rdf-12")]
             Term::Triple(_) => {
                 return Err(TermParseError::msg(
                     "Triple terms are not allowed in graph name position",
@@ -474,7 +474,7 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
     let s = s.trim();
     #[allow(unused_variables, clippy::allow_attributes)]
     if let Some(remain) = s.strip_prefix("<<") {
-        #[cfg(feature = "rdf-star")]
+        #[cfg(feature = "rdf-12")]
         {
             let (triple, remain) = read_triple(remain, number_of_recursive_calls + 1)?;
             let remain = remain.trim_start();
@@ -486,9 +486,9 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
                 ))
             }
         }
-        #[cfg(not(feature = "rdf-star"))]
+        #[cfg(not(feature = "rdf-12"))]
         {
-            Err(TermParseError::msg("RDF-star is not supported"))
+            Err(TermParseError::msg("RDF 1.2 is not supported"))
         }
     } else if s.starts_with('<') {
         let (term, remain) = read_named_node(s)?;
@@ -520,7 +520,7 @@ fn read_triple(
                         "Literals are not allowed in subject position",
                     ));
                 }
-                #[cfg(feature = "rdf-star")]
+                #[cfg(feature = "rdf-12")]
                 Term::Triple(s) => Subject::Triple(s),
             },
             predicate,
@@ -588,7 +588,7 @@ impl TermParseError {
 }
 
 #[cfg(test)]
-#[cfg(feature = "rdf-star")]
+#[cfg(feature = "rdf-12")]
 mod tests {
     use super::*;
 

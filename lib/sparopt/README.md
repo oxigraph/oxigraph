@@ -11,7 +11,7 @@ sparopt is a work in progress [SPARQL Query](https://www.w3.org/TR/sparql11-quer
 
 It relies on the output of [spargebra](https://crates.io/crates/spargebra).
 
-Support for [SPARQL-star](https://w3c.github.io/rdf-star/cg-spec/2021-12-17.html#sparql-star) is also available behind the `rdf-star` feature.
+Support for [SPARQL 1.2](https://www.w3.org/TR/sparql12-query/) is also available behind the `sparql-12` feature.
 
 This crate is intended
 to be a building piece for SPARQL implementations in Rust like [spareval](https://crates.io/crates/spareval)

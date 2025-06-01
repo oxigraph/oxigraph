@@ -18,7 +18,6 @@ fn parse<'a>(
     let mut quads = Vec::new();
     let mut errors = Vec::new();
     let mut parser = TriGParser::new()
-        .with_quoted_triples()
         .with_base_iri("http://example.com/")
         .unwrap();
     if unchecked {
@@ -142,7 +141,6 @@ fuzz_target!(|data: &[u8]| {
 
     // We parse the serialization
     let new_quads = TriGParser::new()
-        .with_quoted_triples()
         .for_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
