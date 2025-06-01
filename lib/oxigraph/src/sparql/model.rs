@@ -105,18 +105,12 @@ impl QueryResults {
     ///
     /// ```
     /// use oxigraph::io::RdfFormat;
-    /// use oxigraph::model::*;
     /// use oxigraph::store::Store;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n";
     ///
     /// let store = Store::new()?;
-    /// store.load_graph(
-    ///     graph.as_bytes(),
-    ///     RdfFormat::NTriples,
-    ///     GraphName::DefaultGraph,
-    ///     None,
-    /// )?;
+    /// store.load_from_reader(RdfFormat::NTriples, graph.as_bytes())?;
     ///
     /// let results = store.query("CONSTRUCT WHERE { ?s ?p ?o }")?;
     /// assert_eq!(

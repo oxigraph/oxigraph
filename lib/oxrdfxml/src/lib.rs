@@ -16,7 +16,3 @@ pub use parser::{RdfXmlParser, RdfXmlPrefixesIter, ReaderRdfXmlParser, SliceRdfX
 #[cfg(feature = "async-tokio")]
 pub use serializer::TokioAsyncWriterRdfXmlSerializer;
 pub use serializer::{RdfXmlSerializer, WriterRdfXmlSerializer};
-
-#[cfg(feature = "async-tokio")]
-#[deprecated(note = "Use TokioAsyncWriterRdfXmlSerializer instead")]
-pub type TokioAsyncWriterdfXmlSerializer<W> = TokioAsyncWriterRdfXmlSerializer<W>;

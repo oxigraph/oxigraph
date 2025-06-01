@@ -114,11 +114,6 @@ impl QueryResultsSerializer {
         }
     }
 
-    #[deprecated(note = "use serialize_boolean_to_writer", since = "0.4.0")]
-    pub fn write_boolean_result<W: Write>(&self, writer: W, value: bool) -> io::Result<W> {
-        self.clone().serialize_boolean_to_writer(writer, value)
-    }
-
     /// Returns a `SolutionsSerializer` allowing writing query solutions into the given [`Write`] implementation.
     ///
     /// <div class="warning">
@@ -215,18 +210,6 @@ impl QueryResultsSerializer {
                 ),
             },
         })
-    }
-
-    #[deprecated(note = "use serialize_solutions_to_writer", since = "0.4.0")]
-    pub fn solutions_writer<W: Write>(
-        &self,
-        writer: W,
-        variables: Vec<Variable>,
-    ) -> io::Result<WriterSolutionsSerializer<W>> {
-        Self {
-            format: self.format,
-        }
-        .serialize_solutions_to_writer(writer, variables)
     }
 }
 

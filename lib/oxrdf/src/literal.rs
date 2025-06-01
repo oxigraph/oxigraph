@@ -173,7 +173,7 @@ impl Literal {
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     /// or has the datatype [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
-    #[deprecated(note = "Plain literal concept is removed in RDF 1.1")]
+    #[deprecated(note = "Plain literal concept is removed in RDF 1.1", since = "0.3.0")]
     pub fn is_plain(&self) -> bool {
         #[expect(deprecated)]
         self.as_ref().is_plain()
@@ -658,7 +658,7 @@ impl<'a> LiteralRef<'a> {
     /// It returns true if the literal is a [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string)
     /// or has the datatype [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
-    #[deprecated(note = "Plain literal concept is removed in RDF 1.1")]
+    #[deprecated(note = "Plain literal concept is removed in RDF 1.1", since = "0.3.0")]
     pub const fn is_plain(self) -> bool {
         matches!(
             self.0,
@@ -696,7 +696,10 @@ impl<'a> LiteralRef<'a> {
     /// Extract components from this literal
     #[cfg(not(feature = "rdf-12"))]
     #[inline]
-    #[deprecated(note = "Use directly .value(), .datatype() and .language()")]
+    #[deprecated(
+        note = "Use directly .value(), .datatype() and .language()",
+        since = "0.3.0"
+    )]
     pub const fn destruct(self) -> (&'a str, Option<NamedNodeRef<'a>>, Option<&'a str>) {
         match self.0 {
             LiteralRefContent::String(s) => (s, None, None),

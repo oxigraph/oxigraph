@@ -132,14 +132,6 @@ impl QueryResultsParser {
         })
     }
 
-    #[deprecated(note = "use for_read", since = "0.4.0")]
-    pub fn read_results<R: Read>(
-        &self,
-        reader: R,
-    ) -> Result<ReaderQueryResultsParserOutput<R>, QueryResultsParseError> {
-        self.clone().for_reader(reader)
-    }
-
     /// Reads a result file from a Tokio [`AsyncRead`] implementation.
     ///
     /// Reads are automatically buffered.

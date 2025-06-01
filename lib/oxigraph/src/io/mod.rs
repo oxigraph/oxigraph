@@ -26,16 +26,6 @@
 //! assert_eq!(serializer.finish().unwrap(), ntriples_file);
 //! ```
 
-mod format;
-pub mod read;
-pub mod write;
-
-#[expect(deprecated)]
-pub use self::format::{DatasetFormat, GraphFormat};
-#[expect(deprecated)]
-pub use self::read::{DatasetParser, GraphParser};
-#[expect(deprecated)]
-pub use self::write::{DatasetSerializer, GraphSerializer};
 pub use oxrdfio::{
     JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParseError, RdfParser,
     RdfSerializer, RdfSyntaxError, ReaderQuadParser, SliceQuadParser, TextPosition,
