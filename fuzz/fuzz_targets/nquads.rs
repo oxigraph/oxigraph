@@ -14,7 +14,7 @@ fn parse<'a>(
     let mut errors = Vec::new();
     let mut parser = NQuadsParser::new().with_quoted_triples();
     if unchecked {
-        parser = parser.unchecked();
+        parser = parser.lenient();
     }
     let mut parser = parser.low_level();
     for chunk in chunks {

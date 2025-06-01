@@ -3,7 +3,7 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
-use anyhow::{bail, ensure, Context, Error, Result};
+use anyhow::{Context, Error, Result, bail, ensure};
 use oxigraph::io::RdfParser;
 use oxigraph::model::dataset::CanonicalizationAlgorithm;
 use oxigraph::model::vocab::rdf;
@@ -16,8 +16,8 @@ use oxigraph::sparql::{QueryResults, Update};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
-use spargebra::algebra::GraphPattern;
 use spargebra::Query;
+use spargebra::algebra::GraphPattern;
 use spargeo::add_geosparql_functions;
 use sparopt::Optimizer;
 use std::collections::HashMap;
@@ -460,9 +460,8 @@ fn compare_terms<'a>(
     }
 }
 
-#[expect(clippy::large_enum_variant)]
 enum StaticQueryResults {
-    Graph(Graph),
+    Graph(Box<Graph>),
     Solutions {
         variables: Vec<Variable>,
         solutions: Vec<Vec<(Variable, Term)>>,
@@ -556,7 +555,7 @@ impl StaticQueryResults {
             }
         } else {
             graph.canonicalize(CanonicalizationAlgorithm::Unstable);
-            Ok(Self::Graph(graph))
+            Ok(Self::Graph(Box::new(graph)))
         }
     }
 }

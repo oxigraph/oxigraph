@@ -1,14 +1,14 @@
 #![allow(clippy::panic)]
 
 use bzip2::read::MultiBzDecoder;
-use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion, Throughput};
+use codspeed_criterion_compat::{Criterion, Throughput, criterion_group, criterion_main};
 use oxhttp::model::{Request, Uri};
 use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
 use oxigraph::store::Store;
 use rand::random;
 use std::env::temp_dir;
-use std::fs::{remove_dir_all, File};
+use std::fs::{File, remove_dir_all};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::str;
@@ -339,7 +339,7 @@ enum RawOperation {
     Update(String),
 }
 
-#[expect(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant, clippy::allow_attributes)]
 #[derive(Clone)]
 enum Operation {
     Query(Query),

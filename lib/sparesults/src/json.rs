@@ -1,5 +1,7 @@
 //! Implementation of [SPARQL Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/)
 
+#![allow(clippy::large_enum_variant)]
+
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser, WriterJsonSerializer};
 #[cfg(feature = "async-tokio")]
@@ -234,7 +236,6 @@ fn write_json_term<'a>(output: &mut Vec<JsonEvent<'a>>, term: TermRef<'a>) {
     }
 }
 
-#[expect(clippy::large_enum_variant)]
 pub enum ReaderJsonQueryResultsParserOutput<R: Read> {
     Solutions {
         variables: Vec<Variable>,
@@ -290,7 +291,6 @@ impl<R: Read> ReaderJsonSolutionsParser<R> {
 }
 
 #[cfg(feature = "async-tokio")]
-#[expect(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderJsonQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions {
         variables: Vec<Variable>,
@@ -350,7 +350,6 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonSolutionsParser<R> {
     }
 }
 
-#[expect(clippy::large_enum_variant)]
 pub enum SliceJsonQueryResultsParserOutput<'a> {
     Solutions {
         variables: Vec<Variable>,
@@ -405,7 +404,6 @@ impl SliceJsonSolutionsParser<'_> {
     }
 }
 
-#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
 enum JsonInnerQueryResults {
     Solutions {
         variables: Vec<Variable>,
@@ -414,7 +412,6 @@ enum JsonInnerQueryResults {
     Boolean(bool),
 }
 
-#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
 enum JsonInnerSolutions {
     Reader(JsonInnerSolutionsParser),
     Iterator(JsonBufferedSolutionsIterator),
@@ -430,7 +427,6 @@ struct JsonInnerReader {
     solutions_read: bool,
 }
 
-#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
 enum JsonInnerReaderState {
     Start,
     InRootObject,
@@ -709,10 +705,7 @@ impl JsonInnerReader {
                 }
                 _ => unreachable!(),
             },
-            JsonInnerReaderState::Term {
-                ref mut reader,
-                variable,
-            } => {
+            JsonInnerReaderState::Term { reader, variable } => {
                 let result = reader.read_event(event);
                 if let Some(term) = result? {
                     self.current_solution_variables.push(take(variable));
@@ -740,7 +733,10 @@ impl JsonInnerReader {
                 }
             }
             #[expect(clippy::ref_patterns)]
-            JsonInnerReaderState::Ignore { level, ref after } => {
+            &mut JsonInnerReaderState::Ignore {
+                ref mut level,
+                ref after,
+            } => {
                 let level = match event {
                     JsonEvent::StartArray | JsonEvent::StartObject => *level + 1,
                     JsonEvent::EndArray | JsonEvent::EndObject => *level - 1,
@@ -781,7 +777,7 @@ struct JsonInnerSolutionsParser {
     mapping: HashMap<String, usize>,
     new_bindings: Vec<Option<Term>>,
 }
-#[cfg_attr(feature = "rdf-star", expect(clippy::large_enum_variant))]
+
 enum JsonInnerSolutionsParserState {
     BeforeSolution,
     BetweenSolutionTerms,
@@ -831,10 +827,7 @@ impl JsonInnerSolutionsParser {
                 }
                 _ => unreachable!(),
             },
-            JsonInnerSolutionsParserState::Term {
-                ref mut reader,
-                key,
-            } => {
+            JsonInnerSolutionsParserState::Term { reader, key } => {
                 let result = reader.read_event(event);
                 if let Some(term) = result? {
                     self.new_bindings[*key] = Some(term);
@@ -902,7 +895,7 @@ enum TermType {
 }
 
 impl JsonInnerTermReader {
-    #[cfg_attr(not(feature = "rdf-star"), expect(clippy::collapsible_else_if))]
+    #[cfg_attr(not(feature = "sparql-12"), expect(clippy::collapsible_else_if))]
     fn read_event(
         &mut self,
         event: JsonEvent<'_>,
@@ -1172,7 +1165,7 @@ impl JsonInnerTermReader {
                 _ => unreachable!(),
             },
             #[cfg(feature = "rdf-star")]
-            JsonInnerTermReaderState::Subject(ref mut inner_state) => {
+            JsonInnerTermReaderState::Subject(inner_state) => {
                 if let Some(term) = inner_state.read_event(event)? {
                     self.state = JsonInnerTermReaderState::InValue;
                     self.subject = Some(term);
@@ -1180,7 +1173,7 @@ impl JsonInnerTermReader {
                 Ok(None)
             }
             #[cfg(feature = "rdf-star")]
-            JsonInnerTermReaderState::Predicate(ref mut inner_state) => {
+            JsonInnerTermReaderState::Predicate(inner_state) => {
                 if let Some(term) = inner_state.read_event(event)? {
                     self.state = JsonInnerTermReaderState::InValue;
                     self.predicate = Some(term);
@@ -1188,7 +1181,7 @@ impl JsonInnerTermReader {
                 Ok(None)
             }
             #[cfg(feature = "rdf-star")]
-            JsonInnerTermReaderState::Object(ref mut inner_state) => {
+            JsonInnerTermReaderState::Object(inner_state) => {
                 if let Some(term) = inner_state.read_event(event)? {
                     self.state = JsonInnerTermReaderState::InValue;
                     self.object = Some(term);

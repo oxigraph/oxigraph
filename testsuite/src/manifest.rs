@@ -1,6 +1,6 @@
 use crate::files::{guess_rdf_format, load_to_graph};
 use crate::vocab::*;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use oxigraph::model::vocab::*;
 use oxigraph::model::*;
 use std::collections::{HashMap, VecDeque};

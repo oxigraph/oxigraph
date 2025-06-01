@@ -1,5 +1,5 @@
 use crate::algebra::*;
-use crate::parser::{parse_query, SparqlSyntaxError};
+use crate::parser::{SparqlSyntaxError, parse_query};
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;

@@ -1012,13 +1012,13 @@ pub trait Decoder: StrLookup {
                     Term::Literal(_) => {
                         return Err(
                             CorruptionError::msg("A literal is not a valid graph name").into()
-                        )
+                        );
                     }
                     #[cfg(feature = "rdf-star")]
                     Term::Triple(_) => {
                         return Err(
                             CorruptionError::msg("A triple is not a valid graph name").into()
-                        )
+                        );
                     }
                 }
             },

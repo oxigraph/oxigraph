@@ -25,8 +25,8 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -110,8 +110,8 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -144,8 +144,8 @@ impl TriGParser {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -182,8 +182,8 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -224,8 +224,8 @@ impl TriGParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
     /// let file: [&[u8]; 5] = [
@@ -280,8 +280,8 @@ impl TriGParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -330,6 +330,7 @@ impl<R: Read> ReaderTriGParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
@@ -382,8 +383,8 @@ impl<R: Read> Iterator for ReaderTriGParser<R> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -443,6 +444,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -469,6 +471,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -489,8 +492,8 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -539,6 +542,7 @@ impl SliceTriGParser<'_> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
@@ -589,8 +593,8 @@ impl Iterator for SliceTriGParser<'_> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
 /// let file: [&[u8]; 5] = [
@@ -676,6 +680,7 @@ impl LowLevelTriGParser {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TriGPrefixesIter<'_> {
@@ -700,6 +705,7 @@ impl LowLevelTriGParser {
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {

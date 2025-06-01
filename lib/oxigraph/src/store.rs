@@ -28,8 +28,8 @@
 use crate::io::{RdfFormat, RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
 use crate::sparql::{
-    evaluate_query, evaluate_update, EvaluationError, Query, QueryExplanation, QueryOptions,
-    QueryResults, Update, UpdateOptions,
+    EvaluationError, Query, QueryExplanation, QueryOptions, QueryResults, Update, UpdateOptions,
+    evaluate_query, evaluate_update,
 };
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
@@ -1729,7 +1729,7 @@ impl BulkLoader {
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
     /// store.bulk_loader().load_from_reader(
-    ///     RdfParser::from_format(RdfFormat::NQuads).unchecked(), // we inject a custom parser with options
+    ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
     ///     file.as_ref()
     /// )?;
     ///

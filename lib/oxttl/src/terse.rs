@@ -1,15 +1,15 @@
 //! Shared parser implementation for Turtle and TriG.
 
-use crate::lexer::{resolve_local_name, N3Lexer, N3LexerMode, N3LexerOptions, N3Token};
+use crate::lexer::{N3Lexer, N3LexerMode, N3LexerOptions, N3Token, resolve_local_name};
 use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOrLineJump};
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use oxiri::Iri;
-use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "rdf-star")]
 use oxrdf::Triple;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Subject, Term};
-use std::collections::hash_map::Iter;
 use std::collections::HashMap;
+use std::collections::hash_map::Iter;
 
 pub struct TriGRecognizer {
     stack: Vec<TriGState>,

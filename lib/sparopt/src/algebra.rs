@@ -1647,11 +1647,7 @@ fn new_var() -> Variable {
 }
 
 fn order_pair<T: Hash>(a: T, b: T) -> (T, T) {
-    if hash(&a) <= hash(&b) {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if hash(&a) <= hash(&b) { (a, b) } else { (b, a) }
 }
 
 fn order_vec<T: Hash>(mut vec: Vec<T>) -> Vec<T> {

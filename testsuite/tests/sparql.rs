@@ -16,26 +16,29 @@ fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
 #[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
-    check_testsuite("https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl", &[
-        //Multiple writing of the same xsd:integer. Our system does some normalization.
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2",
-        //Simple literal vs xsd:string. We apply RDF 1.1
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-08",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-10",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-11",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-12",
-        //DATATYPE("foo"@en) returns rdf:langString in RDF 1.1
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
-        // We use XSD 1.1 equality on dates
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
-        // We choose to simplify first the nested group patterns in OPTIONAL
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
-        // This test relies on naive iteration on the input file
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
-        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2"
-    ])
+    check_testsuite(
+        "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
+        &[
+            // Multiple writing of the same xsd:integer. Our system does some normalization.
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2",
+            // Simple literal vs xsd:string. We apply RDF 1.1
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-2",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-08",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-10",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-11",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-12",
+            // DATATYPE("foo"@en) returns rdf:langString in RDF 1.1
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-2",
+            // We use XSD 1.1 equality on dates
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2",
+            // We choose to simplify first the nested group patterns in OPTIONAL
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified",
+            // This test relies on naive iteration on the input file
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
+        ],
+    )
 }
 
 #[test]

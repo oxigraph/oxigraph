@@ -1,6 +1,6 @@
 use crate::io::{
-    lookup_rdf_format, map_parse_error, PyRdfFormatInput, PyReadable, PyReadableInput, PyWritable,
-    PyWritableOutput,
+    PyRdfFormatInput, PyReadable, PyReadableInput, PyWritable, PyWritableOutput, lookup_rdf_format,
+    map_parse_error,
 };
 use crate::model::*;
 use crate::sparql::*;

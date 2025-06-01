@@ -1,7 +1,7 @@
 #![allow(clippy::print_stderr)]
 
 use codspeed_criterion_compat::{
-    criterion_group, criterion_main, BenchmarkId, Criterion, Throughput,
+    BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
 };
 use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser};
 use oxigraph_testsuite::files::read_file;

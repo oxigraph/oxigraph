@@ -19,7 +19,7 @@ fn parse(
     let mut errors = Vec::new();
     let mut parser = RdfXmlParser::new();
     if unchecked {
-        parser = parser.unchecked();
+        parser = parser.lenient();
     }
     let mut parser = parser.for_slice(data);
     for result in &mut parser {

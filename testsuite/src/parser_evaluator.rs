@@ -3,7 +3,7 @@ use crate::files::{guess_rdf_format, load_dataset, load_n3, read_file, read_file
 use crate::manifest::Test;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::jld;
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use json_event_parser::{JsonEvent, SliceJsonParser};
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::graph::CanonicalizationAlgorithm;

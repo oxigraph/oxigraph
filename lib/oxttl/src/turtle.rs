@@ -1,6 +1,7 @@
 //! A [Turtle](https://www.w3.org/TR/turtle/) streaming parser implemented by [`TurtleParser`]
 //! and a serializer implemented by [`TurtleSerializer`].
 
+use crate::MIN_PARALLEL_CHUNK_SIZE;
 use crate::chunker::get_turtle_file_chunks;
 use crate::terse::TriGRecognizer;
 #[cfg(feature = "async-tokio")]
@@ -9,11 +10,10 @@ use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, Tu
 #[cfg(feature = "async-tokio")]
 use crate::trig::TokioAsyncWriterTriGSerializer;
 use crate::trig::{LowLevelTriGSerializer, TriGSerializer, WriterTriGSerializer};
-use crate::MIN_PARALLEL_CHUNK_SIZE;
 use oxiri::{Iri, IriParseError};
 use oxrdf::{GraphNameRef, Triple, TripleRef};
-use std::collections::hash_map::Iter;
 use std::collections::HashMap;
+use std::collections::hash_map::Iter;
 use std::io::{self, Read, Write};
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -24,8 +24,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TurtleParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -109,8 +109,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TurtleParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -143,8 +143,8 @@ impl TurtleParser {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TurtleParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -181,8 +181,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TurtleParser;
     ///
     /// let file = br#"@base <http://example.com/> .
@@ -227,8 +227,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TurtleParser;
     /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
     ///
@@ -285,8 +285,8 @@ impl TurtleParser {
     ///
     /// Count the number of people:
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxttl::TurtleParser;
     ///
     /// let file: [&[u8]; 5] = [
@@ -341,8 +341,8 @@ impl TurtleParser {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TurtleParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -391,6 +391,7 @@ impl<R: Read> ReaderTurtleParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
@@ -443,8 +444,8 @@ impl<R: Read> Iterator for ReaderTurtleParser<R> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TurtleParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -504,6 +505,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTurtleParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -530,6 +532,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTurtleParser<R> {
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -550,8 +553,8 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTurtleParser<R> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TurtleParser;
 ///
 /// let file = br#"@base <http://example.com/> .
@@ -600,6 +603,7 @@ impl SliceTurtleParser<'_> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
@@ -650,8 +654,8 @@ impl Iterator for SliceTurtleParser<'_> {
 ///
 /// Count the number of people:
 /// ```
-/// use oxrdf::vocab::rdf;
 /// use oxrdf::NamedNodeRef;
+/// use oxrdf::vocab::rdf;
 /// use oxttl::TurtleParser;
 ///
 /// let file: [&[u8]; 5] = [
@@ -737,6 +741,7 @@ impl LowLevelTurtleParser {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> TurtlePrefixesIter<'_> {
@@ -761,6 +766,7 @@ impl LowLevelTurtleParser {
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
@@ -1133,7 +1139,10 @@ mod tests {
             NamedNodeRef::new_unchecked("http://example.com/p2"),
             BlankNodeRef::new_unchecked("b2"),
         ))?;
-        assert_eq!(String::from_utf8(serializer.finish()?).unwrap(), "<http://example.com/s> <http://example.com/p> <http://example.com/o> , \"foo\" ;\n\t<http://example.com/p2> \"foo\"@en .\n_:b <http://example.com/p2> _:b2 .\n");
+        assert_eq!(
+            String::from_utf8(serializer.finish()?).unwrap(),
+            "<http://example.com/s> <http://example.com/p> <http://example.com/o> , \"foo\" ;\n\t<http://example.com/p2> \"foo\"@en .\n_:b <http://example.com/p2> _:b2 .\n"
+        );
         Ok(())
     }
 }

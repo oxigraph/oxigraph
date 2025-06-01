@@ -517,6 +517,7 @@ impl<R: Read> ReaderQuadParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> PrefixesIter<'_> {
@@ -567,8 +568,8 @@ impl<R: Read> ReaderQuadParser<R> {
     /// A callback to load remote documents during parsing like JSON-LD contexts.
     ///
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
     ///
     /// let file = br#"{
@@ -605,11 +606,11 @@ impl<R: Read> ReaderQuadParser<R> {
     pub fn with_document_loader(
         mut self,
         loader: impl Fn(&str) -> Result<LoadedDocument, Box<dyn Error + Send + Sync>>
-            + Send
-            + Sync
-            + UnwindSafe
-            + RefUnwindSafe
-            + 'static,
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
     ) -> Self {
         self.inner = match self.inner {
             ReaderQuadParserKind::JsonLd(p) => {
@@ -735,6 +736,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -772,6 +774,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI
+    /// //
     /// # Ok(())
     /// # }
     /// ```
@@ -862,8 +865,8 @@ impl SliceQuadParser<'_> {
     /// A callback to load remote documents during parsing like JSON-LD contexts.
     ///
     /// ```
-    /// use oxrdf::vocab::rdf;
     /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::vocab::rdf;
     /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
     ///
     /// let file = br#"{
@@ -900,11 +903,11 @@ impl SliceQuadParser<'_> {
     pub fn with_document_loader(
         mut self,
         loader: impl Fn(&str) -> Result<LoadedDocument, Box<dyn Error + Send + Sync>>
-            + Send
-            + Sync
-            + UnwindSafe
-            + RefUnwindSafe
-            + 'static,
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
     ) -> Self {
         self.inner = match self.inner {
             SliceQuadParserKind::JsonLd(p) => {
@@ -952,6 +955,7 @@ impl SliceQuadParser<'_> {
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
     /// ); // There are now prefixes
+    /// //
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn prefixes(&self) -> PrefixesIter<'_> {

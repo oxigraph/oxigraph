@@ -1,3 +1,5 @@
+#![allow(clippy::large_enum_variant)]
+
 use crate::csv::{
     ReaderTsvQueryResultsParserOutput, ReaderTsvSolutionsParser, SliceTsvQueryResultsParserOutput,
     SliceTsvSolutionsParser,
@@ -237,7 +239,9 @@ impl QueryResultsParser {
     ) -> Result<SliceQueryResultsParserOutput<'_>, QueryResultsSyntaxError> {
         Ok(match self.format {
             QueryResultsFormat::Xml => match SliceXmlQueryResultsParserOutput::read(slice)? {
-                SliceXmlQueryResultsParserOutput::Boolean(r) => SliceQueryResultsParserOutput::Boolean(r),
+                SliceXmlQueryResultsParserOutput::Boolean(r) => {
+                    SliceQueryResultsParserOutput::Boolean(r)
+                }
                 SliceXmlQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
@@ -247,7 +251,9 @@ impl QueryResultsParser {
                 }),
             },
             QueryResultsFormat::Json => match SliceJsonQueryResultsParserOutput::read(slice)? {
-                SliceJsonQueryResultsParserOutput::Boolean(r) => SliceQueryResultsParserOutput::Boolean(r),
+                SliceJsonQueryResultsParserOutput::Boolean(r) => {
+                    SliceQueryResultsParserOutput::Boolean(r)
+                }
                 SliceJsonQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
@@ -256,9 +262,15 @@ impl QueryResultsParser {
                     solutions: SliceSolutionsParserKind::Json(solutions),
                 }),
             },
-            QueryResultsFormat::Csv => return Err(QueryResultsSyntaxError::msg("CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation")),
+            QueryResultsFormat::Csv => {
+                return Err(QueryResultsSyntaxError::msg(
+                    "CSV SPARQL results syntax is lossy and can't be parsed to a proper RDF representation",
+                ));
+            }
             QueryResultsFormat::Tsv => match SliceTsvQueryResultsParserOutput::read(slice)? {
-                SliceTsvQueryResultsParserOutput::Boolean(r) => SliceQueryResultsParserOutput::Boolean(r),
+                SliceTsvQueryResultsParserOutput::Boolean(r) => {
+                    SliceQueryResultsParserOutput::Boolean(r)
+                }
                 SliceTsvQueryResultsParserOutput::Solutions {
                     solutions,
                     variables,
@@ -312,7 +324,6 @@ impl From<QueryResultsFormat> for QueryResultsParser {
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[expect(clippy::large_enum_variant)]
 pub enum ReaderQueryResultsParserOutput<R: Read> {
     Solutions(ReaderSolutionsParser<R>),
     Boolean(bool),
@@ -432,7 +443,6 @@ impl<R: Read> Iterator for ReaderSolutionsParser<R> {
 /// # }
 /// ```
 #[cfg(feature = "async-tokio")]
-#[expect(clippy::large_enum_variant)]
 pub enum TokioAsyncReaderQueryResultsParserOutput<R: AsyncRead + Unpin> {
     Solutions(TokioAsyncReaderSolutionsParser<R>),
     Boolean(bool),
@@ -552,7 +562,6 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderSolutionsParser<R> {
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-#[expect(clippy::large_enum_variant)]
 pub enum SliceQueryResultsParserOutput<'a> {
     Solutions(SliceSolutionsParser<'a>),
     Boolean(bool),

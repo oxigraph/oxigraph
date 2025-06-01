@@ -2,7 +2,7 @@ use crate::sparql::QueryDataset;
 #[cfg(feature = "rdf-star")]
 use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
-    insert_term, Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup,
+    Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
 use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxrdf::Term;
@@ -11,8 +11,8 @@ use oxsdatatypes::Boolean;
 use spareval::ExpressionTriple;
 use spareval::{ExpressionTerm, InternalQuad, QueryableDataset};
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
 #[cfg(feature = "rdf-star")]
@@ -219,7 +219,7 @@ impl QueryableDataset for DatasetView {
     ) -> Result<ExpressionTerm, StorageError> {
         Ok(match term {
             EncodedTerm::DefaultGraph => {
-                return Err(CorruptionError::new("Unexpected default graph").into())
+                return Err(CorruptionError::new("Unexpected default graph").into());
             }
             EncodedTerm::BooleanLiteral(value) => ExpressionTerm::BooleanLiteral(value),
             EncodedTerm::FloatLiteral(value) => ExpressionTerm::FloatLiteral(value),

@@ -1,9 +1,10 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
 use crate::cli::{Args, Command};
-use crate::service_description::{generate_service_description, EndpointKind};
-use anyhow::{bail, ensure, Context};
+use crate::service_description::{EndpointKind, generate_service_description};
+use anyhow::{Context, bail, ensure};
 use clap::Parser;
 use flate2::read::MultiGzDecoder;
+use oxhttp::Server;
 use oxhttp::model::header::{
     ACCEPT, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
     ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD,
@@ -11,7 +12,6 @@ use oxhttp::model::header::{
 };
 use oxhttp::model::uri::PathAndQuery;
 use oxhttp::model::{Body, HeaderValue, Method, Request, Response, StatusCode, Uri};
-use oxhttp::Server;
 use oxigraph::io::{JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
@@ -31,7 +31,7 @@ use std::cmp::{max, min};
 use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Read, Write, stdin, stdout};
 use std::net::ToSocketAddrs;
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixDatagram;
@@ -41,7 +41,7 @@ use std::str::FromStr;
 use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
 use std::{fmt, fs, str};
-use url::{form_urlencoded, Url};
+use url::{Url, form_urlencoded};
 
 mod cli;
 mod service_description;
@@ -392,16 +392,17 @@ pub fn main() -> anyhow::Result<()> {
             })();
             if let Some(explain_file) = explain_file {
                 let mut file = BufWriter::new(File::create(&explain_file)?);
-                match explain_file
-                    .extension()
-                    .and_then(OsStr::to_str) {
+                match explain_file.extension().and_then(OsStr::to_str) {
                     Some("json") => {
                         explanation.write_in_json(&mut file)?;
-                    },
+                    }
                     Some("txt") => {
                         write!(file, "{explanation:?}")?;
-                    },
-                    _ => bail!("The given explanation file {} must have an extension that is .json or .txt", explain_file.display())
+                    }
+                    _ => bail!(
+                        "The given explanation file {} must have an extension that is .json or .txt",
+                        explain_file.display()
+                    ),
                 }
                 close_file_writer(file)?;
             } else if explain || stats {
@@ -1188,7 +1189,7 @@ fn evaluate_sparql_query(
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
             return Err(bad_request(
-                "default-graph-uri or named-graph-uri and union-default-graph should not be set at the same time"
+                "default-graph-uri or named-graph-uri and union-default-graph should not be set at the same time",
             ));
         }
         query.dataset_mut().set_default_graph_as_union()
@@ -1328,7 +1329,7 @@ fn evaluate_sparql_update(
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
             return Err(bad_request(
-                "using-graph-uri or using-named-graph-uri and using-union-graph should not be set at the same time"
+                "using-graph-uri or using-named-graph-uri and using-union-graph should not be set at the same time",
             ));
         }
         for using in update.using_datasets_mut() {
@@ -1353,8 +1354,8 @@ fn evaluate_sparql_update(
         for using in update.using_datasets_mut() {
             if !using.is_default_dataset() {
                 return Err(bad_request(
-                        "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
-                    ));
+                    "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
+                ));
             }
             using.set_default_graph(default_graph_uris.clone());
             using.set_available_named_graphs(named_graph_uris.clone());
@@ -1739,8 +1740,8 @@ mod tests {
     use assert_cmd::Command;
     use assert_fs::prelude::*;
     use assert_fs::{NamedTempFile, TempDir};
-    use flate2::write::GzEncoder;
     use flate2::Compression;
+    use flate2::write::GzEncoder;
     use oxhttp::model::header::ACCEPT;
     use predicates::prelude::*;
     use std::fs::remove_dir_all;

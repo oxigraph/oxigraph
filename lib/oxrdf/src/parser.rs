@@ -1,8 +1,8 @@
-use crate::vocab::xsd;
 #[cfg(feature = "rdf-12")]
 use crate::BaseDirection;
 #[cfg(feature = "rdf-star")]
 use crate::Subject;
+use crate::vocab::xsd;
 use crate::{
     BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
     NamedNode, Quad, Term, Triple, Variable, VariableNameParseError,

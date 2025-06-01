@@ -1,7 +1,7 @@
 #![expect(clippy::expect_used)]
 
 use crate::{DayTimeDuration, Decimal, Duration, YearMonthDuration};
-use std::cmp::{min, Ordering};
+use std::cmp::{Ordering, min};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -1862,7 +1862,7 @@ impl Timestamp {
 #[cfg(feature = "custom-now")]
 #[expect(unsafe_code)]
 pub fn since_unix_epoch() -> Duration {
-    extern "Rust" {
+    unsafe extern "Rust" {
         fn custom_ox_now() -> Duration;
     }
 
@@ -2758,9 +2758,11 @@ mod tests {
             GDay::from_str("---15-11:00")?,
             GDay::from_str("---16+13:00")?
         );
-        assert!(GDay::from_str("---15-13:00")?
-            .partial_cmp(&GDay::from_str("---16")?)
-            .is_none());
+        assert!(
+            GDay::from_str("---15-13:00")?
+                .partial_cmp(&GDay::from_str("---16")?)
+                .is_none()
+        );
         Ok(())
     }
 
@@ -3145,7 +3147,7 @@ mod tests {
     #[test]
     fn custom_now() {
         #[expect(unsafe_code)]
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         extern "Rust" fn custom_ox_now() -> Duration {
             Duration::default()
         }

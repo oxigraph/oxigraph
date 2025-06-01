@@ -2,8 +2,8 @@ use crate::utils::*;
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{NamedNodeRef, Subject, SubjectRef, TermRef, TripleRef};
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io;
@@ -392,7 +392,7 @@ impl InnerRdfXmlWriter {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "RDF/XML only supports named or blank subject",
-                    ))
+                    ));
                 }
             }
             output.push(Event::Start(description_open));
@@ -442,7 +442,7 @@ impl InnerRdfXmlWriter {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "RDF/XML only supports named, blank or literal object",
-                ))
+                ));
             }
         };
         if let Some(content) = content {
@@ -596,7 +596,10 @@ mod tests {
             NamedNodeRef::new("http://example.com/o2")?,
         ))?;
         let output = serializer.finish()?;
-        assert_eq!(String::from_utf8_lossy(&output), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns=\"http://example.com/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<oxprefix:o xmlns:oxprefix=\"http://example.org/\" rdf:about=\"http://example.com/s\">\n\t\t<p rdf:resource=\"http://example.com/o2\"/>\n\t</oxprefix:o>\n</rdf:RDF>");
+        assert_eq!(
+            String::from_utf8_lossy(&output),
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns=\"http://example.com/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<oxprefix:o xmlns:oxprefix=\"http://example.org/\" rdf:about=\"http://example.com/s\">\n\t\t<p rdf:resource=\"http://example.com/o2\"/>\n\t</oxprefix:o>\n</rdf:RDF>"
+        );
         Ok(())
     }
 }

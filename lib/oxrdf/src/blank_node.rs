@@ -1,7 +1,7 @@
 #![allow(clippy::host_endian_bytes)] // We use it to go around 16 bytes alignment of u128
 use rand::random;
 #[cfg(feature = "serde")]
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::io::Write;
 use std::{fmt, str};
 

@@ -40,7 +40,7 @@ Currently:
   ```rust
   use oxsdatatypes::Duration;
   
-  #[no_mangle]
+  #[unsafe(no_mangle)]
   fn custom_ox_now() -> Duration {
     unimplemented!("now implementation")
   }

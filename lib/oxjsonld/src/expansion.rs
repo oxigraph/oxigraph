@@ -1,6 +1,6 @@
 use crate::context::{
-    has_keyword_form, json_node_from_events, JsonLdContext, JsonLdContextProcessor,
-    JsonLdLoadDocumentOptions, JsonLdRemoteDocument,
+    JsonLdContext, JsonLdContextProcessor, JsonLdLoadDocumentOptions, JsonLdRemoteDocument,
+    has_keyword_form, json_node_from_events,
 };
 use crate::error::JsonLdErrorCode;
 use crate::profile::JsonLdProcessingMode;
@@ -183,14 +183,14 @@ impl JsonLdExpansionConverter {
     pub fn with_load_document_callback(
         mut self,
         callback: impl Fn(
-                &str,
-                &JsonLdLoadDocumentOptions,
-            ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-            + Send
-            + Sync
-            + UnwindSafe
-            + RefUnwindSafe
-            + 'static,
+            &str,
+            &JsonLdLoadDocumentOptions,
+        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
     ) -> Self {
         self.context_processor.load_document_callback = Some(Arc::new(callback));
         self
@@ -1137,14 +1137,103 @@ impl JsonLdExpansionConverter {
                 r#type,
                 value,
                 language,
-            } => match event {
-                JsonEvent::ObjectKey(key) => {
-                    if let Some(iri) = self.expand_iri(key, false, true, errors) {
-                        match iri.as_ref() {
-                            "@value" => {
-                                if value.is_some() {
+            } => {
+                match event {
+                    JsonEvent::ObjectKey(key) => {
+                        if let Some(iri) = self.expand_iri(key, false, true, errors) {
+                            match iri.as_ref() {
+                                "@value" => {
+                                    if value.is_some() {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "@value cannot be set multiple times",
+                                            JsonLdErrorCode::InvalidValueObject,
+                                        ));
+                                        self.state.push(JsonLdExpansionState::Value {
+                                            r#type,
+                                            value,
+                                            language,
+                                        });
+                                        self.state
+                                            .push(JsonLdExpansionState::Skip { is_array: false });
+                                    } else {
+                                        self.state.push(JsonLdExpansionState::ValueValue {
+                                            r#type,
+                                            language,
+                                        });
+                                    }
+                                }
+                                "@language" => {
+                                    if language.is_some() {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "@language cannot be set multiple times",
+                                            JsonLdErrorCode::CollidingKeywords,
+                                        ));
+                                        self.state.push(JsonLdExpansionState::Value {
+                                            r#type,
+                                            value,
+                                            language,
+                                        });
+                                        self.state
+                                            .push(JsonLdExpansionState::Skip { is_array: false });
+                                    } else {
+                                        self.state.push(JsonLdExpansionState::ValueLanguage {
+                                            r#type,
+                                            value,
+                                        });
+                                    }
+                                }
+                                "@type" => {
+                                    if !self.lenient {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "@type must be the first key of an object or right after @context",
+                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                    ))
+                                    }
+                                    if r#type.is_some() {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            "@type cannot be set multiple times",
+                                            JsonLdErrorCode::CollidingKeywords,
+                                        ));
+                                        self.state.push(JsonLdExpansionState::Value {
+                                            r#type,
+                                            value,
+                                            language,
+                                        });
+                                        self.state
+                                            .push(JsonLdExpansionState::Skip { is_array: false });
+                                    } else {
+                                        self.state.push(JsonLdExpansionState::ValueType {
+                                            value,
+                                            language,
+                                        });
+                                    }
+                                }
+                                "@context" => {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@value cannot be set multiple times",
+                                        "@context must be the first key of an object",
+                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
+                                    ));
+                                    self.state.push(JsonLdExpansionState::Value {
+                                        r#type,
+                                        value,
+                                        language,
+                                    });
+                                    self.state
+                                        .push(JsonLdExpansionState::Skip { is_array: false });
+                                }
+                                "@index" => {
+                                    self.state.push(JsonLdExpansionState::Value {
+                                        r#type,
+                                        value,
+                                        language,
+                                    });
+                                    self.state.push(JsonLdExpansionState::Index);
+                                }
+                                _ if has_keyword_form(&iri) => {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        format!(
+                                            "Unsupported JSON-Ld keyword inside of a @value: {iri}",
+                                        ),
                                         JsonLdErrorCode::InvalidValueObject,
                                     ));
                                     self.state.push(JsonLdExpansionState::Value {
@@ -1154,19 +1243,9 @@ impl JsonLdExpansionConverter {
                                     });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
-                                } else {
-                                    self.state.push(JsonLdExpansionState::ValueValue {
-                                        r#type,
-                                        language,
-                                    });
                                 }
-                            }
-                            "@language" => {
-                                if language.is_some() {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@language cannot be set multiple times",
-                                        JsonLdErrorCode::CollidingKeywords,
-                                    ));
+                                _ => {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(format!("Objects with @value cannot contain properties, {iri} found"), JsonLdErrorCode::InvalidValueObject));
                                     self.state.push(JsonLdExpansionState::Value {
                                         r#type,
                                         value,
@@ -1174,147 +1253,72 @@ impl JsonLdExpansionConverter {
                                     });
                                     self.state
                                         .push(JsonLdExpansionState::Skip { is_array: false });
-                                } else {
-                                    self.state.push(JsonLdExpansionState::ValueLanguage {
-                                        r#type,
-                                        value,
-                                    });
                                 }
                             }
-                            "@type" => {
-                                if !self.lenient {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@type must be the first key of an object or right after @context",
-                                        JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                    ))
-                                }
-                                if r#type.is_some() {
-                                    errors.push(JsonLdSyntaxError::msg_and_code(
-                                        "@type cannot be set multiple times",
-                                        JsonLdErrorCode::CollidingKeywords,
-                                    ));
-                                    self.state.push(JsonLdExpansionState::Value {
-                                        r#type,
-                                        value,
-                                        language,
-                                    });
-                                    self.state
-                                        .push(JsonLdExpansionState::Skip { is_array: false });
-                                } else {
-                                    self.state
-                                        .push(JsonLdExpansionState::ValueType { value, language });
-                                }
-                            }
-                            "@context" => {
+                        } else {
+                            self.state.push(JsonLdExpansionState::Value {
+                                r#type,
+                                value,
+                                language,
+                            });
+                            self.state
+                                .push(JsonLdExpansionState::Skip { is_array: false });
+                        }
+                    }
+                    JsonEvent::EndObject => {
+                        if let Some(value) = value {
+                            let mut is_valid = true;
+                            if language.is_some() && r#type.is_some() {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@context must be the first key of an object",
-                                    JsonLdErrorCode::InvalidStreamingKeyOrder,
-                                ));
-                                self.state.push(JsonLdExpansionState::Value {
-                                    r#type,
-                                    value,
-                                    language,
-                                });
-                                self.state
-                                    .push(JsonLdExpansionState::Skip { is_array: false });
-                            }
-                            "@index" => {
-                                self.state.push(JsonLdExpansionState::Value {
-                                    r#type,
-                                    value,
-                                    language,
-                                });
-                                self.state.push(JsonLdExpansionState::Index);
-                            }
-                            _ if has_keyword_form(&iri) => {
-                                errors.push(JsonLdSyntaxError::msg_and_code(
-                                    format!(
-                                        "Unsupported JSON-Ld keyword inside of a @value: {iri}",
-                                    ),
+                                    "@type and @language cannot be used together",
                                     JsonLdErrorCode::InvalidValueObject,
                                 ));
-                                self.state.push(JsonLdExpansionState::Value {
-                                    r#type,
-                                    value,
-                                    language,
-                                });
-                                self.state
-                                    .push(JsonLdExpansionState::Skip { is_array: false });
+                                is_valid = false;
                             }
-                            _ => {
-                                errors.push(JsonLdSyntaxError::msg_and_code(format!("Objects with @value cannot contain properties, {iri} found"), JsonLdErrorCode::InvalidValueObject));
-                                self.state.push(JsonLdExpansionState::Value {
-                                    r#type,
-                                    value,
-                                    language,
-                                });
-                                self.state
-                                    .push(JsonLdExpansionState::Skip { is_array: false });
-                            }
-                        }
-                    } else {
-                        self.state.push(JsonLdExpansionState::Value {
-                            r#type,
-                            value,
-                            language,
-                        });
-                        self.state
-                            .push(JsonLdExpansionState::Skip { is_array: false });
-                    }
-                }
-                JsonEvent::EndObject => {
-                    if let Some(value) = value {
-                        let mut is_valid = true;
-                        if language.is_some() && r#type.is_some() {
-                            errors.push(JsonLdSyntaxError::msg_and_code(
-                                "@type and @language cannot be used together",
-                                JsonLdErrorCode::InvalidValueObject,
-                            ));
-                            is_valid = false;
-                        }
-                        if language.is_some() && !matches!(value, JsonLdValue::String(_)) {
-                            errors.push(JsonLdSyntaxError::msg_and_code(
-                                "@language can be used only on a string @value",
-                                JsonLdErrorCode::InvalidLanguageTaggedValue,
-                            ));
-                            is_valid = false;
-                        }
-                        if let Some(r#type) = &r#type {
-                            if r#type.starts_with("_:") {
+                            if language.is_some() && !matches!(value, JsonLdValue::String(_)) {
                                 errors.push(JsonLdSyntaxError::msg_and_code(
-                                    "@type cannot be a blank node",
-                                    JsonLdErrorCode::InvalidTypedValue,
+                                    "@language can be used only on a string @value",
+                                    JsonLdErrorCode::InvalidLanguageTaggedValue,
                                 ));
                                 is_valid = false;
-                            } else if !self.lenient {
-                                if let Err(e) = Iri::parse(r#type.as_str()) {
+                            }
+                            if let Some(r#type) = &r#type {
+                                if r#type.starts_with("_:") {
                                     errors.push(JsonLdSyntaxError::msg_and_code(
-                                        format!("@type value '{type}' must be an IRI: {e}"),
+                                        "@type cannot be a blank node",
                                         JsonLdErrorCode::InvalidTypedValue,
                                     ));
                                     is_valid = false;
+                                } else if !self.lenient {
+                                    if let Err(e) = Iri::parse(r#type.as_str()) {
+                                        errors.push(JsonLdSyntaxError::msg_and_code(
+                                            format!("@type value '{type}' must be an IRI: {e}"),
+                                            JsonLdErrorCode::InvalidTypedValue,
+                                        ));
+                                        is_valid = false;
+                                    }
                                 }
                             }
+                            if is_valid {
+                                results.push(JsonLdEvent::Value {
+                                    value,
+                                    r#type,
+                                    language,
+                                })
+                            }
                         }
-                        if is_valid {
-                            results.push(JsonLdEvent::Value {
-                                value,
-                                r#type,
-                                language,
-                            })
-                        }
+                        self.pop_context();
                     }
-                    self.pop_context();
+                    JsonEvent::Null
+                    | JsonEvent::String(_)
+                    | JsonEvent::Number(_)
+                    | JsonEvent::Boolean(_)
+                    | JsonEvent::StartArray
+                    | JsonEvent::EndArray
+                    | JsonEvent::StartObject
+                    | JsonEvent::Eof => unreachable!(),
                 }
-                JsonEvent::Null
-                | JsonEvent::String(_)
-                | JsonEvent::Number(_)
-                | JsonEvent::Boolean(_)
-                | JsonEvent::StartArray
-                | JsonEvent::EndArray
-                | JsonEvent::StartObject
-                | JsonEvent::Eof => unreachable!(),
-            },
+            }
             JsonLdExpansionState::ValueValue { r#type, language } => match event {
                 JsonEvent::Null => self.state.push(JsonLdExpansionState::Value {
                     r#type,

@@ -2,7 +2,7 @@ use crate::algebra::{
     Expression, GraphPattern, JoinAlgorithm, LeftJoinAlgorithm, MinusAlgorithm, OrderExpression,
 };
 use crate::type_inference::{
-    infer_expression_type, infer_graph_pattern_types, VariableType, VariableTypes,
+    VariableType, VariableTypes, infer_expression_type, infer_graph_pattern_types,
 };
 use oxrdf::Variable;
 use spargebra::algebra::PropertyPathExpression;

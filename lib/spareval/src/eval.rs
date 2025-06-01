@@ -1,16 +1,16 @@
+use crate::CustomFunctionRegistry;
 #[cfg(feature = "rdf-star")]
 use crate::dataset::{ExpressionSubject, ExpressionTriple};
 use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 use crate::error::QueryEvaluationError;
 use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
-use crate::CustomFunctionRegistry;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use md5::{Digest, Md5};
 use oxiri::Iri;
-use oxrdf::vocab::{rdf, xsd};
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
+use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{BlankNode, Literal, NamedNode, Term, Triple, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, Duration, Time, TimezoneOffset, YearMonthDuration};
@@ -34,7 +34,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use std::iter::{empty, once, Peekable};
+use std::iter::{Peekable, empty, once};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{fmt, io};
@@ -62,7 +62,7 @@ impl<D: QueryableDataset> EvalDataset<D> {
 
     fn internal_named_graphs(
         &self,
-    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> {
+    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + use<D> {
         self.dataset
             .internal_named_graphs()
             .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
@@ -1910,11 +1910,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             None => error = true,
                         }
                     }
-                    if error {
-                        None
-                    } else {
-                        Some(false.into())
-                    }
+                    if error { None } else { Some(false.into()) }
                 })
             }
             Expression::And(inner) => {
@@ -1937,11 +1933,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             None => error = true,
                         }
                     }
-                    if error {
-                        None
-                    } else {
-                        Some(true.into())
-                    }
+                    if error { None } else { Some(true.into()) }
                 })
             }
             Expression::Equal(a, b) => {
@@ -2304,7 +2296,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             #[cfg(feature = "sparql-12")]
                             ExpressionTerm::DirLangStringLiteral { language, .. } => language,
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
-                                return None
+                                return None;
                             }
                             #[cfg(feature = "rdf-star")]
                             ExpressionTerm::Triple(_) => return None,
@@ -2359,7 +2351,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 }
                             }
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
-                                return None
+                                return None;
                             }
                             #[cfg(feature = "rdf-star")]
                             ExpressionTerm::Triple(_) => return None,
@@ -2410,7 +2402,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             }
                             ExpressionTerm::OtherTypedLiteral { datatype, .. } => datatype,
                             ExpressionTerm::NamedNode(_) | ExpressionTerm::BlankNode(_) => {
-                                return None
+                                return None;
                             }
                             #[cfg(feature = "rdf-star")]
                             ExpressionTerm::Triple(_) => return None,
@@ -4399,11 +4391,7 @@ fn partial_cmp_literals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Orderi
                 language: lb,
             } = b
             {
-                if la == lb {
-                    va.partial_cmp(vb)
-                } else {
-                    None
-                }
+                if la == lb { va.partial_cmp(vb) } else { None }
             } else {
                 None
             }
@@ -5617,7 +5605,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
     fn get_subject_or_object_identity_pairs_in_graph(
         &self,
         graph_name: Option<&D::InternalTerm>,
-    ) -> impl Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>>
+    ) -> impl Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>> + 'static
     {
         self.dataset
             .internal_quads_for_pattern(None, None, None, Some(graph_name))
@@ -5636,7 +5624,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
             (D::InternalTerm, D::InternalTerm, Option<D::InternalTerm>),
             QueryEvaluationError,
         >,
-    > {
+    > + 'static {
         self.dataset
             .internal_quads_for_pattern(None, None, None, None)
             .flat_map_ok(|t| {
@@ -6320,13 +6308,13 @@ struct FlatMapOk<
 }
 
 impl<
-        T,
-        E,
-        O,
-        I: Iterator<Item = Result<T, E>>,
-        F: FnMut(T) -> U,
-        U: IntoIterator<Item = Result<O, E>>,
-    > Iterator for FlatMapOk<T, E, O, I, F, U>
+    T,
+    E,
+    O,
+    I: Iterator<Item = Result<T, E>>,
+    F: FnMut(T) -> U,
+    U: IntoIterator<Item = Result<O, E>>,
+> Iterator for FlatMapOk<T, E, O, I, F, U>
 {
     type Item = Result<O, E>;
 

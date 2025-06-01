@@ -227,15 +227,19 @@ impl QueryDataset {
     /// ```
     /// use oxigraph::sparql::Query;
     ///
-    /// assert!(Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?
+    /// assert!(
+    ///     Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?
+    ///         .dataset()
+    ///         .is_default_dataset()
+    /// );
+    /// assert!(
+    ///     !Query::parse(
+    ///         "SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }",
+    ///         None
+    ///     )?
     ///     .dataset()
-    ///     .is_default_dataset());
-    /// assert!(!Query::parse(
-    ///     "SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }",
-    ///     None
-    /// )?
-    /// .dataset()
-    /// .is_default_dataset());
+    ///     .is_default_dataset()
+    /// );
     ///
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```

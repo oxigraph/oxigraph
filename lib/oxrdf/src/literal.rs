@@ -4,7 +4,7 @@ use oxilangtag::{LanguageTag, LanguageTagParseError};
 #[cfg(feature = "oxsdatatypes")]
 use oxsdatatypes::*;
 #[cfg(feature = "serde")]
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
@@ -14,8 +14,8 @@ use std::fmt::Write;
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
 /// # use oxilangtag::LanguageTagParseError;
-/// use oxrdf::vocab::xsd;
 /// use oxrdf::Literal;
+/// use oxrdf::vocab::xsd;
 ///
 /// assert_eq!(
 ///     "\"foo\\nbar\"",
@@ -514,8 +514,8 @@ impl From<DayTimeDuration> for Literal {
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation:
 /// ```
-/// use oxrdf::vocab::xsd;
 /// use oxrdf::LiteralRef;
+/// use oxrdf::vocab::xsd;
 ///
 /// assert_eq!(
 ///     "\"foo\\nbar\"",

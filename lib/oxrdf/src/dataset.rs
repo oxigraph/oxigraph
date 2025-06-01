@@ -185,17 +185,17 @@ impl Dataset {
             .map(move |q| self.decode_spog(q))
     }
 
-    fn interned_quads_for_subject(
-        &self,
+    fn interned_quads_for_subject<'a>(
+        &'a self,
         subject: &InternedSubject,
     ) -> impl Iterator<
         Item = (
-            &InternedSubject,
-            &InternedNamedNode,
-            &InternedTerm,
-            &InternedGraphName,
+            &'a InternedSubject,
+            &'a InternedNamedNode,
+            &'a InternedTerm,
+            &'a InternedGraphName,
         ),
-    > + '_ {
+    > + use<'a> {
         self.spog
             .range(
                 &(
@@ -266,17 +266,17 @@ impl Dataset {
             .map(move |q| self.decode_spog(q))
     }
 
-    fn interned_quads_for_object(
-        &self,
+    fn interned_quads_for_object<'a>(
+        &'a self,
         object: &InternedTerm,
     ) -> impl Iterator<
         Item = (
-            &InternedSubject,
-            &InternedNamedNode,
-            &InternedTerm,
-            &InternedGraphName,
+            &'a InternedSubject,
+            &'a InternedNamedNode,
+            &'a InternedTerm,
+            &'a InternedGraphName,
         ),
-    > + '_ {
+    > + use<'a> {
         self.ospg
             .range(
                 &(
@@ -307,17 +307,17 @@ impl Dataset {
             .map(move |q| self.decode_spog(q))
     }
 
-    fn interned_quads_for_graph_name(
-        &self,
+    fn interned_quads_for_graph_name<'a>(
+        &'a self,
         graph_name: &InternedGraphName,
     ) -> impl Iterator<
         Item = (
-            &InternedSubject,
-            &InternedNamedNode,
-            &InternedTerm,
-            &InternedGraphName,
+            &'a InternedSubject,
+            &'a InternedNamedNode,
+            &'a InternedTerm,
+            &'a InternedGraphName,
         ),
-    > + '_ {
+    > + use<'a> {
         self.gspo
             .range(
                 &(
@@ -827,11 +827,7 @@ impl Dataset {
                     a_hashes.sort();
                     let mut b_hashes = a.values().collect::<Vec<_>>();
                     b_hashes.sort();
-                    if a_hashes <= b_hashes {
-                        a
-                    } else {
-                        b
-                    }
+                    if a_hashes <= b_hashes { a } else { b }
                 })
                 .unwrap_or_default()
         } else {
@@ -1048,7 +1044,7 @@ impl<'a> GraphView<'a> {
     pub(super) fn triples_for_interned_subject(
         &self,
         subject: Option<InternedSubject>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = TripleRef<'a>> + use<'a> {
         let subject = subject.unwrap_or_else(InternedSubject::impossible);
         let ds = self.dataset;
         self.dataset
@@ -1088,7 +1084,7 @@ impl<'a> GraphView<'a> {
         &self,
         subject: Option<InternedSubject>,
         predicate: Option<InternedNamedNode>,
-    ) -> impl Iterator<Item = TermRef<'a>> + 'a {
+    ) -> impl Iterator<Item = TermRef<'a>> + use<'a> {
         let subject = subject.unwrap_or_else(InternedSubject::impossible);
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let ds = self.dataset;
@@ -1135,7 +1131,7 @@ impl<'a> GraphView<'a> {
         &self,
         subject: Option<InternedSubject>,
         object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
+    ) -> impl Iterator<Item = NamedNodeRef<'a>> + use<'a> {
         let subject = subject.unwrap_or_else(InternedSubject::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
         let ds = self.dataset;
@@ -1168,7 +1164,7 @@ impl<'a> GraphView<'a> {
     pub(super) fn triples_for_interned_predicate(
         &self,
         predicate: Option<InternedNamedNode>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = TripleRef<'a>> + use<'a> {
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let ds = self.dataset;
         self.dataset
@@ -1205,7 +1201,7 @@ impl<'a> GraphView<'a> {
         &self,
         predicate: Option<InternedNamedNode>,
         object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = SubjectRef<'a>> + 'a {
+    ) -> impl Iterator<Item = SubjectRef<'a>> + use<'a> {
         let predicate = predicate.unwrap_or_else(InternedNamedNode::impossible);
         let object = object.unwrap_or_else(InternedTerm::impossible);
         let ds = self.dataset;
@@ -1246,7 +1242,7 @@ impl<'a> GraphView<'a> {
     pub(super) fn triples_for_interned_object(
         &self,
         object: Option<InternedTerm>,
-    ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
+    ) -> impl Iterator<Item = TripleRef<'a>> + use<'a> {
         let object = object.unwrap_or_else(InternedTerm::impossible);
         let ds = self.dataset;
         self.dataset

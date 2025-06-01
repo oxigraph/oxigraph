@@ -1,10 +1,10 @@
 use crate::model::NamedNode;
+use crate::sparql::QueryDataset;
 use crate::sparql::algebra::Query;
 use crate::sparql::error::EvaluationError;
 use crate::sparql::http::Client;
 use crate::sparql::model::QueryResults;
 use crate::sparql::results::QueryResultsFormat;
-use crate::sparql::QueryDataset;
 use oxiri::Iri;
 use sparesults::{QueryResultsParser, ReaderQueryResultsParserOutput};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QuerySolutionIter};
