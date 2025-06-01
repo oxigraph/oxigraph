@@ -5,6 +5,7 @@ import sys
 import unittest
 
 from pyoxigraph import (
+    BaseDirection,
     BlankNode,
     DefaultGraph,
     Literal,
@@ -19,6 +20,7 @@ XSD_INTEGER = NamedNode("http://www.w3.org/2001/XMLSchema#integer")
 XSD_DOUBLE = NamedNode("http://www.w3.org/2001/XMLSchema#double")
 XSD_BOOLEAN = NamedNode("http://www.w3.org/2001/XMLSchema#boolean")
 RDF_LANG_STRING = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+RDF_DIR_LANG_STRING = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString")
 
 
 def match_works(test: unittest.TestCase, matched_value: str, constraint: str) -> None:
@@ -102,6 +104,11 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(Literal("foo", language="en").language, "en")
         self.assertEqual(Literal("foo", language="en").datatype, RDF_LANG_STRING)
 
+        self.assertEqual(Literal("foo", language="en", direction=BaseDirection.LTR).value, "foo")
+        self.assertEqual(Literal("foo", language="en", direction=BaseDirection.LTR).language, "en")
+        self.assertEqual(Literal("foo", language="en", direction=BaseDirection.LTR).direction, BaseDirection.LTR)
+        self.assertEqual(Literal("foo", language="en", direction=BaseDirection.LTR).datatype, RDF_DIR_LANG_STRING)
+
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).value, "foo")
         self.assertEqual(Literal("foo", datatype=XSD_INTEGER).datatype, XSD_INTEGER)
 
@@ -119,6 +126,7 @@ class TestLiteral(unittest.TestCase):
     def test_string(self) -> None:
         self.assertEqual(str(Literal("foo")), '"foo"')
         self.assertEqual(str(Literal("foo", language="en")), '"foo"@en')
+        self.assertEqual(str(Literal("foo", language="en", direction=BaseDirection.RTL)), '"foo"@en--rtl')
         self.assertEqual(
             str(Literal("foo", datatype=XSD_INTEGER)),
             '"foo"^^<http://www.w3.org/2001/XMLSchema#integer>',
@@ -129,6 +137,10 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(
             Literal("foo", language="en", datatype=RDF_LANG_STRING),
             Literal("foo", language="en"),
+        )
+        self.assertEqual(
+            Literal("foo", language="en", direction=BaseDirection.RTL, datatype=RDF_DIR_LANG_STRING),
+            Literal("foo", language="en", direction=BaseDirection.RTL),
         )
         self.assertNotEqual(NamedNode("http://foo"), Literal("foo"))
         self.assertNotEqual(Literal("foo"), NamedNode("http://foo"))
@@ -146,6 +158,11 @@ class TestLiteral(unittest.TestCase):
         self.assertEqual(copy.copy(lang_tagged), lang_tagged)
         self.assertEqual(copy.deepcopy(lang_tagged), lang_tagged)
 
+        dir_lang_tagged = Literal("foo", language="en", direction=BaseDirection.RTL)
+        self.assertEqual(pickle.loads(pickle.dumps(dir_lang_tagged)), dir_lang_tagged)
+        self.assertEqual(copy.copy(dir_lang_tagged), dir_lang_tagged)
+        self.assertEqual(copy.deepcopy(dir_lang_tagged), dir_lang_tagged)
+
         number = Literal("1", datatype=XSD_INTEGER)
         self.assertEqual(pickle.loads(pickle.dumps(number)), number)
         self.assertEqual(copy.copy(number), number)
@@ -155,13 +172,46 @@ class TestLiteral(unittest.TestCase):
         match_works(self, 'Literal("foo", language="en")', 'Literal("foo", language="en")')
         match_works(
             self,
+            'Literal("foo", language="en", direction=BaseDirection.RTL)',
+            'Literal("foo", language="en", direction=BaseDirection.RTL)',
+        )
+        match_works(
+            self,
             'Literal("1", datatype=XSD_INTEGER)',
             'Literal("1", datatype=NamedNode("http://www.w3.org/2001/XMLSchema#integer"))',
         )
 
     def test_wildcard_match(self) -> None:
         match_works(self, 'Literal("foo", language="en")', "Literal(v, language=l)")
+        match_works(
+            self, 'Literal("foo", language="en", direction=BaseDirection.RTL)', "Literal(v, language=l, direction=d)"
+        )
         match_works(self, 'Literal("1", datatype=XSD_INTEGER)', "Literal(v, datatype=d)")
+
+
+class TestBaseDirection(unittest.TestCase):
+    def test_constructor(self) -> None:
+        self.assertEqual(BaseDirection("ltr"), BaseDirection.LTR)
+        self.assertEqual(BaseDirection("rtl"), BaseDirection.RTL)
+
+    def test_string(self) -> None:
+        self.assertEqual(str(BaseDirection("ltr")), "ltr")
+
+    def test_equal(self) -> None:
+        self.assertEqual(BaseDirection("rtl"), BaseDirection("rtl"))
+        self.assertNotEqual(BaseDirection("rtl"), BaseDirection("ltr"))
+
+    def test_pickle(self) -> None:
+        v = BaseDirection("rtl")
+        self.assertEqual(pickle.loads(pickle.dumps(v)), v)
+        self.assertEqual(copy.copy(v), v)
+        self.assertEqual(copy.deepcopy(v), v)
+
+    def test_basic_match(self) -> None:
+        match_works(self, 'BaseDirection("rtl")', 'BaseDirection("rtl")')
+
+    def test_wildcard_match(self) -> None:
+        match_works(self, 'BaseDirection("rtl")', "BaseDirection(x)")
 
 
 class TestTriple(unittest.TestCase):
