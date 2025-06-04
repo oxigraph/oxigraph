@@ -17,7 +17,7 @@ const TYPESCRIPT_CUSTOM_SECTION: &str = r###"
 /**
  * RDF/JS DataFactory-compatible methods
  */ 
-export function literal(value: string | undefined, languageOrDataType?: string | NamedNode): Literal;
+export function literal(value: string | undefined, languageOrDataType?: string | NamedNode | {language: string, direction?: "ltr" | "rtl"}): Literal;
 export function quad(subject: Quad_Subject, predicate: Quad_Predicate, object: Quad_Object, graph?: Quad_Graph): Quad;
 
 /**
@@ -48,6 +48,7 @@ export class DefaultGraph {
 export class Literal {
     readonly datatype: NamedNode;
     readonly language: string;
+    readonly direction: "ltr" | "rtl" | "";
     readonly termType: "Literal";
     readonly value: string;
 
@@ -156,10 +157,47 @@ pub fn literal(
         )
         .map_err(JsError::from)?
         .into())
-    } else if let JsTerm::NamedNode(datatype) = FROM_JS.with(|c| c.to_term(language_or_datatype))? {
-        Ok(Literal::new_typed_literal(value.unwrap_or_default(), datatype).into())
     } else {
-        Err(format_err!("The literal datatype should be a NamedNode"))
+        let language = Reflect::get(language_or_datatype, &JsValue::from_str("language"))?;
+        if language.is_undefined() {
+            if let JsTerm::NamedNode(datatype) =
+                FROM_JS.with(|c| c.to_term(language_or_datatype))?
+            {
+                Ok(Literal::new_typed_literal(value.unwrap_or_default(), datatype).into())
+            } else {
+                Err(format_err!("The literal datatype should be a NamedNode"))
+            }
+        } else if let Some(direction) =
+            Reflect::get(language_or_datatype, &JsValue::from_str("direction"))?.as_string()
+        {
+            #[cfg(feature = "rdf-12")]
+            {
+                Ok(Literal::new_directional_language_tagged_literal(
+                    value.unwrap_or_default(),
+                    language.as_string().unwrap_or_default(),
+                    match direction.as_str() {
+                        "ltr" => BaseDirection::Ltr,
+                        "rtl" => BaseDirection::Rtl,
+                        dir => return Err(format_err!("Invalid direction: {dir}")),
+                    },
+                )
+                .map_err(JsError::from)?
+                .into())
+            }
+            #[cfg(not(feature = "rdf-12"))]
+            {
+                Err(format_err!(
+                    "RDF 1.2 is not enabled, {direction} direction is not supported"
+                ))
+            }
+        } else {
+            Ok(Literal::new_language_tagged_literal(
+                value.unwrap_or_default(),
+                language.as_string().unwrap_or_default(),
+            )
+            .map_err(JsError::from)?
+            .into())
+        }
     }
 }
 
@@ -369,6 +407,14 @@ impl JsLiteral {
     #[wasm_bindgen(getter)]
     pub fn language(&self) -> String {
         self.inner.language().unwrap_or("").to_owned()
+    }
+
+    #[cfg(feature = "rdf-12")]
+    #[wasm_bindgen(getter)]
+    pub fn direction(&self) -> String {
+        self.inner
+            .direction()
+            .map_or_else(String::new, |d| d.to_string())
     }
 
     #[wasm_bindgen(getter)]
@@ -805,6 +851,8 @@ pub struct FromJsConverter {
     term_type: JsValue,
     value: JsValue,
     language: JsValue,
+    #[cfg(feature = "rdf-12")]
+    direction: JsValue,
     datatype: JsValue,
     subject: JsValue,
     predicate: JsValue,
@@ -818,6 +866,8 @@ impl Default for FromJsConverter {
             term_type: JsValue::from_str("termType"),
             value: JsValue::from_str("value"),
             language: JsValue::from_str("language"),
+            #[cfg(feature = "rdf-12")]
+            direction: JsValue::from_str("direction"),
             datatype: JsValue::from_str("datatype"),
             subject: JsValue::from_str("subject"),
             predicate: JsValue::from_str("predicate"),
@@ -859,6 +909,16 @@ impl FromJsConverter {
                                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" => Literal::new_language_tagged_literal(literal_value, Reflect::get(value, &self.language)?.as_string().ok_or_else(
                                         || format_err!("Literal with rdf:langString datatype should have a language"),
                                     )?).map_err(JsError::from)?,
+                                    #[cfg(feature = "rdf-12")]
+                                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString" => Literal::new_directional_language_tagged_literal(literal_value, Reflect::get(value, &self.language)?.as_string().ok_or_else(
+                                        || format_err!("Literal with rdf:dirLangString datatype should have a language"),
+                                    )?, match Reflect::get(value, &self.direction)?.as_string().ok_or_else(
+                                        || format_err!("Literal with rdf:dirLangString datatype should have a direction"),
+                                    )?.as_str() {
+                                        "ltr" => BaseDirection::Ltr,
+                                        "rtl" => BaseDirection::Rtl,
+                                        dir => return Err(format_err!("Invalid direction: {dir}")),
+                                    }).map_err(JsError::from)?,
                                     _ => Literal::new_typed_literal(literal_value, datatype)
                                 }.into())
                     } else {
