@@ -453,8 +453,8 @@ impl PyLiteral {
     }
 
     #[classattr]
-    fn __match_args__() -> (&'static str, &'static str, &'static str, &'static str) {
-        ("value", "language", "direction", "datatype")
+    fn __match_args__() -> (&'static str,) {
+        ("value",)
     }
 }
 
