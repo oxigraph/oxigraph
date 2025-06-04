@@ -194,19 +194,3 @@ fn sparql12_w3c_testsuite() -> Result<()> {
         ],
     )
 }
-
-#[test]
-fn sparql_star_syntax_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://w3c.github.io/rdf-star/tests/sparql/syntax/manifest.ttl",
-        &[],
-    )
-}
-
-#[test]
-fn sparql_star_eval_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://w3c.github.io/rdf-star/tests/sparql/eval/manifest.ttl",
-        &[],
-    )
-}
