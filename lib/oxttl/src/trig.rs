@@ -1267,7 +1267,7 @@ impl fmt::Display for TurtleTerm<'_> {
             TermRef::Triple(t) => {
                 write!(
                     f,
-                    "<< {} {} {} >>",
+                    "<<( {} {} {} )>>",
                     TurtleTerm {
                         term: t.subject.as_ref().into(),
                         prefixes: self.prefixes,

@@ -87,7 +87,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     #[cfg(feature = "rdf-12")]
-                    N3Token::Punctuation("<<") => {
+                    N3Token::Punctuation("<<(") => {
                         self.stack.push(NQuadsState::AfterQuotedSubject);
                         self.stack.push(NQuadsState::ExpectSubject);
                         self
@@ -155,7 +155,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         self
                     }
                     #[cfg(feature = "rdf-12")]
-                    N3Token::Punctuation("<<") => {
+                    N3Token::Punctuation("<<(") => {
                         self.stack.push(NQuadsState::AfterQuotedObject);
                         self.stack.push(NQuadsState::ExpectSubject);
                         self
@@ -268,7 +268,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                             self.recognize_next(token, context, results, errors)
                         }
                     }
-                } else if token == TokenOrLineJump::Token(N3Token::Punctuation(">>")) {
+                } else if token == TokenOrLineJump::Token(N3Token::Punctuation(")>>")) {
                     self
                 } else {
                     self.error(
@@ -276,7 +276,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                         results,
                         errors,
                         token,
-                        "Expecting the end of a quoted triple '>>'",
+                        "Expecting the end of a quoted triple ')>>'",
                     )
                 }
             }

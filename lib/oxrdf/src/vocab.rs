@@ -41,6 +41,10 @@ pub mod rdf {
     /// The class of RDF properties.
     pub const PROPERTY: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#Property");
+    /// Associate a resource (reifier) with a triple (proposition).
+    #[cfg(feature = "rdf-12")]
+    pub const REIFIES: NamedNodeRef<'_> =
+        NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies");
     /// The rest of the subject RDF list after the first item.
     pub const REST: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest");

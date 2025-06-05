@@ -68,7 +68,13 @@ impl TokenRecognizer for N3Lexer {
     ) -> Option<(usize, Result<N3Token<'a>, TokenRecognizerError>)> {
         match *data.first()? {
             b'<' => match *data.get(1)? {
-                b'<' => Some((2, Ok(N3Token::Punctuation("<<")))),
+                b'<' => {
+                    if *data.get(2)? == b'(' {
+                        Some((3, Ok(N3Token::Punctuation("<<("))))
+                    } else {
+                        Some((2, Ok(N3Token::Punctuation("<<"))))
+                    }
+                }
                 b'=' if self.mode == N3LexerMode::N3 => {
                     if let Some((consumed, result)) = self.recognize_iri(data, options) {
                         Some(if let Ok(result) = result {
@@ -142,7 +148,13 @@ impl TokenRecognizer for N3Lexer {
                 }
             }
             b'(' => Some((1, Ok(N3Token::Punctuation("(")))),
-            b')' => Some((1, Ok(N3Token::Punctuation(")")))),
+            b')' => {
+                if *data.get(1)? == b'>' && *data.get(2)? == b'>' {
+                    Some((3, Ok(N3Token::Punctuation(")>>"))))
+                } else {
+                    Some((1, Ok(N3Token::Punctuation(")"))))
+                }
+            }
             b'[' => Some((1, Ok(N3Token::Punctuation("[")))),
             b']' => Some((1, Ok(N3Token::Punctuation("]")))),
             b'{' => {
@@ -170,6 +182,7 @@ impl TokenRecognizer for N3Lexer {
                     Some((1, Ok(N3Token::Punctuation("="))))
                 }
             }
+            b'~' => Some((1, Ok(N3Token::Punctuation("~")))),
             b'0'..=b'9' | b'+' | b'-' => Self::recognize_number(data, is_ending),
             b'?' => self.recognize_variable(data, is_ending),
             _ => self.recognize_pname_or_keyword(data, is_ending),
