@@ -318,7 +318,7 @@ impl fmt::Display for SubjectRef<'_> {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
             #[cfg(feature = "rdf-12")]
-            Self::Triple(triple) => write!(f, "<<{triple}>>"),
+            Self::Triple(triple) => write!(f, "<<( {triple} )>>"),
         }
     }
 }
@@ -674,7 +674,7 @@ impl fmt::Display for TermRef<'_> {
             Self::Literal(literal) => literal.fmt(f),
             #[cfg(feature = "rdf-12")]
             Self::Triple(triple) => {
-                write!(f, "<<{triple}>>")
+                write!(f, "<<( {triple} )>>")
             }
         }
     }

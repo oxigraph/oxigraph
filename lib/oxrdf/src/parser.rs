@@ -473,16 +473,16 @@ fn read_term(s: &str, number_of_recursive_calls: usize) -> Result<(Term, &str), 
     }
     let s = s.trim();
     #[allow(unused_variables, clippy::allow_attributes)]
-    if let Some(remain) = s.strip_prefix("<<") {
+    if let Some(remain) = s.strip_prefix("<<(") {
         #[cfg(feature = "rdf-12")]
         {
             let (triple, remain) = read_triple(remain, number_of_recursive_calls + 1)?;
             let remain = remain.trim_start();
-            if let Some(remain) = remain.strip_prefix(">>") {
+            if let Some(remain) = remain.strip_prefix(")>>") {
                 Ok((triple.into(), remain))
             } else {
                 Err(TermParseError::msg(
-                    "Nested triple serialization must be enclosed between << and >>",
+                    "Triple term serialization must be enclosed between <<( and )>>",
                 ))
             }
         }
@@ -603,7 +603,7 @@ mod tests {
             NamedNode::new_unchecked("http://example.com/\u{e9}\u{e9}").into()
         );
         assert_eq!(
-            Term::from_str("<< _:s <http://example.com/p> \"o\" >>").unwrap(),
+            Term::from_str("<<( _:s <http://example.com/p> \"o\" )>>").unwrap(),
             Triple::new(
                 BlankNode::new("s").unwrap(),
                 NamedNode::new("http://example.com/p").unwrap(),

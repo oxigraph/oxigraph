@@ -87,6 +87,9 @@ pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
         "http://www.w3.org/ns/rdftest#TestNTriplesPositiveC14N",
         |t| evaluate_positive_c14n_test(t, RdfFormat::NTriples),
     );
+    evaluator.register("http://www.w3.org/ns/rdftest#TestNQuadsPositiveC14N", |t| {
+        evaluate_positive_c14n_test(t, RdfFormat::NQuads)
+    });
     evaluator.register(
         "https://w3c.github.io/rdf-canon/tests/vocab#RDFC10EvalTest",
         |t| evaluate_positive_syntax_test(t, RdfFormat::NQuads), //TODO: not a proper implementation!
