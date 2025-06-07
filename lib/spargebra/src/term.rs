@@ -22,7 +22,7 @@ impl fmt::Display for GroundSubject {
             #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(
                 f,
-                "<<{} {} {}>>",
+                "<<( {} {} {} )>>",
                 triple.subject, triple.predicate, triple.object
             ),
         }
@@ -102,7 +102,7 @@ impl fmt::Display for GroundTerm {
             #[cfg(feature = "sparql-12")]
             Self::Triple(triple) => write!(
                 f,
-                "<<{} {} {}>>",
+                "<<( {} {} {} )>>",
                 triple.subject, triple.predicate, triple.object
             ),
         }
@@ -500,7 +500,7 @@ impl fmt::Display for TermPattern {
             Self::BlankNode(term) => term.fmt(f),
             Self::Literal(term) => term.fmt(f),
             #[cfg(feature = "sparql-12")]
-            Self::Triple(triple) => write!(f, "<<{triple}>>"),
+            Self::Triple(triple) => write!(f, "<<( {triple} )>>"),
             Self::Variable(var) => var.fmt(f),
         }
     }
@@ -650,7 +650,7 @@ impl fmt::Display for GroundTermPattern {
             Self::Literal(term) => term.fmt(f),
             Self::Variable(var) => var.fmt(f),
             #[cfg(feature = "sparql-12")]
-            Self::Triple(triple) => write!(f, "<<{triple}>>"),
+            Self::Triple(triple) => write!(f, "<<( {triple} )>>"),
         }
     }
 }

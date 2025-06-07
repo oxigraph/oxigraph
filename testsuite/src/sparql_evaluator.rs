@@ -48,8 +48,16 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
         evaluate_evaluation_test,
     );
     evaluator.register(
+        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#PositiveUpdateSyntaxTest",
+        evaluate_positive_update_syntax_test,
+    );
+    evaluator.register(
         "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#PositiveUpdateSyntaxTest11",
         evaluate_positive_update_syntax_test,
+    );
+    evaluator.register(
+        "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#NegativeUpdateSyntaxTest",
+        evaluate_negative_update_syntax_test,
     );
     evaluator.register(
         "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#NegativeUpdateSyntaxTest11",
