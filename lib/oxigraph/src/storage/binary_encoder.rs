@@ -9,8 +9,6 @@ use std::mem::size_of;
 #[cfg(feature = "rdf-12")]
 use std::sync::Arc;
 
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-pub const LATEST_STORAGE_VERSION: u64 = 1;
 pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash>();
 
 // Encoded term type blocks
@@ -51,7 +49,9 @@ const TYPE_DURATION_LITERAL: u8 = 42;
 const TYPE_YEAR_MONTH_DURATION_LITERAL: u8 = 43;
 const TYPE_DAY_TIME_DURATION_LITERAL: u8 = 44;
 #[cfg(feature = "rdf-12")]
-const TYPE_TRIPLE: u8 = 48;
+pub const TYPE_STAR_TRIPLE: u8 = 48;
+#[cfg(feature = "rdf-12")]
+const TYPE_TRIPLE: u8 = 49;
 #[cfg(feature = "rdf-12")]
 const TYPE_LTR_SMALL_SMALL_DIR_LANG_STRING_LITERAL: u8 = 56;
 #[cfg(feature = "rdf-12")]
@@ -517,7 +517,7 @@ impl<R: Read> TermReader for R {
                 ))
             }
             #[cfg(feature = "rdf-12")]
-            TYPE_TRIPLE => Ok(EncodedTerm::Triple(Arc::new(EncodedTriple {
+            TYPE_TRIPLE | TYPE_STAR_TRIPLE => Ok(EncodedTerm::Triple(Arc::new(EncodedTriple {
                 subject: self.read_term()?,
                 predicate: self.read_term()?,
                 object: self.read_term()?,

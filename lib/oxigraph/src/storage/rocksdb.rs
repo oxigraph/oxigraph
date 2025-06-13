@@ -1,6 +1,9 @@
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
+use crate::model::vocab::rdf;
+use crate::model::{
+    BlankNode, GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, Subject, Term, TermRef, Triple,
+};
 use crate::storage::binary_encoder::{
-    LATEST_STORAGE_VERSION, QuadEncoding, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
+    QuadEncoding, TYPE_STAR_TRIPLE, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
     encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad, write_gpos_quad,
     write_gspo_quad, write_osp_quad, write_ospg_quad, write_pos_quad, write_posg_quad,
     write_spo_quad, write_spog_quad, write_term,
@@ -13,14 +16,16 @@ use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
 };
 use rustc_hash::{FxBuildHasher, FxHashSet};
+use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;
-use std::hash::BuildHasherDefault;
+use std::hash::{BuildHasherDefault, Hash};
 use std::mem::{swap, take};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{io, thread};
 
+const LATEST_STORAGE_VERSION: u64 = 2;
 const ID2STR_CF: &str = "id2str";
 const SPOG_CF: &str = "spog";
 const POSG_CF: &str = "posg";
@@ -176,6 +181,65 @@ impl RocksDbStorage {
             self.db
                 .insert_stt_files(&[(&self.graphs_cf, stt_file.finish()?)])?;
             version = 1;
+            self.update_version(version)?;
+        }
+        if version == 1 {
+            // We migrate to v2
+            fn to_rdf12_reified_triple(
+                mut quad: Quad,
+                w: &mut RocksDbStorageWriter<'_>,
+            ) -> Result<BlankNode, StorageError> {
+                if let Subject::Triple(t) = quad.subject {
+                    quad.subject =
+                        to_rdf12_reified_triple((*t).in_graph(quad.graph_name.clone()), w)?.into();
+                }
+                if let Term::Triple(t) = quad.object {
+                    quad.object =
+                        to_rdf12_reified_triple((*t).in_graph(quad.graph_name.clone()), w)?.into();
+                }
+                // We hash the triple
+                let triple = Triple::new(quad.subject, quad.predicate, quad.object);
+                let mut hasher = SipHasher24::new();
+                triple.hash(&mut hasher);
+                let reifier = BlankNode::new_from_unique_id(hasher.finish128().as_u128());
+                w.insert(QuadRef::new(
+                    reifier.as_ref(),
+                    rdf::REIFIES,
+                    &Term::from(triple),
+                    &quad.graph_name,
+                ))?;
+                Ok(reifier)
+            }
+
+            let snapshot = self.snapshot();
+            for quad in snapshot
+                .dspo_quads(&[TYPE_STAR_TRIPLE])
+                .chain(snapshot.spog_quads(&[TYPE_STAR_TRIPLE]))
+                .chain(snapshot.dosp_quads(&[TYPE_STAR_TRIPLE]))
+                .chain(snapshot.ospg_quads(&[TYPE_STAR_TRIPLE]))
+            {
+                let quad = snapshot.decode_quad(&quad?)?;
+                self.transaction(move |mut w| {
+                    let mut new_quad = quad.clone();
+                    if let Subject::Triple(t) = new_quad.subject {
+                        new_quad.subject = to_rdf12_reified_triple(
+                            (*t).clone().in_graph(quad.graph_name.clone()),
+                            &mut w,
+                        )?
+                        .into();
+                    }
+                    if let Term::Triple(t) = new_quad.object {
+                        new_quad.object = to_rdf12_reified_triple(
+                            (*t).in_graph(quad.graph_name.clone()),
+                            &mut w,
+                        )?
+                        .into();
+                    }
+                    w.insert(new_quad.as_ref())?;
+                    w.remove(quad.as_ref())
+                })?;
+            }
+            version = 2;
             self.update_version(version)?;
         }
 

@@ -439,6 +439,47 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", feature = "rocksdb", feature = "rdf-12"))]
+fn test_rdf_star_backward_compatibility() -> Result<(), Box<dyn Error>> {
+    // We run twice to check if data is properly saved and closed
+    let s = NamedNodeRef::new_unchecked("http://example.com/s");
+    let p = NamedNodeRef::new_unchecked("http://example.com/p");
+    let o = NamedNodeRef::new_unchecked("http://example.com/o");
+    let g = NamedNodeRef::new_unchecked("http://example.com/g");
+    let bnode = BlankNodeRef::new_unchecked("f2fef82410957224105241225fd0a648");
+    for _ in 0..2 {
+        let store = Store::open("tests/rocksdb_bc_rdf_star_data")?;
+        assert!(store.contains(QuadRef::new(s, p, o, g))?);
+        assert!(store.contains(QuadRef::new(s, p, o, GraphNameRef::DefaultGraph))?);
+        // panic!(
+        // "{:?}",
+        // store
+        // .iter()
+        // .map(|q| q.map(|q| q.to_string()))
+        // .collect::<Result<Vec<_>, _>>()?
+        // );
+        assert!(store.contains(QuadRef::new(bnode, p, o, g))?);
+        assert!(store.contains(QuadRef::new(bnode, p, o, GraphNameRef::DefaultGraph))?);
+        assert!(store.contains(QuadRef::new(s, p, bnode, g))?);
+        assert!(store.contains(QuadRef::new(s, p, bnode, GraphNameRef::DefaultGraph))?);
+        assert!(store.contains(QuadRef::new(
+            bnode,
+            rdf::REIFIES,
+            &Term::from(Triple::new(s, p, o)),
+            g
+        ))?);
+        assert!(store.contains(QuadRef::new(
+            bnode,
+            rdf::REIFIES,
+            &Term::from(Triple::new(s, p, o)),
+            GraphNameRef::DefaultGraph
+        ))?);
+    }
+    reset_dir("tests/rocksdb_bc_data")?;
+    Ok(())
+}
+
+#[test]
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 fn test_read_only() -> Result<(), Box<dyn Error>> {
     let s = NamedNodeRef::new_unchecked("http://example.com/s");
