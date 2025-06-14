@@ -404,8 +404,6 @@ impl From<GroundSubject> for Expression {
     fn from(value: GroundSubject) -> Self {
         match value {
             GroundSubject::NamedNode(value) => value.into(),
-            #[cfg(feature = "sparql-12")]
-            GroundSubject::Triple(value) => (*value).into(),
         }
     }
 }

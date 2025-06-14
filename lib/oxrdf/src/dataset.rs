@@ -584,10 +584,6 @@ impl Dataset {
             if let InternedSubject::BlankNode(bnode) = s {
                 bnodes.insert(*bnode);
             }
-            #[cfg(feature = "rdf-12")]
-            if let InternedSubject::Triple(triple) = s {
-                Self::triple_blank_nodes(triple, &mut bnodes);
-            }
             if let InternedTerm::BlankNode(bnode) = o {
                 bnodes.insert(*bnode);
             }
@@ -606,8 +602,6 @@ impl Dataset {
     fn triple_blank_nodes(triple: &InternedTriple, bnodes: &mut HashSet<InternedBlankNode>) {
         if let InternedSubject::BlankNode(bnode) = &triple.subject {
             bnodes.insert(*bnode);
-        } else if let InternedSubject::Triple(t) = &triple.subject {
-            Self::triple_blank_nodes(t, bnodes);
         }
         if let InternedTerm::BlankNode(bnode) = &triple.object {
             bnodes.insert(*bnode);
@@ -621,10 +615,6 @@ impl Dataset {
         for quad in &self.spog {
             if let InternedSubject::BlankNode(bnode) = &quad.0 {
                 map.entry(*bnode).or_default().push(quad.clone());
-            }
-            #[cfg(feature = "rdf-12")]
-            if let InternedSubject::Triple(t) = &quad.0 {
-                Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, &mut map);
             }
             if let InternedTerm::BlankNode(bnode) = &quad.2 {
                 map.entry(*bnode).or_default().push(quad.clone());
@@ -653,9 +643,6 @@ impl Dataset {
     ) {
         if let InternedSubject::BlankNode(bnode) = &triple.subject {
             map.entry(*bnode).or_default().push(quad.clone());
-        }
-        if let InternedSubject::Triple(t) = &triple.subject {
-            Self::add_quad_with_quoted_triple_to_quad_per_blank_nodes_map(quad, t, map);
         }
         if let InternedTerm::BlankNode(bnode) = &triple.object {
             map.entry(*bnode).or_default().push(quad.clone());
@@ -741,10 +728,6 @@ impl Dataset {
             InternedSubject::NamedNode(node) => Self::hash_tuple(node.decode_from(&self.interner)),
             InternedSubject::BlankNode(bnode) => {
                 Self::hash_blank_node(*bnode, current_blank_node, bnodes_hash)
-            }
-            #[cfg(feature = "rdf-12")]
-            InternedSubject::Triple(triple) => {
-                self.hash_triple(triple, current_blank_node, bnodes_hash)
             }
         }
     }
@@ -858,13 +841,6 @@ impl Dataset {
                                 &mut self.interner,
                             ))
                         }
-                        #[cfg(feature = "rdf-12")]
-                        InternedSubject::Triple(triple) => {
-                            InternedSubject::Triple(Box::new(InternedTriple::encoded_into(
-                                self.map_triple_blank_nodes(&triple, bnode_mapping).as_ref(),
-                                &mut self.interner,
-                            )))
-                        }
                     },
                     p,
                     match o {
@@ -906,8 +882,6 @@ impl Dataset {
         Triple {
             subject: if let InternedSubject::BlankNode(bnode) = &triple.subject {
                 bnode_mapping[bnode].clone().into()
-            } else if let InternedSubject::Triple(t) = &triple.subject {
-                self.map_triple_blank_nodes(t, bnode_mapping).into()
             } else {
                 triple.subject.decode_from(&self.interner).into_owned()
             },

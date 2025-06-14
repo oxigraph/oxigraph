@@ -27,11 +27,11 @@ describe("Store", () => {
     });
 
     describe("#delete()", () => {
-        it("an removed quad should not be in the store anymore", () => {
-            const store = new Store([dataModel.quad(triple, ex, ex)]);
-            assert(store.has(dataModel.quad(triple, ex, ex)));
-            store.delete(dataModel.quad(triple, ex, ex));
-            assert(!store.has(dataModel.quad(triple, ex, ex)));
+        it("a removed quad should not be in the store anymore", () => {
+            const store = new Store([dataModel.quad(ex, ex, triple, ex)]);
+            assert(store.has(dataModel.quad(ex, ex, triple, ex)));
+            store.delete(dataModel.quad(ex, ex, triple, ex));
+            assert(!store.has(dataModel.quad(ex, ex, triple, ex)));
         });
     });
 

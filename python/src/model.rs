@@ -638,8 +638,6 @@ impl From<NamedOrBlankNode> for PyNamedOrBlankNode {
 pub enum PySubject {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
-    #[cfg(feature = "rdf-12")]
-    Triple(PyTriple),
 }
 
 impl From<PySubject> for Subject {
@@ -647,8 +645,6 @@ impl From<PySubject> for Subject {
         match node {
             PySubject::NamedNode(node) => node.into(),
             PySubject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-12")]
-            PySubject::Triple(triple) => triple.into(),
         }
     }
 }
@@ -658,8 +654,6 @@ impl From<Subject> for PySubject {
         match node {
             Subject::NamedNode(node) => Self::NamedNode(node.into()),
             Subject::BlankNode(node) => Self::BlankNode(node.into()),
-            #[cfg(feature = "rdf-12")]
-            Subject::Triple(triple) => Self::Triple(triple.as_ref().clone().into()),
         }
     }
 }
@@ -735,13 +729,6 @@ impl From<PyTriple> for Triple {
 impl<'a> From<&'a PyTriple> for TripleRef<'a> {
     fn from(triple: &'a PyTriple) -> Self {
         triple.inner.as_ref()
-    }
-}
-
-#[cfg(feature = "rdf-12")]
-impl From<PyTriple> for Subject {
-    fn from(triple: PyTriple) -> Self {
-        triple.inner.into()
     }
 }
 
@@ -1177,8 +1164,6 @@ impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
 pub enum PySubjectRef<'a> {
     NamedNode(PyRef<'a, PyNamedNode>),
     BlankNode(PyRef<'a, PyBlankNode>),
-    #[cfg(feature = "rdf-12")]
-    Triple(PyRef<'a, PyTriple>),
 }
 
 impl<'a> From<&'a PySubjectRef<'a>> for SubjectRef<'a> {
@@ -1186,8 +1171,6 @@ impl<'a> From<&'a PySubjectRef<'a>> for SubjectRef<'a> {
         match value {
             PySubjectRef::NamedNode(value) => value.inner.as_ref().into(),
             PySubjectRef::BlankNode(value) => value.inner.as_ref().into(),
-            #[cfg(feature = "rdf-12")]
-            PySubjectRef::Triple(value) => (&value.inner).into(),
         }
     }
 }

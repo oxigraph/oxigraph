@@ -1,7 +1,5 @@
 #[cfg(feature = "rdf-12")]
 use crate::BaseDirection;
-#[cfg(feature = "rdf-12")]
-use crate::Subject;
 use crate::vocab::xsd;
 use crate::{
     BlankNode, BlankNodeIdParseError, GraphName, IriParseError, LanguageTagParseError, Literal,
@@ -521,7 +519,11 @@ fn read_triple(
                     ));
                 }
                 #[cfg(feature = "rdf-12")]
-                Term::Triple(s) => Subject::Triple(s),
+                Term::Triple(_) => {
+                    return Err(TermParseError::msg(
+                        "Triple terms are not allowed in subject position",
+                    ));
+                }
             },
             predicate,
             object,

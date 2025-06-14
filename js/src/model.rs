@@ -666,8 +666,6 @@ impl From<Subject> for JsTerm {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-12")]
-            Subject::Triple(node) => node.into(),
         }
     }
 }
@@ -787,7 +785,10 @@ impl TryFrom<JsTerm> for Subject {
                 variable.inner
             )),
             #[cfg(feature = "rdf-12")]
-            JsTerm::Quad(quad) => Ok(Triple::from(quad).into()),
+            JsTerm::Quad(quad) => Err(format_err!(
+                "The triple term <<( {} )>> is not a possible RDF subject",
+                quad.inner
+            )),
             #[cfg(not(feature = "rdf-12"))]
             JsTerm::Quad(quad) => Err(format_err!(
                 "The quad {} is not a possible RDF subject",

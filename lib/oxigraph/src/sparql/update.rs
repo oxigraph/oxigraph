@@ -249,8 +249,6 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             subject: match &quad.subject {
                 Subject::NamedNode(subject) => subject.clone().into(),
                 Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
-                #[cfg(feature = "rdf-12")]
-                Subject::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
             predicate: quad.predicate.clone(),
             object: match &quad.object {
@@ -273,8 +271,6 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             subject: match &triple.subject {
                 Subject::NamedNode(subject) => subject.clone().into(),
                 Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
-                #[cfg(feature = "rdf-12")]
-                Subject::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
             },
             predicate: triple.predicate.clone(),
             object: match &triple.object {
@@ -298,8 +294,6 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         OxQuad {
             subject: match &quad.subject {
                 GroundSubject::NamedNode(subject) => subject.clone().into(),
-                #[cfg(feature = "rdf-12")]
-                GroundSubject::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
             predicate: quad.predicate.clone(),
             object: match &quad.object {
@@ -320,8 +314,6 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         Triple {
             subject: match &triple.subject {
                 GroundSubject::NamedNode(subject) => subject.clone().into(),
-                #[cfg(feature = "rdf-12")]
-                GroundSubject::Triple(subject) => Self::convert_ground_triple(subject).into(),
             },
             predicate: triple.predicate.clone(),
             object: match &triple.object {
@@ -343,7 +335,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
                 #[cfg(feature = "rdf-12")]
-                Term::Triple(triple) => triple.into(),
+                Term::Triple(_) => return None,
                 Term::Literal(_) => return None,
             },
             predicate: Self::fill_named_node_or_var(&quad.predicate, solution)?,
@@ -413,7 +405,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
                 #[cfg(feature = "rdf-12")]
-                Term::Triple(triple) => triple.into(),
+                Term::Triple(_) => return None,
                 Term::Literal(_) => return None,
             },
             predicate: Self::fill_named_node_or_var(&triple.predicate, solution)?,
@@ -429,7 +421,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
                 #[cfg(feature = "rdf-12")]
-                Term::Triple(triple) => triple.into(),
+                Term::Triple(_) => return None,
                 Term::Literal(_) => return None,
             },
             predicate: Self::fill_named_node_or_var(&quad.predicate, solution)?,
@@ -460,7 +452,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Term::NamedNode(node) => node.into(),
                 Term::BlankNode(node) => node.into(),
                 #[cfg(feature = "rdf-12")]
-                Term::Triple(triple) => triple.into(),
+                Term::Triple(_) => return None,
                 Term::Literal(_) => return None,
             },
             predicate: Self::fill_named_node_or_var(&triple.predicate, solution)?,

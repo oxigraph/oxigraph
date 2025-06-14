@@ -645,8 +645,6 @@ impl From<SubjectRef<'_>> for EncodedTerm {
         match term {
             SubjectRef::NamedNode(named_node) => named_node.into(),
             SubjectRef::BlankNode(blank_node) => blank_node.into(),
-            #[cfg(feature = "rdf-12")]
-            SubjectRef::Triple(triple) => triple.as_ref().into(),
         }
     }
 }
@@ -949,7 +947,10 @@ pub trait Decoder: StrLookup {
             )
             .into()),
             #[cfg(feature = "rdf-12")]
-            Term::Triple(triple) => Ok(Subject::Triple(triple)),
+            Term::Triple(_) => Err(CorruptionError::msg(
+                "A triple term has been found instead of a subject node",
+            )
+            .into()),
         }
     }
 

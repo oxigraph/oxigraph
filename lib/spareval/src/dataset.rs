@@ -145,7 +145,7 @@ impl QueryableDataset for Dataset {
                 TermRef::BlankNode(s) => s.into(),
                 TermRef::Literal(_) => return Box::new(empty()),
                 #[cfg(feature = "sparql-12")]
-                TermRef::Triple(s) => s.into(),
+                TermRef::Triple(_) => return Box::new(empty()),
             })
         } else {
             None
@@ -652,7 +652,6 @@ impl ExpressionTriple {
             subject: match subject {
                 ExpressionTerm::NamedNode(s) => ExpressionSubject::NamedNode(s),
                 ExpressionTerm::BlankNode(s) => ExpressionSubject::BlankNode(s),
-                ExpressionTerm::Triple(s) => ExpressionSubject::Triple(s),
                 _ => return None,
             },
             predicate: if let ExpressionTerm::NamedNode(p) = predicate {
@@ -670,7 +669,6 @@ impl ExpressionTriple {
 pub enum ExpressionSubject {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
-    Triple(Box<ExpressionTriple>),
 }
 
 #[cfg(feature = "sparql-12")]
@@ -680,7 +678,6 @@ impl From<ExpressionSubject> for ExpressionTerm {
         match subject {
             ExpressionSubject::NamedNode(s) => Self::NamedNode(s),
             ExpressionSubject::BlankNode(s) => Self::BlankNode(s),
-            ExpressionSubject::Triple(s) => Self::Triple(s),
         }
     }
 }
@@ -692,7 +689,6 @@ impl From<ExpressionSubject> for Subject {
         match subject {
             ExpressionSubject::NamedNode(s) => s.into(),
             ExpressionSubject::BlankNode(s) => s.into(),
-            ExpressionSubject::Triple(s) => Triple::from(*s).into(),
         }
     }
 }
@@ -704,7 +700,6 @@ impl From<Subject> for ExpressionSubject {
         match subject {
             Subject::NamedNode(s) => Self::NamedNode(s),
             Subject::BlankNode(s) => Self::BlankNode(s),
-            Subject::Triple(s) => ExpressionSubject::Triple(Box::new(ExpressionTriple::from(*s))),
         }
     }
 }

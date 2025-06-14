@@ -10,8 +10,6 @@ use std::fmt::Write;
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum GroundSubject {
     NamedNode(NamedNode),
-    #[cfg(feature = "sparql-12")]
-    Triple(Box<GroundTriple>),
 }
 
 impl fmt::Display for GroundSubject {
@@ -19,12 +17,6 @@ impl fmt::Display for GroundSubject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => node.fmt(f),
-            #[cfg(feature = "sparql-12")]
-            Self::Triple(triple) => write!(
-                f,
-                "<<( {} {} {} )>>",
-                triple.subject, triple.predicate, triple.object
-            ),
         }
     }
 }
@@ -36,14 +28,6 @@ impl From<NamedNode> for GroundSubject {
     }
 }
 
-#[cfg(feature = "sparql-12")]
-impl From<GroundTriple> for GroundSubject {
-    #[inline]
-    fn from(triple: GroundTriple) -> Self {
-        Self::Triple(Box::new(triple))
-    }
-}
-
 impl TryFrom<Subject> for GroundSubject {
     type Error = ();
 
@@ -52,8 +36,6 @@ impl TryFrom<Subject> for GroundSubject {
         match subject {
             Subject::NamedNode(t) => Ok(t.into()),
             Subject::BlankNode(_) => Err(()),
-            #[cfg(feature = "sparql-12")]
-            Subject::Triple(t) => Ok(GroundTriple::try_from(*t)?.into()),
         }
     }
 }
@@ -62,8 +44,6 @@ impl From<GroundSubject> for Subject {
     fn from(subject: GroundSubject) -> Self {
         match subject {
             GroundSubject::NamedNode(t) => t.into(),
-            #[cfg(feature = "sparql-12")]
-            GroundSubject::Triple(t) => Triple::from(*t).into(),
         }
     }
 }
@@ -77,7 +57,7 @@ impl TryFrom<GroundTerm> for GroundSubject {
             GroundTerm::NamedNode(t) => Ok(t.into()),
             GroundTerm::Literal(_) => Err(()),
             #[cfg(feature = "sparql-12")]
-            GroundTerm::Triple(t) => Ok((*t).into()),
+            GroundTerm::Triple(_) => Err(()),
         }
     }
 }
@@ -547,8 +527,6 @@ impl From<Subject> for TermPattern {
         match subject {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "sparql-12")]
-            Subject::Triple(t) => TriplePattern::from(*t).into(),
         }
     }
 }
@@ -598,7 +576,7 @@ impl TryFrom<TermPattern> for Subject {
             TermPattern::NamedNode(t) => Ok(t.into()),
             TermPattern::BlankNode(t) => Ok(t.into()),
             #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(t) => Ok(Triple::try_from(*t)?.into()),
+            TermPattern::Triple(_) => Err(()),
             TermPattern::Literal(_) | TermPattern::Variable(_) => Err(()),
         }
     }
@@ -689,8 +667,6 @@ impl From<GroundSubject> for GroundTermPattern {
     fn from(term: GroundSubject) -> Self {
         match term {
             GroundSubject::NamedNode(node) => node.into(),
-            #[cfg(feature = "sparql-12")]
-            GroundSubject::Triple(triple) => GroundTriplePattern::from(*triple).into(),
         }
     }
 }

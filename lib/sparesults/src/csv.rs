@@ -335,13 +335,13 @@ fn write_tsv_term<'a>(output: &mut String, term: impl Into<TermRef<'a>>) {
         }
         #[cfg(feature = "sparql-12")]
         TermRef::Triple(triple) => {
-            output.push_str("<< ");
+            output.push_str("<<( ");
             write_tsv_term(output, &triple.subject);
             output.push(' ');
             write_tsv_term(output, &triple.predicate);
             output.push(' ');
             write_tsv_term(output, &triple.object);
-            output.push_str(" >>");
+            output.push_str(" )>>");
         }
     }
 }
@@ -959,6 +959,7 @@ mod tests {
             "?p\n_:",
             "?p\n\"",
             "?p\n<<",
+            "?p\n<<(",
             "?p\n1\t2\n",
             "?p\n\n",
         ];

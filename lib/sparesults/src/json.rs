@@ -932,12 +932,12 @@ impl JsonInnerTermReader {
                     self.state = JsonInnerTermReaderState::Start;
                     match self.term_type.take() {
                         None => Err(QueryResultsSyntaxError::msg(
-                            "Term serialization should have a 'type' key",
+                            "Term serialization must have a 'type' key",
                         )),
                         Some(TermType::Uri) => Ok(Some(
                             NamedNode::new(self.value.take().ok_or_else(|| {
                                 QueryResultsSyntaxError::msg(
-                                    "uri serialization should have a 'value' key",
+                                    "uri serialization must have a 'value' key",
                                 )
                             })?)
                             .map_err(|e| {
@@ -948,7 +948,7 @@ impl JsonInnerTermReader {
                         Some(TermType::BNode) => Ok(Some(
                             BlankNode::new(self.value.take().ok_or_else(|| {
                                 QueryResultsSyntaxError::msg(
-                                    "bnode serialization should have a 'value' key",
+                                    "bnode serialization must have a 'value' key",
                                 )
                             })?)
                             .map_err(|e| {
@@ -959,7 +959,7 @@ impl JsonInnerTermReader {
                         Some(TermType::Literal) => {
                             let value = self.value.take().ok_or_else(|| {
                                 QueryResultsSyntaxError::msg(
-                                    "literal serialization should have a 'value' key",
+                                    "literal serialization must have a 'value' key",
                                 )
                             })?;
                             Ok(Some(if let Some(lang) = self.lang.take() {
@@ -1018,33 +1018,38 @@ impl JsonInnerTermReader {
                             Triple::new(
                                 match self.subject.take().ok_or_else(|| {
                                     QueryResultsSyntaxError::msg(
-                                        "triple serialization should have a 'subject' key",
+                                        "triple serialization must have a 'subject' key",
                                     )
                                 })? {
-                                    Term::NamedNode(subject) => subject.into(),
-                                    Term::BlankNode(subject) => subject.into(),
-                                    Term::Triple(subject) => Subject::Triple(subject),
+                                    Term::NamedNode(subject) => NamedOrBlankNode::from(subject),
+                                    Term::BlankNode(subject) => NamedOrBlankNode::from(subject),
+                                    Term::Triple(_) => {
+                                        return Err(QueryResultsSyntaxError::msg(
+                                            "The 'subject' value cannot be a triple term",
+                                        ));
+                                    }
                                     Term::Literal(_) => {
                                         return Err(QueryResultsSyntaxError::msg(
-                                            "The 'subject' value should not be a literal",
+                                            "The 'subject' value cannot be a literal",
                                         ));
                                     }
                                 },
-                                match self.predicate.take().ok_or_else(|| {
-                                    QueryResultsSyntaxError::msg(
-                                        "triple serialization should have a 'predicate' key",
-                                    )
-                                })? {
-                                    Term::NamedNode(predicate) => predicate,
-                                    _ => {
-                                        return Err(QueryResultsSyntaxError::msg(
-                                            "The 'predicate' value should be a uri",
-                                        ));
-                                    }
+                                if let Term::NamedNode(predicate) =
+                                    self.predicate.take().ok_or_else(|| {
+                                        QueryResultsSyntaxError::msg(
+                                            "triple serialization must have a 'predicate' key",
+                                        )
+                                    })?
+                                {
+                                    predicate
+                                } else {
+                                    return Err(QueryResultsSyntaxError::msg(
+                                        "The 'predicate' value must be a uri",
+                                    ));
                                 },
                                 self.object.take().ok_or_else(|| {
                                     QueryResultsSyntaxError::msg(
-                                        "triple serialization should have a 'object' key",
+                                        "triple serialization must have a 'object' key",
                                     )
                                 })?,
                             )
