@@ -7,7 +7,7 @@ use spargebra::algebra::{
     GraphPattern as AlGraphPattern, OrderExpression as AlOrderExpression,
 };
 pub use spargebra::algebra::{Function, PropertyPathExpression};
-use spargebra::term::{BlankNode, GroundSubject, TermPattern, TriplePattern};
+use spargebra::term::{BlankNode, TermPattern, TriplePattern};
 pub use spargebra::term::{
     GroundTerm, GroundTermPattern, Literal, NamedNode, NamedNodePattern, Variable,
 };
@@ -397,14 +397,6 @@ impl From<NamedNode> for Expression {
 impl From<Literal> for Expression {
     fn from(value: Literal) -> Self {
         Self::Literal(value)
-    }
-}
-
-impl From<GroundSubject> for Expression {
-    fn from(value: GroundSubject) -> Self {
-        match value {
-            GroundSubject::NamedNode(value) => value.into(),
-        }
     }
 }
 
