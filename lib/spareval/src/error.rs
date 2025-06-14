@@ -28,7 +28,7 @@ pub enum QueryEvaluationError {
     #[error("The service {0} is not supported")]
     UnsupportedService(NamedNode),
     #[cfg(feature = "sparql-12")]
-    #[error("The storage provided a triple term that is not a valid RDF 1.2 term")]
+    #[error("The SPARQL dataset returned a triple term that is not a valid RDF 1.2 term")]
     InvalidStorageTripleTerm,
 }
 
