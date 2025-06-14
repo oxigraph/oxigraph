@@ -1,11 +1,14 @@
+#[cfg(feature = "http-client")]
 use crate::io::{RdfFormat, RdfParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
 use crate::sparql::algebra::QueryDataset;
 use crate::sparql::dataset::DatasetView;
+#[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
 use crate::storage::StorageWriter;
 use oxiri::Iri;
+#[cfg(feature = "http-client")]
 use oxrdfio::LoadedDocument;
 use rustc_hash::FxHashMap;
 use sparesults::QuerySolution;
@@ -19,7 +22,7 @@ use spargebra::term::{
 #[cfg(feature = "rdf-12")]
 use spargebra::term::{GroundTriple, GroundTriplePattern, Triple, TriplePattern};
 use spargebra::{GraphUpdateOperation, Query};
-use std::io;
+#[cfg(feature = "http-client")]
 use std::io::Read;
 
 pub fn evaluate_update<'a, 'b: 'a>(
@@ -31,6 +34,7 @@ pub fn evaluate_update<'a, 'b: 'a>(
         transaction,
         base_iri: update.inner.base_iri.clone(),
         query_evaluator: options.query_options.clone().into_evaluator(),
+        #[cfg(feature = "http-client")]
         client: Client::new(
             options.query_options.http_timeout,
             options.query_options.http_redirection_limit,
@@ -43,6 +47,7 @@ struct SimpleUpdateEvaluator<'a, 'b> {
     transaction: &'a mut StorageWriter<'b>,
     base_iri: Option<Iri<String>>,
     query_evaluator: QueryEvaluator,
+    #[cfg(feature = "http-client")]
     client: Client,
 }
 
@@ -148,6 +153,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         Ok(())
     }
 
+    #[cfg(feature = "http-client")]
     fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), EvaluationError> {
         let (content_type, body) = self
             .client
@@ -168,12 +174,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             .without_named_graphs()
             .with_default_graph(to_graph_name)
             .with_base_iri(from.as_str())
-            .map_err(|e| {
-                EvaluationError::Service(Box::new(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Invalid URL: {from}: {e}"),
-                )))
-            })?
+            .map_err(|e| EvaluationError::Unexpected(format!("Invalid URL: {from}: {e}").into()))?
             .for_reader(body)
             .with_document_loader(move |url| {
                 let (content_type, mut body) = client.get(
@@ -193,6 +194,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             self.transaction.insert(q?.as_ref())?;
         }
         Ok(())
+    }
+
+    #[cfg(not(feature = "http-client"))]
+    #[expect(clippy::unused_self)]
+    fn eval_load(&mut self, _: &NamedNode, _: &GraphName) -> Result<(), EvaluationError> {
+        Err(EvaluationError::Unexpected(
+            "HTTP client is not available. Enable the feature 'http-client'".into(),
+        ))
     }
 
     fn eval_create(&mut self, graph_name: &NamedNode, silent: bool) -> Result<(), EvaluationError> {

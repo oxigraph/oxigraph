@@ -3,6 +3,7 @@ use crate::model::NamedNode;
 use crate::sparql::SparqlSyntaxError;
 use crate::sparql::results::QueryResultsParseError as ResultsParseError;
 use crate::store::{CorruptionError, StorageError};
+use oxrdf::{Term, Variable};
 use spareval::QueryEvaluationError;
 use std::convert::Infallible;
 use std::error::Error;
@@ -24,7 +25,7 @@ pub enum EvaluationError {
     /// An error while parsing an external result file (likely from a federated query).
     #[error(transparent)]
     ResultsParsing(#[from] ResultsParseError),
-    /// An error returned during results serialization.
+    /// An error returned during result serialization.
     #[error(transparent)]
     ResultsSerialization(io::Error),
     /// Error during `SERVICE` evaluation
@@ -39,18 +40,24 @@ pub enum EvaluationError {
     /// The variable storing the `SERVICE` name is unbound
     #[error("The variable encoding the service name is unbound")]
     UnboundService,
+    /// Invalid service name
+    #[error("{0} is not a valid service name")]
+    InvalidServiceName(Term),
     /// The given `SERVICE` is not supported
     #[error("The service {0} is not supported")]
     UnsupportedService(NamedNode),
     /// The given content media type returned from an HTTP response is not supported (`SERVICE` and `LOAD`)
     #[error("The content media type {0} is not supported")]
     UnsupportedContentType(String),
-    /// The `SERVICE` call has not returns solutions
+    /// The `SERVICE` call has not returned solutions
     #[error("The service is not returning solutions but a boolean or a graph")]
     ServiceDoesNotReturnSolutions,
-    /// The results are not a RDF graph
+    /// The results are not an RDF graph
     #[error("The query results are not a RDF graph")]
     NotAGraph,
+    /// If a variable present in the given initial substitution is not present in the `SELECT` part of the query
+    #[error("The SPARQL query does not contains variable {0} in its SELECT projection")]
+    NotExistingSubstitutedVariable(Variable),
     #[doc(hidden)]
     #[error(transparent)]
     Unexpected(Box<dyn Error + Send + Sync>),
@@ -72,11 +79,22 @@ impl From<QueryEvaluationError> for EvaluationError {
             },
             QueryEvaluationError::Service(error) => Self::Service(error),
             QueryEvaluationError::UnexpectedDefaultGraph => Self::Storage(
-                CorruptionError::new("Unexpected default graph in SPARQL results").into(),
+                CorruptionError::new("Unexpected default graph returned from the storage").into(),
             ),
-            e => Self::Storage(
-                CorruptionError::new(format!("Unsupported SPARQL evaluation error: {e}")).into(),
+            QueryEvaluationError::UnboundService => Self::UnboundService,
+            QueryEvaluationError::UnsupportedService(name) => Self::UnsupportedService(name),
+            QueryEvaluationError::NotExistingSubstitutedVariable(v) => {
+                Self::NotExistingSubstitutedVariable(v)
+            }
+            QueryEvaluationError::InvalidServiceName(name) => Self::InvalidServiceName(name),
+            #[cfg(feature = "rdf-12")]
+            QueryEvaluationError::InvalidStorageTripleTerm => Self::Storage(
+                CorruptionError::new(
+                    "The storage returned a triple term that is not a valid RDF 1.2 term",
+                )
+                .into(),
             ),
+            e => Self::Unexpected(Box::new(e)),
         }
     }
 }
@@ -99,10 +117,14 @@ impl From<EvaluationError> for io::Error {
             EvaluationError::GraphAlreadyExists(_)
             | EvaluationError::GraphDoesNotExist(_)
             | EvaluationError::UnboundService
+            | EvaluationError::InvalidServiceName(_)
             | EvaluationError::UnsupportedService(_)
             | EvaluationError::UnsupportedContentType(_)
             | EvaluationError::ServiceDoesNotReturnSolutions
-            | EvaluationError::NotAGraph => Self::new(io::ErrorKind::InvalidInput, error),
+            | EvaluationError::NotAGraph
+            | EvaluationError::NotExistingSubstitutedVariable(_) => {
+                Self::new(io::ErrorKind::InvalidInput, error)
+            }
         }
     }
 }
