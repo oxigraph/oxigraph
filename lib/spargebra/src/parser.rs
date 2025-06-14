@@ -1840,7 +1840,7 @@ parser! {
 
         rule TripleTermData() -> GroundTriple = "<<(" _ s:TripleTermDataSubject() _ p:TripleTermData_p() _ o:TripleTermDataObject() _ ")>>" {?
             Ok(GroundTriple {
-                subject: s.try_into().map_err(|()| "Literals are not allowed in subject position of nested patterns")?,
+                subject: if let GroundTerm::NamedNode(s) = s { s } else { return Err("Literals are not allowed in subject position of nested patterns") },
                 predicate: p,
                 object: o
             })

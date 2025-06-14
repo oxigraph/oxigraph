@@ -4,64 +4,6 @@ pub use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple, V
 use std::fmt;
 use std::fmt::Write;
 
-/// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
-///
-/// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum GroundSubject {
-    NamedNode(NamedNode),
-}
-
-impl fmt::Display for GroundSubject {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt(f),
-        }
-    }
-}
-
-impl From<NamedNode> for GroundSubject {
-    #[inline]
-    fn from(node: NamedNode) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl TryFrom<NamedOrBlankNode> for GroundSubject {
-    type Error = ();
-
-    #[inline]
-    fn try_from(subject: NamedOrBlankNode) -> Result<Self, Self::Error> {
-        match subject {
-            NamedOrBlankNode::NamedNode(t) => Ok(t.into()),
-            NamedOrBlankNode::BlankNode(_) => Err(()),
-        }
-    }
-}
-impl From<GroundSubject> for NamedOrBlankNode {
-    #[inline]
-    fn from(subject: GroundSubject) -> Self {
-        match subject {
-            GroundSubject::NamedNode(t) => t.into(),
-        }
-    }
-}
-
-impl TryFrom<GroundTerm> for GroundSubject {
-    type Error = ();
-
-    #[inline]
-    fn try_from(term: GroundTerm) -> Result<Self, Self::Error> {
-        match term {
-            GroundTerm::NamedNode(t) => Ok(t.into()),
-            GroundTerm::Literal(_) => Err(()),
-            #[cfg(feature = "sparql-12")]
-            GroundTerm::Triple(_) => Err(()),
-        }
-    }
-}
-
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [literals](https://www.w3.org/TR/rdf11-concepts/#dfn-literal) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation.
@@ -158,7 +100,7 @@ impl From<GroundTerm> for Term {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriple {
-    pub subject: GroundSubject,
+    pub subject: NamedNode,
     pub predicate: NamedNode,
     pub object: GroundTerm,
 }
@@ -176,7 +118,11 @@ impl TryFrom<Triple> for GroundTriple {
     #[inline]
     fn try_from(triple: Triple) -> Result<Self, Self::Error> {
         Ok(Self {
-            subject: triple.subject.try_into()?,
+            subject: if let NamedOrBlankNode::NamedNode(s) = triple.subject {
+                s
+            } else {
+                return Err(());
+            },
             predicate: triple.predicate,
             object: triple.object.try_into()?,
         })
@@ -339,7 +285,7 @@ impl TryFrom<QuadPattern> for Quad {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundQuad {
-    pub subject: GroundSubject,
+    pub subject: NamedNode,
     pub predicate: NamedNode,
     pub object: GroundTerm,
     pub graph_name: GraphName,
@@ -386,7 +332,11 @@ impl TryFrom<Quad> for GroundQuad {
     #[inline]
     fn try_from(quad: Quad) -> Result<Self, Self::Error> {
         Ok(Self {
-            subject: quad.subject.try_into()?,
+            subject: if let NamedOrBlankNode::NamedNode(s) = quad.subject {
+                s
+            } else {
+                return Err(());
+            },
             predicate: quad.predicate,
             object: quad.object.try_into()?,
             graph_name: quad.graph_name,
@@ -662,14 +612,6 @@ impl From<Variable> for GroundTermPattern {
     }
 }
 
-impl From<GroundSubject> for GroundTermPattern {
-    #[inline]
-    fn from(term: GroundSubject) -> Self {
-        match term {
-            GroundSubject::NamedNode(node) => node.into(),
-        }
-    }
-}
 impl From<GroundTerm> for GroundTermPattern {
     #[inline]
     fn from(term: GroundTerm) -> Self {

@@ -12,8 +12,8 @@ use sparesults::QuerySolution;
 use spareval::{QueryEvaluator, QueryResults};
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
-    BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundSubject,
-    GroundTerm, GroundTermPattern, NamedNode, NamedNodePattern, NamedOrBlankNode, Quad,
+    BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundTerm,
+    GroundTermPattern, NamedNode, NamedNodePattern, NamedOrBlankNode, Quad,
     QuadPattern, Term, TermPattern,
 };
 #[cfg(feature = "rdf-12")]
@@ -296,9 +296,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
 
     fn convert_ground_quad(quad: &GroundQuad) -> OxQuad {
         OxQuad {
-            subject: match &quad.subject {
-                GroundSubject::NamedNode(subject) => subject.clone().into(),
-            },
+            subject: quad.subject.clone().into(),
             predicate: quad.predicate.clone(),
             object: match &quad.object {
                 GroundTerm::NamedNode(object) => object.clone().into(),
@@ -316,9 +314,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     #[cfg(feature = "rdf-12")]
     fn convert_ground_triple(triple: &GroundTriple) -> Triple {
         Triple {
-            subject: match &triple.subject {
-                GroundSubject::NamedNode(subject) => subject.clone().into(),
-            },
+            subject: triple.subject.clone().into(),
             predicate: triple.predicate.clone(),
             object: match &triple.object {
                 GroundTerm::NamedNode(object) => object.clone().into(),
