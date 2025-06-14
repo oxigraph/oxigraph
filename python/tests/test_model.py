@@ -227,11 +227,7 @@ class TestTriple(unittest.TestCase):
 
     def test_rdf_star_constructor(self) -> None:
         t = Triple(
-            Triple(
-                NamedNode("http://example.com/ss"),
-                NamedNode("http://example.com/sp"),
-                NamedNode("http://example.com/so"),
-            ),
+            NamedNode("http://example.com/s"),
             NamedNode("http://example.com/p"),
             Triple(
                 NamedNode("http://example.com/os"),
@@ -239,14 +235,7 @@ class TestTriple(unittest.TestCase):
                 NamedNode("http://example.com/oo"),
             ),
         )
-        self.assertEqual(
-            t.subject,
-            Triple(
-                NamedNode("http://example.com/ss"),
-                NamedNode("http://example.com/sp"),
-                NamedNode("http://example.com/so"),
-            ),
-        )
+        self.assertEqual(t.subject, NamedNode("http://example.com/s"))
         self.assertEqual(t.predicate, NamedNode("http://example.com/p"))
         self.assertEqual(
             t.object,

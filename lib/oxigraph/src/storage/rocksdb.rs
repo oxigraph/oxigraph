@@ -1,7 +1,8 @@
+#[cfg(feature = "rdf-12")]
 use crate::model::vocab::rdf;
-use crate::model::{
-    BlankNode, GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, Subject, Term, TermRef, Triple,
-};
+#[cfg(feature = "rdf-12")]
+use crate::model::{BlankNode, GraphName, Term, Triple};
+use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
 use crate::storage::binary_encoder::{
     QuadEncoding, TYPE_STAR_TRIPLE, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
     encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad, write_gpos_quad,
@@ -16,10 +17,13 @@ use crate::storage::rocksdb_wrapper::{
     ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
 };
 use rustc_hash::{FxBuildHasher, FxHashSet};
+#[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;
-use std::hash::{BuildHasherDefault, Hash};
+use std::hash::BuildHasherDefault;
+#[cfg(feature = "rdf-12")]
+use std::hash::Hash;
 use std::mem::{swap, take};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -185,58 +189,88 @@ impl RocksDbStorage {
         }
         if version == 1 {
             // We migrate to v2
+            #[cfg(feature = "rdf-12")]
             fn to_rdf12_reified_triple(
-                mut quad: Quad,
+                subject: &EncodedTerm,
+                predicate: &EncodedTerm,
+                object: &EncodedTerm,
+                graph_name: &EncodedTerm,
+                r: &RocksDbStorageReader,
                 w: &mut RocksDbStorageWriter<'_>,
-            ) -> Result<BlankNode, StorageError> {
-                if let Subject::Triple(t) = quad.subject {
-                    quad.subject =
-                        to_rdf12_reified_triple((*t).in_graph(quad.graph_name.clone()), w)?.into();
-                }
-                if let Term::Triple(t) = quad.object {
-                    quad.object =
-                        to_rdf12_reified_triple((*t).in_graph(quad.graph_name.clone()), w)?.into();
-                }
+            ) -> Result<EncodedTerm, StorageError> {
+                let subject = if let EncodedTerm::Triple(t) = subject {
+                    to_rdf12_reified_triple(&t.subject, &t.predicate, &t.object, graph_name, r, w)?
+                } else {
+                    subject.clone()
+                };
+                let object = if let EncodedTerm::Triple(t) = object {
+                    to_rdf12_reified_triple(&t.subject, &t.predicate, &t.object, graph_name, r, w)?
+                } else {
+                    object.clone()
+                };
                 // We hash the triple
-                let triple = Triple::new(quad.subject, quad.predicate, quad.object);
+                let triple = Triple::new(
+                    r.decode_subject(&subject)?,
+                    r.decode_named_node(predicate)?,
+                    r.decode_term(&object)?,
+                );
                 let mut hasher = SipHasher24::new();
                 triple.hash(&mut hasher);
                 let reifier = BlankNode::new_from_unique_id(hasher.finish128().as_u128());
                 w.insert(QuadRef::new(
-                    reifier.as_ref(),
+                    &reifier,
                     rdf::REIFIES,
                     &Term::from(triple),
-                    &quad.graph_name,
+                    &if *graph_name == EncodedTerm::DefaultGraph {
+                        GraphName::DefaultGraph
+                    } else {
+                        r.decode_named_or_blank_node(graph_name)?.into()
+                    },
                 ))?;
-                Ok(reifier)
+                Ok(reifier.as_ref().into())
             }
 
             let snapshot = self.snapshot();
+            #[cfg_attr(not(feature = "rdf-12"), expect(clippy::never_loop))]
             for quad in snapshot
                 .dspo_quads(&[TYPE_STAR_TRIPLE])
                 .chain(snapshot.spog_quads(&[TYPE_STAR_TRIPLE]))
                 .chain(snapshot.dosp_quads(&[TYPE_STAR_TRIPLE]))
                 .chain(snapshot.ospg_quads(&[TYPE_STAR_TRIPLE]))
             {
-                let quad = snapshot.decode_quad(&quad?)?;
+                #[cfg_attr(not(feature = "rdf-12"), expect(unused_variables))]
+                let quad = quad?;
+                #[cfg(not(feature = "rdf-12"))]
+                return Err(CorruptionError::msg(
+                    "You need to enable the rdf-12 Cargo feature to read a database with triple terms",
+                ).into());
+
+                #[cfg(feature = "rdf-12")]
                 self.transaction(move |mut w| {
+                    let r = w.reader();
                     let mut new_quad = quad.clone();
-                    if let Subject::Triple(t) = new_quad.subject {
+                    if let EncodedTerm::Triple(t) = new_quad.subject {
                         new_quad.subject = to_rdf12_reified_triple(
-                            (*t).clone().in_graph(quad.graph_name.clone()),
+                            &t.subject,
+                            &t.predicate,
+                            &t.object,
+                            &quad.graph_name,
+                            &r,
                             &mut w,
-                        )?
-                        .into();
+                        )?;
                     }
-                    if let Term::Triple(t) = new_quad.object {
+                    if let EncodedTerm::Triple(t) = new_quad.object {
                         new_quad.object = to_rdf12_reified_triple(
-                            (*t).in_graph(quad.graph_name.clone()),
+                            &t.subject,
+                            &t.predicate,
+                            &t.object,
+                            &quad.graph_name,
+                            &r,
                             &mut w,
-                        )?
-                        .into();
+                        )?;
                     }
-                    w.insert(new_quad.as_ref())?;
-                    w.remove(quad.as_ref())
+                    w.insert(r.decode_quad(&new_quad)?.as_ref())?;
+                    w.remove_encoded(&quad)
                 })?;
             }
             version = 2;

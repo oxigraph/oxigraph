@@ -47,6 +47,7 @@ fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
     )
 }
 
+#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn rdf12_n_quads_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(

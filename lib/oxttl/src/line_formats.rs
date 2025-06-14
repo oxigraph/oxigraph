@@ -34,9 +34,7 @@ enum NQuadsState {
     ExpectLineJump,
     RecoverToLineJump,
     #[cfg(feature = "rdf-12")]
-    AfterQuotedSubject,
-    #[cfg(feature = "rdf-12")]
-    AfterQuotedObject,
+    AfterQuotedTriple,
 }
 
 impl RuleRecognizer for NQuadsRecognizer {
@@ -84,12 +82,6 @@ impl RuleRecognizer for NQuadsRecognizer {
                     N3Token::BlankNodeLabel(s) => {
                         self.subjects.push(BlankNode::new_unchecked(s).into());
                         self.stack.push(NQuadsState::ExpectPredicate);
-                        self
-                    }
-                    #[cfg(feature = "rdf-12")]
-                    N3Token::Punctuation("<<(") => {
-                        self.stack.push(NQuadsState::AfterQuotedSubject);
-                        self.stack.push(NQuadsState::ExpectSubject);
                         self
                     }
                     _ => self.error(
@@ -156,7 +148,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                     }
                     #[cfg(feature = "rdf-12")]
                     N3Token::Punctuation("<<(") => {
-                        self.stack.push(NQuadsState::AfterQuotedObject);
+                        self.stack.push(NQuadsState::AfterQuotedTriple);
                         self.stack.push(NQuadsState::ExpectSubject);
                         self
                     }
@@ -313,18 +305,7 @@ impl RuleRecognizer for NQuadsRecognizer {
                 self.recognize_next(TokenOrLineJump::Token(token), context, results, errors)
             }
             #[cfg(feature = "rdf-12")]
-            NQuadsState::AfterQuotedSubject => {
-                let triple = Triple {
-                    subject: self.subjects.pop().unwrap(),
-                    predicate: self.predicates.pop().unwrap(),
-                    object: self.objects.pop().unwrap(),
-                };
-                self.subjects.push(triple.into());
-                self.stack.push(NQuadsState::ExpectPredicate);
-                self.recognize_next(token, context, results, errors)
-            }
-            #[cfg(feature = "rdf-12")]
-            NQuadsState::AfterQuotedObject => {
+            NQuadsState::AfterQuotedTriple => {
                 let triple = Triple {
                     subject: self.subjects.pop().unwrap(),
                     predicate: self.predicates.pop().unwrap(),

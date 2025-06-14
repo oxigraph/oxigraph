@@ -326,8 +326,7 @@ fn n3_to_dataset(quads: Vec<N3Quad>) -> Dataset {
                 subject: match q.subject {
                     N3Term::NamedNode(n) => n.into(),
                     N3Term::BlankNode(n) => n.into(),
-                    N3Term::Triple(n) => n.into(),
-                    N3Term::Literal(_) => return None,
+                    N3Term::Triple(_) | N3Term::Literal(_) => return None,
                     N3Term::Variable(v) => BlankNode::new_unchecked(v.into_string()).into(),
                 },
                 predicate: match q.predicate {

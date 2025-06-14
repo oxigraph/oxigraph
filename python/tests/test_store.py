@@ -37,9 +37,8 @@ class TestStore(unittest.TestCase):
         store.add(Quad(foo, bar, baz))
         store.add(Quad(foo, bar, baz, DefaultGraph()))
         store.add(Quad(foo, bar, baz, graph))
-        store.add(Quad(triple, bar, baz))
         store.add(Quad(foo, bar, triple))
-        self.assertEqual(len(store), 4)
+        self.assertEqual(len(store), 3)
 
     def test_extend(self) -> None:
         store = Store()

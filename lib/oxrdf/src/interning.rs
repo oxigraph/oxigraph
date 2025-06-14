@@ -317,8 +317,6 @@ impl InternedLiteral {
 pub enum InternedSubject {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
-    #[cfg(feature = "rdf-12")]
-    Triple(Box<InternedTriple>),
 }
 
 impl InternedSubject {
@@ -330,11 +328,6 @@ impl InternedSubject {
             SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_into(node, interner))
             }
-            #[cfg(feature = "rdf-12")]
-            SubjectRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_into(
-                triple.as_ref(),
-                interner,
-            ))),
         }
     }
 
@@ -346,11 +339,6 @@ impl InternedSubject {
             SubjectRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_from(node, interner)?)
             }
-            #[cfg(feature = "rdf-12")]
-            SubjectRef::Triple(triple) => Self::Triple(Box::new(InternedTriple::encoded_from(
-                triple.as_ref(),
-                interner,
-            )?)),
         })
     }
 
@@ -358,8 +346,6 @@ impl InternedSubject {
         match self {
             Self::NamedNode(node) => SubjectRef::NamedNode(node.decode_from(interner)),
             Self::BlankNode(node) => SubjectRef::BlankNode(node.decode_from(interner)),
-            #[cfg(feature = "rdf-12")]
-            Self::Triple(triple) => SubjectRef::Triple(&interner.triples[triple.as_ref()]),
         }
     }
 
@@ -371,8 +357,6 @@ impl InternedSubject {
         match self {
             Self::NamedNode(node) => Self::NamedNode(node.next()),
             Self::BlankNode(node) => Self::BlankNode(node.next()),
-            #[cfg(feature = "rdf-12")]
-            Self::Triple(triple) => Self::Triple(Box::new(triple.next())),
         }
     }
 

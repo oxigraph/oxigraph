@@ -1,8 +1,9 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use oxigraph_fuzz::count_triple_blank_nodes;
 use oxrdf::graph::CanonicalizationAlgorithm;
-use oxrdf::{Graph, Subject, Term, Triple};
+use oxrdf::{Graph, Triple};
 use oxrdfxml::{RdfXmlParser, RdfXmlSerializer};
 use std::io::ErrorKind;
 
@@ -39,18 +40,6 @@ fn parse(
     )
 }
 
-fn count_triple_blank_nodes(triple: &Triple) -> usize {
-    (match &triple.subject {
-        Subject::BlankNode(_) => 1,
-        Subject::Triple(t) => count_triple_blank_nodes(t),
-        _ => 0,
-    }) + (match &triple.object {
-        Term::BlankNode(_) => 1,
-        Term::Triple(t) => count_triple_blank_nodes(t),
-        _ => 0,
-    })
-}
-
 fuzz_target!(|data: &[u8]| {
     // We parse
     let (triples, errors, prefixes, base_iri) = parse(data, false);
@@ -60,7 +49,10 @@ fuzz_target!(|data: &[u8]| {
     if errors.is_empty() {
         assert!(errors_unchecked.is_empty());
 
-        let bnodes_count = triples.iter().map(count_triple_blank_nodes).sum::<usize>();
+        let bnodes_count = triples
+            .iter()
+            .map(|t| count_triple_blank_nodes(t.as_ref()))
+            .sum::<usize>();
         if bnodes_count == 0 {
             assert_eq!(triples, triples_unchecked);
         } else if bnodes_count <= 4 {

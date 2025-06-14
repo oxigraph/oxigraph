@@ -4263,21 +4263,7 @@ fn equals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<bool> {
 
 #[cfg(feature = "sparql-12")]
 fn triple_equals(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<bool> {
-    Some(
-        match &a.subject {
-            ExpressionSubject::NamedNode(_) | ExpressionSubject::BlankNode(_) => {
-                a.subject == b.subject
-            }
-            ExpressionSubject::Triple(a) => {
-                if let ExpressionSubject::Triple(b) = &b.subject {
-                    triple_equals(a, b)?
-                } else {
-                    false
-                }
-            }
-        } && a.predicate == b.predicate
-            && equals(&a.object, &b.object)?,
-    )
+    Some(a.subject == b.subject && a.predicate == b.predicate && equals(&a.object, &b.object)?)
 }
 
 /// Comparison for ordering
@@ -4335,18 +4321,10 @@ fn cmp_triples(a: &ExpressionTriple, b: &ExpressionTriple) -> Ordering {
         ExpressionSubject::BlankNode(a) => match &b.subject {
             ExpressionSubject::BlankNode(b) => a.as_str().cmp(b.as_str()),
             ExpressionSubject::NamedNode(_) => Ordering::Less,
-            #[cfg(feature = "sparql-12")]
-            ExpressionSubject::Triple(_) => Ordering::Less,
         },
         ExpressionSubject::NamedNode(a) => match &b.subject {
             ExpressionSubject::BlankNode(_) => Ordering::Greater,
             ExpressionSubject::NamedNode(b) => a.as_str().cmp(b.as_str()),
-            #[cfg(feature = "sparql-12")]
-            ExpressionSubject::Triple(_) => Ordering::Less,
-        },
-        ExpressionSubject::Triple(a) => match &b.subject {
-            ExpressionSubject::Triple(b) => cmp_triples(a, b),
-            _ => Ordering::Greater,
         },
     } {
         Ordering::Equal => match a.predicate.as_str().cmp(b.predicate.as_str()) {
@@ -4545,12 +4523,6 @@ fn partial_cmp_triples(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<Ord
         (ExpressionSubject::BlankNode(a), ExpressionSubject::BlankNode(b)) => {
             if a != b {
                 return None;
-            }
-        }
-        (ExpressionSubject::Triple(a), ExpressionSubject::Triple(b)) => {
-            match partial_cmp_triples(a, b)? {
-                Ordering::Equal => (),
-                o => return Some(o),
             }
         }
         _ => return None,
@@ -5979,7 +5951,6 @@ impl<D: QueryableDataset> Iterator for ConstructIterator<D> {
                         // triples with blank nodes are likely to be new.
                         #[cfg(feature = "sparql-12")]
                         let new_triple = triple.subject.is_blank_node()
-                            || triple.subject.is_triple()
                             || triple.object.is_blank_node()
                             || triple.object.is_triple()
                             || self.already_emitted_results.insert(triple.clone());

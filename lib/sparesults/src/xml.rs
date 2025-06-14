@@ -581,10 +581,10 @@ impl XmlInnerQueryResultsParser {
                     }
                     Ok(None)
                 } else {
-                    Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into())
+                    Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file must have a <head> and a <result> or <boolean> tag").into())
                 }
             }
-            Event::Eof => Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file should have a <head> and a <result> or <boolean> tag").into()),
+            Event::Eof => Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file must have a <head> and a <result> or <boolean> tag").into()),
             Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {
                 Ok(None)
             }
@@ -877,24 +877,28 @@ impl XmlInnerSolutionsParser {
                         self.term = Some(
                             Triple::new(
                                 match subject {
-                                    Term::NamedNode(subject) => subject.into(),
-                                    Term::BlankNode(subject) => subject.into(),
-                                    Term::Triple(subject) => Subject::Triple(subject),
+                                    Term::NamedNode(subject) => NamedOrBlankNode::from(subject),
+                                    Term::BlankNode(subject) => NamedOrBlankNode::from(subject),
+                                    Term::Triple(_) => {
+                                        return Err(QueryResultsSyntaxError::msg(
+                                            "The <subject> value cannot be a <triple>",
+                                        )
+                                        .into());
+                                    }
                                     Term::Literal(_) => {
                                         return Err(QueryResultsSyntaxError::msg(
-                                            "The <subject> value should not be a <literal>",
+                                            "The <subject> value cannot be a <literal>",
                                         )
                                         .into());
                                     }
                                 },
-                                match predicate {
-                                    Term::NamedNode(predicate) => predicate,
-                                    _ => {
-                                        return Err(QueryResultsSyntaxError::msg(
-                                            "The <predicate> value should be an <uri>",
-                                        )
-                                        .into());
-                                    }
+                                if let Term::NamedNode(predicate) = predicate {
+                                    predicate
+                                } else {
+                                    return Err(QueryResultsSyntaxError::msg(
+                                        "The <predicate> value must be an <uri>",
+                                    )
+                                    .into());
                                 },
                                 object,
                             )
@@ -903,7 +907,7 @@ impl XmlInnerSolutionsParser {
                         Ok(None)
                     } else {
                         Err(QueryResultsSyntaxError::msg(
-                            "A <triple> should contain a <subject>, a <predicate> and an <object>",
+                            "A <triple> must contain a <subject>, a <predicate> and an <object>",
                         )
                         .into())
                     }

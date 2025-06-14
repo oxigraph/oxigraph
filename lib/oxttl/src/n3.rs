@@ -108,8 +108,6 @@ impl From<Subject> for N3Term {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-12")]
-            Subject::Triple(triple) => Self::Triple(triple),
         }
     }
 }

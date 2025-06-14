@@ -162,8 +162,6 @@ pub enum Subject {
     NamedNode(NamedNode),
     #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNode),
-    #[cfg(feature = "rdf-12")]
-    Triple(Box<Triple>),
 }
 
 impl Subject {
@@ -177,19 +175,11 @@ impl Subject {
         self.as_ref().is_blank_node()
     }
 
-    #[cfg(feature = "rdf-12")]
-    #[inline]
-    pub fn is_triple(&self) -> bool {
-        self.as_ref().is_triple()
-    }
-
     #[inline]
     pub fn as_ref(&self) -> SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => SubjectRef::NamedNode(node.as_ref()),
             Self::BlankNode(node) => SubjectRef::BlankNode(node.as_ref()),
-            #[cfg(feature = "rdf-12")]
-            Self::Triple(triple) => SubjectRef::Triple(triple),
         }
     }
 }
@@ -229,30 +219,6 @@ impl From<BlankNodeRef<'_>> for Subject {
     }
 }
 
-#[cfg(feature = "rdf-12")]
-impl From<Triple> for Subject {
-    #[inline]
-    fn from(node: Triple) -> Self {
-        Self::Triple(Box::new(node))
-    }
-}
-
-#[cfg(feature = "rdf-12")]
-impl From<Box<Triple>> for Subject {
-    #[inline]
-    fn from(node: Box<Triple>) -> Self {
-        Self::Triple(node)
-    }
-}
-
-#[cfg(feature = "rdf-12")]
-impl From<TripleRef<'_>> for Subject {
-    #[inline]
-    fn from(node: TripleRef<'_>) -> Self {
-        node.into_owned().into()
-    }
-}
-
 impl From<NamedOrBlankNode> for Subject {
     #[inline]
     fn from(node: NamedOrBlankNode) -> Self {
@@ -279,8 +245,6 @@ pub enum SubjectRef<'a> {
     NamedNode(NamedNodeRef<'a>),
     #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNodeRef<'a>),
-    #[cfg(feature = "rdf-12")]
-    Triple(&'a Triple),
 }
 
 impl SubjectRef<'_> {
@@ -294,19 +258,11 @@ impl SubjectRef<'_> {
         matches!(self, Self::BlankNode(_))
     }
 
-    #[cfg(feature = "rdf-12")]
-    #[inline]
-    pub fn is_triple(&self) -> bool {
-        matches!(self, Self::Triple(_))
-    }
-
     #[inline]
     pub fn into_owned(self) -> Subject {
         match self {
             Self::NamedNode(node) => Subject::NamedNode(node.into_owned()),
             Self::BlankNode(node) => Subject::BlankNode(node.into_owned()),
-            #[cfg(feature = "rdf-12")]
-            Self::Triple(triple) => Subject::Triple(Box::new(triple.clone())),
         }
     }
 }
@@ -317,8 +273,6 @@ impl fmt::Display for SubjectRef<'_> {
         match self {
             Self::NamedNode(node) => node.fmt(f),
             Self::BlankNode(node) => node.fmt(f),
-            #[cfg(feature = "rdf-12")]
-            Self::Triple(triple) => write!(f, "<<( {triple} )>>"),
         }
     }
 }
@@ -348,14 +302,6 @@ impl<'a> From<&'a BlankNode> for SubjectRef<'a> {
     #[inline]
     fn from(node: &'a BlankNode) -> Self {
         node.as_ref().into()
-    }
-}
-
-#[cfg(feature = "rdf-12")]
-impl<'a> From<&'a Triple> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: &'a Triple) -> Self {
-        Self::Triple(node)
     }
 }
 
@@ -536,8 +482,6 @@ impl From<Subject> for Term {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-12")]
-            Subject::Triple(triple) => Self::Triple(triple),
         }
     }
 }
@@ -605,11 +549,14 @@ impl TryFrom<Term> for Subject {
         match term {
             Term::NamedNode(term) => Ok(Self::NamedNode(term)),
             Term::BlankNode(term) => Ok(Self::BlankNode(term)),
-            #[cfg(feature = "rdf-12")]
-            Term::Triple(term) => Ok(Self::Triple(term)),
             Term::Literal(_) => Err(TryFromTermError {
                 term,
                 target: "Subject",
+            }),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => Err(TryFromTermError {
+                term,
+                target: "Triple",
             }),
         }
     }
@@ -753,8 +700,6 @@ impl<'a> From<SubjectRef<'a>> for TermRef<'a> {
         match node {
             SubjectRef::NamedNode(node) => node.into(),
             SubjectRef::BlankNode(node) => node.into(),
-            #[cfg(feature = "rdf-12")]
-            SubjectRef::Triple(triple) => triple.into(),
         }
     }
 }

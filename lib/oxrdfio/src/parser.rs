@@ -1034,8 +1034,6 @@ impl QuadMapper {
         match node {
             Subject::NamedNode(node) => node.into(),
             Subject::BlankNode(node) => self.map_blank_node(node).into(),
-            #[cfg(feature = "rdf-12")]
-            Subject::Triple(triple) => self.map_triple(*triple).into(),
         }
     }
 
@@ -1099,7 +1097,9 @@ impl QuadMapper {
                     "literals are not allowed in regular RDF subjects",
                 )),
                 #[cfg(feature = "rdf-12")]
-                N3Term::Triple(s) => Ok(self.map_triple(*s).into()),
+                N3Term::Triple(_) => Err(RdfSyntaxError::msg(
+                    "triple terms are not allowed in regular RDF subjects",
+                )),
                 N3Term::Variable(_) => Err(RdfSyntaxError::msg(
                     "variables are not allowed in regular RDF subjects",
                 )),

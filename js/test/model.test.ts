@@ -8,7 +8,8 @@ import oxigraph from "../pkg/oxigraph.js";
 import { webcrypto } from "node:crypto";
 vi.stubGlobal("crypto", webcrypto);
 
-runTests({ factory: oxigraph });
+// TODO: add back when https://github.com/rdfjs-base/data-model/pull/52 is released
+// runTests({ factory: oxigraph });
 
 describe("DataModel", () => {
     describe("#toString()", () => {
@@ -37,7 +38,7 @@ describe("DataModel", () => {
 
         it("quad().toString() should return SPARQL compatible syntax", () => {
             assert.strictEqual(
-                "<http://example.com/s> <http://example.com/p> <<<http://example.com/s1> <http://example.com/p1> <http://example.com/o1>>> <http://example.com/g>",
+                "<http://example.com/s> <http://example.com/p> <<( <http://example.com/s1> <http://example.com/p1> <http://example.com/o1> )>> <http://example.com/g>",
                 oxigraph
                     .quad(
                         oxigraph.namedNode("http://example.com/s"),
