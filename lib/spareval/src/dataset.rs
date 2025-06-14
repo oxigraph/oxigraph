@@ -596,7 +596,7 @@ fn parse_typed_literal(value: &str, datatype: &str) -> Option<ExpressionTerm> {
 #[cfg(feature = "sparql-12")]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ExpressionTriple {
-    pub subject: ExpressionSubject,
+    pub subject: NamedOrBlankNode,
     pub predicate: NamedNode,
     pub object: ExpressionTerm,
 }
@@ -614,7 +614,7 @@ impl From<Triple> for ExpressionTriple {
     #[inline]
     fn from(triple: Triple) -> Self {
         ExpressionTriple {
-            subject: triple.subject.into(),
+            subject: triple.subject,
             predicate: triple.predicate,
             object: triple.object.into(),
         }
@@ -626,7 +626,7 @@ impl From<ExpressionTriple> for Triple {
     #[inline]
     fn from(triple: ExpressionTriple) -> Self {
         Triple {
-            subject: triple.subject.into(),
+            subject: triple.subject,
             predicate: triple.predicate,
             object: triple.object.into(),
         }
@@ -651,8 +651,8 @@ impl ExpressionTriple {
         }
         Some(Self {
             subject: match subject {
-                ExpressionTerm::NamedNode(s) => ExpressionSubject::NamedNode(s),
-                ExpressionTerm::BlankNode(s) => ExpressionSubject::BlankNode(s),
+                ExpressionTerm::NamedNode(s) => NamedOrBlankNode::NamedNode(s),
+                ExpressionTerm::BlankNode(s) => NamedOrBlankNode::BlankNode(s),
                 _ => return None,
             },
             predicate: if let ExpressionTerm::NamedNode(p) = predicate {
@@ -666,36 +666,7 @@ impl ExpressionTriple {
 }
 
 #[cfg(feature = "sparql-12")]
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub enum ExpressionSubject {
-    NamedNode(NamedNode),
-    BlankNode(BlankNode),
-}
-
-#[cfg(feature = "sparql-12")]
-impl From<ExpressionSubject> for ExpressionTerm {
-    #[inline]
-    fn from(subject: ExpressionSubject) -> Self {
-        match subject {
-            ExpressionSubject::NamedNode(s) => Self::NamedNode(s),
-            ExpressionSubject::BlankNode(s) => Self::BlankNode(s),
-        }
-    }
-}
-
-#[cfg(feature = "sparql-12")]
-impl From<ExpressionSubject> for NamedOrBlankNode {
-    #[inline]
-    fn from(subject: ExpressionSubject) -> Self {
-        match subject {
-            ExpressionSubject::NamedNode(s) => s.into(),
-            ExpressionSubject::BlankNode(s) => s.into(),
-        }
-    }
-}
-
-#[cfg(feature = "sparql-12")]
-impl From<NamedOrBlankNode> for ExpressionSubject {
+impl From<NamedOrBlankNode> for ExpressionTerm {
     #[inline]
     fn from(subject: NamedOrBlankNode) -> Self {
         match subject {
