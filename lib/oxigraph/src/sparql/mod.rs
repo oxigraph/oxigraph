@@ -5,6 +5,7 @@
 mod algebra;
 mod dataset;
 mod error;
+#[cfg(feature = "http-client")]
 mod http;
 mod model;
 pub mod results;
@@ -15,15 +16,18 @@ use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
+#[cfg(feature = "http-client")]
+use crate::sparql::http::HttpServiceHandler;
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
-pub use crate::sparql::service::ServiceHandler;
-use crate::sparql::service::{EmptyServiceHandler, WrappedDefaultServiceHandler};
+pub use crate::sparql::service::{DefaultServiceHandler, ServiceHandler};
+use crate::sparql::service::{WrappedDefaultServiceHandler, WrappedServiceHandler};
 pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::StorageReader;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
 pub use spareval::QueryExplanation;
 pub use spargebra::SparqlSyntaxError;
+#[cfg(feature = "http-client")]
 use std::time::Duration;
 
 pub(crate) fn evaluate_query(
@@ -65,28 +69,72 @@ pub(crate) fn evaluate_query(
 /// ```
 #[derive(Clone)]
 pub struct QueryOptions {
+    #[cfg(feature = "http-client")]
     http_timeout: Option<Duration>,
+    #[cfg(feature = "http-client")]
     http_redirection_limit: usize,
+    #[cfg(feature = "http-client")]
+    with_http_default_service_handler: bool,
     inner: QueryEvaluator,
 }
 
 impl QueryOptions {
     /// Use a given [`ServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls.
+    ///
+    /// See [`ServiceHandler`] for an example.
     #[inline]
     #[must_use]
-    pub fn with_service_handler(mut self, service_handler: impl ServiceHandler + 'static) -> Self {
+    pub fn with_service_handler(
+        mut self,
+        service_name: impl Into<NamedNode>,
+        handler: impl ServiceHandler + 'static,
+    ) -> Self {
         self.inner = self
             .inner
-            .with_default_service_handler(WrappedDefaultServiceHandler(service_handler));
+            .with_service_handler(service_name, WrappedServiceHandler(handler));
+        self
+    }
+
+    /// Use a given [`DefaultServiceHandler`] to execute [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICE calls if no explicit service handler is defined for the service.
+    ///
+    /// This replaces the default service handler that does HTTP requests to remote endpoints.
+    ///
+    /// See [`DefaultServiceHandler`] for an example.
+    #[inline]
+    #[must_use]
+    pub fn with_default_service_handler(
+        mut self,
+        handler: impl DefaultServiceHandler + 'static,
+    ) -> Self {
+        #[cfg(feature = "http-client")]
+        {
+            self.with_http_default_service_handler = false;
+        }
+        self.inner = self
+            .inner
+            .with_default_service_handler(WrappedDefaultServiceHandler(handler));
+        self
+    }
+
+    /// Disables the default `SERVICE` call implementation that does HTTP requests to remote endpoints.
+    #[cfg(feature = "http-client")]
+    #[inline]
+    #[must_use]
+    pub fn without_default_http_service_handler(mut self) -> Self {
+        self.with_http_default_service_handler = false;
         self
     }
 
     /// Disables the `SERVICE` calls
+    #[cfg(feature = "http-client")]
     #[inline]
     #[must_use]
-    pub fn without_service_handler(mut self) -> Self {
-        self.inner = self.inner.with_default_service_handler(EmptyServiceHandler);
-        self
+    #[deprecated(
+        note = "Use `without_default_http_service_handler` instead",
+        since = "0.5.0"
+    )]
+    pub fn without_service_handler(self) -> Self {
+        self.without_default_http_service_handler()
     }
 
     /// Sets a timeout for HTTP requests done during SPARQL evaluation.
@@ -98,9 +146,9 @@ impl QueryOptions {
         self
     }
 
-    /// Sets an upper bound of the number of HTTP redirection followed per HTTP request done during SPARQL evaluation.
+    /// Sets an upper bound to the number of HTTP redirections followed per HTTP request done during SPARQL evaluation.
     ///
-    /// By default this value is `0`.
+    /// By default, this value is `0`.
     #[cfg(feature = "http-client")]
     #[inline]
     #[must_use]
@@ -109,14 +157,16 @@ impl QueryOptions {
         self
     }
 
+    #[cfg_attr(not(feature = "http-client"), expect(unused_mut))]
     fn into_evaluator(mut self) -> QueryEvaluator {
-        if !self.inner.has_default_service_handler() {
-            self.inner =
-                self.inner
-                    .with_default_service_handler(service::SimpleServiceHandler::new(
-                        self.http_timeout,
-                        self.http_redirection_limit,
-                    ))
+        #[cfg(feature = "http-client")]
+        if self.with_http_default_service_handler {
+            self.inner = self
+                .inner
+                .with_default_service_handler(HttpServiceHandler::new(
+                    self.http_timeout,
+                    self.http_redirection_limit,
+                ))
         }
         self.inner
     }
@@ -167,21 +217,15 @@ impl QueryOptions {
 
 impl Default for QueryOptions {
     fn default() -> Self {
-        let mut options = Self {
+        Self {
+            #[cfg(feature = "http-client")]
             http_timeout: None,
+            #[cfg(feature = "http-client")]
             http_redirection_limit: 0,
+            #[cfg(feature = "http-client")]
+            with_http_default_service_handler: true,
             inner: QueryEvaluator::new(),
-        };
-        if cfg!(feature = "http-client") {
-            options.inner =
-                options
-                    .inner
-                    .with_default_service_handler(service::SimpleServiceHandler::new(
-                        options.http_timeout,
-                        options.http_redirection_limit,
-                    ));
         }
-        options
     }
 }
 
