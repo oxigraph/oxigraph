@@ -1,4 +1,4 @@
-use crate::model::{PyGraphNameRef, PyNamedNodeRef, PyQuad, PySubjectRef, PyTermRef};
+use crate::model::{PyGraphNameRef, PyNamedNodeRef, PyNamedOrBlankNodeRef, PyQuad, PyTermRef};
 use oxigraph::model::dataset::{CanonicalizationAlgorithm, Dataset};
 use oxigraph::model::{Quad, QuadRef};
 use pyo3::exceptions::PyKeyError;
@@ -51,7 +51,7 @@ impl PyDataset {
     /// >>> list(store.quads_for_subject(NamedNode('http://example.com')))
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[expect(clippy::needless_pass_by_value)]
-    fn quads_for_subject(&self, subject: PySubjectRef<'_>) -> QuadIter {
+    fn quads_for_subject(&self, subject: PyNamedOrBlankNodeRef<'_>) -> QuadIter {
         QuadIter {
             inner: self
                 .inner

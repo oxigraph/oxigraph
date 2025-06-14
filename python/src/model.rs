@@ -42,12 +42,6 @@ impl From<PyNamedNode> for NamedOrBlankNode {
     }
 }
 
-impl From<PyNamedNode> for Subject {
-    fn from(node: PyNamedNode) -> Self {
-        node.inner.into()
-    }
-}
-
 impl From<PyNamedNode> for Term {
     fn from(node: PyNamedNode) -> Self {
         node.inner.into()
@@ -141,12 +135,6 @@ impl From<PyBlankNode> for BlankNode {
 }
 
 impl From<PyBlankNode> for NamedOrBlankNode {
-    fn from(node: PyBlankNode) -> Self {
-        node.inner.into()
-    }
-}
-
-impl From<PyBlankNode> for Subject {
     fn from(node: PyBlankNode) -> Self {
         node.inner.into()
     }
@@ -635,30 +623,6 @@ impl From<NamedOrBlankNode> for PyNamedOrBlankNode {
 }
 
 #[derive(FromPyObject, IntoPyObject)]
-pub enum PySubject {
-    NamedNode(PyNamedNode),
-    BlankNode(PyBlankNode),
-}
-
-impl From<PySubject> for Subject {
-    fn from(node: PySubject) -> Self {
-        match node {
-            PySubject::NamedNode(node) => node.into(),
-            PySubject::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl From<Subject> for PySubject {
-    fn from(node: Subject) -> Self {
-        match node {
-            Subject::NamedNode(node) => Self::NamedNode(node.into()),
-            Subject::BlankNode(node) => Self::BlankNode(node.into()),
-        }
-    }
-}
-
-#[derive(FromPyObject, IntoPyObject)]
 pub enum PyTerm {
     NamedNode(PyNamedNode),
     BlankNode(PyBlankNode),
@@ -742,7 +706,7 @@ impl From<PyTriple> for Term {
 #[pymethods]
 impl PyTriple {
     #[new]
-    fn new(subject: PySubject, predicate: PyNamedNode, object: PyTerm) -> Self {
+    fn new(subject: PyNamedOrBlankNode, predicate: PyNamedNode, object: PyTerm) -> Self {
         Triple::new(subject, predicate, object).into()
     }
 
@@ -752,7 +716,7 @@ impl PyTriple {
     /// >>> Triple(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')).subject
     /// <NamedNode value=http://example.com>
     #[getter]
-    fn subject(&self) -> PySubject {
+    fn subject(&self) -> PyNamedOrBlankNode {
         self.inner.subject.clone().into()
     }
 
@@ -811,7 +775,7 @@ impl PyTriple {
     }
 
     /// :rtype: typing.Any
-    fn __getnewargs__(&self) -> (PySubject, PyNamedNode, PyTerm) {
+    fn __getnewargs__(&self) -> (PyNamedOrBlankNode, PyNamedNode, PyTerm) {
         (self.subject(), self.predicate(), self.object())
     }
 
@@ -912,7 +876,7 @@ impl PyQuad {
     #[new]
     #[pyo3(signature = (subject, predicate, object, graph_name = None))]
     fn new(
-        subject: PySubject,
+        subject: PyNamedOrBlankNode,
         predicate: PyNamedNode,
         object: PyTerm,
         graph_name: Option<PyGraphName>,
@@ -932,7 +896,7 @@ impl PyQuad {
     /// >>> Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1'), NamedNode('http://example.com/g')).subject
     /// <NamedNode value=http://example.com>
     #[getter]
-    fn subject(&self) -> PySubject {
+    fn subject(&self) -> PyNamedOrBlankNode {
         self.inner.subject.clone().into()
     }
 
@@ -1000,7 +964,7 @@ impl PyQuad {
 
     fn __getitem__<'a>(&self, input: usize, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         match input {
-            0 => PySubject::from(self.inner.subject.clone()).into_bound_py_any(py),
+            0 => PyNamedOrBlankNode::from(self.inner.subject.clone()).into_bound_py_any(py),
             1 => PyNamedNode::from(self.inner.predicate.clone()).into_bound_py_any(py),
             2 => PyTerm::from(self.inner.object.clone()).into_bound_py_any(py),
             3 => PyGraphName::from(self.inner.graph_name.clone()).into_bound_py_any(py),
@@ -1025,7 +989,7 @@ impl PyQuad {
     }
 
     /// :rtype: typing.Any
-    fn __getnewargs__(&self) -> (PySubject, PyNamedNode, PyTerm, PyGraphName) {
+    fn __getnewargs__(&self) -> (PyNamedOrBlankNode, PyNamedNode, PyTerm, PyGraphName) {
         (
             self.subject(),
             self.predicate(),
@@ -1156,21 +1120,6 @@ impl<'a> From<&'a PyNamedOrBlankNodeRef<'a>> for NamedOrBlankNodeRef<'a> {
         match value {
             PyNamedOrBlankNodeRef::NamedNode(value) => value.inner.as_ref().into(),
             PyNamedOrBlankNodeRef::BlankNode(value) => value.inner.as_ref().into(),
-        }
-    }
-}
-
-#[derive(FromPyObject)]
-pub enum PySubjectRef<'a> {
-    NamedNode(PyRef<'a, PyNamedNode>),
-    BlankNode(PyRef<'a, PyBlankNode>),
-}
-
-impl<'a> From<&'a PySubjectRef<'a>> for SubjectRef<'a> {
-    fn from(value: &'a PySubjectRef<'a>) -> Self {
-        match value {
-            PySubjectRef::NamedNode(value) => value.inner.as_ref().into(),
-            PySubjectRef::BlankNode(value) => value.inner.as_ref().into(),
         }
     }
 }

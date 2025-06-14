@@ -640,15 +640,6 @@ impl From<NamedOrBlankNodeRef<'_>> for EncodedTerm {
     }
 }
 
-impl From<SubjectRef<'_>> for EncodedTerm {
-    fn from(term: SubjectRef<'_>) -> Self {
-        match term {
-            SubjectRef::NamedNode(named_node) => named_node.into(),
-            SubjectRef::BlankNode(blank_node) => blank_node.into(),
-        }
-    }
-}
-
 impl From<TermRef<'_>> for EncodedTerm {
     fn from(term: TermRef<'_>) -> Self {
         match term {
@@ -938,22 +929,6 @@ pub fn parse_day_time_duration_str(value: &str) -> Option<EncodedTerm> {
 pub trait Decoder: StrLookup {
     fn decode_term(&self, encoded: &EncodedTerm) -> Result<Term, StorageError>;
 
-    fn decode_subject(&self, encoded: &EncodedTerm) -> Result<Subject, StorageError> {
-        match self.decode_term(encoded)? {
-            Term::NamedNode(named_node) => Ok(named_node.into()),
-            Term::BlankNode(blank_node) => Ok(blank_node.into()),
-            Term::Literal(_) => Err(CorruptionError::msg(
-                "A literal has been found instead of a subject node",
-            )
-            .into()),
-            #[cfg(feature = "rdf-12")]
-            Term::Triple(_) => Err(CorruptionError::msg(
-                "A triple term has been found instead of a subject node",
-            )
-            .into()),
-        }
-    }
-
     fn decode_named_or_blank_node(
         &self,
         encoded: &EncodedTerm,
@@ -993,7 +968,7 @@ pub trait Decoder: StrLookup {
     #[cfg(feature = "rdf-12")]
     fn decode_triple(&self, encoded: &EncodedTriple) -> Result<Triple, StorageError> {
         Ok(Triple::new(
-            self.decode_subject(&encoded.subject)?,
+            self.decode_named_or_blank_node(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
             self.decode_term(&encoded.object)?,
         ))
@@ -1001,7 +976,7 @@ pub trait Decoder: StrLookup {
 
     fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, StorageError> {
         Ok(Quad::new(
-            self.decode_subject(&encoded.subject)?,
+            self.decode_named_or_blank_node(&encoded.subject)?,
             self.decode_named_node(&encoded.predicate)?,
             self.decode_term(&encoded.object)?,
             if encoded.graph_name == EncodedTerm::DefaultGraph {

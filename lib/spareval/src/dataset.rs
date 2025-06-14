@@ -1,10 +1,11 @@
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::{
-    BlankNode, Dataset, GraphNameRef, Literal, NamedNode, QuadRef, SubjectRef, Term, TermRef,
+    BlankNode, Dataset, GraphNameRef, Literal, NamedNode, NamedOrBlankNodeRef, QuadRef, Term,
+    TermRef,
 };
 #[cfg(feature = "sparql-12")]
-use oxrdf::{Subject, Triple};
+use oxrdf::{NamedOrBlankNode, Triple};
 use oxsdatatypes::{Boolean, DateTime, Decimal, Double, Float, Integer};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, DayTimeDuration, Duration, Time, YearMonthDuration};
@@ -141,7 +142,7 @@ impl QueryableDataset for Dataset {
 
         let subject = if let Some(subject) = subject {
             Some(match TermRef::from(subject) {
-                TermRef::NamedNode(s) => SubjectRef::from(s),
+                TermRef::NamedNode(s) => NamedOrBlankNodeRef::from(s),
                 TermRef::BlankNode(s) => s.into(),
                 TermRef::Literal(_) => return Box::new(empty()),
                 #[cfg(feature = "sparql-12")]
@@ -683,7 +684,7 @@ impl From<ExpressionSubject> for ExpressionTerm {
 }
 
 #[cfg(feature = "sparql-12")]
-impl From<ExpressionSubject> for Subject {
+impl From<ExpressionSubject> for NamedOrBlankNode {
     #[inline]
     fn from(subject: ExpressionSubject) -> Self {
         match subject {
@@ -694,12 +695,12 @@ impl From<ExpressionSubject> for Subject {
 }
 
 #[cfg(feature = "sparql-12")]
-impl From<Subject> for ExpressionSubject {
+impl From<NamedOrBlankNode> for ExpressionSubject {
     #[inline]
-    fn from(subject: Subject) -> Self {
+    fn from(subject: NamedOrBlankNode) -> Self {
         match subject {
-            Subject::NamedNode(s) => Self::NamedNode(s),
-            Subject::BlankNode(s) => Self::BlankNode(s),
+            NamedOrBlankNode::NamedNode(s) => Self::NamedNode(s),
+            NamedOrBlankNode::BlankNode(s) => Self::BlankNode(s),
         }
     }
 }

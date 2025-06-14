@@ -5,11 +5,11 @@ use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOr
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 
 pub struct NQuadsRecognizer {
     stack: Vec<NQuadsState>,
-    subjects: Vec<Subject>,
+    subjects: Vec<NamedOrBlankNode>,
     predicates: Vec<NamedNode>,
     objects: Vec<Term>,
 }

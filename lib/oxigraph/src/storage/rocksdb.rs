@@ -210,7 +210,7 @@ impl RocksDbStorage {
                 };
                 // We hash the triple
                 let triple = Triple::new(
-                    r.decode_subject(&subject)?,
+                    r.decode_named_or_blank_node(&subject)?,
                     r.decode_named_node(predicate)?,
                     r.decode_term(&object)?,
                 );

@@ -8,8 +8,12 @@ use std::fmt;
 
 /// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 pub enum NamedOrBlankNode {
+    #[cfg_attr(feature = "serde", serde(rename = "uri"))]
     NamedNode(NamedNode),
+    #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNode),
 }
 
@@ -70,8 +74,12 @@ impl From<BlankNodeRef<'_>> for NamedOrBlankNode {
 
 /// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
 pub enum NamedOrBlankNodeRef<'a> {
+    #[cfg_attr(feature = "serde", serde(rename = "uri"))]
     NamedNode(NamedNodeRef<'a>),
+    #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
     BlankNode(BlankNodeRef<'a>),
 }
 
@@ -150,189 +158,6 @@ impl<'a> From<NamedOrBlankNodeRef<'a>> for NamedOrBlankNode {
     #[inline]
     fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
         node.into_owned()
-    }
-}
-
-/// The owned union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node),  and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-12` feature is enabled).
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub enum Subject {
-    #[cfg_attr(feature = "serde", serde(rename = "uri"))]
-    NamedNode(NamedNode),
-    #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
-    BlankNode(BlankNode),
-}
-
-impl Subject {
-    #[inline]
-    pub fn is_named_node(&self) -> bool {
-        self.as_ref().is_named_node()
-    }
-
-    #[inline]
-    pub fn is_blank_node(&self) -> bool {
-        self.as_ref().is_blank_node()
-    }
-
-    #[inline]
-    pub fn as_ref(&self) -> SubjectRef<'_> {
-        match self {
-            Self::NamedNode(node) => SubjectRef::NamedNode(node.as_ref()),
-            Self::BlankNode(node) => SubjectRef::BlankNode(node.as_ref()),
-        }
-    }
-}
-
-impl fmt::Display for Subject {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().fmt(f)
-    }
-}
-
-impl From<NamedNode> for Subject {
-    #[inline]
-    fn from(node: NamedNode) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl From<NamedNodeRef<'_>> for Subject {
-    #[inline]
-    fn from(node: NamedNodeRef<'_>) -> Self {
-        node.into_owned().into()
-    }
-}
-
-impl From<BlankNode> for Subject {
-    #[inline]
-    fn from(node: BlankNode) -> Self {
-        Self::BlankNode(node)
-    }
-}
-
-impl From<BlankNodeRef<'_>> for Subject {
-    #[inline]
-    fn from(node: BlankNodeRef<'_>) -> Self {
-        node.into_owned().into()
-    }
-}
-
-impl From<NamedOrBlankNode> for Subject {
-    #[inline]
-    fn from(node: NamedOrBlankNode) -> Self {
-        match node {
-            NamedOrBlankNode::NamedNode(node) => node.into(),
-            NamedOrBlankNode::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl From<NamedOrBlankNodeRef<'_>> for Subject {
-    #[inline]
-    fn from(node: NamedOrBlankNodeRef<'_>) -> Self {
-        node.into_owned().into()
-    }
-}
-
-/// The borrowed union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [blank nodes](https://www.w3.org/TR/rdf11-concepts/#dfn-blank-node) and [triples](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) (if the `rdf-12` feature is enabled).
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
-#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "lowercase"))]
-pub enum SubjectRef<'a> {
-    #[cfg_attr(feature = "serde", serde(rename = "uri"))]
-    NamedNode(NamedNodeRef<'a>),
-    #[cfg_attr(feature = "serde", serde(rename = "bnode"))]
-    BlankNode(BlankNodeRef<'a>),
-}
-
-impl SubjectRef<'_> {
-    #[inline]
-    pub fn is_named_node(&self) -> bool {
-        matches!(self, Self::NamedNode(_))
-    }
-
-    #[inline]
-    pub fn is_blank_node(&self) -> bool {
-        matches!(self, Self::BlankNode(_))
-    }
-
-    #[inline]
-    pub fn into_owned(self) -> Subject {
-        match self {
-            Self::NamedNode(node) => Subject::NamedNode(node.into_owned()),
-            Self::BlankNode(node) => Subject::BlankNode(node.into_owned()),
-        }
-    }
-}
-
-impl fmt::Display for SubjectRef<'_> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NamedNode(node) => node.fmt(f),
-            Self::BlankNode(node) => node.fmt(f),
-        }
-    }
-}
-
-impl<'a> From<NamedNodeRef<'a>> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: NamedNodeRef<'a>) -> Self {
-        Self::NamedNode(node)
-    }
-}
-
-impl<'a> From<&'a NamedNode> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: &'a NamedNode) -> Self {
-        node.as_ref().into()
-    }
-}
-
-impl<'a> From<BlankNodeRef<'a>> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: BlankNodeRef<'a>) -> Self {
-        Self::BlankNode(node)
-    }
-}
-
-impl<'a> From<&'a BlankNode> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: &'a BlankNode) -> Self {
-        node.as_ref().into()
-    }
-}
-
-impl<'a> From<&'a Subject> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: &'a Subject) -> Self {
-        node.as_ref()
-    }
-}
-
-impl<'a> From<SubjectRef<'a>> for Subject {
-    #[inline]
-    fn from(node: SubjectRef<'a>) -> Self {
-        node.into_owned()
-    }
-}
-
-impl<'a> From<NamedOrBlankNodeRef<'a>> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: NamedOrBlankNodeRef<'a>) -> Self {
-        match node {
-            NamedOrBlankNodeRef::NamedNode(node) => node.into(),
-            NamedOrBlankNodeRef::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl<'a> From<&'a NamedOrBlankNode> for SubjectRef<'a> {
-    #[inline]
-    fn from(node: &'a NamedOrBlankNode) -> Self {
-        node.as_ref().into()
     }
 }
 
@@ -476,23 +301,6 @@ impl From<NamedOrBlankNodeRef<'_>> for Term {
     }
 }
 
-impl From<Subject> for Term {
-    #[inline]
-    fn from(node: Subject) -> Self {
-        match node {
-            Subject::NamedNode(node) => node.into(),
-            Subject::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl From<SubjectRef<'_>> for Term {
-    #[inline]
-    fn from(node: SubjectRef<'_>) -> Self {
-        node.into_owned().into()
-    }
-}
-
 impl TryFrom<Term> for NamedNode {
     type Error = TryFromTermError;
 
@@ -541,7 +349,7 @@ impl TryFrom<Term> for Literal {
     }
 }
 
-impl TryFrom<Term> for Subject {
+impl TryFrom<Term> for NamedOrBlankNode {
     type Error = TryFromTermError;
 
     #[inline]
@@ -551,7 +359,7 @@ impl TryFrom<Term> for Subject {
             Term::BlankNode(term) => Ok(Self::BlankNode(term)),
             Term::Literal(_) => Err(TryFromTermError {
                 term,
-                target: "Subject",
+                target: "NamedOrBlankNode",
             }),
             #[cfg(feature = "rdf-12")]
             Term::Triple(_) => Err(TryFromTermError {
@@ -694,23 +502,6 @@ impl<'a> From<&'a NamedOrBlankNode> for TermRef<'a> {
     }
 }
 
-impl<'a> From<SubjectRef<'a>> for TermRef<'a> {
-    #[inline]
-    fn from(node: SubjectRef<'a>) -> Self {
-        match node {
-            SubjectRef::NamedNode(node) => node.into(),
-            SubjectRef::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl<'a> From<&'a Subject> for TermRef<'a> {
-    #[inline]
-    fn from(node: &'a Subject) -> Self {
-        node.as_ref().into()
-    }
-}
-
 impl<'a> From<&'a Term> for TermRef<'a> {
     #[inline]
     fn from(node: &'a Term) -> Self {
@@ -746,7 +537,7 @@ impl<'a> From<TermRef<'a>> for Term {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Triple {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
-    pub subject: Subject,
+    pub subject: NamedOrBlankNode,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_predicate"))]
@@ -760,7 +551,7 @@ impl Triple {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
     #[inline]
     pub fn new(
-        subject: impl Into<Subject>,
+        subject: impl Into<NamedOrBlankNode>,
         predicate: impl Into<NamedNode>,
         object: impl Into<Term>,
     ) -> Self {
@@ -836,7 +627,7 @@ impl fmt::Display for Triple {
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct TripleRef<'a> {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
-    pub subject: SubjectRef<'a>,
+    pub subject: NamedOrBlankNodeRef<'a>,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     pub predicate: NamedNodeRef<'a>,
@@ -849,7 +640,7 @@ impl<'a> TripleRef<'a> {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple).
     #[inline]
     pub fn new(
-        subject: impl Into<SubjectRef<'a>>,
+        subject: impl Into<NamedOrBlankNodeRef<'a>>,
         predicate: impl Into<NamedNodeRef<'a>>,
         object: impl Into<TermRef<'a>>,
     ) -> Self {
@@ -1129,7 +920,7 @@ impl<'a> From<GraphNameRef<'a>> for GraphName {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Quad {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
-    pub subject: Subject,
+    pub subject: NamedOrBlankNode,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_predicate"))]
@@ -1147,7 +938,7 @@ impl Quad {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn new(
-        subject: impl Into<Subject>,
+        subject: impl Into<NamedOrBlankNode>,
         predicate: impl Into<NamedNode>,
         object: impl Into<Term>,
         graph_name: impl Into<GraphName>,
@@ -1209,7 +1000,7 @@ impl From<Quad> for Triple {
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct QuadRef<'a> {
     /// The [subject](https://www.w3.org/TR/rdf11-concepts/#dfn-subject) of this triple.
-    pub subject: SubjectRef<'a>,
+    pub subject: NamedOrBlankNodeRef<'a>,
 
     /// The [predicate](https://www.w3.org/TR/rdf11-concepts/#dfn-predicate) of this triple.
     pub predicate: NamedNodeRef<'a>,
@@ -1225,7 +1016,7 @@ impl<'a> QuadRef<'a> {
     /// Builds an RDF [triple](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-triple) in an [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
     #[inline]
     pub fn new(
-        subject: impl Into<SubjectRef<'a>>,
+        subject: impl Into<NamedOrBlankNodeRef<'a>>,
         predicate: impl Into<NamedNodeRef<'a>>,
         object: impl Into<TermRef<'a>>,
         graph_name: impl Into<GraphNameRef<'a>>,

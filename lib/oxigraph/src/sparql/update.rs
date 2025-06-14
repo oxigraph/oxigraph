@@ -13,8 +13,8 @@ use spareval::{QueryEvaluator, QueryResults};
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
     BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundSubject,
-    GroundTerm, GroundTermPattern, NamedNode, NamedNodePattern, Quad, QuadPattern, Subject, Term,
-    TermPattern,
+    GroundTerm, GroundTermPattern, NamedNode, NamedNodePattern, NamedOrBlankNode, Quad,
+    QuadPattern, Term, TermPattern,
 };
 #[cfg(feature = "rdf-12")]
 use spargebra::term::{GroundTriple, GroundTriplePattern, Triple, TriplePattern};
@@ -247,8 +247,10 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     fn convert_quad(quad: &Quad, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> OxQuad {
         OxQuad {
             subject: match &quad.subject {
-                Subject::NamedNode(subject) => subject.clone().into(),
-                Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
+                NamedOrBlankNode::NamedNode(subject) => subject.clone().into(),
+                NamedOrBlankNode::BlankNode(subject) => {
+                    Self::convert_blank_node(subject, bnodes).into()
+                }
             },
             predicate: quad.predicate.clone(),
             object: match &quad.object {
@@ -269,8 +271,10 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     fn convert_triple(triple: &Triple, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> Triple {
         Triple {
             subject: match &triple.subject {
-                Subject::NamedNode(subject) => subject.clone().into(),
-                Subject::BlankNode(subject) => Self::convert_blank_node(subject, bnodes).into(),
+                NamedOrBlankNode::NamedNode(subject) => subject.clone().into(),
+                NamedOrBlankNode::BlankNode(subject) => {
+                    Self::convert_blank_node(subject, bnodes).into()
+                }
             },
             predicate: triple.predicate.clone(),
             object: match &triple.object {

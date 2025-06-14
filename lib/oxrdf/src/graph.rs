@@ -81,26 +81,26 @@ impl Graph {
 
     pub fn triples_for_subject<'a, 'b>(
         &'a self,
-        subject: impl Into<SubjectRef<'b>>,
+        subject: impl Into<NamedOrBlankNodeRef<'b>>,
     ) -> impl Iterator<Item = TripleRef<'a>> + 'a {
         self.graph()
-            .triples_for_interned_subject(self.dataset.encoded_subject(subject))
+            .triples_for_interned_subject(self.dataset.encoded_named_or_blank_node(subject))
     }
 
     pub fn objects_for_subject_predicate<'a, 'b>(
         &'a self,
-        subject: impl Into<SubjectRef<'b>>,
+        subject: impl Into<NamedOrBlankNodeRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> impl Iterator<Item = TermRef<'a>> + 'a {
         self.graph().objects_for_interned_subject_predicate(
-            self.dataset.encoded_subject(subject),
+            self.dataset.encoded_named_or_blank_node(subject),
             self.dataset.encoded_named_node(predicate),
         )
     }
 
     pub fn object_for_subject_predicate<'a, 'b>(
         &'a self,
-        subject: impl Into<SubjectRef<'b>>,
+        subject: impl Into<NamedOrBlankNodeRef<'b>>,
         predicate: impl Into<NamedNodeRef<'b>>,
     ) -> Option<TermRef<'a>> {
         self.graph()
@@ -110,11 +110,11 @@ impl Graph {
 
     pub fn predicates_for_subject_object<'a, 'b>(
         &'a self,
-        subject: impl Into<SubjectRef<'b>>,
+        subject: impl Into<NamedOrBlankNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
     ) -> impl Iterator<Item = NamedNodeRef<'a>> + 'a {
         self.graph().predicates_for_interned_subject_object(
-            self.dataset.encoded_subject(subject),
+            self.dataset.encoded_named_or_blank_node(subject),
             self.dataset.encoded_term(object),
         )
     }
@@ -131,7 +131,7 @@ impl Graph {
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> impl Iterator<Item = SubjectRef<'a>> + 'a {
+    ) -> impl Iterator<Item = NamedOrBlankNodeRef<'a>> + 'a {
         self.graph().subjects_for_interned_predicate_object(
             self.dataset.encoded_named_node(predicate),
             self.dataset.encoded_term(object),
@@ -142,7 +142,7 @@ impl Graph {
         &'a self,
         predicate: impl Into<NamedNodeRef<'b>>,
         object: impl Into<TermRef<'b>>,
-    ) -> Option<SubjectRef<'a>> {
+    ) -> Option<NamedOrBlankNodeRef<'a>> {
         self.graph().subject_for_predicate_object(predicate, object)
     }
 

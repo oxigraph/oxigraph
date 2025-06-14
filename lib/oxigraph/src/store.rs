@@ -312,7 +312,7 @@ impl Store {
     /// ```
     pub fn quads_for_pattern(
         &self,
-        subject: Option<SubjectRef<'_>>,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
@@ -1029,7 +1029,7 @@ impl Transaction<'_> {
     /// ```
     pub fn quads_for_pattern(
         &self,
-        subject: Option<SubjectRef<'_>>,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
@@ -1577,7 +1577,7 @@ mod tests {
     fn store() -> Result<(), StorageError> {
         use crate::model::*;
 
-        let main_s = Subject::from(BlankNode::default());
+        let main_s = NamedOrBlankNode::from(BlankNode::default());
         let main_p = NamedNode::new("http://example.com").unwrap();
         let main_o = Term::from(Literal::from(1));
         let main_g = GraphName::from(BlankNode::default());

@@ -7,13 +7,13 @@ use oxiri::Iri;
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Subject, Term};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
 
 pub struct TriGRecognizer {
     stack: Vec<TriGState>,
-    cur_subject: Vec<Subject>,
+    cur_subject: Vec<NamedOrBlankNode>,
     cur_predicate: Vec<NamedNode>,
     cur_object: Vec<Term>,
     cur_graph: GraphName,
@@ -232,7 +232,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.cur_graph = term.into();
                         self.stack.push(TriGState::WrappedGraph);
                     } else {
-                        self.cur_subject.push(term.into());
+                        self.cur_subject.push(term);
                         self.stack.push(TriGState::ExpectDot);
                         self.stack.push(TriGState::PredicateObjectList);
                     }
@@ -548,7 +548,7 @@ impl RuleRecognizer for TriGRecognizer {
                             ));
                             reifier.into()
                         };
-                        self.cur_subject.push(reifier.into());
+                        self.cur_subject.push(reifier);
                         self.stack.push(TriGState::AnnotationEnd { with_reifier });
                         self.stack.push(TriGState::PredicateObjectList);
                         self
@@ -859,8 +859,7 @@ impl RuleRecognizer for TriGRecognizer {
                 // [29] reifiedTriple 	::= 	'<<' rtSubject verb rtObject reifier? '>>'
                 #[cfg(feature = "rdf-12")]
                 TriGState::SubjectReifiedTripleEnd => {
-                    self.cur_subject
-                        .push(self.cur_reifier.pop().unwrap().into());
+                    self.cur_subject.push(self.cur_reifier.pop().unwrap());
                     if token == N3Token::Punctuation(">>") {
                         self
                     } else {

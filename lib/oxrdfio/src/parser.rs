@@ -9,7 +9,7 @@ use oxjsonld::{
     JsonLdParser, JsonLdPrefixesIter, JsonLdProfileSet, JsonLdRemoteDocument, ReaderJsonLdParser,
     SliceJsonLdParser,
 };
-use oxrdf::{BlankNode, GraphName, IriParseError, Quad, Subject, Term, Triple};
+use oxrdf::{BlankNode, GraphName, IriParseError, NamedOrBlankNode, Quad, Term, Triple};
 #[cfg(feature = "async-tokio")]
 use oxrdfxml::TokioAsyncReaderRdfXmlParser;
 use oxrdfxml::{RdfXmlParser, RdfXmlPrefixesIter, ReaderRdfXmlParser, SliceRdfXmlParser};
@@ -1030,10 +1030,10 @@ impl QuadMapper {
         }
     }
 
-    fn map_subject(&mut self, node: Subject) -> Subject {
+    fn map_subject(&mut self, node: NamedOrBlankNode) -> NamedOrBlankNode {
         match node {
-            Subject::NamedNode(node) => node.into(),
-            Subject::BlankNode(node) => self.map_blank_node(node).into(),
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => self.map_blank_node(node).into(),
         }
     }
 

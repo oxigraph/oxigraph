@@ -24,9 +24,13 @@ pub use crate::literal::{Literal, LiteralRef};
 pub use crate::named_node::{NamedNode, NamedNodeRef};
 pub use crate::parser::TermParseError;
 pub use crate::triple::{
-    GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Subject,
-    SubjectRef, Term, TermRef, Triple, TripleRef, TryFromTermError,
+    GraphName, GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef, Term, TermRef,
+    Triple, TripleRef, TryFromTermError,
 };
 pub use crate::variable::{Variable, VariableNameParseError, VariableRef};
 pub use oxilangtag::LanguageTagParseError;
 pub use oxiri::IriParseError;
+#[deprecated(note = "Use `NamedOrBlankNode` instead", since = "0.5.0")]
+pub type Subject = NamedOrBlankNode;
+#[deprecated(note = "Use `NamedOrBlankNodeRef` instead", since = "0.5.0")]
+pub type SubjectRef<'a> = NamedOrBlankNodeRef<'a>;

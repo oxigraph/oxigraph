@@ -314,38 +314,38 @@ impl InternedLiteral {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
-pub enum InternedSubject {
+pub enum InternedNamedOrBlankNode {
     NamedNode(InternedNamedNode),
     BlankNode(InternedBlankNode),
 }
 
-impl InternedSubject {
-    pub fn encoded_into(node: SubjectRef<'_>, interner: &mut Interner) -> Self {
+impl InternedNamedOrBlankNode {
+    pub fn encoded_into(node: NamedOrBlankNodeRef<'_>, interner: &mut Interner) -> Self {
         match node {
-            SubjectRef::NamedNode(node) => {
+            NamedOrBlankNodeRef::NamedNode(node) => {
                 Self::NamedNode(InternedNamedNode::encoded_into(node, interner))
             }
-            SubjectRef::BlankNode(node) => {
+            NamedOrBlankNodeRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_into(node, interner))
             }
         }
     }
 
-    pub fn encoded_from(node: SubjectRef<'_>, interner: &Interner) -> Option<Self> {
+    pub fn encoded_from(node: NamedOrBlankNodeRef<'_>, interner: &Interner) -> Option<Self> {
         Some(match node {
-            SubjectRef::NamedNode(node) => {
+            NamedOrBlankNodeRef::NamedNode(node) => {
                 Self::NamedNode(InternedNamedNode::encoded_from(node, interner)?)
             }
-            SubjectRef::BlankNode(node) => {
+            NamedOrBlankNodeRef::BlankNode(node) => {
                 Self::BlankNode(InternedBlankNode::encoded_from(node, interner)?)
             }
         })
     }
 
-    pub fn decode_from<'a>(&self, interner: &'a Interner) -> SubjectRef<'a> {
+    pub fn decode_from<'a>(&self, interner: &'a Interner) -> NamedOrBlankNodeRef<'a> {
         match self {
-            Self::NamedNode(node) => SubjectRef::NamedNode(node.decode_from(interner)),
-            Self::BlankNode(node) => SubjectRef::BlankNode(node.decode_from(interner)),
+            Self::NamedNode(node) => NamedOrBlankNodeRef::NamedNode(node.decode_from(interner)),
+            Self::BlankNode(node) => NamedOrBlankNodeRef::BlankNode(node.decode_from(interner)),
         }
     }
 
@@ -497,7 +497,7 @@ impl InternedTerm {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
 pub struct InternedTriple {
-    pub subject: InternedSubject,
+    pub subject: InternedNamedOrBlankNode,
     pub predicate: InternedNamedNode,
     pub object: InternedTerm,
 }
@@ -506,7 +506,7 @@ pub struct InternedTriple {
 impl InternedTriple {
     pub fn encoded_into(triple: TripleRef<'_>, interner: &mut Interner) -> Self {
         let interned_triple = Self {
-            subject: InternedSubject::encoded_into(triple.subject, interner),
+            subject: InternedNamedOrBlankNode::encoded_into(triple.subject, interner),
             predicate: InternedNamedNode::encoded_into(triple.predicate, interner),
             object: InternedTerm::encoded_into(triple.object, interner),
         };
@@ -518,7 +518,7 @@ impl InternedTriple {
 
     pub fn encoded_from(triple: TripleRef<'_>, interner: &Interner) -> Option<Self> {
         let interned_triple = Self {
-            subject: InternedSubject::encoded_from(triple.subject, interner)?,
+            subject: InternedNamedOrBlankNode::encoded_from(triple.subject, interner)?,
             predicate: InternedNamedNode::encoded_from(triple.predicate, interner)?,
             object: InternedTerm::encoded_from(triple.object, interner)?,
         };

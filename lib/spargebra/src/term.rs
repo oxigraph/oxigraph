@@ -1,6 +1,6 @@
 //! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
 
-pub use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term, Triple, Variable};
+pub use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple, Variable};
 use std::fmt;
 use std::fmt::Write;
 
@@ -28,18 +28,18 @@ impl From<NamedNode> for GroundSubject {
     }
 }
 
-impl TryFrom<Subject> for GroundSubject {
+impl TryFrom<NamedOrBlankNode> for GroundSubject {
     type Error = ();
 
     #[inline]
-    fn try_from(subject: Subject) -> Result<Self, Self::Error> {
+    fn try_from(subject: NamedOrBlankNode) -> Result<Self, Self::Error> {
         match subject {
-            Subject::NamedNode(t) => Ok(t.into()),
-            Subject::BlankNode(_) => Err(()),
+            NamedOrBlankNode::NamedNode(t) => Ok(t.into()),
+            NamedOrBlankNode::BlankNode(_) => Err(()),
         }
     }
 }
-impl From<GroundSubject> for Subject {
+impl From<GroundSubject> for NamedOrBlankNode {
     #[inline]
     fn from(subject: GroundSubject) -> Self {
         match subject {
@@ -264,7 +264,7 @@ impl TryFrom<GraphNamePattern> for GraphName {
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Quad {
-    pub subject: Subject,
+    pub subject: NamedOrBlankNode,
     pub predicate: NamedNode,
     pub object: Term,
     pub graph_name: GraphName,
@@ -521,12 +521,12 @@ impl From<Variable> for TermPattern {
     }
 }
 
-impl From<Subject> for TermPattern {
+impl From<NamedOrBlankNode> for TermPattern {
     #[inline]
-    fn from(subject: Subject) -> Self {
+    fn from(subject: NamedOrBlankNode) -> Self {
         match subject {
-            Subject::NamedNode(node) => node.into(),
-            Subject::BlankNode(node) => node.into(),
+            NamedOrBlankNode::NamedNode(node) => node.into(),
+            NamedOrBlankNode::BlankNode(node) => node.into(),
         }
     }
 }
@@ -567,7 +567,7 @@ impl From<GroundTermPattern> for TermPattern {
     }
 }
 
-impl TryFrom<TermPattern> for Subject {
+impl TryFrom<TermPattern> for NamedOrBlankNode {
     type Error = ();
 
     #[inline]
