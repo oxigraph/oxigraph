@@ -4,7 +4,10 @@ use libfuzzer_sys::fuzz_target;
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{Dataset, Graph, NamedNode};
-use oxigraph::sparql::{EvaluationError, Query, QueryOptions, QueryResults, ServiceHandler};
+use oxigraph::sparql::{
+    DefaultServiceHandler as OxDefaultServiceHandler, EvaluationError, Query, QueryOptions,
+    QueryResults,
+};
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
@@ -33,7 +36,7 @@ fuzz_target!(|data: sparql_smith::Query| {
 
     let query_str = data.to_string();
     if let Ok(query) = spargebra::Query::parse(&query_str, None) {
-        let options = QueryOptions::default().with_service_handler(StoreServiceHandler {
+        let options = QueryOptions::default().with_default_service_handler(StoreServiceHandler {
             store: store.clone(),
         });
         let with_opt = store.query_opt(Query::from(query.clone()), options.clone());
@@ -95,7 +98,7 @@ struct StoreServiceHandler {
     store: Store,
 }
 
-impl ServiceHandler for StoreServiceHandler {
+impl OxDefaultServiceHandler for StoreServiceHandler {
     type Error = EvaluationError;
 
     fn handle(
@@ -111,7 +114,7 @@ impl ServiceHandler for StoreServiceHandler {
             .set_default_graph(vec![service_name.into()]);
         self.store.query_opt(
             query,
-            QueryOptions::default().with_service_handler(self.clone()),
+            QueryOptions::default().with_default_service_handler(self.clone()),
         )
     }
 }
