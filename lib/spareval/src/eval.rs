@@ -1,6 +1,6 @@
 use crate::CustomFunctionRegistry;
 #[cfg(feature = "sparql-12")]
-use crate::dataset::{ExpressionSubject, ExpressionTriple};
+use crate::dataset::ExpressionTriple;
 use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 use crate::error::QueryEvaluationError;
 use crate::model::{QuerySolutionIter, QueryTripleIter};
@@ -8,9 +8,9 @@ use crate::service::ServiceHandlerRegistry;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use md5::{Digest, Md5};
 use oxiri::Iri;
-#[cfg(feature = "sparql-12")]
-use oxrdf::BaseDirection;
 use oxrdf::vocab::{rdf, xsd};
+#[cfg(feature = "sparql-12")]
+use oxrdf::{BaseDirection, NamedOrBlankNode};
 use oxrdf::{BlankNode, Literal, NamedNode, Term, Triple, Variable};
 #[cfg(feature = "sep-0002")]
 use oxsdatatypes::{Date, Duration, Time, TimezoneOffset, YearMonthDuration};
@@ -4318,13 +4318,13 @@ fn cmp_terms(a: Option<&ExpressionTerm>, b: Option<&ExpressionTerm>) -> Ordering
 #[cfg(feature = "sparql-12")]
 fn cmp_triples(a: &ExpressionTriple, b: &ExpressionTriple) -> Ordering {
     match match &a.subject {
-        ExpressionSubject::BlankNode(a) => match &b.subject {
-            ExpressionSubject::BlankNode(b) => a.as_str().cmp(b.as_str()),
-            ExpressionSubject::NamedNode(_) => Ordering::Less,
+        NamedOrBlankNode::BlankNode(a) => match &b.subject {
+            NamedOrBlankNode::BlankNode(b) => a.as_str().cmp(b.as_str()),
+            NamedOrBlankNode::NamedNode(_) => Ordering::Less,
         },
-        ExpressionSubject::NamedNode(a) => match &b.subject {
-            ExpressionSubject::BlankNode(_) => Ordering::Greater,
-            ExpressionSubject::NamedNode(b) => a.as_str().cmp(b.as_str()),
+        NamedOrBlankNode::NamedNode(a) => match &b.subject {
+            NamedOrBlankNode::BlankNode(_) => Ordering::Greater,
+            NamedOrBlankNode::NamedNode(b) => a.as_str().cmp(b.as_str()),
         },
     } {
         Ordering::Equal => match a.predicate.as_str().cmp(b.predicate.as_str()) {
@@ -4515,12 +4515,12 @@ fn partial_cmp_literals(a: &ExpressionTerm, b: &ExpressionTerm) -> Option<Orderi
 fn partial_cmp_triples(a: &ExpressionTriple, b: &ExpressionTriple) -> Option<Ordering> {
     // We compare subjects
     match (&a.subject, &b.subject) {
-        (ExpressionSubject::NamedNode(a), ExpressionSubject::NamedNode(b)) => {
+        (NamedOrBlankNode::NamedNode(a), NamedOrBlankNode::NamedNode(b)) => {
             if a != b {
                 return None;
             }
         }
-        (ExpressionSubject::BlankNode(a), ExpressionSubject::BlankNode(b)) => {
+        (NamedOrBlankNode::BlankNode(a), NamedOrBlankNode::BlankNode(b)) => {
             if a != b {
                 return None;
             }

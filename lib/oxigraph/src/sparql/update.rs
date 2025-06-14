@@ -13,8 +13,8 @@ use spareval::{QueryEvaluator, QueryResults};
 use spargebra::algebra::{GraphPattern, GraphTarget};
 use spargebra::term::{
     BlankNode, GraphName, GraphNamePattern, GroundQuad, GroundQuadPattern, GroundTerm,
-    GroundTermPattern, NamedNode, NamedNodePattern, NamedOrBlankNode, Quad,
-    QuadPattern, Term, TermPattern,
+    GroundTermPattern, NamedNode, NamedNodePattern, NamedOrBlankNode, Quad, QuadPattern, Term,
+    TermPattern,
 };
 #[cfg(feature = "rdf-12")]
 use spargebra::term::{GroundTriple, GroundTriplePattern, Triple, TriplePattern};
