@@ -299,7 +299,23 @@ fn read_blank_node(s: &str) -> Result<(BlankNode, &str), TermParseError> {
         let mut end = remain
             .find(|v: char| {
                 v.is_whitespace()
-                    || matches!(v, '<' | '?' | '$' | '"' | '\'' | '>' | '@' | '^' | ':')
+                    || matches!(
+                        v,
+                        '<' | '?'
+                            | '$'
+                            | '"'
+                            | '\''
+                            | '>'
+                            | '@'
+                            | '^'
+                            | ':'
+                            | '('
+                            | ')'
+                            | '{'
+                            | '}'
+                            | '['
+                            | ']'
+                    )
             })
             .unwrap_or(remain.len());
         if let Some(pos) = remain[..end].find("..") {
