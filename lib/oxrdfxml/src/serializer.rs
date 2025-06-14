@@ -1,7 +1,7 @@
 use crate::utils::*;
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{NamedNodeRef, Subject, SubjectRef, TermRef, TripleRef};
+use oxrdf::{NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, TermRef, TripleRef};
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use std::borrow::Cow;
@@ -329,7 +329,7 @@ const RESERVED_SYNTAX_TERMS: [&str; 9] = [
 ];
 
 pub struct InnerRdfXmlWriter {
-    current_subject: Option<Subject>,
+    current_subject: Option<NamedOrBlankNode>,
     current_resource_tag: Option<String>,
     custom_default_prefix: bool,
     prefixes_by_iri: BTreeMap<String, String>,
@@ -348,7 +348,7 @@ impl InnerRdfXmlWriter {
 
         let triple = t.into();
         // We open a new rdf:Description if useful
-        if self.current_subject.as_ref().map(Subject::as_ref) != Some(triple.subject) {
+        if self.current_subject.as_ref().map(NamedOrBlankNode::as_ref) != Some(triple.subject) {
             if self.current_subject.is_some() {
                 output.push(Event::End(
                     self.current_resource_tag
@@ -383,9 +383,9 @@ impl InnerRdfXmlWriter {
                 clippy::allow_attributes
             )]
             match triple.subject {
-                SubjectRef::NamedNode(node) => description_open
+                NamedOrBlankNodeRef::NamedNode(node) => description_open
                     .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri))),
-                SubjectRef::BlankNode(node) => {
+                NamedOrBlankNodeRef::BlankNode(node) => {
                     description_open.push_attribute(("rdf:nodeID", node.as_str()))
                 }
                 _ => {

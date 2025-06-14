@@ -3,7 +3,7 @@ use crate::utils::*;
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::rdf;
-use oxrdf::{BlankNode, Literal, NamedNode, Subject, Term, Triple};
+use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
@@ -721,7 +721,7 @@ const RESERVED_RDF_ATTRIBUTES: [&str; 5] = [
 
 #[derive(Clone, Debug)]
 enum NodeOrText {
-    Node(Subject),
+    Node(NamedOrBlankNode),
     Text(String),
 }
 
@@ -736,7 +736,7 @@ enum RdfXmlState {
     NodeElt {
         base_iri: Option<Iri<String>>,
         language: Option<String>,
-        subject: Subject,
+        subject: NamedOrBlankNode,
         li_counter: u64,
     },
     PropertyElt {
@@ -744,7 +744,7 @@ enum RdfXmlState {
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
-        subject: Subject,
+        subject: NamedOrBlankNode,
         object: Option<NodeOrText>,
         id_attr: Option<NamedNode>,
         datatype_attr: Option<NamedNode>,
@@ -753,15 +753,15 @@ enum RdfXmlState {
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
-        subject: Subject,
-        objects: Vec<Subject>,
+        subject: NamedOrBlankNode,
+        objects: Vec<NamedOrBlankNode>,
         id_attr: Option<NamedNode>,
     },
     ParseTypeLiteralPropertyElt {
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
-        subject: Subject,
+        subject: NamedOrBlankNode,
         writer: Writer<Vec<u8>>,
         id_attr: Option<NamedNode>,
         emit: bool, // false for parseTypeOtherPropertyElt support
@@ -869,7 +869,7 @@ impl<R> InternalRdfXmlParser<R> {
         enum RdfXmlNextProduction {
             Rdf,
             NodeElt,
-            PropertyElt { subject: Subject },
+            PropertyElt { subject: NamedOrBlankNode },
         }
 
         // Literal case
@@ -1114,7 +1114,7 @@ impl<R> InternalRdfXmlParser<R> {
                         {
                             let object = match (resource_attr, node_id_attr)
                             {
-                                (Some(resource_attr), None) => Subject::from(resource_attr),
+                                (Some(resource_attr), None) => NamedOrBlankNode::from(resource_attr),
                                 (None, Some(node_id_attr)) => node_id_attr.into(),
                                 (None, None) => BlankNode::default().into(),
                                 (Some(_), Some(_)) => return Err(RdfXmlSyntaxError::msg("Not both rdf:resource and rdf:nodeID could be set at the same time").into())
@@ -1291,7 +1291,7 @@ impl<R> InternalRdfXmlParser<R> {
         results: &mut Vec<Triple>,
     ) -> Result<RdfXmlState, RdfXmlSyntaxError> {
         let subject = match (id_attr, node_id_attr, about_attr) {
-            (Some(id_attr), None, None) => Subject::from(id_attr),
+            (Some(id_attr), None, None) => NamedOrBlankNode::from(id_attr),
             (None, Some(node_id_attr), None) => node_id_attr.into(),
             (None, None, Some(about_attr)) => about_attr.into(),
             (None, None, None) => BlankNode::default().into(),
@@ -1333,7 +1333,7 @@ impl<R> InternalRdfXmlParser<R> {
         iri: NamedNode,
         base_iri: Option<Iri<String>>,
         language: Option<String>,
-        subject: Subject,
+        subject: NamedOrBlankNode,
         id_attr: Option<NamedNode>,
         results: &mut Vec<Triple>,
     ) -> RdfXmlState {
@@ -1388,9 +1388,9 @@ impl<R> InternalRdfXmlParser<R> {
                 objects,
                 ..
             } => {
-                let mut current_node = Subject::from(rdf::NIL);
+                let mut current_node = NamedOrBlankNode::from(rdf::NIL);
                 for object in objects.into_iter().rev() {
-                    let subject = Subject::from(BlankNode::default());
+                    let subject = NamedOrBlankNode::from(BlankNode::default());
                     results.push(Triple::new(subject.clone(), rdf::FIRST, object));
                     results.push(Triple::new(subject.clone(), rdf::REST, current_node));
                     current_node = subject;
@@ -1487,7 +1487,7 @@ impl<R> InternalRdfXmlParser<R> {
 
     fn emit_property_attrs(
         &self,
-        subject: &Subject,
+        subject: &NamedOrBlankNode,
         literal_attributes: Vec<(NamedNode, String)>,
         language: Option<&str>,
         results: &mut Vec<Triple>,

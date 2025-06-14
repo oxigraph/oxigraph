@@ -199,7 +199,7 @@ impl PyStore {
     #[pyo3(signature = (subject, predicate, object, graph_name = None))]
     fn quads_for_pattern(
         &self,
-        subject: Option<PySubjectRef<'_>>,
+        subject: Option<PyNamedOrBlankNodeRef<'_>>,
         predicate: Option<PyNamedNodeRef<'_>>,
         object: Option<PyTermRef<'_>>,
         graph_name: Option<PyGraphNameRef<'_>>,

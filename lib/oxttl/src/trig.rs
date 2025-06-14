@@ -9,7 +9,8 @@ use crate::toolkit::{Parser, ReaderIterator, SliceIterator, TurtleParseError, Tu
 use oxiri::{Iri, IriParseError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
-    GraphName, GraphNameRef, LiteralRef, NamedNode, NamedNodeRef, Quad, QuadRef, Subject, TermRef,
+    GraphName, GraphNameRef, LiteralRef, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, QuadRef,
+    TermRef,
 };
 use std::borrow::Cow;
 use std::collections::hash_map::Iter;
@@ -1044,7 +1045,7 @@ pub struct LowLevelTriGSerializer {
     base_iri: Option<Iri<String>>,
     prelude_written: bool,
     current_graph_name: GraphName,
-    current_subject_predicate: Option<(Subject, NamedNode)>,
+    current_subject_predicate: Option<(NamedOrBlankNode, NamedNode)>,
 }
 
 impl LowLevelTriGSerializer {

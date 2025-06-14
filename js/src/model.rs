@@ -298,12 +298,6 @@ impl From<JsNamedNode> for NamedOrBlankNode {
     }
 }
 
-impl From<JsNamedNode> for Subject {
-    fn from(node: JsNamedNode) -> Self {
-        node.inner.into()
-    }
-}
-
 impl From<JsNamedNode> for Term {
     fn from(node: JsNamedNode) -> Self {
         node.inner.into()
@@ -363,12 +357,6 @@ impl From<JsBlankNode> for BlankNode {
 }
 
 impl From<JsBlankNode> for NamedOrBlankNode {
-    fn from(node: JsBlankNode) -> Self {
-        node.inner.into()
-    }
-}
-
-impl From<JsBlankNode> for Subject {
     fn from(node: JsBlankNode) -> Self {
         node.inner.into()
     }
@@ -661,15 +649,6 @@ impl From<NamedOrBlankNode> for JsTerm {
     }
 }
 
-impl From<Subject> for JsTerm {
-    fn from(node: Subject) -> Self {
-        match node {
-            Subject::NamedNode(node) => node.into(),
-            Subject::BlankNode(node) => node.into(),
-        }
-    }
-}
-
 impl From<Term> for JsTerm {
     fn from(term: Term) -> Self {
         match term {
@@ -760,38 +739,6 @@ impl TryFrom<JsTerm> for NamedOrBlankNode {
             )),
             JsTerm::Quad(quad) => Err(format_err!(
                 "The quad {} is not a possible named or blank node term",
-                quad.inner
-            )),
-        }
-    }
-}
-
-impl TryFrom<JsTerm> for Subject {
-    type Error = JsValue;
-
-    fn try_from(value: JsTerm) -> Result<Self, Self::Error> {
-        match value {
-            JsTerm::NamedNode(node) => Ok(node.into()),
-            JsTerm::BlankNode(node) => Ok(node.into()),
-            JsTerm::Literal(literal) => Err(format_err!(
-                "The literal {} is not a possible RDF subject",
-                literal.inner
-            )),
-            JsTerm::DefaultGraph(_) => Err(format_err!(
-                "The default graph is not a possible RDF subject"
-            )),
-            JsTerm::Variable(variable) => Err(format_err!(
-                "The variable {} is not a possible RDF subject",
-                variable.inner
-            )),
-            #[cfg(feature = "rdf-12")]
-            JsTerm::Quad(quad) => Err(format_err!(
-                "The triple term <<( {} )>> is not a possible RDF subject",
-                quad.inner
-            )),
-            #[cfg(not(feature = "rdf-12"))]
-            JsTerm::Quad(quad) => Err(format_err!(
-                "The quad {} is not a possible RDF subject",
                 quad.inner
             )),
         }
@@ -983,7 +930,7 @@ impl FromJsConverter {
         graph_name: &JsValue,
     ) -> Result<Quad, JsValue> {
         Ok(Quad {
-            subject: Subject::try_from(self.to_term(subject)?)?,
+            subject: NamedOrBlankNode::try_from(self.to_term(subject)?)?,
             predicate: NamedNode::try_from(self.to_term(predicate)?)?,
             object: Term::try_from(self.to_term(object)?)?,
             graph_name: if graph_name.is_undefined() {

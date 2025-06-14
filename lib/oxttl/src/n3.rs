@@ -13,8 +13,7 @@ use oxiri::{Iri, IriParseError};
 use oxrdf::Triple;
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::{
-    BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Subject, Term,
-    Variable,
+    BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad, Term, Variable,
 };
 use std::collections::HashMap;
 use std::collections::hash_map::Iter;
@@ -98,16 +97,6 @@ impl From<NamedOrBlankNode> for N3Term {
         match node {
             NamedOrBlankNode::NamedNode(node) => node.into(),
             NamedOrBlankNode::BlankNode(node) => node.into(),
-        }
-    }
-}
-
-impl From<Subject> for N3Term {
-    #[inline]
-    fn from(node: Subject) -> Self {
-        match node {
-            Subject::NamedNode(node) => node.into(),
-            Subject::BlankNode(node) => node.into(),
         }
     }
 }

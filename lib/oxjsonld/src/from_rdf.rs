@@ -6,7 +6,7 @@ use oxiri::{Iri, IriParseError};
 use oxrdf::BaseDirection;
 use oxrdf::vocab::xsd;
 use oxrdf::{
-    GraphName, GraphNameRef, NamedNode, NamedOrBlankNodeRef, QuadRef, Subject, SubjectRef, TermRef,
+    GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -326,7 +326,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterJsonLdSerializer<W> {
 pub struct InnerJsonLdWriter {
     started: bool,
     current_graph_name: Option<GraphName>,
-    current_subject: Option<Subject>,
+    current_subject: Option<NamedOrBlankNode>,
     current_predicate: Option<NamedNode>,
     emitted_predicates: BTreeSet<String>,
     prefixes: BTreeMap<String, String>,
@@ -417,8 +417,8 @@ impl InnerJsonLdWriter {
                 clippy::allow_attributes
             )]
             output.push(JsonEvent::String(self.id_value(match quad.subject {
-                SubjectRef::NamedNode(iri) => iri.into(),
-                SubjectRef::BlankNode(bnode) => bnode.into(),
+                NamedOrBlankNodeRef::NamedNode(iri) => iri.into(),
+                NamedOrBlankNodeRef::BlankNode(bnode) => bnode.into(),
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,

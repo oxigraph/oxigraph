@@ -135,7 +135,7 @@ impl JsStore {
                     None
                 }
                 .as_ref()
-                .map(<&Subject>::into),
+                .map(<&NamedOrBlankNode>::into),
                 if let Some(predicate) = FROM_JS.with(|c| c.to_optional_term(predicate))? {
                     Some(NamedNode::try_from(predicate)?)
                 } else {
