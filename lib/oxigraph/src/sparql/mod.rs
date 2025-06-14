@@ -5,25 +5,26 @@
 mod algebra;
 mod dataset;
 mod error;
+#[cfg(feature = "http-client")]
 mod http;
 mod model;
 pub mod results;
-mod service;
 mod update;
 
 use crate::model::{NamedNode, Term};
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::EvaluationError;
-pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 #[cfg(feature = "http-client")]
-use crate::sparql::service::SimpleServiceHandler;
+use crate::sparql::http::HttpServiceHandler;
+pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 pub(crate) use crate::sparql::update::evaluate_update;
 use crate::storage::StorageReader;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
 pub use spareval::{DefaultServiceHandler, QueryExplanation, ServiceHandler};
 pub use spargebra::SparqlSyntaxError;
+#[cfg(feature = "http-client")]
 use std::time::Duration;
 
 pub(crate) fn evaluate_query(
@@ -100,7 +101,10 @@ impl QueryOptions {
         mut self,
         handler: impl DefaultServiceHandler + 'static,
     ) -> Self {
-        self.with_http_default_service_handler = false;
+        #[cfg(feature = "http-client")]
+        {
+            self.with_http_default_service_handler = false;
+        }
         self.inner = self.inner.with_default_service_handler(handler);
         self
     }
@@ -146,12 +150,13 @@ impl QueryOptions {
         self
     }
 
+    #[cfg_attr(not(feature = "http-client"), expect(unused_mut))]
     fn into_evaluator(mut self) -> QueryEvaluator {
         #[cfg(feature = "http-client")]
         if self.with_http_default_service_handler {
             self.inner = self
                 .inner
-                .with_default_service_handler(SimpleServiceHandler::new(
+                .with_default_service_handler(HttpServiceHandler::new(
                     self.http_timeout,
                     self.http_redirection_limit,
                 ))
