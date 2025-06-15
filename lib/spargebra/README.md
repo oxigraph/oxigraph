@@ -22,10 +22,10 @@ This crate is intended to be a building piece for SPARQL implementations in Rust
 Usage example:
 
 ```rust
-use spargebra::Query;
+use spargebra::SparqlParser;
 
 let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-let query = Query::parse(query_str, None).unwrap();
+let query = SparqlParser::new().parse_query(query_str).unwrap();
 assert_eq!(query.to_string(), query_str);
 ```
 

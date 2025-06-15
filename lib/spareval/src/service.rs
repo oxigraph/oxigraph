@@ -16,7 +16,7 @@ use std::sync::Arc;
 /// use oxrdf::{Dataset, Literal, NamedNode, Variable};
 /// use sparesults::QuerySolution;
 /// use spareval::{QueryEvaluator, QueryResults, QuerySolutionIter, ServiceHandler};
-/// use spargebra::Query;
+/// use spargebra::SparqlParser;
 /// use spargebra::algebra::GraphPattern;
 /// use std::convert::Infallible;
 /// use std::iter::once;
@@ -48,10 +48,8 @@ use std::sync::Arc;
 ///     NamedNode::new("http://example.com/service")?,
 ///     TestServiceHandler {},
 /// );
-/// let query = Query::parse(
-///     "SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }",
-///     None,
-/// )?;
+/// let query = SparqlParser::new()
+///     .parse_query("SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }")?;
 /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
 ///     assert_eq!(
 ///         solutions.next().unwrap()?.get("foo"),
@@ -83,7 +81,7 @@ pub trait ServiceHandler: Send + Sync {
 /// use oxrdf::{Dataset, NamedNode, Variable};
 /// use sparesults::QuerySolution;
 /// use spareval::{DefaultServiceHandler, QueryEvaluator, QueryResults, QuerySolutionIter};
-/// use spargebra::Query;
+/// use spargebra::SparqlParser;
 /// use spargebra::algebra::GraphPattern;
 /// use std::convert::Infallible;
 /// use std::iter::once;
@@ -113,10 +111,8 @@ pub trait ServiceHandler: Send + Sync {
 /// }
 ///
 /// let evaluator = QueryEvaluator::default().with_default_service_handler(TestServiceHandler {});
-/// let query = Query::parse(
-///     "SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }",
-///     None,
-/// )?;
+/// let query = SparqlParser::new()
+///     .parse_query("SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }")?;
 /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
 ///     assert_eq!(
 ///         solutions.next().unwrap()?.get("foo"),

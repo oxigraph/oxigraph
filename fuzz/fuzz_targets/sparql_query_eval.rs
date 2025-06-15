@@ -13,6 +13,7 @@ use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
 use oxrdf::{GraphNameRef, QuadRef};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator};
+use spargebra::SparqlParser;
 use spargebra::algebra::GraphPattern;
 use std::sync::OnceLock;
 
@@ -35,7 +36,7 @@ fuzz_target!(|data: sparql_smith::Query| {
     });
 
     let query_str = data.to_string();
-    if let Ok(query) = spargebra::Query::parse(&query_str, None) {
+    if let Ok(query) = SparqlParser::new().parse_query(&query_str) {
         let options = QueryOptions::default().with_default_service_handler(StoreServiceHandler {
             store: store.clone(),
         });

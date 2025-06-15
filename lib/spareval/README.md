@@ -17,7 +17,7 @@ to be a building piece for SPARQL implementations like [oxigraph](https://oxigra
 ```rust
 use oxrdf::{Dataset, GraphName, NamedNode, Quad};
 use spareval::{QueryEvaluator, QueryResults};
-use spargebra::Query;
+use spargebra::SparqlParser;
 
 let ex = NamedNode::new("http://example.com").unwrap();
 let dataset = Dataset::from_iter([Quad::new(
@@ -26,7 +26,7 @@ let dataset = Dataset::from_iter([Quad::new(
     ex.clone(),
     GraphName::DefaultGraph,
 )]);
-let query = Query::parse("SELECT * WHERE { ?s ?p ?o }", None).unwrap();
+let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }").unwrap();
 let results = QueryEvaluator::new().execute(dataset, &query);
 if let QueryResults::Solutions(solutions) = results.unwrap() {
     let solutions = solutions.collect::<Result<Vec<_>, _>>().unwrap();

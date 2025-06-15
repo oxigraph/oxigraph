@@ -38,7 +38,7 @@ use std::{fmt, io};
 /// ```
 /// use oxrdf::{Dataset, GraphName, NamedNode, Quad};
 /// use spareval::{QueryEvaluator, QueryResults};
-/// use spargebra::Query;
+/// use spargebra::SparqlParser;
 ///
 /// let ex = NamedNode::new("http://example.com")?;
 /// let dataset = Dataset::from_iter([Quad::new(
@@ -47,7 +47,7 @@ use std::{fmt, io};
 ///     ex.clone(),
 ///     GraphName::DefaultGraph,
 /// )]);
-/// let query = Query::parse("SELECT * WHERE { ?s ?p ?o }", None)?;
+/// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
 /// let results = QueryEvaluator::new().execute(dataset, &query);
 /// if let QueryResults::Solutions(solutions) = results? {
 ///     let solutions = solutions.collect::<Result<Vec<_>, _>>()?;
@@ -86,7 +86,7 @@ impl QueryEvaluator {
     /// ```
     /// use oxrdf::{Dataset, GraphName, NamedNode, Quad, Variable};
     /// use spareval::{QueryEvaluator, QueryResults};
-    /// use spargebra::Query;
+    /// use spargebra::SparqlParser;
     ///
     /// let ex = NamedNode::new("http://example.com")?;
     /// let dataset = Dataset::from_iter([Quad::new(
@@ -95,7 +95,7 @@ impl QueryEvaluator {
     ///     ex.clone(),
     ///     GraphName::DefaultGraph,
     /// )]);
-    /// let query = Query::parse("SELECT * WHERE { ?s ?p ?o }", None)?;
+    /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
     /// let results = QueryEvaluator::new().execute_with_substituted_variables(
     ///     dataset,
     ///     &query,
@@ -275,16 +275,14 @@ impl QueryEvaluator {
     /// ```
     /// use oxrdf::{Dataset, Literal, NamedNode};
     /// use spareval::{QueryEvaluator, QueryResults};
-    /// use spargebra::Query;
+    /// use spargebra::SparqlParser;
     ///
     /// let evaluator = QueryEvaluator::new().with_custom_function(
     ///     NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
     ///     |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
     /// );
-    /// let query = Query::parse(
-    ///     "SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}",
-    ///     None,
-    /// )?;
+    /// let query = SparqlParser::new()
+    ///     .parse_query("SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}")?;
     /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("nt"),
