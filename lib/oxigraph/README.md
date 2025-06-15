@@ -28,9 +28,9 @@ A preliminary benchmark [is provided](../bench/README.md). Oxigraph internal des
 
 The main entry point of Oxigraph is the [`Store`](store::Store) struct:
 ```rust
-use oxigraph::store::Store;
 use oxigraph::model::*;
-use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::store::Store;
 
 let store = Store::new().unwrap();
 
@@ -40,12 +40,24 @@ let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph
 store.insert(&quad).unwrap();
 
 // quad filter
-let results = store.quads_for_pattern(Some(ex.as_ref().into()), None, None, None).collect::<Result<Vec<Quad>,_>>().unwrap();
+let results = store
+    .quads_for_pattern(Some(ex.as_ref().into()), None, None, None)
+    .collect::<Result<Vec<Quad>, _>>()
+    .unwrap();
 assert_eq!(vec![quad], results);
 
 // SPARQL query
-if let QueryResults::Solutions(mut solutions) =  store.query("SELECT ?s WHERE { ?s ?p ?o }").unwrap() {
-    assert_eq!(solutions.next().unwrap().unwrap().get("s"), Some(&ex.into()));
+if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+    .parse_query("SELECT ?s WHERE { ?s ?p ?o }")
+    .unwrap()
+    .on_store(&store)
+    .execute()
+    .unwrap()
+{
+    assert_eq!(
+        solutions.next().unwrap().unwrap().get("s"),
+        Some(&ex.into())
+    );
 }
 ```
 

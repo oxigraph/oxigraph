@@ -4,9 +4,10 @@ use bzip2::read::MultiBzDecoder;
 use codspeed_criterion_compat::{Criterion, Throughput, criterion_group, criterion_main};
 use oxhttp::model::{Request, Uri};
 use oxigraph::io::{JsonLdProfile, JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer};
-use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use rand::random;
+use spargebra::{Query, Update};
 use std::env::temp_dir;
 use std::fs::{File, remove_dir_all};
 use std::io::Read;
@@ -157,8 +158,8 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
     let explore_operations = bsbm_sparql_operation("exploreAndUpdate-1000.csv.bz2")
         .into_iter()
         .map(|op| match op {
-            RawOperation::Query(q) => Operation::Query(Query::parse(&q, None).unwrap()),
-            RawOperation::Update(q) => Operation::Update(Update::parse(&q, None).unwrap()),
+            RawOperation::Query(q) => Operation::Query(Query::from_str(&q).unwrap()),
+            RawOperation::Update(q) => Operation::Update(Update::from_str(&q).unwrap()),
         })
         .collect::<Vec<_>>();
     let explore_query_operations = explore_operations
@@ -170,7 +171,7 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
         .into_iter()
         .map(|op| match op {
             RawOperation::Query(q) => {
-                Operation::Query(Query::parse(&q.replace('#', ""), None).unwrap())
+                Operation::Query(Query::from_str(&q.replace('#', "")).unwrap())
             }
             RawOperation::Update(_) => unreachable!(),
         })
@@ -238,13 +239,19 @@ fn do_store_query_and_update(c: &mut Criterion, data_size: usize, without_ops: b
 }
 
 fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
-    let mut options = QueryOptions::default();
+    let mut evaluator = SparqlEvaluator::new();
     if !with_opts {
-        options = options.without_optimizations();
+        evaluator = evaluator.without_optimizations();
     }
     for operation in operations {
         match operation {
-            Operation::Query(q) => match store.query_opt(q.clone(), options.clone()).unwrap() {
+            Operation::Query(q) => match evaluator
+                .clone()
+                .for_query(q.clone())
+                .on_store(store)
+                .execute()
+                .unwrap()
+            {
                 QueryResults::Boolean(_) => (),
                 QueryResults::Solutions(s) => {
                     for s in s {
@@ -257,7 +264,7 @@ fn run_operation(store: &Store, operations: &[Operation], with_opts: bool) {
                     }
                 }
             },
-            Operation::Update(u) => store.update_opt(u.clone(), options.clone()).unwrap(),
+            Operation::Update(u) => store.update_opt(u.clone(), evaluator.clone()).unwrap(),
         }
     }
 }
@@ -280,10 +287,10 @@ fn sparql_parsing(c: &mut Criterion) {
             for operation in &operations {
                 match operation {
                     RawOperation::Query(q) => {
-                        Query::parse(q, None).unwrap();
+                        Query::from_str(q).unwrap();
                     }
                     RawOperation::Update(u) => {
-                        Update::parse(u, None).unwrap();
+                        Update::from_str(u).unwrap();
                     }
                 }
             }

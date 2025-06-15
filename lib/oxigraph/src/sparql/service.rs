@@ -1,12 +1,11 @@
 use crate::model::NamedNode;
-use crate::sparql::QueryDataset;
-use crate::sparql::algebra::Query;
 use crate::sparql::model::QueryResults;
 use oxiri::Iri;
 use spareval::{
     DefaultServiceHandler as EvalDefaultServiceHandler, QueryEvaluationError, QuerySolutionIter,
     ServiceHandler as EvalServiceHandler,
 };
+use spargebra::Query;
 use spargebra::algebra::GraphPattern;
 use std::error::Error;
 
@@ -17,10 +16,9 @@ use std::error::Error;
 ///
 /// ```
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::{
-///     DefaultServiceHandler, EvaluationError, Query, QueryOptions, QueryResults,
-/// };
+/// use oxigraph::sparql::{DefaultServiceHandler, EvaluationError, QueryResults, SparqlEvaluator};
 /// use oxigraph::store::Store;
+/// use spargebra::Query;
 ///
 /// struct TestServiceHandler {
 ///     store: Store,
@@ -35,7 +33,10 @@ use std::error::Error;
 ///         query: Query,
 ///     ) -> Result<QueryResults, Self::Error> {
 ///         if service_name == "http://example.com/service" {
-///             self.store.query(query)
+///             SparqlEvaluator::new()
+///                 .for_query(query)
+///                 .on_store(&self.store)
+///                 .execute()
 ///         } else {
 ///             panic!()
 ///         }
@@ -51,10 +52,12 @@ use std::error::Error;
 ///     .store
 ///     .insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
 ///
-/// if let QueryResults::Solutions(mut solutions) = store.query_opt(
-///     "SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }",
-///     QueryOptions::default().with_default_service_handler(service),
-/// )? {
+/// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+///     .with_default_service_handler(service)
+///     .parse_query("SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }")?
+///     .on_store(&store)
+///     .execute()?
+/// {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -98,8 +101,9 @@ impl<H: DefaultServiceHandler> EvalDefaultServiceHandler for WrappedDefaultServi
 ///
 /// ```
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::{EvaluationError, Query, QueryOptions, QueryResults, ServiceHandler};
+/// use oxigraph::sparql::{EvaluationError, QueryResults, ServiceHandler, SparqlEvaluator};
 /// use oxigraph::store::Store;
+/// use spargebra::Query;
 ///
 /// struct TestServiceHandler {
 ///     store: Store,
@@ -109,7 +113,10 @@ impl<H: DefaultServiceHandler> EvalDefaultServiceHandler for WrappedDefaultServi
 ///     type Error = EvaluationError;
 ///
 ///     fn handle(&self, query: Query) -> Result<QueryResults, Self::Error> {
-///         self.store.query(query)
+///         SparqlEvaluator::new()
+///             .for_query(query)
+///             .on_store(&self.store)
+///             .execute()
 ///     }
 /// }
 ///
@@ -122,11 +129,12 @@ impl<H: DefaultServiceHandler> EvalDefaultServiceHandler for WrappedDefaultServi
 ///     .store
 ///     .insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
 ///
-/// if let QueryResults::Solutions(mut solutions) = store.query_opt(
-///     "SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }",
-///     QueryOptions::default()
-///         .with_service_handler(NamedNodeRef::new("http://example.com/service")?, service),
-/// )? {
+/// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+///     .with_service_handler(NamedNodeRef::new("http://example.com/service")?, service)
+///     .parse_query("SELECT ?s WHERE { SERVICE <http://example.com/service> { ?s ?p ?o } }")?
+///     .on_store(&store)
+///     .execute()?
+/// {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -166,15 +174,12 @@ fn query_from_pattern(
     pattern: GraphPattern,
     base_iri: Option<String>,
 ) -> Result<Query, QueryEvaluationError> {
-    Ok(Query {
-        inner: spargebra::Query::Select {
-            dataset: None,
-            pattern,
-            base_iri: base_iri
-                .map(Iri::parse)
-                .transpose()
-                .map_err(|e| QueryEvaluationError::Service(Box::new(e)))?,
-        },
-        dataset: QueryDataset::new(),
+    Ok(Query::Select {
+        dataset: None,
+        pattern,
+        base_iri: base_iri
+            .map(Iri::parse)
+            .transpose()
+            .map_err(|e| QueryEvaluationError::Service(Box::new(e)))?,
     })
 }

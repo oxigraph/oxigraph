@@ -11,8 +11,8 @@ use oxigraph::model::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, Literal, LiteralRef,
     NamedNode, Term, TermRef, Triple, TripleRef, Variable,
 };
+use oxigraph::sparql::QueryResults;
 use oxigraph::sparql::results::QueryResultsFormat;
-use oxigraph::sparql::{QueryResults, Update};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
@@ -213,9 +213,12 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
 
 fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test.action.as_deref().context("No action found")?;
-    let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
+    let update = SparqlParser::new()
+        .with_base_iri(update_file)?
+        .parse_update(&read_file_to_string(update_file)?)
         .context("Not able to parse")?;
-    Update::parse(&update.to_string(), None)
+    SparqlParser::new()
+        .parse_update(&update.to_string())
         .with_context(|| format!("Failure to deserialize \"{update}\""))?;
     Ok(())
 }
@@ -223,7 +226,10 @@ fn evaluate_positive_update_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_negative_update_syntax_test(test: &Test) -> Result<()> {
     let update_file = test.action.as_deref().context("No action found")?;
     ensure!(
-        Update::parse(&read_file_to_string(update_file)?, Some(update_file)).is_err(),
+        SparqlParser::new()
+            .with_base_iri(update_file)?
+            .parse_update(&read_file_to_string(update_file)?)
+            .is_err(),
         "Oxigraph parses even if it should not."
     );
     Ok(())
@@ -247,14 +253,19 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     }
 
     let update_file = test.update.as_deref().context("No action found")?;
-    let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
+    let update = SparqlParser::new()
+        .with_base_iri(update_file)?
+        .parse_update(&read_file_to_string(update_file)?)
         .context("Failure to parse update")?;
 
     // We check parsing roundtrip
-    Update::parse(&update.to_string(), None)
+    SparqlParser::new()
+        .parse_update(&update.to_string())
         .with_context(|| format!("Failure to deserialize \"{update}\""))?;
 
-    store.update(update).context("Failure to execute update")?;
+    store
+        .update(update.clone())
+        .context("Failure to execute update")?;
     let mut store_dataset: Dataset = store.iter().collect::<Result<_, _>>()?;
     store_dataset.canonicalize(CanonicalizationAlgorithm::Unstable);
     let mut result_store_dataset: Dataset = result_store.iter().collect::<Result<_, _>>()?;
@@ -263,7 +274,7 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
         store_dataset == result_store_dataset,
         "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
         dataset_diff(&result_store_dataset, &store_dataset),
-        Update::parse(&read_file_to_string(update_file)?, Some(update_file)).unwrap(),
+        update
     );
     Ok(())
 }

@@ -5,8 +5,10 @@ use crate::sparql::algebra::QueryDataset;
 use crate::sparql::dataset::DatasetView;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
-use crate::sparql::{EvaluationError, Update, UpdateOptions};
-use crate::storage::{Storage, StorageReadableTransaction, StorageTransaction};
+#[expect(deprecated)]
+use crate::sparql::{EvaluationError, Update};
+use crate::storage::{StorageError, StorageReadableTransaction, StorageTransaction};
+use crate::store::{Store, Transaction};
 use oxiri::Iri;
 #[cfg(feature = "http-client")]
 use oxrdfio::LoadedDocument;
@@ -24,40 +26,200 @@ use spargebra::term::{GroundTriple, GroundTriplePattern, Triple, TriplePattern};
 use spargebra::{GraphUpdateOperation, Query};
 #[cfg(feature = "http-client")]
 use std::io::Read;
+#[cfg(feature = "http-client")]
+use std::time::Duration;
 
-pub fn evaluate_update_on_transaction<'a, 'b: 'a>(
-    transaction: &'a mut StorageReadableTransaction<'b>,
-    update: &Update,
-    options: &UpdateOptions,
-) -> Result<(), EvaluationError> {
-    SimpleUpdateEvaluator {
-        transaction,
-        base_iri: update.inner.base_iri.clone(),
-        query_evaluator: options.query_options.clone().into_evaluator(),
-        #[cfg(feature = "http-client")]
-        client: Client::new(
-            options.query_options.http_timeout,
-            options.query_options.http_redirection_limit,
-        ),
-    }
-    .eval_all(&update.inner.operations, &update.using_datasets)
+/// A prepared SPARQL update.
+///
+/// Usage example:
+/// ```
+/// use oxigraph::sparql::SparqlEvaluator;
+/// use oxigraph::store::Store;
+///
+/// let prepared_update = SparqlEvaluator::new().parse_update(
+///     "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+/// )?;
+/// prepared_update.on_store(&Store::new()?).execute()?;
+/// # Ok::<_, Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone)]
+#[must_use]
+pub struct PreparedSparqlUpdate {
+    evaluator: QueryEvaluator,
+    update: spargebra::Update,
+    using_datasets: Vec<Option<QueryDataset>>,
+    #[cfg(feature = "http-client")]
+    http_timeout: Option<Duration>,
+    #[cfg(feature = "http-client")]
+    http_redirection_limit: usize,
 }
 
-pub fn evaluate_update_on_storage(
-    storage: &Storage,
-    update: &Update,
-    options: &UpdateOptions,
-) -> Result<(), EvaluationError> {
-    if update_requires_read(update) {
-        let mut transaction = storage.start_readable_transaction()?;
-        evaluate_update_on_transaction(&mut transaction, update, options)?;
-        transaction.commit()?;
-    } else {
-        let mut transaction = storage.start_transaction()?;
-        evaluate_update_without_read(&mut transaction, update);
-        transaction.commit()?;
+impl PreparedSparqlUpdate {
+    #[expect(deprecated)]
+    pub(crate) fn new(
+        evaluator: QueryEvaluator,
+        update: Update,
+        #[cfg(feature = "http-client")] http_timeout: Option<Duration>,
+        #[cfg(feature = "http-client")] http_redirection_limit: usize,
+    ) -> Self {
+        Self {
+            evaluator,
+            update: update.inner,
+            using_datasets: update.using_datasets,
+            #[cfg(feature = "http-client")]
+            http_timeout,
+            #[cfg(feature = "http-client")]
+            http_redirection_limit,
+        }
     }
-    Ok(())
+
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
+    #[inline]
+    pub fn using_datasets(&self) -> impl Iterator<Item = &QueryDataset> {
+        self.using_datasets.iter().filter_map(Option::as_ref)
+    }
+
+    /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
+    #[inline]
+    pub fn using_datasets_mut(&mut self) -> impl Iterator<Item = &mut QueryDataset> {
+        self.using_datasets.iter_mut().filter_map(Option::as_mut)
+    }
+
+    /// Bind the prepared update to the [`Store`] it should be evaluated on.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::sparql::SparqlEvaluator;
+    /// use oxigraph::store::Store;
+    ///
+    /// let prepared_update = SparqlEvaluator::new().parse_update(
+    ///     "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+    /// )?;
+    /// prepared_update.on_store(&Store::new()?).execute()?;
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn on_store(self, store: &Store) -> BoundPreparedSparqlUpdate<'_, '_> {
+        let transaction = if update_requires_read(&self.update) {
+            store
+                .storage()
+                .start_readable_transaction()
+                .map(UpdateTransaction::OwnedReadable)
+        } else {
+            store
+                .storage()
+                .start_transaction()
+                .map(UpdateTransaction::Owned)
+        };
+        BoundPreparedSparqlUpdate {
+            evaluator: self.evaluator,
+            update: self.update,
+            using_datasets: self.using_datasets,
+            #[cfg(feature = "http-client")]
+            http_timeout: self.http_timeout,
+            #[cfg(feature = "http-client")]
+            http_redirection_limit: self.http_redirection_limit,
+            transaction,
+        }
+    }
+
+    /// Bind the prepared update to the [`Transaction`] it should be evaluated on.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::sparql::SparqlEvaluator;
+    /// use oxigraph::store::Store;
+    ///
+    /// let prepared_update = SparqlEvaluator::new().parse_update(
+    ///     "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+    /// )?;
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    /// prepared_update.on_transaction(&mut transaction).execute()?;
+    /// # Ok::<_, Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn on_transaction<'a, 'b: 'a>(
+        self,
+        transaction: &'a mut Transaction<'b>,
+    ) -> BoundPreparedSparqlUpdate<'a, 'b> {
+        BoundPreparedSparqlUpdate {
+            evaluator: self.evaluator,
+            update: self.update,
+            using_datasets: self.using_datasets,
+            #[cfg(feature = "http-client")]
+            http_timeout: self.http_timeout,
+            #[cfg(feature = "http-client")]
+            http_redirection_limit: self.http_redirection_limit,
+            transaction: Ok(UpdateTransaction::BorrowedReadable(transaction.inner_mut())),
+        }
+    }
+}
+
+/// A prepared SPARQL query bound to a storage, ready to be executed.
+///
+///
+/// Usage example:
+/// ```
+/// use oxigraph::sparql::SparqlEvaluator;
+/// use oxigraph::store::Store;
+///
+/// let store = Store::new()?;
+/// let prepared_update = SparqlEvaluator::new()
+///     .parse_update(
+///         "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+///     )?
+///     .on_store(&store);
+/// prepared_update.execute()?;
+/// # Ok::<_, Box<dyn std::error::Error>>(())
+/// ```
+#[must_use]
+pub struct BoundPreparedSparqlUpdate<'a, 'b> {
+    evaluator: QueryEvaluator,
+    update: spargebra::Update,
+    using_datasets: Vec<Option<QueryDataset>>,
+    #[cfg(feature = "http-client")]
+    http_timeout: Option<Duration>,
+    #[cfg(feature = "http-client")]
+    http_redirection_limit: usize,
+    transaction: Result<UpdateTransaction<'a, 'b>, StorageError>,
+}
+
+impl BoundPreparedSparqlUpdate<'_, '_> {
+    /// Evaluate the update against the given store.
+    pub fn execute(self) -> Result<(), EvaluationError> {
+        match self.transaction? {
+            UpdateTransaction::OwnedReadable(mut transaction) => {
+                SimpleUpdateEvaluator {
+                    transaction: &mut transaction,
+                    base_iri: self.update.base_iri.clone(),
+                    query_evaluator: self.evaluator,
+                    #[cfg(feature = "http-client")]
+                    client: Client::new(self.http_timeout, self.http_redirection_limit),
+                }
+                .eval_all(&self.update.operations, &self.using_datasets)?;
+                transaction.commit()?;
+                Ok(())
+            }
+            UpdateTransaction::BorrowedReadable(transaction) => SimpleUpdateEvaluator {
+                transaction,
+                base_iri: self.update.base_iri.clone(),
+                query_evaluator: self.evaluator,
+                #[cfg(feature = "http-client")]
+                client: Client::new(self.http_timeout, self.http_redirection_limit),
+            }
+            .eval_all(&self.update.operations, &self.using_datasets),
+            UpdateTransaction::Owned(mut transaction) => {
+                evaluate_update_without_read(&mut transaction, &self.update);
+                transaction.commit()?;
+                Ok(())
+            }
+        }
+    }
+}
+
+enum UpdateTransaction<'a, 'b> {
+    OwnedReadable(StorageReadableTransaction<'b>),
+    BorrowedReadable(&'a mut StorageReadableTransaction<'b>),
+    Owned(StorageTransaction<'b>),
 }
 
 struct SimpleUpdateEvaluator<'a, 'b> {
@@ -291,8 +453,8 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     }
 }
 
-fn update_requires_read(update: &Update) -> bool {
-    for op in &update.inner.operations {
+fn update_requires_read(update: &spargebra::Update) -> bool {
+    for op in &update.operations {
         match op {
             GraphUpdateOperation::InsertData { .. }
             | GraphUpdateOperation::DeleteData { .. }
@@ -310,9 +472,12 @@ fn update_requires_read(update: &Update) -> bool {
     }
     false
 }
-fn evaluate_update_without_read(transaction: &mut StorageTransaction<'_>, update: &Update) {
+fn evaluate_update_without_read(
+    transaction: &mut StorageTransaction<'_>,
+    update: &spargebra::Update,
+) {
     // Must be sync with update_require_read
-    for op in &update.inner.operations {
+    for op in &update.operations {
         match op {
             GraphUpdateOperation::InsertData { data } => {
                 let mut bnodes = FxHashMap::default();

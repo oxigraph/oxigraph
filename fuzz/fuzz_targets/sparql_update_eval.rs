@@ -2,8 +2,9 @@
 
 use libfuzzer_sys::fuzz_target;
 use oxigraph::model::dataset::{CanonicalizationAlgorithm, Dataset};
-use oxigraph::sparql::{QueryOptions, Update};
+use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::store::Store;
+use spargebra::SparqlParser;
 #[cfg(feature = "rocksdb")]
 use std::env::temp_dir;
 use std::sync::OnceLock;
@@ -22,17 +23,22 @@ fuzz_target!(|data: sparql_smith::Update| {
     });
 
     let update_str = data.to_string();
-    if let Ok(update) = Update::parse(&update_str, None) {
-        let options = QueryOptions::default();
-
+    if let Ok(update) = SparqlParser::new().parse_update(&update_str) {
         disk_store.clear().unwrap();
-        let disk_with_opt = disk_store.update_opt(update.clone(), options.clone());
+        let disk_with_opt = SparqlEvaluator::new()
+            .for_update(update.clone())
+            .on_store(disk_store)
+            .execute();
         disk_store.validate().unwrap();
         let mut dataset_disk_with_opt = disk_store.iter().collect::<Result<Dataset, _>>().unwrap();
         dataset_disk_with_opt.canonicalize(CanonicalizationAlgorithm::Unstable);
 
         let memory_store = Store::new().unwrap();
-        let memory_without_opt = memory_store.update_opt(update, options.without_optimizations());
+        let memory_without_opt = SparqlEvaluator::new()
+            .without_optimizations()
+            .for_update(update)
+            .on_store(&memory_store)
+            .execute();
         memory_store.validate().unwrap();
         let mut dataset_memory_without_opt =
             memory_store.iter().collect::<Result<Dataset, _>>().unwrap();
