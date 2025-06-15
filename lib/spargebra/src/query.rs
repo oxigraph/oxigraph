@@ -2,6 +2,8 @@ use crate::algebra::*;
 use crate::parser::{SparqlSyntaxError, parse_query};
 use crate::term::*;
 use oxiri::Iri;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
@@ -20,6 +22,7 @@ use std::str::FromStr;
 /// # Ok::<_, spargebra::SparqlSyntaxError>(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Query {
     /// [SELECT](https://www.w3.org/TR/sparql11-query/#select).
     Select {
@@ -314,5 +317,93 @@ impl TryFrom<&String> for Query {
 
     fn try_from(query: &String) -> Result<Self, Self::Error> {
         Self::from_str(query)
+    }
+}
+
+// Serialization and Deserialization test
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "serde")]
+    mod serde_tests {
+        use super::super::*;
+        use serde_json;
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        fn calculate_hash<T: Hash>(t: &T) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            t.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        #[test]
+        fn test_select_query_serialization() {
+            let query = Query::parse("SELECT * WHERE { ?s ?p ?o . }", None).unwrap();
+
+            let serialized = serde_json::to_string(&query).unwrap();
+            let deserialized: Query = serde_json::from_str(&serialized).unwrap();
+
+            assert_eq!(query, deserialized);
+            // Check the hashes match
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
+        }
+
+        #[test]
+        fn test_construct_query_serialization() {
+            let query =
+                Query::parse("CONSTRUCT { ?s ?p ?o . } WHERE { ?s ?p ?o . }", None).unwrap();
+
+            let serialized = serde_json::to_string(&query).unwrap();
+            let deserialized: Query = serde_json::from_str(&serialized).unwrap();
+
+            assert_eq!(query, deserialized);
+            // Check the hashes match
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
+        }
+
+        #[test]
+        fn test_describe_query_serialization() {
+            let query = Query::parse("DESCRIBE * WHERE { ?s ?p ?o . }", None).unwrap();
+
+            let serialized = serde_json::to_string(&query).unwrap();
+            let deserialized: Query = serde_json::from_str(&serialized).unwrap();
+
+            assert_eq!(query, deserialized);
+            // Check the hashes match
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
+        }
+
+        #[test]
+        fn test_ask_query_serialization() {
+            let query = Query::parse("ASK WHERE { ?s ?p ?o . }", None).unwrap();
+
+            let serialized = serde_json::to_string(&query).unwrap();
+            let deserialized: Query = serde_json::from_str(&serialized).unwrap();
+
+            assert_eq!(query, deserialized);
+            // Check the hashes match
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
+        }
+
+        #[test]
+        fn test_complex_query_serialization() {
+            // Create a more complex query from a SPARQL string
+            let query = Query::parse(
+                "BASE <http://example.org/>
+                 SELECT ?s 
+                 FROM <http://example.org/graph>
+                 FROM NAMED <http://example.org/named-graph>
+                 WHERE { ?s a <http://example.org/class> . }",
+                None,
+            )
+            .unwrap();
+
+            let serialized = serde_json::to_string(&query).unwrap();
+            let deserialized: Query = serde_json::from_str(&serialized).unwrap();
+
+            assert_eq!(query, deserialized);
+            // Check the hashes match
+            assert_eq!(calculate_hash(&query), calculate_hash(&deserialized));
+        }
     }
 }

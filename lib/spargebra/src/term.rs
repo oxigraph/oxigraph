@@ -1,6 +1,8 @@
 //! Data structures for [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) like IRI, literal or triples.
 
 pub use oxrdf::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple, Variable};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Write;
 
@@ -8,6 +10,7 @@ use std::fmt::Write;
 ///
 /// The default string formatter is returning an N-Triples, Turtle, and SPARQL compatible representation.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GroundTerm {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -99,6 +102,7 @@ impl From<GroundTerm> for Term {
 /// # Result::<_,oxrdf::IriParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GroundTriple {
     pub subject: NamedNode,
     pub predicate: NamedNode,
@@ -144,6 +148,7 @@ impl From<GroundTriple> for Triple {
 ///
 /// It is the union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and the [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph).
 #[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GraphName {
     NamedNode(NamedNode),
     #[default]
@@ -346,6 +351,7 @@ impl TryFrom<Quad> for GroundQuad {
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NamedNodePattern {
     NamedNode(NamedNode),
     Variable(Variable),
@@ -399,6 +405,7 @@ impl TryFrom<NamedNodePattern> for NamedNode {
 
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TermPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -549,6 +556,7 @@ impl TryFrom<TermPattern> for Term {
 }
 /// The union of [terms](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-term) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables) without blank nodes.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GroundTermPattern {
     NamedNode(NamedNode),
     Literal(Literal),
@@ -652,6 +660,7 @@ impl TryFrom<TermPattern> for GroundTermPattern {
 
 /// The union of [IRIs](https://www.w3.org/TR/rdf11-concepts/#dfn-iri), [default graph name](https://www.w3.org/TR/rdf11-concepts/#dfn-default-graph) and [variables](https://www.w3.org/TR/sparql11-query/#sparqlQueryVariables).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GraphNamePattern {
     NamedNode(NamedNode),
     DefaultGraph,
@@ -716,6 +725,7 @@ impl From<NamedNodePattern> for GraphNamePattern {
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern)
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TriplePattern {
     pub subject: TermPattern,
     pub predicate: NamedNodePattern,
@@ -791,6 +801,7 @@ impl TryFrom<TriplePattern> for Triple {
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GroundTriplePattern {
     pub subject: GroundTermPattern,
     pub predicate: NamedNodePattern,
@@ -844,6 +855,7 @@ impl TryFrom<TriplePattern> for GroundTriplePattern {
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct QuadPattern {
     pub subject: TermPattern,
     pub predicate: NamedNodePattern,
@@ -904,6 +916,7 @@ impl fmt::Display for QuadPattern {
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) in a specific graph without blank nodes.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GroundQuadPattern {
     pub subject: GroundTermPattern,
     pub predicate: NamedNodePattern,
