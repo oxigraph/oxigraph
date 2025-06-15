@@ -8,8 +8,8 @@ use oxigraph::sparql::results::{
     ReaderQueryResultsParserOutput, ReaderSolutionsParser,
 };
 use oxigraph::sparql::{
-    EvaluationError, Query, QueryOptions, QueryResults, QuerySolution, QuerySolutionIter,
-    QueryTripleIter, Variable,
+    EvaluationError, PreparedSparqlQuery, QueryResults, QuerySolution, QuerySolutionIter,
+    QueryTripleIter, SparqlEvaluator, Variable,
 };
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
@@ -24,17 +24,16 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::vec::IntoIter;
 
-pub fn parse_query(
+pub fn prepare_sparql_query(
+    evaluator: SparqlEvaluator,
     query: &str,
-    base_iri: Option<&str>,
     use_default_graph_as_union: bool,
     default_graph: Option<&Bound<'_, PyAny>>,
     named_graphs: Option<&Bound<'_, PyAny>>,
-    py: Python<'_>,
-) -> PyResult<Query> {
-    let mut query = py
-        .allow_threads(|| Query::parse(query, base_iri))
-        .map_err(|e| map_evaluation_error(e.into()))?;
+) -> PyResult<PreparedSparqlQuery> {
+    let mut prepared = evaluator
+        .parse_query(query)
+        .map_err(|e| PySyntaxError::new_err(e.to_string()))?;
 
     if use_default_graph_as_union && default_graph.is_some() {
         return Err(PyValueError::new_err(
@@ -43,18 +42,18 @@ pub fn parse_query(
     }
 
     if use_default_graph_as_union {
-        query.dataset_mut().set_default_graph_as_union();
+        prepared.dataset_mut().set_default_graph_as_union();
     }
 
     if let Some(default_graph) = default_graph {
         if let Ok(default_graphs) = default_graph.try_iter() {
-            query.dataset_mut().set_default_graph(
+            prepared.dataset_mut().set_default_graph(
                 default_graphs
                     .map(|graph| Ok(graph?.extract::<PyGraphName>()?.into()))
                     .collect::<PyResult<_>>()?,
             )
         } else if let Ok(default_graph) = default_graph.extract::<PyGraphName>() {
-            query
+            prepared
                 .dataset_mut()
                 .set_default_graph(vec![default_graph.into()]);
         } else {
@@ -66,7 +65,7 @@ pub fn parse_query(
     }
 
     if let Some(named_graphs) = named_graphs {
-        query.dataset_mut().set_available_named_graphs(
+        prepared.dataset_mut().set_available_named_graphs(
             named_graphs
                 .try_iter()?
                 .map(|graph| Ok(graph?.extract::<PyNamedOrBlankNode>()?.into()))
@@ -74,21 +73,22 @@ pub fn parse_query(
         )
     }
 
-    Ok(query)
+    Ok(prepared)
 }
 
-pub fn query_options_from_python(
+pub fn sparql_evaluator_from_python(
+    base_iri: Option<&str>,
     custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
-) -> QueryOptions {
-    let mut options = QueryOptions::default();
+) -> PyResult<SparqlEvaluator> {
+    let mut evaluator = SparqlEvaluator::default();
     #[cfg(feature = "geosparql")]
     {
-        options = register_geosparql_functions(options);
+        evaluator = register_geosparql_functions(evaluator);
     }
 
     if let Some(custom_functions) = custom_functions {
         for (name, function) in custom_functions {
-            options = options.with_custom_function(name.into(), move |args| {
+            evaluator = evaluator.with_custom_function(name.into(), move |args| {
                 Python::with_gil(|py| {
                     Some(
                         function
@@ -106,7 +106,14 @@ pub fn query_options_from_python(
             })
         }
     }
-    options
+
+    if let Some(base_iri) = base_iri {
+        evaluator = evaluator
+            .with_base_iri(base_iri)
+            .map_err(|e| PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}")))?;
+    }
+
+    Ok(evaluator)
 }
 
 pub fn query_results_to_python(

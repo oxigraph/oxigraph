@@ -186,7 +186,7 @@ pub struct QuerySolutionIter {
 }
 
 impl QuerySolutionIter {
-    /// Construct a new iterator of solution from an ordered list of solution variables and an iterator of solution tuples
+    /// Construct a new iterator of solutions from an ordered list of solution variables and an iterator of solution tuples
     /// (each tuple using the same ordering as the variable list such that tuple element 0 is the value for the variable 0...)
     pub fn new(
         variables: Arc<[Variable]>,

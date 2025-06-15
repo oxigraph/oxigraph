@@ -5,16 +5,16 @@ use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{Dataset, Graph, NamedNode};
 use oxigraph::sparql::{
-    DefaultServiceHandler as OxDefaultServiceHandler, EvaluationError, Query, QueryOptions,
-    QueryResults,
+    DefaultServiceHandler as OxDefaultServiceHandler, EvaluationError, QueryResults,
+    SparqlEvaluator,
 };
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
 use oxrdf::{GraphNameRef, QuadRef};
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator};
-use spargebra::SparqlParser;
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{GraphPattern, QueryDataset};
+use spargebra::{Query, SparqlParser};
 use std::sync::OnceLock;
 
 fuzz_target!(|data: sparql_smith::Query| {
@@ -37,10 +37,13 @@ fuzz_target!(|data: sparql_smith::Query| {
 
     let query_str = data.to_string();
     if let Ok(query) = SparqlParser::new().parse_query(&query_str) {
-        let options = QueryOptions::default().with_default_service_handler(StoreServiceHandler {
-            store: store.clone(),
-        });
-        let with_opt = store.query_opt(Query::from(query.clone()), options.clone());
+        let with_opt = SparqlEvaluator::new()
+            .with_default_service_handler(StoreServiceHandler {
+                store: store.clone(),
+            })
+            .for_query(query.clone())
+            .on_store(store)
+            .execute();
         let without_opt = QueryEvaluator::new()
             .without_optimizations()
             .with_default_service_handler(DatasetServiceHandler {
@@ -110,13 +113,19 @@ impl OxDefaultServiceHandler for StoreServiceHandler {
         if !self.store.contains_named_graph(&service_name)? {
             return Err(EvaluationError::Service("Graph does not exist".into()));
         }
-        query
-            .dataset_mut()
-            .set_default_graph(vec![service_name.into()]);
-        self.store.query_opt(
-            query,
-            QueryOptions::default().with_default_service_handler(self.clone()),
-        )
+        if let Query::Select { dataset, .. } = &mut query {
+            dataset
+                .get_or_insert(QueryDataset {
+                    default: Vec::new(),
+                    named: None,
+                })
+                .default = vec![service_name];
+        }
+        SparqlEvaluator::new()
+            .with_default_service_handler(self.clone())
+            .for_query(query)
+            .on_store(&self.store)
+            .execute()
     }
 }
 

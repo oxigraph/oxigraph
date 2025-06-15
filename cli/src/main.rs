@@ -17,7 +17,7 @@ use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
-use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
@@ -280,13 +280,20 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 io::read_to_string(stdin().lock())?
             };
-            let mut query = Query::parse(&query, query_base.as_deref())?;
-            if union_default_graph {
-                query.dataset_mut().set_default_graph_as_union();
-            }
             let store = Store::open_read_only(location)?;
-            let (results, explanation) =
-                store.explain_query_opt(query, default_query_options(), stats)?;
+            let mut evaluator = default_sparql_evaluator();
+            if let Some(base) = query_base {
+                evaluator = evaluator.with_base_iri(&base)?;
+            }
+            let mut prepared = evaluator.parse_query(&query)?;
+            if union_default_graph {
+                prepared.dataset_mut().set_default_graph_as_union();
+            }
+            let mut prepared = prepared.on_store(&store);
+            if stats {
+                prepared = prepared.compute_statistics();
+            }
+            let (results, explanation) = prepared.explain();
             let print_result = (|| {
                 match results? {
                     QueryResults::Solutions(solutions) => {
@@ -425,9 +432,15 @@ pub fn main() -> anyhow::Result<()> {
             } else {
                 io::read_to_string(stdin().lock())?
             };
-            let update = Update::parse(&update, update_base.as_deref())?;
             let store = Store::open(location)?;
-            store.update_opt(update, default_query_options())?;
+            let mut evaluator = default_sparql_evaluator();
+            if let Some(base) = update_base {
+                evaluator = evaluator.with_base_iri(&base)?;
+            }
+            evaluator
+                .parse_update(&update)?
+                .on_store(&store)
+                .execute()?;
             store.flush()?;
             Ok(())
         }
@@ -1184,7 +1197,11 @@ fn evaluate_sparql_query(
     named_graph_uris: Vec<String>,
     request: &Request<Body>,
 ) -> Result<Response<Body>, HttpError> {
-    let mut query = Query::parse(query, Some(&base_url(request))).map_err(bad_request)?;
+    let mut prepared = default_sparql_evaluator()
+        .with_base_iri(base_url(request))
+        .map_err(bad_request)?
+        .parse_query(query)
+        .map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -1192,16 +1209,16 @@ fn evaluate_sparql_query(
                 "default-graph-uri or named-graph-uri and union-default-graph should not be set at the same time",
             ));
         }
-        query.dataset_mut().set_default_graph_as_union()
+        prepared.dataset_mut().set_default_graph_as_union()
     } else if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
-        query.dataset_mut().set_default_graph(
+        prepared.dataset_mut().set_default_graph(
             default_graph_uris
                 .into_iter()
                 .map(|e| Ok(NamedNode::new(e)?.into()))
                 .collect::<Result<Vec<GraphName>, IriParseError>>()
                 .map_err(bad_request)?,
         );
-        query.dataset_mut().set_available_named_graphs(
+        prepared.dataset_mut().set_available_named_graphs(
             named_graph_uris
                 .into_iter()
                 .map(|e| Ok(NamedNode::new(e)?.into()))
@@ -1210,8 +1227,9 @@ fn evaluate_sparql_query(
         );
     }
 
-    let results = store
-        .query_opt(query, default_query_options())
+    let results = prepared
+        .on_store(store)
+        .execute()
         .map_err(internal_server_error)?;
     match results {
         QueryResults::Solutions(solutions) => {
@@ -1266,13 +1284,13 @@ fn evaluate_sparql_query(
     }
 }
 
-fn default_query_options() -> QueryOptions {
-    let mut options = QueryOptions::default();
+fn default_sparql_evaluator() -> SparqlEvaluator {
+    let mut evaluator = SparqlEvaluator::new();
     #[cfg(feature = "geosparql")]
     {
-        options = register_geosparql_functions(options);
+        evaluator = register_geosparql_functions(evaluator);
     }
-    options
+    evaluator
 }
 
 fn configure_and_evaluate_sparql_update(
@@ -1323,8 +1341,11 @@ fn evaluate_sparql_update(
     named_graph_uris: Vec<String>,
     request: &Request<Body>,
 ) -> Result<Response<Body>, HttpError> {
-    let mut update =
-        Update::parse(update, Some(base_url(request).as_str())).map_err(bad_request)?;
+    let mut prepared = default_sparql_evaluator()
+        .with_base_iri(base_url(request).as_str())
+        .map_err(bad_request)?
+        .parse_update(update)
+        .map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -1332,7 +1353,7 @@ fn evaluate_sparql_update(
                 "using-graph-uri or using-named-graph-uri and using-union-graph should not be set at the same time",
             ));
         }
-        for using in update.using_datasets_mut() {
+        for using in prepared.using_datasets_mut() {
             if !using.is_default_dataset() {
                 return Err(bad_request(
                     "using-union-graph must not be used with a SPARQL UPDATE containing USING",
@@ -1351,7 +1372,7 @@ fn evaluate_sparql_update(
             .map(|e| Ok(NamedNode::new(e)?.into()))
             .collect::<Result<Vec<NamedOrBlankNode>, IriParseError>>()
             .map_err(bad_request)?;
-        for using in update.using_datasets_mut() {
+        for using in prepared.using_datasets_mut() {
             if !using.is_default_dataset() {
                 return Err(bad_request(
                     "using-graph-uri and using-named-graph-uri must not be used with a SPARQL UPDATE containing USING",
@@ -1361,8 +1382,9 @@ fn evaluate_sparql_update(
             using.set_available_named_graphs(named_graph_uris.clone());
         }
     }
-    store
-        .update_opt(update, default_query_options())
+    prepared
+        .on_store(store)
+        .execute()
         .map_err(internal_server_error)?;
     Ok(Response::builder()
         .status(StatusCode::NO_CONTENT)

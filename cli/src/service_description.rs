@@ -27,6 +27,11 @@ mod sd {
 
     pub const EMPTY_GRAPHS: NamedNodeRef<'_> =
         NamedNodeRef::new_unchecked("http://www.w3.org/ns/sparql-service-description#EmptyGraphs");
+    #[cfg(any(
+        feature = "native-tls",
+        feature = "rustls-native",
+        feature = "rustls-webpki"
+    ))]
     pub const BASIC_FEDERATED_QUERY: NamedNodeRef<'_> = NamedNodeRef::new_unchecked(
         "http://www.w3.org/ns/sparql-service-description#BasicFederatedQuery",
     );

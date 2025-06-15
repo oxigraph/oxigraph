@@ -4,7 +4,7 @@ use js_sys::{Array, Map, Reflect, try_iter};
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 use oxigraph::sparql::results::QueryResultsFormat;
-use oxigraph::sparql::{Query, QueryOptions, QueryResults, Update};
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 #[cfg(feature = "geosparql")]
 use spargeo::register_geosparql_functions;
@@ -214,29 +214,34 @@ impl JsStore {
             }
         }
 
-        let mut query = Query::parse(query, base_iri.as_deref()).map_err(JsError::from)?;
-        if use_default_graph_as_union {
-            query.dataset_mut().set_default_graph_as_union();
-        }
-        if let Some(default_graph) = default_graph {
-            query.dataset_mut().set_default_graph(default_graph);
-        }
-        if let Some(named_graphs) = named_graphs {
-            query.dataset_mut().set_available_named_graphs(named_graphs);
-        }
-
-        #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
-        let mut options = QueryOptions::default();
+        let mut evaluator = SparqlEvaluator::new();
         #[cfg(feature = "geosparql")]
         {
-            options = register_geosparql_functions(options);
+            evaluator = register_geosparql_functions(evaluator);
+        }
+        if let Some(base_iri) = base_iri {
+            evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
         }
 
-        let results = self
-            .store
-            .query_opt(query, options)
-            .map_err(JsError::from)?;
+        let mut prepared_query = evaluator.parse_query(&query).map_err(JsError::from)?;
+        if use_default_graph_as_union {
+            prepared_query.dataset_mut().set_default_graph_as_union();
+        }
+        if let Some(default_graph) = default_graph {
+            prepared_query
+                .dataset_mut()
+                .set_default_graph(default_graph);
+        }
+        if let Some(named_graphs) = named_graphs {
+            prepared_query
+                .dataset_mut()
+                .set_available_named_graphs(named_graphs);
+        }
 
+        let results = prepared_query
+            .on_store(&self.store)
+            .execute()
+            .map_err(JsError::from)?;
         Ok(match results {
             QueryResults::Solutions(solutions) => {
                 if let Some(results_format) = results_format {
@@ -315,18 +320,20 @@ impl JsStore {
             base_iri = convert_base_iri(&Reflect::get(options, &JsValue::from_str("base_iri"))?)?;
         }
 
-        let update = Update::parse(update, base_iri.as_deref()).map_err(JsError::from)?;
-
-        #[cfg_attr(not(feature = "geosparql"), expect(unused_mut))]
-        let mut options = QueryOptions::default();
+        let mut evaluator = SparqlEvaluator::new();
         #[cfg(feature = "geosparql")]
         {
-            options = register_geosparql_functions(options);
+            evaluator = register_geosparql_functions(evaluator);
+        }
+        if let Some(base_iri) = base_iri {
+            evaluator = evaluator.with_base_iri(base_iri).map_err(JsError::from)?;
         }
 
-        Ok(self
-            .store
-            .update_opt(update, options)
+        Ok(evaluator
+            .parse_update(update)
+            .map_err(JsError::from)?
+            .on_store(&self.store)
+            .execute()
             .map_err(JsError::from)?)
     }
 

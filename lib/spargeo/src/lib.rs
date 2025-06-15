@@ -7,14 +7,14 @@
 use geo::{Geometry, Relate};
 use geojson::GeoJson;
 use oxigraph::model::{Literal, NamedNodeRef, Term};
-use oxigraph::sparql::QueryOptions;
+use oxigraph::sparql::SparqlEvaluator;
 use spareval::QueryEvaluator;
 use std::str::FromStr;
 use wkt::TryFromWkt;
 
-/// Registers GeoSPARQL extension functions in the [`QueryOptions`]
-pub fn register_geosparql_functions(options: QueryOptions) -> QueryOptions {
-    options
+/// Registers GeoSPARQL extension functions in the [`SparqlEvaluator`]
+pub fn register_geosparql_functions(evaluator: SparqlEvaluator) -> SparqlEvaluator {
+    evaluator
         .with_custom_function(geosparql_functions::SF_EQUALS.into(), geof_sf_equals)
         .with_custom_function(geosparql_functions::SF_DISJOINT.into(), geof_sf_disjoint)
         .with_custom_function(

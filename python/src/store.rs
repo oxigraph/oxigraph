@@ -6,9 +6,9 @@ use crate::model::*;
 use crate::sparql::*;
 use oxigraph::io::{RdfParser, RdfSerializer};
 use oxigraph::model::GraphNameRef;
-use oxigraph::sparql::{QueryResults, Update};
+use oxigraph::sparql::QueryResults;
 use oxigraph::store::{self, LoaderError, SerializerError, StorageError, Store};
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -270,29 +270,21 @@ impl PyStore {
         // SAFETY: To derive Ungil
         unsafe impl Send for UngilQueryResults {}
 
-        let query = parse_query(
+        let mut evaluator = prepare_sparql_query(
+            sparql_evaluator_from_python(base_iri, custom_functions)?,
             query,
-            base_iri,
             use_default_graph_as_union,
             default_graph,
             named_graphs,
-            py,
-        )?;
-        let options = query_options_from_python(custom_functions);
-        let substitutions = substitutions
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(k, v)| (k.into(), v.into()));
+        )?
+        .on_store(&self.inner);
+        if let Some(substitutions) = substitutions {
+            for (k, v) in substitutions {
+                evaluator = evaluator.substitute_variable(k, v);
+            }
+        }
         let results = py
-            .allow_threads(|| {
-                Ok(UngilQueryResults(
-                    self.inner.query_opt_with_substituted_variables(
-                        query,
-                        options,
-                        substitutions,
-                    )?,
-                ))
-            })
+            .allow_threads(|| Ok(UngilQueryResults(evaluator.execute()?)))
             .map_err(map_evaluation_error)?
             .0;
         query_results_to_python(py, results)
@@ -343,11 +335,11 @@ impl PyStore {
         py: Python<'_>,
     ) -> PyResult<()> {
         py.allow_threads(|| {
-            let options = query_options_from_python(custom_functions);
-            let update =
-                Update::parse(update, base_iri).map_err(|e| map_evaluation_error(e.into()))?;
-            self.inner
-                .update_opt(update, options)
+            sparql_evaluator_from_python(base_iri, custom_functions)?
+                .parse_update(update)
+                .map_err(|e| PySyntaxError::new_err(e.to_string()))?
+                .on_store(&self.inner)
+                .execute()
                 .map_err(map_evaluation_error)
         })
     }

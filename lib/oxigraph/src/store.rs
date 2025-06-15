@@ -5,7 +5,7 @@
 //! Usage example:
 //! ```
 //! use oxigraph::model::*;
-//! use oxigraph::sparql::QueryResults;
+//! use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 //! use oxigraph::store::Store;
 //!
 //! let store = Store::new()?;
@@ -20,16 +20,20 @@
 //! assert_eq!(vec![quad], results?);
 //!
 //! // SPARQL query
-//! if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+//! if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+//!     .parse_query("SELECT ?s WHERE { ?s ?p ?o }")?
+//!     .on_store(&store)
+//!     .execute()?
+//! {
 //!     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 //! };
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
 use crate::io::{RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
+#[expect(deprecated)]
 use crate::sparql::{
-    EvaluationError, Query, QueryExplanation, QueryOptions, QueryResults, Update, UpdateOptions,
-    evaluate_query, evaluate_update_on_storage, evaluate_update_on_transaction,
+    EvaluationError, Query, QueryExplanation, QueryResults, SparqlEvaluator, Update,
 };
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
@@ -43,17 +47,17 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 /// An on-disk [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
-/// Allows to query and update it using SPARQL.
+/// Allows querying and update it using SPARQL.
 /// It is based on the [RocksDB](https://rocksdb.org/) key-value store.
 ///
 /// This store ensures the "repeatable read" isolation level: the store only exposes changes that have
-/// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
-/// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
+/// been "committed" (i.e., no partial writes), and the exposed state does not change for the complete duration
+/// of a read operation (e.g., a SPARQL query) or a read/write operation (e.g., a SPARQL update).
 ///
 /// Usage example:
 /// ```
 /// use oxigraph::model::*;
-/// use oxigraph::sparql::QueryResults;
+/// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 /// use oxigraph::store::Store;
 /// # use std::fs::remove_dir_all;
 ///
@@ -70,7 +74,11 @@ use std::path::Path;
 /// assert_eq!(vec![quad], results?);
 ///
 /// // SPARQL query
-/// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+/// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+///     .parse_query("SELECT ?s WHERE { ?s ?p ?o }")?
+///     .on_store(&store)
+///     .execute()?
+/// {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// };
 /// #
@@ -118,7 +126,7 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::QueryResults;
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
@@ -128,7 +136,11 @@ impl Store {
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     ///
     /// // SPARQL query
-    /// if let QueryResults::Solutions(mut solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+    /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+    ///     .parse_query("SELECT ?s WHERE { ?s ?p ?o }")?
+    ///     .on_store(&store)
+    ///     .execute()?
+    /// {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("s"),
     ///         Some(&ex.into_owned().into())
@@ -136,11 +148,13 @@ impl Store {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
+    #[expect(deprecated)]
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     ) -> Result<QueryResults, EvaluationError> {
-        self.query_opt(query, QueryOptions::default())
+        self.query_opt(query, SparqlEvaluator::new())
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options.
@@ -148,17 +162,18 @@ impl Store {
     /// Usage example with a custom function serializing terms to N-Triples:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
-    /// let store = Store::new()?;
-    /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
-    ///     "SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}",
-    ///     QueryOptions::default().with_custom_function(
+    /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+    ///     .with_custom_function(
     ///         NamedNode::new("http://www.w3.org/ns/formats/N-Triples")?,
     ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
-    ///     ),
-    /// )? {
+    ///     )
+    ///     .parse_query("SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}")?
+    ///     .on_store(&Store::new()?)
+    ///     .execute()?
+    /// {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("nt"),
     ///         Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into())
@@ -166,31 +181,32 @@ impl Store {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
+    #[expect(deprecated)]
     pub fn query_opt(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
+        options: SparqlEvaluator,
     ) -> Result<QueryResults, EvaluationError> {
-        let (results, _) = self.explain_query_opt(query, options, false)?;
-        results
+        self.query_opt_with_substituted_variables(query, options, [])
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options while substituting some variables with the given values.
     ///
     /// Substitution follows [RDF-dev SEP-0007](https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0007/sep-0007.md).
     ///
-    /// Usage example with a custom function serializing terms to N-Triples:
+    /// Usage example:
     /// ```
     /// use oxigraph::model::{Literal, Variable};
-    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
-    /// let store = Store::new()?;
-    /// if let QueryResults::Solutions(mut solutions) = store.query_opt_with_substituted_variables(
-    ///     "SELECT ?v WHERE {}",
-    ///     QueryOptions::default(),
-    ///     [(Variable::new("v")?, Literal::from(1).into())],
-    /// )? {
+    /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+    ///     .parse_query("SELECT ?v WHERE {}")?
+    ///     .substitute_variable(Variable::new("v")?, Literal::from(1))
+    ///     .on_store(&Store::new()?)
+    ///     .execute()?
+    /// {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("v"),
     ///         Some(&Literal::from(1).into())
@@ -198,72 +214,36 @@ impl Store {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
+    #[expect(deprecated)]
     pub fn query_opt_with_substituted_variables(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
+        options: SparqlEvaluator,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> Result<QueryResults, EvaluationError> {
-        let (results, _) = self.explain_query_opt_with_substituted_variables(
-            query,
-            options,
-            false,
-            substitutions,
-        )?;
-        results
+        let mut evaluator = options.for_query(query.try_into().map_err(Into::into)?);
+        for (variable, term) in substitutions {
+            evaluator = evaluator.substitute_variable(variable, term);
+        }
+        evaluator.on_store(self).execute()
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options and
     /// returns a query explanation with some statistics (if enabled with the `with_stats` parameter).
     ///
-    /// <div class="warning">If you want to compute statistics you need to exhaust the results iterator before having a look at them.</div>
+    /// <div class="warning">If you want to compute statistics, you need to exhaust the results iterator before having a look at them.</div>
     ///
-    /// Usage example serialising the explanation with statistics in JSON:
+    /// Usage example serializing the explanation with statistics in JSON:
     /// ```
-    /// use oxigraph::sparql::{QueryOptions, QueryResults};
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
-    /// let store = Store::new()?;
-    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) = store.explain_query_opt(
-    ///     "SELECT ?s WHERE { VALUES ?s { 1 2 3 } }",
-    ///     QueryOptions::default(),
-    ///     true,
-    /// )? {
-    ///     // We make sure to have read all the solutions
-    ///     for _ in solutions {}
-    ///     let mut buf = Vec::new();
-    ///     explanation.write_in_json(&mut buf)?;
-    /// }
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// ```
-    pub fn explain_query_opt(
-        &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
-        with_stats: bool,
-    ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
-        self.explain_query_opt_with_substituted_variables(query, options, with_stats, [])
-    }
-
-    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options and
-    /// returns a query explanation with some statistics (if enabled with the `with_stats` parameter).
-    ///
-    /// <div class="warning">If you want to compute statistics you need to exhaust the results iterator before having a look at them.</div>
-    ///
-    /// Usage example serialising the explanation with statistics in JSON:
-    /// ```
-    /// use oxigraph::sparql::{QueryOptions, QueryResults};
-    /// use oxigraph::store::Store;
-    /// use oxrdf::{Literal, Variable};
-    ///
-    /// let store = Store::new()?;
-    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) = store
-    ///     .explain_query_opt_with_substituted_variables(
-    ///         "SELECT ?s WHERE {}",
-    ///         QueryOptions::default(),
-    ///         true,
-    ///         [(Variable::new("s")?, Literal::from(1).into())],
-    ///     )?
+    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) = SparqlEvaluator::new()
+    ///     .parse_query("SELECT ?s WHERE { VALUES ?s { 1 2 3 } }")?
+    ///     .on_store(&Store::new()?)
+    ///     .compute_statistics()
+    ///     .explain()
     /// {
     ///     // We make sure to have read all the solutions
     ///     for _ in solutions {}
@@ -272,20 +252,67 @@ impl Store {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
+    #[expect(deprecated)]
+    pub fn explain_query_opt(
+        &self,
+        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        options: SparqlEvaluator,
+        with_stats: bool,
+    ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
+        let mut prepared = options
+            .for_query(query.try_into().map_err(Into::into)?)
+            .on_store(self);
+        if with_stats {
+            prepared = prepared.compute_statistics();
+        }
+        Ok(prepared.explain())
+    }
+
+    /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options and
+    /// returns a query explanation with some statistics (if enabled with the `with_stats` parameter).
+    ///
+    /// <div class="warning">If you want to compute statistics, you need to exhaust the results iterator before having a look at them.</div>
+    ///
+    /// Usage example serializing the explanation with statistics in JSON:
+    /// ```
+    /// use oxigraph::model::{Literal, Variable};
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+    /// use oxigraph::store::Store;
+    ///
+    /// if let (Ok(QueryResults::Solutions(solutions)), explanation) = SparqlEvaluator::new()
+    ///     .parse_query("SELECT ?s WHERE {}")?
+    ///     .substitute_variable(Variable::new("s")?, Literal::from(1))
+    ///     .on_store(&Store::new()?)
+    ///     .compute_statistics()
+    ///     .explain()
+    /// {
+    ///     // We make sure to have read all the solutions
+    ///     for _ in solutions {}
+    ///     let mut buf = Vec::new();
+    ///     explanation.write_in_json(&mut buf)?;
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
+    #[expect(deprecated)]
     pub fn explain_query_opt_with_substituted_variables(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
+        options: SparqlEvaluator,
         with_stats: bool,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
-        evaluate_query(
-            self.storage.snapshot(),
-            query,
-            options,
-            with_stats,
-            substitutions,
-        )
+        let mut prepared = options
+            .for_query(query.try_into().map_err(Into::into)?)
+            .on_store(self);
+        if with_stats {
+            prepared = prepared.compute_statistics();
+        }
+        for (variable, term) in substitutions {
+            prepared = prepared.substitute_variable(variable, term);
+        }
+        Ok(prepared.explain())
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -452,24 +479,30 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
+    /// use oxigraph::sparql::SparqlEvaluator;
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     ///
     /// // insertion
-    /// store
-    ///     .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
+    /// SparqlEvaluator::new()
+    ///     .parse_update(
+    ///         "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+    ///     )?
+    ///     .on_store(&store)
+    ///     .execute()?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[expect(deprecated)]
     pub fn update(
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
     ) -> Result<(), EvaluationError> {
-        self.update_opt(update, UpdateOptions::default())
+        self.update_opt(update, SparqlEvaluator::new())
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/) with some options.
@@ -489,16 +522,16 @@ impl Store {
     /// )?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
+    #[expect(deprecated)]
     pub fn update_opt(
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
-        options: impl Into<UpdateOptions>,
+        options: SparqlEvaluator,
     ) -> Result<(), EvaluationError> {
-        evaluate_update_on_storage(
-            &self.storage,
-            &update.try_into().map_err(Into::into)?,
-            &options.into(),
-        )
+        options
+            .for_update(update.try_into().map_err(Into::into)?)
+            .on_store(self)
+            .execute()
     }
 
     /// Loads an RDF file under into the store.
@@ -508,9 +541,8 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::io::{RdfFormat, RdfParser};
     /// use oxigraph::model::*;
-    /// use oxrdfio::RdfParser;
     ///
     /// let store = Store::new()?;
     ///
@@ -554,9 +586,8 @@ impl Store {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::io::{RdfParser, RdfFormat};
     /// use oxigraph::model::*;
-    /// use oxrdfio::RdfParser;
     ///
     /// let store = Store::new()?;
     ///
@@ -956,10 +987,14 @@ impl Store {
         }
     }
 
-    /// Validates that all the store invariants held in the data
+    /// Validate that all the store invariants held in the data
     #[doc(hidden)]
     pub fn validate(&self) -> Result<(), StorageError> {
         self.storage.snapshot().validate()
+    }
+
+    pub(super) fn storage(&self) -> &Storage {
+        &self.storage
     }
 }
 
@@ -990,18 +1025,22 @@ pub struct Transaction<'a> {
     inner: StorageReadableTransaction<'a>,
 }
 
-impl Transaction<'_> {
+impl<'a> Transaction<'a> {
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
     ///
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{EvaluationError, QueryResults};
+    /// use oxigraph::sparql::{EvaluationError, QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// if let QueryResults::Solutions(solutions) = transaction.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+    /// if let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+    ///     .parse_query("SELECT ?s WHERE { ?s ?p ?o }")?
+    ///     .on_transaction(&transaction)
+    ///     .execute()?
+    /// {
     ///     for solution in solutions {
     ///         if let Some(Term::NamedNode(s)) = solution?.get("s") {
     ///             transaction.insert(QuadRef::new(
@@ -1016,11 +1055,13 @@ impl Transaction<'_> {
     /// transaction.commit()?;
     /// # Result::<_, EvaluationError>::Ok(())
     /// ```
+    #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
+    #[expect(deprecated)]
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
     ) -> Result<QueryResults, EvaluationError> {
-        self.query_opt(query, QueryOptions::default())
+        self.query_opt(query, SparqlEvaluator::new())
     }
 
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/) with some options.
@@ -1028,18 +1069,22 @@ impl Transaction<'_> {
     /// Usage example with a custom function serializing terms to N-Triples:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{EvaluationError, QueryOptions, QueryResults};
+    /// use oxigraph::sparql::{EvaluationError, QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
-    /// if let QueryResults::Solutions(solutions) = transaction.query_opt(
-    ///     "SELECT ?s (<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) WHERE { ?s ?p ?o }",
-    ///     QueryOptions::default().with_custom_function(
+    /// if let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+    ///     .with_custom_function(
     ///         NamedNode::new_unchecked("http://www.w3.org/ns/formats/N-Triples"),
     ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
-    ///     ),
-    /// )? {
+    ///     )
+    ///     .parse_query(
+    ///         "SELECT ?s (<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) WHERE { ?s ?p ?o }",
+    ///     )?
+    ///     .on_transaction(&transaction)
+    ///     .execute()?
+    /// {
     ///     for solution in solutions {
     ///         let solution = solution?;
     ///         if let (Some(Term::NamedNode(s)), Some(nt)) = (solution.get("s"), solution.get("nt")) {
@@ -1055,13 +1100,17 @@ impl Transaction<'_> {
     /// transaction.commit()?;
     /// # Result::<_, EvaluationError>::Ok(())
     /// ```
+    #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
+    #[expect(deprecated)]
     pub fn query_opt(
         &self,
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-        options: QueryOptions,
+        options: SparqlEvaluator,
     ) -> Result<QueryResults, EvaluationError> {
-        let (results, _) = evaluate_query(self.inner.reader(), query, options, false, [])?;
-        results
+        options
+            .for_query(query.try_into().map_err(Into::into)?)
+            .on_transaction(self)
+            .execute()
     }
 
     /// Retrieves quads with a filter on each quad component.
@@ -1131,14 +1180,18 @@ impl Transaction<'_> {
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::EvaluationError;
+    /// use oxigraph::sparql::{EvaluationError, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
     /// // insertion
-    /// transaction
-    ///     .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
+    /// SparqlEvaluator::new()
+    ///     .parse_update(
+    ///         "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
+    ///     )?
+    ///     .on_transaction(&mut transaction)
+    ///     .execute()?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
@@ -1147,24 +1200,25 @@ impl Transaction<'_> {
     /// transaction.commit()?;
     /// # Result::<_, EvaluationError>::Ok(())
     /// ```
+    #[expect(deprecated)]
     pub fn update(
         &mut self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
     ) -> Result<(), EvaluationError> {
-        self.update_opt(update, UpdateOptions::default())
+        self.update_opt(update, SparqlEvaluator::new())
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/) with some options.
+    #[expect(deprecated)]
     pub fn update_opt(
         &mut self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
-        options: impl Into<UpdateOptions>,
+        options: SparqlEvaluator,
     ) -> Result<(), EvaluationError> {
-        evaluate_update_on_transaction(
-            &mut self.inner,
-            &update.try_into().map_err(Into::into)?,
-            &options.into(),
-        )
+        options
+            .for_update(update.try_into().map_err(Into::into)?)
+            .on_transaction(self)
+            .execute()
     }
 
     /// Loads an RDF file into the store.
@@ -1174,9 +1228,8 @@ impl Transaction<'_> {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::io::{RdfParser, RdfFormat};
     /// use oxigraph::model::*;
-    /// use oxrdfio::RdfParser;
     ///
     /// let store = Store::new()?;
     ///
@@ -1223,9 +1276,8 @@ impl Transaction<'_> {
     /// Usage example:
     /// ```
     /// use oxigraph::store::Store;
-    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::io::{RdfParser, RdfFormat};
     /// use oxigraph::model::*;
-    /// use oxrdfio::RdfParser;
     ///
     /// let store = Store::new()?;
     ///
@@ -1466,6 +1518,14 @@ impl Transaction<'_> {
     /// ```
     pub fn commit(self) -> Result<(), StorageError> {
         self.inner.commit()
+    }
+
+    pub(super) fn inner(&self) -> &StorageReadableTransaction<'a> {
+        &self.inner
+    }
+
+    pub(super) fn inner_mut(&mut self) -> &mut StorageReadableTransaction<'a> {
+        &mut self.inner
     }
 }
 
