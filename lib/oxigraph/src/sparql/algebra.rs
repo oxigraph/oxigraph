@@ -40,6 +40,7 @@ impl Query {
         query: &str,
         base_iri: Option<&str>,
     ) -> Result<Self, spargebra::SparqlSyntaxError> {
+        #[expect(deprecated)]
         let query = Self::from(spargebra::Query::parse(query, base_iri)?);
         Ok(Self {
             dataset: query.dataset,
@@ -126,6 +127,7 @@ impl Update {
         update: &str,
         base_iri: Option<&str>,
     ) -> Result<Self, spargebra::SparqlSyntaxError> {
+        #[expect(deprecated)]
         Ok(spargebra::Update::parse(update, base_iri)?.into())
     }
 

@@ -25,9 +25,9 @@ impl From<QuerySolutionIter> for QueryResults {
 /// ```
 /// use oxrdf::Dataset;
 /// use spareval::{QueryEvaluator, QueryResults};
-/// use spargebra::Query;
+/// use spargebra::SparqlParser;
 ///
-/// let query = Query::parse("SELECT ?s ?o WHERE { ?s ?p ?o }", None)?;
+/// let query = SparqlParser::new().parse_query("SELECT ?s ?o WHERE { ?s ?p ?o }")?;
 /// if let QueryResults::Solutions(solutions) =
 ///     QueryEvaluator::new().execute(Dataset::new(), &query)?
 /// {
@@ -60,9 +60,9 @@ impl QuerySolutionIter {
     /// ```
     /// use oxrdf::{Dataset, Variable};
     /// use spareval::{QueryEvaluator, QueryResults};
-    /// use spargebra::Query;
+    /// use spargebra::SparqlParser;
     ///
-    /// let query = Query::parse("SELECT ?s ?o WHERE { ?s ?p ?o }", None)?;
+    /// let query = SparqlParser::new().parse_query("SELECT ?s ?o WHERE { ?s ?p ?o }")?;
     /// if let QueryResults::Solutions(solutions) =
     ///     QueryEvaluator::new().execute(Dataset::new(), &query)?
     /// {
@@ -98,9 +98,9 @@ impl Iterator for QuerySolutionIter {
 /// ```
 /// use oxrdf::Dataset;
 /// use spareval::{QueryEvaluator, QueryResults};
-/// use spargebra::Query;
+/// use spargebra::SparqlParser;
 ///
-/// let query = Query::parse("CONSTRUCT WHERE { ?s ?p ?o }", None)?;
+/// let query = SparqlParser::new().parse_query("CONSTRUCT WHERE { ?s ?p ?o }")?;
 /// if let QueryResults::Graph(triples) = QueryEvaluator::new().execute(Dataset::new(), &query)? {
 ///     for triple in triples {
 ///         println!("{}", triple?);

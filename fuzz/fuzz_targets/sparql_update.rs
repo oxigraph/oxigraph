@@ -1,8 +1,8 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use spargebra::Update;
+use spargebra::SparqlParser;
 use std::str;
 
 fuzz_target!(|data: &str| {
-    let _ = Update::parse(data, None);
+    let _ = SparqlParser::new().parse_update(data);
 });

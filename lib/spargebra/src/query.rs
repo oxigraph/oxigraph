@@ -1,5 +1,6 @@
+use crate::SparqlParser;
 use crate::algebra::*;
-use crate::parser::{SparqlSyntaxError, parse_query};
+use crate::parser::SparqlSyntaxError;
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -8,10 +9,10 @@ use std::str::FromStr;
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 ///
 /// ```
-/// use spargebra::Query;
+/// use spargebra::SparqlParser;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-/// let query = Query::parse(query_str, None)?;
+/// let query = SparqlParser::new().parse_query(query_str)?;
 /// assert_eq!(query.to_string(), query_str);
 /// assert_eq!(
 ///     query.to_sse(),
@@ -63,8 +64,18 @@ pub enum Query {
 
 impl Query {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
+    #[deprecated(
+        note = "Use `SparqlParser::new().parse_query` instead",
+        since = "0.4.0"
+    )]
     pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        parse_query(query, base_iri)
+        let mut parser = SparqlParser::new();
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(SparqlSyntaxError::from_bad_base_iri)?;
+        }
+        parser.parse_query(query)
     }
 
     #[inline]
@@ -297,7 +308,7 @@ impl FromStr for Query {
     type Err = SparqlSyntaxError;
 
     fn from_str(query: &str) -> Result<Self, Self::Err> {
-        Self::parse(query, None)
+        SparqlParser::new().parse_query(query)
     }
 }
 

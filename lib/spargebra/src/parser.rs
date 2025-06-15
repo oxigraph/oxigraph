@@ -14,27 +14,118 @@ use std::collections::{HashMap, HashSet};
 use std::mem::take;
 use std::str::FromStr;
 
-/// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
-pub fn parse_query(query: &str, base_iri: Option<&str>) -> Result<Query, SparqlSyntaxError> {
-    let mut state = ParserState::from_base_iri(base_iri)?;
-    parser::QueryUnit(query, &mut state).map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))
+/// A SPARQL parser
+///
+/// ```
+/// use spargebra::SparqlParser;
+///
+/// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
+/// let query = SparqlParser::new().parse_query(query_str)?;
+/// assert_eq!(query.to_string(), query_str);
+/// # Ok::<_, spargebra::SparqlSyntaxError>(())
+/// ```
+#[must_use]
+#[derive(Clone, Default)]
+pub struct SparqlParser {
+    base_iri: Option<Iri<String>>,
+    prefixes: HashMap<String, String>,
 }
 
-/// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
-pub fn parse_update(update: &str, base_iri: Option<&str>) -> Result<Update, SparqlSyntaxError> {
-    let mut state = ParserState::from_base_iri(base_iri)?;
-    let operations = parser::UpdateInit(update, &mut state)
-        .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
-    Ok(Update {
-        operations,
-        base_iri: state.base_iri,
-    })
+impl SparqlParser {
+    #[inline]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Provides an IRI that could be used to resolve the operation relative IRIs.
+    ///
+    /// ```
+    /// use spargebra::SparqlParser;
+    ///
+    /// let query = SparqlParser::new().with_base_iri("http://example.com/")?.parse_query("SELECT * WHERE { <s> <p> <o> }")?;
+    /// assert_eq!(query.to_string(), "BASE <http://example.com/>\nSELECT * WHERE { <http://example.com/s> <http://example.com/p> <http://example.com/o> . }");
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Result<Self, IriParseError> {
+        self.base_iri = Some(Iri::parse(base_iri.into())?);
+        Ok(self)
+    }
+
+    /// Set a default IRI prefix used during parsing.
+    ///
+    /// ```
+    /// use spargebra::SparqlParser;
+    ///
+    /// let query = SparqlParser::new()
+    ///     .with_prefix("ex", "http://example.com/")?
+    ///     .parse_query("SELECT * WHERE { ex:s ex:p ex:o }")?;
+    /// assert_eq!(
+    ///     query.to_string(),
+    ///     "SELECT * WHERE { <http://example.com/s> <http://example.com/p> <http://example.com/o> . }"
+    /// );
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_prefix(
+        mut self,
+        prefix_name: impl Into<String>,
+        prefix_iri: impl Into<String>,
+    ) -> Result<Self, IriParseError> {
+        self.prefixes.insert(
+            prefix_name.into(),
+            Iri::parse(prefix_iri.into())?.into_inner(),
+        );
+        Ok(self)
+    }
+
+    /// Parse the given query string using the already set options.
+    ///
+    /// ```
+    /// use spargebra::SparqlParser;
+    ///
+    /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
+    /// let query = SparqlParser::new().parse_query(query_str)?;
+    /// assert_eq!(query.to_string(), query_str);
+    /// # Ok::<_, spargebra::SparqlSyntaxError>(())
+    /// ```
+    pub fn parse_query(self, query: &str) -> Result<Query, SparqlSyntaxError> {
+        let mut state = ParserState::new(self.base_iri, self.prefixes);
+        parser::QueryUnit(query, &mut state)
+            .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))
+    }
+
+    /// Parse the given update string using the already set options.
+    ///
+    /// ```
+    /// use spargebra::SparqlParser;
+    ///
+    /// let update_str = "CLEAR ALL ;";
+    /// let update = SparqlParser::new().parse_update(update_str)?;
+    /// assert_eq!(update.to_string().trim(), update_str);
+    /// # Ok::<_, spargebra::SparqlSyntaxError>(())
+    /// ```
+    pub fn parse_update(self, update: &str) -> Result<Update, SparqlSyntaxError> {
+        let mut state = ParserState::new(self.base_iri, self.prefixes);
+        let operations = parser::UpdateInit(update, &mut state)
+            .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
+        Ok(Update {
+            operations,
+            base_iri: state.base_iri,
+        })
+    }
 }
 
 /// Error returned during SPARQL parsing.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct SparqlSyntaxError(#[from] ParseErrorKind);
+
+impl SparqlSyntaxError {
+    pub(crate) fn from_bad_base_iri(e: IriParseError) -> Self {
+        Self(ParseErrorKind::InvalidBaseIri(e))
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 enum ParseErrorKind {
@@ -659,21 +750,14 @@ pub struct ParserState {
 }
 
 impl ParserState {
-    pub(crate) fn from_base_iri(base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        Ok(Self {
-            base_iri: if let Some(base_iri) = base_iri {
-                Some(
-                    Iri::parse(base_iri.to_owned())
-                        .map_err(|e| SparqlSyntaxError(ParseErrorKind::InvalidBaseIri(e)))?,
-                )
-            } else {
-                None
-            },
-            prefixes: HashMap::new(),
+    pub(crate) fn new(base_iri: Option<Iri<String>>, prefixes: HashMap<String, String>) -> Self {
+        Self {
+            base_iri,
+            prefixes,
             used_bnodes: HashSet::new(),
             currently_used_bnodes: HashSet::new(),
             aggregates: Vec::new(),
-        })
+        }
     }
 
     fn parse_iri(&self, iri: String) -> Result<Iri<String>, IriParseError> {

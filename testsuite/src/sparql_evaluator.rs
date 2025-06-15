@@ -16,8 +16,8 @@ use oxigraph::sparql::{QueryResults, Update};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
-use spargebra::Query;
 use spargebra::algebra::GraphPattern;
+use spargebra::{Query, SparqlParser};
 use spargeo::add_geosparql_functions;
 use sparopt::Optimizer;
 use std::collections::HashMap;
@@ -95,9 +95,12 @@ pub fn register_sparql_tests(evaluator: &mut TestEvaluator) {
 
 fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
     let query_file = test.action.as_deref().context("No action found")?;
-    let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
+    let query = SparqlParser::new()
+        .with_base_iri(query_file)?
+        .parse_query(&read_file_to_string(query_file)?)
         .context("Not able to parse")?;
-    Query::parse(&query.to_string(), None)
+    SparqlParser::new()
+        .parse_query(&query.to_string())
         .with_context(|| format!("Failure to deserialize \"{query}\""))?;
     Ok(())
 }
@@ -105,7 +108,10 @@ fn evaluate_positive_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
     let query_file = test.action.as_deref().context("No action found")?;
     ensure!(
-        Query::parse(&read_file_to_string(query_file)?, Some(query_file)).is_err(),
+        SparqlParser::new()
+            .with_base_iri(query_file)?
+            .parse_query(&read_file_to_string(query_file)?)
+            .is_err(),
         "Oxigraph parses even if it should not."
     );
     Ok(())
@@ -152,11 +158,14 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         load_to_dataset(value, &mut dataset, name.clone())?;
     }
     let query_file = test.query.as_deref().context("No action found")?;
-    let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
+    let query = SparqlParser::new()
+        .with_base_iri(query_file)?
+        .parse_query(&read_file_to_string(query_file)?)
         .context("Failure to parse query")?;
 
     // We check parsing roundtrip
-    Query::parse(&query.to_string(), None)
+    SparqlParser::new()
+        .parse_query(&query.to_string())
         .with_context(|| format!("Failure to deserialize \"{query}\""))?;
 
     let evaluator = QueryEvaluator::new()
@@ -702,8 +711,9 @@ fn load_to_dataset(
 fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
     let actual = (&Optimizer::optimize_graph_pattern(
-        (&if let Query::Select { pattern, .. } =
-            Query::parse(&read_file_to_string(action)?, Some(action))?
+        (&if let Query::Select { pattern, .. } = SparqlParser::new()
+            .with_base_iri(action)?
+            .parse_query(&read_file_to_string(action)?)?
         {
             pattern
         } else {
@@ -715,7 +725,9 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     let result = test.result.as_ref().context("No tests result found")?;
     let Query::Select {
         pattern: expected, ..
-    } = Query::parse(&read_file_to_string(result)?, Some(result))?
+    } = SparqlParser::new()
+        .with_base_iri(result)?
+        .parse_query(&read_file_to_string(result)?)?
     else {
         bail!("Only SELECT queries are supported in query sparql-optimization tests")
     };

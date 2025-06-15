@@ -1,5 +1,6 @@
+use crate::SparqlParser;
 use crate::algebra::*;
-use crate::parser::{SparqlSyntaxError, parse_update};
+use crate::parser::SparqlSyntaxError;
 use crate::term::*;
 use oxiri::Iri;
 use std::fmt;
@@ -8,10 +9,10 @@ use std::str::FromStr;
 /// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/).
 ///
 /// ```
-/// use spargebra::Update;
+/// use spargebra::SparqlParser;
 ///
 /// let update_str = "CLEAR ALL ;";
-/// let update = Update::parse(update_str, None)?;
+/// let update = SparqlParser::new().parse_update(update_str)?;
 /// assert_eq!(update.to_string().trim(), update_str);
 /// assert_eq!(update.to_sse(), "(update (clear all))");
 /// # Ok::<_, spargebra::SparqlSyntaxError>(())
@@ -26,8 +27,18 @@ pub struct Update {
 
 impl Update {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
+    #[deprecated(
+        note = "Use `SparqlParser::new().parse_update` instead",
+        since = "0.4.0"
+    )]
     pub fn parse(update: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
-        parse_update(update, base_iri)
+        let mut parser = SparqlParser::new();
+        if let Some(base_iri) = base_iri {
+            parser = parser
+                .with_base_iri(base_iri)
+                .map_err(SparqlSyntaxError::from_bad_base_iri)?;
+        }
+        parser.parse_update(update)
     }
 
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
@@ -71,7 +82,7 @@ impl FromStr for Update {
     type Err = SparqlSyntaxError;
 
     fn from_str(update: &str) -> Result<Self, Self::Err> {
-        Self::parse(update, None)
+        SparqlParser::new().parse_update(update)
     }
 }
 
