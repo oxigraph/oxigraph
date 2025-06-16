@@ -761,6 +761,14 @@ impl LowLevelTurtleParser {
             .as_ref()
             .map(Iri::as_str)
     }
+
+    /// Whether a (syntax) comment has been seen in the input yet.
+    ///
+    /// This concerns syntax comments (e.g. `# foo`),
+    /// not RDF comments (e.g. `<s> rdfs::comment "A random subject"@en .`).
+    pub fn seen_comment(&self) -> bool {
+        self.parser.seen_comment()
+    }
 }
 
 /// Iterator on the file prefixes.
