@@ -36,14 +36,16 @@ use std::sync::OnceLock;
 /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
 /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
 /// :type format: RdfFormat or None, optional
-/// :param path: The file path to read from. Replaces the ``input`` parameter.
+/// :param path: The file path to read from. Replace the ``input`` parameter.
 /// :type path: str or os.PathLike[str] or None, optional
 /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
 /// :type base_iri: str or None, optional
 /// :param without_named_graphs: Sets that the parser must fail when parsing a named graph.
 /// :type without_named_graphs: bool, optional
-/// :param rename_blank_nodes: Renames the blank nodes identifiers from the ones set in the serialization to random ids. This allows to avoid identifier conflicts when merging graphs together.
+/// :param rename_blank_nodes: Renames the blank nodes identifiers from the ones set in the serialization to random ids. This allows avoiding identifier conflicts when merging graphs together.
 /// :type rename_blank_nodes: bool, optional
+/// :param lenient: Skip some data validation during loading, like validating IRIs. This makes parsing faster at the cost of maybe ingesting invalid data.
+/// :type lenient: bool, optional
 /// :return: an iterator of RDF triples or quads depending on the format.
 /// :rtype: QuadParser
 /// :raises ValueError: if the format is not supported.
@@ -53,7 +55,7 @@ use std::sync::OnceLock;
 /// >>> list(parse(input=b'<foo> <p> "1" .', format=RdfFormat.TURTLE, base_iri="http://example.com/"))
 /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<DefaultGraph>>]
 #[pyfunction]
-#[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, without_named_graphs = false, rename_blank_nodes = false))]
+#[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, without_named_graphs = false, rename_blank_nodes = false, lenient = false))]
 pub fn parse(
     input: Option<PyReadableInput>,
     format: Option<PyRdfFormatInput>,
@@ -61,6 +63,7 @@ pub fn parse(
     base_iri: Option<&str>,
     without_named_graphs: bool,
     rename_blank_nodes: bool,
+    lenient: bool,
     py: Python<'_>,
 ) -> PyResult<PyQuadParser> {
     let input = PyReadable::from_args(&path, input, py)?;
@@ -76,6 +79,9 @@ pub fn parse(
     }
     if rename_blank_nodes {
         parser = parser.rename_blank_nodes();
+    }
+    if lenient {
+        parser = parser.lenient();
     }
     Ok(PyQuadParser {
         inner: parser.for_reader(input),

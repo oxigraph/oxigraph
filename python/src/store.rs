@@ -355,7 +355,7 @@ impl PyStore {
         })
     }
 
-    /// Loads an RDF serialization into the store.
+    /// Loads RDF serialization into the store.
     ///
     /// Loads are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
     /// The :py:func:`bulk_load` method is also available for much faster loading of big files but without transactional guarantees.
@@ -380,12 +380,14 @@ impl PyStore {
     /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
     /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: RdfFormat or None, optional
-    /// :param path: The file path to read from. Replaces the ``input`` parameter.
+    /// :param path: The file path to read from. Replace the ``input`` parameter.
     /// :type path: str or os.PathLike[str] or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :param lenient: Skip some data validation during loading, like validating IRIs. This makes parsing faster at the cost of maybe ingesting invalid data.
+    /// :type lenient: bool, optional
     /// :rtype: None
     /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
@@ -396,7 +398,7 @@ impl PyStore {
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[expect(clippy::needless_pass_by_value)]
-    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None, lenient=false))]
     fn load(
         &self,
         input: Option<PyReadableInput>,
@@ -404,6 +406,7 @@ impl PyStore {
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<PyGraphNameRef<'_>>,
+        lenient: bool,
         py: Python<'_>,
     ) -> PyResult<()> {
         let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
@@ -419,16 +422,19 @@ impl PyStore {
             if let Some(to_graph_name) = to_graph_name {
                 parser = parser.with_default_graph(to_graph_name);
             }
+            if lenient {
+                parser = parser.lenient();
+            }
             self.inner
                 .load_from_reader(parser, input)
                 .map_err(|e| map_loader_error(e, path))
         })
     }
 
-    /// Loads an RDF serialization into the store.
+    /// Loads some RDF serialization into the store.
     ///
     /// This function is designed to be as fast as possible on big files **without** transactional guarantees.
-    /// If the file is invalid only a piece of it might be written to the store.
+    /// If the file is invalid, only a piece of it might be written to the store.
     ///
     /// The :py:func:`load` method is also available for loads with transactional guarantees.
     ///
@@ -450,12 +456,14 @@ impl PyStore {
     /// :type input: bytes or str or typing.IO[bytes] or typing.IO[str] or None, optional
     /// :param format: the format of the RDF serialization. If :py:const:`None`, the format is guessed from the file name extension.
     /// :type format: RdfFormat or None, optional
-    /// :param path: The file path to read from. Replaces the ``input`` parameter.
+    /// :param path: The file path to read from. Replace the ``input`` parameter.
     /// :type path: str or os.PathLike[str] or None, optional
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the file or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
     /// :param to_graph: if it is a file composed of triples, the graph in which the triples should be stored. By default, the default graph is used.
     /// :type to_graph: NamedNode or BlankNode or DefaultGraph or None, optional
+    /// :param lenient: Skip some data validation during loading, like validating IRIs. This makes parsing faster at the cost of maybe ingesting invalid data.
+    /// :type lenient: bool, optional
     /// :rtype: None
     /// :raises ValueError: if the format is not supported.
     /// :raises SyntaxError: if the provided data is invalid.
@@ -466,7 +474,7 @@ impl PyStore {
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com/foo> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[expect(clippy::needless_pass_by_value)]
-    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None))]
+    #[pyo3(signature = (input = None, format = None, *, path = None, base_iri = None, to_graph = None, lenient = false))]
     fn bulk_load(
         &self,
         input: Option<PyReadableInput>,
@@ -474,6 +482,7 @@ impl PyStore {
         path: Option<PathBuf>,
         base_iri: Option<&str>,
         to_graph: Option<PyGraphNameRef<'_>>,
+        lenient: bool,
         py: Python<'_>,
     ) -> PyResult<()> {
         let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
@@ -488,6 +497,9 @@ impl PyStore {
             }
             if let Some(to_graph_name) = to_graph_name {
                 parser = parser.with_default_graph(to_graph_name);
+            }
+            if lenient {
+                parser = parser.lenient();
             }
             self.inner
                 .bulk_loader()
