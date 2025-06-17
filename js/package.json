@@ -3,7 +3,7 @@
     "description": "Oxigraph JS build and tests",
     "private": true,
     "devDependencies": {
-        "@biomejs/biome": "^1.0.0",
+        "@biomejs/biome": "^2.0.0",
         "@codspeed/vitest-plugin": "^4.0.0",
         "@rdfjs/data-model": "^2.1.0",
         "@tsconfig/node18": "^18.2.4",
@@ -23,8 +23,5 @@
         "release": "npm run build && npm publish --provenance --access public ./pkg",
         "pack": "npm run build && npm pack ./pkg",
         "bench": "npm run build-node && vitest bench"
-    },
-    "standard": {
-        "ignore": ["pkg*"]
     }
 }

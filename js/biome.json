@@ -1,14 +1,11 @@
 {
-    "$schema": "https://biomejs.dev/schemas/1.0.0/schema.json",
+    "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
     "formatter": {
         "indentStyle": "space",
         "indentWidth": 4,
         "lineWidth": 100
     },
-    "organizeImports": {
-        "enabled": true
-    },
     "files": {
-        "ignore": ["node_modules/*", "package-lock.json", "pkg/*"]
+        "includes": ["**", "!**/node_modules/**/*", "!**/package-lock.json", "!**/pkg/**/*"]
     }
 }
