@@ -162,6 +162,14 @@ class TestParse(unittest.TestCase):
             ),
         )
 
+    def test_parse_lenient(self) -> None:
+        self.assertEqual(
+            serialize(
+                parse('<foo> <p> "a"@abcdefghijklmnop .', RdfFormat.TURTLE, lenient=True), format=RdfFormat.N_TRIPLES
+            ),
+            b'<foo> <p> "a"@abcdefghijklmnop .\n',
+        )
+
 
 class TestSerialize(unittest.TestCase):
     def test_serialize_to_bytes(self) -> None:
