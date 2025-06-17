@@ -1,11 +1,9 @@
 import assert from "node:assert";
-// @ts-expect-error
-import runTests from "@rdfjs/data-model/test/index.js";
+import { webcrypto } from "node:crypto";
 import { describe, it, vi } from "vitest";
 import oxigraph from "../pkg/oxigraph.js";
 
 // thread_rng: Node.js ES modules are not directly supported, see https://docs.rs/getrandom#nodejs-es-module-support
-import { webcrypto } from "node:crypto";
 vi.stubGlobal("crypto", webcrypto);
 
 // TODO: add back when https://github.com/rdfjs-base/data-model/pull/52 is released
