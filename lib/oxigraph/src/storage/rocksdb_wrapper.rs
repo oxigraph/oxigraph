@@ -9,7 +9,6 @@
 )]
 
 use crate::storage::error::{CorruptionError, StorageError};
-use libc::c_void;
 use oxrocksdb_sys::*;
 use rand::random;
 use std::borrow::Borrow;
@@ -17,7 +16,7 @@ use std::borrow::Borrow;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::{CStr, CString};
+use std::ffi::{CString, c_void};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -28,17 +27,12 @@ use std::{fmt, io, ptr, slice};
 
 macro_rules! ffi_result {
     ( $($function:ident)::*( $arg1:expr $(, $arg:expr)* $(,)? ) ) => {{
-        let mut status = rocksdb_status_t {
-            code: rocksdb_status_code_t_rocksdb_status_code_ok,
-            subcode: rocksdb_status_subcode_t_rocksdb_status_subcode_none,
-            severity: rocksdb_status_severity_t_rocksdb_status_severity_none,
-            string: ptr::null()
-        };
-        let result = $($function)::*($arg1 $(, $arg)* , &mut status);
-        if status.code == rocksdb_status_code_t_rocksdb_status_code_ok {
+        let mut error: *mut ::std::ffi::c_char = ::std::ptr::null_mut();
+        let result = $($function)::*($arg1 $(, $arg)* , &mut error);
+        if error.is_null() {
             Ok(result)
         } else {
-            Err(ErrorStatus(status))
+            Err(ErrorStatus(::std::ffi::CString::from_raw(error)))
         }
     }}
 }
@@ -177,7 +171,7 @@ impl Db {
                 "rocksdb_transactiondb_options_create returned null"
             );
 
-            let db = ffi_result!(rocksdb_transactiondb_open_column_families_with_status(
+            let db = ffi_result!(rocksdb_transactiondb_open_column_families(
                 options,
                 transactiondb_options,
                 c_path.as_ptr(),
@@ -284,7 +278,7 @@ impl Db {
             let mut cf_handles: Vec<*mut rocksdb_column_family_handle_t> =
                 vec![ptr::null_mut(); column_family_names.len()];
             let c_num_column_families = c_column_family_names.len().try_into().unwrap();
-            let db = ffi_result!(rocksdb_open_for_read_only_column_families_with_status(
+            let db = ffi_result!(rocksdb_open_for_read_only_column_families(
                 options,
                 c_path.as_ptr(),
                 c_num_column_families,
@@ -306,12 +300,12 @@ impl Db {
             })?;
             assert!(
                 !db.is_null(),
-                "rocksdb_open_for_read_only_column_families_with_status returned null"
+                "rocksdb_open_for_read_only_column_families returned null"
             );
             for handle in &cf_handles {
                 assert!(
                     !handle.is_null(),
-                    "rocksdb_open_for_read_only_column_families_with_status returned a null column family"
+                    "rocksdb_open_for_read_only_column_families returned a null column family"
                 );
             }
             let read_options = rocksdb_readoptions_create();
@@ -501,7 +495,7 @@ impl Db {
             match result {
                 Ok(result) => {
                     unsafe {
-                        let r = ffi_result!(rocksdb_transaction_commit_with_status(transaction));
+                        let r = ffi_result!(rocksdb_transaction_commit(transaction));
                         rocksdb_transaction_destroy(transaction);
                         rocksdb_readoptions_destroy(read_options);
                         rocksdb_free(snapshot as *mut c_void);
@@ -511,7 +505,7 @@ impl Db {
                 }
                 Err(e) => {
                     unsafe {
-                        let r = ffi_result!(rocksdb_transaction_rollback_with_status(transaction));
+                        let r = ffi_result!(rocksdb_transaction_rollback(transaction));
                         rocksdb_transaction_destroy(transaction);
                         rocksdb_readoptions_destroy(read_options);
                         rocksdb_free(snapshot as *mut c_void);
@@ -523,9 +517,12 @@ impl Db {
                         error = e;
                     }
                     let is_conflict_error = error.downcast_ref::<ErrorStatus>().is_some_and(|e| {
-                        e.0.code == rocksdb_status_code_t_rocksdb_status_code_busy
-                            || e.0.code == rocksdb_status_code_t_rocksdb_status_code_timed_out
-                            || e.0.code == rocksdb_status_code_t_rocksdb_status_code_try_again
+                        matches!(
+                            e.message().split_once(':').unwrap_or_default().0,
+                            "Resource busy"
+                                | "Operation timed out"
+                                | "Operation failed. Try again."
+                        )
                     });
                     if is_conflict_error {
                         // We give a chance to the OS to do something else before retrying in order to help avoiding another conflict
@@ -547,7 +544,7 @@ impl Db {
         unsafe {
             let slice = match &self.inner {
                 DbKind::ReadOnly(db) => {
-                    ffi_result!(rocksdb_get_pinned_cf_with_status(
+                    ffi_result!(rocksdb_get_pinned_cf(
                         db.db,
                         db.read_options,
                         column_family.0,
@@ -556,7 +553,7 @@ impl Db {
                     ))
                 }
                 DbKind::ReadWrite(db) => {
-                    ffi_result!(rocksdb_transactiondb_get_pinned_cf_with_status(
+                    ffi_result!(rocksdb_transactiondb_get_pinned_cf(
                         db.db,
                         db.read_options,
                         column_family.0,
@@ -593,7 +590,7 @@ impl Db {
             ));
         };
         unsafe {
-            ffi_result!(rocksdb_transactiondb_put_cf_with_status(
+            ffi_result!(rocksdb_transactiondb_put_cf(
                 db.db,
                 db.write_options,
                 column_family.0,
@@ -613,7 +610,7 @@ impl Db {
             ));
         };
         unsafe {
-            ffi_result!(rocksdb_transactiondb_flush_cfs_with_status(
+            ffi_result!(rocksdb_transactiondb_flush_cfs(
                 db.db,
                 db.flush_options,
                 db.cf_handles.as_ptr().cast_mut(),
@@ -630,16 +627,16 @@ impl Db {
             ));
         };
         unsafe {
-            ffi_result!(rocksdb_transactiondb_compact_range_cf_opt_with_status(
-                db.db,
+            rocksdb_compact_range_cf_opt(
+                db.db.cast(),
                 column_family.0,
                 db.compaction_options,
                 ptr::null(),
                 0,
                 ptr::null(),
                 0,
-            ))
-        }?;
+            )
+        }
         Ok(())
     }
 
@@ -652,7 +649,7 @@ impl Db {
         let path = db.path.join(random::<u128>().to_string());
         unsafe {
             let writer = rocksdb_sstfilewriter_create(db.env_options, db.options);
-            ffi_result!(rocksdb_sstfilewriter_open_with_status(
+            ffi_result!(rocksdb_sstfilewriter_open(
                 writer,
                 path_to_cstring(&path)?.as_ptr()
             ))
@@ -697,7 +694,7 @@ impl Db {
             })
             .collect::<Vec<_>>();
         unsafe {
-            ffi_result!(rocksdb_transactiondb_ingest_external_files_with_status(
+            ffi_result!(rocksdb_transactiondb_ingest_external_files(
                 db.db,
                 args.as_ptr(),
                 args.len()
@@ -708,17 +705,19 @@ impl Db {
 
     pub fn backup(&self, target_directory: &Path) -> Result<(), StorageError> {
         let path = path_to_cstring(target_directory)?;
-        match &self.inner {
-            DbKind::ReadOnly(db) => unsafe {
-                ffi_result!(rocksdb_create_checkpoint_with_status(db.db, path.as_ptr()))
-            },
-            DbKind::ReadWrite(db) => unsafe {
-                ffi_result!(rocksdb_transactiondb_create_checkpoint_with_status(
-                    db.db,
-                    path.as_ptr()
-                ))
-            },
-        }?;
+        unsafe {
+            let checkpoint = match &self.inner {
+                DbKind::ReadOnly(db) => ffi_result!(rocksdb_checkpoint_object_create(db.db)),
+                DbKind::ReadWrite(db) => {
+                    ffi_result!(rocksdb_transactiondb_checkpoint_object_create(db.db))
+                }
+            }?;
+            assert!(
+                !checkpoint.is_null(),
+                "rocksdb_checkpoint_object_create returned null"
+            );
+            ffi_result!(rocksdb_checkpoint_create(checkpoint, path.as_ptr(), 0))?;
+        }
         Ok(())
     }
 }
@@ -778,7 +777,7 @@ impl Reader {
         unsafe {
             let slice = match &self.inner {
                 InnerReader::TransactionalSnapshot(inner) => {
-                    ffi_result!(rocksdb_transactiondb_get_pinned_cf_with_status(
+                    ffi_result!(rocksdb_transactiondb_get_pinned_cf(
                         inner.db.db,
                         self.options,
                         column_family.0,
@@ -792,7 +791,7 @@ impl Reader {
                             "The transaction is already ended".into(),
                         ));
                     };
-                    ffi_result!(rocksdb_transaction_get_pinned_cf_with_status(
+                    ffi_result!(rocksdb_transaction_get_pinned_cf(
                         *inner,
                         self.options,
                         column_family.0,
@@ -801,7 +800,7 @@ impl Reader {
                     ))
                 }
                 InnerReader::PlainDb(inner) => {
-                    ffi_result!(rocksdb_get_pinned_cf_with_status(
+                    ffi_result!(rocksdb_get_pinned_cf(
                         inner.db,
                         self.options,
                         column_family.0,
@@ -934,7 +933,7 @@ impl Transaction<'_> {
         key: &[u8],
     ) -> Result<Option<PinnableSlice>, StorageError> {
         unsafe {
-            let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf_with_status(
+            let slice = ffi_result!(rocksdb_transaction_get_for_update_pinned_cf(
                 *self.inner,
                 self.read_options,
                 column_family.0,
@@ -964,7 +963,7 @@ impl Transaction<'_> {
         value: &[u8],
     ) -> Result<(), StorageError> {
         unsafe {
-            ffi_result!(rocksdb_transaction_put_cf_with_status(
+            ffi_result!(rocksdb_transaction_put_cf(
                 *self.inner,
                 column_family.0,
                 key.as_ptr().cast(),
@@ -986,7 +985,7 @@ impl Transaction<'_> {
 
     pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) -> Result<(), StorageError> {
         unsafe {
-            ffi_result!(rocksdb_transaction_delete_cf_with_status(
+            ffi_result!(rocksdb_transaction_delete_cf(
                 *self.inner,
                 column_family.0,
                 key.as_ptr().cast(),
@@ -1104,7 +1103,7 @@ impl Iter {
 
     pub fn status(&self) -> Result<(), StorageError> {
         unsafe {
-            ffi_result!(rocksdb_iter_get_status(self.inner))?;
+            ffi_result!(rocksdb_iter_get_error(self.inner))?;
         }
         Ok(())
     }
@@ -1145,7 +1144,7 @@ impl Drop for SstFileWriter {
 impl SstFileWriter {
     pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), StorageError> {
         unsafe {
-            ffi_result!(rocksdb_sstfilewriter_put_with_status(
+            ffi_result!(rocksdb_sstfilewriter_put(
                 self.writer,
                 key.as_ptr().cast(),
                 key.len(),
@@ -1162,70 +1161,58 @@ impl SstFileWriter {
 
     pub fn finish(self) -> Result<PathBuf, StorageError> {
         unsafe {
-            ffi_result!(rocksdb_sstfilewriter_finish_with_status(self.writer))?;
+            ffi_result!(rocksdb_sstfilewriter_finish(self.writer))?;
         }
         Ok(self.path.clone())
     }
 }
 
-#[derive(thiserror::Error)]
-#[error("{}", self.message())]
-struct ErrorStatus(rocksdb_status_t);
-
-unsafe impl Send for ErrorStatus {}
-unsafe impl Sync for ErrorStatus {}
-
-impl Drop for ErrorStatus {
-    fn drop(&mut self) {
-        if !self.0.string.is_null() {
-            unsafe {
-                rocksdb_free(self.0.string as *mut c_void);
-            }
-        }
-    }
-}
+struct ErrorStatus(CString);
 
 impl ErrorStatus {
     fn message(&self) -> &str {
-        if self.0.string.is_null() {
-            "Unknown error"
-        } else {
-            unsafe { CStr::from_ptr(self.0.string) }
-                .to_str()
-                .unwrap_or("Invalid error message")
-        }
+        self.0.to_str().unwrap_or("Invalid RocksDB error message")
     }
 }
 
 impl fmt::Debug for ErrorStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ErrorStatus")
-            .field("code", &self.0.code)
-            .field("subcode", &self.0.subcode)
-            .field("severity", &self.0.severity)
             .field("message", &self.message())
             .finish()
     }
 }
 
+impl fmt::Display for ErrorStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.message())
+    }
+}
+
+impl Error for ErrorStatus {}
+
 impl From<ErrorStatus> for StorageError {
     fn from(status: ErrorStatus) -> Self {
-        if status.0.code == rocksdb_status_code_t_rocksdb_status_code_io_error {
-            let kind =
-                if status.0.subcode == rocksdb_status_subcode_t_rocksdb_status_subcode_no_space {
-                    io::ErrorKind::Other // TODO ErrorKind::StorageFull
-                } else if status.0.subcode
-                    == rocksdb_status_subcode_t_rocksdb_status_subcode_path_not_found
-                {
-                    io::ErrorKind::NotFound
-                } else {
-                    io::ErrorKind::Other
-                };
-            Self::Io(io::Error::new(kind, status))
-        } else if status.0.code == rocksdb_status_code_t_rocksdb_status_code_corruption {
-            Self::Corruption(CorruptionError::new(status))
-        } else {
-            Self::Other(Box::new(status))
+        let mut parts = status.message().split(": ");
+        match parts.next() {
+            Some("IO error") => Self::Io(io::Error::new(
+                match parts.next() {
+                    Some("Timeout Acquiring Mutex" | "Timeout waiting to lock key") => {
+                        io::ErrorKind::TimedOut
+                    }
+                    Some("No space left on device" | "Space limit reached") => {
+                        io::ErrorKind::StorageFull
+                    }
+                    Some("Deadlock") => io::ErrorKind::Deadlock,
+                    Some("Stale file handle") => io::ErrorKind::StaleNetworkFileHandle,
+                    Some("Memory limit reached") => io::ErrorKind::OutOfMemory,
+                    Some("No such file or directory") => io::ErrorKind::NotFound,
+                    _ => io::ErrorKind::Other,
+                },
+                status,
+            )),
+            Some("Corruption") => Self::Corruption(CorruptionError::new(status)),
+            _ => Self::Other(Box::new(status)),
         }
     }
 }
