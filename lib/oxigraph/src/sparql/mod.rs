@@ -63,7 +63,7 @@ pub(crate) fn evaluate_query(
 /// let store = Store::new()?;
 /// store.query_opt(
 ///     "SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> {} }",
-///     QueryOptions::default().without_service_handler(),
+///     QueryOptions::default().without_default_http_service_handler(),
 /// )?;
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```

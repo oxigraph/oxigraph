@@ -22,7 +22,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, OnceLock};
-use std::thread::{available_parallelism, yield_now};
+use std::thread::available_parallelism;
 use std::{fmt, io, ptr, slice};
 
 macro_rules! ffi_result {
@@ -457,83 +457,38 @@ impl Db {
         }
     }
 
-    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
-        &self,
-        f: impl for<'a> Fn(Transaction<'a>) -> Result<T, E>,
-    ) -> Result<T, E> {
+    pub fn start_transaction(&self) -> Result<Transaction<'_>, StorageError> {
         let DbKind::ReadWrite(db) = &self.inner else {
             return Err(StorageError::Other(
                 "Transaction are only possible on read-write instances".into(),
-            )
-            .into());
+            ));
         };
-        loop {
-            let transaction = unsafe {
-                let transaction = rocksdb_transaction_begin(
-                    db.db,
-                    db.write_options,
-                    db.transaction_options,
-                    ptr::null_mut(),
-                );
-                assert!(
-                    !transaction.is_null(),
-                    "rocksdb_transaction_begin returned null"
-                );
-                transaction
-            };
-            let (read_options, snapshot) = unsafe {
-                let options = rocksdb_readoptions_create_copy(db.read_options);
-                let snapshot = rocksdb_transaction_get_snapshot(transaction);
-                rocksdb_readoptions_set_snapshot(options, snapshot);
-                (options, snapshot)
-            };
-            let result = f(Transaction {
-                inner: Rc::new(transaction),
-                read_options,
-                _lifetime: PhantomData,
-            });
-            match result {
-                Ok(result) => {
-                    unsafe {
-                        let r = ffi_result!(rocksdb_transaction_commit(transaction));
-                        rocksdb_transaction_destroy(transaction);
-                        rocksdb_readoptions_destroy(read_options);
-                        rocksdb_free(snapshot as *mut c_void);
-                        r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
-                    }
-                    return Ok(result);
-                }
-                Err(e) => {
-                    unsafe {
-                        let r = ffi_result!(rocksdb_transaction_rollback(transaction));
-                        rocksdb_transaction_destroy(transaction);
-                        rocksdb_readoptions_destroy(read_options);
-                        rocksdb_free(snapshot as *mut c_void);
-                        r.map_err(StorageError::from)?; // We make sure to also run destructors if the commit fails
-                    }
-                    // We look for the root error
-                    let mut error: &(dyn Error + 'static) = &e;
-                    while let Some(e) = error.source() {
-                        error = e;
-                    }
-                    let is_conflict_error = error.downcast_ref::<ErrorStatus>().is_some_and(|e| {
-                        matches!(
-                            e.message().split_once(':').unwrap_or_default().0,
-                            "Resource busy"
-                                | "Operation timed out"
-                                | "Operation failed. Try again."
-                        )
-                    });
-                    if is_conflict_error {
-                        // We give a chance to the OS to do something else before retrying in order to help avoiding another conflict
-                        yield_now();
-                    } else {
-                        // We raise the error
-                        return Err(e);
-                    }
-                }
-            }
-        }
+        let transaction = unsafe {
+            let transaction = rocksdb_transaction_begin(
+                db.db,
+                db.write_options,
+                db.transaction_options,
+                ptr::null_mut(),
+            );
+            assert!(
+                !transaction.is_null(),
+                "rocksdb_transaction_begin returned null"
+            );
+            transaction
+        };
+        let (read_options, snapshot) = unsafe {
+            let options = rocksdb_readoptions_create_copy(db.read_options);
+            let snapshot = rocksdb_transaction_get_snapshot(transaction);
+            rocksdb_readoptions_set_snapshot(options, snapshot);
+            (options, snapshot)
+        };
+        Ok(Transaction {
+            inner: Rc::new(transaction),
+            snapshot,
+            read_options,
+            _lifetime: PhantomData,
+            committed: false,
+        })
     }
 
     pub fn get(
@@ -915,8 +870,24 @@ impl Reader {
 
 pub struct Transaction<'a> {
     inner: Rc<*mut rocksdb_transaction_t>,
+    snapshot: *const rocksdb_snapshot_t,
     read_options: *mut rocksdb_readoptions_t,
     _lifetime: PhantomData<&'a ()>,
+    committed: bool,
+}
+
+impl Drop for Transaction<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            #[expect(unused_must_use)]
+            if !self.committed {
+                ffi_result!(rocksdb_transaction_rollback(*self.inner));
+            }
+            rocksdb_transaction_destroy(*self.inner);
+            rocksdb_readoptions_destroy(self.read_options);
+            rocksdb_free(self.snapshot as *mut c_void);
+        }
+    }
 }
 
 impl Transaction<'_> {
@@ -991,6 +962,22 @@ impl Transaction<'_> {
                 key.as_ptr().cast(),
                 key.len(),
             ))?;
+        }
+        Ok(())
+    }
+
+    pub fn commit(mut self) -> Result<(), StorageError> {
+        self.committed = true;
+        unsafe {
+            ffi_result!(rocksdb_transaction_commit(*self.inner))?;
+        }
+        Ok(())
+    }
+
+    pub fn rollback(mut self) -> Result<(), StorageError> {
+        self.committed = true;
+        unsafe {
+            ffi_result!(rocksdb_transaction_rollback(*self.inner))?;
         }
         Ok(())
     }

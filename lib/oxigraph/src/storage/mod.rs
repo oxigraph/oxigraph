@@ -2,16 +2,15 @@ use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::memory::{
     MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
-    MemoryStorageWriter, QuadIterator,
+    MemoryStorageTransaction, QuadIterator,
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use crate::storage::rocksdb::{
     RocksDbChainedDecodingQuadIterator, RocksDbDecodingGraphIterator, RocksDbStorage,
-    RocksDbStorageBulkLoader, RocksDbStorageReader, RocksDbStorageWriter,
+    RocksDbStorageBulkLoader, RocksDbStorageReader, RocksDbStorageTransaction,
 };
 use oxrdf::Quad;
-use std::error::Error;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 
@@ -73,23 +72,22 @@ impl Storage {
         }
     }
 
-    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
-        &self,
-        f: impl for<'a> Fn(StorageWriter<'a>) -> Result<T, E>,
-    ) -> Result<T, E> {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageKind::RocksDb(storage) => storage.transaction(|transaction| {
-                f(StorageWriter {
-                    kind: StorageWriterKind::RocksDb(transaction),
-                })
-            }),
-            StorageKind::Memory(storage) => storage.transaction(|transaction| {
-                f(StorageWriter {
-                    kind: StorageWriterKind::Memory(transaction),
-                })
-            }),
-        }
+    #[cfg_attr(
+        not(all(not(target_family = "wasm"), feature = "rocksdb")),
+        expect(clippy::unnecessary_wraps)
+    )]
+    pub fn start_transaction(&self) -> Result<StorageTransaction<'_>, StorageError> {
+        Ok(StorageTransaction {
+            kind: match &self.kind {
+                #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+                StorageKind::RocksDb(storage) => {
+                    StorageTransactionKind::RocksDb(storage.start_transaction()?)
+                }
+                StorageKind::Memory(storage) => {
+                    StorageTransactionKind::Memory(storage.start_transaction())
+                }
+            },
+        })
     }
 
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -285,29 +283,29 @@ impl StrLookup for StorageReader {
     }
 }
 
-pub struct StorageWriter<'a> {
-    kind: StorageWriterKind<'a>,
+pub struct StorageTransaction<'a> {
+    kind: StorageTransactionKind<'a>,
 }
 
-enum StorageWriterKind<'a> {
+enum StorageTransactionKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    RocksDb(RocksDbStorageWriter<'a>),
-    Memory(MemoryStorageWriter<'a>),
+    RocksDb(RocksDbStorageTransaction<'a>),
+    Memory(MemoryStorageTransaction<'a>),
 }
 
 #[cfg_attr(
     not(all(not(target_family = "wasm"), feature = "rocksdb")),
     expect(clippy::unnecessary_wraps)
 )]
-impl StorageWriter<'_> {
+impl StorageTransaction<'_> {
     pub fn reader(&self) -> StorageReader {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => StorageReader {
-                kind: StorageReaderKind::RocksDb(writer.reader()),
+            StorageTransactionKind::RocksDb(transaction) => StorageReader {
+                kind: StorageReaderKind::RocksDb(transaction.reader()),
             },
-            StorageWriterKind::Memory(writer) => StorageReader {
-                kind: StorageReaderKind::Memory(writer.reader()),
+            StorageTransactionKind::Memory(transaction) => StorageReader {
+                kind: StorageReaderKind::Memory(transaction.reader()),
             },
         }
     }
@@ -315,8 +313,8 @@ impl StorageWriter<'_> {
     pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.insert(quad),
-            StorageWriterKind::Memory(writer) => Ok(writer.insert(quad)),
+            StorageTransactionKind::RocksDb(transaction) => transaction.insert(quad),
+            StorageTransactionKind::Memory(transaction) => Ok(transaction.insert(quad)),
         }
     }
 
@@ -326,25 +324,29 @@ impl StorageWriter<'_> {
     ) -> Result<bool, StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.insert_named_graph(graph_name),
-            StorageWriterKind::Memory(writer) => Ok(writer.insert_named_graph(graph_name)),
+            StorageTransactionKind::RocksDb(transaction) => {
+                transaction.insert_named_graph(graph_name)
+            }
+            StorageTransactionKind::Memory(transaction) => {
+                Ok(transaction.insert_named_graph(graph_name))
+            }
         }
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.remove(quad),
-            StorageWriterKind::Memory(writer) => Ok(writer.remove(quad)),
+            StorageTransactionKind::RocksDb(transaction) => transaction.remove(quad),
+            StorageTransactionKind::Memory(transaction) => Ok(transaction.remove(quad)),
         }
     }
 
     pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.clear_graph(graph_name),
-            StorageWriterKind::Memory(writer) => {
-                writer.clear_graph(graph_name);
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear_graph(graph_name),
+            StorageTransactionKind::Memory(transaction) => {
+                transaction.clear_graph(graph_name);
                 Ok(())
             }
         }
@@ -353,9 +355,9 @@ impl StorageWriter<'_> {
     pub fn clear_all_named_graphs(&mut self) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.clear_all_named_graphs(),
-            StorageWriterKind::Memory(writer) => {
-                writer.clear_all_named_graphs();
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear_all_named_graphs(),
+            StorageTransactionKind::Memory(transaction) => {
+                transaction.clear_all_named_graphs();
                 Ok(())
             }
         }
@@ -364,9 +366,9 @@ impl StorageWriter<'_> {
     pub fn clear_all_graphs(&mut self) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.clear_all_graphs(),
-            StorageWriterKind::Memory(writer) => {
-                writer.clear_all_graphs();
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear_all_graphs(),
+            StorageTransactionKind::Memory(transaction) => {
+                transaction.clear_all_graphs();
                 Ok(())
             }
         }
@@ -378,17 +380,21 @@ impl StorageWriter<'_> {
     ) -> Result<bool, StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.remove_named_graph(graph_name),
-            StorageWriterKind::Memory(writer) => Ok(writer.remove_named_graph(graph_name)),
+            StorageTransactionKind::RocksDb(transaction) => {
+                transaction.remove_named_graph(graph_name)
+            }
+            StorageTransactionKind::Memory(transaction) => {
+                Ok(transaction.remove_named_graph(graph_name))
+            }
         }
     }
 
     pub fn remove_all_named_graphs(&mut self) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.remove_all_named_graphs(),
-            StorageWriterKind::Memory(writer) => {
-                writer.remove_all_named_graphs();
+            StorageTransactionKind::RocksDb(transaction) => transaction.remove_all_named_graphs(),
+            StorageTransactionKind::Memory(transaction) => {
+                transaction.remove_all_named_graphs();
                 Ok(())
             }
         }
@@ -397,11 +403,30 @@ impl StorageWriter<'_> {
     pub fn clear(&mut self) -> Result<(), StorageError> {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageWriterKind::RocksDb(writer) => writer.clear(),
-            StorageWriterKind::Memory(writer) => {
-                writer.clear();
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear(),
+            StorageTransactionKind::Memory(transaction) => {
+                transaction.clear();
                 Ok(())
             }
+        }
+    }
+
+    pub fn commit(self) -> Result<(), StorageError> {
+        match self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageTransactionKind::RocksDb(transaction) => transaction.commit(),
+            StorageTransactionKind::Memory(transaction) => {
+                transaction.commit();
+                Ok(())
+            }
+        }
+    }
+
+    pub fn rollback(self) -> Result<(), StorageError> {
+        match self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageTransactionKind::RocksDb(transaction) => transaction.rollback(),
+            StorageTransactionKind::Memory(_) => Ok(()),
         }
     }
 }
@@ -416,6 +441,7 @@ enum StorageBulkLoaderKind {
     RocksDb(RocksDbStorageBulkLoader),
     Memory(MemoryStorageBulkLoader),
 }
+
 impl StorageBulkLoader {
     #[cfg_attr(
         not(all(not(target_family = "wasm"), feature = "rocksdb")),

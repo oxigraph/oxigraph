@@ -20,7 +20,6 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::{HashMap, VecDeque};
-use std::error::Error;
 use std::hash::BuildHasherDefault;
 #[cfg(feature = "rdf-12")]
 use std::hash::Hash;
@@ -196,7 +195,7 @@ impl RocksDbStorage {
                 object: &EncodedTerm,
                 graph_name: &EncodedTerm,
                 r: &RocksDbStorageReader,
-                w: &mut RocksDbStorageWriter<'_>,
+                w: &mut RocksDbStorageTransaction<'_>,
             ) -> Result<EncodedTerm, StorageError> {
                 let subject = if let EncodedTerm::Triple(t) = subject {
                     to_rdf12_reified_triple(&t.subject, &t.predicate, &t.object, graph_name, r, w)?
@@ -246,7 +245,8 @@ impl RocksDbStorage {
                 ).into());
 
                 #[cfg(feature = "rdf-12")]
-                self.transaction(move |mut w| {
+                {
+                    let mut w = self.start_transaction()?;
                     let r = w.reader();
                     let mut new_quad = quad.clone();
                     if let EncodedTerm::Triple(t) = new_quad.subject {
@@ -270,8 +270,9 @@ impl RocksDbStorage {
                         )?;
                     }
                     w.insert(r.decode_quad(&new_quad)?.as_ref())?;
-                    w.remove_encoded(&quad)
-                })?;
+                    w.remove_encoded(&quad)?;
+                    w.commit()?;
+                }
             }
             version = 2;
             self.update_version(version)?;
@@ -316,16 +317,11 @@ impl RocksDbStorage {
         }
     }
 
-    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
-        &self,
-        f: impl for<'a> Fn(RocksDbStorageWriter<'a>) -> Result<T, E>,
-    ) -> Result<T, E> {
-        self.db.transaction(|transaction| {
-            f(RocksDbStorageWriter {
-                buffer: Vec::new(),
-                transaction,
-                storage: self,
-            })
+    pub fn start_transaction(&self) -> Result<RocksDbStorageTransaction<'_>, StorageError> {
+        Ok(RocksDbStorageTransaction {
+            buffer: Vec::new(),
+            transaction: self.db.start_transaction()?,
+            storage: self,
         })
     }
 
@@ -880,13 +876,13 @@ impl StrLookup for RocksDbStorageReader {
     }
 }
 
-pub struct RocksDbStorageWriter<'a> {
+pub struct RocksDbStorageTransaction<'a> {
     buffer: Vec<u8>,
     transaction: Transaction<'a>,
     storage: &'a RocksDbStorage,
 }
 
-impl RocksDbStorageWriter<'_> {
+impl RocksDbStorageTransaction<'_> {
     pub fn reader(&self) -> RocksDbStorageReader {
         RocksDbStorageReader {
             reader: self.transaction.reader(),
@@ -1189,6 +1185,14 @@ impl RocksDbStorageWriter<'_> {
             self.remove_encoded(&quad?)?;
         }
         Ok(())
+    }
+
+    pub fn commit(self) -> Result<(), StorageError> {
+        self.transaction.commit()
+    }
+
+    pub fn rollback(self) -> Result<(), StorageError> {
+        self.transaction.rollback()
     }
 }
 

@@ -35,9 +35,8 @@ use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::{
     DecodingGraphIterator, DecodingQuadIterator, Storage, StorageBulkLoader, StorageReader,
-    StorageWriter,
+    StorageTransaction,
 };
-use std::error::Error;
 use std::fmt;
 use std::io::{Read, Write};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -418,31 +417,30 @@ impl Store {
     /// Transactions ensure the "repeatable read" isolation level: the store only exposes changes that have
     /// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
     /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
+    /// Transactional operations are also atomic.
     ///
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::store::{StorageError, Store};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// let a = NamedNodeRef::new("http://example.com/a")?;
     /// let b = NamedNodeRef::new("http://example.com/b")?;
     ///
     /// // Copy all triples about ex:a to triples about ex:b
-    /// store.transaction(|mut transaction| {
-    ///     for q in transaction.quads_for_pattern(Some(a.into()), None, None, None) {
-    ///         let q = q?;
-    ///         transaction.insert(QuadRef::new(b, &q.predicate, &q.object, &q.graph_name))?;
-    ///     }
-    ///     Result::<_, StorageError>::Ok(())
-    /// })?;
+    /// let mut transaction = store.start_transaction()?;
+    /// for q in transaction.quads_for_pattern(Some(a.into()), None, None, None) {
+    ///     let q = q?;
+    ///     transaction.insert(QuadRef::new(b, &q.predicate, &q.object, &q.graph_name))?;
+    /// }
+    /// transaction.commit()?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
-        &self,
-        f: impl for<'a> Fn(Transaction<'a>) -> Result<T, E>,
-    ) -> Result<T, E> {
-        self.storage.transaction(|writer| f(Transaction { writer }))
+    pub fn start_transaction(&self) -> Result<Transaction<'_>, StorageError> {
+        Ok(Transaction {
+            inner: self.storage.start_transaction()?,
+        })
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
@@ -492,15 +490,15 @@ impl Store {
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
         options: impl Into<UpdateOptions>,
     ) -> Result<(), EvaluationError> {
-        let update = update.try_into().map_err(Into::into)?;
-        let options = options.into();
-        self.storage
-            .transaction(|mut t| evaluate_update(&mut t, &update, &options))
+        let mut transaction = self.start_transaction()?;
+        transaction.update_opt(update, options)?;
+        transaction.commit()?;
+        Ok(())
     }
 
-    /// Loads a RDF file under into the store.
+    /// Loads an RDF file under into the store.
     ///
-    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use the [`bulk_loader`](Store::bulk_loader).
+    /// This function is atomic, quite slow and memory hungry. To get much better performances, you might want to use the [`bulk_loader`](Store::bulk_loader).
     ///
     /// Usage example:
     /// ```
@@ -536,17 +534,12 @@ impl Store {
         parser: impl Into<RdfParser>,
         reader: impl Read,
     ) -> Result<(), LoaderError> {
-        let quads = parser
-            .into()
-            .rename_blank_nodes()
-            .for_reader(reader)
-            .collect::<Result<Vec<_>, _>>()?;
-        self.storage.transaction(move |mut t| {
-            for quad in &quads {
-                t.insert(quad.as_ref())?;
-            }
-            Ok(())
-        })
+        let mut transaction = self.storage.start_transaction()?;
+        for quad in parser.into().rename_blank_nodes().for_reader(reader) {
+            transaction.insert(quad?.as_ref())?;
+        }
+        transaction.commit()?;
+        Ok(())
     }
 
     /// Adds a quad to this store.
@@ -569,11 +562,13 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
-        let quad = quad.into();
-        self.transaction(|mut t| t.insert(quad))
+        let mut transaction = self.start_transaction()?;
+        let result = transaction.insert(quad)?;
+        transaction.commit()?;
+        Ok(result)
     }
 
-    /// Adds atomically a set of quads to this store.
+    /// Atomically adds a set of quads to this store.
     ///
     /// <div class="warning">
     ///
@@ -582,8 +577,12 @@ impl Store {
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
     ) -> Result<(), StorageError> {
-        let quads = quads.into_iter().map(Into::into).collect::<Vec<_>>();
-        self.transaction(move |mut t| t.extend(&quads))
+        let mut transaction = self.storage.start_transaction()?;
+        for quad in quads {
+            transaction.insert(quad.into().as_ref())?;
+        }
+        transaction.commit()?;
+        Ok(())
     }
 
     /// Removes a quad from this store.
@@ -607,12 +606,14 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
-        let quad = quad.into();
-        self.transaction(move |mut t| t.remove(quad))
+        let mut transaction = self.start_transaction()?;
+        let result = transaction.remove(quad)?;
+        transaction.commit()?;
+        Ok(result)
     }
 
     /// Dumps the store into a file.
-    ///    
+    ///
     /// ```
     /// use oxigraph::io::RdfFormat;
     /// use oxigraph::store::Store;
@@ -645,7 +646,7 @@ impl Store {
     }
 
     /// Dumps a store graph into a file.
-    ///    
+    ///
     /// Usage example:
     /// ```
     /// use oxigraph::io::RdfFormat;
@@ -744,8 +745,10 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, StorageError> {
-        let graph_name = graph_name.into();
-        self.transaction(|mut t| t.insert_named_graph(graph_name))
+        let mut transaction = self.start_transaction()?;
+        let result = transaction.insert_named_graph(graph_name)?;
+        transaction.commit()?;
+        Ok(result)
     }
 
     /// Clears a graph from this store.
@@ -770,8 +773,9 @@ impl Store {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), StorageError> {
-        let graph_name = graph_name.into();
-        self.transaction(|mut t| t.clear_graph(graph_name))
+        let mut transaction = self.start_transaction()?;
+        transaction.clear_graph(graph_name.into())?;
+        transaction.commit()
     }
 
     /// Removes a graph from this store.
@@ -798,8 +802,10 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, StorageError> {
-        let graph_name = graph_name.into();
-        self.transaction(|mut t| t.remove_named_graph(graph_name))
+        let mut transaction = self.start_transaction()?;
+        let result = transaction.remove_named_graph(graph_name.into())?;
+        transaction.commit()?;
+        Ok(result)
     }
 
     /// Clears the store.
@@ -820,7 +826,9 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> Result<(), StorageError> {
-        self.transaction(|mut t| t.clear())
+        let mut transaction = self.start_transaction()?;
+        transaction.clear()?;
+        transaction.commit()
     }
 
     /// Flushes all buffers and ensures that all writes are saved on disk.
@@ -921,9 +929,9 @@ impl IntoIterator for &Store {
 
 /// An object to do operations during a transaction.
 ///
-/// See [`Store::transaction`] for a more detailed description.
+/// See [`Store::start_transaction`] for a more detailed description.
 pub struct Transaction<'a> {
-    writer: StorageWriter<'a>,
+    inner: StorageTransaction<'a>,
 }
 
 impl Transaction<'_> {
@@ -936,23 +944,20 @@ impl Transaction<'_> {
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     if let QueryResults::Solutions(solutions) =
-    ///         transaction.query("SELECT ?s WHERE { ?s ?p ?o }")?
-    ///     {
-    ///         for solution in solutions {
-    ///             if let Some(Term::NamedNode(s)) = solution?.get("s") {
-    ///                 transaction.insert(QuadRef::new(
-    ///                     s,
-    ///                     vocab::rdf::TYPE,
-    ///                     NamedNodeRef::new_unchecked("http://example.com"),
-    ///                     GraphNameRef::DefaultGraph,
-    ///                 ))?;
-    ///             }
+    /// let mut transaction = store.start_transaction()?;
+    /// if let QueryResults::Solutions(solutions) = transaction.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+    ///     for solution in solutions {
+    ///         if let Some(Term::NamedNode(s)) = solution?.get("s") {
+    ///             transaction.insert(QuadRef::new(
+    ///                 s,
+    ///                 vocab::rdf::TYPE,
+    ///                 NamedNodeRef::new_unchecked("http://example.com"),
+    ///                 GraphNameRef::DefaultGraph,
+    ///             ))?;
     ///         }
     ///     }
-    ///     Result::<_, EvaluationError>::Ok(())
-    /// })?;
+    /// }
+    /// transaction.commit()?;
     /// # Result::<_, EvaluationError>::Ok(())
     /// ```
     pub fn query(
@@ -971,30 +976,27 @@ impl Transaction<'_> {
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     if let QueryResults::Solutions(solutions) = transaction.query_opt(
-    ///         "SELECT ?s (<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) WHERE { ?s ?p ?o }",
-    ///         QueryOptions::default().with_custom_function(
-    ///             NamedNode::new_unchecked("http://www.w3.org/ns/formats/N-Triples"),
-    ///             |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
-    ///         ),
-    ///     )? {
-    ///         for solution in solutions {
-    ///             let solution = solution?;
-    ///             if let (Some(Term::NamedNode(s)), Some(nt)) =
-    ///                 (solution.get("s"), solution.get("nt"))
-    ///             {
-    ///                 transaction.insert(QuadRef::new(
-    ///                     s,
-    ///                     NamedNodeRef::new_unchecked("http://example.com/n-triples-representation"),
-    ///                     nt,
-    ///                     GraphNameRef::DefaultGraph,
-    ///                 ))?;
-    ///             }
+    /// let mut transaction = store.start_transaction()?;
+    /// if let QueryResults::Solutions(solutions) = transaction.query_opt(
+    ///     "SELECT ?s (<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) WHERE { ?s ?p ?o }",
+    ///     QueryOptions::default().with_custom_function(
+    ///         NamedNode::new_unchecked("http://www.w3.org/ns/formats/N-Triples"),
+    ///         |args| args.get(0).map(|t| Literal::from(t.to_string()).into()),
+    ///     ),
+    /// )? {
+    ///     for solution in solutions {
+    ///         let solution = solution?;
+    ///         if let (Some(Term::NamedNode(s)), Some(nt)) = (solution.get("s"), solution.get("nt")) {
+    ///             transaction.insert(QuadRef::new(
+    ///                 s,
+    ///                 NamedNodeRef::new_unchecked("http://example.com/n-triples-representation"),
+    ///                 nt,
+    ///                 GraphNameRef::DefaultGraph,
+    ///             ))?;
     ///         }
     ///     }
-    ///     Result::<_, EvaluationError>::Ok(())
-    /// })?;
+    /// }
+    /// transaction.commit()?;
     /// # Result::<_, EvaluationError>::Ok(())
     /// ```
     pub fn query_opt(
@@ -1002,7 +1004,7 @@ impl Transaction<'_> {
         query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
         options: QueryOptions,
     ) -> Result<QueryResults, EvaluationError> {
-        let (results, _) = evaluate_query(self.writer.reader(), query, options, false, [])?;
+        let (results, _) = evaluate_query(self.inner.reader(), query, options, false, [])?;
         results
     }
 
@@ -1011,20 +1013,19 @@ impl Transaction<'_> {
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::store::{StorageError, Store};
+    /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
     /// let a = NamedNodeRef::new("http://example.com/a")?;
     /// let b = NamedNodeRef::new("http://example.com/b")?;
     ///
     /// // Copy all triples about ex:a to triples about ex:b
-    /// store.transaction(|mut transaction| {
-    ///     for q in transaction.quads_for_pattern(Some(a.into()), None, None, None) {
-    ///         let q = q?;
-    ///         transaction.insert(QuadRef::new(b, &q.predicate, &q.object, &q.graph_name))?;
-    ///     }
-    ///     Result::<_, StorageError>::Ok(())
-    /// })?;
+    /// let mut transaction = store.start_transaction()?;
+    /// for q in transaction.quads_for_pattern(Some(a.into()), None, None, None) {
+    ///     let q = q?;
+    ///     transaction.insert(QuadRef::new(b, &q.predicate, &q.object, &q.graph_name))?;
+    /// }
+    /// transaction.commit()?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn quads_for_pattern(
@@ -1034,7 +1035,7 @@ impl Transaction<'_> {
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
     ) -> QuadIter {
-        let reader = self.writer.reader();
+        let reader = self.inner.reader();
         QuadIter {
             iter: reader.quads_for_pattern(
                 subject.map(EncodedTerm::from).as_ref(),
@@ -1054,19 +1055,19 @@ impl Transaction<'_> {
     /// Checks if this store contains a given quad.
     pub fn contains<'b>(&self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
         let quad = EncodedQuad::from(quad.into());
-        self.writer.reader().contains(&quad)
+        self.inner.reader().contains(&quad)
     }
 
     /// Returns the number of quads in the store.
     ///
     /// <div class="warning">this function executes a full scan.</div>
     pub fn len(&self) -> Result<usize, StorageError> {
-        self.writer.reader().len()
+        self.inner.reader().len()
     }
 
     /// Returns if the store is empty.
     pub fn is_empty(&self) -> Result<bool, StorageError> {
-        self.writer.reader().is_empty()
+        self.inner.reader().is_empty()
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/).
@@ -1078,17 +1079,16 @@ impl Transaction<'_> {
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     // insertion
-    ///     transaction.update(
-    ///         "INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }",
-    ///     )?;
+    /// let mut transaction = store.start_transaction()?;
+    /// // insertion
+    /// transaction
+    ///     .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }")?;
     ///
-    ///     // we inspect the store contents
-    ///     let ex = NamedNodeRef::new_unchecked("http://example.com");
-    ///     assert!(transaction.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
-    ///     Result::<_, EvaluationError>::Ok(())
-    /// })?;
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// assert!(transaction.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
+    ///
+    /// transaction.commit()?;
     /// # Result::<_, EvaluationError>::Ok(())
     /// ```
     pub fn update(
@@ -1105,7 +1105,7 @@ impl Transaction<'_> {
         options: impl Into<UpdateOptions>,
     ) -> Result<(), EvaluationError> {
         evaluate_update(
-            &mut self.writer,
+            &mut self.inner,
             &update.try_into().map_err(Into::into)?,
             &options.into(),
         )
@@ -1126,20 +1126,22 @@ impl Transaction<'_> {
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.transaction(|mut t| t.load_from_reader(RdfFormat::NQuads, file.as_ref()))?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.load_from_reader(RdfFormat::NQuads, file.as_ref())?;
+    /// transaction.commit()?;
     ///
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";
-    /// store.transaction(|mut t|
-    ///     t.load_from_reader(
-    ///         RdfParser::from_format(RdfFormat::Turtle)
-    ///             .with_base_iri("http://example.com")
-    ///             .unwrap()
-    ///             .without_named_graphs() // No named graphs allowed in the input
-    ///             .with_default_graph(NamedNodeRef::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
-    ///         file.as_ref()
-    ///     )
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.load_from_reader(
+    ///     RdfParser::from_format(RdfFormat::Turtle)
+    ///         .with_base_iri("http://example.com")
+    ///         .unwrap()
+    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
+    ///     file.as_ref()
     /// )?;
+    /// transaction.commit()?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1171,12 +1173,14 @@ impl Transaction<'_> {
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| transaction.insert(quad))?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(quad)?;
+    /// transaction.commit()?;
     /// assert!(store.contains(quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
     pub fn insert<'b>(&mut self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
-        self.writer.insert(quad.into())
+        self.inner.insert(quad.into())
     }
 
     /// Adds a set of quads to this store.
@@ -1185,7 +1189,7 @@ impl Transaction<'_> {
         quads: impl IntoIterator<Item = impl Into<QuadRef<'b>>>,
     ) -> Result<(), StorageError> {
         for quad in quads {
-            self.writer.insert(quad.into())?;
+            self.inner.insert(quad.into())?;
         }
         Ok(())
     }
@@ -1202,20 +1206,20 @@ impl Transaction<'_> {
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     transaction.insert(quad)?;
-    ///     transaction.remove(quad)
-    /// })?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(quad)?;
+    /// transaction.remove(quad)?;
+    /// transaction.commit()?;
     /// assert!(!store.contains(quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
     pub fn remove<'b>(&mut self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
-        self.writer.remove(quad.into())
+        self.inner.remove(quad.into())
     }
 
     /// Returns all the store named graphs.
     pub fn named_graphs(&self) -> GraphNameIter {
-        let reader = self.writer.reader();
+        let reader = self.inner.reader();
         GraphNameIter {
             iter: reader.named_graphs(),
             reader,
@@ -1227,7 +1231,7 @@ impl Transaction<'_> {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
     ) -> Result<bool, StorageError> {
-        self.writer
+        self.inner
             .reader()
             .contains_named_graph(&EncodedTerm::from(graph_name.into()))
     }
@@ -1243,7 +1247,9 @@ impl Transaction<'_> {
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| transaction.insert_named_graph(ex))?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert_named_graph(ex)?;
+    /// transaction.commit()?;
     /// assert_eq!(
     ///     store.named_graphs().collect::<Result<Vec<_>, _>>()?,
     ///     vec![ex.into_owned().into()]
@@ -1254,7 +1260,7 @@ impl Transaction<'_> {
         &mut self,
         graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
     ) -> Result<bool, StorageError> {
-        self.writer.insert_named_graph(graph_name.into())
+        self.inner.insert_named_graph(graph_name.into())
     }
 
     /// Clears a graph from this store.
@@ -1267,10 +1273,10 @@ impl Transaction<'_> {
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let quad = QuadRef::new(ex, ex, ex, ex);
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     transaction.insert(quad)?;
-    ///     transaction.clear_graph(ex)
-    /// })?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(quad)?;
+    /// transaction.clear_graph(ex)?;
+    /// transaction.commit()?;
     /// assert!(store.is_empty()?);
     /// assert_eq!(1, store.named_graphs().count());
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
@@ -1279,7 +1285,7 @@ impl Transaction<'_> {
         &mut self,
         graph_name: impl Into<GraphNameRef<'b>>,
     ) -> Result<(), StorageError> {
-        self.writer.clear_graph(graph_name.into())
+        self.inner.clear_graph(graph_name.into())
     }
 
     /// Removes a graph from this store.
@@ -1294,10 +1300,10 @@ impl Transaction<'_> {
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let quad = QuadRef::new(ex, ex, ex, ex);
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     transaction.insert(quad)?;
-    ///     transaction.remove_named_graph(ex)
-    /// })?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(quad)?;
+    /// transaction.remove_named_graph(ex)?;
+    /// transaction.commit()?;
     /// assert!(store.is_empty()?);
     /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
@@ -1306,7 +1312,7 @@ impl Transaction<'_> {
         &mut self,
         graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
     ) -> Result<bool, StorageError> {
-        self.writer.remove_named_graph(graph_name.into())
+        self.inner.remove_named_graph(graph_name.into())
     }
 
     /// Clears the store.
@@ -1318,15 +1324,53 @@ impl Transaction<'_> {
     ///
     /// let ex = NamedNodeRef::new_unchecked("http://example.com");
     /// let store = Store::new()?;
-    /// store.transaction(|mut transaction| {
-    ///     transaction.insert(QuadRef::new(ex, ex, ex, ex))?;
-    ///     transaction.clear()
-    /// })?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(QuadRef::new(ex, ex, ex, ex))?;
+    /// transaction.clear()?;
+    /// transaction.commit()?;
     /// assert!(store.is_empty()?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
     pub fn clear(&mut self) -> Result<(), StorageError> {
-        self.writer.clear()
+        self.inner.clear()
+    }
+
+    /// Commits the transaction, i.e., apply its modifications to the underlying store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(QuadRef::new(ex, ex, ex, ex))?;
+    /// transaction.commit()?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, ex))?);
+    /// # Result::<_,oxigraph::store::StorageError>::Ok(())
+    /// ```
+    pub fn commit(self) -> Result<(), StorageError> {
+        self.inner.commit()
+    }
+
+    /// Rollback the transaction, i.e., drop all pending modifications.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.insert(QuadRef::new(ex, ex, ex, ex))?;
+    /// transaction.rollback()?;
+    /// assert!(store.is_empty()?);
+    /// # Result::<_,oxigraph::store::StorageError>::Ok(())
+    /// ```
+    pub fn rollback(self) -> Result<(), StorageError> {
+        self.inner.rollback()
     }
 }
 
