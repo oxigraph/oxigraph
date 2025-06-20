@@ -10,16 +10,15 @@ use dashmap::{DashMap, DashSet};
 use oxrdf::Quad;
 use rustc_hash::FxHasher;
 use std::borrow::Borrow;
-use std::error::Error;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
-use std::mem::transmute;
+use std::mem::{take, transmute};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
 
 /// In-memory storage working with MVCC
 ///
 /// Each quad and graph name is annotated by a version range, allowing to read old versions while updates are applied.
-/// To simplify the implementation a single write transaction is currently allowed. This restriction should be lifted in the future.
+/// To simplify the implementation, a single write transaction is currently allowed. This restriction should be lifted in the future.
 #[derive(Clone)]
 pub struct MemoryStorage {
     content: Arc<Content>,
@@ -68,61 +67,19 @@ impl MemoryStorage {
         }
     }
 
-    #[expect(clippy::unwrap_in_result)]
-    pub fn transaction<T, E: Error + 'static + From<StorageError>>(
-        &self,
-        f: impl for<'a> Fn(MemoryStorageWriter<'a>) -> Result<T, E>,
-    ) -> Result<T, E> {
+    pub fn start_transaction(&self) -> MemoryStorageTransaction<'_> {
         let mut transaction_mutex = self.transaction_counter.lock().unwrap();
         *transaction_mutex += 1;
         let transaction_id = *transaction_mutex;
         let snapshot_id = self.version_counter.load(Ordering::Acquire);
-        let mut operations = Vec::new();
-        let result = f(MemoryStorageWriter {
+        MemoryStorageTransaction {
             storage: self,
-            log: &mut operations,
+            log: Vec::new(),
             transaction_id,
-        });
-        if result.is_ok() {
-            let new_version_id = snapshot_id + 1;
-            for operation in operations {
-                match operation {
-                    LogEntry::QuadNode(node) => {
-                        node.range
-                            .lock()
-                            .unwrap()
-                            .upgrade_transaction(transaction_id, new_version_id);
-                    }
-                    LogEntry::Graph(graph_name) => {
-                        if let Some(mut entry) = self.content.graphs.get_mut(&graph_name) {
-                            entry
-                                .value_mut()
-                                .upgrade_transaction(transaction_id, new_version_id)
-                        }
-                    }
-                }
-            }
-            self.version_counter
-                .store(new_version_id, Ordering::Release);
-        } else {
-            for operation in operations {
-                match operation {
-                    LogEntry::QuadNode(node) => {
-                        node.range
-                            .lock()
-                            .unwrap()
-                            .rollback_transaction(transaction_id);
-                    }
-                    LogEntry::Graph(graph_name) => {
-                        if let Some(mut entry) = self.content.graphs.get_mut(&graph_name) {
-                            entry.value_mut().rollback_transaction(transaction_id)
-                        }
-                    }
-                }
-            }
+            snapshot_id,
+            _transaction_mutex: transaction_mutex,
+            committed: false,
         }
-        // TODO: garbage collection
-        result
     }
 
     pub fn bulk_loader(&self) -> MemoryStorageBulkLoader {
@@ -451,13 +408,16 @@ impl StrLookup for MemoryStorageReader {
     }
 }
 
-pub struct MemoryStorageWriter<'a> {
+pub struct MemoryStorageTransaction<'a> {
     storage: &'a MemoryStorage,
-    log: &'a mut Vec<LogEntry>,
+    log: Vec<LogEntry>,
     transaction_id: usize,
+    snapshot_id: usize,
+    _transaction_mutex: MutexGuard<'a, usize>,
+    committed: bool,
 }
 
-impl MemoryStorageWriter<'_> {
+impl MemoryStorageTransaction<'_> {
     pub fn reader(&self) -> MemoryStorageReader {
         MemoryStorageReader {
             storage: self.storage.clone(),
@@ -465,6 +425,172 @@ impl MemoryStorageWriter<'_> {
         }
     }
 
+    pub fn insert(&mut self, quad: QuadRef<'_>) -> bool {
+        self.writer().insert(quad)
+    }
+
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
+        self.writer().insert_named_graph(graph_name)
+    }
+
+    pub fn remove(&mut self, quad: QuadRef<'_>) -> bool {
+        self.remove_encoded(&quad.into())
+    }
+
+    fn remove_encoded(&mut self, quad: &EncodedQuad) -> bool {
+        let Some(node) = self
+            .storage
+            .content
+            .quad_set
+            .get(quad)
+            .map(|node| Arc::clone(&node))
+        else {
+            return false;
+        };
+        let removed = node.range.lock().unwrap().remove(self.transaction_id);
+        if removed {
+            self.log.push(LogEntry::QuadNode(node));
+        }
+        removed
+    }
+
+    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) {
+        self.clear_encoded_graph(&graph_name.into())
+    }
+
+    fn clear_encoded_graph(&mut self, graph_name: &EncodedTerm) {
+        let mut next = self
+            .storage
+            .content
+            .last_quad_by_graph_name
+            .view(graph_name, |_, (node, _)| Weak::clone(node));
+        while let Some(current) = next.take().and_then(|c| c.upgrade()) {
+            if current.range.lock().unwrap().remove(self.transaction_id) {
+                self.log.push(LogEntry::QuadNode(Arc::clone(&current)));
+            }
+            next.clone_from(&current.previous_graph_name);
+        }
+    }
+
+    pub fn clear_all_named_graphs(&mut self) {
+        for graph_name in self.reader().named_graphs() {
+            self.clear_encoded_graph(&graph_name)
+        }
+    }
+
+    pub fn clear_all_graphs(&mut self) {
+        self.storage.content.quad_set.iter().for_each(|node| {
+            if node.range.lock().unwrap().remove(self.transaction_id) {
+                self.log.push(LogEntry::QuadNode(Arc::clone(&node)));
+            }
+        });
+    }
+
+    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
+        self.remove_encoded_named_graph(&graph_name.into())
+    }
+
+    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> bool {
+        self.clear_encoded_graph(graph_name);
+        let removed = self
+            .storage
+            .content
+            .graphs
+            .get_mut(graph_name)
+            .is_some_and(|mut entry| entry.value_mut().remove(self.transaction_id));
+        if removed {
+            self.log.push(LogEntry::Graph(graph_name.clone()));
+        }
+        removed
+    }
+
+    pub fn remove_all_named_graphs(&mut self) {
+        self.clear_all_named_graphs();
+        self.do_remove_graphs();
+    }
+
+    fn do_remove_graphs(&mut self) {
+        self.storage
+            .content
+            .graphs
+            .iter_mut()
+            .for_each(|mut entry| {
+                if entry.value_mut().remove(self.transaction_id) {
+                    self.log.push(LogEntry::Graph(entry.key().clone()));
+                }
+            });
+    }
+
+    pub fn clear(&mut self) {
+        self.clear_all_graphs();
+        self.do_remove_graphs();
+    }
+
+    fn writer(&mut self) -> MemoryStorageInserter<'_> {
+        MemoryStorageInserter {
+            storage: self.storage,
+            log: &mut self.log,
+            transaction_id: self.transaction_id,
+        }
+    }
+
+    pub fn commit(mut self) {
+        let new_version_id = self.snapshot_id + 1;
+        for operation in take(&mut self.log) {
+            match operation {
+                LogEntry::QuadNode(node) => {
+                    node.range
+                        .lock()
+                        .unwrap()
+                        .upgrade_transaction(self.transaction_id, new_version_id);
+                }
+                LogEntry::Graph(graph_name) => {
+                    if let Some(mut entry) = self.storage.content.graphs.get_mut(&graph_name) {
+                        entry
+                            .value_mut()
+                            .upgrade_transaction(self.transaction_id, new_version_id)
+                    }
+                }
+            }
+        }
+        self.storage
+            .version_counter
+            .store(new_version_id, Ordering::Release);
+        self.committed = true;
+    }
+}
+
+impl Drop for MemoryStorageTransaction<'_> {
+    fn drop(&mut self) {
+        // We roll back
+        if !self.committed {
+            for operation in take(&mut self.log) {
+                match operation {
+                    LogEntry::QuadNode(node) => {
+                        node.range
+                            .lock()
+                            .unwrap()
+                            .rollback_transaction(self.transaction_id);
+                    }
+                    LogEntry::Graph(graph_name) => {
+                        if let Some(mut entry) = self.storage.content.graphs.get_mut(&graph_name) {
+                            entry.value_mut().rollback_transaction(self.transaction_id)
+                        }
+                    }
+                }
+            }
+            // TODO: garbage collection
+        }
+    }
+}
+
+pub struct MemoryStorageInserter<'a> {
+    storage: &'a MemoryStorage,
+    log: &'a mut Vec<LogEntry>,
+    transaction_id: usize,
+}
+
+impl MemoryStorageInserter<'_> {
     pub fn insert(&mut self, quad: QuadRef<'_>) -> bool {
         let encoded: EncodedQuad = quad.into();
         if let Some(node) = self
@@ -617,99 +743,6 @@ impl MemoryStorageWriter<'_> {
             .or_insert_with(|| value.into());
         debug_assert_eq!(*inserted, value, "Hash conflict for two strings");
     }
-
-    pub fn remove(&mut self, quad: QuadRef<'_>) -> bool {
-        self.remove_encoded(&quad.into())
-    }
-
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> bool {
-        let Some(node) = self
-            .storage
-            .content
-            .quad_set
-            .get(quad)
-            .map(|node| Arc::clone(&node))
-        else {
-            return false;
-        };
-        let removed = node.range.lock().unwrap().remove(self.transaction_id);
-        if removed {
-            self.log.push(LogEntry::QuadNode(node));
-        }
-        removed
-    }
-
-    pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) {
-        self.clear_encoded_graph(&graph_name.into())
-    }
-
-    fn clear_encoded_graph(&mut self, graph_name: &EncodedTerm) {
-        let mut next = self
-            .storage
-            .content
-            .last_quad_by_graph_name
-            .view(graph_name, |_, (node, _)| Weak::clone(node));
-        while let Some(current) = next.take().and_then(|c| c.upgrade()) {
-            if current.range.lock().unwrap().remove(self.transaction_id) {
-                self.log.push(LogEntry::QuadNode(Arc::clone(&current)));
-            }
-            next.clone_from(&current.previous_graph_name);
-        }
-    }
-
-    pub fn clear_all_named_graphs(&mut self) {
-        for graph_name in self.reader().named_graphs() {
-            self.clear_encoded_graph(&graph_name)
-        }
-    }
-
-    pub fn clear_all_graphs(&mut self) {
-        self.storage.content.quad_set.iter().for_each(|node| {
-            if node.range.lock().unwrap().remove(self.transaction_id) {
-                self.log.push(LogEntry::QuadNode(Arc::clone(&node)));
-            }
-        });
-    }
-
-    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
-        self.remove_encoded_named_graph(&graph_name.into())
-    }
-
-    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> bool {
-        self.clear_encoded_graph(graph_name);
-        let removed = self
-            .storage
-            .content
-            .graphs
-            .get_mut(graph_name)
-            .is_some_and(|mut entry| entry.value_mut().remove(self.transaction_id));
-        if removed {
-            self.log.push(LogEntry::Graph(graph_name.clone()));
-        }
-        removed
-    }
-
-    pub fn remove_all_named_graphs(&mut self) {
-        self.clear_all_named_graphs();
-        self.do_remove_graphs();
-    }
-
-    fn do_remove_graphs(&mut self) {
-        self.storage
-            .content
-            .graphs
-            .iter_mut()
-            .for_each(|mut entry| {
-                if entry.value_mut().remove(self.transaction_id) {
-                    self.log.push(LogEntry::Graph(entry.key().clone()));
-                }
-            });
-    }
-
-    pub fn clear(&mut self) {
-        self.clear_all_graphs();
-        self.do_remove_graphs();
-    }
 }
 
 pub struct QuadIterator {
@@ -813,7 +846,7 @@ impl MemoryStorageBulkLoader {
         let version_id = self.storage.version_counter.load(Ordering::Acquire) + 1;
         let mut log = Vec::new();
         for quad in quads {
-            MemoryStorageWriter {
+            MemoryStorageInserter {
                 storage: &self.storage,
                 log: &mut log,
                 transaction_id: version_id,
@@ -1110,21 +1143,19 @@ mod tests {
 
         // We start with a graph
         let snapshot = storage.snapshot();
-        storage.transaction(|mut writer| {
-            writer.insert_named_graph(example.into());
-            Ok::<_, StorageError>(())
-        })?;
+        let mut transaction = storage.start_transaction();
+        transaction.insert_named_graph(example.into());
+        transaction.commit();
         assert!(!snapshot.contains_named_graph(&encoded_example));
         assert!(storage.snapshot().contains_named_graph(&encoded_example));
         storage.snapshot().validate()?;
 
         // We add two quads
         let snapshot = storage.snapshot();
-        storage.transaction(|mut writer| {
-            writer.insert(default_quad);
-            writer.insert(named_graph_quad);
-            Ok::<_, StorageError>(())
-        })?;
+        let mut transaction = storage.start_transaction();
+        transaction.insert(default_quad);
+        transaction.insert(named_graph_quad);
+        transaction.commit();
         assert!(!snapshot.contains(&encoded_default_quad));
         assert!(!snapshot.contains(&encoded_named_graph_quad));
         assert!(storage.snapshot().contains(&encoded_default_quad));
@@ -1133,11 +1164,10 @@ mod tests {
 
         // We remove the quads
         let snapshot = storage.snapshot();
-        storage.transaction(|mut writer| {
-            writer.remove(default_quad);
-            writer.remove_named_graph(example.into());
-            Ok::<_, StorageError>(())
-        })?;
+        let mut transaction = storage.start_transaction();
+        transaction.remove(default_quad);
+        transaction.remove_named_graph(example.into());
+        transaction.commit();
         assert!(snapshot.contains(&encoded_default_quad));
         assert!(snapshot.contains(&encoded_named_graph_quad));
         assert!(snapshot.contains_named_graph(&encoded_example));
@@ -1148,16 +1178,11 @@ mod tests {
 
         // We add the quads again but rollback
         let snapshot = storage.snapshot();
-        assert!(
-            storage
-                .transaction(|mut writer| {
-                    writer.insert(default_quad);
-                    writer.insert(named_graph_quad);
-                    writer.insert_named_graph(example2.into());
-                    Err::<(), _>(StorageError::Other("foo".into()))
-                })
-                .is_err()
-        );
+        let mut transaction = storage.start_transaction();
+        transaction.insert(default_quad);
+        transaction.insert(named_graph_quad);
+        transaction.insert_named_graph(example2.into());
+        drop(transaction);
         assert!(!snapshot.contains(&encoded_default_quad));
         assert!(!snapshot.contains(&encoded_named_graph_quad));
         assert!(!snapshot.contains_named_graph(&encoded_example));
@@ -1173,14 +1198,12 @@ mod tests {
             Ok(default_quad.into_owned()),
             Ok(named_graph_quad.into_owned()),
         ])?;
-        storage.transaction(|mut writer| {
-            writer.insert_named_graph(example2.into());
-            Ok::<_, StorageError>(())
-        })?;
-        storage.transaction(|mut writer| {
-            writer.clear();
-            Ok::<_, StorageError>(())
-        })?;
+        let mut transaction = storage.start_transaction();
+        transaction.insert_named_graph(example2.into());
+        transaction.commit();
+        let mut transaction = storage.start_transaction();
+        transaction.clear();
+        transaction.commit();
         assert!(!storage.snapshot().contains(&encoded_default_quad));
         assert!(!storage.snapshot().contains(&encoded_named_graph_quad));
         assert!(!storage.snapshot().contains_named_graph(&encoded_example));

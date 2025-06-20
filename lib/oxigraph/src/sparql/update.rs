@@ -6,7 +6,7 @@ use crate::sparql::dataset::DatasetView;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
-use crate::storage::StorageWriter;
+use crate::storage::StorageTransaction;
 use oxiri::Iri;
 #[cfg(feature = "http-client")]
 use oxrdfio::LoadedDocument;
@@ -26,7 +26,7 @@ use spargebra::{GraphUpdateOperation, Query};
 use std::io::Read;
 
 pub fn evaluate_update<'a, 'b: 'a>(
-    transaction: &'a mut StorageWriter<'b>,
+    transaction: &'a mut StorageTransaction<'b>,
     update: &Update,
     options: &UpdateOptions,
 ) -> Result<(), EvaluationError> {
@@ -44,7 +44,7 @@ pub fn evaluate_update<'a, 'b: 'a>(
 }
 
 struct SimpleUpdateEvaluator<'a, 'b> {
-    transaction: &'a mut StorageWriter<'b>,
+    transaction: &'a mut StorageTransaction<'b>,
     base_iri: Option<Iri<String>>,
     query_evaluator: QueryEvaluator,
     #[cfg(feature = "http-client")]
