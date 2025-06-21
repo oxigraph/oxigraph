@@ -1,0 +1,13 @@
+diff --git a/memtable/wbwi_memtable.h b/memtable/wbwi_memtable.h
+--- a/memtable/wbwi_memtable.h	(revision ae8fb3e5000e46d8d4c9dbf3a36019c0aaceebff)
++++ b/memtable/wbwi_memtable.h	(date 1750604861180)
+@@ -366,8 +366,7 @@
+     if (t == WriteTypeToValueTypeMap.end()) {
+       key_.clear();
+       valid_ = false;
+-      s_ = Status::Corruption("Unexpected write_batch_with_index entry type " +
+-                              std::to_string(t->second));
++      s_ = Status::Corruption("Unexpected write_batch_with_index entry type ");
+       return;
+     }
+     key_buf_.SetInternalKey(it_->Entry().key, assigned_seqno_.upper_bound,

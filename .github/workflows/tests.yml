@@ -265,7 +265,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: rocksdb
-          key: ${{ runner.os }}-rocksdb-8.0.0
+          key: ${{ runner.os }}-rocksdb-9.10.0
       - run: bash .github/workflows/install_rocksdb.sh
       - run: cargo test --tests --features oxrocksdb-sys/pkg-config
 
