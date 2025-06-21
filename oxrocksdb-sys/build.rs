@@ -30,8 +30,6 @@ fn bindgen_rocksdb_api(includes: &[PathBuf]) {
     }
     builder
         .header("api/c.h")
-        .ctypes_prefix("libc")
-        .size_t_is_usize(true)
         .allowlist_function("rocksdb_.*")
         .allowlist_type("rocksdb_.*")
         .allowlist_var("rocksdb_.*")
