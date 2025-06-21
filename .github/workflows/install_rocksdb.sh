@@ -4,7 +4,8 @@ then
 else
   git clone https://github.com/facebook/rocksdb.git
   cd rocksdb || exit
-  git checkout v8.0.0
+  git checkout v9.10.0
+  git apply "../.github/workflows/install_rocksdb.patch"
   make shared_lib
 fi
 sudo make install-shared
