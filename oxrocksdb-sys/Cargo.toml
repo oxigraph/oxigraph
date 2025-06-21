@@ -15,9 +15,6 @@ links = "rocksdb"
 [features]
 pkg-config = ["dep:pkg-config"]
 
-[dependencies]
-libc.workspace = true
-
 [build-dependencies]
 bindgen.workspace = true
 cc = { workspace = true, features = ["parallel"] }
