@@ -671,8 +671,10 @@ impl Db {
                 !checkpoint.is_null(),
                 "rocksdb_checkpoint_object_create returned null"
             );
-            ffi_result!(rocksdb_checkpoint_create(checkpoint, path.as_ptr(), 0))?;
-        }
+            let result = ffi_result!(rocksdb_checkpoint_create(checkpoint, path.as_ptr(), 0));
+            rocksdb_checkpoint_object_destroy(checkpoint);
+            result
+        }?;
         Ok(())
     }
 }
