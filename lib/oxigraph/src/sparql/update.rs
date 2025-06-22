@@ -6,7 +6,7 @@ use crate::sparql::dataset::DatasetView;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
-use crate::storage::StorageTransaction;
+use crate::storage::StorageReadableTransaction;
 use oxiri::Iri;
 #[cfg(feature = "http-client")]
 use oxrdfio::LoadedDocument;
@@ -26,7 +26,7 @@ use spargebra::{GraphUpdateOperation, Query};
 use std::io::Read;
 
 pub fn evaluate_update<'a, 'b: 'a>(
-    transaction: &'a mut StorageTransaction<'b>,
+    transaction: &'a mut StorageReadableTransaction<'b>,
     update: &Update,
     options: &UpdateOptions,
 ) -> Result<(), EvaluationError> {
@@ -44,7 +44,7 @@ pub fn evaluate_update<'a, 'b: 'a>(
 }
 
 struct SimpleUpdateEvaluator<'a, 'b> {
-    transaction: &'a mut StorageTransaction<'b>,
+    transaction: &'a mut StorageReadableTransaction<'b>,
     base_iri: Option<Iri<String>>,
     query_evaluator: QueryEvaluator,
     #[cfg(feature = "http-client")]
@@ -70,7 +70,10 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     ) -> Result<(), EvaluationError> {
         match update {
             GraphUpdateOperation::InsertData { data } => self.eval_insert_data(data),
-            GraphUpdateOperation::DeleteData { data } => self.eval_delete_data(data),
+            GraphUpdateOperation::DeleteData { data } => {
+                self.eval_delete_data(data);
+                Ok(())
+            }
             GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert,
@@ -108,12 +111,11 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         Ok(())
     }
 
-    fn eval_delete_data(&mut self, data: &[GroundQuad]) -> Result<(), EvaluationError> {
+    fn eval_delete_data(&mut self, data: &[GroundQuad]) {
         for quad in data {
             let quad = Self::convert_ground_quad(quad);
-            self.transaction.remove(quad.as_ref())?;
+            self.transaction.remove(quad.as_ref());
         }
-        Ok(())
     }
 
     fn eval_delete_insert(
@@ -140,7 +142,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             let solution = solution?;
             for quad in delete {
                 if let Some(quad) = Self::fill_ground_quad_pattern(quad, &solution) {
-                    self.transaction.remove(quad.as_ref())?;
+                    self.transaction.remove(quad.as_ref());
                 }
             }
             for quad in insert {
@@ -205,10 +207,18 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     }
 
     fn eval_create(&mut self, graph_name: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
-        if self.transaction.insert_named_graph(graph_name.into())? || silent {
-            Ok(())
+        if self
+            .transaction
+            .reader()
+            .contains_named_graph(&graph_name.as_ref().into())?
+        {
+            if silent {
+                Ok(())
+            } else {
+                Err(EvaluationError::GraphAlreadyExists(graph_name.clone()))
+            }
         } else {
-            Err(EvaluationError::GraphAlreadyExists(graph_name.clone()))
+            Ok(self.transaction.insert_named_graph(graph_name.into())?)
         }
     }
 
@@ -239,7 +249,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     fn eval_drop(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
-                if self.transaction.remove_named_graph(graph_name.into())? || silent {
+                if self
+                    .transaction
+                    .reader()
+                    .contains_named_graph(&graph_name.as_ref().into())?
+                {
+                    self.transaction.remove_named_graph(graph_name.into())?;
+                    Ok(())
+                } else if silent {
                     Ok(())
                 } else {
                     Err(EvaluationError::GraphDoesNotExist(graph_name.clone()))

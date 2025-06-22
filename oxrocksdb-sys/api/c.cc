@@ -1,20 +1,20 @@
 #include "c.h"
 
 #include <rocksdb/db.h>
-#include <rocksdb/utilities/checkpoint.h>
-#include <rocksdb/utilities/transaction_db.h>
+#include <rocksdb/utilities/write_batch_with_index.h>
 
 #include <vector>
 
 using ROCKSDB_NAMESPACE::ColumnFamilyHandle;
 using ROCKSDB_NAMESPACE::DB;
 using ROCKSDB_NAMESPACE::IngestExternalFileOptions;
+using ROCKSDB_NAMESPACE::Iterator;
 using ROCKSDB_NAMESPACE::PinnableSlice;
 using ROCKSDB_NAMESPACE::ReadOptions;
 using ROCKSDB_NAMESPACE::Slice;
 using ROCKSDB_NAMESPACE::Status;
-using ROCKSDB_NAMESPACE::Transaction;
-using ROCKSDB_NAMESPACE::TransactionDB;
+using ROCKSDB_NAMESPACE::WriteBatch;
+using ROCKSDB_NAMESPACE::WriteBatchWithIndex;
 using std::vector;
 
 // From RocksDB
@@ -23,8 +23,16 @@ struct rocksdb_t {
   DB* rep;
 };
 
+struct rocksdb_iterator_t {
+  Iterator* rep;
+};
+
 struct rocksdb_column_family_handle_t {
   ColumnFamilyHandle* rep;
+};
+
+struct rocksdb_writebatch_wi_t {
+  WriteBatchWithIndex* rep;
 };
 
 struct rocksdb_ingestexternalfileoptions_t {
@@ -43,14 +51,6 @@ struct rocksdb_readoptions_t {
   Slice timestamp;
   Slice iter_start_ts;
 };
-
-struct rocksdb_transaction_t {
-  Transaction* rep;
-};
-
-struct rocksdb_transactiondb_t {
-  TransactionDB* rep;
-};
 }
 
 static void SaveError(char** errptr, const Status& source) {
@@ -61,8 +61,8 @@ static void SaveError(char** errptr, const Status& source) {
 
 extern "C" {
 
-void rocksdb_transactiondb_ingest_external_files(
-    rocksdb_transactiondb_t* db, const rocksdb_ingestexternalfilearg_t* list,
+void oxrocksdb_ingest_external_files(
+    rocksdb_t* db, const rocksdb_ingestexternalfilearg_t* list,
     const size_t list_len, char** errptr) {
   vector<rocksdb::IngestExternalFileArg> args(list_len);
   for (size_t i = 0; i < list_len; ++i) {
@@ -77,15 +77,28 @@ void rocksdb_transactiondb_ingest_external_files(
   SaveError(errptr, db->rep->IngestExternalFiles(args));
 }
 
-rocksdb_pinnableslice_t* rocksdb_transaction_get_for_update_pinned_cf(
-    rocksdb_transaction_t* txn, const rocksdb_readoptions_t* options,
+rocksdb_iterator_t*
+oxrocksdb_writebatch_wi_create_iterator_with_base_readopts_cf(
+    rocksdb_writebatch_wi_t* wbwi, rocksdb_iterator_t* base_iterator,
+    const rocksdb_readoptions_t* options, rocksdb_column_family_handle_t* cf) {
+  rocksdb_iterator_t* result = new rocksdb_iterator_t;
+  result->rep = wbwi->rep->NewIteratorWithBase(cf->rep, base_iterator->rep,
+                                               &options->rep);
+  delete base_iterator;
+  return result;
+}
+
+rocksdb_pinnableslice_t*
+oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
+    rocksdb_writebatch_wi_t* wbwi, rocksdb_t* db,
+    const rocksdb_readoptions_t* options,
     rocksdb_column_family_handle_t* column_family, const char* key,
     size_t keylen, char** errptr) {
-  rocksdb_pinnableslice_t* v = new rocksdb_pinnableslice_t;
-  Status s = txn->rep->GetForUpdate(options->rep, column_family->rep,
-                                    Slice(key, keylen), &v->rep);
+  rocksdb_pinnableslice_t* v = new (rocksdb_pinnableslice_t);
+  Status s = wbwi->rep->GetFromBatchAndDB(
+      db->rep, options->rep, column_family->rep, Slice(key, keylen), &v->rep);
   if (!s.ok()) {
-    delete v;
+    delete (v);
     if (!s.IsNotFound()) {
       SaveError(errptr, s);
     }
@@ -93,8 +106,7 @@ rocksdb_pinnableslice_t* rocksdb_transaction_get_for_update_pinned_cf(
   }
   return v;
 }
-
-rocksdb_readoptions_t* rocksdb_readoptions_create_copy(
+rocksdb_readoptions_t* oxrocksdb_readoptions_create_copy(
     rocksdb_readoptions_t* options) {
   return new rocksdb_readoptions_t(*options);
 }

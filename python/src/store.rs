@@ -660,12 +660,8 @@ impl PyStore {
         py.allow_threads(|| {
             match graph_name {
                 GraphNameRef::DefaultGraph => Ok(()),
-                GraphNameRef::NamedNode(graph_name) => {
-                    self.inner.insert_named_graph(graph_name).map(|_| ())
-                }
-                GraphNameRef::BlankNode(graph_name) => {
-                    self.inner.insert_named_graph(graph_name).map(|_| ())
-                }
+                GraphNameRef::NamedNode(graph_name) => self.inner.insert_named_graph(graph_name),
+                GraphNameRef::BlankNode(graph_name) => self.inner.insert_named_graph(graph_name),
             }
             .map_err(map_storage_error)
         })
@@ -715,12 +711,8 @@ impl PyStore {
         py.allow_threads(|| {
             match graph_name {
                 GraphNameRef::DefaultGraph => self.inner.clear_graph(GraphNameRef::DefaultGraph),
-                GraphNameRef::NamedNode(graph_name) => {
-                    self.inner.remove_named_graph(graph_name).map(|_| ())
-                }
-                GraphNameRef::BlankNode(graph_name) => {
-                    self.inner.remove_named_graph(graph_name).map(|_| ())
-                }
+                GraphNameRef::NamedNode(graph_name) => self.inner.remove_named_graph(graph_name),
+                GraphNameRef::BlankNode(graph_name) => self.inner.remove_named_graph(graph_name),
             }
             .map_err(map_storage_error)
         })

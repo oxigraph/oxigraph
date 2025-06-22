@@ -34,8 +34,8 @@ use crate::sparql::{
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::{
-    DecodingGraphIterator, DecodingQuadIterator, Storage, StorageBulkLoader, StorageReader,
-    StorageTransaction,
+    DecodingGraphIterator, DecodingQuadIterator, Storage, StorageBulkLoader,
+    StorageReadableTransaction, StorageReader,
 };
 use std::fmt;
 use std::io::{Read, Write};
@@ -439,7 +439,7 @@ impl Store {
     /// ```
     pub fn start_transaction(&self) -> Result<Transaction<'_>, StorageError> {
         Ok(Transaction {
-            inner: self.storage.start_transaction()?,
+            inner: self.storage.start_readable_transaction()?,
         })
     }
 
@@ -555,17 +555,16 @@ impl Store {
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
     /// let store = Store::new()?;
-    /// assert!(store.insert(quad)?);
-    /// assert!(!store.insert(quad)?);
+    /// store.insert(quad)?;
     ///
     /// assert!(store.contains(quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
-        let mut transaction = self.start_transaction()?;
-        let result = transaction.insert(quad)?;
+    pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), StorageError> {
+        let mut transaction = self.storage.start_transaction()?;
+        transaction.insert(quad.into())?;
         transaction.commit()?;
-        Ok(result)
+        Ok(())
     }
 
     /// Atomically adds a set of quads to this store.
@@ -599,17 +598,16 @@ impl Store {
     ///
     /// let store = Store::new()?;
     /// store.insert(quad)?;
-    /// assert!(store.remove(quad)?);
-    /// assert!(!store.remove(quad)?);
+    /// store.remove(quad)?;
     ///
     /// assert!(!store.contains(quad)?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool, StorageError> {
-        let mut transaction = self.start_transaction()?;
-        let result = transaction.remove(quad)?;
+    pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<(), StorageError> {
+        let mut transaction = self.storage.start_transaction()?;
+        transaction.remove(quad.into());
         transaction.commit()?;
-        Ok(result)
+        Ok(())
     }
 
     /// Dumps the store into a file.
@@ -744,11 +742,11 @@ impl Store {
     pub fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, StorageError> {
-        let mut transaction = self.start_transaction()?;
-        let result = transaction.insert_named_graph(graph_name)?;
+    ) -> Result<(), StorageError> {
+        let mut transaction = self.storage.start_transaction()?;
+        transaction.insert_named_graph(graph_name.into())?;
         transaction.commit()?;
-        Ok(result)
+        Ok(())
     }
 
     /// Clears a graph from this store.
@@ -773,7 +771,7 @@ impl Store {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), StorageError> {
-        let mut transaction = self.start_transaction()?;
+        let mut transaction = self.storage.start_readable_transaction()?;
         transaction.clear_graph(graph_name.into())?;
         transaction.commit()
     }
@@ -793,7 +791,7 @@ impl Store {
     /// store.insert(quad)?;
     /// assert_eq!(1, store.len()?);
     ///
-    /// assert!(store.remove_named_graph(ex)?);
+    /// store.remove_named_graph(ex)?;
     /// assert!(store.is_empty()?);
     /// assert_eq!(0, store.named_graphs().count());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -801,11 +799,11 @@ impl Store {
     pub fn remove_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, StorageError> {
-        let mut transaction = self.start_transaction()?;
-        let result = transaction.remove_named_graph(graph_name.into())?;
+    ) -> Result<(), StorageError> {
+        let mut transaction = self.storage.start_readable_transaction()?;
+        transaction.remove_named_graph(graph_name.into())?;
         transaction.commit()?;
-        Ok(result)
+        Ok(())
     }
 
     /// Clears the store.
@@ -826,7 +824,7 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> Result<(), StorageError> {
-        let mut transaction = self.start_transaction()?;
+        let mut transaction = self.storage.start_readable_transaction()?;
         transaction.clear()?;
         transaction.commit()
     }
@@ -931,7 +929,7 @@ impl IntoIterator for &Store {
 ///
 /// See [`Store::start_transaction`] for a more detailed description.
 pub struct Transaction<'a> {
-    inner: StorageTransaction<'a>,
+    inner: StorageReadableTransaction<'a>,
 }
 
 impl Transaction<'_> {
@@ -1179,7 +1177,7 @@ impl Transaction<'_> {
     /// assert!(store.contains(quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn insert<'b>(&mut self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
+    pub fn insert<'b>(&mut self, quad: impl Into<QuadRef<'b>>) -> Result<(), StorageError> {
         self.inner.insert(quad.into())
     }
 
@@ -1208,12 +1206,12 @@ impl Transaction<'_> {
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
     /// transaction.insert(quad)?;
-    /// transaction.remove(quad)?;
+    /// transaction.remove(quad);
     /// transaction.commit()?;
     /// assert!(!store.contains(quad)?);
     /// # Result::<_,oxigraph::store::StorageError>::Ok(())
     /// ```
-    pub fn remove<'b>(&mut self, quad: impl Into<QuadRef<'b>>) -> Result<bool, StorageError> {
+    pub fn remove<'b>(&mut self, quad: impl Into<QuadRef<'b>>) {
         self.inner.remove(quad.into())
     }
 
@@ -1259,7 +1257,7 @@ impl Transaction<'_> {
     pub fn insert_named_graph<'b>(
         &mut self,
         graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<(), StorageError> {
         self.inner.insert_named_graph(graph_name.into())
     }
 
@@ -1311,7 +1309,7 @@ impl Transaction<'_> {
     pub fn remove_named_graph<'b>(
         &mut self,
         graph_name: impl Into<NamedOrBlankNodeRef<'b>>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<(), StorageError> {
         self.inner.remove_named_graph(graph_name.into())
     }
 
@@ -1353,30 +1351,11 @@ impl Transaction<'_> {
     pub fn commit(self) -> Result<(), StorageError> {
         self.inner.commit()
     }
-
-    /// Rollback the transaction, i.e., drop all pending modifications.
-    ///
-    /// Usage example:
-    /// ```
-    /// use oxigraph::model::*;
-    /// use oxigraph::store::Store;
-    ///
-    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
-    /// let store = Store::new()?;
-    /// let mut transaction = store.start_transaction()?;
-    /// transaction.insert(QuadRef::new(ex, ex, ex, ex))?;
-    /// transaction.rollback()?;
-    /// assert!(store.is_empty()?);
-    /// # Result::<_,oxigraph::store::StorageError>::Ok(())
-    /// ```
-    pub fn rollback(self) -> Result<(), StorageError> {
-        self.inner.rollback()
-    }
 }
 
 impl IntoIterator for &Transaction<'_> {
-    type IntoIter = QuadIter;
     type Item = Result<Quad, StorageError>;
+    type IntoIter = QuadIter;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -1672,16 +1651,19 @@ mod tests {
 
         let store = Store::new()?;
         for t in &default_quads {
-            assert!(store.insert(t)?);
+            store.insert(t)?;
+            assert!(store.contains(t)?);
         }
-        assert!(!store.insert(&default_quad)?);
+        store.insert(&default_quad)?;
 
-        assert!(store.remove(&default_quad)?);
-        assert!(!store.remove(&default_quad)?);
-        assert!(store.insert(&named_quad)?);
-        assert!(!store.insert(&named_quad)?);
-        assert!(store.insert(&default_quad)?);
-        assert!(!store.insert(&default_quad)?);
+        store.remove(&default_quad)?;
+        assert!(!store.contains(&default_quad)?);
+        store.remove(&default_quad)?;
+        store.insert(&named_quad)?;
+        assert!(store.contains(&named_quad)?);
+        store.insert(&named_quad)?;
+        store.insert(&default_quad)?;
+        store.insert(&default_quad)?;
         store.validate()?;
 
         assert_eq!(store.len()?, 4);
