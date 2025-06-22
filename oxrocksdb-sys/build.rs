@@ -31,6 +31,7 @@ fn bindgen_rocksdb_api(includes: &[PathBuf]) {
     builder
         .header("api/c.h")
         .allowlist_function("rocksdb_.*")
+        .allowlist_function("oxrocksdb_.*")
         .allowlist_type("rocksdb_.*")
         .allowlist_var("rocksdb_.*")
         .generate()

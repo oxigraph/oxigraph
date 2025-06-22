@@ -425,19 +425,19 @@ impl MemoryStorageTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> bool {
+    pub fn insert(&mut self, quad: QuadRef<'_>) {
         self.writer().insert(quad)
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
         self.writer().insert_named_graph(graph_name)
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) -> bool {
+    pub fn remove(&mut self, quad: QuadRef<'_>) {
         self.remove_encoded(&quad.into())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> bool {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) {
         let Some(node) = self
             .storage
             .content
@@ -445,13 +445,12 @@ impl MemoryStorageTransaction<'_> {
             .get(quad)
             .map(|node| Arc::clone(&node))
         else {
-            return false;
+            return;
         };
         let removed = node.range.lock().unwrap().remove(self.transaction_id);
         if removed {
             self.log.push(LogEntry::QuadNode(node));
         }
-        removed
     }
 
     pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) {
@@ -486,11 +485,11 @@ impl MemoryStorageTransaction<'_> {
         });
     }
 
-    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
+    pub fn remove_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
         self.remove_encoded_named_graph(&graph_name.into())
     }
 
-    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> bool {
+    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) {
         self.clear_encoded_graph(graph_name);
         let removed = self
             .storage
@@ -501,7 +500,6 @@ impl MemoryStorageTransaction<'_> {
         if removed {
             self.log.push(LogEntry::Graph(graph_name.clone()));
         }
-        removed
     }
 
     pub fn remove_all_named_graphs(&mut self) {
@@ -591,7 +589,7 @@ pub struct MemoryStorageInserter<'a> {
 }
 
 impl MemoryStorageInserter<'_> {
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> bool {
+    pub fn insert(&mut self, quad: QuadRef<'_>) {
         let encoded: EncodedQuad = quad.into();
         if let Some(node) = self
             .storage
@@ -615,7 +613,6 @@ impl MemoryStorageInserter<'_> {
                     self.log.push(LogEntry::Graph(encoded.graph_name.clone()));
                 }
             }
-            added
         } else {
             let node = Arc::new(QuadListNode {
                 quad: encoded.clone(),
@@ -695,11 +692,10 @@ impl MemoryStorageInserter<'_> {
                 GraphNameRef::DefaultGraph => (),
             }
             self.log.push(LogEntry::QuadNode(node));
-            true
         }
     }
 
-    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
         self.insert_encoded_named_graph(graph_name, graph_name.into())
     }
 
@@ -707,7 +703,7 @@ impl MemoryStorageInserter<'_> {
         &mut self,
         graph_name: NamedOrBlankNodeRef<'_>,
         encoded_graph_name: EncodedTerm,
-    ) -> bool {
+    ) {
         let added = match self
             .storage
             .content
@@ -724,7 +720,6 @@ impl MemoryStorageInserter<'_> {
         if added {
             self.log.push(LogEntry::Graph(encoded_graph_name));
         }
-        added
     }
 
     fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {

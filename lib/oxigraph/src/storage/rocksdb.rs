@@ -14,7 +14,7 @@ use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
 use crate::storage::rocksdb_wrapper::{
-    ColumnFamily, ColumnFamilyDefinition, Db, Iter, Reader, Transaction,
+    ColumnFamily, ColumnFamilyDefinition, Db, Iter, ReadableTransaction, Reader, Transaction,
 };
 use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
@@ -247,7 +247,6 @@ impl RocksDbStorage {
                 #[cfg(feature = "rdf-12")]
                 {
                     let mut w = self.start_transaction()?;
-                    let r = w.reader();
                     let mut new_quad = quad.clone();
                     if let EncodedTerm::Triple(t) = new_quad.subject {
                         new_quad.subject = to_rdf12_reified_triple(
@@ -255,7 +254,7 @@ impl RocksDbStorage {
                             &t.predicate,
                             &t.object,
                             &quad.graph_name,
-                            &r,
+                            &snapshot,
                             &mut w,
                         )?;
                     }
@@ -265,12 +264,12 @@ impl RocksDbStorage {
                             &t.predicate,
                             &t.object,
                             &quad.graph_name,
-                            &r,
+                            &snapshot,
                             &mut w,
                         )?;
                     }
-                    w.insert(r.decode_quad(&new_quad)?.as_ref())?;
-                    w.remove_encoded(&quad)?;
+                    w.insert(snapshot.decode_quad(&new_quad)?.as_ref())?;
+                    w.remove_encoded(&quad);
                     w.commit()?;
                 }
             }
@@ -321,6 +320,16 @@ impl RocksDbStorage {
         Ok(RocksDbStorageTransaction {
             buffer: Vec::new(),
             transaction: self.db.start_transaction()?,
+            storage: self,
+        })
+    }
+
+    pub fn start_readable_transaction(
+        &self,
+    ) -> Result<RocksDbStorageReadableTransaction<'_>, StorageError> {
+        Ok(RocksDbStorageReadableTransaction {
+            buffer: Vec::new(),
+            transaction: self.db.start_readable_transaction()?,
             storage: self,
         })
     }
@@ -878,123 +887,85 @@ impl StrLookup for RocksDbStorageReader {
 
 pub struct RocksDbStorageTransaction<'a> {
     buffer: Vec<u8>,
-    transaction: Transaction<'a>,
+    transaction: Transaction,
     storage: &'a RocksDbStorage,
 }
 
 impl RocksDbStorageTransaction<'_> {
-    pub fn reader(&self) -> RocksDbStorageReader {
-        RocksDbStorageReader {
-            reader: self.transaction.reader(),
-            storage: self.storage.clone(),
-        }
-    }
-
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
+    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<(), StorageError> {
         let encoded = quad.into();
         self.buffer.clear();
-        let result = if quad.graph_name.is_default_graph() {
+        if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut self.buffer, &encoded);
-            if self
-                .transaction
-                .contains_key_for_update(&self.storage.dspo_cf, &self.buffer)?
-            {
-                false
-            } else {
-                self.transaction
-                    .insert_empty(&self.storage.dspo_cf, &self.buffer)?;
+            self.transaction
+                .insert_empty(&self.storage.dspo_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_pos_quad(&mut self.buffer, &encoded);
-                self.transaction
-                    .insert_empty(&self.storage.dpos_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_pos_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.dpos_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_osp_quad(&mut self.buffer, &encoded);
-                self.transaction
-                    .insert_empty(&self.storage.dosp_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_osp_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.dosp_cf, &self.buffer);
 
-                self.insert_term(quad.subject.into(), &encoded.subject)?;
-                self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-                self.insert_term(quad.object, &encoded.object)?;
-                true
-            }
+            self.insert_term(quad.subject.into(), &encoded.subject)?;
+            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
+            self.insert_term(quad.object, &encoded.object)
         } else {
             write_spog_quad(&mut self.buffer, &encoded);
-            if self
-                .transaction
-                .contains_key_for_update(&self.storage.spog_cf, &self.buffer)?
-            {
-                false
-            } else {
-                self.transaction
-                    .insert_empty(&self.storage.spog_cf, &self.buffer)?;
+            self.transaction
+                .insert_empty(&self.storage.spog_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_posg_quad(&mut self.buffer, &encoded);
-                self.transaction
-                    .insert_empty(&self.storage.posg_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_posg_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.posg_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_ospg_quad(&mut self.buffer, &encoded);
-                self.transaction
-                    .insert_empty(&self.storage.ospg_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_ospg_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.ospg_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_gspo_quad(&mut self.buffer, &encoded);
-                self.transaction
-                    .insert_empty(&self.storage.gspo_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_gspo_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.gspo_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_gpos_quad(&mut self.buffer, &encoded);
-                self.transaction
-                    .insert_empty(&self.storage.gpos_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_gpos_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.gpos_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_gosp_quad(&mut self.buffer, &encoded);
-                self.transaction
-                    .insert_empty(&self.storage.gosp_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_gosp_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.gosp_cf, &self.buffer);
 
-                self.insert_term(quad.subject.into(), &encoded.subject)?;
-                self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-                self.insert_term(quad.object, &encoded.object)?;
+            self.insert_term(quad.subject.into(), &encoded.subject)?;
+            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
+            self.insert_term(quad.object, &encoded.object)?;
 
-                self.buffer.clear();
-                write_term(&mut self.buffer, &encoded.graph_name);
-                if !self
-                    .transaction
-                    .contains_key_for_update(&self.storage.graphs_cf, &self.buffer)?
-                {
-                    self.transaction
-                        .insert_empty(&self.storage.graphs_cf, &self.buffer)?;
-                    self.insert_graph_name(quad.graph_name, &encoded.graph_name)?;
-                }
-                true
-            }
-        };
-        Ok(result)
+            self.buffer.clear();
+            write_term(&mut self.buffer, &encoded.graph_name);
+            self.transaction
+                .insert_empty(&self.storage.graphs_cf, &self.buffer);
+            self.insert_graph_name(quad.graph_name, &encoded.graph_name)
+        }
     }
 
     pub fn insert_named_graph(
         &mut self,
         graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<(), StorageError> {
         let encoded_graph_name = graph_name.into();
 
         self.buffer.clear();
         write_term(&mut self.buffer, &encoded_graph_name);
-        let result = if self
-            .transaction
-            .contains_key_for_update(&self.storage.graphs_cf, &self.buffer)?
-        {
-            false
-        } else {
-            self.transaction
-                .insert_empty(&self.storage.graphs_cf, &self.buffer)?;
-            self.insert_term(graph_name.into(), &encoded_graph_name)?;
-            true
-        };
-        Ok(result)
+        self.transaction
+            .insert_empty(&self.storage.graphs_cf, &self.buffer);
+        self.insert_term(graph_name.into(), &encoded_graph_name)
     }
 
     fn insert_term(
@@ -1018,13 +989,7 @@ impl RocksDbStorageTransaction<'_> {
     }
 
     fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
-        if self
-            .storage
-            .db
-            .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())?
-        {
-            return Ok(());
-        }
+        // TODO: add to batch?
         self.storage.db.insert(
             &self.storage.id2str_cf,
             &key.to_be_bytes(),
@@ -1032,92 +997,230 @@ impl RocksDbStorageTransaction<'_> {
         )
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) -> Result<bool, StorageError> {
+    pub fn remove(&mut self, quad: QuadRef<'_>) {
         self.remove_encoded(&quad.into())
     }
 
-    fn remove_encoded(&mut self, quad: &EncodedQuad) -> Result<bool, StorageError> {
+    fn remove_encoded(&mut self, quad: &EncodedQuad) {
         self.buffer.clear();
-        let result = if quad.graph_name.is_default_graph() {
+        if quad.graph_name.is_default_graph() {
             write_spo_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.dspo_cf, &self.buffer);
 
-            if self
-                .transaction
-                .contains_key_for_update(&self.storage.dspo_cf, &self.buffer)?
-            {
-                self.transaction
-                    .remove(&self.storage.dspo_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_pos_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.dpos_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_pos_quad(&mut self.buffer, quad);
-                self.transaction
-                    .remove(&self.storage.dpos_cf, &self.buffer)?;
-
-                self.buffer.clear();
-                write_osp_quad(&mut self.buffer, quad);
-                self.transaction
-                    .remove(&self.storage.dosp_cf, &self.buffer)?;
-                true
-            } else {
-                false
-            }
+            self.buffer.clear();
+            write_osp_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.dosp_cf, &self.buffer);
         } else {
             write_spog_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.spog_cf, &self.buffer);
 
-            if self
-                .transaction
-                .contains_key_for_update(&self.storage.spog_cf, &self.buffer)?
-            {
-                self.transaction
-                    .remove(&self.storage.spog_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_posg_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.posg_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_posg_quad(&mut self.buffer, quad);
-                self.transaction
-                    .remove(&self.storage.posg_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_ospg_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.ospg_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_ospg_quad(&mut self.buffer, quad);
-                self.transaction
-                    .remove(&self.storage.ospg_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_gspo_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.gspo_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_gspo_quad(&mut self.buffer, quad);
-                self.transaction
-                    .remove(&self.storage.gspo_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_gpos_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.gpos_cf, &self.buffer);
 
-                self.buffer.clear();
-                write_gpos_quad(&mut self.buffer, quad);
-                self.transaction
-                    .remove(&self.storage.gpos_cf, &self.buffer)?;
+            self.buffer.clear();
+            write_gosp_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.gosp_cf, &self.buffer);
+        }
+    }
 
-                self.buffer.clear();
-                write_gosp_quad(&mut self.buffer, quad);
-                self.transaction
-                    .remove(&self.storage.gosp_cf, &self.buffer)?;
-                true
-            } else {
-                false
-            }
-        };
-        Ok(result)
+    pub fn commit(self) -> Result<(), StorageError> {
+        self.transaction.commit()
+    }
+}
+
+pub struct RocksDbStorageReadableTransaction<'a> {
+    buffer: Vec<u8>,
+    transaction: ReadableTransaction,
+    storage: &'a RocksDbStorage,
+}
+
+impl RocksDbStorageReadableTransaction<'_> {
+    pub fn reader(&self) -> RocksDbStorageReader {
+        RocksDbStorageReader {
+            reader: self.transaction.reader(),
+            storage: self.storage.clone(),
+        }
+    }
+
+    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<(), StorageError> {
+        let encoded = quad.into();
+        self.buffer.clear();
+        if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.dspo_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_pos_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.dpos_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_osp_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.dosp_cf, &self.buffer);
+
+            self.insert_term(quad.subject.into(), &encoded.subject)?;
+            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
+            self.insert_term(quad.object, &encoded.object)
+        } else {
+            write_spog_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.spog_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_posg_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.posg_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_ospg_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.ospg_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_gspo_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.gspo_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_gpos_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.gpos_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_gosp_quad(&mut self.buffer, &encoded);
+            self.transaction
+                .insert_empty(&self.storage.gosp_cf, &self.buffer);
+
+            self.insert_term(quad.subject.into(), &encoded.subject)?;
+            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
+            self.insert_term(quad.object, &encoded.object)?;
+
+            self.buffer.clear();
+            write_term(&mut self.buffer, &encoded.graph_name);
+            self.transaction
+                .insert_empty(&self.storage.graphs_cf, &self.buffer);
+            self.insert_graph_name(quad.graph_name, &encoded.graph_name)
+        }
+    }
+
+    pub fn insert_named_graph(
+        &mut self,
+        graph_name: NamedOrBlankNodeRef<'_>,
+    ) -> Result<(), StorageError> {
+        let encoded_graph_name = graph_name.into();
+
+        self.buffer.clear();
+        write_term(&mut self.buffer, &encoded_graph_name);
+        self.transaction
+            .insert_empty(&self.storage.graphs_cf, &self.buffer);
+        self.insert_term(graph_name.into(), &encoded_graph_name)
+    }
+
+    fn insert_term(
+        &mut self,
+        term: TermRef<'_>,
+        encoded: &EncodedTerm,
+    ) -> Result<(), StorageError> {
+        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
+    }
+
+    fn insert_graph_name(
+        &mut self,
+        graph_name: GraphNameRef<'_>,
+        encoded: &EncodedTerm,
+    ) -> Result<(), StorageError> {
+        match graph_name {
+            GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
+            GraphNameRef::DefaultGraph => Ok(()),
+        }
+    }
+
+    fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
+        self.storage.db.insert(
+            &self.storage.id2str_cf,
+            &key.to_be_bytes(),
+            value.as_bytes(),
+        )
+    }
+
+    pub fn remove(&mut self, quad: QuadRef<'_>) {
+        self.remove_encoded(&quad.into())
+    }
+
+    fn remove_encoded(&mut self, quad: &EncodedQuad) {
+        self.buffer.clear();
+        if quad.graph_name.is_default_graph() {
+            write_spo_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.dspo_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_pos_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.dpos_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_osp_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.dosp_cf, &self.buffer);
+        } else {
+            write_spog_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.spog_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_posg_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.posg_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_ospg_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.ospg_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_gspo_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.gspo_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_gpos_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.gpos_cf, &self.buffer);
+
+            self.buffer.clear();
+            write_gosp_quad(&mut self.buffer, quad);
+            self.transaction.remove(&self.storage.gosp_cf, &self.buffer);
+        }
     }
 
     pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
         if graph_name.is_default_graph() {
             for quad in self.reader().quads_for_graph(&EncodedTerm::DefaultGraph) {
-                self.remove_encoded(&quad?)?;
+                self.remove_encoded(&quad?);
             }
         } else {
             self.buffer.clear();
             write_term(&mut self.buffer, &graph_name.into());
             if self
                 .transaction
-                .contains_key_for_update(&self.storage.graphs_cf, &self.buffer)?
+                .contains_key(&self.storage.graphs_cf, &self.buffer)?
             {
                 // The condition is useful to lock the graph itself and ensure no quad is inserted at the same time
                 for quad in self.reader().quads_for_graph(&graph_name.into()) {
-                    self.remove_encoded(&quad?)?;
+                    self.remove_encoded(&quad?);
                 }
             }
         }
@@ -1126,14 +1229,14 @@ impl RocksDbStorageTransaction<'_> {
 
     pub fn clear_all_named_graphs(&mut self) -> Result<(), StorageError> {
         for quad in self.reader().quads_in_named_graph() {
-            self.remove_encoded(&quad?)?;
+            self.remove_encoded(&quad?);
         }
         Ok(())
     }
 
     pub fn clear_all_graphs(&mut self) -> Result<(), StorageError> {
         for quad in self.reader().quads() {
-            self.remove_encoded(&quad?)?;
+            self.remove_encoded(&quad?);
         }
         Ok(())
     }
@@ -1141,33 +1244,27 @@ impl RocksDbStorageTransaction<'_> {
     pub fn remove_named_graph(
         &mut self,
         graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<(), StorageError> {
         self.remove_encoded_named_graph(&graph_name.into())
     }
 
-    fn remove_encoded_named_graph(
-        &mut self,
-        graph_name: &EncodedTerm,
-    ) -> Result<bool, StorageError> {
+    fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> Result<(), StorageError> {
         self.buffer.clear();
         write_term(&mut self.buffer, graph_name);
-        let result = if self
+        if self
             .transaction
-            .contains_key_for_update(&self.storage.graphs_cf, &self.buffer)?
+            .contains_key(&self.storage.graphs_cf, &self.buffer)?
         {
             // The condition is done ASAP to lock the graph itself
             for quad in self.reader().quads_for_graph(graph_name) {
-                self.remove_encoded(&quad?)?;
+                self.remove_encoded(&quad?);
             }
             self.buffer.clear();
             write_term(&mut self.buffer, graph_name);
             self.transaction
-                .remove(&self.storage.graphs_cf, &self.buffer)?;
-            true
-        } else {
-            false
-        };
-        Ok(result)
+                .remove(&self.storage.graphs_cf, &self.buffer);
+        }
+        Ok(())
     }
 
     pub fn remove_all_named_graphs(&mut self) -> Result<(), StorageError> {
@@ -1182,17 +1279,13 @@ impl RocksDbStorageTransaction<'_> {
             self.remove_encoded_named_graph(&graph_name?)?;
         }
         for quad in self.reader().quads() {
-            self.remove_encoded(&quad?)?;
+            self.remove_encoded(&quad?);
         }
         Ok(())
     }
 
     pub fn commit(self) -> Result<(), StorageError> {
         self.transaction.commit()
-    }
-
-    pub fn rollback(self) -> Result<(), StorageError> {
-        self.transaction.rollback()
     }
 }
 
