@@ -3272,6 +3272,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     }
                     match function_name.as_ref() {
                         xsd::STRING => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3288,6 +3291,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             })
                         }
                         xsd::BOOLEAN => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3306,6 +3312,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             })
                         }
                         xsd::DOUBLE => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3324,6 +3333,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             })
                         }
                         xsd::FLOAT => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3342,6 +3354,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             })
                         }
                         xsd::INTEGER => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3364,6 +3379,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             })
                         }
                         xsd::DECIMAL => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3385,6 +3403,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         #[cfg(feature = "sep-0002")]
                         xsd::DATE => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3403,6 +3424,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         #[cfg(feature = "sep-0002")]
                         xsd::TIME => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3418,6 +3442,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                             })
                         }
                         xsd::DATE_TIME => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3435,6 +3462,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         #[cfg(feature = "sep-0002")]
                         xsd::DURATION => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3452,6 +3482,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         #[cfg(feature = "sep-0002")]
                         xsd::YEAR_MONTH_DURATION => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
@@ -3470,6 +3503,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         }
                         #[cfg(feature = "sep-0002")]
                         xsd::DAY_TIME_DURATION => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
                             let e = self.expression_evaluator(
                                 &parameters[0],
                                 encoded_variables,
