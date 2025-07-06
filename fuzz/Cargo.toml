@@ -11,7 +11,7 @@ cargo-fuzz = true
 rocksdb = ["oxigraph/rocksdb"]
 
 [dependencies]
-anyhow = "1.0.72"
+anyhow = "1"
 libfuzzer-sys = "0.4"
 oxiri = "0.2"
 oxigraph = { path = "../lib/oxigraph", default-features = false, features = ["rdf-12"] }
