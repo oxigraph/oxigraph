@@ -14,6 +14,7 @@ use oxjsonld::{
 };
 use oxttl::n3::{N3Quad, N3Term};
 use std::collections::HashMap;
+use std::fmt::Write;
 
 pub fn register_parser_tests(evaluator: &mut TestEvaluator) {
     evaluator.register(
@@ -304,9 +305,11 @@ fn evaluate_n3_eval_test(test: &Test, ignore_errors: bool) -> Result<()> {
 
 fn evaluate_positive_c14n_test(test: &Test, format: RdfFormat) -> Result<()> {
     let action = test.action.as_deref().context("No action found")?;
-    let actual = load_dataset(action, format, false, false)
-        .with_context(|| format!("Parse error on file {action}"))?
-        .to_string();
+    // We avoid using Dataset struct to avoid reordering quads
+    let mut actual = String::new();
+    for q in RdfParser::from_format(format).for_reader(read_file(action)?) {
+        writeln!(actual, "{} .", q?)?;
+    }
     let results = test.result.as_ref().context("No tests result found")?;
     let expected =
         read_file_to_string(results).with_context(|| format!("Read error on file {results}"))?;
