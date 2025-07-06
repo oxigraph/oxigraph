@@ -386,7 +386,7 @@ impl fmt::Display for GroupClause {
 enum GroupCondition {
     // [20]   GroupCondition   ::=   BuiltInCall | FunctionCall | '(' Expression ( 'AS' Var )? ')' | Var
     BuiltInCall(BuiltInCall),
-    // TODO FunctionCall(FunctionCall)
+    FunctionCall(FunctionCall),
     Projection(Expression, Option<Var>),
     Var(Var),
 }
@@ -395,7 +395,7 @@ impl fmt::Display for GroupCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            // Self::FunctionCall(c) => write!(f, "{c}"),
+            Self::FunctionCall(c) => write!(f, "{c}"),
             Self::Projection(e, v) => {
                 if let Some(v) = v {
                     write!(f, "({e} AS {v})")
@@ -1255,7 +1255,7 @@ enum Constraint {
     // [69]   Constraint   ::=   BrackettedExpression | BuiltInCall | FunctionCall
     BrackettedExpression(BrackettedExpression),
     BuiltInCall(BuiltInCall),
-    // TODO FunctionCall(FunctionCall),
+    FunctionCall(FunctionCall),
 }
 
 impl fmt::Display for Constraint {
@@ -1263,7 +1263,7 @@ impl fmt::Display for Constraint {
         match self {
             Self::BrackettedExpression(e) => write!(f, "{e}"),
             Self::BuiltInCall(c) => write!(f, "{c}"),
-            // Self::FunctionCall(c) => write!(f, "{c}"),
+            Self::FunctionCall(c) => write!(f, "{c}"),
         }
     }
 }
@@ -1271,13 +1271,51 @@ impl fmt::Display for Constraint {
 #[derive(Arbitrary)]
 struct FunctionCall {
     // [70]   FunctionCall   ::=   iri ArgList
-    iri: Iri,
+    iri: FunctionCallName,
     args: ArgList,
 }
 
 impl fmt::Display for FunctionCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.iri, self.args)
+    }
+}
+
+#[derive(Arbitrary)]
+#[expect(clippy::enum_variant_names)]
+enum FunctionCallName {
+    XsdString,
+    XsdInteger,
+    XsdDecimal,
+    XsdDouble,
+    XsdBoolean,
+    XsdDateTime,
+    XsdDate,
+    XsdTime,
+    XsdDuration,
+    XsdYearMonthDuration,
+    XsdDayTimeDuration,
+}
+
+impl fmt::Display for FunctionCallName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            FunctionCallName::XsdString => "<http://www.w3.org/2001/XMLSchema#string>",
+            FunctionCallName::XsdInteger => "<http://www.w3.org/2001/XMLSchema#integer>",
+            FunctionCallName::XsdDecimal => "<http://www.w3.org/2001/XMLSchema#decimal>",
+            FunctionCallName::XsdDouble => "<http://www.w3.org/2001/XMLSchema#double>",
+            FunctionCallName::XsdBoolean => "<http://www.w3.org/2001/XMLSchema#boolean>",
+            FunctionCallName::XsdDateTime => "<http://www.w3.org/2001/XMLSchema#dateTime>",
+            FunctionCallName::XsdDate => "<http://www.w3.org/2001/XMLSchema#date>",
+            FunctionCallName::XsdTime => "<http://www.w3.org/2001/XMLSchema#time>",
+            FunctionCallName::XsdDuration => "<http://www.w3.org/2001/XMLSchema#duration>",
+            FunctionCallName::XsdYearMonthDuration => {
+                "<http://www.w3.org/2001/XMLSchema#yearMonthDuration>"
+            }
+            FunctionCallName::XsdDayTimeDuration => {
+                "<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
+            }
+        })
     }
 }
 
@@ -2362,19 +2400,18 @@ impl fmt::Display for NotExistsFunc {
 }
 
 #[derive(Arbitrary)]
-struct IriOrFunction {
+enum IriOrFunction {
     // [128]   iriOrFunction   ::=   iri ArgList?
-    iri: Iri,
-    // TODO args: Option<ArgList>,
+    Iri(Iri),
+    Function(FunctionCall),
 }
 
 impl fmt::Display for IriOrFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.iri)?;
-        // if let Some(args) = &self.args {
-        // write!(f, "{args}")?;
-        // }
-        Ok(())
+        match self {
+            IriOrFunction::Iri(i) => write!(f, "{i}"),
+            IriOrFunction::Function(func) => write!(f, "{func}"),
+        }
     }
 }
 
