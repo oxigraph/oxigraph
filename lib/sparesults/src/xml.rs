@@ -5,15 +5,14 @@
 use crate::error::{QueryResultsParseError, QueryResultsSyntaxError};
 use oxrdf::vocab::{rdf, xsd};
 use oxrdf::*;
-use quick_xml::escape::{escape, resolve_xml_entity, unescape};
+use quick_xml::escape::{EscapeError, escape, resolve_xml_entity};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesRef, BytesStart, BytesText, Event};
 use quick_xml::reader::Config;
-use quick_xml::{Decoder, Error, Reader, Writer};
+use quick_xml::{Decoder, Error, Reader, Writer, XmlVersion};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
 use std::mem::take;
-use std::str::FromStr;
 #[cfg(feature = "async-tokio")]
 use std::sync::Arc;
 #[cfg(feature = "async-tokio")]
@@ -256,6 +255,7 @@ impl<R: Read> ReaderXmlQueryResultsParserOutput<R> {
             variables: Vec::new(),
             decoder: reader.decoder(),
             text_buffer: String::new(),
+            xml_version: XmlVersion::Implicit1_0,
         };
         loop {
             reader_buffer.clear();
@@ -321,6 +321,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderXmlQueryResultsParserOutput<R> {
             variables: Vec::new(),
             decoder: reader.decoder(),
             text_buffer: String::new(),
+            xml_version: XmlVersion::Implicit1_0,
         };
         loop {
             reader_buffer.clear();
@@ -400,6 +401,7 @@ impl<'a> SliceXmlQueryResultsParserOutput<'a> {
             variables: Vec::new(),
             decoder: reader.decoder(),
             text_buffer: String::new(),
+            xml_version: XmlVersion::Implicit1_0,
         };
         loop {
             reader_buffer.clear();
@@ -476,6 +478,7 @@ struct XmlInnerQueryResultsParser {
     variables: Vec<Variable>,
     decoder: Decoder,
     text_buffer: String,
+    xml_version: XmlVersion,
 }
 
 impl XmlInnerQueryResultsParser {
@@ -511,7 +514,7 @@ impl XmlInnerQueryResultsParser {
                             .filter_map(Result::ok)
                             .find(|attr| attr.key.local_name().as_ref() == b"name")
                             .ok_or_else(|| QueryResultsSyntaxError::msg("No name attribute found for the <variable> tag"))?;
-                        let name = unescape(&self.decoder.decode(&name.value)?)?.into_owned();
+                        let name = name.decoded_and_normalized_value(self.xml_version, self.decoder)?;
                         let variable = Variable::new(name).map_err(|e| QueryResultsSyntaxError::msg(format!("Invalid variable name: {e}")))?;
                         if self.variables.contains(&variable) {
                             return Err(QueryResultsSyntaxError::msg(format!(
@@ -554,6 +557,7 @@ impl XmlInnerQueryResultsParser {
                                 predicate_stack: Vec::new(),
                                 object_stack: Vec::new(),
                                 text_buffer: String::new(),
+                                xml_version: self.xml_version,
                             },
                         }))
                     } else if event.local_name().as_ref() != b"link" && event.local_name().as_ref() != b"results" && event.local_name().as_ref() != b"boolean" {
@@ -565,11 +569,11 @@ impl XmlInnerQueryResultsParser {
                 ResultsState::Boolean => Err(QueryResultsSyntaxError::msg(format!("Unexpected tag inside of <boolean> tag: <{}>", self.decoder.decode(event.name().as_ref())?)).into())
             },
             Event::Text(event) => {
-                self.text_buffer.push_str(&event.xml_content()?);
+                self.text_buffer.push_str(&event.xml_content(self.xml_version)?);
                 Ok(None)
             }
             Event::GeneralRef(event) => {
-                decode_xml_entity(&event, &mut self.text_buffer)?;
+                decode_xml_entity(&event, &mut self.text_buffer, self.xml_version)?;
                 Ok(None)
             }
             Event::End(event) => {
@@ -599,7 +603,11 @@ impl XmlInnerQueryResultsParser {
                 }
             }
             Event::Eof => Err(QueryResultsSyntaxError::msg("Unexpected early file end. All results file must have a <head> and a <result> or <boolean> tag").into()),
-            Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {
+            Event::Decl(event) => {
+                self.xml_version = event.xml_version()?;
+                Ok(None)
+            }
+            Event::Comment(_) | Event::PI(_) | Event::DocType(_) => {
                 Ok(None)
             }
             Event::Empty(_) => unreachable!("Empty events are expended"),
@@ -641,6 +649,7 @@ struct XmlInnerSolutionsParser {
     predicate_stack: Vec<Term>,
     object_stack: Vec<Term>,
     text_buffer: String,
+    xml_version: XmlVersion,
 }
 
 impl XmlInnerSolutionsParser {
@@ -677,8 +686,10 @@ impl XmlInnerSolutionsParser {
                             )
                             .into());
                         };
-                        self.current_var =
-                            Some(attr.decode_and_unescape_value(self.decoder)?.into_owned());
+                        self.current_var = Some(
+                            attr.decoded_and_normalized_value(self.xml_version, self.decoder)?
+                                .into_owned(),
+                        );
                         self.state_stack.push(State::Binding);
                         Ok(None)
                     } else {
@@ -707,11 +718,15 @@ impl XmlInnerSolutionsParser {
                             let attr = attr.map_err(Error::from)?;
                             if attr.key.as_ref() == b"xml:lang" {
                                 self.lang = Some(
-                                    attr.decode_and_unescape_value(self.decoder)?.into_owned(),
+                                    attr.decoded_and_normalized_value(
+                                        self.xml_version,
+                                        self.decoder,
+                                    )?
+                                    .into_owned(),
                                 );
                             } else if attr.key.local_name().as_ref() == b"datatype" {
-                                let iri = self.decoder.decode(&attr.value)?;
-                                let iri = unescape(&iri)?;
+                                let iri = attr
+                                    .decoded_and_normalized_value(self.xml_version, self.decoder)?;
                                 self.datatype =
                                     Some(NamedNode::new(iri.as_ref()).map_err(|e| {
                                         QueryResultsSyntaxError::msg(format!(
@@ -722,7 +737,11 @@ impl XmlInnerSolutionsParser {
                             #[cfg(feature = "sparql-12")]
                             if attr.key.as_ref() == b"its:dir" {
                                 self.direction = Some(
-                                    attr.decode_and_unescape_value(self.decoder)?.into_owned(),
+                                    attr.decoded_and_normalized_value(
+                                        self.xml_version,
+                                        self.decoder,
+                                    )?
+                                    .into_owned(),
                                 );
                             }
                         }
@@ -774,7 +793,8 @@ impl XmlInnerSolutionsParser {
                 .into()),
             },
             Event::Text(event) => {
-                self.text_buffer.push_str(&event.xml_content()?);
+                self.text_buffer
+                    .push_str(&event.xml_content(self.xml_version)?);
                 Ok(None)
             }
             Event::End(_) => {
@@ -916,11 +936,13 @@ impl XmlInnerSolutionsParser {
                     }
                 }
             }
-            Event::Eof | Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {
+            Event::Decl(event) => {
+                self.xml_version = event.xml_version()?;
                 Ok(None)
             }
+            Event::Eof | Event::Comment(_) | Event::PI(_) | Event::DocType(_) => Ok(None),
             Event::GeneralRef(event) => {
-                decode_xml_entity(&event, &mut self.text_buffer)?;
+                decode_xml_entity(&event, &mut self.text_buffer, self.xml_version)?;
                 Ok(None)
             }
             Event::Empty(_) => unreachable!("Empty events are expended"),
@@ -1028,30 +1050,18 @@ fn escape_including_bound_whitespaces(value: &str) -> Cow<'_, str> {
 fn decode_xml_entity(
     event: &BytesRef<'_>,
     buffer: &mut String,
-) -> Result<(), QueryResultsParseError> {
-    let reference = event.xml_content()?;
-    if let Some(num) = reference.strip_prefix('#') {
-        let codepoint = char::from_u32(u32::from_str(num).map_err(|e| {
-            QueryResultsSyntaxError::msg(format!(
-                "Invalid numerical XML entity reference '{reference}': {e}"
-            ))
-        })?)
-        .ok_or_else(|| {
-            QueryResultsSyntaxError::msg(format!(
-                "XML entity reference encoding an invalid UTF-8 codepoint '{reference}'"
-            ))
-        })?;
-        buffer.push_str(codepoint.encode_utf8(&mut [0_u8; 4]));
-        Ok(())
-    } else if let Some(value) = resolve_xml_entity(reference.as_ref()) {
-        buffer.push_str(value);
-        Ok(())
-    } else {
-        Err(
-            QueryResultsSyntaxError::msg(format!("Unsupported XML entity reference: {reference}"))
-                .into(),
-        )
+    xml_version: XmlVersion,
+) -> Result<(), Error> {
+    if let Some(char_ref) = event.resolve_char_ref()? {
+        buffer.push(char_ref);
+        return Ok(());
     }
+    let reference = event.xml_content(xml_version)?;
+    let Some(value) = resolve_xml_entity(&reference) else {
+        return Err(EscapeError::UnrecognizedEntity(0..event.len(), reference.into()).into());
+    };
+    buffer.push_str(value);
+    Ok(())
 }
 
 #[cfg(feature = "async-tokio")]
