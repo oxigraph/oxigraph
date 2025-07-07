@@ -15,8 +15,7 @@ use oxrdf::Quad;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::Path;
 
-#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-mod binary_encoder;
+pub mod binary_encoder;
 mod error;
 mod memory;
 pub mod numeric_encoder;

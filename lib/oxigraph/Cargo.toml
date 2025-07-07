@@ -24,9 +24,13 @@ http-client-rustls-native = ["http-client", "oxhttp/rustls-ring-native"]
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 rocksdb-debug = []
 rdf-12 = ["oxrdfio/rdf-12", "spareval/sparql-12"]
+datafusion = ["dep:datafusion", "dep:async-trait", "dep:futures"]
 
 [dependencies]
+async-trait = { workspace = true, optional = true }
 dashmap.workspace = true
+datafusion = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 oxiri.workspace = true
 oxrdf = { workspace = true, features = ["oxsdatatypes"] }
 oxrdfio.workspace = true
@@ -53,6 +57,7 @@ codspeed-criterion-compat.workspace = true
 csv.workspace = true
 oxhttp = { workspace = true, features = ["rustls-ring-native"] }
 bzip2.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true
