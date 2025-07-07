@@ -1,11 +1,14 @@
 #![no_main]
 
+use datafusion_common::DataFusionError;
+use futures::stream::StreamExt;
 use libfuzzer_sys::fuzz_target;
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{Dataset, Graph, NamedNode};
 use oxigraph::sparql::{
-    DefaultServiceHandler, QueryEvaluationError, QueryResults, QuerySolutionIter, SparqlEvaluator,
+    DatafusionQueryResults, DefaultServiceHandler, QueryEvaluationError, QueryResults,
+    QuerySolutionIter, SparqlEvaluator,
 };
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
@@ -15,6 +18,7 @@ use spareval::QueryEvaluator;
 use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::{Query, SparqlParser};
 use std::sync::OnceLock;
+use tokio::runtime::Builder;
 
 fuzz_target!(|data: sparql_smith::Query| {
     static STORE: OnceLock<Store> = OnceLock::new();
@@ -36,23 +40,42 @@ fuzz_target!(|data: sparql_smith::Query| {
 
     let query_str = data.to_string();
     if let Ok(query) = SparqlParser::new().parse_query(&query_str) {
-        let with_opt = SparqlEvaluator::new()
-            .with_default_service_handler(StoreServiceHandler {
-                store: store.clone(),
+        let with_opt = query_results_key(
+            SparqlEvaluator::new()
+                .with_default_service_handler(StoreServiceHandler {
+                    store: store.clone(),
+                })
+                .for_query(query.clone())
+                .on_store(store)
+                .execute(),
+            query_str.contains(" REDUCED "),
+        );
+        let without_opt = query_results_key(
+            QueryEvaluator::new()
+                .without_optimizations()
+                .with_default_service_handler(DatasetServiceHandler {
+                    dataset: dataset.clone(),
+                })
+                .execute(dataset, &query),
+            query_str.contains(" REDUCED "),
+        );
+        assert_eq!(with_opt, without_opt);
+        if let Some(datafusion) = Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(async {
+                datafusion_query_results_key(
+                    SparqlEvaluator::new()
+                        .for_query(query.clone())
+                        .datafusion(store)
+                        .await,
+                    query_str.contains(" REDUCED "),
+                )
+                .await
             })
-            .for_query(query.clone())
-            .on_store(store)
-            .execute();
-        let without_opt = QueryEvaluator::new()
-            .without_optimizations()
-            .with_default_service_handler(DatasetServiceHandler {
-                dataset: dataset.clone(),
-            })
-            .execute(dataset, &query);
-        assert_eq!(
-            query_results_key(with_opt, query_str.contains(" REDUCED ")),
-            query_results_key(without_opt, query_str.contains(" REDUCED "))
-        )
+        {
+            assert_eq!(without_opt, datafusion);
+        }
     }
 });
 
@@ -93,6 +116,37 @@ fn query_results_key(
         }
         Ok(QueryResults::Boolean(bool)) => if bool { "true" } else { "" }.into(),
         Err(_) => String::new(),
+    }
+}
+
+async fn datafusion_query_results_key(
+    results: Result<DatafusionQueryResults, DataFusionError>,
+    is_reduced: bool,
+) -> Option<String> {
+    match results {
+        Ok(DatafusionQueryResults::Solutions(iter)) => {
+            // TODO: ordering
+            let mut b = iter
+                .filter_map(|r| async { r.ok() })
+                .map(|t| {
+                    let mut b = t
+                        .iter()
+                        .map(|(var, val)| format!("{var}: {val}"))
+                        .collect::<Vec<_>>();
+                    b.sort_unstable();
+                    b.join(" ")
+                })
+                .collect::<Vec<_>>()
+                .await;
+            b.sort_unstable();
+            if is_reduced {
+                b.dedup();
+            }
+            Some(b.join("\n"))
+        }
+        Ok(DatafusionQueryResults::Boolean(bool)) => Some(if bool { "true" } else { "" }.into()),
+        Err(DataFusionError::NotImplemented(_)) => None,
+        Err(_) => Some(String::new()),
     }
 }
 

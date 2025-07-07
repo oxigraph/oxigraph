@@ -3,6 +3,8 @@
 //! The entry point for SPARQL execution is the [`SparqlEvaluator`] type.
 
 mod algebra;
+#[cfg(feature = "datafusion")]
+mod datafusion;
 mod dataset;
 mod error;
 #[cfg(feature = "http-client")]
@@ -13,6 +15,10 @@ mod update;
 use crate::model::{NamedNode, Term};
 #[expect(deprecated)]
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
+#[cfg(feature = "datafusion")]
+use crate::sparql::datafusion::DatafusionEvaluator;
+#[cfg(feature = "datafusion")]
+pub use crate::sparql::datafusion::DatafusionQueryResults;
 use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
@@ -20,6 +26,8 @@ use crate::sparql::http::HttpServiceHandler;
 pub use crate::sparql::update::{BoundPreparedSparqlUpdate, PreparedSparqlUpdate};
 use crate::storage::StorageReader;
 use crate::store::{Store, Transaction};
+#[cfg(feature = "datafusion")]
+pub use ::datafusion::error::Result as DatafusionResult;
 use oxrdf::IriParseError;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
@@ -585,6 +593,28 @@ impl PreparedSparqlQuery {
             substitutions: self.substitutions,
             reader: store.storage().snapshot(),
         }
+    }
+
+    #[cfg(feature = "datafusion")]
+    #[expect(deprecated)]
+    pub async fn datafusion(self, store: &Store) -> DatafusionResult<DatafusionQueryResults> {
+        let query = Query::from(self.query);
+        let dataset = DatasetView::new(store.storage().snapshot(), &query.dataset);
+        DatafusionEvaluator::new()
+            .unwrap()
+            .execute(dataset, &query.inner)
+            .await
+    }
+
+    #[cfg(feature = "datafusion")]
+    #[expect(deprecated)]
+    pub async fn datafusion_explain(self, store: &Store) -> DatafusionResult<String> {
+        let query = Query::from(self.query);
+        let dataset = DatasetView::new(store.storage().snapshot(), &query.dataset);
+        DatafusionEvaluator::new()
+            .unwrap()
+            .explain(dataset, &query.inner)
+            .await
     }
 
     /// Bind the prepared query to the [`Transaction`] it should be evaluated on.

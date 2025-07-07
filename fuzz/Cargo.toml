@@ -12,9 +12,11 @@ rocksdb = ["oxigraph/rocksdb"]
 
 [dependencies]
 anyhow = "1"
+datafusion-common = "49"
+futures = "0.3"
 libfuzzer-sys = "0.4"
 oxiri = "0.2"
-oxigraph = { path = "../lib/oxigraph", default-features = false, features = ["rdf-12"] }
+oxigraph = { path = "../lib/oxigraph", default-features = false, features = ["rdf-12", "datafusion"] }
 oxjsonld.path = "../lib/oxjsonld"
 oxrdf.path = "../lib/oxrdf"
 oxrdfxml.path = "../lib/oxrdfxml"
@@ -23,6 +25,7 @@ sparesults.path = "../lib/sparesults"
 spargebra.path = "../lib/spargebra"
 spareval.path = "../lib/spareval"
 sparql-smith = { path = "../lib/sparql-smith", features = ["sep-0006"] }
+tokio = { version = "1", features = ["rt"] }
 
 [profile.release]
 codegen-units = 1
