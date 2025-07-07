@@ -10,17 +10,17 @@ use oxsdatatypes::Boolean;
 #[cfg(feature = "rdf-12")]
 use spareval::ExpressionTriple;
 use spareval::{ExpressionTerm, InternalQuad, QueryableDataset};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::iter::empty;
 #[cfg(feature = "rdf-12")]
 use std::sync::Arc;
+use std::sync::Mutex;
 
 pub struct DatasetView<'a> {
     reader: StorageReader<'a>,
-    extra: RefCell<HashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
+    extra: Mutex<HashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
     dataset: EncodedDatasetSpec,
 }
 
@@ -36,13 +36,13 @@ impl<'a> DatasetView<'a> {
         };
         Self {
             reader,
-            extra: RefCell::new(HashMap::default()),
+            extra: Mutex::new(HashMap::default()),
             dataset,
         }
     }
 
     pub fn insert_str(&self, key: &StrHash, value: &str) {
-        if let Entry::Vacant(e) = self.extra.borrow_mut().entry(*key) {
+        if let Entry::Vacant(e) = self.extra.lock().unwrap().entry(*key) {
             if !matches!(self.reader.contains_str(key), Ok(true)) {
                 e.insert(value.to_owned());
             }
@@ -54,52 +54,90 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
     type InternalTerm = EncodedTerm;
     type Error = StorageError;
 
+    #[expect(refining_impl_trait)]
     fn internal_quads_for_pattern(
         &self,
         subject: Option<&EncodedTerm>,
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: Option<Option<&EncodedTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>> + use<'a> {
-        let iter: Box<dyn Iterator<Item = Result<_, _>>> = if let Some(graph_name) = graph_name {
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>> + Send + 'a> {
+        let iter: Box<dyn Iterator<Item = Result<_, _>> + Send> =
             if let Some(graph_name) = graph_name {
-                if self
-                    .dataset
-                    .named
-                    .as_ref()
-                    .is_none_or(|d| d.contains(graph_name))
-                {
-                    Box::new(
-                        self.reader
-                            .quads_for_pattern(subject, predicate, object, Some(graph_name))
-                            .map(|quad| {
-                                let quad = quad?;
-                                Ok(InternalQuad {
-                                    subject: quad.subject,
-                                    predicate: quad.predicate,
-                                    object: quad.object,
-                                    graph_name: if quad.graph_name.is_default_graph() {
-                                        None
-                                    } else {
-                                        Some(quad.graph_name)
-                                    },
-                                })
-                            }),
-                    )
+                if let Some(graph_name) = graph_name {
+                    if self
+                        .dataset
+                        .named
+                        .as_ref()
+                        .is_none_or(|d| d.contains(graph_name))
+                    {
+                        Box::new(
+                            self.reader
+                                .quads_for_pattern(subject, predicate, object, Some(graph_name))
+                                .map(|quad| {
+                                    let quad = quad?;
+                                    Ok(InternalQuad {
+                                        subject: quad.subject,
+                                        predicate: quad.predicate,
+                                        object: quad.object,
+                                        graph_name: if quad.graph_name.is_default_graph() {
+                                            None
+                                        } else {
+                                            Some(quad.graph_name)
+                                        },
+                                    })
+                                }),
+                        )
+                    } else {
+                        Box::new(empty())
+                    }
+                } else if let Some(default_graph_graphs) = &self.dataset.default {
+                    if default_graph_graphs.len() == 1 {
+                        // Single graph optimization
+                        Box::new(
+                            self.reader
+                                .quads_for_pattern(
+                                    subject,
+                                    predicate,
+                                    object,
+                                    Some(&default_graph_graphs[0]),
+                                )
+                                .map(|quad| {
+                                    let quad = quad?;
+                                    Ok(InternalQuad {
+                                        subject: quad.subject,
+                                        predicate: quad.predicate,
+                                        object: quad.object,
+                                        graph_name: None,
+                                    })
+                                }),
+                        )
+                    } else {
+                        let iters = default_graph_graphs
+                            .iter()
+                            .map(|graph_name| {
+                                self.reader.quads_for_pattern(
+                                    subject,
+                                    predicate,
+                                    object,
+                                    Some(graph_name),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        Box::new(iters.into_iter().flatten().map(|quad| {
+                            let quad = quad?;
+                            Ok(InternalQuad {
+                                subject: quad.subject,
+                                predicate: quad.predicate,
+                                object: quad.object,
+                                graph_name: None,
+                            })
+                        }))
+                    }
                 } else {
-                    Box::new(empty())
-                }
-            } else if let Some(default_graph_graphs) = &self.dataset.default {
-                if default_graph_graphs.len() == 1 {
-                    // Single graph optimization
                     Box::new(
                         self.reader
-                            .quads_for_pattern(
-                                subject,
-                                predicate,
-                                object,
-                                Some(&default_graph_graphs[0]),
-                            )
+                            .quads_for_pattern(subject, predicate, object, None)
                             .map(|quad| {
                                 let quad = quad?;
                                 Ok(InternalQuad {
@@ -110,86 +148,50 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                                 })
                             }),
                     )
-                } else {
-                    let iters = default_graph_graphs
-                        .iter()
-                        .map(|graph_name| {
-                            self.reader.quads_for_pattern(
-                                subject,
-                                predicate,
-                                object,
-                                Some(graph_name),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    Box::new(iters.into_iter().flatten().map(|quad| {
-                        let quad = quad?;
-                        Ok(InternalQuad {
-                            subject: quad.subject,
-                            predicate: quad.predicate,
-                            object: quad.object,
-                            graph_name: None,
-                        })
-                    }))
                 }
+            } else if let Some(named_graphs) = &self.dataset.named {
+                let iters = named_graphs
+                    .iter()
+                    .map(|graph_name| {
+                        self.reader
+                            .quads_for_pattern(subject, predicate, object, Some(graph_name))
+                    })
+                    .collect::<Vec<_>>();
+                Box::new(iters.into_iter().flatten().map(|quad| {
+                    let quad = quad?;
+                    Ok(InternalQuad {
+                        subject: quad.subject,
+                        predicate: quad.predicate,
+                        object: quad.object,
+                        graph_name: if quad.graph_name.is_default_graph() {
+                            None
+                        } else {
+                            Some(quad.graph_name)
+                        },
+                    })
+                }))
             } else {
                 Box::new(
                     self.reader
                         .quads_for_pattern(subject, predicate, object, None)
-                        .map(|quad| {
-                            let quad = quad?;
-                            Ok(InternalQuad {
+                        .filter_map(|quad| {
+                            let quad = match quad {
+                                Ok(quad) => quad,
+                                Err(e) => return Some(Err(e)),
+                            };
+                            Some(Ok(InternalQuad {
                                 subject: quad.subject,
                                 predicate: quad.predicate,
                                 object: quad.object,
-                                graph_name: None,
-                            })
+                                graph_name: if quad.graph_name.is_default_graph() {
+                                    return None;
+                                } else {
+                                    Some(quad.graph_name)
+                                },
+                            }))
                         }),
                 )
-            }
-        } else if let Some(named_graphs) = &self.dataset.named {
-            let iters = named_graphs
-                .iter()
-                .map(|graph_name| {
-                    self.reader
-                        .quads_for_pattern(subject, predicate, object, Some(graph_name))
-                })
-                .collect::<Vec<_>>();
-            Box::new(iters.into_iter().flatten().map(|quad| {
-                let quad = quad?;
-                Ok(InternalQuad {
-                    subject: quad.subject,
-                    predicate: quad.predicate,
-                    object: quad.object,
-                    graph_name: if quad.graph_name.is_default_graph() {
-                        None
-                    } else {
-                        Some(quad.graph_name)
-                    },
-                })
-            }))
-        } else {
-            Box::new(
-                self.reader
-                    .quads_for_pattern(subject, predicate, object, None)
-                    .filter_map(|quad| {
-                        let quad = match quad {
-                            Ok(quad) => quad,
-                            Err(e) => return Some(Err(e)),
-                        };
-                        Some(Ok(InternalQuad {
-                            subject: quad.subject,
-                            predicate: quad.predicate,
-                            object: quad.object,
-                            graph_name: if quad.graph_name.is_default_graph() {
-                                return None;
-                            } else {
-                                Some(quad.graph_name)
-                            },
-                        }))
-                    }),
-            )
-        };
+            };
         iter
     }
 
@@ -311,11 +313,18 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
 
 impl StrLookup for DatasetView<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
-        Ok(if let Some(value) = self.extra.borrow().get(key) {
-            Some(value.clone())
-        } else {
-            self.reader.get_str(key)?
-        })
+        Ok(
+            if let Some(value) = self
+                .extra
+                .lock()
+                .map_err(|e| CorruptionError::msg(e.to_string()))?
+                .get(key)
+            {
+                Some(value.clone())
+            } else {
+                self.reader.get_str(key)?
+            },
+        )
     }
 }
 
