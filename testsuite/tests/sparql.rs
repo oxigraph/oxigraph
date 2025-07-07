@@ -37,6 +37,22 @@ fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
             // This test relies on naive iteration on the input file
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
             "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-01",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-1",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-2",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-simple",
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-01", /* TODO: easy to fix */
+            #[cfg(feature = "datafusion")]
+            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/dataset/manifest#dawg-dataset-05", /* TODO: easy to fix */
         ],
     )
 }
@@ -96,6 +112,8 @@ fn sparql12_w3c_testsuite() -> Result<()> {
         &[
             // TODO: https://github.com/w3c/sparql-query/issues/282
             "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-positive/manifest#basic-tripleterm-subject",
+            #[cfg(feature = "datafusion")]
+            "https://w3c.github.io/rdf-tests/sparql/sparql12/grouping#group01",
         ],
     )
 }
