@@ -738,60 +738,58 @@ pub trait StrLookup {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError>;
 }
 
-pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
+pub fn insert_term<F: FnMut(&StrHash, &str)>(
     term: TermRef<'_>,
     encoded: &EncodedTerm,
     insert_str: &mut F,
-) -> Result<(), StorageError> {
+) {
     match term {
         TermRef::NamedNode(node) => {
-            if let EncodedTerm::NamedNode { iri_id } = encoded {
-                insert_str(iri_id, node.as_str())
-            } else {
-                Err(CorruptionError::from_encoded_term(encoded, &term).into())
-            }
+            let EncodedTerm::NamedNode { iri_id } = encoded else {
+                unreachable!("Invalid named node encoding: {encoded:?}");
+            };
+            insert_str(iri_id, node.as_str());
         }
         TermRef::BlankNode(node) => match encoded {
-            EncodedTerm::BigBlankNode { id_id } => insert_str(id_id, node.as_str()),
-            EncodedTerm::SmallBlankNode(..) | EncodedTerm::NumericalBlankNode { .. } => Ok(()),
-            _ => Err(CorruptionError::from_encoded_term(encoded, &term).into()),
+            EncodedTerm::BigBlankNode { id_id } => {
+                insert_str(id_id, node.as_str());
+            }
+            EncodedTerm::SmallBlankNode(..) | EncodedTerm::NumericalBlankNode { .. } => (),
+            _ => unreachable!("Invalid named node encoding: {encoded:?}"),
         },
         TermRef::Literal(literal) => match encoded {
             EncodedTerm::BigStringLiteral { value_id }
             | EncodedTerm::BigSmallLangStringLiteral { value_id, .. } => {
-                insert_str(value_id, literal.value())
+                insert_str(value_id, literal.value());
             }
             EncodedTerm::SmallBigLangStringLiteral { language_id, .. } => {
-                if let Some(language) = literal.language() {
-                    insert_str(language_id, language)
-                } else {
-                    Err(CorruptionError::from_encoded_term(encoded, &term).into())
-                }
+                let Some(language) = literal.language() else {
+                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
+                };
+                insert_str(language_id, language);
             }
             EncodedTerm::BigBigLangStringLiteral {
                 value_id,
                 language_id,
             } => {
-                insert_str(value_id, literal.value())?;
-                if let Some(language) = literal.language() {
-                    insert_str(language_id, language)
-                } else {
-                    Err(CorruptionError::from_encoded_term(encoded, &term).into())
-                }
+                insert_str(value_id, literal.value());
+                let Some(language) = literal.language() else {
+                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
+                };
+                insert_str(language_id, language);
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlBigSmallDirLangStringLiteral { value_id, .. }
             | EncodedTerm::LtrBigSmallDirLangStringLiteral { value_id, .. } => {
-                insert_str(value_id, literal.value())
+                insert_str(value_id, literal.value());
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlSmallBigDirLangStringLiteral { language_id, .. }
             | EncodedTerm::LtrSmallBigDirLangStringLiteral { language_id, .. } => {
-                if let Some(language) = literal.language() {
-                    insert_str(language_id, language)
-                } else {
-                    Err(CorruptionError::from_encoded_term(encoded, &term).into())
-                }
+                let Some(language) = literal.language() else {
+                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
+                };
+                insert_str(language_id, language);
             }
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlBigBigDirLangStringLiteral {
@@ -802,22 +800,21 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
                 value_id,
                 language_id,
             } => {
-                insert_str(value_id, literal.value())?;
-                if let Some(language) = literal.language() {
-                    insert_str(language_id, language)
-                } else {
-                    Err(CorruptionError::from_encoded_term(encoded, &term).into())
-                }
+                insert_str(value_id, literal.value());
+                let Some(language) = literal.language() else {
+                    unreachable!("Invalid literal encoding: {encoded:?} for {term}");
+                };
+                insert_str(language_id, language);
             }
             EncodedTerm::SmallTypedLiteral { datatype_id, .. } => {
-                insert_str(datatype_id, literal.datatype().as_str())
+                insert_str(datatype_id, literal.datatype().as_str());
             }
             EncodedTerm::BigTypedLiteral {
                 value_id,
                 datatype_id,
             } => {
-                insert_str(value_id, literal.value())?;
-                insert_str(datatype_id, literal.datatype().as_str())
+                insert_str(value_id, literal.value());
+                insert_str(datatype_id, literal.datatype().as_str());
             }
             EncodedTerm::SmallStringLiteral(..)
             | EncodedTerm::SmallSmallLangStringLiteral { .. }
@@ -836,25 +833,24 @@ pub fn insert_term<F: FnMut(&StrHash, &str) -> Result<(), StorageError>>(
             | EncodedTerm::GMonthLiteral(..)
             | EncodedTerm::DurationLiteral(..)
             | EncodedTerm::YearMonthDurationLiteral(..)
-            | EncodedTerm::DayTimeDurationLiteral(..) => Ok(()),
+            | EncodedTerm::DayTimeDurationLiteral(..) => (),
             #[cfg(feature = "rdf-12")]
             EncodedTerm::RtlSmallSmallDirLangStringLiteral { .. }
-            | EncodedTerm::LtrSmallSmallDirLangStringLiteral { .. } => Ok(()),
-            _ => Err(CorruptionError::from_encoded_term(encoded, &term).into()),
+            | EncodedTerm::LtrSmallSmallDirLangStringLiteral { .. } => (),
+            _ => unreachable!("Invalid literal encoding: {encoded:?} for {term}"),
         },
         #[cfg(feature = "rdf-12")]
         TermRef::Triple(triple) => {
-            if let EncodedTerm::Triple(encoded) = encoded {
-                insert_term(triple.subject.as_ref().into(), &encoded.subject, insert_str)?;
-                insert_term(
-                    triple.predicate.as_ref().into(),
-                    &encoded.predicate,
-                    insert_str,
-                )?;
-                insert_term(triple.object.as_ref(), &encoded.object, insert_str)
-            } else {
-                Err(CorruptionError::from_encoded_term(encoded, &term).into())
-            }
+            let EncodedTerm::Triple(encoded) = encoded else {
+                unreachable!("Invalid triple term encoding: {encoded:?}");
+            };
+            insert_term(triple.subject.as_ref().into(), &encoded.subject, insert_str);
+            insert_term(
+                triple.predicate.as_ref().into(),
+                &encoded.predicate,
+                insert_str,
+            );
+            insert_term(triple.object.as_ref(), &encoded.object, insert_str);
         }
     }
 }

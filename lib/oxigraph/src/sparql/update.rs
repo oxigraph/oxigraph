@@ -69,7 +69,10 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         using_dataset: &Option<QueryDataset>,
     ) -> Result<(), EvaluationError> {
         match update {
-            GraphUpdateOperation::InsertData { data } => self.eval_insert_data(data),
+            GraphUpdateOperation::InsertData { data } => {
+                self.eval_insert_data(data);
+                Ok(())
+            }
             GraphUpdateOperation::DeleteData { data } => {
                 self.eval_delete_data(data);
                 Ok(())
@@ -102,13 +105,12 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
-    fn eval_insert_data(&mut self, data: &[Quad]) -> Result<(), EvaluationError> {
+    fn eval_insert_data(&mut self, data: &[Quad]) {
         let mut bnodes = FxHashMap::default();
         for quad in data {
             let quad = Self::convert_quad(quad, &mut bnodes);
-            self.transaction.insert(quad.as_ref())?;
+            self.transaction.insert(quad.as_ref());
         }
-        Ok(())
     }
 
     fn eval_delete_data(&mut self, data: &[GroundQuad]) {
@@ -147,7 +149,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             }
             for quad in insert {
                 if let Some(quad) = Self::fill_quad_pattern(quad, &solution, &mut bnodes) {
-                    self.transaction.insert(quad.as_ref())?;
+                    self.transaction.insert(quad.as_ref());
                 }
             }
             bnodes.clear();
@@ -193,7 +195,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 })
             });
         for q in parser {
-            self.transaction.insert(q?.as_ref())?;
+            self.transaction.insert(q?.as_ref());
         }
         Ok(())
     }
@@ -218,7 +220,8 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Err(EvaluationError::GraphAlreadyExists(graph_name.clone()))
             }
         } else {
-            Ok(self.transaction.insert_named_graph(graph_name.into())?)
+            self.transaction.insert_named_graph(graph_name.into());
+            Ok(())
         }
     }
 

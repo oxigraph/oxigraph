@@ -723,11 +723,7 @@ impl MemoryStorageInserter<'_> {
     }
 
     fn insert_term(&self, term: TermRef<'_>, encoded: &EncodedTerm) {
-        insert_term(term, encoded, &mut |key, value| {
-            self.insert_str(key, value);
-            Ok(())
-        })
-        .unwrap()
+        insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
     }
 
     fn insert_str(&self, key: &StrHash, value: &str) {

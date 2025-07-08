@@ -225,7 +225,7 @@ impl RocksDbStorage {
                     } else {
                         r.decode_named_or_blank_node(graph_name)?.into()
                     },
-                ))?;
+                ));
                 Ok(reifier.as_ref().into())
             }
 
@@ -268,7 +268,7 @@ impl RocksDbStorage {
                             &mut w,
                         )?;
                     }
-                    w.insert(snapshot.decode_quad(&new_quad)?.as_ref())?;
+                    w.insert(snapshot.decode_quad(&new_quad)?.as_ref());
                     w.remove_encoded(&quad);
                     w.commit()?;
                 }
@@ -892,7 +892,7 @@ pub struct RocksDbStorageTransaction<'a> {
 }
 
 impl RocksDbStorageTransaction<'_> {
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<(), StorageError> {
+    pub fn insert(&mut self, quad: QuadRef<'_>) {
         let encoded = quad.into();
         self.buffer.clear();
         if quad.graph_name.is_default_graph() {
@@ -910,9 +910,9 @@ impl RocksDbStorageTransaction<'_> {
             self.transaction
                 .insert_empty(&self.storage.dosp_cf, &self.buffer);
 
-            self.insert_term(quad.subject.into(), &encoded.subject)?;
-            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-            self.insert_term(quad.object, &encoded.object)
+            self.insert_term(quad.subject.into(), &encoded.subject);
+            self.insert_term(quad.predicate.into(), &encoded.predicate);
+            self.insert_term(quad.object, &encoded.object);
         } else {
             write_spog_quad(&mut self.buffer, &encoded);
             self.transaction
@@ -943,54 +943,42 @@ impl RocksDbStorageTransaction<'_> {
             self.transaction
                 .insert_empty(&self.storage.gosp_cf, &self.buffer);
 
-            self.insert_term(quad.subject.into(), &encoded.subject)?;
-            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-            self.insert_term(quad.object, &encoded.object)?;
+            self.insert_term(quad.subject.into(), &encoded.subject);
+            self.insert_term(quad.predicate.into(), &encoded.predicate);
+            self.insert_term(quad.object, &encoded.object);
 
             self.buffer.clear();
             write_term(&mut self.buffer, &encoded.graph_name);
             self.transaction
                 .insert_empty(&self.storage.graphs_cf, &self.buffer);
-            self.insert_graph_name(quad.graph_name, &encoded.graph_name)
+            self.insert_graph_name(quad.graph_name, &encoded.graph_name);
         }
     }
 
-    pub fn insert_named_graph(
-        &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<(), StorageError> {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
         let encoded_graph_name = graph_name.into();
 
         self.buffer.clear();
         write_term(&mut self.buffer, &encoded_graph_name);
         self.transaction
             .insert_empty(&self.storage.graphs_cf, &self.buffer);
-        self.insert_term(graph_name.into(), &encoded_graph_name)
+        self.insert_term(graph_name.into(), &encoded_graph_name);
     }
 
-    fn insert_term(
-        &mut self,
-        term: TermRef<'_>,
-        encoded: &EncodedTerm,
-    ) -> Result<(), StorageError> {
+    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
         insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
     }
 
-    fn insert_graph_name(
-        &mut self,
-        graph_name: GraphNameRef<'_>,
-        encoded: &EncodedTerm,
-    ) -> Result<(), StorageError> {
+    fn insert_graph_name(&mut self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) {
         match graph_name {
             GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
             GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::DefaultGraph => Ok(()),
+            GraphNameRef::DefaultGraph => (),
         }
     }
 
-    fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
-        // TODO: add to batch?
-        self.storage.db.insert(
+    fn insert_str(&mut self, key: &StrHash, value: &str) {
+        self.transaction.insert(
             &self.storage.id2str_cf,
             &key.to_be_bytes(),
             value.as_bytes(),
@@ -1059,7 +1047,7 @@ impl RocksDbStorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<(), StorageError> {
+    pub fn insert(&mut self, quad: QuadRef<'_>) {
         let encoded = quad.into();
         self.buffer.clear();
         if quad.graph_name.is_default_graph() {
@@ -1077,8 +1065,8 @@ impl RocksDbStorageReadableTransaction<'_> {
             self.transaction
                 .insert_empty(&self.storage.dosp_cf, &self.buffer);
 
-            self.insert_term(quad.subject.into(), &encoded.subject)?;
-            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
+            self.insert_term(quad.subject.into(), &encoded.subject);
+            self.insert_term(quad.predicate.into(), &encoded.predicate);
             self.insert_term(quad.object, &encoded.object)
         } else {
             write_spog_quad(&mut self.buffer, &encoded);
@@ -1110,9 +1098,9 @@ impl RocksDbStorageReadableTransaction<'_> {
             self.transaction
                 .insert_empty(&self.storage.gosp_cf, &self.buffer);
 
-            self.insert_term(quad.subject.into(), &encoded.subject)?;
-            self.insert_term(quad.predicate.into(), &encoded.predicate)?;
-            self.insert_term(quad.object, &encoded.object)?;
+            self.insert_term(quad.subject.into(), &encoded.subject);
+            self.insert_term(quad.predicate.into(), &encoded.predicate);
+            self.insert_term(quad.object, &encoded.object);
 
             self.buffer.clear();
             write_term(&mut self.buffer, &encoded.graph_name);
@@ -1122,10 +1110,7 @@ impl RocksDbStorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert_named_graph(
-        &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<(), StorageError> {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
         let encoded_graph_name = graph_name.into();
 
         self.buffer.clear();
@@ -1135,32 +1120,24 @@ impl RocksDbStorageReadableTransaction<'_> {
         self.insert_term(graph_name.into(), &encoded_graph_name)
     }
 
-    fn insert_term(
-        &mut self,
-        term: TermRef<'_>,
-        encoded: &EncodedTerm,
-    ) -> Result<(), StorageError> {
+    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
         insert_term(term, encoded, &mut |key, value| self.insert_str(key, value))
     }
 
-    fn insert_graph_name(
-        &mut self,
-        graph_name: GraphNameRef<'_>,
-        encoded: &EncodedTerm,
-    ) -> Result<(), StorageError> {
+    fn insert_graph_name(&mut self, graph_name: GraphNameRef<'_>, encoded: &EncodedTerm) {
         match graph_name {
             GraphNameRef::NamedNode(graph_name) => self.insert_term(graph_name.into(), encoded),
             GraphNameRef::BlankNode(graph_name) => self.insert_term(graph_name.into(), encoded),
-            GraphNameRef::DefaultGraph => Ok(()),
+            GraphNameRef::DefaultGraph => (),
         }
     }
 
-    fn insert_str(&mut self, key: &StrHash, value: &str) -> Result<(), StorageError> {
-        self.storage.db.insert(
+    fn insert_str(&mut self, key: &StrHash, value: &str) {
+        self.transaction.insert(
             &self.storage.id2str_cf,
             &key.to_be_bytes(),
             value.as_bytes(),
-        )
+        );
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) {
@@ -1455,14 +1432,14 @@ impl<'a> FileBulkLoader<'a> {
             let encoded = EncodedQuad::from(quad.as_ref());
             if quad.graph_name.is_default_graph() {
                 if self.triples.insert(encoded.clone()) {
-                    self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
-                    self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
-                    self.insert_term(quad.object.as_ref(), &encoded.object)?;
+                    self.insert_term(quad.subject.as_ref().into(), &encoded.subject);
+                    self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate);
+                    self.insert_term(quad.object.as_ref(), &encoded.object);
                 }
             } else if self.quads.insert(encoded.clone()) {
-                self.insert_term(quad.subject.as_ref().into(), &encoded.subject)?;
-                self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate)?;
-                self.insert_term(quad.object.as_ref(), &encoded.object)?;
+                self.insert_term(quad.subject.as_ref().into(), &encoded.subject);
+                self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate);
+                self.insert_term(quad.object.as_ref(), &encoded.object);
 
                 if self.graphs.insert(encoded.graph_name.clone()) {
                     self.insert_term(
@@ -1477,7 +1454,7 @@ impl<'a> FileBulkLoader<'a> {
                             }
                         },
                         &encoded.graph_name,
-                    )?;
+                    );
                 }
             }
         }
@@ -1608,14 +1585,9 @@ impl<'a> FileBulkLoader<'a> {
         self.storage.db.insert_stt_files(&to_load)
     }
 
-    fn insert_term(
-        &mut self,
-        term: TermRef<'_>,
-        encoded: &EncodedTerm,
-    ) -> Result<(), StorageError> {
+    fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {
         insert_term(term, encoded, &mut |key, value| {
             self.id2str.entry(*key).or_insert_with(|| value.into());
-            Ok(())
         })
     }
 
