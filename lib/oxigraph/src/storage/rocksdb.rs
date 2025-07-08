@@ -874,6 +874,7 @@ impl Iterator for RocksDbDecodingGraphIterator {
 }
 
 impl StrLookup for RocksDbStorageReader {
+    #[inline(never)]
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(self
             .storage
