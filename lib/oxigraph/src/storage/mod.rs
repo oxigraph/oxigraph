@@ -319,21 +319,17 @@ enum StorageTransactionKind<'a> {
     expect(clippy::unnecessary_wraps)
 )]
 impl StorageTransaction<'_> {
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<(), StorageError> {
+    pub fn insert(&mut self, quad: QuadRef<'_>) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => transaction.insert(quad),
             StorageTransactionKind::Memory(transaction) => {
                 transaction.insert(quad);
-                Ok(())
             }
         }
     }
 
-    pub fn insert_named_graph(
-        &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<(), StorageError> {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => {
@@ -341,7 +337,6 @@ impl StorageTransaction<'_> {
             }
             StorageTransactionKind::Memory(transaction) => {
                 transaction.insert_named_graph(graph_name);
-                Ok(())
             }
         }
     }
@@ -393,21 +388,17 @@ impl StorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) -> Result<(), StorageError> {
+    pub fn insert(&mut self, quad: QuadRef<'_>) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => transaction.insert(quad),
             StorageReadableTransactionKind::Memory(transaction) => {
                 transaction.insert(quad);
-                Ok(())
             }
         }
     }
 
-    pub fn insert_named_graph(
-        &mut self,
-        graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<(), StorageError> {
+    pub fn insert_named_graph(&mut self, graph_name: NamedOrBlankNodeRef<'_>) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => {
@@ -415,7 +406,6 @@ impl StorageReadableTransaction<'_> {
             }
             StorageReadableTransactionKind::Memory(transaction) => {
                 transaction.insert_named_graph(graph_name);
-                Ok(())
             }
         }
     }

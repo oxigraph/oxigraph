@@ -203,9 +203,8 @@ impl QueryableDataset for DatasetView {
     fn internalize_term(&self, term: Term) -> Result<EncodedTerm, StorageError> {
         let encoded = term.as_ref().into();
         insert_term(term.as_ref(), &encoded, &mut |key, value| {
-            self.insert_str(key, value);
-            Ok(())
-        })?;
+            self.insert_str(key, value)
+        });
         Ok(encoded)
     }
 
