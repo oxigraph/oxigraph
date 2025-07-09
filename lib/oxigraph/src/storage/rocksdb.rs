@@ -691,7 +691,7 @@ impl RocksDbStorageReader {
             .contains_key(&self.storage.id2str_cf, &key.to_be_bytes())
     }
 
-    /// Validates that all the storage invariants held in the data
+    /// Validate that all the storage invariants held in the data
     pub fn validate(&self) -> Result<(), StorageError> {
         // triples
         let dspo_size = self.dspo_quads(&[]).count();
@@ -1028,6 +1028,30 @@ impl RocksDbStorageTransaction<'_> {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.transaction
+            .remove_range(&self.storage.dspo_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.dpos_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.dosp_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.gspo_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.gpos_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.gosp_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.spog_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.posg_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.ospg_cf, &[], &[u8::MAX]);
+        self.transaction
+            .remove_range(&self.storage.graphs_cf, &[], &[u8::MAX]);
+        // TODO: clear id2str?
+    }
+
     pub fn commit(self) -> Result<(), StorageError> {
         self.transaction.commit()
     }
@@ -1184,22 +1208,8 @@ impl RocksDbStorageReadableTransaction<'_> {
     }
 
     pub fn clear_graph(&mut self, graph_name: GraphNameRef<'_>) -> Result<(), StorageError> {
-        if graph_name.is_default_graph() {
-            for quad in self.reader().quads_for_graph(&EncodedTerm::DefaultGraph) {
-                self.remove_encoded(&quad?);
-            }
-        } else {
-            self.buffer.clear();
-            write_term(&mut self.buffer, &graph_name.into());
-            if self
-                .transaction
-                .contains_key(&self.storage.graphs_cf, &self.buffer)?
-            {
-                // The condition is useful to lock the graph itself and ensure no quad is inserted at the same time
-                for quad in self.reader().quads_for_graph(&graph_name.into()) {
-                    self.remove_encoded(&quad?);
-                }
-            }
+        for quad in self.reader().quads_for_graph(&graph_name.into()) {
+            self.remove_encoded(&quad?);
         }
         Ok(())
     }
@@ -1226,21 +1236,13 @@ impl RocksDbStorageReadableTransaction<'_> {
     }
 
     fn remove_encoded_named_graph(&mut self, graph_name: &EncodedTerm) -> Result<(), StorageError> {
+        for quad in self.reader().quads_for_graph(graph_name) {
+            self.remove_encoded(&quad?);
+        }
         self.buffer.clear();
         write_term(&mut self.buffer, graph_name);
-        if self
-            .transaction
-            .contains_key(&self.storage.graphs_cf, &self.buffer)?
-        {
-            // The condition is done ASAP to lock the graph itself
-            for quad in self.reader().quads_for_graph(graph_name) {
-                self.remove_encoded(&quad?);
-            }
-            self.buffer.clear();
-            write_term(&mut self.buffer, graph_name);
-            self.transaction
-                .remove(&self.storage.graphs_cf, &self.buffer);
-        }
+        self.transaction
+            .remove(&self.storage.graphs_cf, &self.buffer);
         Ok(())
     }
 

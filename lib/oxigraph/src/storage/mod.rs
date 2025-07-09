@@ -240,7 +240,7 @@ impl StorageReader {
         }
     }
 
-    /// Validates that all the storage invariants held in the data
+    /// Validate that all the storage invariants held in the data
     pub fn validate(&self) -> Result<(), StorageError> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -346,6 +346,14 @@ impl StorageTransaction<'_> {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => transaction.remove(quad),
             StorageTransactionKind::Memory(transaction) => transaction.remove(quad),
+        }
+    }
+
+    pub fn clear(&mut self) {
+        match &mut self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear(),
+            StorageTransactionKind::Memory(transaction) => transaction.clear(),
         }
     }
 

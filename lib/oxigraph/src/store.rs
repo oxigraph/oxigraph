@@ -824,8 +824,8 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn clear(&self) -> Result<(), StorageError> {
-        let mut transaction = self.storage.start_readable_transaction()?;
-        transaction.clear()?;
+        let mut transaction = self.storage.start_transaction()?;
+        transaction.clear();
         transaction.commit()
     }
 
