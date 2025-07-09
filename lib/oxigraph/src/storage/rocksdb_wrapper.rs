@@ -903,6 +903,19 @@ impl Transaction {
         }
     }
 
+    pub fn remove_range(&mut self, column_family: &ColumnFamily, start_key: &[u8], end_key: &[u8]) {
+        unsafe {
+            rocksdb_writebatch_delete_range_cf(
+                self.batch,
+                column_family.0,
+                start_key.as_ptr().cast(),
+                start_key.len(),
+                end_key.as_ptr().cast(),
+                end_key.len(),
+            )
+        }
+    }
+
     pub fn commit(self) -> Result<(), StorageError> {
         unsafe {
             ffi_result!(rocksdb_write(self.db.db, self.db.write_options, self.batch))?;
@@ -939,36 +952,6 @@ impl ReadableTransaction {
             })),
             options: unsafe { oxrocksdb_readoptions_create_copy(self.read_options) },
         }
-    }
-
-    pub fn get(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-    ) -> Result<Option<PinnableSlice>, StorageError> {
-        unsafe {
-            let slice = ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
-                *self.batch,
-                self.db.db,
-                self.read_options,
-                column_family.0,
-                key.as_ptr().cast(),
-                key.len()
-            ))?;
-            Ok(if slice.is_null() {
-                None
-            } else {
-                Some(PinnableSlice(slice))
-            })
-        }
-    }
-
-    pub fn contains_key(
-        &self,
-        column_family: &ColumnFamily,
-        key: &[u8],
-    ) -> Result<bool, StorageError> {
-        Ok(self.get(column_family, key)?.is_some()) // TODO: optimize
     }
 
     pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) {

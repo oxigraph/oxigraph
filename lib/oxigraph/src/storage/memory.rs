@@ -221,7 +221,7 @@ impl MemoryStorageReader {
         self.storage.id2str.contains_key(key)
     }
 
-    /// Validates that all the storage invariants held in the data
+    /// Validate that all the storage invariants held in the data
     #[expect(clippy::unwrap_in_result)]
     pub fn validate(&self) -> Result<(), StorageError> {
         // All used named graphs are in graph set

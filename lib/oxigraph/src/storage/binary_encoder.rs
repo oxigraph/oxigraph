@@ -18,7 +18,8 @@ pub const WRITTEN_TERM_MAX_SIZE: usize = size_of::<u8>() + 2 * size_of::<StrHash
 // 48-55: triples
 // 56-64: literal again
 // 64-127: default named node prefixes
-// 128-255: custom named node prefixes
+// 128-254: custom named node prefixes
+// 255: reserved for easy "all" ranges
 const TYPE_NAMED_NODE_ID: u8 = 1;
 const TYPE_NUMERICAL_BLANK_NODE_ID: u8 = 8;
 const TYPE_SMALL_BLANK_NODE_ID: u8 = 9;
