@@ -10,7 +10,7 @@ cargo build --release --manifest-path="../../cli/Cargo.toml"
 VERSION=$(./../../target/release/oxigraph --version | sed 's/oxigraph //g')
 ./../../target/release/oxigraph serve --location oxigraph_data --bind 127.0.0.1:7878 &
 sleep 1
-curl -X POST -T "explore-${DATASET_SIZE}.nt" -H "content-type: application/n-triples" "http://127.0.0.1:7878/store?no_transaction"
+curl -X POST -T "explore-${DATASET_SIZE}.nt" -H "content-type: application/n-quads" "http://127.0.0.1:7878/store?no_transaction"
 ./testdriver -mt ${PARALLELISM} -ucf usecases/explore/sparql.txt -o "../bsbm.explore.oxigraph.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://127.0.0.1:7878/query
 ./testdriver -mt ${PARALLELISM} -ucf usecases/exploreAndUpdate/sparql.txt -o "../bsbm.exploreAndUpdate.oxigraph.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" http://127.0.0.1:7878/query -u http://127.0.0.1:7878/update -udataset "explore-update-${DATASET_SIZE}.nt"
 #./testdriver -mt ${PARALLELISM} -ucf usecases/businessIntelligence/sparql.txt -o "../bsbm.businessIntelligence.${VERSION}.${DATASET_SIZE}.${PARALLELISM}.xml" "http://127.0.0.1:7878/query"
