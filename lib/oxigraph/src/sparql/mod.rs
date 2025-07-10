@@ -21,7 +21,9 @@ use crate::sparql::http::HttpServiceHandler;
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 pub use crate::sparql::service::{DefaultServiceHandler, ServiceHandler};
 use crate::sparql::service::{WrappedDefaultServiceHandler, WrappedServiceHandler};
-pub(crate) use crate::sparql::update::evaluate_update;
+pub(crate) use crate::sparql::update::{
+    evaluate_update_on_storage, evaluate_update_on_transaction,
+};
 use crate::storage::StorageReader;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;

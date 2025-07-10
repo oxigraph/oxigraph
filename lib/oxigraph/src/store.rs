@@ -29,7 +29,7 @@ use crate::io::{RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
 use crate::sparql::{
     EvaluationError, Query, QueryExplanation, QueryOptions, QueryResults, Update, UpdateOptions,
-    evaluate_query, evaluate_update,
+    evaluate_query, evaluate_update_on_storage, evaluate_update_on_transaction,
 };
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
@@ -490,10 +490,11 @@ impl Store {
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
         options: impl Into<UpdateOptions>,
     ) -> Result<(), EvaluationError> {
-        let mut transaction = self.start_transaction()?;
-        transaction.update_opt(update, options)?;
-        transaction.commit()?;
-        Ok(())
+        evaluate_update_on_storage(
+            &self.storage,
+            &update.try_into().map_err(Into::into)?,
+            &options.into(),
+        )
     }
 
     /// Loads an RDF file under into the store.
@@ -1102,7 +1103,7 @@ impl Transaction<'_> {
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
         options: impl Into<UpdateOptions>,
     ) -> Result<(), EvaluationError> {
-        evaluate_update(
+        evaluate_update_on_transaction(
             &mut self.inner,
             &update.try_into().map_err(Into::into)?,
             &options.into(),

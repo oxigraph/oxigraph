@@ -6,7 +6,7 @@ use crate::sparql::dataset::DatasetView;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
 use crate::sparql::{EvaluationError, Update, UpdateOptions};
-use crate::storage::StorageReadableTransaction;
+use crate::storage::{Storage, StorageReadableTransaction, StorageTransaction};
 use oxiri::Iri;
 #[cfg(feature = "http-client")]
 use oxrdfio::LoadedDocument;
@@ -25,7 +25,7 @@ use spargebra::{GraphUpdateOperation, Query};
 #[cfg(feature = "http-client")]
 use std::io::Read;
 
-pub fn evaluate_update<'a, 'b: 'a>(
+pub fn evaluate_update_on_transaction<'a, 'b: 'a>(
     transaction: &'a mut StorageReadableTransaction<'b>,
     update: &Update,
     options: &UpdateOptions,
@@ -41,6 +41,23 @@ pub fn evaluate_update<'a, 'b: 'a>(
         ),
     }
     .eval_all(&update.inner.operations, &update.using_datasets)
+}
+
+pub fn evaluate_update_on_storage(
+    storage: &Storage,
+    update: &Update,
+    options: &UpdateOptions,
+) -> Result<(), EvaluationError> {
+    if update_requires_read(update) {
+        let mut transaction = storage.start_readable_transaction()?;
+        evaluate_update_on_transaction(&mut transaction, update, options)?;
+        transaction.commit()?;
+    } else {
+        let mut transaction = storage.start_transaction()?;
+        evaluate_update_without_read(&mut transaction, update);
+        transaction.commit()?;
+    }
+    Ok(())
 }
 
 struct SimpleUpdateEvaluator<'a, 'b> {
@@ -108,14 +125,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     fn eval_insert_data(&mut self, data: &[Quad]) {
         let mut bnodes = FxHashMap::default();
         for quad in data {
-            let quad = Self::convert_quad(quad, &mut bnodes);
+            let quad = convert_quad(quad, &mut bnodes);
             self.transaction.insert(quad.as_ref());
         }
     }
 
     fn eval_delete_data(&mut self, data: &[GroundQuad]) {
         for quad in data {
-            let quad = Self::convert_ground_quad(quad);
+            let quad = convert_ground_quad(quad);
             self.transaction.remove(quad.as_ref());
         }
     }
@@ -143,12 +160,12 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         for solution in solutions {
             let solution = solution?;
             for quad in delete {
-                if let Some(quad) = Self::fill_ground_quad_pattern(quad, &solution) {
+                if let Some(quad) = fill_ground_quad_pattern(quad, &solution) {
                     self.transaction.remove(quad.as_ref());
                 }
             }
             for quad in insert {
-                if let Some(quad) = Self::fill_quad_pattern(quad, &solution, &mut bnodes) {
+                if let Some(quad) = fill_quad_pattern(quad, &solution, &mut bnodes) {
                     self.transaction.insert(quad.as_ref());
                 }
             }
@@ -272,220 +289,248 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             GraphTarget::AllGraphs => Ok(self.transaction.clear()?),
         }
     }
+}
 
-    fn convert_quad(quad: &Quad, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> OxQuad {
-        OxQuad {
-            subject: match &quad.subject {
-                NamedOrBlankNode::NamedNode(subject) => subject.clone().into(),
-                NamedOrBlankNode::BlankNode(subject) => {
-                    Self::convert_blank_node(subject, bnodes).into()
+fn update_requires_read(update: &Update) -> bool {
+    for op in &update.inner.operations {
+        match op {
+            GraphUpdateOperation::InsertData { .. }
+            | GraphUpdateOperation::DeleteData { .. }
+            | GraphUpdateOperation::Create { silent: true, .. }
+            | GraphUpdateOperation::Drop {
+                graph: GraphTarget::AllGraphs,
+                ..
+            } => (),
+            _ => return true,
+        }
+    }
+    false
+}
+fn evaluate_update_without_read(transaction: &mut StorageTransaction<'_>, update: &Update) {
+    // Must be sync with update_require_read
+    for op in &update.inner.operations {
+        match op {
+            GraphUpdateOperation::InsertData { data } => {
+                let mut bnodes = FxHashMap::default();
+                for quad in data {
+                    let quad = convert_quad(quad, &mut bnodes);
+                    transaction.insert(quad.as_ref())
                 }
-            },
-            predicate: quad.predicate.clone(),
-            object: match &quad.object {
-                Term::NamedNode(object) => object.clone().into(),
-                Term::BlankNode(object) => Self::convert_blank_node(object, bnodes).into(),
-                Term::Literal(object) => object.clone().into(),
-                #[cfg(feature = "rdf-12")]
-                Term::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
-            },
-            graph_name: match &quad.graph_name {
-                GraphName::NamedNode(graph_name) => graph_name.clone().into(),
-                GraphName::DefaultGraph => OxGraphName::DefaultGraph,
-            },
-        }
-    }
-
-    #[cfg(feature = "rdf-12")]
-    fn convert_triple(triple: &Triple, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> Triple {
-        Triple {
-            subject: match &triple.subject {
-                NamedOrBlankNode::NamedNode(subject) => subject.clone().into(),
-                NamedOrBlankNode::BlankNode(subject) => {
-                    Self::convert_blank_node(subject, bnodes).into()
+            }
+            GraphUpdateOperation::DeleteData { data } => {
+                for quad in data {
+                    let quad = convert_ground_quad(quad);
+                    transaction.remove(quad.as_ref())
                 }
-            },
-            predicate: triple.predicate.clone(),
-            object: match &triple.object {
-                Term::NamedNode(object) => object.clone().into(),
-                Term::BlankNode(object) => Self::convert_blank_node(object, bnodes).into(),
-                Term::Literal(object) => object.clone().into(),
-                #[cfg(feature = "rdf-12")]
-                Term::Triple(subject) => Self::convert_triple(subject, bnodes).into(),
-            },
+            }
+            GraphUpdateOperation::Create {
+                graph,
+                silent: true,
+            } => transaction.insert_named_graph(graph.into()),
+            GraphUpdateOperation::Drop {
+                graph: GraphTarget::AllGraphs,
+                ..
+            } => transaction.clear(),
+            _ => unreachable!("Must be gated by update_require_read"),
         }
     }
+}
 
-    fn convert_blank_node(
-        node: &BlankNode,
-        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-    ) -> BlankNode {
-        bnodes.entry(node.clone()).or_default().clone()
-    }
-
-    fn convert_ground_quad(quad: &GroundQuad) -> OxQuad {
-        OxQuad {
-            subject: quad.subject.clone().into(),
-            predicate: quad.predicate.clone(),
-            object: match &quad.object {
-                GroundTerm::NamedNode(object) => object.clone().into(),
-                GroundTerm::Literal(object) => object.clone().into(),
-                #[cfg(feature = "rdf-12")]
-                GroundTerm::Triple(subject) => Self::convert_ground_triple(subject).into(),
-            },
-            graph_name: match &quad.graph_name {
-                GraphName::NamedNode(graph_name) => graph_name.clone().into(),
-                GraphName::DefaultGraph => OxGraphName::DefaultGraph,
-            },
-        }
-    }
-
-    #[cfg(feature = "rdf-12")]
-    fn convert_ground_triple(triple: &GroundTriple) -> Triple {
-        Triple {
-            subject: triple.subject.clone().into(),
-            predicate: triple.predicate.clone(),
-            object: match &triple.object {
-                GroundTerm::NamedNode(object) => object.clone().into(),
-                GroundTerm::Literal(object) => object.clone().into(),
-                #[cfg(feature = "rdf-12")]
-                GroundTerm::Triple(subject) => Self::convert_ground_triple(subject).into(),
-            },
-        }
-    }
-
-    fn fill_quad_pattern(
-        quad: &QuadPattern,
-        solution: &QuerySolution,
-        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-    ) -> Option<OxQuad> {
-        Some(OxQuad {
-            subject: match Self::fill_term_or_var(&quad.subject, solution, bnodes)? {
-                Term::NamedNode(node) => node.into(),
-                Term::BlankNode(node) => node.into(),
-                #[cfg(feature = "rdf-12")]
-                Term::Triple(_) => return None,
-                Term::Literal(_) => return None,
-            },
-            predicate: Self::fill_named_node_or_var(&quad.predicate, solution)?,
-            object: Self::fill_term_or_var(&quad.object, solution, bnodes)?,
-            graph_name: Self::fill_graph_name_or_var(&quad.graph_name, solution)?,
-        })
-    }
-
-    fn fill_term_or_var(
-        term: &TermPattern,
-        solution: &QuerySolution,
-        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-    ) -> Option<Term> {
-        Some(match term {
-            TermPattern::NamedNode(term) => term.clone().into(),
-            TermPattern::BlankNode(bnode) => Self::convert_blank_node(bnode, bnodes).into(),
-            TermPattern::Literal(term) => term.clone().into(),
+fn convert_quad(quad: &Quad, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> OxQuad {
+    OxQuad {
+        subject: match &quad.subject {
+            NamedOrBlankNode::NamedNode(subject) => subject.clone().into(),
+            NamedOrBlankNode::BlankNode(subject) => convert_blank_node(subject, bnodes).into(),
+        },
+        predicate: quad.predicate.clone(),
+        object: match &quad.object {
+            Term::NamedNode(object) => object.clone().into(),
+            Term::BlankNode(object) => convert_blank_node(object, bnodes).into(),
+            Term::Literal(object) => object.clone().into(),
             #[cfg(feature = "rdf-12")]
-            TermPattern::Triple(triple) => {
-                Self::fill_triple_pattern(triple, solution, bnodes)?.into()
-            }
-            TermPattern::Variable(v) => solution.get(v)?.clone(),
-        })
+            Term::Triple(subject) => convert_triple(subject, bnodes).into(),
+        },
+        graph_name: match &quad.graph_name {
+            GraphName::NamedNode(graph_name) => graph_name.clone().into(),
+            GraphName::DefaultGraph => OxGraphName::DefaultGraph,
+        },
     }
+}
 
-    fn fill_named_node_or_var(
-        term: &NamedNodePattern,
-        solution: &QuerySolution,
-    ) -> Option<NamedNode> {
-        Some(match term {
-            NamedNodePattern::NamedNode(term) => term.clone(),
-            NamedNodePattern::Variable(v) => {
-                if let Term::NamedNode(s) = solution.get(v)? {
-                    s.clone()
-                } else {
-                    return None;
-                }
-            }
-        })
-    }
-
-    fn fill_graph_name_or_var(
-        term: &GraphNamePattern,
-        solution: &QuerySolution,
-    ) -> Option<OxGraphName> {
-        Some(match term {
-            GraphNamePattern::NamedNode(term) => term.clone().into(),
-            GraphNamePattern::DefaultGraph => OxGraphName::DefaultGraph,
-            GraphNamePattern::Variable(v) => match solution.get(v)? {
-                Term::NamedNode(node) => node.clone().into(),
-                Term::BlankNode(node) => node.clone().into(),
-                Term::Literal(_) => return None,
-                #[cfg(feature = "rdf-12")]
-                Term::Triple(_) => return None,
-            },
-        })
-    }
-
-    #[cfg(feature = "rdf-12")]
-    fn fill_triple_pattern(
-        triple: &TriplePattern,
-        solution: &QuerySolution,
-        bnodes: &mut FxHashMap<BlankNode, BlankNode>,
-    ) -> Option<Triple> {
-        Some(Triple {
-            subject: match Self::fill_term_or_var(&triple.subject, solution, bnodes)? {
-                Term::NamedNode(node) => node.into(),
-                Term::BlankNode(node) => node.into(),
-                #[cfg(feature = "rdf-12")]
-                Term::Triple(_) => return None,
-                Term::Literal(_) => return None,
-            },
-            predicate: Self::fill_named_node_or_var(&triple.predicate, solution)?,
-            object: Self::fill_term_or_var(&triple.object, solution, bnodes)?,
-        })
-    }
-    fn fill_ground_quad_pattern(
-        quad: &GroundQuadPattern,
-        solution: &QuerySolution,
-    ) -> Option<OxQuad> {
-        Some(OxQuad {
-            subject: match Self::fill_ground_term_or_var(&quad.subject, solution)? {
-                Term::NamedNode(node) => node.into(),
-                Term::BlankNode(node) => node.into(),
-                #[cfg(feature = "rdf-12")]
-                Term::Triple(_) => return None,
-                Term::Literal(_) => return None,
-            },
-            predicate: Self::fill_named_node_or_var(&quad.predicate, solution)?,
-            object: Self::fill_ground_term_or_var(&quad.object, solution)?,
-            graph_name: Self::fill_graph_name_or_var(&quad.graph_name, solution)?,
-        })
-    }
-
-    fn fill_ground_term_or_var(term: &GroundTermPattern, solution: &QuerySolution) -> Option<Term> {
-        Some(match term {
-            GroundTermPattern::NamedNode(term) => term.clone().into(),
-            GroundTermPattern::Literal(term) => term.clone().into(),
+#[cfg(feature = "rdf-12")]
+fn convert_triple(triple: &Triple, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> Triple {
+    Triple {
+        subject: match &triple.subject {
+            NamedOrBlankNode::NamedNode(subject) => subject.clone().into(),
+            NamedOrBlankNode::BlankNode(subject) => convert_blank_node(subject, bnodes).into(),
+        },
+        predicate: triple.predicate.clone(),
+        object: match &triple.object {
+            Term::NamedNode(object) => object.clone().into(),
+            Term::BlankNode(object) => convert_blank_node(object, bnodes).into(),
+            Term::Literal(object) => object.clone().into(),
             #[cfg(feature = "rdf-12")]
-            GroundTermPattern::Triple(triple) => {
-                Self::fill_ground_triple_pattern(triple, solution)?.into()
-            }
-            GroundTermPattern::Variable(v) => solution.get(v)?.clone(),
-        })
+            Term::Triple(subject) => convert_triple(subject, bnodes).into(),
+        },
     }
+}
 
-    #[cfg(feature = "rdf-12")]
-    fn fill_ground_triple_pattern(
-        triple: &GroundTriplePattern,
-        solution: &QuerySolution,
-    ) -> Option<Triple> {
-        Some(Triple {
-            subject: match Self::fill_ground_term_or_var(&triple.subject, solution)? {
-                Term::NamedNode(node) => node.into(),
-                Term::BlankNode(node) => node.into(),
-                #[cfg(feature = "rdf-12")]
-                Term::Triple(_) => return None,
-                Term::Literal(_) => return None,
-            },
-            predicate: Self::fill_named_node_or_var(&triple.predicate, solution)?,
-            object: Self::fill_ground_term_or_var(&triple.object, solution)?,
-        })
+fn convert_blank_node(node: &BlankNode, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> BlankNode {
+    bnodes.entry(node.clone()).or_default().clone()
+}
+
+fn convert_ground_quad(quad: &GroundQuad) -> OxQuad {
+    OxQuad {
+        subject: quad.subject.clone().into(),
+        predicate: quad.predicate.clone(),
+        object: match &quad.object {
+            GroundTerm::NamedNode(object) => object.clone().into(),
+            GroundTerm::Literal(object) => object.clone().into(),
+            #[cfg(feature = "rdf-12")]
+            GroundTerm::Triple(subject) => convert_ground_triple(subject).into(),
+        },
+        graph_name: match &quad.graph_name {
+            GraphName::NamedNode(graph_name) => graph_name.clone().into(),
+            GraphName::DefaultGraph => OxGraphName::DefaultGraph,
+        },
     }
+}
+
+#[cfg(feature = "rdf-12")]
+fn convert_ground_triple(triple: &GroundTriple) -> Triple {
+    Triple {
+        subject: triple.subject.clone().into(),
+        predicate: triple.predicate.clone(),
+        object: match &triple.object {
+            GroundTerm::NamedNode(object) => object.clone().into(),
+            GroundTerm::Literal(object) => object.clone().into(),
+            #[cfg(feature = "rdf-12")]
+            GroundTerm::Triple(subject) => convert_ground_triple(subject).into(),
+        },
+    }
+}
+
+fn fill_quad_pattern(
+    quad: &QuadPattern,
+    solution: &QuerySolution,
+    bnodes: &mut FxHashMap<BlankNode, BlankNode>,
+) -> Option<OxQuad> {
+    Some(OxQuad {
+        subject: match fill_term_or_var(&quad.subject, solution, bnodes)? {
+            Term::NamedNode(node) => node.into(),
+            Term::BlankNode(node) => node.into(),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => return None,
+            Term::Literal(_) => return None,
+        },
+        predicate: fill_named_node_or_var(&quad.predicate, solution)?,
+        object: fill_term_or_var(&quad.object, solution, bnodes)?,
+        graph_name: fill_graph_name_or_var(&quad.graph_name, solution)?,
+    })
+}
+
+fn fill_term_or_var(
+    term: &TermPattern,
+    solution: &QuerySolution,
+    bnodes: &mut FxHashMap<BlankNode, BlankNode>,
+) -> Option<Term> {
+    Some(match term {
+        TermPattern::NamedNode(term) => term.clone().into(),
+        TermPattern::BlankNode(bnode) => convert_blank_node(bnode, bnodes).into(),
+        TermPattern::Literal(term) => term.clone().into(),
+        #[cfg(feature = "rdf-12")]
+        TermPattern::Triple(triple) => fill_triple_pattern(triple, solution, bnodes)?.into(),
+        TermPattern::Variable(v) => solution.get(v)?.clone(),
+    })
+}
+
+fn fill_named_node_or_var(term: &NamedNodePattern, solution: &QuerySolution) -> Option<NamedNode> {
+    Some(match term {
+        NamedNodePattern::NamedNode(term) => term.clone(),
+        NamedNodePattern::Variable(v) => {
+            if let Term::NamedNode(s) = solution.get(v)? {
+                s.clone()
+            } else {
+                return None;
+            }
+        }
+    })
+}
+
+fn fill_graph_name_or_var(
+    term: &GraphNamePattern,
+    solution: &QuerySolution,
+) -> Option<OxGraphName> {
+    Some(match term {
+        GraphNamePattern::NamedNode(term) => term.clone().into(),
+        GraphNamePattern::DefaultGraph => OxGraphName::DefaultGraph,
+        GraphNamePattern::Variable(v) => match solution.get(v)? {
+            Term::NamedNode(node) => node.clone().into(),
+            Term::BlankNode(node) => node.clone().into(),
+            Term::Literal(_) => return None,
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => return None,
+        },
+    })
+}
+
+#[cfg(feature = "rdf-12")]
+fn fill_triple_pattern(
+    triple: &TriplePattern,
+    solution: &QuerySolution,
+    bnodes: &mut FxHashMap<BlankNode, BlankNode>,
+) -> Option<Triple> {
+    Some(Triple {
+        subject: match fill_term_or_var(&triple.subject, solution, bnodes)? {
+            Term::NamedNode(node) => node.into(),
+            Term::BlankNode(node) => node.into(),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => return None,
+            Term::Literal(_) => return None,
+        },
+        predicate: fill_named_node_or_var(&triple.predicate, solution)?,
+        object: fill_term_or_var(&triple.object, solution, bnodes)?,
+    })
+}
+fn fill_ground_quad_pattern(quad: &GroundQuadPattern, solution: &QuerySolution) -> Option<OxQuad> {
+    Some(OxQuad {
+        subject: match fill_ground_term_or_var(&quad.subject, solution)? {
+            Term::NamedNode(node) => node.into(),
+            Term::BlankNode(node) => node.into(),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => return None,
+            Term::Literal(_) => return None,
+        },
+        predicate: fill_named_node_or_var(&quad.predicate, solution)?,
+        object: fill_ground_term_or_var(&quad.object, solution)?,
+        graph_name: fill_graph_name_or_var(&quad.graph_name, solution)?,
+    })
+}
+
+fn fill_ground_term_or_var(term: &GroundTermPattern, solution: &QuerySolution) -> Option<Term> {
+    Some(match term {
+        GroundTermPattern::NamedNode(term) => term.clone().into(),
+        GroundTermPattern::Literal(term) => term.clone().into(),
+        #[cfg(feature = "rdf-12")]
+        GroundTermPattern::Triple(triple) => fill_ground_triple_pattern(triple, solution)?.into(),
+        GroundTermPattern::Variable(v) => solution.get(v)?.clone(),
+    })
+}
+
+#[cfg(feature = "rdf-12")]
+fn fill_ground_triple_pattern(
+    triple: &GroundTriplePattern,
+    solution: &QuerySolution,
+) -> Option<Triple> {
+    Some(Triple {
+        subject: match fill_ground_term_or_var(&triple.subject, solution)? {
+            Term::NamedNode(node) => node.into(),
+            Term::BlankNode(node) => node.into(),
+            #[cfg(feature = "rdf-12")]
+            Term::Triple(_) => return None,
+            Term::Literal(_) => return None,
+        },
+        predicate: fill_named_node_or_var(&triple.predicate, solution)?,
+        object: fill_ground_term_or_var(&triple.object, solution)?,
+    })
 }
