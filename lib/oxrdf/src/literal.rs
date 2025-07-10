@@ -786,14 +786,16 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')?;
     for c in string.chars() {
         match c {
-            '\u{08}' => f.write_str("\\b"),
+            '\u{8}' => f.write_str("\\b"),
             '\t' => f.write_str("\\t"),
             '\n' => f.write_str("\\n"),
-            '\u{0C}' => f.write_str("\\f"),
+            '\u{C}' => f.write_str("\\f"),
             '\r' => f.write_str("\\r"),
             '"' => f.write_str("\\\""),
             '\\' => f.write_str("\\\\"),
-            '\0'..='\u{1F}' | '\u{7F}' => write!(f, "\\u{:04X}", u32::from(c)),
+            '\0'..='\u{1F}' | '\u{7F}' | '\u{FFFE}' | '\u{FFFF}' => {
+                write!(f, "\\u{:04X}", u32::from(c))
+            }
             _ => f.write_char(c),
         }?;
     }
