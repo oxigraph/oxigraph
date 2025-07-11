@@ -83,6 +83,11 @@ impl RuleRecognizer for TriGRecognizer {
                             self.stack.push(TriGState::PrefixExpectPrefix);
                             self
                         }
+                        #[cfg(feature = "rdf-12")]
+                        N3Token::PlainKeyword(k) if k.eq_ignore_ascii_case("version") => {
+                            self.stack.push(TriGState::VersionExpectVersion);
+                            self
+                        }
                         N3Token::LangTag {
                             language: "prefix",
                             #[cfg(feature = "rdf-12")]
@@ -99,6 +104,15 @@ impl RuleRecognizer for TriGRecognizer {
                         } => {
                             self.stack.push(TriGState::ExpectDot);
                             self.stack.push(TriGState::BaseExpectIri);
+                            self
+                        }
+                        #[cfg(feature = "rdf-12")]
+                        N3Token::LangTag {
+                            language: "version",
+                            direction: None,
+                        } => {
+                            self.stack.push(TriGState::ExpectDot);
+                            self.stack.push(TriGState::VersionExpectVersion);
                             self
                         }
                         N3Token::PlainKeyword(k)
@@ -163,6 +177,14 @@ impl RuleRecognizer for TriGRecognizer {
                         self
                     } else {
                         self.error(errors, "The PREFIX declaration should be followed by a prefix and its value as an IRI")
+                    }
+                }
+                #[cfg(feature = "rdf-12")]
+                TriGState::VersionExpectVersion => {
+                    if let N3Token::String(_) = token {
+                        self
+                    } else {
+                        self.error(errors, "The VERSION keyword should be followed by a single quoted string like \"1.2\"")
                     }
                 }
                 // [3] 	triplesOrGraph 	::= 	(labelOrSubject (wrappedGraph | (predicateObjectList '.'))) | (reifiedTriple predicateObjectList? '.')
@@ -650,7 +672,7 @@ impl RuleRecognizer for TriGRecognizer {
                         self.stack.push(TriGState::ObjectCollectionBeginning);
                         self
                     }
-                    N3Token::String(value) => {
+                    N3Token::String(value) | N3Token::LongString(value) => {
                         self.stack
                             .push(TriGState::LiteralPossibleSuffix { value, emit: true });
                         self
@@ -1269,6 +1291,8 @@ enum TriGState {
     PrefixExpectIri {
         name: String,
     },
+    #[cfg(feature = "rdf-12")]
+    VersionExpectVersion,
     TriplesOrGraph,
     WrappedGraphBlankNodePropertyListCurrent,
     SubjectBlankNodePropertyListEnd,
