@@ -297,8 +297,12 @@ fn update_requires_read(update: &Update) -> bool {
             GraphUpdateOperation::InsertData { .. }
             | GraphUpdateOperation::DeleteData { .. }
             | GraphUpdateOperation::Create { silent: true, .. }
+            | GraphUpdateOperation::Clear {
+                graph: GraphTarget::DefaultGraph | GraphTarget::NamedGraphs | GraphTarget::AllGraphs,
+                ..
+            }
             | GraphUpdateOperation::Drop {
-                graph: GraphTarget::AllGraphs,
+                graph: GraphTarget::DefaultGraph | GraphTarget::NamedGraphs | GraphTarget::AllGraphs,
                 ..
             } => (),
             _ => return true,
@@ -327,6 +331,26 @@ fn evaluate_update_without_read(transaction: &mut StorageTransaction<'_>, update
                 graph,
                 silent: true,
             } => transaction.insert_named_graph(graph.into()),
+            GraphUpdateOperation::Clear {
+                graph: GraphTarget::DefaultGraph,
+                ..
+            }
+            | GraphUpdateOperation::Drop {
+                graph: GraphTarget::DefaultGraph,
+                ..
+            } => transaction.clear_default_graph(),
+            GraphUpdateOperation::Clear {
+                graph: GraphTarget::NamedGraphs,
+                ..
+            } => transaction.clear_all_named_graphs(),
+            GraphUpdateOperation::Clear {
+                graph: GraphTarget::AllGraphs,
+                ..
+            } => transaction.clear_all_graphs(),
+            GraphUpdateOperation::Drop {
+                graph: GraphTarget::NamedGraphs,
+                ..
+            } => transaction.remove_all_named_graphs(),
             GraphUpdateOperation::Drop {
                 graph: GraphTarget::AllGraphs,
                 ..

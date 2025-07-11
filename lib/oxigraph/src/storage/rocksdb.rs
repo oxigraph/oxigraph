@@ -1028,13 +1028,16 @@ impl RocksDbStorageTransaction<'_> {
         }
     }
 
-    pub fn clear(&mut self) {
+    pub fn clear_default_graph(&mut self) {
         self.transaction
             .remove_range(&self.storage.dspo_cf, &[], &[u8::MAX]);
         self.transaction
             .remove_range(&self.storage.dpos_cf, &[], &[u8::MAX]);
         self.transaction
             .remove_range(&self.storage.dosp_cf, &[], &[u8::MAX]);
+    }
+
+    pub fn clear_all_named_graphs(&mut self) {
         self.transaction
             .remove_range(&self.storage.gspo_cf, &[], &[u8::MAX]);
         self.transaction
@@ -1047,8 +1050,22 @@ impl RocksDbStorageTransaction<'_> {
             .remove_range(&self.storage.posg_cf, &[], &[u8::MAX]);
         self.transaction
             .remove_range(&self.storage.ospg_cf, &[], &[u8::MAX]);
+    }
+
+    pub fn clear_all_graphs(&mut self) {
+        self.clear_default_graph();
+        self.remove_all_named_graphs();
+    }
+
+    pub fn remove_all_named_graphs(&mut self) {
+        self.clear_all_named_graphs();
         self.transaction
             .remove_range(&self.storage.graphs_cf, &[], &[u8::MAX]);
+    }
+
+    pub fn clear(&mut self) {
+        self.clear_default_graph();
+        self.remove_all_named_graphs();
         // TODO: clear id2str?
     }
 

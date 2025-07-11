@@ -349,6 +349,40 @@ impl StorageTransaction<'_> {
         }
     }
 
+    pub fn clear_default_graph(&mut self) {
+        match &mut self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear_default_graph(),
+            StorageTransactionKind::Memory(transaction) => {
+                transaction.clear_graph(GraphNameRef::DefaultGraph)
+            }
+        }
+    }
+
+    pub fn clear_all_named_graphs(&mut self) {
+        match &mut self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear_all_named_graphs(),
+            StorageTransactionKind::Memory(transaction) => transaction.clear_all_named_graphs(),
+        }
+    }
+
+    pub fn clear_all_graphs(&mut self) {
+        match &mut self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageTransactionKind::RocksDb(transaction) => transaction.clear_all_graphs(),
+            StorageTransactionKind::Memory(transaction) => transaction.clear_all_graphs(),
+        }
+    }
+
+    pub fn remove_all_named_graphs(&mut self) {
+        match &mut self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageTransactionKind::RocksDb(transaction) => transaction.remove_all_named_graphs(),
+            StorageTransactionKind::Memory(transaction) => transaction.remove_all_named_graphs(),
+        }
+    }
+
     pub fn clear(&mut self) {
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]

@@ -772,9 +772,16 @@ impl Store {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), StorageError> {
-        let mut transaction = self.storage.start_readable_transaction()?;
-        transaction.clear_graph(graph_name.into())?;
-        transaction.commit()
+        let graph_name = graph_name.into();
+        if graph_name.is_default_graph() {
+            let mut transaction = self.storage.start_transaction()?;
+            transaction.clear_default_graph();
+            transaction.commit()
+        } else {
+            let mut transaction = self.storage.start_readable_transaction()?;
+            transaction.clear_graph(graph_name)?;
+            transaction.commit()
+        }
     }
 
     /// Removes a graph from this store.
@@ -1183,6 +1190,22 @@ impl Transaction<'_> {
     }
 
     /// Adds a set of quads to this store.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::store::Store;
+    ///
+    /// let ex = NamedNodeRef::new_unchecked("http://example.com");
+    /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
+    ///
+    /// let store = Store::new()?;
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.extend([quad]);
+    /// transaction.commit()?;
+    /// assert!(store.contains(quad)?);
+    /// # Result::<_,oxigraph::store::StorageError>::Ok(())
+    /// ```
     pub fn extend<'b>(&mut self, quads: impl IntoIterator<Item = impl Into<QuadRef<'b>>>) {
         for quad in quads {
             self.inner.insert(quad.into());
@@ -1212,7 +1235,7 @@ impl Transaction<'_> {
         self.inner.remove(quad.into())
     }
 
-    /// Returns all the store named graphs.
+    /// Returns all the named graphs in the store.
     pub fn named_graphs(&self) -> GraphNameIter {
         let reader = self.inner.reader();
         GraphNameIter {
