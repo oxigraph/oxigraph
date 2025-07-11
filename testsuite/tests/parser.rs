@@ -15,9 +15,7 @@ fn rdf11_n_triples_w3c_testsuite() -> Result<()> {
 fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax/manifest.ttl",
-        &[
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-triples/syntax#ntriples-star-bad-10", /* TODO */
-        ],
+        &[],
     )
 }
 #[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
@@ -41,9 +39,7 @@ fn rdf11_n_quads_w3c_testsuite() -> Result<()> {
 fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-quads/syntax/manifest.ttl",
-        &[
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-n-quads/syntax#nquads-star-bad-10", /* TODO */
-        ],
+        &[],
     )
 }
 
@@ -69,16 +65,7 @@ fn rdf11_turtle_w3c_testsuite() -> Result<()> {
 fn rdf12_turtle_syntax_w3c_testsuite() -> Result<()> {
     check_testsuite(
         "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax/manifest.ttl",
-        &[
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-01",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-02",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-03",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-04",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-05",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-06",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-07",
-            "https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax#turtle12-version-08",
-        ],
+        &[],
     )
 }
 

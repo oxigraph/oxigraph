@@ -1138,7 +1138,7 @@ impl RuleRecognizer for N3Recognizer {
                             self.stack.push(N3State::CollectionBeginning);
                             self
                         }
-                        N3Token::String(value) => {
+                        N3Token::String(value) |  N3Token::LongString(value) => {
                             self.stack.push(N3State::LiteralPossibleSuffix { value });
                             self
                         }

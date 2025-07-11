@@ -24,6 +24,7 @@ pub enum N3Token<'a> {
     Variable(Cow<'a, str>),
     BlankNodeLabel(&'a str),
     String(String),
+    LongString(String),
     Integer(&'a str),
     Decimal(&'a str),
     Double(&'a str),
@@ -725,7 +726,7 @@ impl N3Lexer {
             match data[i] {
                 c if c == delimiter => {
                     if *data.get(i + 1)? == delimiter && *data.get(i + 2)? == delimiter {
-                        return Some((i + 3, Ok(N3Token::String(string))));
+                        return Some((i + 3, Ok(N3Token::LongString(string))));
                     }
                     i += 1;
                     string.push(char::from(delimiter));
