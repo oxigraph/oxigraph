@@ -13,7 +13,9 @@ ALLOWED_MISSING_PACKAGES = {
     "rustc-hash",
     "geo",
     "wkt",
-    "quick-xml"
+    "quick-xml",
+    "getrandom",
+    "rand"
 }
 
 base_path = Path(__file__).parent.parent
