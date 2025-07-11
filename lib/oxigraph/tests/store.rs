@@ -451,13 +451,6 @@ fn test_rdf_star_backward_compatibility() -> Result<(), Box<dyn Error>> {
         let store = Store::open("tests/rocksdb_bc_rdf_star_data")?;
         assert!(store.contains(QuadRef::new(s, p, o, g))?);
         assert!(store.contains(QuadRef::new(s, p, o, GraphNameRef::DefaultGraph))?);
-        // panic!(
-        // "{:?}",
-        // store
-        // .iter()
-        // .map(|q| q.map(|q| q.to_string()))
-        // .collect::<Result<Vec<_>, _>>()?
-        // );
         assert!(store.contains(QuadRef::new(bnode, p, o, g))?);
         assert!(store.contains(QuadRef::new(bnode, p, o, GraphNameRef::DefaultGraph))?);
         assert!(store.contains(QuadRef::new(s, p, bnode, g))?);

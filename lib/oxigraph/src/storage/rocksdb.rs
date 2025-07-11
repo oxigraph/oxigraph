@@ -1616,3 +1616,126 @@ fn map_thread_result<R>(result: thread::Result<R>) -> io::Result<R> {
         })
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxrdf::NamedNodeRef;
+    use rand::random;
+    use std::env::temp_dir;
+    use std::fs::remove_dir_all;
+
+    #[test]
+    #[expect(clippy::panic_in_result_fn)]
+    fn test_transaction() -> Result<(), StorageError> {
+        let example = NamedNodeRef::new_unchecked("http://example.com/1");
+        let example2 = NamedNodeRef::new_unchecked("http://example.com/2");
+        let encoded_example = EncodedTerm::from(example);
+        let encoded_example2 = EncodedTerm::from(example2);
+        let default_quad = QuadRef::new(example, example, example, GraphNameRef::DefaultGraph);
+        let encoded_default_quad = EncodedQuad::from(default_quad);
+        let named_graph_quad = QuadRef::new(example, example, example, example);
+        let encoded_named_graph_quad = EncodedQuad::from(named_graph_quad);
+
+        let path = TempDir::default();
+        let storage = RocksDbStorage::open(path.as_ref())?;
+
+        // We start with a graph
+        let snapshot = storage.snapshot();
+        let mut transaction = storage.start_transaction()?;
+        transaction.insert_named_graph(example.into());
+        transaction.commit()?;
+        assert!(!snapshot.contains_named_graph(&encoded_example)?);
+        assert!(storage.snapshot().contains_named_graph(&encoded_example)?);
+        storage.snapshot().validate()?;
+
+        // We add two quads
+        let snapshot = storage.snapshot();
+        let mut transaction = storage.start_transaction()?;
+        transaction.insert(default_quad);
+        transaction.insert(named_graph_quad);
+        transaction.commit()?;
+        assert!(!snapshot.contains(&encoded_default_quad)?);
+        assert!(!snapshot.contains(&encoded_named_graph_quad)?);
+        assert!(storage.snapshot().contains(&encoded_default_quad)?);
+        assert!(storage.snapshot().contains(&encoded_named_graph_quad)?);
+        storage.snapshot().validate()?;
+
+        // We remove the quads
+        let snapshot = storage.snapshot();
+        let mut transaction = storage.start_readable_transaction()?;
+        transaction.remove(default_quad);
+        transaction.remove_named_graph(example.into())?;
+        transaction.commit()?;
+        assert!(snapshot.contains(&encoded_default_quad)?);
+        assert!(snapshot.contains(&encoded_named_graph_quad)?);
+        assert!(snapshot.contains_named_graph(&encoded_example)?);
+        assert!(!storage.snapshot().contains(&encoded_default_quad)?);
+        assert!(!storage.snapshot().contains(&encoded_named_graph_quad)?);
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example)?);
+        storage.snapshot().validate()?;
+
+        // We add the quads again but rollback
+        let snapshot = storage.snapshot();
+        let mut transaction = storage.start_transaction()?;
+        transaction.insert(default_quad);
+        transaction.insert(named_graph_quad);
+        transaction.insert_named_graph(example2.into());
+        drop(transaction);
+        assert!(!snapshot.contains(&encoded_default_quad)?);
+        assert!(!snapshot.contains(&encoded_named_graph_quad)?);
+        assert!(!snapshot.contains_named_graph(&encoded_example)?);
+        assert!(!snapshot.contains_named_graph(&encoded_example2)?);
+        assert!(!storage.snapshot().contains(&encoded_default_quad)?);
+        assert!(!storage.snapshot().contains(&encoded_named_graph_quad)?);
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example)?);
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example2)?);
+        storage.snapshot().validate()?;
+
+        // We add quads and graph, then clear
+        storage.bulk_loader().load::<StorageError, StorageError>([
+            Ok(default_quad.into_owned()),
+            Ok(named_graph_quad.into_owned()),
+        ])?;
+        let mut transaction = storage.start_transaction()?;
+        transaction.insert_named_graph(example2.into());
+        transaction.commit()?;
+        let mut transaction = storage.start_transaction()?;
+        transaction.clear();
+        transaction.commit()?;
+        assert!(!storage.snapshot().contains(&encoded_default_quad)?);
+        assert!(!storage.snapshot().contains(&encoded_named_graph_quad)?);
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example)?);
+        assert!(!storage.snapshot().contains_named_graph(&encoded_example2)?);
+        assert!(storage.snapshot().is_empty()?);
+        storage.snapshot().validate()?;
+
+        Ok(())
+    }
+
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+    struct TempDir(PathBuf);
+
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+    impl Default for TempDir {
+        fn default() -> Self {
+            Self(temp_dir().join(format!("oxigraph-test-{}", random::<u128>())))
+        }
+    }
+
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+    impl AsRef<Path> for TempDir {
+        fn as_ref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            if self.0.is_dir() {
+                remove_dir_all(&self.0).unwrap();
+            }
+        }
+    }
+}
