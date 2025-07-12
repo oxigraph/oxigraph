@@ -765,6 +765,7 @@ impl From<Triple> for TriplePattern {
     }
 }
 
+#[cfg(feature = "sparql-12")]
 impl From<GroundTriplePattern> for TriplePattern {
     #[inline]
     fn from(triple: GroundTriplePattern) -> Self {
@@ -790,6 +791,7 @@ impl TryFrom<TriplePattern> for Triple {
 }
 
 /// A [triple pattern](https://www.w3.org/TR/sparql11-query/#defn_TriplePattern) without blank nodes.
+#[cfg(feature = "sparql-12")]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct GroundTriplePattern {
     pub subject: GroundTermPattern,
@@ -797,6 +799,7 @@ pub struct GroundTriplePattern {
     pub object: GroundTermPattern,
 }
 
+#[cfg(feature = "sparql-12")]
 impl GroundTriplePattern {
     /// Formats using the [SPARQL S-Expression syntax](https://jena.apache.org/documentation/notes/sse.html).
     #[cfg(feature = "sparql-12")]
@@ -811,6 +814,7 @@ impl GroundTriplePattern {
     }
 }
 
+#[cfg(feature = "sparql-12")]
 impl fmt::Display for GroundTriplePattern {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -818,6 +822,7 @@ impl fmt::Display for GroundTriplePattern {
     }
 }
 
+#[cfg(feature = "sparql-12")]
 impl From<GroundTriple> for GroundTriplePattern {
     #[inline]
     fn from(triple: GroundTriple) -> Self {
@@ -829,6 +834,7 @@ impl From<GroundTriple> for GroundTriplePattern {
     }
 }
 
+#[cfg(feature = "sparql-12")]
 impl TryFrom<TriplePattern> for GroundTriplePattern {
     type Error = ();
 
