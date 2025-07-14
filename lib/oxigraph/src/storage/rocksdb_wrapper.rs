@@ -193,6 +193,7 @@ impl Db {
                 !read_options.is_null(),
                 "rocksdb_readoptions_create returned null"
             );
+            rocksdb_readoptions_set_async_io(read_options, 1);
 
             let write_options = rocksdb_writeoptions_create();
             assert!(
@@ -291,6 +292,7 @@ impl Db {
                 !read_options.is_null(),
                 "rocksdb_readoptions_create returned null"
             );
+            rocksdb_readoptions_set_async_io(read_options, 1);
 
             Ok(Self {
                 inner: DbKind::ReadOnly(Arc::new(RoDbHandler {
