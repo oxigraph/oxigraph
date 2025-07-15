@@ -22,7 +22,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-dev"
+version = "0.5.0-beta.1"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
@@ -33,8 +33,8 @@ anyhow = "1.0.72"
 arbitrary = "1.3"
 assert_cmd = "2.0"
 assert_fs = "1.0"
-bindgen = "0.71"
-bzip2 = ">=0.4, <0.6"
+bindgen = ">=0.71,<0.73"
+bzip2 = ">=0.4, <0.7"
 cc = "1.0.73"
 clap = "4.0"
 clap_complete = "4.0"
@@ -80,19 +80,19 @@ wasm-bindgen = "0.2.83"
 wkt = "0.14"
 
 # Internal dependencies
-oxigraph = { version = "=0.5.0-dev", path = "lib/oxigraph" }
-oxjsonld = { version = "=0.2.0-dev", path = "lib/oxjsonld" }
-oxrdf = { version = "=0.3.0-dev", path = "lib/oxrdf" }
-oxrdfio = { version = "=0.2.0-dev", path = "lib/oxrdfio" }
-oxrdfxml = { version = "=0.2.0-dev", path = "lib/oxrdfxml" }
-oxrocksdb-sys = { version = "=0.5.0-dev", path = "./oxrocksdb-sys" }
+oxigraph = { version = "=0.5.0-beta.1", path = "lib/oxigraph" }
+oxjsonld = { version = "=0.2.0-beta.1", path = "lib/oxjsonld" }
+oxrdf = { version = "=0.3.0-beta.1", path = "lib/oxrdf" }
+oxrdfio = { version = "=0.2.0-beta.1", path = "lib/oxrdfio" }
+oxrdfxml = { version = "=0.2.0-beta.1", path = "lib/oxrdfxml" }
+oxrocksdb-sys = { version = "=0.5.0-beta.1", path = "./oxrocksdb-sys" }
 oxsdatatypes = { version = "=0.2.2", path = "lib/oxsdatatypes" }
-oxttl = { version = "=0.2.0-dev", path = "lib/oxttl" }
-spargebra = { version = "=0.4.0-dev", path = "lib/spargebra" }
-spargeo = { version = "=0.5.0-dev", path = "lib/spargeo" }
-sparesults = { version = "=0.3.0-dev", path = "lib/sparesults" }
-sparopt = { version = "=0.3.0-dev", path = "lib/sparopt" }
-spareval = { version = "=0.2.0-dev", path = "lib/spareval" }
+oxttl = { version = "=0.2.0-beta.1", path = "lib/oxttl" }
+spargebra = { version = "=0.4.0-beta.1", path = "lib/spargebra" }
+spargeo = { version = "=0.5.0-beta.1", path = "lib/spargeo" }
+sparesults = { version = "=0.3.0-beta.1", path = "lib/sparesults" }
+sparopt = { version = "=0.3.0-beta.1", path = "lib/sparopt" }
+spareval = { version = "=0.2.0-beta.1", path = "lib/spareval" }
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "warn"
