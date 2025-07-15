@@ -1,7 +1,48 @@
+# [0.5.0-beta.1] - 2025-06-20
+
+### Added
+- Support for current W3C working drafts RDF 1.2 and SPARQL 1.2, hidden behind the `rdf-12` or `sparql-12` features.
+  RDF 1.2 includes triple terms using a slightly different syntax as RDF-star
+  and directional language strings using the new `Literal.direction` attribute.
+- `oxrdf`: basic `serde` support behind the `serde` feature.
+- `spargebra`: a `SparqlParser` API allowing setting default prefixes.
+- `oxigraph`: the `Store.start_transaction` method that returns a new `Transaction` object.
+  transactions can be committed with the `commit` method or rolled back by just dropping the `Transaction` object.
+- Python: the `lenient` option to the `parse` and `load` method to skip some validations.
+
+### Removed
+- RDF-star support is now dropped in favor of RDF 1.2.
+  The `rdf-star` feature is not available anymore but triple terms are supported using `rdf-12`.
+  RDF 1.2 does not support triple terms in the subject position anymore.
+  Existing databases are automatically migrated on the first opening with Oxigraph 0.5 to keep most SPARQL queries working.
+  However, serialization in N-Triples/Turtle/... has changed.
+- All deprecated Rust methods in the 0.4.x releases.
+- Rust: support for Rust versions before 1.85.
+- RocksDB: support of versions before 9.10.
+- `oxrdf`: the `Subject` enum is now merged into `NamedOrBlankNode`.
+- `spargebra`: `GroundSubject` is now merged into `NamedNode`.
+- `spareval`: `ExpressionSubject` is now merged into `NamedOrBlankNode`.
+- `oxigraph`: `Store.transaction` is replaced by `Store.start_transaction`. 
+- Python: `pyoxigraph.__package__` and `pyoxigraph.__author__` constants.
+
+### Changed
+- `oxrdf`: deprecate `Literal::is_plain` (not defined anymore in RDF 1.1 and 1.2).
+- `oxrdf`: deprecate `Literal::destruct` (no added value compared to regular assessors).
+- `oxttl`/`oxrdfxml`/`oxrdfio`: rename `unchecked()` to `lenient()`.
+- `oxigraph` now relies on `oxhttp` 0.3. Some optional feature names have changed.
+- `oxigraph`: the SERVICE setup API has changed. The `ServiceHandler` trait now defines a single service with a given name
+   whereas the `DefaultServiceHandler` trait set a default behavior for other service URLs.
+- RDF/XML: keep namespaces in `rdf:parseType="Literal"` output.
+- RocksDB transactions do not rely anymore on `TransactionDB` but on the new [`WriteBatchWithIndex`](https://github.com/facebook/rocksdb/wiki/Write-Batch-With-Index) API.
+  It means that some write-write conflicts are not detected anymore (e.g., if a graph is dropped by a transaction while a concurrent one adds a triple to the same graph)
+  but significantly increases update speed and enables things like efficient `Store.clear` implementation.
+- Bulk loading is now atomic: if it fails no triple will be added to the database.
+
+
 ## [0.4.11] - 2025-05-21
 
 ### Changed
-- Bumps to RocksDB 10.3.0 and fixes a compilation issue with GCC 13+
+- Bumps to RocksDB 10.3.0 and fixes a compilation issue with GCC 13+.
 
 
 ## [0.4.10] - 2025-05-15
