@@ -200,7 +200,6 @@ impl RdfXmlParser {
         SliceRdfXmlParser {
             results: Vec::new(),
             parser: self.into_internal(slice),
-            reader_buffer: Vec::default(),
         }
     }
 
@@ -531,7 +530,6 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
 pub struct SliceRdfXmlParser<'a> {
     results: Vec<Triple>,
     parser: InternalRdfXmlParser<&'a [u8]>,
-    reader_buffer: Vec<u8>,
 }
 
 impl Iterator for SliceRdfXmlParser<'_> {
@@ -622,11 +620,7 @@ impl SliceRdfXmlParser<'_> {
     }
 
     fn parse_step(&mut self) -> Result<(), RdfXmlParseError> {
-        self.reader_buffer.clear();
-        let event = self
-            .parser
-            .reader
-            .read_event_into(&mut self.reader_buffer)?;
+        let event = self.parser.reader.read_event()?;
         self.parser.parse_event(event, &mut self.results)
     }
 }
