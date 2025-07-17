@@ -108,10 +108,10 @@ impl PyStore {
         })
     }
 
-    /// Adds atomically a set of quads to this store.
+    /// Adds a set of quads to this store.
     ///
-    /// Insertion is done in a transactional manner: either the full operation succeeds or nothing is written to the database.
-    /// The :py:func:`bulk_extend` method is also available for much faster loading of a large number of quads but without transactional guarantees.
+    /// Insertion is done in a transactional manner: either the full operation succeeds, or nothing is written to the database.
+    /// The :py:func:`bulk_extend` method is also available for loading of a very large number of quads without having them all into memory.
     ///
     /// :param quads: the quads to add.
     /// :type quads: collections.abc.Iterable[Quad]
@@ -134,9 +134,6 @@ impl PyStore {
     }
 
     /// Adds a set of quads to this store.
-    ///
-    /// This function is designed to be as fast as possible **without** transactional guarantees.
-    /// Only a part of the data might be written to the store.
     ///
     /// :param quads: the quads to add.
     /// :type quads: collections.abc.Iterable[Quad]
@@ -357,8 +354,8 @@ impl PyStore {
 
     /// Loads RDF serialization into the store.
     ///
-    /// Loads are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
-    /// The :py:func:`bulk_load` method is also available for much faster loading of big files but without transactional guarantees.
+    /// Loads are applied in a transactional manner: either the full operation succeeds, or nothing is written to the database.
+    /// The :py:func:`bulk_load` method is also available for loading big files without loading all its content into memory.
     ///
     /// Beware, the full file is loaded into memory.
     ///
