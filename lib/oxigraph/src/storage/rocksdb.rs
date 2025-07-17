@@ -182,7 +182,7 @@ impl RocksDbStorage {
                 stt_file.insert_empty(&k)?;
             }
             self.db
-                .insert_stt_files(&[(&self.graphs_cf, stt_file.finish()?)])?;
+                .insert_stt_files(&[(self.graphs_cf.clone(), stt_file.finish()?)])?;
             version = 1;
             self.update_version(version)?;
         }
@@ -1334,6 +1334,7 @@ impl RocksDbStorageBulkLoader {
         let mut done_and_displayed_counter = 0;
         thread::scope(|thread_scope| {
             let mut threads = VecDeque::with_capacity(num_threads - 1);
+            let mut sst_files = Vec::new();
             let mut buffer = Vec::with_capacity(batch_size);
             for quad in quads {
                 let quad = quad?;
@@ -1341,6 +1342,7 @@ impl RocksDbStorageBulkLoader {
                 if buffer.len() >= batch_size {
                     self.spawn_load_thread(
                         &mut buffer,
+                        &mut sst_files,
                         &mut threads,
                         thread_scope,
                         &done_counter,
@@ -1352,6 +1354,7 @@ impl RocksDbStorageBulkLoader {
             }
             self.spawn_load_thread(
                 &mut buffer,
+                &mut sst_files,
                 &mut threads,
                 thread_scope,
                 &done_counter,
@@ -1360,9 +1363,10 @@ impl RocksDbStorageBulkLoader {
                 batch_size,
             )?;
             for thread in threads {
-                map_thread_result(thread.join()).map_err(StorageError::Io)??;
+                sst_files.extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
                 self.on_possible_progress(&done_counter, &mut done_and_displayed_counter)?;
             }
+            self.storage.db.insert_stt_files(&sst_files)?;
             Ok(())
         })
     }
@@ -1370,7 +1374,10 @@ impl RocksDbStorageBulkLoader {
     fn spawn_load_thread<'scope>(
         &'scope self,
         buffer: &mut Vec<Quad>,
-        threads: &mut VecDeque<thread::ScopedJoinHandle<'scope, Result<(), StorageError>>>,
+        sst_files: &mut Vec<(ColumnFamily, PathBuf)>,
+        threads: &mut VecDeque<
+            thread::ScopedJoinHandle<'scope, Result<Vec<(ColumnFamily, PathBuf)>, StorageError>>,
+        >,
         thread_scope: &'scope thread::Scope<'scope, '_>,
         done_counter: &'scope Mutex<u64>,
         done_and_displayed_counter: &mut u64,
@@ -1378,10 +1385,10 @@ impl RocksDbStorageBulkLoader {
         batch_size: usize,
     ) -> Result<(), StorageError> {
         self.on_possible_progress(done_counter, done_and_displayed_counter)?;
-        // We avoid to have too many threads
+        // We avoid having too many threads
         if threads.len() >= num_threads {
             if let Some(thread) = threads.pop_front() {
-                map_thread_result(thread.join()).map_err(StorageError::Io)??;
+                sst_files.extend(map_thread_result(thread.join()).map_err(StorageError::Io)??);
                 self.on_possible_progress(done_counter, done_and_displayed_counter)?;
             }
         }
@@ -1435,15 +1442,19 @@ impl<'a> FileBulkLoader<'a> {
         }
     }
 
-    fn load(&mut self, quads: Vec<Quad>, counter: &Mutex<u64>) -> Result<(), StorageError> {
+    fn load(
+        &mut self,
+        quads: Vec<Quad>,
+        counter: &Mutex<u64>,
+    ) -> Result<Vec<(ColumnFamily, PathBuf)>, StorageError> {
         self.encode(quads)?;
         let size = self.triples.len() + self.quads.len();
-        self.save()?;
+        let files = self.build_sst_files()?;
         *counter
             .lock()
             .map_err(|_| io::Error::other("Mutex poisoned"))? +=
             size.try_into().unwrap_or(u64::MAX);
-        Ok(())
+        Ok(files)
     }
 
     fn encode(&mut self, quads: Vec<Quad>) -> Result<(), StorageError> {
@@ -1480,8 +1491,8 @@ impl<'a> FileBulkLoader<'a> {
         Ok(())
     }
 
-    fn save(&mut self) -> Result<(), StorageError> {
-        let mut to_load = Vec::new();
+    fn build_sst_files(&mut self) -> Result<Vec<(ColumnFamily, PathBuf)>, StorageError> {
+        let mut sst_files = Vec::new();
 
         // id2str
         if !self.id2str.is_empty() {
@@ -1494,28 +1505,28 @@ impl<'a> FileBulkLoader<'a> {
             for (k, v) in id2str {
                 id2str_sst.insert(&k, v.as_bytes())?;
             }
-            to_load.push((&self.storage.id2str_cf, id2str_sst.finish()?));
+            sst_files.push((self.storage.id2str_cf.clone(), id2str_sst.finish()?));
         }
 
         if !self.triples.is_empty() {
-            to_load.push((
-                &self.storage.dspo_cf,
+            sst_files.push((
+                self.storage.dspo_cf.clone(),
                 self.build_sst_for_keys(
                     self.triples.iter().map(|quad| {
                         encode_term_triple(&quad.subject, &quad.predicate, &quad.object)
                     }),
                 )?,
             ));
-            to_load.push((
-                &self.storage.dpos_cf,
+            sst_files.push((
+                self.storage.dpos_cf.clone(),
                 self.build_sst_for_keys(
                     self.triples.iter().map(|quad| {
                         encode_term_triple(&quad.predicate, &quad.object, &quad.subject)
                     }),
                 )?,
             ));
-            to_load.push((
-                &self.storage.dosp_cf,
+            sst_files.push((
+                self.storage.dosp_cf.clone(),
                 self.build_sst_for_keys(
                     self.triples.iter().map(|quad| {
                         encode_term_triple(&quad.object, &quad.subject, &quad.predicate)
@@ -1526,14 +1537,14 @@ impl<'a> FileBulkLoader<'a> {
         }
 
         if !self.quads.is_empty() {
-            to_load.push((
-                &self.storage.graphs_cf,
+            sst_files.push((
+                self.storage.graphs_cf.clone(),
                 self.build_sst_for_keys(self.graphs.iter().map(encode_term))?,
             ));
             self.graphs.clear();
 
-            to_load.push((
-                &self.storage.gspo_cf,
+            sst_files.push((
+                self.storage.gspo_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.graph_name,
@@ -1543,8 +1554,8 @@ impl<'a> FileBulkLoader<'a> {
                     )
                 }))?,
             ));
-            to_load.push((
-                &self.storage.gpos_cf,
+            sst_files.push((
+                self.storage.gpos_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.graph_name,
@@ -1554,8 +1565,8 @@ impl<'a> FileBulkLoader<'a> {
                     )
                 }))?,
             ));
-            to_load.push((
-                &self.storage.gosp_cf,
+            sst_files.push((
+                self.storage.gosp_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.graph_name,
@@ -1565,8 +1576,8 @@ impl<'a> FileBulkLoader<'a> {
                     )
                 }))?,
             ));
-            to_load.push((
-                &self.storage.spog_cf,
+            sst_files.push((
+                self.storage.spog_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.subject,
@@ -1576,8 +1587,8 @@ impl<'a> FileBulkLoader<'a> {
                     )
                 }))?,
             ));
-            to_load.push((
-                &self.storage.posg_cf,
+            sst_files.push((
+                self.storage.posg_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.predicate,
@@ -1587,8 +1598,8 @@ impl<'a> FileBulkLoader<'a> {
                     )
                 }))?,
             ));
-            to_load.push((
-                &self.storage.ospg_cf,
+            sst_files.push((
+                self.storage.ospg_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
                         &quad.object,
@@ -1600,8 +1611,7 @@ impl<'a> FileBulkLoader<'a> {
             ));
             self.quads.clear();
         }
-
-        self.storage.db.insert_stt_files(&to_load)
+        Ok(sst_files)
     }
 
     fn insert_term(&mut self, term: TermRef<'_>, encoded: &EncodedTerm) {

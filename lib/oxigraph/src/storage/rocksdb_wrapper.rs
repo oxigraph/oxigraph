@@ -597,7 +597,7 @@ impl Db {
 
     pub fn insert_stt_files(
         &self,
-        ssts_for_cf: &[(&ColumnFamily, PathBuf)],
+        ssts_for_cf: &[(ColumnFamily, PathBuf)],
     ) -> Result<(), StorageError> {
         let DbKind::ReadWrite(db) = &self.inner else {
             return Err(StorageError::Other(
@@ -610,7 +610,7 @@ impl Db {
         let mut paths_by_cf = HashMap::<_, Vec<_>>::new();
         for (cf, path) in ssts_for_cf {
             paths_by_cf
-                .entry(*cf)
+                .entry(cf)
                 .or_default()
                 .push(path_to_cstring(path)?);
         }

@@ -412,12 +412,16 @@ impl Store {
         self.storage.snapshot().is_empty()
     }
 
-    /// Executes a transaction.
+    /// Start a transaction.
     ///
     /// Transactions ensure the "repeatable read" isolation level: the store only exposes changes that have
-    /// been "committed" (i.e. no partial writes) and the exposed state does not change for the complete duration
-    /// of a read operation (e.g. a SPARQL query) or a read/write operation (e.g. a SPARQL update).
+    /// been "committed" (i.e., no partial writes are done),
+    /// and the exposed state does not change for the complete duration of a read operation
+    /// (e.g., a SPARQL query) or a read/write operation (e.g., a SPARQL update).
     /// Transactional operations are also atomic.
+    ///
+    /// Note that the transaction keeps the complete set of changes into memory, do not use them to load
+    /// tens of millions of triples.
     ///
     /// Usage example:
     /// ```
@@ -878,7 +882,7 @@ impl Store {
         self.storage.backup(target_directory.as_ref())
     }
 
-    /// Creates a bulk loader allowing to load at lot of data quickly into the store.
+    /// Creates a bulk loader allowing to load at a lot of data quickly into the store.
     ///
     /// Usage example:
     /// ```
@@ -1419,7 +1423,7 @@ impl Iterator for GraphNameIter {
     }
 }
 
-/// A bulk loader allowing to load at lot of data quickly into the store.
+/// A bulk loader allowing to load a lot of data quickly into the store.
 ///
 /// <div class="warning">The operations provided here are not atomic.
 /// If the operation fails in the middle, only a part of the data may be written to the store.
@@ -1427,7 +1431,7 @@ impl Iterator for GraphNameIter {
 ///
 /// Memory usage is configurable using [`with_max_memory_size_in_megabytes`](Self::with_max_memory_size_in_megabytes)
 /// and the number of used threads with [`with_num_threads`](Self::with_num_threads).
-/// By default the memory consumption target (excluding the system and RocksDB internal consumption)
+/// By default, the memory consumption target (excluding the system and RocksDB internal consumption)
 /// is around 2GB per thread and 2 threads.
 /// These targets are considered per loaded file.
 ///
