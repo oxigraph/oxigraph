@@ -176,8 +176,8 @@ jobs:
         include:
           - arch: x86_64
             runner: windows-latest
-          #- arch: aarch64 TODO: blocked by https://github.com/actions/partner-runner-images/issues/77
-          #  runner: windows-11-arm
+          - arch: aarch64
+            runner: windows-11-arm
     continue-on-error: true
     runs-on: ${{ matrix.runner }}
     steps:
