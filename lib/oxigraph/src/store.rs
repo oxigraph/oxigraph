@@ -1121,9 +1121,9 @@ impl Transaction<'_> {
         )
     }
 
-    /// Loads a RDF file into the store.
+    /// Loads an RDF file into the store.
     ///
-    /// This function is atomic, quite slow and memory hungry. To get much better performances you might want to use the [`bulk_loader`](Store::bulk_loader).
+    /// This function is atomic, quite slow and memory hungry. To get much better performances, you might want to use the [`bulk_loader`](Store::bulk_loader).
     ///
     /// Usage example:
     /// ```
@@ -1425,10 +1425,6 @@ impl Iterator for GraphNameIter {
 
 /// A bulk loader allowing to load a lot of data quickly into the store.
 ///
-/// <div class="warning">The operations provided here are not atomic.
-/// If the operation fails in the middle, only a part of the data may be written to the store.
-/// Results might get weird if you delete data during the loading process.</div>
-///
 /// Memory usage is configurable using [`with_max_memory_size_in_megabytes`](Self::with_max_memory_size_in_megabytes)
 /// and the number of used threads with [`with_num_threads`](Self::with_num_threads).
 /// By default, the memory consumption target (excluding the system and RocksDB internal consumption)
@@ -1510,13 +1506,9 @@ impl BulkLoader {
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_reader`] might be more convenient.
     ///
-    /// <div class="warning">This method is not atomic.
-    /// If the parsing fails in the middle of the file, only a part of it may be written to the store.
-    /// Results might get weird if you delete data during the loading process.</div>
-    ///
     /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     ///
-    /// To get better speed on valid datasets, consider enabling [`RdfParser::unchecked`] option to skip some validations.
+    /// To get better speed on valid datasets, consider enabling [`RdfParser::lenient`] option to skip some validations.
     ///
     /// Usage example:
     /// ```
@@ -1578,10 +1570,6 @@ impl BulkLoader {
 
     /// Adds a set of quads using the bulk loader.
     ///
-    /// <div class="warning">This method is not atomic.
-    /// If the process fails in the middle of the file, only a part of the data may be written to the store.
-    /// Results might get weird if you delete data during the loading process.</div>
-    ///
     /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     pub fn load_quads(
         &self,
@@ -1591,10 +1579,6 @@ impl BulkLoader {
     }
 
     /// Adds a set of quads using the bulk loader while breaking in the middle of the process in case of error.
-    ///
-    /// <div class="warning">This method is not atomic.
-    /// If the process fails in the middle of the file, only a part of the data may be written to the store.
-    /// Results might get weird if you delete data during the loading process.</div>
     ///
     /// This method is optimized for speed. See [the struct](Self) documentation for more details.
     pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
