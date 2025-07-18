@@ -20,6 +20,7 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 #[cfg(feature = "rdf-12")]
 use siphasher::sip128::{Hasher128, SipHasher24};
 use std::collections::{HashMap, VecDeque};
+use std::fs::remove_file;
 use std::hash::BuildHasherDefault;
 #[cfg(feature = "rdf-12")]
 use std::hash::Hash;
@@ -1332,9 +1333,9 @@ impl RocksDbStorageBulkLoader {
         }
         let done_counter = Mutex::new(0);
         let mut done_and_displayed_counter = 0;
-        thread::scope(|thread_scope| {
+        let mut sst_files = Vec::new();
+        let result = thread::scope(|thread_scope| {
             let mut threads = VecDeque::with_capacity(num_threads - 1);
-            let mut sst_files = Vec::new();
             let mut buffer = Vec::with_capacity(batch_size);
             for quad in quads {
                 let quad = quad?;
@@ -1368,7 +1369,15 @@ impl RocksDbStorageBulkLoader {
             }
             self.storage.db.insert_stt_files(&sst_files)?;
             Ok(())
-        })
+        });
+        if result.is_err() {
+            // We clean the created files
+            for (_, file) in sst_files {
+                #[expect(unused_must_use)] // We already have an error to report...
+                remove_file(file);
+            }
+        }
+        result
     }
 
     fn spawn_load_thread<'scope>(
