@@ -1550,34 +1550,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxigraph"
-version = "0.5.3"
-dependencies = [
- "bzip2",
- "codspeed-criterion-compat",
- "csv",
- "dashmap",
- "getrandom 0.3.4",
- "js-sys",
- "libc",
- "oxhttp",
- "oxiri",
- "oxrdf",
- "oxrdfio",
- "oxrocksdb-sys",
- "oxsdatatypes",
- "rand",
- "rustc-hash",
- "siphasher",
- "sparesults",
- "spareval",
- "spargebra",
- "tempfile",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "oxigraph-cli"
+name = "oxigraph-cli_elevont"
 version = "0.5.3"
 dependencies = [
  "anyhow",
@@ -1588,23 +1561,23 @@ dependencies = [
  "clap_mangen",
  "flate2",
  "oxhttp",
- "oxigraph",
+ "oxigraph_elevont",
  "oxiri",
  "predicates",
  "rand",
  "rayon-core",
- "spargeo",
+ "spargeo_elevont",
  "url",
 ]
 
 [[package]]
-name = "oxigraph-js"
+name = "oxigraph-js_elevont"
 version = "0.5.3"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
- "oxigraph",
- "spargeo",
+ "oxigraph_elevont",
+ "spargeo_elevont",
  "wasm-bindgen",
 ]
 
@@ -1617,16 +1590,43 @@ dependencies = [
  "codspeed-criterion-compat",
  "dissimilar",
  "json-event-parser",
- "oxigraph",
+ "oxigraph_elevont",
  "oxiri",
- "oxjsonld",
- "oxrdf",
- "oxttl",
- "spareval",
- "spargebra",
- "spargeo",
- "sparopt",
+ "oxjsonld_elevont",
+ "oxrdf_elevont",
+ "oxttl_elevont",
+ "spareval_elevont",
+ "spargebra_elevont",
+ "spargeo_elevont",
+ "sparopt_elevont",
  "time",
+]
+
+[[package]]
+name = "oxigraph_elevont"
+version = "0.5.3"
+dependencies = [
+ "bzip2",
+ "codspeed-criterion-compat",
+ "csv",
+ "dashmap",
+ "getrandom 0.3.4",
+ "js-sys",
+ "libc",
+ "oxhttp",
+ "oxiri",
+ "oxrdf_elevont",
+ "oxrdfio_elevont",
+ "oxrocksdb-sys_elevont",
+ "oxsdatatypes_elevont",
+ "rand",
+ "rustc-hash",
+ "siphasher",
+ "sparesults_elevont",
+ "spareval_elevont",
+ "spargebra_elevont",
+ "tempfile",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1645,24 +1645,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
-name = "oxjsonld"
+name = "oxjsonld_elevont"
 version = "0.2.1"
 dependencies = [
  "json-event-parser",
  "oxiri",
- "oxrdf",
- "thiserror 2.0.17",
+ "oxrdf_elevont",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
 [[package]]
-name = "oxrdf"
+name = "oxrdf_elevont"
 version = "0.3.1"
 dependencies = [
  "hex",
  "oxilangtag",
  "oxiri",
- "oxsdatatypes",
+ "oxsdatatypes_elevont",
  "rand",
  "serde",
  "serde_json",
@@ -1671,32 +1671,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxrdfio"
+name = "oxrdfio_elevont"
 version = "0.2.1"
 dependencies = [
- "oxjsonld",
- "oxrdf",
- "oxrdfxml",
- "oxttl",
+ "oxjsonld_elevont",
+ "oxrdf_elevont",
+ "oxrdfxml_elevont",
+ "oxttl_elevont",
  "tempfile",
- "thiserror 2.0.17",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
 [[package]]
-name = "oxrdfxml"
+name = "oxrdfxml_elevont"
 version = "0.2.1"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "oxrdf",
+ "oxrdf_elevont",
  "quick-xml",
- "thiserror 2.0.17",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
 [[package]]
-name = "oxrocksdb-sys"
+name = "oxrocksdb-sys_elevont"
 version = "0.5.3"
 dependencies = [
  "bindgen",
@@ -1705,21 +1705,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxsdatatypes"
+name = "oxsdatatypes_elevont"
 version = "0.2.2"
 dependencies = [
  "js-sys",
- "thiserror 2.0.17",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
-name = "oxttl"
+name = "oxttl_elevont"
 version = "0.2.1"
 dependencies = [
  "memchr",
  "oxilangtag",
  "oxiri",
- "oxrdf",
+ "oxrdf_elevont",
  "rayon",
  "tempfile",
  "thiserror 2.0.17",
@@ -1959,12 +1959,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyoxigraph"
+name = "pyoxigraph_elevont"
 version = "0.5.3"
 dependencies = [
- "oxigraph",
+ "oxigraph_elevont",
  "pyo3",
- "spargeo",
+ "spargeo_elevont",
 ]
 
 [[package]]
@@ -2447,71 +2447,71 @@ dependencies = [
 ]
 
 [[package]]
-name = "sparesults"
+name = "sparesults_elevont"
 version = "0.3.1"
 dependencies = [
  "json-event-parser",
  "memchr",
- "oxrdf",
+ "oxrdf_elevont",
  "quick-xml",
- "thiserror 2.0.17",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
 [[package]]
-name = "spareval"
+name = "spareval_elevont"
 version = "0.2.3"
 dependencies = [
  "hex",
  "json-event-parser",
  "md-5",
  "oxiri",
- "oxrdf",
- "oxsdatatypes",
+ "oxrdf_elevont",
+ "oxsdatatypes_elevont",
  "rand",
  "regex",
  "rustc-hash",
  "sha1",
  "sha2",
- "sparesults",
- "spargebra",
- "sparopt",
- "thiserror 2.0.17",
+ "sparesults_elevont",
+ "spargebra_elevont",
+ "sparopt_elevont",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
-name = "spargebra"
+name = "spargebra_elevont"
 version = "0.4.3"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "oxrdf",
+ "oxrdf_elevont",
  "peg",
  "rand",
- "thiserror 2.0.17",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
-name = "spargeo"
+name = "spargeo_elevont"
 version = "0.5.2"
 dependencies = [
  "geo",
  "geojson",
- "oxrdf",
+ "oxrdf_elevont",
  "wkt",
 ]
 
 [[package]]
-name = "sparopt"
+name = "sparopt_elevont"
 version = "0.3.3"
 dependencies = [
- "oxrdf",
+ "oxrdf_elevont",
  "rand",
- "spargebra",
+ "spargebra_elevont",
 ]
 
 [[package]]
-name = "sparql-smith"
+name = "sparql-smith_elevont"
 version = "0.1.0-alpha.12"
 dependencies = [
  "arbitrary",

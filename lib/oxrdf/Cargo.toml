@@ -1,13 +1,13 @@
 [package]
-name = "oxrdf"
+name = "oxrdf_elevont"
 version = "0.3.1"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["RDF"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/oxrdf"
+repository = "https://github.com/elevont/oxigraph/tree/main/lib/oxrdf"
 description = "Basic data structures related to RDF"
-documentation = "https://docs.rs/oxrdf"
+documentation = "https://docs.rs/oxrdf_elevont"
 edition.workspace = true
 rust-version.workspace = true
 

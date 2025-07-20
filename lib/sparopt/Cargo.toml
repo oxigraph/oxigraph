@@ -1,12 +1,12 @@
 [package]
-name = "sparopt"
+name = "sparopt_elevont"
 version = "0.3.3"
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
 keywords = ["SPARQL"]
-repository = "https://github.com/oxigraph/oxigraph/tree/main/lib/sparopt"
-documentation = "https://docs.rs/sparopt"
+repository = "https://github.com/elevont/oxigraph/tree/main/lib/sparopt"
+documentation = "https://docs.rs/sparopt_elevont"
 description = "SPARQL optimizer"
 edition.workspace = true
 rust-version.workspace = true
