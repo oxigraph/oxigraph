@@ -225,8 +225,10 @@ impl PyStore {
     /// :type named_graphs: list[NamedNode or BlankNode] or None, optional
     /// :param substitutions: dictionary of values variables should be substituted with. Substitution follows `RDF-dev SEP-0007 <https://github.com/w3c/sparql-dev/blob/main/SEP/SEP-0007/sep-0007.md>`_.
     /// :type substitutions: dict[Variable, NamedNode or BlankNode or Literal or Triple] or None, optional
-    /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions takes for input some :py:class:`Term`s and return a :py:class:`Term` or :py:const:`None`.
+    /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions takes for input some RDF term and returns a RDF term or :py:const:`None`.
     /// :type custom_functions: dict[NamedNode, typing.Callable[[NamedNode or BlankNode or Literal or Triple, ...], NamedNode or BlankNode or Literal or Triple or None]] or None, optional
+    /// :param custom_aggregate_functions: dictionary of custom aggregate functions mapping function names to their definition. Custom aggregate functions take no input and return an object with two methods, `accumulate(self, term: Term)` to add a new term to the accumulator and `finish(self) -> Term` to return the accumulated result.
+    /// :type custom_aggregate_functions: dict[NamedNode, typing.Callable[[], AggregateFunctionAccumulator]] or None, optional
     /// :return: a :py:class:`bool` for ``ASK`` queries, an iterator of :py:class:`Triple` for ``CONSTRUCT`` and ``DESCRIBE`` queries and an iterator of :py:class:`QuerySolution` for ``SELECT`` queries.
     /// :rtype: QuerySolutions or QueryBoolean or QueryTriples
     /// :raises SyntaxError: if the provided query is invalid.
@@ -252,7 +254,7 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
-    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None))]
+    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None, custom_aggregate_functions = None))]
     fn query<'py>(
         &self,
         query: &str,
@@ -262,6 +264,7 @@ impl PyStore {
         named_graphs: Option<&Bound<'_, PyAny>>,
         substitutions: Option<HashMap<PyVariable, PyTerm>>,
         custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
+        custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
         pub struct UngilQueryResults(QueryResults);
@@ -271,7 +274,7 @@ impl PyStore {
         unsafe impl Send for UngilQueryResults {}
 
         let mut evaluator = prepare_sparql_query(
-            sparql_evaluator_from_python(base_iri, custom_functions)?,
+            sparql_evaluator_from_python(base_iri, custom_functions, custom_aggregate_functions)?,
             query,
             use_default_graph_as_union,
             default_graph,
@@ -292,14 +295,16 @@ impl PyStore {
 
     /// Executes a `SPARQL 1.1 update <https://www.w3.org/TR/sparql11-update/>`_.
     ///
-    /// Updates are applied in a transactional manner: either the full operation succeeds or nothing is written to the database.
+    /// Updates are applied in a transactional manner: either the full operation succeeds, or nothing is written to the database.
     ///
     /// :param update: the update to execute.
     /// :type update: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the SPARQL update or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
-    /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions takes for input some :py:class:`Term`s and return a :py:class:`Term` or :py:const:`None`.
+    /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions take for input some RDF terms and returns a RDF term or :py:const:`None`.
     /// :type custom_functions: dict[NamedNode, typing.Callable[[NamedNode or BlankNode or Literal or Triple, ...], NamedNode or BlankNode or Literal or Triple or None]] or None, optional
+    /// :param custom_aggregate_functions: dictionary of custom aggregate functions mapping function names to their definition. Custom aggregate functions take no input and return an object with two methods, `accumulate(self, term: Term)` to add a new term to the accumulator and `finish(self) -> Term` to return the accumulated result.
+    /// :type custom_aggregate_functions: dict[NamedNode, typing.Callable[[], AggregateFunctionAccumulator]] or None, optional
     /// :rtype: None
     /// :raises SyntaxError: if the provided update is invalid.
     /// :raises OSError: if an error happens while reading the store.
@@ -326,16 +331,17 @@ impl PyStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[pyo3(signature = (update, *, base_iri = None, custom_functions = None))]
+    #[pyo3(signature = (update, *, base_iri = None, custom_functions = None, custom_aggregate_functions = None))]
     fn update(
         &self,
         update: &str,
         base_iri: Option<&str>,
         custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
+        custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
         py: Python<'_>,
     ) -> PyResult<()> {
         py.allow_threads(|| {
-            sparql_evaluator_from_python(base_iri, custom_functions)?
+            sparql_evaluator_from_python(base_iri, custom_functions, custom_aggregate_functions)?
                 .parse_update(update)
                 .map_err(|e| PySyntaxError::new_err(e.to_string()))?
                 .on_store(&self.inner)

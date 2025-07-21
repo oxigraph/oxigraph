@@ -1,10 +1,12 @@
-use crate::CustomFunctionRegistry;
 #[cfg(feature = "sparql-12")]
 use crate::dataset::ExpressionTriple;
 use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 use crate::error::QueryEvaluationError;
 use crate::model::{QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
+use crate::{
+    AggregateFunctionAccumulator, CustomAggregateFunctionRegistry, CustomFunctionRegistry,
+};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use md5::{Digest, Md5};
 use oxiri::Iri;
@@ -236,6 +238,7 @@ pub struct SimpleEvaluator<D: QueryableDataset> {
     now: DateTime,
     service_handler: Rc<ServiceHandlerRegistry>,
     custom_functions: Rc<CustomFunctionRegistry>,
+    custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
     run_stats: bool,
 }
 
@@ -245,6 +248,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         base_iri: Option<Rc<Iri<String>>>,
         service_handler: Rc<ServiceHandlerRegistry>,
         custom_functions: Rc<CustomFunctionRegistry>,
+        custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
         run_stats: bool,
     ) -> Self {
         Self {
@@ -255,6 +259,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
             now: DateTime::now(),
             service_handler,
             custom_functions,
+            custom_aggregate_functions,
             run_stats,
         }
     }
@@ -1509,7 +1514,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                     accumulator_builders.iter().map(|c| c()).collect::<Vec<_>>()
                                 });
                             for accumulator in key_accumulators {
-                                accumulator.add(&tuple);
+                                accumulator.accumulate(&tuple);
                             }
                         });
                     let accumulator_variables = accumulator_variables.clone();
@@ -1759,7 +1764,27 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                         })
                     }
                 }
-                AggregateFunction::Custom(_) => Box::new(move || AccumulatorWrapper::Failing),
+                AggregateFunction::Custom(function_name) => {
+                    if let Some(function) = self.custom_aggregate_functions.get(function_name) {
+                        let evaluator =
+                            self.expression_evaluator(expr, encoded_variables, stat_children);
+                        let function = Arc::clone(function);
+                        if *distinct {
+                            Box::new(move || AccumulatorWrapper::DistinctExpression {
+                                evaluator: Rc::clone(&evaluator),
+                                seen: FxHashSet::default(),
+                                accumulator: Some(Box::new(CustomAccumulator(function()))),
+                            })
+                        } else {
+                            Box::new(move || AccumulatorWrapper::Expression {
+                                evaluator: Rc::clone(&evaluator),
+                                accumulator: Some(Box::new(CustomAccumulator(function()))),
+                            })
+                        }
+                    } else {
+                        Box::new(move || AccumulatorWrapper::Failing)
+                    }
+                }
             },
         }
     }
@@ -3713,6 +3738,7 @@ impl<D: QueryableDataset> Clone for SimpleEvaluator<D> {
             now: self.now,
             service_handler: Rc::clone(&self.service_handler),
             custom_functions: Rc::clone(&self.custom_functions),
+            custom_aggregate_functions: Rc::clone(&self.custom_aggregate_functions),
             run_stats: self.run_stats,
         }
     }
@@ -3958,7 +3984,7 @@ enum AccumulatorWrapper<D: QueryableDataset> {
 }
 
 impl<D: QueryableDataset> AccumulatorWrapper<D> {
-    fn add(&mut self, tuple: &InternalTuple<D>) {
+    fn accumulate(&mut self, tuple: &InternalTuple<D>) {
         match self {
             Self::CountTuple { count } => {
                 *count += 1;
@@ -4005,7 +4031,7 @@ impl<D: QueryableDataset> AccumulatorWrapper<D> {
                 let Some(accumulator) = accumulator else {
                     return;
                 };
-                accumulator.add(value);
+                accumulator.accumulate(value);
             }
             Self::DistinctExpression {
                 seen,
@@ -4023,7 +4049,7 @@ impl<D: QueryableDataset> AccumulatorWrapper<D> {
                     return;
                 };
                 if seen.insert(value.clone()) {
-                    accumulator.add(value);
+                    accumulator.accumulate(value);
                 }
             }
             Self::Failing => (),
@@ -4048,7 +4074,7 @@ impl<D: QueryableDataset> AccumulatorWrapper<D> {
 }
 
 trait Accumulator {
-    fn add(&mut self, element: ExpressionTerm);
+    fn accumulate(&mut self, element: ExpressionTerm);
 
     fn finish(&mut self) -> Option<ExpressionTerm>;
 }
@@ -4059,7 +4085,7 @@ struct CountAccumulator {
 }
 
 impl Accumulator for CountAccumulator {
-    fn add(&mut self, _element: ExpressionTerm) {
+    fn accumulate(&mut self, _element: ExpressionTerm) {
         self.count += 1;
     }
 
@@ -4081,7 +4107,7 @@ impl Default for SumAccumulator {
 }
 
 impl Accumulator for SumAccumulator {
-    fn add(&mut self, element: ExpressionTerm) {
+    fn accumulate(&mut self, element: ExpressionTerm) {
         let Some(sum) = &self.sum else {
             return;
         };
@@ -4118,8 +4144,8 @@ struct AvgAccumulator {
 }
 
 impl Accumulator for AvgAccumulator {
-    fn add(&mut self, element: ExpressionTerm) {
-        self.sum.add(element);
+    fn accumulate(&mut self, element: ExpressionTerm) {
+        self.sum.accumulate(element);
         self.count += 1;
     }
 
@@ -4155,7 +4181,7 @@ struct MinAccumulator {
 }
 
 impl Accumulator for MinAccumulator {
-    fn add(&mut self, element: ExpressionTerm) {
+    fn accumulate(&mut self, element: ExpressionTerm) {
         if let Some(min) = &self.min {
             if cmp_terms(Some(&element), min.as_ref()) == Ordering::Less {
                 self.min = Some(Some(element));
@@ -4177,7 +4203,7 @@ struct MaxAccumulator {
 }
 
 impl Accumulator for MaxAccumulator {
-    fn add(&mut self, element: ExpressionTerm) {
+    fn accumulate(&mut self, element: ExpressionTerm) {
         if let Some(max) = &self.max {
             if cmp_terms(Some(&element), max.as_ref()) == Ordering::Greater {
                 self.max = Some(Some(element))
@@ -4210,7 +4236,7 @@ impl GroupConcatAccumulator {
 }
 
 impl Accumulator for GroupConcatAccumulator {
-    fn add(&mut self, element: ExpressionTerm) {
+    fn accumulate(&mut self, element: ExpressionTerm) {
         let Some(concat) = self.concat.as_mut() else {
             return;
         };
@@ -4233,6 +4259,18 @@ impl Accumulator for GroupConcatAccumulator {
         self.concat
             .take()
             .map(|result| build_plain_literal(result, self.language.take().flatten()))
+    }
+}
+
+struct CustomAccumulator(Box<dyn AggregateFunctionAccumulator + Send + Sync>);
+
+impl Accumulator for CustomAccumulator {
+    fn accumulate(&mut self, element: ExpressionTerm) {
+        self.0.accumulate(element.into())
+    }
+
+    fn finish(&mut self) -> Option<ExpressionTerm> {
+        Some(self.0.finish()?.into())
     }
 }
 
