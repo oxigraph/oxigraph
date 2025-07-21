@@ -9,6 +9,13 @@ import sys
 from functools import reduce
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
 
+PROTOCOLS = """
+@typing.type_check_only
+class AggregateFunctionAccumulator(typing.Protocol):
+    def accumulate(self, element: NamedNode | BlankNode | Literal | Triple) -> None: ...
+    def finish(self) -> NamedNode | BlankNode | Literal | Triple | None: ...
+"""
+
 
 def path_to_type(*elements: str) -> ast.expr:
     base: ast.expr = ast.Name(id=elements[0], ctx=ast.Load())
@@ -447,7 +454,7 @@ def parse_type_to_ast(type_str: str, element_path: List[str], types_to_import: S
                     # TODO: hack to convert Callable[[T, ...], R] into Callable[..., R]
                     new_elements.append(ast.Constant(...))
                 else:
-                    new_elements.append(ast.Expr(value=ast.List([parse_sequence(g) for g in group[0]])))
+                    new_elements.append(ast.Expr(value=ast.List([parse_sequence(g) for g in group[0] if g])))
             else:
                 raise ValueError(f"Not able to parse type '{type_str}' used by {'.'.join(element_path)}")
         return reduce(lambda left, right: ast.BinOp(left=left, op=ast.BitOr(), right=right), new_elements)
@@ -491,7 +498,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--ruff", help="Formats the generated stubs using Ruff", action="store_true")
     args = parser.parse_args()
-    stub_content = ast.unparse(module_stubs(importlib.import_module(args.module_name)))
+    stub_content = ast.unparse(module_stubs(importlib.import_module(args.module_name))) + "\n" + PROTOCOLS
     args.out.write(stub_content)
     if args.ruff:
         format_with_ruff(args.out.name)
