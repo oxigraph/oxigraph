@@ -1,6 +1,13 @@
 Migration Guide
 ===============
 
+From 0.4 to 0.5
+"""""""""""""""
+
+* RDF-star support has been dropped in favor of `RDF 1.2 <https://www.w3.org/TR/rdf12-concepts>_`.
+  Triple terms are not allowed in subject position anymore.
+
+
 From 0.3 to 0.4
 """""""""""""""
 
