@@ -8,8 +8,8 @@ use oxigraph::sparql::results::{
     ReaderQueryResultsParserOutput, ReaderSolutionsParser,
 };
 use oxigraph::sparql::{
-    EvaluationError, PreparedSparqlQuery, QueryResults, QuerySolution, QuerySolutionIter,
-    QueryTripleIter, SparqlEvaluator, Variable,
+    AggregateFunctionAccumulator, EvaluationError, PreparedSparqlQuery, QueryResults,
+    QuerySolution, QuerySolutionIter, QueryTripleIter, SparqlEvaluator, Variable,
 };
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
@@ -79,6 +79,7 @@ pub fn prepare_sparql_query(
 pub fn sparql_evaluator_from_python(
     base_iri: Option<&str>,
     custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
+    custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
 ) -> PyResult<SparqlEvaluator> {
     let mut evaluator = SparqlEvaluator::default();
     #[cfg(feature = "geosparql")]
@@ -106,6 +107,17 @@ pub fn sparql_evaluator_from_python(
             })
         }
     }
+    if let Some(custom_aggregate_functions) = custom_aggregate_functions {
+        for (name, function) in custom_aggregate_functions {
+            evaluator = evaluator.with_custom_aggregate_function(name.into(), move || {
+                Python::with_gil(|py| {
+                    Box::new(PyAggregateFunctionAccumulator {
+                        inner: function.call0(py).ok(),
+                    })
+                })
+            })
+        }
+    }
 
     if let Some(base_iri) = base_iri {
         evaluator = evaluator
@@ -114,6 +126,37 @@ pub fn sparql_evaluator_from_python(
     }
 
     Ok(evaluator)
+}
+
+struct PyAggregateFunctionAccumulator {
+    inner: Option<PyObject>,
+}
+
+impl AggregateFunctionAccumulator for PyAggregateFunctionAccumulator {
+    fn accumulate(&mut self, element: Term) {
+        Python::with_gil(|py| {
+            self.inner = self.inner.take().and_then(|inner| {
+                inner
+                    .call_method1(py, "accumulate", (PyTerm::from(element),))
+                    .ok()?;
+                Some(inner)
+            })
+        })
+    }
+
+    fn finish(&mut self) -> Option<Term> {
+        Python::with_gil(|py| {
+            Some(
+                self.inner
+                    .take()?
+                    .call_method0(py, "finish")
+                    .ok()?
+                    .extract::<PyTerm>(py)
+                    .ok()?
+                    .into(),
+            )
+        })
+    }
 }
 
 pub fn query_results_to_python(

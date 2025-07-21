@@ -60,6 +60,7 @@ use std::{fmt, io};
 pub struct QueryEvaluator {
     service_handler: ServiceHandlerRegistry,
     custom_functions: CustomFunctionRegistry,
+    custom_aggregate_functions: CustomAggregateFunctionRegistry,
     without_optimizations: bool,
     run_stats: bool,
 }
@@ -147,6 +148,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_select(&pattern, substitutions);
@@ -169,6 +171,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_ask(&pattern, substitutions);
@@ -194,6 +197,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_construct(&pattern, template, substitutions);
@@ -216,6 +220,7 @@ impl QueryEvaluator {
                     base_iri.clone().map(Rc::new),
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
+                    Rc::new(self.custom_aggregate_functions.clone()),
                     self.run_stats,
                 )
                 .evaluate_describe(&pattern, substitutions);
@@ -302,6 +307,72 @@ impl QueryEvaluator {
         self
     }
 
+    /// Adds a custom SPARQL evaluation aggregate function.
+    ///
+    /// Note that it must also be given to the SPARQL parser using [`SparqlParser::with_custom_aggregate_function`](spargebra::SparqlParser::with_custom_aggregate_function).
+    ///
+    /// Example with a function doing concatenation:
+    /// ```
+    /// use oxrdf::{Dataset, Literal, NamedNode, Term};
+    /// use spareval::{AggregateFunctionAccumulator, QueryEvaluator, QueryResults};
+    /// use spargebra::SparqlParser;
+    /// use std::mem::take;
+    ///
+    /// struct ConcatAccumulator {
+    ///     value: String,
+    /// }
+    ///
+    /// impl AggregateFunctionAccumulator for ConcatAccumulator {
+    ///     fn accumulate(&mut self, element: Term) {
+    ///         if let Term::Literal(v) = element {
+    ///             if !self.value.is_empty() {
+    ///                 self.value.push(' ');
+    ///             }
+    ///             self.value.push_str(v.value());
+    ///         }
+    ///     }
+    ///
+    ///     fn finish(&mut self) -> Option<Term> {
+    ///         Some(Literal::new_simple_literal(take(&mut self.value)).into())
+    ///     }
+    /// }
+    ///
+    /// let evaluator = QueryEvaluator::new().with_custom_aggregate_function(
+    ///     NamedNode::new("http://example.com/concat")?,
+    ///     || {
+    ///         Box::new(ConcatAccumulator {
+    ///             value: String::new(),
+    ///         })
+    ///     },
+    /// );
+    /// let query = SparqlParser::new()
+    ///     .with_custom_aggregate_function(NamedNode::new("http://example.com/concat")?)
+    ///     .parse_query(
+    ///         "SELECT (<http://example.com/concat>(?v) AS ?r) WHERE { VALUES ?v { 1 2 3 } }",
+    ///     )?;
+    /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("r"),
+    ///         Some(&Literal::new_simple_literal("1 2 3").into())
+    ///     );
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn with_custom_aggregate_function(
+        mut self,
+        name: NamedNode,
+        evaluator: impl Fn() -> Box<dyn AggregateFunctionAccumulator + Send + Sync>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        self.custom_aggregate_functions
+            .insert(name, Arc::new(evaluator));
+        self
+    }
+
     /// Disables query optimizations and runs the query as it is.
     #[inline]
     #[must_use]
@@ -321,6 +392,21 @@ impl QueryEvaluator {
 
 pub(crate) type CustomFunctionRegistry =
     HashMap<NamedNode, Arc<dyn (Fn(&[Term]) -> Option<Term>) + Send + Sync>>;
+pub(crate) type CustomAggregateFunctionRegistry = HashMap<
+    NamedNode,
+    Arc<dyn (Fn() -> Box<dyn AggregateFunctionAccumulator + Send + Sync>) + Send + Sync>,
+>;
+
+/// A trait for custom aggregate function implementation.
+///
+/// The accumulator accumulates values using the [`accumulate`](Self::accumulate) method
+/// and returns a final aggregated value (or an error) using [`finish`](Self::finish).
+///
+/// See [`QueryEvaluator::with_custom_aggregate_function`] for an example.
+pub trait AggregateFunctionAccumulator {
+    fn accumulate(&mut self, element: Term);
+    fn finish(&mut self) -> Option<Term>;
+}
 
 /// The explanation of a query.
 #[derive(Clone)]

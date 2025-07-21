@@ -29,6 +29,7 @@ use std::str::FromStr;
 pub struct SparqlParser {
     base_iri: Option<Iri<String>>,
     prefixes: HashMap<String, String>,
+    custom_aggregate_functions: HashSet<NamedNode>,
 }
 
 impl SparqlParser {
@@ -79,6 +80,25 @@ impl SparqlParser {
         Ok(self)
     }
 
+    /// Adds a new function to be parsed as a custom aggregate function and not as a regular custom function.
+    ///
+    /// ```
+    /// use oxrdf::NamedNode;
+    /// use spargebra::SparqlParser;
+    ///
+    /// SparqlParser::new()
+    ///     .with_custom_aggregate_function(NamedNode::new("http://example.com/concat")?)
+    ///     .parse_query(
+    ///         "PREFIX ex: <http://example.com/> SELECT (ex:concat(?o) AS ?concat) WHERE { ex:s ex:p ex:o }",
+    ///     )?;
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    pub fn with_custom_aggregate_function(mut self, name: impl Into<NamedNode>) -> Self {
+        self.custom_aggregate_functions.insert(name.into());
+        self
+    }
+
     /// Parse the given query string using the already set options.
     ///
     /// ```
@@ -90,7 +110,11 @@ impl SparqlParser {
     /// # Ok::<_, spargebra::SparqlSyntaxError>(())
     /// ```
     pub fn parse_query(self, query: &str) -> Result<Query, SparqlSyntaxError> {
-        let mut state = ParserState::new(self.base_iri, self.prefixes);
+        let mut state = ParserState::new(
+            self.base_iri,
+            self.prefixes,
+            self.custom_aggregate_functions,
+        );
         parser::QueryUnit(query, &mut state)
             .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))
     }
@@ -106,7 +130,11 @@ impl SparqlParser {
     /// # Ok::<_, spargebra::SparqlSyntaxError>(())
     /// ```
     pub fn parse_update(self, update: &str) -> Result<Update, SparqlSyntaxError> {
-        let mut state = ParserState::new(self.base_iri, self.prefixes);
+        let mut state = ParserState::new(
+            self.base_iri,
+            self.prefixes,
+            self.custom_aggregate_functions,
+        );
         let operations = parser::UpdateInit(update, &mut state)
             .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
         Ok(Update {
@@ -744,16 +772,22 @@ enum Either<L, R> {
 pub struct ParserState {
     base_iri: Option<Iri<String>>,
     prefixes: HashMap<String, String>,
+    custom_aggregate_functions: HashSet<NamedNode>,
     used_bnodes: HashSet<BlankNode>,
     currently_used_bnodes: HashSet<BlankNode>,
     aggregates: Vec<Vec<(Variable, AggregateExpression)>>,
 }
 
 impl ParserState {
-    pub(crate) fn new(base_iri: Option<Iri<String>>, prefixes: HashMap<String, String>) -> Self {
+    pub(crate) fn new(
+        base_iri: Option<Iri<String>>,
+        prefixes: HashMap<String, String>,
+        custom_aggregate_functions: HashSet<NamedNode>,
+    ) -> Self {
         Self {
             base_iri,
             prefixes,
+            custom_aggregate_functions,
             used_bnodes: HashSet::new(),
             currently_used_bnodes: HashSet::new(),
             aggregates: Vec::new(),
@@ -1431,8 +1465,12 @@ parser! {
 
         rule Constraint() -> Expression = BrackettedExpression() / FunctionCall() / BuiltInCall()
 
-        rule FunctionCall() -> Expression = f: iri() _ a: ArgList() {
-            Expression::FunctionCall(Function::Custom(f), a)
+        rule FunctionCall() -> Expression = f:iri() _ a:ArgList() {?
+            if state.custom_aggregate_functions.contains(&f) {
+                Err("This custom function is an aggregate function and not a regular function")
+            } else {
+                Ok(Expression::FunctionCall(Function::Custom(f), a))
+            }
         }
 
         rule ArgList() -> Vec<Expression> =
@@ -2179,13 +2217,30 @@ parser! {
             i("GROUP_CONCAT") _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: true } } /
             i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ";" _ i("SEPARATOR") _ "=" _ s:String() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: Some(s) }, expr, distinct: false } } /
             i("GROUP_CONCAT") _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::GroupConcat { separator: None }, expr, distinct: false } } /
-            name:iri() _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: true } } /
-            name:iri() _ "(" _ expr:Expression() _ ")" { AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: false } }
+            name:iri() _ "(" _ i("DISTINCT") _ expr:Expression() _ ")" {?
+                if state.custom_aggregate_functions.contains(&name) {
+                    Ok(AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: true })
+                } else {
+                    Err("This custom function is a regular function and not an aggregate function")
+                }
+            } /
+            name:iri() _ "(" _ expr:Expression() _ ")" {?
+                if state.custom_aggregate_functions.contains(&name) {
+                    Ok(AggregateExpression::FunctionCall { name: AggregateFunction::Custom(name), expr, distinct: false })
+                } else {
+                    Err("This custom function is a regular function and not an aggregate function")
+                }
+            }
 
-        rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {
-            match a {
-                Some(a) => Expression::FunctionCall(Function::Custom(i), a),
-                None => i.into()
+        rule iriOrFunction() -> Expression = i: iri() _ a: ArgList()? {?
+            if let Some(a) = a {
+                if state.custom_aggregate_functions.contains(&i) {
+                    Err("This custom function is an aggregate function and not a regular function")
+                } else {
+                    Ok(Expression::FunctionCall(Function::Custom(i), a))
+                }
+            } else {
+                Ok(i.into())
             }
         }
 
