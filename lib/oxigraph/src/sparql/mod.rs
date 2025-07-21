@@ -27,7 +27,7 @@ pub(crate) use crate::sparql::update::{
 use crate::storage::StorageReader;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
-pub use spareval::QueryExplanation;
+pub use spareval::{AggregateFunctionAccumulator, QueryExplanation};
 pub use spargebra::SparqlSyntaxError;
 #[cfg(feature = "http-client")]
 use std::time::Duration;
@@ -205,6 +205,68 @@ impl QueryOptions {
         evaluator: impl Fn(&[Term]) -> Option<Term> + Send + Sync + 'static,
     ) -> Self {
         self.inner = self.inner.with_custom_function(name, evaluator);
+        self
+    }
+
+    /// Adds a custom SPARQL evaluation aggregate function.
+    ///
+    /// Example with a function doing concatenation:
+    /// ```
+    /// use oxigraph::model::{Literal, NamedNode, Term};
+    /// use oxigraph::sparql::{AggregateFunctionAccumulator, QueryOptions, QueryResults};
+    /// use oxigraph::store::Store;
+    /// use std::mem::take;
+    ///
+    /// struct ConcatAccumulator {
+    ///     value: String,
+    /// }
+    ///
+    /// impl AggregateFunctionAccumulator for ConcatAccumulator {
+    ///     fn accumulate(&mut self, element: Term) {
+    ///         if let Term::Literal(v) = element {
+    ///             if !self.value.is_empty() {
+    ///                 self.value.push(' ');
+    ///             }
+    ///             self.value.push_str(v.value());
+    ///         }
+    ///     }
+    ///
+    ///     fn finish(&mut self) -> Option<Term> {
+    ///         Some(Literal::new_simple_literal(take(&mut self.value)).into())
+    ///     }
+    /// }
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
+    ///     "SELECT (<http://example.com/concat>(?v) AS ?r) WHERE { VALUES ?v { 1 2 3 } }",
+    ///     QueryOptions::default().with_custom_aggregate_function(
+    ///         NamedNode::new("http://example.com/concat")?,
+    ///         || {
+    ///             Box::new(ConcatAccumulator {
+    ///                 value: String::new(),
+    ///             })
+    ///         },
+    ///     ),
+    /// )? {
+    ///     assert_eq!(
+    ///         solutions.next().unwrap()?.get("r"),
+    ///         Some(&Literal::new_simple_literal("1 2 3").into())
+    ///     );
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn with_custom_aggregate_function(
+        mut self,
+        name: NamedNode,
+        evaluator: impl Fn() -> Box<dyn AggregateFunctionAccumulator + Send + Sync>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        self.inner = self.inner.with_custom_aggregate_function(name, evaluator);
         self
     }
 
