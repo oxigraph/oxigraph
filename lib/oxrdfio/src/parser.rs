@@ -280,7 +280,7 @@ impl RdfParser {
                 RdfParserKind::Turtle(p) => ReaderQuadParserKind::Turtle(p.for_reader(reader)),
             },
             mapper: QuadMapper {
-                default_graph: self.default_graph.clone(),
+                default_graph: self.default_graph,
                 without_named_graphs: self.without_named_graphs,
                 blank_node_map: self.rename_blank_nodes.then(HashMap::new),
             },
@@ -336,7 +336,7 @@ impl RdfParser {
                 }
             },
             mapper: QuadMapper {
-                default_graph: self.default_graph.clone(),
+                default_graph: self.default_graph,
                 without_named_graphs: self.without_named_graphs,
                 blank_node_map: self.rename_blank_nodes.then(HashMap::new),
             },
@@ -370,10 +370,65 @@ impl RdfParser {
                 RdfParserKind::Turtle(p) => SliceQuadParserKind::Turtle(p.for_slice(slice)),
             },
             mapper: QuadMapper {
-                default_graph: self.default_graph.clone(),
+                default_graph: self.default_graph,
                 without_named_graphs: self.without_named_graphs,
                 blank_node_map: self.rename_blank_nodes.then(HashMap::new),
             },
+        }
+    }
+
+    /// Creates a vector of parsers that may be used to parse the document slice in parallel.
+    /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
+    ///
+    /// This only works for N-Triples and N-Quads and is only interesting on large documents.
+    ///
+    ///
+    /// ```
+    /// use oxrdfio::{RdfFormat, RdfParser};
+    ///
+    /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+    ///
+    /// let quads = RdfParser::from_format(RdfFormat::NTriples)
+    ///     .split_slice_for_parallel_parsing(file, 4)
+    ///     .into_iter()
+    ///     .flatten()
+    ///     .collect::<Result<Vec<_>, _>>()?;
+    ///
+    /// assert_eq!(quads.len(), 1);
+    /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
+    /// # std::io::Result::Ok(())
+    /// ```
+    pub fn split_slice_for_parallel_parsing(
+        self,
+        slice: &(impl AsRef<[u8]> + ?Sized),
+        target_parallelism: usize,
+    ) -> Vec<SliceQuadParser<'_>> {
+        match self.inner {
+            RdfParserKind::NTriples(p) => p
+                .split_slice_for_parallel_parsing(slice, target_parallelism)
+                .into_iter()
+                .map(|p| SliceQuadParser {
+                    inner: SliceQuadParserKind::NTriples(p),
+                    mapper: QuadMapper {
+                        default_graph: self.default_graph.clone(),
+                        without_named_graphs: self.without_named_graphs,
+                        blank_node_map: self.rename_blank_nodes.then(HashMap::new),
+                    },
+                })
+                .collect(),
+            RdfParserKind::NQuads(p) => p
+                .split_slice_for_parallel_parsing(slice, target_parallelism)
+                .into_iter()
+                .map(|p| SliceQuadParser {
+                    inner: SliceQuadParserKind::NQuads(p),
+                    mapper: QuadMapper {
+                        default_graph: self.default_graph.clone(),
+                        without_named_graphs: self.without_named_graphs,
+                        blank_node_map: self.rename_blank_nodes.then(HashMap::new),
+                    },
+                })
+                .collect(),
+            _ => vec![self.for_slice(slice)],
         }
     }
 }
@@ -692,7 +747,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut parser =
-    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_slice());
+    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
@@ -733,7 +788,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut parser =
-    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_slice());
+    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base IRI at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
