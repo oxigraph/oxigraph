@@ -161,7 +161,7 @@ impl NTriplesParser {
         }
     }
 
-    /// Creates a vector of iterators that may be used to parse an NTriples document slice in parallel.
+    /// Creates a vector of parsers that may be used to parse an NTriples document slice in parallel.
     /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
     /// Intended to work on large documents.
     ///
@@ -178,7 +178,7 @@ impl NTriplesParser {
     /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = NTriplesParser::new().split_slice_for_parallel_parsing(file.as_bytes(), 2);
+    /// let readers = NTriplesParser::new().split_slice_for_parallel_parsing(file, 2);
     /// let count = readers
     ///     .into_par_iter()
     ///     .map(|reader| {
@@ -195,11 +195,12 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn split_slice_for_parallel_parsing<'a>(
-        &self,
-        slice: &'a [u8],
+    pub fn split_slice_for_parallel_parsing(
+        self,
+        slice: &(impl AsRef<[u8]> + ?Sized),
         target_parallelism: usize,
-    ) -> Vec<SliceNTriplesParser<'a>> {
+    ) -> Vec<SliceNTriplesParser<'_>> {
+        let slice = slice.as_ref();
         let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
         get_ntriples_file_chunks(slice, n_chunks)
             .into_iter()

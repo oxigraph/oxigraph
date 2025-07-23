@@ -205,7 +205,7 @@ impl TurtleParser {
         }
     }
 
-    /// Creates a vector of iterators that may be used to parse a Turtle document slice in parallel.
+    /// Creates a vector of parsers that may be used to parse a Turtle document slice in parallel.
     /// To dynamically specify target_parallelism, use e.g. [`std::thread::available_parallelism`].
     /// Intended to work on large documents.
     /// Can fail or return wrong results if there are prefixes or base iris that are not defined
@@ -226,7 +226,7 @@ impl TurtleParser {
     ///     schema:name "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = TurtleParser::new().split_slice_for_parallel_parsing(file.as_bytes(), 2);
+    /// let readers = TurtleParser::new().split_slice_for_parallel_parsing(file, 2);
     /// let count = readers
     ///     .into_par_iter()
     ///     .map(|reader| {
@@ -245,9 +245,10 @@ impl TurtleParser {
     /// ```
     pub fn split_slice_for_parallel_parsing(
         mut self,
-        slice: &[u8],
+        slice: &(impl AsRef<[u8]> + ?Sized),
         target_parallelism: usize,
     ) -> Vec<SliceTurtleParser<'_>> {
+        let slice = slice.as_ref();
         let n_chunks = (slice.len() / MIN_PARALLEL_CHUNK_SIZE).clamp(1, target_parallelism);
 
         if n_chunks > 1 {
