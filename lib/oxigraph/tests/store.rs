@@ -137,7 +137,7 @@ fn test_bulk_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
         .bulk_loader()
-        .load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
+        .load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -152,7 +152,7 @@ fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
     let store = Store::open(&dir.0)?;
     store
         .bulk_loader()
-        .load_from_reader(RdfFormat::Turtle, DATA.as_bytes())?;
+        .load_from_slice(RdfFormat::Turtle, DATA.as_bytes())?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q)?);
     }
@@ -163,7 +163,7 @@ fn test_bulk_load_graph_on_disk() -> Result<(), Box<dyn Error>> {
 #[test]
 fn test_bulk_load_graph_lenient() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
-    store.bulk_loader().on_parse_error(|_| Ok(())).load_from_reader(
+    store.bulk_loader().on_parse_error(|_| Ok(())).load_from_slice(
         RdfFormat::NTriples,
         b"<http://example.com> <http://example.com> <http://example.com##> .\n<http://example.com> <http://example.com> <http://example.com> .".as_slice(),
     )?;
@@ -205,7 +205,7 @@ fn test_bulk_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new()?;
     store
         .bulk_loader()
-        .load_from_reader(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
+        .load_from_slice(RdfFormat::TriG, GRAPH_DATA.as_bytes())?;
     let graph_name =
         NamedNodeRef::new_unchecked("http://www.wikidata.org/wiki/Special:EntityData/Q90");
     for q in quads(graph_name) {

@@ -32,7 +32,7 @@ use tokio::io::AsyncRead;
 /// use oxrdf::NamedNodeRef;
 /// use oxrdf::vocab::rdf;
 ///
-/// let file = br#"{
+/// let file = r#"{
 ///     "@context": {"schema": "http://schema.org/"},
 ///     "@graph": [
 ///         {
@@ -49,7 +49,7 @@ use tokio::io::AsyncRead;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for quad in JsonLdParser::new().for_reader(file.as_ref()) {
+/// for quad in JsonLdParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
@@ -95,7 +95,7 @@ impl JsonLdParser {
     /// use oxrdf::NamedNodeRef;
     /// use oxrdf::vocab::rdf;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/"},
     ///     "@graph": [
     ///         {
@@ -151,7 +151,7 @@ impl JsonLdParser {
     /// use oxrdf::NamedNodeRef;
     /// use oxrdf::vocab::rdf;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/"},
     ///     "@graph": [
     ///         {
@@ -168,7 +168,7 @@ impl JsonLdParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for quad in JsonLdParser::new().for_reader(file.as_ref()) {
+    /// for quad in JsonLdParser::new().for_reader(file.as_bytes()) {
     ///     let quad = quad?;
     ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
     ///         count += 1;
@@ -196,7 +196,7 @@ impl JsonLdParser {
     /// use oxrdf::NamedNodeRef;
     /// use oxrdf::vocab::rdf;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/"},
     ///     "@graph": [
     ///         {
@@ -213,7 +213,7 @@ impl JsonLdParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_bytes());
     /// while let Some(quad) = parser.next().await {
     ///     let quad = quad?;
     ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
@@ -245,7 +245,7 @@ impl JsonLdParser {
     /// use oxrdf::NamedNodeRef;
     /// use oxrdf::vocab::rdf;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/"},
     ///     "@graph": [
     ///         {
@@ -271,12 +271,12 @@ impl JsonLdParser {
     /// assert_eq!(2, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn for_slice(self, slice: &[u8]) -> SliceJsonLdParser<'_> {
+    pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceJsonLdParser<'_> {
         SliceJsonLdParser {
             results: Vec::new(),
             errors: Vec::new(),
             inner: self.into_inner(),
-            json_parser: SliceJsonParser::new(slice),
+            json_parser: SliceJsonParser::new(slice.as_ref()),
         }
     }
 
@@ -308,7 +308,7 @@ impl JsonLdParser {
 /// use oxrdf::NamedNodeRef;
 /// use oxrdf::vocab::rdf;
 ///
-/// let file = br#"{
+/// let file = r#"{
 ///     "@context": {"schema": "http://schema.org/"},
 ///     "@graph": [
 ///         {
@@ -325,7 +325,7 @@ impl JsonLdParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for quad in JsonLdParser::new().for_reader(file.as_ref()) {
+/// for quad in JsonLdParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
@@ -379,7 +379,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// use oxrdf::NamedNodeRef;
     /// use oxrdf::vocab::rdf;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": "file://context.jsonld",
     ///     "@type": "schema:Person",
     ///     "@id": "http://example.com/foo",
@@ -389,7 +389,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
     /// for quad in JsonLdParser::new()
-    ///     .for_reader(file.as_ref())
+    ///     .for_reader(file.as_bytes())
     ///     .with_load_document_callback(|url, _options| {
     ///         assert_eq!(url, "file://context.jsonld");
     ///         Ok(JsonLdRemoteDocument {
@@ -431,14 +431,14 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// ```
     /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
     ///     "@type": "schema:Person",
     ///     "@id": "foo",
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let mut parser = JsonLdParser::new().for_reader(file.as_ref());
+    /// let mut parser = JsonLdParser::new().for_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().unwrap()?; // We read the first quad
@@ -458,14 +458,14 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// ```
     /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
     ///     "@type": "schema:Person",
     ///     "@id": "foo",
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let mut parser = JsonLdParser::new().for_reader(file.as_ref());
+    /// let mut parser = JsonLdParser::new().for_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
     /// parser.next().unwrap()?; // We read the first quad
@@ -498,7 +498,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
 /// use oxrdf::NamedNodeRef;
 /// use oxrdf::vocab::rdf;
 ///
-/// let file = br#"{
+/// let file = r#"{
 ///     "@context": {"schema": "http://schema.org/"},
 ///     "@graph": [
 ///         {
@@ -515,7 +515,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
+/// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_bytes());
 /// while let Some(quad) = parser.next().await {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
@@ -567,14 +567,14 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
     ///     "@type": "schema:Person",
     ///     "@id": "foo",
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first quad
@@ -597,14 +597,14 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
     ///     "@type": "schema:Person",
     ///     "@id": "foo",
     ///     "schema:name": "Foo"
     /// }"#;
     ///
-    /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
     /// parser.next().await.unwrap()?; // We read the first quad
@@ -636,7 +636,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
 /// use oxrdf::NamedNodeRef;
 /// use oxrdf::vocab::rdf;
 ///
-/// let file = br#"{
+/// let file = r#"{
 ///     "@context": {"schema": "http://schema.org/"},
 ///     "@graph": [
 ///         {
@@ -707,7 +707,7 @@ impl SliceJsonLdParser<'_> {
     /// use oxrdf::NamedNodeRef;
     /// use oxrdf::vocab::rdf;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": "file://context.jsonld",
     ///     "@type": "schema:Person",
     ///     "@id": "http://example.com/foo",
@@ -759,7 +759,7 @@ impl SliceJsonLdParser<'_> {
     /// ```
     /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
     ///     "@type": "schema:Person",
     ///     "@id": "foo",
@@ -786,7 +786,7 @@ impl SliceJsonLdParser<'_> {
     /// ```
     /// use oxjsonld::JsonLdParser;
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": {"schema": "http://schema.org/", "@base": "http://example.com/"},
     ///     "@type": "schema:Person",
     ///     "@id": "foo",

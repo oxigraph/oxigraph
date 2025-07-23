@@ -398,9 +398,9 @@ impl JsStore {
         Ok(if no_transaction {
             self.store
                 .bulk_loader()
-                .load_from_reader(parser, data.as_bytes())
+                .load_from_slice(parser, data.as_bytes())
         } else {
-            self.store.load_from_reader(parser, data.as_bytes())
+            self.store.load_from_slice(parser, data)
         }
         .map_err(JsError::from)?)
     }

@@ -31,7 +31,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
+/// let file = r#"<?xml version="1.0"?>
 /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
 ///  <rdf:Description rdf:about="http://example.com/foo">
 ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -42,7 +42,7 @@ use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
+/// for triple in RdfXmlParser::new().for_reader(file.as_bytes()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -96,7 +96,7 @@ impl RdfXmlParser {
     /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///  <rdf:Description rdf:about="http://example.com/foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -107,7 +107,7 @@ impl RdfXmlParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
+    /// for triple in RdfXmlParser::new().for_reader(file.as_bytes()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -134,7 +134,7 @@ impl RdfXmlParser {
     /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///   <rdf:Description rdf:about="http://example.com/foo">
     ///     <rdf:type rdf:resource="http://schema.org/Person" />
@@ -145,7 +145,7 @@ impl RdfXmlParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_bytes());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -176,7 +176,7 @@ impl RdfXmlParser {
     /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///  <rdf:Description rdf:about="http://example.com/foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -196,10 +196,10 @@ impl RdfXmlParser {
     /// assert_eq!(2, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn for_slice(self, slice: &[u8]) -> SliceRdfXmlParser<'_> {
+    pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceRdfXmlParser<'_> {
         SliceRdfXmlParser {
             results: Vec::new(),
-            parser: self.into_internal(slice),
+            parser: self.into_internal(slice.as_ref()),
         }
     }
 
@@ -230,7 +230,7 @@ impl RdfXmlParser {
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
+/// let file = r#"<?xml version="1.0"?>
 /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
 ///  <rdf:Description rdf:about="http://example.com/foo">
 ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -241,7 +241,7 @@ impl RdfXmlParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
+/// for triple in RdfXmlParser::new().for_reader(file.as_bytes()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -284,7 +284,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     /// ```
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///  <rdf:Description rdf:about="http://example.com/foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -293,7 +293,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let mut parser = RdfXmlParser::new().for_reader(file.as_ref());
+    /// let mut parser = RdfXmlParser::new().for_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().unwrap()?; // We read the first triple
@@ -320,14 +320,14 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     /// ```
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
     ///  <rdf:Description rdf:about="foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />
     ///  </rdf:Description>
     /// </rdf:RDF>"#;
     ///
-    /// let mut parser = RdfXmlParser::new().for_reader(file.as_ref());
+    /// let mut parser = RdfXmlParser::new().for_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
     /// parser.next().unwrap()?; // We read the first triple
@@ -365,7 +365,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
+/// let file = r#"<?xml version="1.0"?>
 /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
 ///   <rdf:Description rdf:about="http://example.com/foo">
 ///     <rdf:type rdf:resource="http://schema.org/Person" />
@@ -376,7 +376,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
+/// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_bytes());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -422,7 +422,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///  <rdf:Description rdf:about="http://example.com/foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -431,7 +431,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
@@ -461,14 +461,14 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
     ///  <rdf:Description rdf:about="foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />
     ///  </rdf:Description>
     /// </rdf:RDF>"#;
     ///
-    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
@@ -506,7 +506,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlParser;
 ///
-/// let file = br#"<?xml version="1.0"?>
+/// let file = r#"<?xml version="1.0"?>
 /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
 ///  <rdf:Description rdf:about="http://example.com/foo">
 ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -560,7 +560,7 @@ impl SliceRdfXmlParser<'_> {
     /// ```
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:schema="http://schema.org/">
     ///  <rdf:Description rdf:about="http://example.com/foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />
@@ -596,7 +596,7 @@ impl SliceRdfXmlParser<'_> {
     /// ```
     /// use oxrdfxml::RdfXmlParser;
     ///
-    /// let file = br#"<?xml version="1.0"?>
+    /// let file = r#"<?xml version="1.0"?>
     /// <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xml:base="http://example.com/">
     ///  <rdf:Description rdf:about="foo">
     ///    <rdf:type rdf:resource="http://schema.org/Person" />

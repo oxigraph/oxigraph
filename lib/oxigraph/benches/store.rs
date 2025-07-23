@@ -132,14 +132,14 @@ fn store_load(c: &mut Criterion) {
 }
 
 fn do_load(store: &Store, data: &[u8]) {
-    store.load_from_reader(RdfFormat::NTriples, data).unwrap();
+    store.load_from_slice(RdfFormat::NTriples, data).unwrap();
     store.optimize().unwrap();
 }
 
 fn do_bulk_load(store: &Store, data: &[u8]) {
     store
         .bulk_loader()
-        .load_from_reader(RdfParser::from_format(RdfFormat::NTriples).lenient(), data)
+        .load_from_slice(RdfParser::from_format(RdfFormat::NTriples).lenient(), data)
         .unwrap();
     store.optimize().unwrap();
 }

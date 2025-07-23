@@ -110,7 +110,7 @@ impl QueryResults {
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n";
     ///
     /// let store = Store::new()?;
-    /// store.load_from_reader(RdfFormat::NTriples, graph.as_bytes())?;
+    /// store.load_from_slice(RdfFormat::NTriples, graph)?;
     ///
     /// let results = store.query("CONSTRUCT WHERE { ?s ?p ?o }")?;
     /// assert_eq!(
