@@ -515,17 +515,17 @@ impl Store {
     /// let store = Store::new()?;
     ///
     /// // insert a dataset file (former load_dataset method)
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.load_from_reader(RdfFormat::NQuads, file.as_ref())?;
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// store.load_from_reader(RdfFormat::NQuads, file.as_bytes())?;
     ///
     /// // insert a graph file (former load_graph method)
-    /// let file = b"<> <> <> .";
+    /// let file = "<> <> <> .";
     /// store.load_from_reader(
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
-    ///     file.as_ref()
+    ///     file.as_bytes()
     /// )?;
     ///
     /// // we inspect the store contents
@@ -542,6 +542,52 @@ impl Store {
         let mut transaction = self.storage.start_transaction()?;
         for quad in parser.into().rename_blank_nodes().for_reader(reader) {
             transaction.insert(quad?.as_ref());
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Loads an RDF file under into the store.
+    ///
+    /// This function is atomic, quite slow and memory hungry. To get much better performances, you might want to use the [`bulk_loader`](Store::bulk_loader).
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::model::*;
+    /// use oxrdfio::RdfParser;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insert a dataset file (former load_dataset method)
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// store.load_from_slice(RdfFormat::NQuads, file)?;
+    ///
+    /// // insert a graph file (former load_graph method)
+    /// let file = "<> <> <> .";
+    /// store.load_from_slice(
+    ///     RdfParser::from_format(RdfFormat::Turtle)
+    ///         .with_base_iri("http://example.com")?
+    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///     file
+    /// )?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_from_slice(
+        &self,
+        parser: impl Into<RdfParser>,
+        slice: &(impl AsRef<[u8]> + ?Sized),
+    ) -> Result<(), LoaderError> {
+        let mut transaction = self.storage.start_transaction()?;
+        for quad in parser.into().rename_blank_nodes().for_slice(slice.as_ref()) {
+            transaction.insert(quad.map_err(RdfParseError::Syntax)?.as_ref());
         }
         transaction.commit()?;
         Ok(())
@@ -622,14 +668,13 @@ impl Store {
     /// use oxigraph::store::Store;
     ///
     /// let file =
-    ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
-    ///         .as_bytes();
+    ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n";
     ///
     /// let store = Store::new()?;
-    /// store.load_from_reader(RdfFormat::NQuads, file)?;
+    /// store.load_from_slice(RdfFormat::NQuads, file)?;
     ///
     /// let buffer = store.dump_to_writer(RdfFormat::NQuads, Vec::new())?;
-    /// assert_eq!(file, buffer.as_slice());
+    /// assert_eq!(file.as_bytes(), buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
     pub fn dump_to_writer<W: Write>(
@@ -656,14 +701,14 @@ impl Store {
     /// use oxigraph::model::GraphNameRef;
     /// use oxigraph::store::Store;
     ///
-    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n";
     ///
     /// let store = Store::new()?;
-    /// store.load_from_reader(RdfFormat::NTriples, file)?;
+    /// store.load_from_slice(RdfFormat::NTriples, file)?;
     ///
     /// let mut buffer = Vec::new();
     /// store.dump_graph_to_writer(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer)?;
-    /// assert_eq!(file, buffer.as_slice());
+    /// assert_eq!(file.as_bytes(), buffer.as_slice());
     /// # std::io::Result::Ok(())
     /// ```
     pub fn dump_graph_to_writer<'a, W: Write>(
@@ -894,10 +939,10 @@ impl Store {
     ///
     /// // quads file insertion
     /// let file =
-    ///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+    ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
     /// store
     ///     .bulk_loader()
-    ///     .load_from_reader(RdfFormat::NQuads, file.as_ref())?;
+    ///     .load_from_slice(RdfFormat::NQuads, file)?;
     ///
     /// // we inspect the store contents
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1135,13 +1180,13 @@ impl Transaction<'_> {
     /// let store = Store::new()?;
     ///
     /// // insert a dataset file (former load_dataset method)
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
     /// let mut transaction = store.start_transaction()?;
-    /// transaction.load_from_reader(RdfFormat::NQuads, file.as_ref())?;
+    /// transaction.load_from_reader(RdfFormat::NQuads, file.as_bytes())?;
     /// transaction.commit()?;
     ///
     /// // insert a graph file (former load_graph method)
-    /// let file = b"<> <> <> .";
+    /// let file = "<> <> <> .";
     /// let mut transaction = store.start_transaction()?;
     /// transaction.load_from_reader(
     ///     RdfParser::from_format(RdfFormat::Turtle)
@@ -1149,7 +1194,7 @@ impl Transaction<'_> {
     ///         .unwrap()
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
-    ///     file.as_ref()
+    ///     file.as_bytes()
     /// )?;
     /// transaction.commit()?;
     ///
@@ -1166,6 +1211,55 @@ impl Transaction<'_> {
     ) -> Result<(), LoaderError> {
         for quad in parser.into().rename_blank_nodes().for_reader(reader) {
             self.insert(quad?.as_ref());
+        }
+        Ok(())
+    }
+
+    /// Loads an RDF file into the store.
+    ///
+    /// This function is atomic, quite slow and memory hungry. To get much better performances, you might want to use the [`bulk_loader`](Store::bulk_loader).
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::model::*;
+    /// use oxrdfio::RdfParser;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insert a dataset file (former load_dataset method)
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.load_from_reader(RdfFormat::NQuads, file.as_bytes())?;
+    /// transaction.commit()?;
+    ///
+    /// // insert a graph file (former load_graph method)
+    /// let file = "<> <> <> .";
+    /// let mut transaction = store.start_transaction()?;
+    /// transaction.load_from_slice(
+    ///     RdfParser::from_format(RdfFormat::Turtle)
+    ///         .with_base_iri("http://example.com")
+    ///         .unwrap()
+    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2").unwrap()), // we put the file default graph inside of a named graph
+    ///     file
+    /// )?;
+    /// transaction.commit()?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_from_slice(
+        &mut self,
+        parser: impl Into<RdfParser>,
+        slice: &(impl AsRef<[u8]> + ?Sized),
+    ) -> Result<(), LoaderError> {
+        for quad in parser.into().rename_blank_nodes().for_slice(slice) {
+            self.insert(quad.map_err(RdfParseError::Syntax)?.as_ref());
         }
         Ok(())
     }
@@ -1441,10 +1535,10 @@ impl Iterator for GraphNameIter {
 ///
 /// // quads file insertion
 /// let file =
-///     b"<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
+///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .";
 /// store
 ///     .bulk_loader()
-///     .load_from_reader(RdfFormat::NQuads, file.as_ref())?;
+///     .load_from_slice(RdfFormat::NQuads, file)?;
 ///
 /// // we inspect the store contents
 /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -1468,13 +1562,13 @@ impl BulkLoader {
         self
     }
 
-    /// Sets a rough idea of the maximal amount of memory to be used by this operation.
+    /// Sets a rough idea about the maximal amount of memory to be used by this operation.
     ///
-    /// This number must be at last a few megabytes per thread.
+    /// This number must be at least a few megabytes per thread.
     ///
     /// Memory used by RocksDB and the system is not taken into account in this limit.
-    /// Note that depending on the system behavior this amount might never be reached or be blown up
-    /// (for example if the data contains very long IRIs or literals).
+    /// Note that depending on the system behavior, this amount might never be reached or be blown up
+    /// (for example, if the data contains very long IRIs or literals).
     ///
     /// By default, a target 2GB per used thread is used.
     pub fn with_max_memory_size_in_megabytes(mut self, max_memory_size: usize) -> Self {
@@ -1493,7 +1587,7 @@ impl BulkLoader {
     /// Adds a `callback` catching all parse errors and choosing if the parsing should continue
     /// by returning `Ok` or fail by returning `Err`.
     ///
-    /// By default the parsing fails.
+    /// By default, the parsing fails.
     pub fn on_parse_error(
         mut self,
         callback: impl Fn(RdfParseError) -> Result<(), RdfParseError> + 'static,
@@ -1506,7 +1600,7 @@ impl BulkLoader {
     ///
     /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_reader`] might be more convenient.
     ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
+    /// See [the struct](Self) documentation for more details.
     ///
     /// To get better speed on valid datasets, consider enabling [`RdfParser::lenient`] option to skip some validations.
     ///
@@ -1519,20 +1613,20 @@ impl BulkLoader {
     /// let store = Store::new()?;
     ///
     /// // insert a dataset file (former load_dataset method)
-    /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
     /// store.bulk_loader().load_from_reader(
     ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
-    ///     file.as_ref()
+    ///     file.as_bytes()
     /// )?;
     ///
     /// // insert a graph file (former load_graph method)
-    /// let file = b"<> <> <> .";
+    /// let file = "<> <> <> .";
     /// store.bulk_loader().load_from_reader(
     ///     RdfParser::from_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
-    ///     file.as_ref()
+    ///     file.as_bytes()
     /// )?;
     ///
     /// // we inspect the store contents
@@ -1568,9 +1662,75 @@ impl BulkLoader {
         )
     }
 
+    /// Loads serialized RDF in a slice using the bulk loader.
+    ///
+    /// This function is optimized for large dataset loading speed. For small files, [`Store::load_from_reader`] might be more convenient.
+    ///
+    /// See [the struct](Self) documentation for more details.
+    ///
+    /// To get better speed on valid datasets, consider enabling [`RdfParser::lenient`] option to skip some validations.
+    ///
+    /// Usage example:
+    /// ```
+    /// use oxigraph::store::Store;
+    /// use oxigraph::io::{RdfParser, RdfFormat};
+    /// use oxigraph::model::*;
+    ///
+    /// let store = Store::new()?;
+    ///
+    /// // insert a dataset file (former load_dataset method)
+    /// let file = "<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
+    /// store.bulk_loader().load_from_slice(
+    ///     RdfParser::from_format(RdfFormat::NQuads).lenient(), // we inject a custom parser with options
+    ///     file
+    /// )?;
+    ///
+    /// // insert a graph file (former load_graph method)
+    /// let file = "<> <> <> .";
+    /// store.bulk_loader().load_from_slice(
+    ///     RdfParser::from_format(RdfFormat::Turtle)
+    ///         .with_base_iri("http://example.com")?
+    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
+    ///     file
+    /// )?;
+    ///
+    /// // we inspect the store contents
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g")?))?);
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, NamedNodeRef::new("http://example.com/g2")?))?);
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn load_from_slice(
+        &self,
+        parser: impl Into<RdfParser>,
+        slice: &(impl AsRef<[u8]> + ?Sized),
+    ) -> Result<(), LoaderError> {
+        self.load_ok_quads(
+            parser
+                .into()
+                .rename_blank_nodes()
+                .for_slice(slice)
+                .filter_map(|r| match r {
+                    Ok(q) => Some(Ok(q)),
+                    Err(e) => {
+                        if let Some(callback) = &self.on_parse_error {
+                            if let Err(e) = callback(RdfParseError::Syntax(e)) {
+                                Some(Err(e))
+                            } else {
+                                None
+                            }
+                        } else {
+                            Some(Err(RdfParseError::Syntax(e)))
+                        }
+                    }
+                }),
+        )
+    }
+
     /// Adds a set of quads using the bulk loader.
     ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
+    /// See [the struct](Self) documentation for more details.
     pub fn load_quads(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
@@ -1580,7 +1740,7 @@ impl BulkLoader {
 
     /// Adds a set of quads using the bulk loader while breaking in the middle of the process in case of error.
     ///
-    /// This method is optimized for speed. See [the struct](Self) documentation for more details.
+    /// See [the struct](Self) documentation for more details.
     pub fn load_ok_quads<EI, EO: From<StorageError> + From<EI>>(
         &self,
         quads: impl IntoIterator<Item = Result<impl Into<Quad>, EI>>,

@@ -28,7 +28,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
-/// let file = br#"@base <http://example.com/> .
+/// let file = r#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
 ///     schema:name "Foo" .
@@ -37,7 +37,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for quad in TriGParser::new().for_reader(file.as_ref()) {
+/// for quad in TriGParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
@@ -103,7 +103,7 @@ impl TriGParser {
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" .
@@ -112,7 +112,7 @@ impl TriGParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for quad in TriGParser::new().for_reader(file.as_ref()) {
+    /// for quad in TriGParser::new().for_reader(file.as_bytes()) {
     ///     let quad = quad?;
     ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
     ///         count += 1;
@@ -137,7 +137,7 @@ impl TriGParser {
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" .
@@ -146,7 +146,7 @@ impl TriGParser {
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_bytes());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -175,7 +175,7 @@ impl TriGParser {
     /// use oxrdf::vocab::rdf;
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" .
@@ -193,10 +193,10 @@ impl TriGParser {
     /// assert_eq!(2, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn for_slice(self, slice: &[u8]) -> SliceTriGParser<'_> {
+    pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceTriGParser<'_> {
         SliceTriGParser {
             inner: TriGRecognizer::new_parser(
-                slice,
+                slice.as_ref(),
                 true,
                 true,
                 self.lenient,
@@ -269,7 +269,7 @@ impl TriGParser {
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
-/// let file = br#"@base <http://example.com/> .
+/// let file = r#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
 ///     schema:name "Foo" .
@@ -278,7 +278,7 @@ impl TriGParser {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for quad in TriGParser::new().for_reader(file.as_ref()) {
+/// for quad in TriGParser::new().for_reader(file.as_bytes()) {
 ///     let quad = quad?;
 ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
 ///         count += 1;
@@ -302,12 +302,12 @@ impl<R: Read> ReaderTriGParser<R> {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut parser = TriGParser::new().for_reader(file.as_ref());
+    /// let mut parser = TriGParser::new().for_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().unwrap()?; // We read the first triple
@@ -329,12 +329,12 @@ impl<R: Read> ReaderTriGParser<R> {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut parser = TriGParser::new().for_reader(file.as_ref());
+    /// let mut parser = TriGParser::new().for_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
     /// parser.next().unwrap()?; // We read the first triple
@@ -372,7 +372,7 @@ impl<R: Read> Iterator for ReaderTriGParser<R> {
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
-/// let file = br#"@base <http://example.com/> .
+/// let file = r#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
 ///     schema:name "Foo" .
@@ -381,7 +381,7 @@ impl<R: Read> Iterator for ReaderTriGParser<R> {
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_ref());
+/// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_bytes());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -416,12 +416,12 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
@@ -446,12 +446,12 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = TriGParser::new().for_tokio_async_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base IRI at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
@@ -481,7 +481,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderTriGParser<R> {
 /// use oxrdf::vocab::rdf;
 /// use oxttl::TriGParser;
 ///
-/// let file = br#"@base <http://example.com/> .
+/// let file = r#"@base <http://example.com/> .
 /// @prefix schema: <http://schema.org/> .
 /// <foo> a schema:Person ;
 ///     schema:name "Foo" .
@@ -514,7 +514,7 @@ impl SliceTriGParser<'_> {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
@@ -541,7 +541,7 @@ impl SliceTriGParser<'_> {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
@@ -651,13 +651,13 @@ impl LowLevelTriGParser {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
     /// let mut parser = TriGParser::new().low_level();
-    /// parser.extend_from_slice(file);
+    /// parser.extend_from_slice(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple
@@ -679,13 +679,13 @@ impl LowLevelTriGParser {
     /// ```
     /// use oxttl::TriGParser;
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
     /// let mut parser = TriGParser::new().low_level();
-    /// parser.extend_from_slice(file);
+    /// parser.extend_from_slice(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base IRI at the beginning
     ///
     /// parser.parse_next().unwrap()?; // We read the first triple

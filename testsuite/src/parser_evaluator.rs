@@ -359,7 +359,7 @@ fn parse_json_ld(
         .with_profile(profile)
         .with_processing_mode(processing_mode)
         .with_base_iri(base_url.unwrap_or(url))?
-        .for_slice(read_file_to_string(url)?.as_bytes())
+        .for_slice(&read_file_to_string(url)?)
         .with_load_document_callback(|url, _| {
             Ok(JsonLdRemoteDocument {
                 document: read_file_to_string(url)?.into(),

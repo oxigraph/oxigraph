@@ -22,7 +22,7 @@ fuzz_target!(|data: sparql_smith::Query| {
     let store = STORE.get_or_init(|| {
         let store = Store::new().unwrap();
         store
-            .load_from_reader(RdfFormat::TriG, sparql_smith::DATA_TRIG.as_bytes())
+            .load_from_slice(RdfFormat::TriG, sparql_smith::DATA_TRIG)
             .unwrap();
         store
     });
@@ -30,7 +30,7 @@ fuzz_target!(|data: sparql_smith::Query| {
     static DATASET: OnceLock<Dataset> = OnceLock::new();
     let dataset = DATASET.get_or_init(|| {
         RdfParser::from(RdfFormat::TriG)
-            .for_slice(sparql_smith::DATA_TRIG.as_bytes())
+            .for_slice(sparql_smith::DATA_TRIG)
             .collect::<Result<_, _>>()
             .unwrap()
     });

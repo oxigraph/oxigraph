@@ -348,7 +348,7 @@ impl RdfParser {
     /// ```
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+    /// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
     ///
     /// let quads = RdfParser::from_format(RdfFormat::NTriples)
     ///     .for_slice(file)
@@ -358,7 +358,7 @@ impl RdfParser {
     /// assert_eq!(quads[0].subject.to_string(), "<http://example.com/s>");
     /// # std::io::Result::Ok(())
     /// ```
-    pub fn for_slice(self, slice: &[u8]) -> SliceQuadParser<'_> {
+    pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceQuadParser<'_> {
         SliceQuadParser {
             inner: match self.inner {
                 RdfParserKind::JsonLd(p, _) => SliceQuadParserKind::JsonLd(p.for_slice(slice)),
@@ -468,12 +468,12 @@ impl<R: Read> ReaderQuadParser<R> {
     /// ```
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_slice());
+    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_bytes());
     /// assert!(parser.prefixes().collect::<Vec<_>>().is_empty()); // No prefix at the beginning
     ///
     /// parser.next().unwrap()?; // We read the first triple
@@ -506,12 +506,12 @@ impl<R: Read> ReaderQuadParser<R> {
     /// ```
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
     ///
-    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_slice());
+    /// let mut parser = RdfParser::from_format(RdfFormat::Turtle).for_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
     /// parser.next().unwrap()?; // We read the first triple
@@ -536,7 +536,7 @@ impl<R: Read> ReaderQuadParser<R> {
     /// use oxrdf::vocab::rdf;
     /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": "file://context.jsonld",
     ///     "@type": "schema:Person",
     ///     "@id": "http://example.com/foo",
@@ -548,7 +548,7 @@ impl<R: Read> ReaderQuadParser<R> {
     /// for quad in RdfParser::from_format(RdfFormat::JsonLd {
     ///     profile: JsonLdProfileSet::empty(),
     /// })
-    /// .for_reader(file.as_slice())
+    /// .for_reader(file.as_bytes())
     /// .with_document_loader(|url| {
     ///     assert_eq!(url, "file://context.jsonld");
     ///     Ok(LoadedDocument {
@@ -686,7 +686,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
@@ -727,7 +727,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     /// # async fn main() -> Result<(), oxrdfio::RdfParseError> {
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
@@ -762,7 +762,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
 /// ```
 /// use oxrdfio::{RdfFormat, RdfParser};
 ///
-/// let file = b"<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
+/// let file = "<http://example.com/s> <http://example.com/p> <http://example.com/o> .";
 ///
 /// let quads = RdfParser::from_format(RdfFormat::NTriples)
 ///     .for_slice(file)
@@ -833,7 +833,7 @@ impl SliceQuadParser<'_> {
     /// use oxrdf::vocab::rdf;
     /// use oxrdfio::{JsonLdProfile, JsonLdProfileSet, LoadedDocument, RdfFormat, RdfParser};
     ///
-    /// let file = br#"{
+    /// let file = r#"{
     ///     "@context": "file://context.jsonld",
     ///     "@type": "schema:Person",
     ///     "@id": "http://example.com/foo",
@@ -906,7 +906,7 @@ impl SliceQuadParser<'_> {
     /// ```
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;
@@ -944,7 +944,7 @@ impl SliceQuadParser<'_> {
     /// ```
     /// use oxrdfio::{RdfFormat, RdfParser};
     ///
-    /// let file = br#"@base <http://example.com/> .
+    /// let file = r#"@base <http://example.com/> .
     /// @prefix schema: <http://schema.org/> .
     /// <foo> a schema:Person ;
     ///     schema:name "Foo" ."#;

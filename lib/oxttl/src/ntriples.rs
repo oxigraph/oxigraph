@@ -19,14 +19,14 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::NTriplesParser;
 ///
-/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in NTriplesParser::new().for_reader(file.as_ref()) {
+/// for triple in NTriplesParser::new().for_reader(file.as_bytes()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -72,14 +72,14 @@ impl NTriplesParser {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxttl::NTriplesParser;
     ///
-    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// for triple in NTriplesParser::new().for_reader(file.as_ref()) {
+    /// for triple in NTriplesParser::new().for_reader(file.as_bytes()) {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
     ///         count += 1;
@@ -103,14 +103,14 @@ impl NTriplesParser {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxttl::NTriplesParser;
     ///
-    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
     /// let mut count = 0;
-    /// let mut parser = NTriplesParser::new().for_tokio_async_reader(file.as_ref());
+    /// let mut parser = NTriplesParser::new().for_tokio_async_reader(file.as_bytes());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple?;
     ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -138,7 +138,7 @@ impl NTriplesParser {
     /// use oxrdf::{NamedNodeRef, vocab::rdf};
     /// use oxttl::NTriplesParser;
     ///
-    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
@@ -154,9 +154,10 @@ impl NTriplesParser {
     /// assert_eq!(2, count);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn for_slice(self, slice: &[u8]) -> SliceNTriplesParser<'_> {
+    pub fn for_slice(self, slice: &(impl AsRef<[u8]> + ?Sized)) -> SliceNTriplesParser<'_> {
         SliceNTriplesParser {
-            inner: NQuadsRecognizer::new_parser(slice, true, false, self.lenient).into_iter(),
+            inner: NQuadsRecognizer::new_parser(slice.as_ref(), true, false, self.lenient)
+                .into_iter(),
         }
     }
 
@@ -171,13 +172,13 @@ impl NTriplesParser {
     /// use oxttl::{NTriplesParser};
     /// use rayon::iter::{IntoParallelIterator, ParallelIterator};
     ///
-    /// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+    /// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/foo> <http://schema.org/name> "Foo" .
     /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
     /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
     ///
     /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
-    /// let readers = NTriplesParser::new().split_slice_for_parallel_parsing(file.as_ref(), 2);
+    /// let readers = NTriplesParser::new().split_slice_for_parallel_parsing(file.as_bytes(), 2);
     /// let count = readers
     ///     .into_par_iter()
     ///     .map(|reader| {
@@ -258,14 +259,14 @@ impl NTriplesParser {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::NTriplesParser;
 ///
-/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// for triple in NTriplesParser::new().for_reader(file.as_ref()) {
+/// for triple in NTriplesParser::new().for_reader(file.as_bytes()) {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
 ///         count += 1;
@@ -298,14 +299,14 @@ impl<R: Read> Iterator for ReaderNTriplesParser<R> {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::NTriplesParser;
 ///
-/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
 ///
 /// let schema_person = NamedNodeRef::new("http://schema.org/Person")?;
 /// let mut count = 0;
-/// let mut parser = NTriplesParser::new().for_tokio_async_reader(file.as_ref());
+/// let mut parser = NTriplesParser::new().for_tokio_async_reader(file.as_bytes());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple?;
 ///     if triple.predicate == rdf::TYPE && triple.object == schema_person.into() {
@@ -330,7 +331,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderNTriplesParser<R> {
     }
 }
 
-/// Parses a N-Triples file from a byte slice.
+/// Parses an N-Triples file from a byte slice.
 ///
 /// Can be built using [`NTriplesParser::for_slice`].
 ///
@@ -339,7 +340,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderNTriplesParser<R> {
 /// use oxrdf::{NamedNodeRef, vocab::rdf};
 /// use oxttl::NTriplesParser;
 ///
-/// let file = br#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
+/// let file = r#"<http://example.com/foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/foo> <http://schema.org/name> "Foo" .
 /// <http://example.com/bar> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/Person> .
 /// <http://example.com/bar> <http://schema.org/name> "Bar" ."#;
