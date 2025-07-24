@@ -153,6 +153,7 @@ impl Storage {
     }
 }
 
+#[must_use]
 pub struct StorageReader {
     kind: StorageReaderKind,
 }
@@ -250,6 +251,7 @@ impl StorageReader {
     }
 }
 
+#[must_use]
 pub struct DecodingQuadIterator {
     kind: DecodingQuadIteratorKind,
 }
@@ -272,6 +274,7 @@ impl Iterator for DecodingQuadIterator {
     }
 }
 
+#[must_use]
 pub struct DecodingGraphIterator {
     kind: DecodingGraphIteratorKind,
 }
@@ -304,6 +307,7 @@ impl StrLookup for StorageReader {
     }
 }
 
+#[must_use]
 pub struct StorageTransaction<'a> {
     kind: StorageTransactionKind<'a>,
 }
@@ -403,6 +407,7 @@ impl StorageTransaction<'_> {
     }
 }
 
+#[must_use]
 pub struct StorageReadableTransaction<'a> {
     kind: StorageReadableTransactionKind<'a>,
 }

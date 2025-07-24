@@ -91,6 +91,7 @@ impl MemoryStorage {
 }
 
 #[derive(Clone)]
+#[must_use]
 pub struct MemoryStorageReader {
     storage: MemoryStorage,
     snapshot_id: usize,
@@ -408,6 +409,7 @@ impl StrLookup for MemoryStorageReader {
     }
 }
 
+#[must_use]
 pub struct MemoryStorageTransaction<'a> {
     storage: &'a MemoryStorage,
     log: Vec<LogEntry>,
@@ -712,6 +714,7 @@ impl Drop for MemoryStorageTransaction<'_> {
     }
 }
 
+#[must_use]
 pub struct QuadIterator {
     reader: MemoryStorageReader,
     current: Option<Weak<QuadListNode>>,
@@ -772,6 +775,7 @@ impl Iterator for QuadIterator {
     }
 }
 
+#[must_use]
 pub struct MemoryDecodingGraphIterator {
     reader: MemoryStorageReader, // Needed to make sure the underlying map is not GCed
     iter: Iter<'static, EncodedTerm, VersionRange>,

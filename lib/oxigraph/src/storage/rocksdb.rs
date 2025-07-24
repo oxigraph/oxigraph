@@ -367,6 +367,7 @@ impl RocksDbStorage {
     }
 }
 
+#[must_use]
 pub struct RocksDbStorageReader {
     reader: Reader,
     storage: RocksDbStorage,
@@ -804,6 +805,7 @@ impl RocksDbStorageReader {
     }
 }
 
+#[must_use]
 pub struct RocksDbChainedDecodingQuadIterator {
     first: RocksDbDecodingQuadIterator,
     second: Option<RocksDbDecodingQuadIterator>,
@@ -857,6 +859,7 @@ impl Iterator for RocksDbDecodingQuadIterator {
     }
 }
 
+#[must_use]
 pub struct RocksDbDecodingGraphIterator {
     iter: Iter,
 }
@@ -886,6 +889,7 @@ impl StrLookup for RocksDbStorageReader {
     }
 }
 
+#[must_use]
 pub struct RocksDbStorageTransaction<'a> {
     buffer: Vec<u8>,
     transaction: Transaction,
@@ -1075,6 +1079,7 @@ impl RocksDbStorageTransaction<'_> {
     }
 }
 
+#[must_use]
 pub struct RocksDbStorageReadableTransaction<'a> {
     buffer: Vec<u8>,
     transaction: ReadableTransaction,
