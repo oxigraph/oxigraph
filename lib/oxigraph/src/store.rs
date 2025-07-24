@@ -985,6 +985,7 @@ impl IntoIterator for &Store {
 /// An object to do operations during a transaction.
 ///
 /// See [`Store::start_transaction`] for a more detailed description.
+#[must_use]
 pub struct Transaction<'a> {
     inner: StorageReadableTransaction<'a>,
 }
@@ -1479,6 +1480,7 @@ impl IntoIterator for &Transaction<'_> {
 }
 
 /// An iterator returning the quads contained in a [`Store`].
+#[must_use]
 pub struct QuadIter {
     iter: DecodingQuadIterator,
     reader: StorageReader,
@@ -1496,6 +1498,7 @@ impl Iterator for QuadIter {
 }
 
 /// An iterator returning the graph names contained in a [`Store`].
+#[must_use]
 pub struct GraphNameIter {
     iter: DecodingGraphIterator,
     reader: StorageReader,
