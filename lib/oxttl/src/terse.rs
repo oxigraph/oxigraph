@@ -19,6 +19,7 @@ pub struct TriGRecognizer {
     cur_graph: GraphName,
     #[cfg(feature = "rdf-12")]
     cur_reifier: Vec<NamedOrBlankNode>,
+    lenient: bool,
 }
 
 #[expect(clippy::partial_pub_fields)]
@@ -845,6 +846,13 @@ impl RuleRecognizer for TriGRecognizer {
                 },
                 TriGState::LiteralExpectDatatype { value, emit } => match token {
                     N3Token::IriRef(datatype) => {
+                        if !self.lenient && datatype == rdf::LANG_STRING.as_str() {
+                            errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
+                        }
+                        #[cfg(feature = "rdf-12")]
+                        if !self.lenient && datatype == rdf::DIR_LANG_STRING.as_str() {
+                            errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
+                        }
                         self.cur_object.push(
                             Literal::new_typed_literal(value, NamedNode::new_unchecked(datatype))
                                 .into(),
@@ -865,6 +873,13 @@ impl RuleRecognizer for TriGRecognizer {
                         &context.prefixes,
                     ) {
                         Ok(t) => {
+                            if !self.lenient && t == rdf::LANG_STRING {
+                                errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
+                            }
+                            #[cfg(feature = "rdf-12")]
+                            if !self.lenient && t == rdf::DIR_LANG_STRING {
+                                errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
+                            }
                             self.cur_object
                                 .push(Literal::new_typed_literal(value, t).into());
                             if emit {
@@ -1248,6 +1263,7 @@ impl TriGRecognizer {
                 cur_graph: GraphName::DefaultGraph,
                 #[cfg(feature = "rdf-12")]
                 cur_reifier: Vec::new(),
+                lenient,
             },
             TriGRecognizerContext {
                 with_graph_name,

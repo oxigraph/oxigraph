@@ -692,7 +692,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut parser =
-    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_slice());
+    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_bytes());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
@@ -733,7 +733,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderQuadParser<R> {
     ///     schema:name "Foo" ."#;
     ///
     /// let mut parser =
-    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_slice());
+    ///     RdfParser::from_format(RdfFormat::Turtle).for_tokio_async_reader(file.as_bytes());
     /// assert!(parser.base_iri().is_none()); // No base IRI at the beginning
     ///
     /// parser.next().await.unwrap()?; // We read the first triple
