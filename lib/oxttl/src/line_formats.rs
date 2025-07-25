@@ -5,6 +5,7 @@ use crate::toolkit::{Lexer, Parser, RuleRecognizer, RuleRecognizerError, TokenOr
 use crate::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 #[cfg(feature = "rdf-12")]
 use oxrdf::Triple;
+use oxrdf::vocab::rdf;
 use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 
 pub struct NQuadsRecognizer {
@@ -12,6 +13,7 @@ pub struct NQuadsRecognizer {
     subjects: Vec<NamedOrBlankNode>,
     predicates: Vec<NamedNode>,
     objects: Vec<Term>,
+    lenient: bool,
 }
 
 pub struct NQuadsRecognizerContext {
@@ -223,6 +225,13 @@ impl RuleRecognizer for NQuadsRecognizer {
                 };
                 match token {
                     N3Token::IriRef(d) => {
+                        if !self.lenient && d == rdf::LANG_STRING.as_str() {
+                            errors.push("The datatype of a literal without a language tag must not be rdf:langString".into());
+                        }
+                        #[cfg(feature = "rdf-12")]
+                        if !self.lenient && d == rdf::DIR_LANG_STRING.as_str() {
+                            errors.push("The datatype of a literal without a base direction must not be rdf:dirLangString".into());
+                        }
                         self.objects.push(
                             Literal::new_typed_literal(value, NamedNode::new_unchecked(d)).into(),
                         );
@@ -373,6 +382,7 @@ impl NQuadsRecognizer {
                 subjects: Vec::new(),
                 predicates: Vec::new(),
                 objects: Vec::new(),
+                lenient,
             },
             NQuadsRecognizerContext {
                 with_graph_name,
