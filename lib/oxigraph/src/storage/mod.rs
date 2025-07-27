@@ -597,7 +597,7 @@ impl StorageBulkLoader {
         }
     }
 
-    pub fn on_progress(self, callback: impl Fn(u64) + 'static) -> Self {
+    pub fn on_progress(self, callback: impl Fn(u64) + Send + Sync + 'static) -> Self {
         match self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageBulkLoaderKind::RocksDb(loader) => Self {
