@@ -797,11 +797,11 @@ impl Iterator for MemoryDecodingGraphIterator {
 #[must_use]
 pub struct MemoryStorageBulkLoader {
     storage: MemoryStorage,
-    hooks: Vec<Box<dyn Fn(u64)>>,
+    hooks: Vec<Box<dyn Fn(u64) + Send + Sync>>,
 }
 
 impl MemoryStorageBulkLoader {
-    pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
+    pub fn on_progress(mut self, callback: impl Fn(u64) + Send + Sync + 'static) -> Self {
         self.hooks.push(Box::new(callback));
         self
     }

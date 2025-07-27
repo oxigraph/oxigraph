@@ -1294,7 +1294,7 @@ impl RocksDbStorageReadableTransaction<'_> {
 #[must_use]
 pub struct RocksDbStorageBulkLoader {
     storage: RocksDbStorage,
-    hooks: Vec<Box<dyn Fn(u64)>>,
+    hooks: Vec<Box<dyn Fn(u64) + Send + Sync>>,
     num_threads: Option<usize>,
     max_memory_size: Option<usize>,
 }
@@ -1310,7 +1310,7 @@ impl RocksDbStorageBulkLoader {
         self
     }
 
-    pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
+    pub fn on_progress(mut self, callback: impl Fn(u64) + Send + Sync + 'static) -> Self {
         self.hooks.push(Box::new(callback));
         self
     }
@@ -1665,6 +1665,15 @@ mod tests {
     use rand::random;
     use std::env::temp_dir;
     use std::fs::remove_dir_all;
+
+    #[test]
+    fn test_send_sync() {
+        fn is_send_sync<T: Send + Sync>() {}
+        is_send_sync::<RocksDbStorage>();
+        is_send_sync::<RocksDbStorageReader>();
+        is_send_sync::<RocksDbStorageReadableTransaction<'_>>();
+        is_send_sync::<RocksDbStorageBulkLoader>();
+    }
 
     #[test]
     #[expect(clippy::panic_in_result_fn)]

@@ -1551,7 +1551,7 @@ impl Iterator for GraphNameIter {
 #[must_use]
 pub struct BulkLoader {
     storage: StorageBulkLoader,
-    on_parse_error: Option<Box<dyn Fn(RdfParseError) -> Result<(), RdfParseError>>>,
+    on_parse_error: Option<Box<dyn Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync>>,
 }
 
 impl BulkLoader {
@@ -1582,7 +1582,7 @@ impl BulkLoader {
     }
 
     /// Adds a `callback` evaluated from time to time with the number of loaded triples.
-    pub fn on_progress(mut self, callback: impl Fn(u64) + 'static) -> Self {
+    pub fn on_progress(mut self, callback: impl Fn(u64) + Send + Sync + 'static) -> Self {
         self.storage = self.storage.on_progress(callback);
         self
     }
@@ -1593,7 +1593,7 @@ impl BulkLoader {
     /// By default, the parsing fails.
     pub fn on_parse_error(
         mut self,
-        callback: impl Fn(RdfParseError) -> Result<(), RdfParseError> + 'static,
+        callback: impl Fn(RdfParseError) -> Result<(), RdfParseError> + Send + Sync + 'static,
     ) -> Self {
         self.on_parse_error = Some(Box::new(callback));
         self
@@ -1762,6 +1762,7 @@ mod tests {
     fn test_send_sync() {
         fn is_send_sync<T: Send + Sync>() {}
         is_send_sync::<Store>();
+        is_send_sync::<BulkLoader>();
     }
 
     #[test]

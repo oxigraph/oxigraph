@@ -19,8 +19,7 @@ use std::error::Error;
 use std::ffi::CString;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::rc::{Rc, Weak};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::thread::available_parallelism;
 use std::{fmt, io, ptr, slice};
 
@@ -423,7 +422,7 @@ impl Db {
                     assert!(!snapshot.is_null(), "rocksdb_create_snapshot returned null");
                     rocksdb_readoptions_set_snapshot(options, snapshot);
                     Reader {
-                        inner: InnerReader::ReadWrite(Rc::new(TransactionalSnapshot {
+                        inner: InnerReader::ReadWrite(Arc::new(TransactionalSnapshot {
                             db: Arc::clone(db),
                             snapshot,
                             owned_snapshot: true,
@@ -466,7 +465,8 @@ impl Db {
         assert!(!batch.is_null(), "rocksdb_writebatch_create returned null");
         Ok(ReadableTransaction {
             db: Arc::clone(db),
-            batch: Rc::new(batch),
+            #[expect(clippy::arc_with_non_send_sync, clippy::mutex_atomic)]
+            batch: Arc::new(Mutex::new(batch)),
             snapshot,
             read_options,
         })
@@ -671,18 +671,24 @@ pub struct Reader {
     options: *mut rocksdb_readoptions_t,
 }
 
+unsafe impl Send for Reader {}
+unsafe impl Sync for Reader {}
+
 #[derive(Clone)]
 enum InnerReader {
     ReadOnly(Arc<RoDbHandler>),
-    ReadWrite(Rc<TransactionalSnapshot>),
+    ReadWrite(Arc<TransactionalSnapshot>),
 }
 
 struct TransactionalSnapshot {
     db: Arc<RwDbHandler>,
     snapshot: *const rocksdb_snapshot_t,
     owned_snapshot: bool,
-    batch: Option<Weak<*mut rocksdb_writebatch_wi_t>>,
+    batch: Option<Weak<Mutex<*mut rocksdb_writebatch_wi_t>>>,
 }
+
+unsafe impl Send for TransactionalSnapshot {}
+unsafe impl Sync for TransactionalSnapshot {}
 
 impl Drop for TransactionalSnapshot {
     fn drop(&mut self) {
@@ -732,7 +738,7 @@ impl Reader {
                             ));
                         };
                         ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
-                            *batch,
+                            *batch.lock().unwrap(),
                             inner.db.db,
                             self.options,
                             column_family.0,
@@ -817,7 +823,7 @@ impl Reader {
                             ));
                         };
                         oxrocksdb_writebatch_wi_create_iterator_with_base_readopts_cf(
-                            *batch,
+                            *batch.lock().unwrap(),
                             iterator,
                             options,
                             column_family.0,
@@ -928,15 +934,18 @@ impl Transaction {
 
 pub struct ReadableTransaction {
     db: Arc<RwDbHandler>,
-    batch: Rc<*mut rocksdb_writebatch_wi_t>,
+    batch: Arc<Mutex<*mut rocksdb_writebatch_wi_t>>,
     snapshot: *const rocksdb_snapshot_t,
     read_options: *mut rocksdb_readoptions_t,
 }
 
+unsafe impl Send for ReadableTransaction {}
+unsafe impl Sync for ReadableTransaction {}
+
 impl Drop for ReadableTransaction {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_writebatch_wi_destroy(*self.batch);
+            rocksdb_writebatch_wi_destroy(*self.batch.lock().unwrap());
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_release_snapshot(self.db.db, self.snapshot);
         }
@@ -946,11 +955,11 @@ impl Drop for ReadableTransaction {
 impl ReadableTransaction {
     pub fn reader(&self) -> Reader {
         Reader {
-            inner: InnerReader::ReadWrite(Rc::new(TransactionalSnapshot {
+            inner: InnerReader::ReadWrite(Arc::new(TransactionalSnapshot {
                 db: Arc::clone(&self.db),
                 snapshot: self.snapshot,
                 owned_snapshot: false,
-                batch: Some(Rc::downgrade(&self.batch)),
+                batch: Some(Arc::downgrade(&self.batch)),
             })),
             options: unsafe { oxrocksdb_readoptions_create_copy(self.read_options) },
         }
@@ -959,7 +968,7 @@ impl ReadableTransaction {
     pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) {
         unsafe {
             rocksdb_writebatch_wi_put_cf(
-                *self.batch,
+                *self.batch.lock().unwrap(),
                 column_family.0,
                 key.as_ptr().cast(),
                 key.len(),
@@ -976,7 +985,7 @@ impl ReadableTransaction {
     pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) {
         unsafe {
             rocksdb_writebatch_wi_delete_cf(
-                *self.batch,
+                *self.batch.lock().unwrap(),
                 column_family.0,
                 key.as_ptr().cast(),
                 key.len(),
@@ -989,7 +998,7 @@ impl ReadableTransaction {
             ffi_result!(rocksdb_write_writebatch_wi(
                 self.db.db,
                 self.db.write_options,
-                *self.batch
+                *self.batch.lock().unwrap()
             ))?;
         }
         Ok(())
