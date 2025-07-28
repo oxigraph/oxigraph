@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.8"
-dynamic = ["version"]
+dynamic = ["authors", "description", "keywords", "license", "license-files", "maintainers", "readme", "version"]
 
 [project.urls]
 Changelog = "https://github.com/oxigraph/oxigraph/blob/main/CHANGELOG.md"
