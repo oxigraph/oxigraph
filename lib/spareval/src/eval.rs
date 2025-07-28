@@ -3522,7 +3522,116 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                                 }))
                             })
                         }
-                        // TODO: gYear...
+                        #[cfg(feature = "calendar-ext")]
+                        xsd::G_YEAR => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
+                            let e = self.expression_evaluator(
+                                &parameters[0],
+                                encoded_variables,
+                                stat_children,
+                            );
+                            Rc::new(move |tuple| {
+                                Some(ExpressionTerm::GYearLiteral(match e(tuple)? {
+                                    ExpressionTerm::GYearLiteral(value) => value,
+                                    ExpressionTerm::GYearMonthLiteral(value) => {
+                                        value.try_into().ok()?
+                                    }
+                                    ExpressionTerm::DateLiteral(value) => value.try_into().ok()?,
+                                    ExpressionTerm::DateTimeLiteral(value) => {
+                                        value.try_into().ok()?
+                                    }
+                                    ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                                    _ => return None,
+                                }))
+                            })
+                        }
+                        #[cfg(feature = "calendar-ext")]
+                        xsd::G_YEAR_MONTH => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
+                            let e = self.expression_evaluator(
+                                &parameters[0],
+                                encoded_variables,
+                                stat_children,
+                            );
+                            Rc::new(move |tuple| {
+                                Some(ExpressionTerm::GYearMonthLiteral(match e(tuple)? {
+                                    ExpressionTerm::GYearMonthLiteral(value) => value,
+                                    ExpressionTerm::DateLiteral(value) => value.into(),
+                                    ExpressionTerm::DateTimeLiteral(value) => {
+                                        value.try_into().ok()?
+                                    }
+                                    ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                                    _ => return None,
+                                }))
+                            })
+                        }
+                        #[cfg(feature = "calendar-ext")]
+                        xsd::G_MONTH => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
+                            let e = self.expression_evaluator(
+                                &parameters[0],
+                                encoded_variables,
+                                stat_children,
+                            );
+                            Rc::new(move |tuple| {
+                                Some(ExpressionTerm::GMonthLiteral(match e(tuple)? {
+                                    ExpressionTerm::GMonthLiteral(value) => value,
+                                    ExpressionTerm::GYearMonthLiteral(value) => value.into(),
+                                    ExpressionTerm::GMonthDayLiteral(value) => value.into(),
+                                    ExpressionTerm::DateLiteral(value) => value.into(),
+                                    ExpressionTerm::DateTimeLiteral(value) => value.into(),
+                                    ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                                    _ => return None,
+                                }))
+                            })
+                        }
+                        #[cfg(feature = "calendar-ext")]
+                        xsd::G_MONTH_DAY => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
+                            let e = self.expression_evaluator(
+                                &parameters[0],
+                                encoded_variables,
+                                stat_children,
+                            );
+                            Rc::new(move |tuple| {
+                                Some(ExpressionTerm::GMonthDayLiteral(match e(tuple)? {
+                                    ExpressionTerm::GMonthDayLiteral(value) => value,
+                                    ExpressionTerm::DateLiteral(value) => value.into(),
+                                    ExpressionTerm::DateTimeLiteral(value) => value.into(),
+                                    ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                                    _ => return None,
+                                }))
+                            })
+                        }
+                        #[cfg(feature = "calendar-ext")]
+                        xsd::G_DAY => {
+                            if parameters.len() != 1 {
+                                return Rc::new(move |_| None);
+                            }
+                            let e = self.expression_evaluator(
+                                &parameters[0],
+                                encoded_variables,
+                                stat_children,
+                            );
+                            Rc::new(move |tuple| {
+                                Some(ExpressionTerm::GDayLiteral(match e(tuple)? {
+                                    ExpressionTerm::GDayLiteral(value) => value,
+                                    ExpressionTerm::GMonthDayLiteral(value) => value.into(),
+                                    ExpressionTerm::DateLiteral(value) => value.into(),
+                                    ExpressionTerm::DateTimeLiteral(value) => value.into(),
+                                    ExpressionTerm::StringLiteral(value) => value.parse().ok()?,
+                                    _ => return None,
+                                }))
+                            })
+                        }
                         _ => Rc::new(|_| None),
                     }
                 }

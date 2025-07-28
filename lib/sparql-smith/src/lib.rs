@@ -1295,6 +1295,11 @@ enum FunctionCallName {
     XsdDuration,
     XsdYearMonthDuration,
     XsdDayTimeDuration,
+    XsdGYear,
+    XsdGMonth,
+    XsdGDay,
+    XsdGYearMonth,
+    XsdGMonthDay,
 }
 
 impl fmt::Display for FunctionCallName {
@@ -1315,6 +1320,11 @@ impl fmt::Display for FunctionCallName {
             FunctionCallName::XsdDayTimeDuration => {
                 "<http://www.w3.org/2001/XMLSchema#dayTimeDuration>"
             }
+            FunctionCallName::XsdGYear => "<http://www.w3.org/2001/XMLSchema#gYear>",
+            FunctionCallName::XsdGMonth => "<http://www.w3.org/2001/XMLSchema#gMonth>",
+            FunctionCallName::XsdGDay => "<http://www.w3.org/2001/XMLSchema#gDay>",
+            FunctionCallName::XsdGYearMonth => "<http://www.w3.org/2001/XMLSchema#gYearMonth>",
+            FunctionCallName::XsdGMonthDay => "<http://www.w3.org/2001/XMLSchema#gMonthDay>",
         })
     }
 }
