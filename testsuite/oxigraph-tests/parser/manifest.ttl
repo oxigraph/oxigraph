@@ -24,6 +24,9 @@
         <#xml_multiple_objects>
         <#slightly_invalid_escape_sequence>
         <#decimal_dot_vs_triple_dot>
+        <#pname_trailing_dot_ttl>
+        <#bnode_trailing_dot_nt>
+        <#bnode_trailing_dot_ttl>
 	) .
 
 <#no_end_line_jump>
@@ -127,3 +130,20 @@
 	mf:name "1. is not a decimal but 1 then a dot" ;
 	mf:action <decimal_dot_vs_triple_dot.ttl> ;
 	mf:result <decimal_dot_vs_triple_dot.nt> .
+
+<#pname_trailing_dot_ttl>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "Dot at the end of a prefixed name" ;
+	mf:action <pname_trailing_dot.ttl> ;
+	mf:result <pname_trailing_dot.nt> .
+
+<#bnode_trailing_dot_nt>
+	rdf:type rdft:TestNTriplesPositiveSyntax ;
+	mf:name "Dot at the end of a blank node" ;
+	mf:action <bnode_trailing_dot.nt> .
+
+<#bnode_trailing_dot_ttl>
+	rdf:type rdft:TestTurtleEval ;
+	mf:name "Dot at the end of a blank node" ;
+	mf:action <bnode_trailing_dot.ttl> ;
+	mf:result <bnode_trailing_dot.nt> .

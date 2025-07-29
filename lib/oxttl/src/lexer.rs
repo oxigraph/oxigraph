@@ -112,7 +112,7 @@ impl TokenRecognizer for N3Lexer {
                 }
             }
             b'_' => match data.get(1)? {
-                b':' => Self::recognize_blank_node_label(data),
+                b':' => Self::recognize_blank_node_label(data, is_ending),
                 c => Some((
                     1,
                     Err((0, format!("Unexpected character '{}'", char::from(*c))).into()),
@@ -523,17 +523,20 @@ impl N3Lexer {
 
     fn recognize_blank_node_label(
         data: &[u8],
+        is_ending: bool,
     ) -> Option<(usize, Result<N3Token<'_>, TokenRecognizerError>)> {
         // [141s]  BLANK_NODE_LABEL  ::=  '_:' (PN_CHARS_U | [0-9]) ((PN_CHARS | '.')* PN_CHARS)?
         let mut i = 2;
-        loop {
-            match Self::recognize_unicode_char(&data[i..], i)? {
+        while let Some(c) = Self::recognize_unicode_char(&data[i..], i) {
+            match c {
                 Ok((c, consumed)) => {
                     if (i == 2 && (Self::is_possible_pn_chars_u(c) || c.is_ascii_digit()))
                         || (i > 2 && Self::is_possible_pn_chars(c))
                     {
                         // Ok
-                    } else if i > 2 && c == '.' {
+                    } else if i == 2 {
+                        return Some((i, Err((0..i, "A blank node ID cannot be empty").into())));
+                    } else if c == '.' {
                         if data[i - 1] == b'.' {
                             i -= 1;
                             return Some((
@@ -541,11 +544,6 @@ impl N3Lexer {
                                 str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel),
                             ));
                         }
-                    } else if i == 2 {
-                        return Some((
-                            i,
-                            Err((0..i, "A blank node ID should not be empty").into()),
-                        ));
                     } else if data[i - 1] == b'.' {
                         i -= 1;
                         return Some((
@@ -563,6 +561,19 @@ impl N3Lexer {
                 Err(e) => return Some((e.location.end, Err(e))),
             }
         }
+        is_ending.then(|| {
+            if data[i - 1] == b'.' {
+                i -= 1;
+            }
+            (
+                i,
+                if i > 2 {
+                    str_from_utf8(&data[2..i], 2..i).map(N3Token::BlankNodeLabel)
+                } else {
+                    Err((0..i, "A blank node ID cannot be empty").into())
+                },
+            )
+        })
     }
 
     fn recognize_lang_tag<'a>(
