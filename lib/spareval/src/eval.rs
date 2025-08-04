@@ -1609,11 +1609,9 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
             Term::NamedNode(service_name) => service_name,
             term => return Err(QueryEvaluationError::InvalidServiceName(term)),
         };
-        let iter = self.service_handler.handle(
-            service_name,
-            graph_pattern.clone(),
-            self.base_iri.as_ref().map(ToString::to_string),
-        )?;
+        let iter =
+            self.service_handler
+                .handle(&service_name, graph_pattern, self.base_iri.as_deref())?;
         Ok(encode_bindings(self.dataset.clone(), variables, iter))
     }
 

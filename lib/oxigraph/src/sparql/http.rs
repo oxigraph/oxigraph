@@ -107,9 +107,9 @@ impl DefaultServiceHandler for HttpServiceHandler {
 
     fn handle(
         &self,
-        service_name: NamedNode,
-        pattern: GraphPattern,
-        base_iri: Option<String>,
+        service_name: &NamedNode,
+        pattern: &GraphPattern,
+        base_iri: Option<&Iri<String>>,
     ) -> std::result::Result<QuerySolutionIter, Self::Error> {
         let (content_type, body) = self
             .client
@@ -117,11 +117,8 @@ impl DefaultServiceHandler for HttpServiceHandler {
                 service_name.as_str(),
                 spargebra::Query::Select {
                     dataset: None,
-                    pattern,
-                    base_iri: base_iri
-                        .map(Iri::parse)
-                        .transpose()
-                        .map_err(|e| EvaluationError::Service(Box::new(e)))?,
+                    pattern: pattern.clone(),
+                    base_iri: base_iri.cloned(),
                 }
                 .to_string()
                 .into_bytes(),
