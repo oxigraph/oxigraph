@@ -317,11 +317,11 @@ impl DefaultServiceHandler for StaticServiceHandler {
 
     fn handle(
         &self,
-        service_name: NamedNode,
-        pattern: GraphPattern,
-        base_iri: Option<String>,
+        service_name: &NamedNode,
+        pattern: &GraphPattern,
+        base_iri: Option<&Iri<String>>,
     ) -> Result<QuerySolutionIter, QueryEvaluationError> {
-        let dataset = self.services.get(&service_name).ok_or_else(|| {
+        let dataset = self.services.get(service_name).ok_or_else(|| {
             QueryEvaluationError::Service(Box::new(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("Service {service_name} not found"),
@@ -335,13 +335,8 @@ impl DefaultServiceHandler for StaticServiceHandler {
             dataset.clone(),
             &Query::Select {
                 dataset: None,
-                pattern,
-                base_iri: base_iri.map(Iri::parse).transpose().map_err(|e| {
-                    QueryEvaluationError::Service(Box::new(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Invalid base IRI: {e}"),
-                    )))
-                })?,
+                pattern: pattern.clone(),
+                base_iri: base_iri.cloned(),
             },
         )?
         else {

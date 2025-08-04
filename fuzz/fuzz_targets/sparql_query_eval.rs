@@ -107,22 +107,22 @@ impl OxDefaultServiceHandler for StoreServiceHandler {
 
     fn handle(
         &self,
-        service_name: NamedNode,
-        pattern: GraphPattern,
-        base_iri: Option<String>,
+        service_name: &NamedNode,
+        pattern: &GraphPattern,
+        base_iri: Option<&Iri<String>>,
     ) -> Result<QuerySolutionIter, EvaluationError> {
-        if !self.store.contains_named_graph(&service_name)? {
+        if !self.store.contains_named_graph(service_name)? {
             return Err(EvaluationError::Service("Graph does not exist".into()));
         }
         let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
             .with_default_service_handler(self.clone())
             .for_query(Query::Select {
                 dataset: Some(QueryDataset {
-                    default: vec![service_name],
+                    default: vec![service_name.clone()],
                     named: None,
                 }),
-                pattern,
-                base_iri: base_iri.map(Iri::parse).transpose().unwrap(),
+                pattern: pattern.clone(),
+                base_iri: base_iri.cloned(),
             })
             .on_store(&self.store)
             .execute()?
@@ -143,13 +143,13 @@ impl DefaultServiceHandler for DatasetServiceHandler {
 
     fn handle(
         &self,
-        service_name: NamedNode,
-        pattern: GraphPattern,
-        base_iri: Option<String>,
-    ) -> Result<spareval::QuerySolutionIter, QueryEvaluationError> {
+        service_name: &NamedNode,
+        pattern: &GraphPattern,
+        base_iri: Option<&Iri<String>>,
+    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
         if self
             .dataset
-            .quads_for_graph_name(&service_name)
+            .quads_for_graph_name(service_name)
             .next()
             .is_none()
         {
@@ -177,10 +177,10 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         });
         let spareval::QueryResults::Solutions(iter) = evaluator.execute(
             dataset,
-            &spargebra::Query::Select {
+            &Query::Select {
                 dataset: None,
-                pattern,
-                base_iri: base_iri.map(|iri| Iri::parse(iri).unwrap()),
+                pattern: pattern.clone(),
+                base_iri: base_iri.cloned(),
             },
         )?
         else {
