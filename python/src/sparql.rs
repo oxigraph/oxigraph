@@ -800,6 +800,7 @@ pub enum PyQueryResultsFormatInput {
 
 pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
     match error {
+        #[expect(deprecated)]
         EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
         EvaluationError::Storage(error) => map_storage_error(error),
         EvaluationError::GraphParsing(error) => map_parse_error(error, None),

@@ -14,6 +14,10 @@ use std::io;
 #[non_exhaustive]
 pub enum EvaluationError {
     /// An error in SPARQL parsing.
+    #[deprecated(
+        note = "Only used by the deprecated oxigraph::Query struct",
+        since = "0.5.0"
+    )]
     #[error(transparent)]
     Parsing(#[from] SparqlSyntaxError),
     /// An error from the storage.
@@ -103,6 +107,7 @@ impl From<EvaluationError> for io::Error {
     #[inline]
     fn from(error: EvaluationError) -> Self {
         match error {
+            #[expect(deprecated)]
             EvaluationError::Parsing(error) => Self::new(io::ErrorKind::InvalidData, error),
             EvaluationError::GraphParsing(error) => error.into(),
             EvaluationError::ResultsParsing(error) => error.into(),

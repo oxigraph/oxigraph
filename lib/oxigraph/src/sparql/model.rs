@@ -181,7 +181,7 @@ impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults
 /// if let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
 ///     .parse_query("SELECT ?s WHERE { ?s ?p ?o }")?
 ///     .on_store(&Store::new()?)
-///     .execute()
+///     .execute()?
 /// {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
@@ -287,7 +287,7 @@ impl Iterator for QuerySolutionIter {
 /// if let QueryResults::Graph(triples) = SparqlEvaluator::new()
 ///     .parse_query("CONSTRUCT WHERE { ?s ?p ?o }")?
 ///     .on_store(&Store::new()?)
-///     .execute()
+///     .execute()?
 /// {
 ///     for triple in triples {
 ///         println!("{}", triple?);
