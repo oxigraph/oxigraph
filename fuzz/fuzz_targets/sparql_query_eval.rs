@@ -12,7 +12,7 @@ use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
 use oxrdf::{GraphNameRef, QuadRef};
-use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator};
+use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
 use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::{Query, SparqlParser};
 use std::sync::OnceLock;
@@ -108,24 +108,28 @@ impl OxDefaultServiceHandler for StoreServiceHandler {
     fn handle(
         &self,
         service_name: NamedNode,
-        mut query: Query,
-    ) -> Result<QueryResults, EvaluationError> {
+        pattern: GraphPattern,
+        base_iri: Option<String>,
+    ) -> Result<QuerySolutionIter, EvaluationError> {
         if !self.store.contains_named_graph(&service_name)? {
             return Err(EvaluationError::Service("Graph does not exist".into()));
         }
-        if let Query::Select { dataset, .. } = &mut query {
-            dataset
-                .get_or_insert(QueryDataset {
-                    default: Vec::new(),
-                    named: None,
-                })
-                .default = vec![service_name];
-        }
-        SparqlEvaluator::new()
+        let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
             .with_default_service_handler(self.clone())
-            .for_query(query)
+            .for_query(Query::Select {
+                dataset: Some(QueryDataset {
+                    default: vec![service_name],
+                    named: None,
+                }),
+                pattern,
+                base_iri: base_iri.map(Iri::parse).transpose().unwrap(),
+            })
             .on_store(&self.store)
-            .execute()
+            .execute()?
+        else {
+            unreachable!();
+        };
+        Ok(solutions.into())
     }
 }
 

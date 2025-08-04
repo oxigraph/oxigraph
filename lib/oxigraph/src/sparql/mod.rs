@@ -9,7 +9,6 @@ mod error;
 mod http;
 mod model;
 pub mod results;
-mod service;
 mod update;
 
 use crate::model::{NamedNode, Term};
@@ -20,15 +19,15 @@ pub use crate::sparql::error::EvaluationError;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::HttpServiceHandler;
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
-pub use crate::sparql::service::{DefaultServiceHandler, ServiceHandler};
-use crate::sparql::service::{WrappedDefaultServiceHandler, WrappedServiceHandler};
 pub use crate::sparql::update::{BoundPreparedSparqlUpdate, PreparedSparqlUpdate};
 use crate::storage::StorageReader;
 use crate::store::{Store, Transaction};
 use oxrdf::IriParseError;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
-pub use spareval::{AggregateFunctionAccumulator, QueryExplanation};
+pub use spareval::{
+    AggregateFunctionAccumulator, DefaultServiceHandler, QueryExplanation, ServiceHandler,
+};
 use spargebra::SparqlParser;
 pub use spargebra::SparqlSyntaxError;
 use std::collections::HashMap;
@@ -143,9 +142,7 @@ impl SparqlEvaluator {
         service_name: impl Into<NamedNode>,
         handler: impl ServiceHandler + 'static,
     ) -> Self {
-        self.inner = self
-            .inner
-            .with_service_handler(service_name, WrappedServiceHandler(handler));
+        self.inner = self.inner.with_service_handler(service_name, handler);
         self
     }
 
@@ -163,9 +160,7 @@ impl SparqlEvaluator {
         {
             self.with_http_default_service_handler = false;
         }
-        self.inner = self
-            .inner
-            .with_default_service_handler(WrappedDefaultServiceHandler(handler));
+        self.inner = self.inner.with_default_service_handler(handler);
         self
     }
 
