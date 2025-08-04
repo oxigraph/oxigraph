@@ -4,7 +4,7 @@ import unittest
 from io import BytesIO, StringIO, UnsupportedOperation
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
-from typing import Any
+from typing import Any, List, Union
 
 from pyoxigraph import (
     BlankNode,
@@ -181,6 +181,20 @@ class TestStore(unittest.TestCase):
         )
         self.assertEqual(len(list(results)), 3)
 
+    def test_ask_query_with_base_and_prefixes(self) -> None:
+        store = Store()
+        store.add(Quad(foo, bar, baz))
+        self.assertTrue(
+            store.query(
+                "ASK { <> bar: baz: }",
+                base_iri="http://foo",
+                prefixes={
+                    "bar": "http://bar",
+                    "baz": "http://baz",
+                },
+            )
+        )
+
     def test_select_query_with_named_graph(self) -> None:
         store = Store()
         graph_bnode = BlankNode("g")
@@ -209,6 +223,30 @@ class TestStore(unittest.TestCase):
         self.assertIsInstance(solution, QuerySolution)
         self.assertEqual(solution["c"], Literal("http://foohttp://bar"))
         self.assertIsNone(solution["f"], None)
+
+    def test_select_query_with_custom_aggregate_function(self) -> None:
+        class Aggregate:
+            def __init__(self) -> None:
+                self.acc: List[Union[NamedNode, BlankNode, Literal, Triple]] = []
+
+            def accumulate(self, element: Union[NamedNode, BlankNode, Literal, Triple]) -> None:
+                self.acc.append(element)
+
+            def finish(self) -> Literal:
+                return Literal(" ".join(sorted(str(e) for e in self.acc)))
+
+        store = Store()
+        store.add(Quad(foo, bar, foo))
+        store.add(Quad(bar, bar, foo))
+        results: Any = store.query(
+            "SELECT (<http://example.com/concat>(?s) AS ?c)WHERE { ?s ?p ?o }",
+            custom_aggregate_functions={
+                NamedNode("http://example.com/concat"): Aggregate,
+            },
+        )
+        solution = next(results)
+        self.assertIsInstance(solution, QuerySolution)
+        self.assertEqual(solution["c"], Literal("<http://bar> <http://foo>"))
 
     def test_select_query_with_substitution(self) -> None:
         store = Store()

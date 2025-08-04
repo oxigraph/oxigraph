@@ -217,6 +217,8 @@ impl PyStore {
     /// :type query: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the SPARQL query or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
+    /// :param prefixes: a set of default prefixes to use during the SPARQL query parsing as a prefix name -> prefix IRI dictionary.
+    /// :type prefixes: dict[str, str] or None, optional
     /// :param use_default_graph_as_union: if the SPARQL query should look for triples in all the dataset graphs by default (i.e. without `GRAPH` operations). Disabled by default.
     /// :type use_default_graph_as_union: bool, optional
     /// :param default_graph: list of the graphs that should be used as the query default graph. By default, the store default graph is used.
@@ -254,11 +256,13 @@ impl PyStore {
     /// >>> store.add(Quad(NamedNode('http://example.com'), NamedNode('http://example.com/p'), Literal('1')))
     /// >>> bool(store.query('ASK { ?s ?p ?o }'))
     /// True
-    #[pyo3(signature = (query, *, base_iri = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None, custom_aggregate_functions = None))]
+    #[expect(clippy::too_many_arguments)]
+    #[pyo3(signature = (query, *, base_iri = None, prefixes = None, use_default_graph_as_union = false, default_graph = None, named_graphs = None, substitutions = None, custom_functions = None, custom_aggregate_functions = None))]
     fn query<'py>(
         &self,
         query: &str,
         base_iri: Option<&str>,
+        prefixes: Option<HashMap<String, String>>,
         use_default_graph_as_union: bool,
         default_graph: Option<&Bound<'_, PyAny>>,
         named_graphs: Option<&Bound<'_, PyAny>>,
@@ -274,7 +278,12 @@ impl PyStore {
         unsafe impl Send for UngilQueryResults {}
 
         let mut evaluator = prepare_sparql_query(
-            sparql_evaluator_from_python(base_iri, custom_functions, custom_aggregate_functions)?,
+            sparql_evaluator_from_python(
+                base_iri,
+                prefixes,
+                custom_functions,
+                custom_aggregate_functions,
+            )?,
             query,
             use_default_graph_as_union,
             default_graph,
@@ -301,6 +310,8 @@ impl PyStore {
     /// :type update: str
     /// :param base_iri: the base IRI used to resolve the relative IRIs in the SPARQL update or :py:const:`None` if relative IRI resolution should not be done.
     /// :type base_iri: str or None, optional
+    /// :param prefixes: a set of default prefixes to use during the SPARQL query parsing as a prefix name -> prefix IRI dictionary.
+    /// :type prefixes: dict[str, str] or None, optional
     /// :param custom_functions: dictionary of custom functions mapping function names to their definition. Custom functions take for input some RDF terms and returns a RDF term or :py:const:`None`.
     /// :type custom_functions: dict[NamedNode, typing.Callable[[NamedNode or BlankNode or Literal or Triple, ...], NamedNode or BlankNode or Literal or Triple or None]] or None, optional
     /// :param custom_aggregate_functions: dictionary of custom aggregate functions mapping function names to their definition. Custom aggregate functions take no input and return an object with two methods, `accumulate(self, term: Term)` to add a new term to the accumulator and `finish(self) -> Term` to return the accumulated result.
@@ -331,22 +342,28 @@ impl PyStore {
     /// >>> store.update('DELETE WHERE { <http://example.com> ?p ?o }')
     /// >>> list(store)
     /// []
-    #[pyo3(signature = (update, *, base_iri = None, custom_functions = None, custom_aggregate_functions = None))]
+    #[pyo3(signature = (update, *, base_iri = None, prefixes = None, custom_functions = None, custom_aggregate_functions = None))]
     fn update(
         &self,
         update: &str,
         base_iri: Option<&str>,
+        prefixes: Option<HashMap<String, String>>,
         custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
         custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
         py: Python<'_>,
     ) -> PyResult<()> {
         py.allow_threads(|| {
-            sparql_evaluator_from_python(base_iri, custom_functions, custom_aggregate_functions)?
-                .parse_update(update)
-                .map_err(|e| PySyntaxError::new_err(e.to_string()))?
-                .on_store(&self.inner)
-                .execute()
-                .map_err(map_evaluation_error)
+            sparql_evaluator_from_python(
+                base_iri,
+                prefixes,
+                custom_functions,
+                custom_aggregate_functions,
+            )?
+            .parse_update(update)
+            .map_err(|e| PySyntaxError::new_err(e.to_string()))?
+            .on_store(&self.inner)
+            .execute()
+            .map_err(map_evaluation_error)
         })
     }
 
