@@ -122,13 +122,13 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            runner: macos-13
+            target: x86_64-apple-darwin
             deployment_target: '10.14'
           - arch: aarch64
-            runner: macos-latest
+            target: aarch64-apple-darwin
             deployment_target: '11.0'
     continue-on-error: true
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
     env:
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
     steps:
@@ -136,6 +136,8 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
+        with:
+          target: ${{ matrix.target }}
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
@@ -144,9 +146,9 @@ jobs:
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
       - run: rm -rf target/wheels
-      - run: uv run maturin build --release --features abi3
+      - run: uv run maturin build --release --features abi3 --target ${{ matrix.target }}
         working-directory: ./python
-      - run: uvx maturin build --release
+      - run: uvx maturin build --release --target ${{ matrix.target }}
         working-directory: ./cli
       - uses: actions/upload-artifact@v4
         with:
