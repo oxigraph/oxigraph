@@ -78,6 +78,7 @@ pub fn prepare_sparql_query(
 
 pub fn sparql_evaluator_from_python(
     base_iri: Option<&str>,
+    prefixes: Option<HashMap<String, String>>,
     custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
     custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
 ) -> PyResult<SparqlEvaluator> {
@@ -122,7 +123,19 @@ pub fn sparql_evaluator_from_python(
     if let Some(base_iri) = base_iri {
         evaluator = evaluator
             .with_base_iri(base_iri)
-            .map_err(|e| PyValueError::new_err(format!("Invalid base IRI '{base_iri}', {e}")))?;
+            .map_err(|e| PyValueError::new_err(format!("Invalid base IRI '{base_iri}': {e}")))?;
+    }
+
+    if let Some(prefixes) = prefixes {
+        for (prefix_name, prefix_iri) in prefixes {
+            evaluator = evaluator
+                .with_prefix(&prefix_name, &prefix_iri)
+                .map_err(|e| {
+                    PyValueError::new_err(format!(
+                        "Invalid prefix IRI '{prefix_iri}' for {prefix_name}: {e}"
+                    ))
+                })?;
+        }
     }
 
     Ok(evaluator)
