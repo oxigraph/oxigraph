@@ -42,12 +42,13 @@ impl QueryResults {
     /// use oxigraph::store::Store;
     /// use oxigraph::model::*;
     /// use oxigraph::sparql::results::QueryResultsFormat;
+    /// use oxigraph::sparql::SparqlEvaluator;
     ///
     /// let store = Store::new()?;
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?;
     ///
-    /// let results = store.query("SELECT ?s WHERE { ?s ?p ?o }")?;
+    /// let results = SparqlEvaluator::new().parse_query("SELECT ?s WHERE { ?s ?p ?o }")?.on_store(&store).execute()?;
     /// assert_eq!(
     ///     results.write(Vec::new(), QueryResultsFormat::Json)?,
     ///     r#"{"head":{"vars":["s"]},"results":{"bindings":[{"s":{"type":"uri","value":"http://example.com"}}]}}"#.as_bytes()
@@ -105,6 +106,7 @@ impl QueryResults {
     ///
     /// ```
     /// use oxigraph::io::RdfFormat;
+    /// use oxigraph::sparql::SparqlEvaluator;
     /// use oxigraph::store::Store;
     ///
     /// let graph = "<http://example.com> <http://example.com> <http://example.com> .\n";
@@ -112,7 +114,10 @@ impl QueryResults {
     /// let store = Store::new()?;
     /// store.load_from_slice(RdfFormat::NTriples, graph)?;
     ///
-    /// let results = store.query("CONSTRUCT WHERE { ?s ?p ?o }")?;
+    /// let results = SparqlEvaluator::new()
+    ///     .parse_query("CONSTRUCT WHERE { ?s ?p ?o }")?
+    ///     .on_store(&store)
+    ///     .execute()?;
     /// assert_eq!(
     ///     results.write_graph(Vec::new(), RdfFormat::NTriples)?,
     ///     graph.as_bytes()
@@ -170,11 +175,14 @@ impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults
 /// An iterator over [`QuerySolution`]s.
 ///
 /// ```
-/// use oxigraph::sparql::QueryResults;
+/// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 /// use oxigraph::store::Store;
 ///
-/// let store = Store::new()?;
-/// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s WHERE { ?s ?p ?o }")? {
+/// if let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+///     .parse_query("SELECT ?s WHERE { ?s ?p ?o }")?
+///     .on_store(&Store::new()?)
+///     .execute()
+/// {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
 ///     }
@@ -182,7 +190,8 @@ impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct QuerySolutionIter {
-    inner: EvalQuerySolutionIter,
+    variables: Arc<[Variable]>,
+    iter: Box<dyn Iterator<Item = Result<QuerySolution, EvaluationError>>>,
 }
 
 impl QuerySolutionIter {
@@ -190,15 +199,13 @@ impl QuerySolutionIter {
     /// (each tuple using the same ordering as the variable list such that tuple element 0 is the value for the variable 0...)
     pub fn new(
         variables: Arc<[Variable]>,
-        iter: impl Iterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
+        iter: impl IntoIterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
     ) -> Self {
         Self {
-            inner: EvalQuerySolutionIter::new(
-                Arc::clone(&variables),
-                Box::new(iter.map(move |t| match t {
-                    Ok(values) => Ok((Arc::clone(&variables), values).into()),
-                    Err(e) => Err(QueryEvaluationError::Service(Box::new(e))),
-                })),
+            variables: Arc::clone(&variables),
+            iter: Box::new(
+                iter.into_iter()
+                    .map(move |values| Ok((Arc::clone(&variables), values?).into())),
             ),
         }
     }
@@ -206,11 +213,14 @@ impl QuerySolutionIter {
     /// The variables used in the solutions.
     ///
     /// ```
-    /// use oxigraph::sparql::{QueryResults, Variable};
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator, Variable};
     /// use oxigraph::store::Store;
     ///
-    /// let store = Store::new()?;
-    /// if let QueryResults::Solutions(solutions) = store.query("SELECT ?s ?o WHERE { ?s ?p ?o }")? {
+    /// if let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+    ///     .parse_query("SELECT ?s ?o WHERE { ?s ?p ?o }")?
+    ///     .on_store(&Store::new()?)
+    ///     .execute()?
+    /// {
     ///     assert_eq!(
     ///         solutions.variables(),
     ///         &[Variable::new("s")?, Variable::new("o")?]
@@ -220,31 +230,36 @@ impl QuerySolutionIter {
     /// ```
     #[inline]
     pub fn variables(&self) -> &[Variable] {
-        self.inner.variables()
+        &self.variables
     }
 }
 
 impl From<EvalQuerySolutionIter> for QuerySolutionIter {
     #[inline]
-    fn from(inner: EvalQuerySolutionIter) -> Self {
-        Self { inner }
+    fn from(iter: EvalQuerySolutionIter) -> Self {
+        Self {
+            variables: iter.variables().into(),
+            iter: Box::new(iter.map(|r| Ok(r?))),
+        }
     }
 }
 
 impl From<QuerySolutionIter> for EvalQuerySolutionIter {
     #[inline]
     fn from(iter: QuerySolutionIter) -> Self {
-        iter.inner
+        Self::new(
+            iter.variables,
+            iter.iter
+                .map(|r| r.map_err(|e| QueryEvaluationError::Service(Box::new(e)))),
+        )
     }
 }
 
 impl<R: Read + 'static> From<ReaderSolutionsParser<R>> for QuerySolutionIter {
     fn from(reader: ReaderSolutionsParser<R>) -> Self {
         Self {
-            inner: EvalQuerySolutionIter::new(
-                reader.variables().into(),
-                Box::new(reader.map(|t| t.map_err(|e| QueryEvaluationError::Service(Box::new(e))))),
-            ),
+            variables: reader.variables().into(),
+            iter: Box::new(reader.map(|r| Ok(r?))),
         }
     }
 }
@@ -254,23 +269,26 @@ impl Iterator for QuerySolutionIter {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.inner.next()?.map_err(Into::into))
+        self.iter.next()
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
+        self.iter.size_hint()
     }
 }
 
 /// An iterator over the triples that compose a graph solution.
 ///
 /// ```
-/// use oxigraph::sparql::QueryResults;
+/// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 /// use oxigraph::store::Store;
 ///
-/// let store = Store::new()?;
-/// if let QueryResults::Graph(triples) = store.query("CONSTRUCT WHERE { ?s ?p ?o }")? {
+/// if let QueryResults::Graph(triples) = SparqlEvaluator::new()
+///     .parse_query("CONSTRUCT WHERE { ?s ?p ?o }")?
+///     .on_store(&Store::new()?)
+///     .execute()
+/// {
 ///     for triple in triples {
 ///         println!("{}", triple?);
 ///     }
@@ -340,56 +358,52 @@ mod tests {
                     ]
                     .as_ref()
                     .into(),
-                    Box::new(
-                        vec![
-                            Ok(vec![None, None]),
-                            Ok(vec![
-                                Some(NamedNode::new_unchecked("http://example.com").into()),
-                                None,
-                            ]),
-                            Ok(vec![
-                                None,
-                                Some(NamedNode::new_unchecked("http://example.com").into()),
-                            ]),
-                            Ok(vec![
-                                Some(BlankNode::new_unchecked("foo").into()),
-                                Some(BlankNode::new_unchecked("bar").into()),
-                            ]),
-                            Ok(vec![Some(Literal::new_simple_literal("foo").into()), None]),
-                            Ok(vec![
-                                Some(
-                                    Literal::new_language_tagged_literal_unchecked("foo", "fr")
-                                        .into(),
-                                ),
-                                None,
-                            ]),
-                            Ok(vec![
-                                Some(Literal::from(1).into()),
-                                Some(Literal::from(true).into()),
-                            ]),
-                            Ok(vec![
-                                Some(Literal::from(1.33).into()),
-                                Some(Literal::from(false).into()),
-                            ]),
-                            #[cfg(feature = "rdf-12")]
-                            Ok(vec![
-                                Some(
+                    vec![
+                        Ok(vec![None, None]),
+                        Ok(vec![
+                            Some(NamedNode::new_unchecked("http://example.com").into()),
+                            None,
+                        ]),
+                        Ok(vec![
+                            None,
+                            Some(NamedNode::new_unchecked("http://example.com").into()),
+                        ]),
+                        Ok(vec![
+                            Some(BlankNode::new_unchecked("foo").into()),
+                            Some(BlankNode::new_unchecked("bar").into()),
+                        ]),
+                        Ok(vec![Some(Literal::new_simple_literal("foo").into()), None]),
+                        Ok(vec![
+                            Some(
+                                Literal::new_language_tagged_literal_unchecked("foo", "fr").into(),
+                            ),
+                            None,
+                        ]),
+                        Ok(vec![
+                            Some(Literal::from(1).into()),
+                            Some(Literal::from(true).into()),
+                        ]),
+                        Ok(vec![
+                            Some(Literal::from(1.33).into()),
+                            Some(Literal::from(false).into()),
+                        ]),
+                        #[cfg(feature = "rdf-12")]
+                        Ok(vec![
+                            Some(
+                                Triple::new(
+                                    NamedNode::new_unchecked("http://example.com/s"),
+                                    NamedNode::new_unchecked("http://example.com/p"),
                                     Triple::new(
-                                        NamedNode::new_unchecked("http://example.com/s"),
-                                        NamedNode::new_unchecked("http://example.com/p"),
-                                        Triple::new(
-                                            NamedNode::new_unchecked("http://example.com/os"),
-                                            NamedNode::new_unchecked("http://example.com/op"),
-                                            NamedNode::new_unchecked("http://example.com/oo"),
-                                        ),
-                                    )
-                                    .into(),
-                                ),
-                                None,
-                            ]),
-                        ]
-                        .into_iter(),
-                    ),
+                                        NamedNode::new_unchecked("http://example.com/os"),
+                                        NamedNode::new_unchecked("http://example.com/op"),
+                                        NamedNode::new_unchecked("http://example.com/oo"),
+                                    ),
+                                )
+                                .into(),
+                            ),
+                            None,
+                        ]),
+                    ],
                 )),
             ];
 
