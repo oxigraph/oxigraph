@@ -1,7 +1,7 @@
 use crate::io::RdfParseError;
 use crate::model::NamedNode;
 use crate::sparql::SparqlSyntaxError;
-use crate::sparql::results::QueryResultsParseError as ResultsParseError;
+use crate::sparql::results::QueryResultsParseError;
 use crate::store::{CorruptionError, StorageError};
 use oxrdf::{Term, Variable};
 use spareval::QueryEvaluationError;
@@ -24,7 +24,7 @@ pub enum EvaluationError {
     GraphParsing(#[from] RdfParseError),
     /// An error while parsing an external result file (likely from a federated query).
     #[error(transparent)]
-    ResultsParsing(#[from] ResultsParseError),
+    ResultsParsing(#[from] QueryResultsParseError),
     /// An error returned during result serialization.
     #[error(transparent)]
     ResultsSerialization(io::Error),
