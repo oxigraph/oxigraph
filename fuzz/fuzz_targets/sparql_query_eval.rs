@@ -5,14 +5,13 @@ use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::graph::CanonicalizationAlgorithm;
 use oxigraph::model::{Dataset, Graph, NamedNode};
 use oxigraph::sparql::{
-    DefaultServiceHandler as OxDefaultServiceHandler, EvaluationError, QueryResults,
-    SparqlEvaluator,
+    DefaultServiceHandler, QueryEvaluationError, QueryResults, QuerySolutionIter, SparqlEvaluator,
 };
 use oxigraph::store::Store;
 use oxigraph_fuzz::count_triple_blank_nodes;
 use oxiri::Iri;
 use oxrdf::{GraphNameRef, QuadRef};
-use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
+use spareval::QueryEvaluator;
 use spargebra::algebra::{GraphPattern, QueryDataset};
 use spargebra::{Query, SparqlParser};
 use std::sync::OnceLock;
@@ -52,15 +51,15 @@ fuzz_target!(|data: sparql_smith::Query| {
             .execute(dataset.clone(), &query);
         assert_eq!(
             query_results_key(with_opt, query_str.contains(" REDUCED ")),
-            query_results_key(
-                without_opt.map(Into::into).map_err(Into::into),
-                query_str.contains(" REDUCED ")
-            )
+            query_results_key(without_opt, query_str.contains(" REDUCED "))
         )
     }
 });
 
-fn query_results_key(results: Result<QueryResults, EvaluationError>, is_reduced: bool) -> String {
+fn query_results_key(
+    results: Result<QueryResults, QueryEvaluationError>,
+    is_reduced: bool,
+) -> String {
     match results {
         Ok(QueryResults::Solutions(iter)) => {
             // TODO: ordering
@@ -102,17 +101,21 @@ struct StoreServiceHandler {
     store: Store,
 }
 
-impl OxDefaultServiceHandler for StoreServiceHandler {
-    type Error = EvaluationError;
+impl DefaultServiceHandler for StoreServiceHandler {
+    type Error = QueryEvaluationError;
 
     fn handle(
         &self,
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, EvaluationError> {
-        if !self.store.contains_named_graph(service_name)? {
-            return Err(EvaluationError::Service("Graph does not exist".into()));
+    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+        if !self
+            .store
+            .contains_named_graph(service_name)
+            .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))?
+        {
+            return Err(QueryEvaluationError::Service("Graph does not exist".into()));
         }
         let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
             .with_default_service_handler(self.clone())
@@ -129,7 +132,7 @@ impl OxDefaultServiceHandler for StoreServiceHandler {
         else {
             unreachable!();
         };
-        Ok(solutions.into())
+        Ok(solutions)
     }
 }
 

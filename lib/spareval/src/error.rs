@@ -1,4 +1,5 @@
 use oxrdf::{NamedNode, Term, Variable};
+use spargebra::SparqlSyntaxError;
 use std::convert::Infallible;
 use std::error::Error;
 
@@ -39,5 +40,14 @@ impl From<Infallible> for QueryEvaluationError {
     #[inline]
     fn from(error: Infallible) -> Self {
         match error {}
+    }
+}
+
+// TODO: remove when removing the Store::update method
+#[doc(hidden)]
+impl From<SparqlSyntaxError> for QueryEvaluationError {
+    #[inline]
+    fn from(error: SparqlSyntaxError) -> Self {
+        Self::Unexpected(Box::new(error))
     }
 }

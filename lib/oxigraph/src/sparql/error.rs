@@ -1,9 +1,9 @@
 use crate::io::RdfParseError;
 use crate::model::NamedNode;
-use crate::sparql::SparqlSyntaxError;
 use crate::store::{CorruptionError, StorageError};
 use oxrdf::{Term, Variable};
 use spareval::QueryEvaluationError;
+use spargebra::SparqlSyntaxError;
 use std::convert::Infallible;
 use std::error::Error;
 use std::io;
@@ -12,13 +12,6 @@ use std::io;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum UpdateEvaluationError {
-    /// An error in SPARQL parsing.
-    #[deprecated(
-        note = "Only used by the deprecated oxigraph::Query struct",
-        since = "0.5.0"
-    )]
-    #[error(transparent)]
-    Parsing(#[from] SparqlSyntaxError),
     /// An error from the storage.
     #[error(transparent)]
     Storage(#[from] StorageError),
@@ -94,8 +87,6 @@ impl From<UpdateEvaluationError> for io::Error {
     #[inline]
     fn from(error: UpdateEvaluationError) -> Self {
         match error {
-            #[expect(deprecated)]
-            UpdateEvaluationError::Parsing(error) => Self::new(io::ErrorKind::InvalidData, error),
             UpdateEvaluationError::Storage(error) => error.into(),
             UpdateEvaluationError::GraphParsing(error) => error.into(),
             UpdateEvaluationError::Service(error) | UpdateEvaluationError::Unexpected(error) => {
@@ -114,5 +105,14 @@ impl From<UpdateEvaluationError> for io::Error {
                 Self::new(io::ErrorKind::InvalidInput, error)
             }
         }
+    }
+}
+
+// TODO: remove when removing the Store::update method
+#[doc(hidden)]
+impl From<SparqlSyntaxError> for UpdateEvaluationError {
+    #[inline]
+    fn from(error: SparqlSyntaxError) -> Self {
+        Self::Unexpected(Box::new(error))
     }
 }
