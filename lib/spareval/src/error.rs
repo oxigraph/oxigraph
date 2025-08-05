@@ -30,6 +30,9 @@ pub enum QueryEvaluationError {
     #[cfg(feature = "sparql-12")]
     #[error("The SPARQL dataset returned a triple term that is not a valid RDF 1.2 term")]
     InvalidStorageTripleTerm,
+    #[doc(hidden)]
+    #[error(transparent)]
+    Unexpected(Box<dyn Error + Send + Sync>),
 }
 
 impl From<Infallible> for QueryEvaluationError {

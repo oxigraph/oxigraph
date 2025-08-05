@@ -8,8 +8,9 @@ use oxigraph::sparql::results::{
     ReaderQueryResultsParserOutput, ReaderSolutionsParser,
 };
 use oxigraph::sparql::{
-    AggregateFunctionAccumulator, EvaluationError, PreparedSparqlQuery, QueryResults,
-    QuerySolution, QuerySolutionIter, QueryTripleIter, SparqlEvaluator, Variable,
+    AggregateFunctionAccumulator, PreparedSparqlQuery, QueryEvaluationError, QueryResults,
+    QuerySolution, QuerySolutionIter, QueryTripleIter, SparqlEvaluator, UpdateEvaluationError,
+    Variable,
 };
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PyValueError};
@@ -798,15 +799,38 @@ pub enum PyQueryResultsFormatInput {
     MediaType(String),
 }
 
-pub fn map_evaluation_error(error: EvaluationError) -> PyErr {
+pub fn map_evaluation_error(error: QueryEvaluationError) -> PyErr {
     match error {
-        #[expect(deprecated)]
-        EvaluationError::Parsing(error) => PySyntaxError::new_err(error.to_string()),
-        EvaluationError::Storage(error) => map_storage_error(error),
-        EvaluationError::GraphParsing(error) => map_parse_error(error, None),
-        EvaluationError::ResultsParsing(error) => map_query_results_parse_error(error, None),
-        EvaluationError::ResultsSerialization(error) => error.into(),
-        EvaluationError::Service(error) => match error.downcast::<io::Error>() {
+        QueryEvaluationError::Dataset(error) => match error.downcast() {
+            Ok(error) => map_storage_error(*error),
+            Err(error) => match error.downcast::<io::Error>() {
+                Ok(error) => (*error).into(),
+                Err(error) => PyRuntimeError::new_err(error.to_string()),
+            },
+        },
+        QueryEvaluationError::Service(error) => match error.downcast::<io::Error>() {
+            Ok(error) => (*error).into(),
+            Err(error) => PyRuntimeError::new_err(error.to_string()),
+        },
+        QueryEvaluationError::Unexpected(error) => match error.downcast() {
+            Ok(error) => map_parse_error(*error, None),
+            Err(error) => match error.downcast() {
+                Ok(error) => map_query_results_parse_error(*error, None),
+                Err(error) => match error.downcast::<io::Error>() {
+                    Ok(error) => (*error).into(),
+                    Err(error) => PyRuntimeError::new_err(error.to_string()),
+                },
+            },
+        },
+        _ => PyRuntimeError::new_err(error.to_string()),
+    }
+}
+
+pub fn map_update_evaluation_error(error: UpdateEvaluationError) -> PyErr {
+    match error {
+        UpdateEvaluationError::Storage(error) => map_storage_error(error),
+        UpdateEvaluationError::GraphParsing(error) => map_parse_error(error, None),
+        UpdateEvaluationError::Service(error) => match error.downcast::<io::Error>() {
             Ok(error) => (*error).into(),
             Err(error) => PyRuntimeError::new_err(error.to_string()),
         },

@@ -1244,7 +1244,7 @@ fn evaluate_sparql_query(
                 },
                 |(mut serializer, mut solutions)| {
                     Ok(if let Some(solution) = solutions.next() {
-                        serializer.serialize(&solution?)?;
+                        serializer.serialize(&solution.map_err(io::Error::other)?)?;
                         Some((serializer, solutions))
                     } else {
                         serializer.finish()?;
@@ -1271,7 +1271,7 @@ fn evaluate_sparql_query(
                 move |w| Ok((RdfSerializer::from_format(format).for_writer(w), triples)),
                 |(mut serializer, mut triples)| {
                     Ok(if let Some(t) = triples.next() {
-                        serializer.serialize_triple(&t?)?;
+                        serializer.serialize_triple(&t.map_err(io::Error::other)?)?;
                         Some((serializer, triples))
                     } else {
                         serializer.finish()?;
