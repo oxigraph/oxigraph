@@ -31,6 +31,7 @@
 //! ```
 use crate::io::{RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
+use crate::sparql::UpdateEvaluationError;
 #[expect(deprecated)]
 use crate::sparql::{
     EvaluationError, Query, QueryExplanation, QueryResults, SparqlEvaluator, Update,
@@ -501,7 +502,7 @@ impl Store {
     pub fn update(
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<(), UpdateEvaluationError> {
         self.update_opt(update, SparqlEvaluator::new())
     }
 
@@ -527,7 +528,7 @@ impl Store {
         &self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
         options: SparqlEvaluator,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<(), UpdateEvaluationError> {
         options
             .for_update(update.try_into().map_err(Into::into)?)
             .on_store(self)
@@ -1204,7 +1205,7 @@ impl<'a> Transaction<'a> {
     pub fn update(
         &mut self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<(), UpdateEvaluationError> {
         self.update_opt(update, SparqlEvaluator::new())
     }
 
@@ -1214,7 +1215,7 @@ impl<'a> Transaction<'a> {
         &mut self,
         update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
         options: SparqlEvaluator,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<(), UpdateEvaluationError> {
         options
             .for_update(update.try_into().map_err(Into::into)?)
             .on_transaction(self)

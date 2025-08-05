@@ -363,7 +363,7 @@ impl PyStore {
             .map_err(|e| PySyntaxError::new_err(e.to_string()))?
             .on_store(&self.inner)
             .execute()
-            .map_err(map_evaluation_error)
+            .map_err(map_update_evaluation_error)
         })
     }
 

@@ -15,7 +15,7 @@ use crate::model::{NamedNode, Term};
 #[expect(deprecated)]
 pub use crate::sparql::algebra::{Query, QueryDataset, Update};
 use crate::sparql::dataset::DatasetView;
-pub use crate::sparql::error::EvaluationError;
+pub use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::HttpServiceHandler;
 pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
@@ -26,7 +26,8 @@ use oxrdf::IriParseError;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
 pub use spareval::{
-    AggregateFunctionAccumulator, DefaultServiceHandler, QueryExplanation, ServiceHandler,
+    AggregateFunctionAccumulator, DefaultServiceHandler, QueryEvaluationError, QueryExplanation,
+    ServiceHandler,
 };
 use spargebra::SparqlParser;
 pub use spargebra::SparqlSyntaxError;
@@ -39,6 +40,8 @@ use std::time::Duration;
 pub type QueryOptions = SparqlEvaluator;
 #[deprecated(note = "Use SparqlEvaluator instead", since = "0.5.0")]
 pub type UpdateOptions = SparqlEvaluator;
+#[deprecated(note = "Use QueryEvaluationError instead", since = "0.5.0")]
+pub type EvaluationError = QueryEvaluationError;
 
 /// SPARQL evaluator.
 ///
@@ -620,7 +623,7 @@ impl BoundPreparedSparqlQuery {
     }
 
     /// Evaluate the query against the given store.
-    pub fn execute(self) -> Result<QueryResults, EvaluationError> {
+    pub fn execute(self) -> Result<QueryResults, QueryEvaluationError> {
         let dataset = DatasetView::new(self.reader, &self.dataset);
         Ok(self
             .evaluator
@@ -656,14 +659,14 @@ impl BoundPreparedSparqlQuery {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn explain(self) -> (Result<QueryResults, EvaluationError>, QueryExplanation) {
+    pub fn explain(self) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
         let dataset = DatasetView::new(self.reader, &self.dataset);
         let (results, explanation) = self.evaluator.explain_with_substituted_variables(
             dataset,
             &self.query,
             self.substitutions,
         );
-        let results = results.map_err(Into::into).map(Into::into);
+        let results = results.map(Into::into);
         (results, explanation)
     }
 }

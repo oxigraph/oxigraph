@@ -1,4 +1,3 @@
-use crate::sparql::EvaluationError;
 use oxhttp::model::header::{ACCEPT, CONTENT_TYPE};
 use oxhttp::model::{Body, Method, Request};
 use oxiri::Iri;
@@ -103,7 +102,7 @@ impl HttpServiceHandler {
 }
 
 impl DefaultServiceHandler for HttpServiceHandler {
-    type Error = EvaluationError;
+    type Error = QueryEvaluationError;
 
     fn handle(
         &self,
@@ -125,13 +124,23 @@ impl DefaultServiceHandler for HttpServiceHandler {
                 "application/sparql-query",
                 "application/sparql-results+json, application/sparql-results+xml",
             )
-            .map_err(|e| EvaluationError::Service(Box::new(e)))?;
-        let format = QueryResultsFormat::from_media_type(&content_type)
-            .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?;
+            .map_err(|e| QueryEvaluationError::Service(Box::new(e)))?;
+        let format = QueryResultsFormat::from_media_type(&content_type).ok_or_else(|| {
+            QueryEvaluationError::Service(
+                format!(
+                    "Unsupported Content-Type returned by service {service_name}: {content_type}"
+                )
+                .into(),
+            )
+        })?;
         let ReaderQueryResultsParserOutput::Solutions(reader) =
-            QueryResultsParser::from_format(format).for_reader(body)?
+            QueryResultsParser::from_format(format)
+                .for_reader(body)
+                .map_err(|e| QueryEvaluationError::Service(Box::new(e)))?
         else {
-            return Err(EvaluationError::ServiceDoesNotReturnSolutions);
+            return Err(QueryEvaluationError::Service(
+                "No valid SPARQL solutions returned by {service_name}".into(),
+            ));
         };
         Ok(QuerySolutionIter::new(
             reader.variables().into(),

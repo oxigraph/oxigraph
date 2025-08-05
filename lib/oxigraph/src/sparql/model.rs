@@ -1,6 +1,5 @@
 use crate::io::{RdfFormat, RdfSerializer};
 use crate::model::*;
-use crate::sparql::error::EvaluationError;
 use crate::sparql::results::{
     QueryResultsFormat, QueryResultsParseError, QueryResultsParser, QueryResultsSerializer,
     ReaderQueryResultsParserOutput, ReaderSolutionsParser,
@@ -59,18 +58,18 @@ impl QueryResults {
         self,
         writer: W,
         format: QueryResultsFormat,
-    ) -> Result<W, EvaluationError> {
+    ) -> Result<W, QueryEvaluationError> {
         let serializer = QueryResultsSerializer::from_format(format);
         match self {
             Self::Boolean(value) => serializer.serialize_boolean_to_writer(writer, value),
             Self::Solutions(solutions) => {
                 let mut serializer = serializer
                     .serialize_solutions_to_writer(writer, solutions.variables().to_vec())
-                    .map_err(EvaluationError::ResultsSerialization)?;
+                    .map_err(|e| QueryEvaluationError::Unexpected(e.into()))?;
                 for solution in solutions {
                     serializer
                         .serialize(&solution?)
-                        .map_err(EvaluationError::ResultsSerialization)?;
+                        .map_err(|e| QueryEvaluationError::Unexpected(e.into()))?;
                 }
                 serializer.finish()
             }
@@ -83,7 +82,7 @@ impl QueryResults {
                         writer,
                         vec![s.into_owned(), p.into_owned(), o.into_owned()],
                     )
-                    .map_err(EvaluationError::ResultsSerialization)?;
+                    .map_err(|e| QueryEvaluationError::Unexpected(e.into()))?;
                 for triple in triples {
                     let triple = triple?;
                     serializer
@@ -92,12 +91,12 @@ impl QueryResults {
                             (p, &triple.predicate.into()),
                             (o, &triple.object),
                         ])
-                        .map_err(EvaluationError::ResultsSerialization)?;
+                        .map_err(|e| QueryEvaluationError::Unexpected(e.into()))?;
                 }
                 serializer.finish()
             }
         }
-        .map_err(EvaluationError::ResultsSerialization)
+        .map_err(|e| QueryEvaluationError::Unexpected(e.into()))
     }
 
     /// Writes the graph query results.
@@ -128,19 +127,21 @@ impl QueryResults {
         self,
         writer: W,
         format: impl Into<RdfFormat>,
-    ) -> Result<W, EvaluationError> {
+    ) -> Result<W, QueryEvaluationError> {
         if let Self::Graph(triples) = self {
             let mut serializer = RdfSerializer::from_format(format.into()).for_writer(writer);
             for triple in triples {
                 serializer
                     .serialize_triple(&triple?)
-                    .map_err(EvaluationError::ResultsSerialization)?;
+                    .map_err(|e| QueryEvaluationError::Unexpected(e.into()))?;
             }
             serializer
                 .finish()
-                .map_err(EvaluationError::ResultsSerialization)
+                .map_err(|e| QueryEvaluationError::Unexpected(e.into()))
         } else {
-            Err(EvaluationError::NotAGraph)
+            Err(QueryEvaluationError::Unexpected(
+                "The SPARQL query is not returning a graph.".into(),
+            ))
         }
     }
 }
@@ -191,7 +192,7 @@ impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults
 /// ```
 pub struct QuerySolutionIter {
     variables: Arc<[Variable]>,
-    iter: Box<dyn Iterator<Item = Result<QuerySolution, EvaluationError>>>,
+    iter: Box<dyn Iterator<Item = Result<QuerySolution, QueryEvaluationError>>>,
 }
 
 impl QuerySolutionIter {
@@ -199,7 +200,7 @@ impl QuerySolutionIter {
     /// (each tuple using the same ordering as the variable list such that tuple element 0 is the value for the variable 0...)
     pub fn new(
         variables: Arc<[Variable]>,
-        iter: impl IntoIterator<Item = Result<Vec<Option<Term>>, EvaluationError>> + 'static,
+        iter: impl IntoIterator<Item = Result<Vec<Option<Term>>, QueryEvaluationError>> + 'static,
     ) -> Self {
         Self {
             variables: Arc::clone(&variables),
@@ -239,7 +240,7 @@ impl From<EvalQuerySolutionIter> for QuerySolutionIter {
     fn from(iter: EvalQuerySolutionIter) -> Self {
         Self {
             variables: iter.variables().into(),
-            iter: Box::new(iter.map(|r| Ok(r?))),
+            iter: Box::new(iter),
         }
     }
 }
@@ -259,13 +260,15 @@ impl<R: Read + 'static> From<ReaderSolutionsParser<R>> for QuerySolutionIter {
     fn from(reader: ReaderSolutionsParser<R>) -> Self {
         Self {
             variables: reader.variables().into(),
-            iter: Box::new(reader.map(|r| Ok(r?))),
+            iter: Box::new(
+                reader.map(|r| r.map_err(|e| QueryEvaluationError::Unexpected(e.into()))),
+            ),
         }
     }
 }
 
 impl Iterator for QuerySolutionIter {
-    type Item = Result<QuerySolution, EvaluationError>;
+    type Item = Result<QuerySolution, QueryEvaluationError>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -314,11 +317,11 @@ impl From<QueryTripleIter> for EvalQueryTripleIter {
 }
 
 impl Iterator for QueryTripleIter {
-    type Item = Result<Triple, EvaluationError>;
+    type Item = Result<Triple, QueryEvaluationError>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.inner.next()?.map_err(Into::into))
+        self.inner.next()
     }
 
     #[inline]
@@ -331,6 +334,7 @@ impl Iterator for QueryTripleIter {
 #[expect(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
+    use std::error::Error;
     use std::io::Cursor;
 
     #[test]
@@ -340,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialization_roundtrip() -> Result<(), EvaluationError> {
+    fn test_serialization_roundtrip() -> Result<(), Box<dyn Error>> {
         use std::str;
 
         for format in [

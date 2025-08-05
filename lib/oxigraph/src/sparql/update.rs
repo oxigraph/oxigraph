@@ -2,11 +2,12 @@
 use crate::io::{RdfFormat, RdfParser};
 use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
 use crate::sparql::algebra::QueryDataset;
+#[expect(deprecated)]
+use crate::sparql::algebra::Update;
 use crate::sparql::dataset::DatasetView;
+use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
-#[expect(deprecated)]
-use crate::sparql::{EvaluationError, Update};
 use crate::storage::{StorageError, StorageReadableTransaction, StorageTransaction};
 use crate::store::{Store, Transaction};
 use oxiri::Iri;
@@ -185,7 +186,7 @@ pub struct BoundPreparedSparqlUpdate<'a, 'b> {
 
 impl BoundPreparedSparqlUpdate<'_, '_> {
     /// Evaluate the update against the given store.
-    pub fn execute(self) -> Result<(), EvaluationError> {
+    pub fn execute(self) -> Result<(), UpdateEvaluationError> {
         match self.transaction? {
             UpdateTransaction::OwnedReadable(mut transaction) => {
                 SimpleUpdateEvaluator {
@@ -235,7 +236,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         &mut self,
         updates: &[GraphUpdateOperation],
         using_datasets: &[Option<QueryDataset>],
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<(), UpdateEvaluationError> {
         for (update, using_dataset) in updates.iter().zip(using_datasets) {
             self.eval(update, using_dataset)?;
         }
@@ -246,7 +247,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         &mut self,
         update: &GraphUpdateOperation,
         using_dataset: &Option<QueryDataset>,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<(), UpdateEvaluationError> {
         match update {
             GraphUpdateOperation::InsertData { data } => {
                 self.eval_insert_data(data);
@@ -305,7 +306,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         insert: &[QuadPattern],
         using: &QueryDataset,
         algebra: &GraphPattern,
-    ) -> Result<(), EvaluationError> {
+    ) -> Result<(), UpdateEvaluationError> {
         let QueryResults::Solutions(solutions) = self.query_evaluator.clone().execute(
             DatasetView::new(self.transaction.reader(), using),
             &Query::Select {
@@ -337,16 +338,16 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
     }
 
     #[cfg(feature = "http-client")]
-    fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), EvaluationError> {
+    fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
         let (content_type, body) = self
             .client
             .get(
                 from.as_str(),
                 "application/n-triples, text/turtle, application/rdf+xml",
             )
-            .map_err(|e| EvaluationError::Service(Box::new(e)))?;
+            .map_err(|e| UpdateEvaluationError::Service(Box::new(e)))?;
         let format = RdfFormat::from_media_type(&content_type)
-            .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?;
+            .ok_or_else(|| UpdateEvaluationError::UnsupportedContentType(content_type))?;
         let to_graph_name = match to {
             GraphName::NamedNode(graph_name) => graph_name.into(),
             GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
@@ -357,7 +358,9 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             .without_named_graphs()
             .with_default_graph(to_graph_name)
             .with_base_iri(from.as_str())
-            .map_err(|e| EvaluationError::Unexpected(format!("Invalid URL: {from}: {e}").into()))?
+            .map_err(|e| {
+                UpdateEvaluationError::Unexpected(format!("Invalid URL: {from}: {e}").into())
+            })?
             .for_reader(body)
             .with_document_loader(move |url| {
                 let (content_type, mut body) = client.get(
@@ -369,8 +372,9 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 Ok(LoadedDocument {
                     url: url.into(),
                     content,
-                    format: RdfFormat::from_media_type(&content_type)
-                        .ok_or_else(|| EvaluationError::UnsupportedContentType(content_type))?,
+                    format: RdfFormat::from_media_type(&content_type).ok_or_else(|| {
+                        UpdateEvaluationError::UnsupportedContentType(content_type)
+                    })?,
                 })
             });
         for q in parser {
@@ -381,13 +385,17 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
 
     #[cfg(not(feature = "http-client"))]
     #[expect(clippy::unused_self)]
-    fn eval_load(&mut self, _: &NamedNode, _: &GraphName) -> Result<(), EvaluationError> {
-        Err(EvaluationError::Unexpected(
+    fn eval_load(&mut self, _: &NamedNode, _: &GraphName) -> Result<(), UpdateEvaluationError> {
+        Err(UpdateEvaluationError::Unexpected(
             "HTTP client is not available. Enable the feature 'http-client'".into(),
         ))
     }
 
-    fn eval_create(&mut self, graph_name: &NamedNode, silent: bool) -> Result<(), EvaluationError> {
+    fn eval_create(
+        &mut self,
+        graph_name: &NamedNode,
+        silent: bool,
+    ) -> Result<(), UpdateEvaluationError> {
         if self
             .transaction
             .reader()
@@ -396,7 +404,9 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
             if silent {
                 Ok(())
             } else {
-                Err(EvaluationError::GraphAlreadyExists(graph_name.clone()))
+                Err(UpdateEvaluationError::GraphAlreadyExists(
+                    graph_name.clone(),
+                ))
             }
         } else {
             self.transaction.insert_named_graph(graph_name.into());
@@ -404,7 +414,11 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
-    fn eval_clear(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
+    fn eval_clear(
+        &mut self,
+        graph: &GraphTarget,
+        silent: bool,
+    ) -> Result<(), UpdateEvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 if self
@@ -416,7 +430,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 } else if silent {
                     Ok(())
                 } else {
-                    Err(EvaluationError::GraphDoesNotExist(graph_name.clone()))
+                    Err(UpdateEvaluationError::GraphDoesNotExist(graph_name.clone()))
                 }
             }
             GraphTarget::DefaultGraph => {
@@ -428,7 +442,11 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         }
     }
 
-    fn eval_drop(&mut self, graph: &GraphTarget, silent: bool) -> Result<(), EvaluationError> {
+    fn eval_drop(
+        &mut self,
+        graph: &GraphTarget,
+        silent: bool,
+    ) -> Result<(), UpdateEvaluationError> {
         match graph {
             GraphTarget::NamedNode(graph_name) => {
                 if self
@@ -441,7 +459,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
                 } else if silent {
                     Ok(())
                 } else {
-                    Err(EvaluationError::GraphDoesNotExist(graph_name.clone()))
+                    Err(UpdateEvaluationError::GraphDoesNotExist(graph_name.clone()))
                 }
             }
             GraphTarget::DefaultGraph => {
