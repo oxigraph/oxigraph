@@ -1,6 +1,11 @@
 use crate::error::QueryEvaluationError;
-use oxrdf::{Triple, Variable};
+use oxrdf::{Term, Triple, Variable};
 pub use sparesults::QuerySolution;
+use sparesults::{
+    ReaderQueryResultsParserOutput, ReaderSolutionsParser, SliceQueryResultsParserOutput,
+    SliceSolutionsParser,
+};
+use std::io::Read;
 use std::sync::Arc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
@@ -17,6 +22,40 @@ impl From<QuerySolutionIter> for QueryResults {
     #[inline]
     fn from(value: QuerySolutionIter) -> Self {
         Self::Solutions(value)
+    }
+}
+
+impl From<bool> for QueryResults {
+    #[inline]
+    fn from(value: bool) -> Self {
+        Self::Boolean(value)
+    }
+}
+
+impl From<QueryTripleIter> for QueryResults {
+    #[inline]
+    fn from(value: QueryTripleIter) -> Self {
+        Self::Graph(value)
+    }
+}
+
+impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults {
+    #[inline]
+    fn from(output: ReaderQueryResultsParserOutput<R>) -> Self {
+        match output {
+            ReaderQueryResultsParserOutput::Solutions(output) => Self::Solutions(output.into()),
+            ReaderQueryResultsParserOutput::Boolean(output) => Self::Boolean(output),
+        }
+    }
+}
+
+impl From<SliceQueryResultsParserOutput<'static>> for QueryResults {
+    #[inline]
+    fn from(output: SliceQueryResultsParserOutput<'static>) -> Self {
+        match output {
+            SliceQueryResultsParserOutput::Solutions(output) => Self::Solutions(output.into()),
+            SliceQueryResultsParserOutput::Boolean(output) => Self::Boolean(output),
+        }
     }
 }
 
@@ -43,16 +82,28 @@ pub struct QuerySolutionIter {
 }
 
 impl QuerySolutionIter {
-    /// Construct a new iterator of solution from an ordered list of solution variables and an iterator of solution tuples
-    /// (each tuple using the same ordering as the variable list such that tuple element 0 is the value for the variable 0...)
+    /// Construct a new iterator of solutions from an ordered list of solution variables and an iterator of solutions
     pub fn new(
         variables: Arc<[Variable]>,
-        iter: impl Iterator<Item = Result<QuerySolution, QueryEvaluationError>> + 'static,
+        iter: impl IntoIterator<Item = Result<QuerySolution, QueryEvaluationError>> + 'static,
     ) -> Self {
         Self {
             variables,
-            iter: Box::new(iter),
+            iter: Box::new(iter.into_iter()),
         }
+    }
+
+    /// Construct a new iterator of solutions from an ordered list of solution variables and an iterator of solution tuples
+    /// (each tuple using the same ordering as the variable list such that tuple element 0 is the value for the variable 0...)
+    pub fn from_tuples(
+        variables: Arc<[Variable]>,
+        iter: impl IntoIterator<Item = Result<Vec<Option<Term>>, QueryEvaluationError>> + 'static,
+    ) -> Self {
+        Self::new(
+            Arc::clone(&variables),
+            iter.into_iter()
+                .map(move |values| Ok((Arc::clone(&variables), values?).into())),
+        )
     }
 
     /// The variables used in the solutions.
@@ -90,6 +141,30 @@ impl Iterator for QuerySolutionIter {
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
+    }
+}
+
+impl<R: Read + 'static> From<ReaderSolutionsParser<R>> for QuerySolutionIter {
+    #[inline]
+    fn from(parser: ReaderSolutionsParser<R>) -> Self {
+        Self {
+            variables: parser.variables().into(),
+            iter: Box::new(
+                parser.map(|r| r.map_err(|e| QueryEvaluationError::Unexpected(e.into()))),
+            ),
+        }
+    }
+}
+
+impl From<SliceSolutionsParser<'static>> for QuerySolutionIter {
+    #[inline]
+    fn from(parser: SliceSolutionsParser<'static>) -> Self {
+        Self {
+            variables: parser.variables().into(),
+            iter: Box::new(
+                parser.map(|r| r.map_err(|e| QueryEvaluationError::Unexpected(e.into()))),
+            ),
+        }
     }
 }
 

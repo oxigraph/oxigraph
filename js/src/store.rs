@@ -1,9 +1,9 @@
 use crate::model::*;
 use crate::{console_warn, format_err};
 use js_sys::{Array, Map, Reflect, try_iter};
-use oxigraph::io::{RdfFormat, RdfParser};
+use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::*;
-use oxigraph::sparql::results::QueryResultsFormat;
+use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 #[cfg(feature = "geosparql")]
@@ -245,14 +245,18 @@ impl JsStore {
         Ok(match results {
             QueryResults::Solutions(solutions) => {
                 if let Some(results_format) = results_format {
-                    let results_format = query_results_format(&results_format)?;
+                    let mut serializer =
+                        QueryResultsSerializer::from_format(query_results_format(&results_format)?)
+                            .serialize_solutions_to_writer(Vec::new(), solutions.variables().into())
+                            .map_err(JsError::from)?;
+                    for solution in solutions {
+                        serializer
+                            .serialize(&solution.map_err(JsError::from)?)
+                            .map_err(JsError::from)?;
+                    }
                     JsValue::from_str(
-                        &String::from_utf8(
-                            QueryResults::Solutions(solutions)
-                                .write(Vec::new(), results_format)
-                                .map_err(JsError::from)?,
-                        )
-                        .map_err(JsError::from)?,
+                        &String::from_utf8(serializer.finish().map_err(JsError::from)?)
+                            .map_err(JsError::from)?,
                     )
                 } else {
                     let results = Array::new();
@@ -270,23 +274,26 @@ impl JsStore {
                     results.into()
                 }
             }
-            QueryResults::Graph(quads) => {
+            QueryResults::Graph(triples) => {
                 if let Some(results_format) = results_format {
-                    let rdf_format = rdf_format(&results_format)?;
+                    let mut serializer = RdfSerializer::from_format(rdf_format(&results_format)?)
+                        .for_writer(Vec::new());
+                    for triple in triples {
+                        serializer
+                            .serialize_triple(&triple.map_err(JsError::from)?)
+                            .map_err(JsError::from)?;
+                    }
                     JsValue::from_str(
-                        &String::from_utf8(
-                            QueryResults::Graph(quads)
-                                .write_graph(Vec::new(), rdf_format)
-                                .map_err(JsError::from)?,
-                        )
-                        .map_err(JsError::from)?,
+                        &String::from_utf8(serializer.finish().map_err(JsError::from)?)
+                            .map_err(JsError::from)?,
                     )
                 } else {
                     let results = Array::new();
-                    for quad in quads {
+                    for triple in triples {
                         results.push(
                             &JsQuad::from(
-                                quad.map_err(JsError::from)?
+                                triple
+                                    .map_err(JsError::from)?
                                     .in_graph(GraphName::DefaultGraph),
                             )
                             .into(),
@@ -297,12 +304,13 @@ impl JsStore {
             }
             QueryResults::Boolean(b) => {
                 if let Some(results_format) = results_format {
-                    let results_format = query_results_format(&results_format)?;
                     JsValue::from_str(
                         &String::from_utf8(
-                            QueryResults::Boolean(b)
-                                .write(Vec::new(), results_format)
-                                .map_err(JsError::from)?,
+                            QueryResultsSerializer::from_format(query_results_format(
+                                &results_format,
+                            )?)
+                            .serialize_boolean_to_writer(Vec::new(), b)
+                            .map_err(JsError::from)?,
                         )
                         .map_err(JsError::from)?,
                     )
