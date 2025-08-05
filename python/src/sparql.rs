@@ -20,6 +20,7 @@ use pyo3::types::PyTuple;
 #[cfg(feature = "geosparql")]
 use spargeo::register_geosparql_functions;
 use std::collections::HashMap;
+use std::error::Error;
 use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -803,26 +804,24 @@ pub fn map_evaluation_error(error: QueryEvaluationError) -> PyErr {
     match error {
         QueryEvaluationError::Dataset(error) => match error.downcast() {
             Ok(error) => map_storage_error(*error),
-            Err(error) => match error.downcast::<io::Error>() {
-                Ok(error) => (*error).into(),
-                Err(error) => PyRuntimeError::new_err(error.to_string()),
-            },
+            Err(error) => io_or_runtime_error(error),
         },
-        QueryEvaluationError::Service(error) => match error.downcast::<io::Error>() {
-            Ok(error) => (*error).into(),
-            Err(error) => PyRuntimeError::new_err(error.to_string()),
-        },
+        QueryEvaluationError::Service(error) => io_or_runtime_error(error),
         QueryEvaluationError::Unexpected(error) => match error.downcast() {
             Ok(error) => map_parse_error(*error, None),
             Err(error) => match error.downcast() {
                 Ok(error) => map_query_results_parse_error(*error, None),
-                Err(error) => match error.downcast::<io::Error>() {
-                    Ok(error) => (*error).into(),
-                    Err(error) => PyRuntimeError::new_err(error.to_string()),
-                },
+                Err(error) => io_or_runtime_error(error),
             },
         },
         _ => PyRuntimeError::new_err(error.to_string()),
+    }
+}
+
+fn io_or_runtime_error(error: Box<dyn Error>) -> PyErr {
+    match error.downcast::<io::Error>() {
+        Ok(error) => (*error).into(),
+        Err(error) => PyRuntimeError::new_err(error.to_string()),
     }
 }
 
@@ -833,6 +832,13 @@ pub fn map_update_evaluation_error(error: UpdateEvaluationError) -> PyErr {
         UpdateEvaluationError::Service(error) => match error.downcast::<io::Error>() {
             Ok(error) => (*error).into(),
             Err(error) => PyRuntimeError::new_err(error.to_string()),
+        },
+        UpdateEvaluationError::Unexpected(error) => match error.downcast() {
+            Ok(error) => map_parse_error(*error, None),
+            Err(error) => match error.downcast() {
+                Ok(error) => map_query_results_parse_error(*error, None),
+                Err(error) => io_or_runtime_error(error),
+            },
         },
         _ => PyRuntimeError::new_err(error.to_string()),
     }

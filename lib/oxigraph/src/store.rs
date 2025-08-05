@@ -31,10 +31,10 @@
 //! ```
 use crate::io::{RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
-use crate::sparql::UpdateEvaluationError;
 #[expect(deprecated)]
 use crate::sparql::{
-    EvaluationError, Query, QueryExplanation, QueryResults, SparqlEvaluator, Update,
+    Query, QueryEvaluationError, QueryExplanation, QueryResults, SparqlEvaluator, Update,
+    UpdateEvaluationError,
 };
 use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 pub use crate::storage::{CorruptionError, LoaderError, SerializerError, StorageError};
@@ -153,8 +153,8 @@ impl Store {
     #[expect(deprecated)]
     pub fn query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-    ) -> Result<QueryResults, EvaluationError> {
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
+    ) -> Result<QueryResults, QueryEvaluationError> {
         self.query_opt(query, SparqlEvaluator::new())
     }
 
@@ -186,9 +186,9 @@ impl Store {
     #[expect(deprecated)]
     pub fn query_opt(
         &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
-    ) -> Result<QueryResults, EvaluationError> {
+    ) -> Result<QueryResults, QueryEvaluationError> {
         self.query_opt_with_substituted_variables(query, options, [])
     }
 
@@ -219,10 +219,10 @@ impl Store {
     #[expect(deprecated)]
     pub fn query_opt_with_substituted_variables(
         &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<QueryResults, EvaluationError> {
+    ) -> Result<QueryResults, QueryEvaluationError> {
         let mut evaluator = options.for_query(query.try_into().map_err(Into::into)?);
         for (variable, term) in substitutions {
             evaluator = evaluator.substitute_variable(variable, term);
@@ -257,10 +257,11 @@ impl Store {
     #[expect(deprecated)]
     pub fn explain_query_opt(
         &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
         with_stats: bool,
-    ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
+    ) -> Result<(Result<QueryResults, QueryEvaluationError>, QueryExplanation), QueryEvaluationError>
+    {
         let mut prepared = options
             .for_query(query.try_into().map_err(Into::into)?)
             .on_store(self);
@@ -299,11 +300,12 @@ impl Store {
     #[expect(deprecated)]
     pub fn explain_query_opt_with_substituted_variables(
         &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
         with_stats: bool,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<(Result<QueryResults, EvaluationError>, QueryExplanation), EvaluationError> {
+    ) -> Result<(Result<QueryResults, QueryEvaluationError>, QueryExplanation), QueryEvaluationError>
+    {
         let mut prepared = options
             .for_query(query.try_into().map_err(Into::into)?)
             .on_store(self);
@@ -501,7 +503,7 @@ impl Store {
     #[expect(deprecated)]
     pub fn update(
         &self,
-        update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
+        update: impl TryInto<Update, Error = impl Into<UpdateEvaluationError>>,
     ) -> Result<(), UpdateEvaluationError> {
         self.update_opt(update, SparqlEvaluator::new())
     }
@@ -526,7 +528,7 @@ impl Store {
     #[expect(deprecated)]
     pub fn update_opt(
         &self,
-        update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
+        update: impl TryInto<Update, Error = impl Into<UpdateEvaluationError>>,
         options: SparqlEvaluator,
     ) -> Result<(), UpdateEvaluationError> {
         options
@@ -1032,7 +1034,7 @@ impl<'a> Transaction<'a> {
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{EvaluationError, QueryResults, SparqlEvaluator};
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
@@ -1054,14 +1056,14 @@ impl<'a> Transaction<'a> {
     ///     }
     /// }
     /// transaction.commit()?;
-    /// # Result::<_, EvaluationError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
     #[expect(deprecated)]
     pub fn query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
-    ) -> Result<QueryResults, EvaluationError> {
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
+    ) -> Result<QueryResults, QueryEvaluationError> {
         self.query_opt(query, SparqlEvaluator::new())
     }
 
@@ -1070,7 +1072,7 @@ impl<'a> Transaction<'a> {
     /// Usage example with a custom function serializing terms to N-Triples:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{EvaluationError, QueryResults, SparqlEvaluator};
+    /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
@@ -1099,15 +1101,15 @@ impl<'a> Transaction<'a> {
     ///     }
     /// }
     /// transaction.commit()?;
-    /// # Result::<_, EvaluationError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[deprecated(note = "Use `SparqlEvaluator` interface instead", since = "0.5.0")]
     #[expect(deprecated)]
     pub fn query_opt(
         &self,
-        query: impl TryInto<Query, Error = impl Into<EvaluationError>>,
+        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
-    ) -> Result<QueryResults, EvaluationError> {
+    ) -> Result<QueryResults, QueryEvaluationError> {
         options
             .for_query(query.try_into().map_err(Into::into)?)
             .on_transaction(self)
@@ -1181,7 +1183,7 @@ impl<'a> Transaction<'a> {
     /// Usage example:
     /// ```
     /// use oxigraph::model::*;
-    /// use oxigraph::sparql::{EvaluationError, SparqlEvaluator};
+    /// use oxigraph::sparql::SparqlEvaluator;
     /// use oxigraph::store::Store;
     ///
     /// let store = Store::new()?;
@@ -1199,12 +1201,12 @@ impl<'a> Transaction<'a> {
     /// assert!(transaction.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph))?);
     ///
     /// transaction.commit()?;
-    /// # Result::<_, EvaluationError>::Ok(())
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     #[expect(deprecated)]
     pub fn update(
         &mut self,
-        update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
+        update: impl TryInto<Update, Error = impl Into<UpdateEvaluationError>>,
     ) -> Result<(), UpdateEvaluationError> {
         self.update_opt(update, SparqlEvaluator::new())
     }
@@ -1213,7 +1215,7 @@ impl<'a> Transaction<'a> {
     #[expect(deprecated)]
     pub fn update_opt(
         &mut self,
-        update: impl TryInto<Update, Error = impl Into<EvaluationError>>,
+        update: impl TryInto<Update, Error = impl Into<UpdateEvaluationError>>,
         options: SparqlEvaluator,
     ) -> Result<(), UpdateEvaluationError> {
         options
