@@ -7,7 +7,6 @@ mod dataset;
 mod error;
 #[cfg(feature = "http-client")]
 mod http;
-mod model;
 pub mod results;
 mod update;
 
@@ -18,7 +17,6 @@ use crate::sparql::dataset::DatasetView;
 pub use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::HttpServiceHandler;
-pub use crate::sparql::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 pub use crate::sparql::update::{BoundPreparedSparqlUpdate, PreparedSparqlUpdate};
 use crate::storage::StorageReader;
 use crate::store::{Store, Transaction};
@@ -27,7 +25,7 @@ pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
 pub use spareval::{
     AggregateFunctionAccumulator, DefaultServiceHandler, QueryEvaluationError, QueryExplanation,
-    ServiceHandler,
+    QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter, ServiceHandler,
 };
 use spargebra::SparqlParser;
 pub use spargebra::SparqlSyntaxError;
@@ -625,10 +623,8 @@ impl BoundPreparedSparqlQuery {
     /// Evaluate the query against the given store.
     pub fn execute(self) -> Result<QueryResults, QueryEvaluationError> {
         let dataset = DatasetView::new(self.reader, &self.dataset);
-        Ok(self
-            .evaluator
-            .execute_with_substituted_variables(dataset, &self.query, self.substitutions)?
-            .into())
+        self.evaluator
+            .execute_with_substituted_variables(dataset, &self.query, self.substitutions)
     }
 
     /// Compute statistics during evaluation and fills them in the explanation tree.
@@ -666,7 +662,6 @@ impl BoundPreparedSparqlQuery {
             &self.query,
             self.substitutions,
         );
-        let results = results.map(Into::into);
         (results, explanation)
     }
 }

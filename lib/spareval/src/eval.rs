@@ -3877,8 +3877,8 @@ fn decode_bindings<D: QueryableDataset>(
     variables: Arc<[Variable]>,
 ) -> QuerySolutionIter {
     let tuple_size = variables.len();
-    QuerySolutionIter::new(
-        Arc::clone(&variables),
+    QuerySolutionIter::from_tuples(
+        variables,
         Box::new(iter.map(move |values| {
             let mut result = vec![None; tuple_size];
             for (i, value) in values?.iter().enumerate() {
@@ -3886,7 +3886,7 @@ fn decode_bindings<D: QueryableDataset>(
                     result[i] = Some(dataset.externalize_term(term)?)
                 }
             }
-            Ok((Arc::clone(&variables), result).into())
+            Ok(result)
         })),
     )
 }

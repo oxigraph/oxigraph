@@ -3,7 +3,7 @@ use crate::files::*;
 use crate::manifest::*;
 use crate::report::{dataset_diff, format_diff};
 use crate::vocab::*;
-use anyhow::{Context, Error, Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use oxigraph::io::RdfParser;
 use oxigraph::model::dataset::CanonicalizationAlgorithm;
 use oxigraph::model::vocab::rdf;
@@ -12,7 +12,9 @@ use oxigraph::model::{
     NamedNode, Term, TermRef, Triple, TripleRef, Variable,
 };
 use oxigraph::sparql::QueryResults;
-use oxigraph::sparql::results::QueryResultsFormat;
+use oxigraph::sparql::results::{
+    QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput,
+};
 use oxigraph::store::Store;
 use oxiri::Iri;
 use spareval::{DefaultServiceHandler, QueryEvaluationError, QueryEvaluator, QuerySolutionIter};
@@ -22,7 +24,7 @@ use spargeo::add_geosparql_functions;
 use sparopt::Optimizer;
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::io::{self, Cursor};
+use std::io;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -120,12 +122,16 @@ fn evaluate_negative_syntax_test(test: &Test) -> Result<()> {
 fn evaluate_positive_result_syntax_test(test: &Test, format: QueryResultsFormat) -> Result<()> {
     let action_file = test.action.as_deref().context("No action found")?;
     let actual_results = StaticQueryResults::from_query_results(
-        QueryResults::read(read_file(action_file)?, format)?,
+        QueryResultsParser::from_format(format)
+            .for_reader(read_file(action_file)?)?
+            .into(),
         true,
     )?;
     if let Some(result_file) = test.result.as_deref() {
         let expected_results = StaticQueryResults::from_query_results(
-            QueryResults::read(read_file(result_file)?, format)?,
+            QueryResultsParser::from_format(format)
+                .for_reader(read_file(result_file)?)?
+                .into(),
             true,
         )?;
         ensure!(
@@ -140,9 +146,14 @@ fn evaluate_positive_result_syntax_test(test: &Test, format: QueryResultsFormat)
 fn evaluate_negative_result_syntax_test(test: &Test, format: QueryResultsFormat) -> Result<()> {
     let action_file = test.action.as_deref().context("No action found")?;
     ensure!(
-        QueryResults::read(Cursor::new(read_file_to_string(action_file)?), format)
-            .map_err(Error::from)
-            .and_then(|r| { StaticQueryResults::from_query_results(r, true) })
+        QueryResultsParser::from_format(format)
+            .for_reader(read_file(action_file)?)
+            .and_then(|output| {
+                if let ReaderQueryResultsParserOutput::Solutions(output) = output {
+                    output.collect::<Result<Vec<_>, _>>()?;
+                }
+                Ok(())
+            })
             .is_err(),
         "Oxigraph parses even if it should not."
     );
@@ -198,9 +209,8 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
             evaluator = evaluator.without_optimizations();
         }
         let actual_results = evaluator.execute(dataset.clone(), &query)?;
-        let actual_results =
-            StaticQueryResults::from_query_results(actual_results.into(), with_order)
-                .with_context(|| format!("Error when executing {query}"))?;
+        let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)
+            .with_context(|| format!("Error when executing {query}"))?;
 
         ensure!(
             are_query_results_isomorphic(&expected_results, &actual_results),
@@ -284,7 +294,12 @@ fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
         .rsplit_once('.')
         .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))
     {
-        StaticQueryResults::from_query_results(QueryResults::read(read_file(url)?, format)?, false)
+        StaticQueryResults::from_query_results(
+            QueryResultsParser::from_format(format)
+                .for_reader(read_file(url)?)?
+                .into(),
+            false,
+        )
     } else {
         StaticQueryResults::from_graph(&load_graph(url, guess_rdf_format(url)?, false)?)
     }
@@ -331,7 +346,7 @@ impl DefaultServiceHandler for StaticServiceHandler {
         let evaluator = QueryEvaluator::new().with_default_service_handler(StaticServiceHandler {
             services: Arc::clone(&self.services),
         });
-        let spareval::QueryResults::Solutions(iter) = evaluator.execute(
+        let QueryResults::Solutions(iter) = evaluator.execute(
             dataset.clone(),
             &Query::Select {
                 dataset: None,
