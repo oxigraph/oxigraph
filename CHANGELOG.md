@@ -1,3 +1,24 @@
+# [0.5.2-beta.2] - 2025-08-07
+
+### Added
+- `oxrdfio`: `RdfParser.split_slice_for_parallel_parsing` to enable easier NTriples and NQuads parallel parsing.
+- `oxigraph`: `(BulkLoader|Store|Transaction).load_from_slice` to load serialized RDF data from a slice.
+- `oxigraph`: `SparqlEvaluator` fluent API to customize more easily SPARQL operations and prepare them.
+  The `Store.query` and `Store.update` methods are deprecated and `QueryOptions` and `UpdateOptions` types are removed.
+- SPARQL: support for `xsd:gYear`, `xsd:gMonth`, `xsd:gDay`, `xsd:gMonthDay` and `xsd:gYearMonth` cast functions.
+- Python: add `prefixes` and `custom_aggregate_functions` options to `Store.query` and `Store.update` methods.
+
+### Removed
+- `oxigraph`: Remove `Service`, `DefaultService`, `QueryResults` and `QuerySolutionIter` types in favor of `spargebra` ones.
+
+### Changed
+- Turtle: fixes parsing of blank nodes at the end of the files.
+- Turtle/NTriples: fail on `"foo"^^rdf:langString` and `"foo"^^rdf:dirLangString`.
+- RocksDB: enable async I/O when RocksDB is built with it.
+- `spareval`: `Service` and `DefaultService` traits now take parameters by reference.
+- `oxigraph`: the `EvaluationError` type is now replaced by the `QueryEvaluationError` and `UpdateEvaluationError` types.
+
+
 # [0.5.0-beta.1] - 2025-06-20
 
 ### Added
