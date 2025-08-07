@@ -771,8 +771,8 @@ impl TriGSerializer {
         prefix_iri: impl Into<String>,
     ) -> Result<Self, IriParseError> {
         self.prefixes.insert(
-            Iri::parse(prefix_iri.into())?.into_inner(),
             prefix_name.into(),
+            Iri::parse(prefix_iri.into())?.into_inner(),
         );
         Ok(self)
     }
@@ -902,8 +902,11 @@ impl TriGSerializer {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
     pub fn low_level(self) -> LowLevelTriGSerializer {
+        // We sort prefixes by decreasing length
+        let mut prefixes = self.prefixes.into_iter().collect::<Vec<_>>();
+        prefixes.sort_unstable_by(|(_, l), (_, r)| r.len().cmp(&l.len()));
         LowLevelTriGSerializer {
-            prefixes: self.prefixes,
+            prefixes,
             base_iri: self.base_iri,
             prelude_written: false,
             current_graph_name: GraphName::DefaultGraph,
@@ -1041,7 +1044,7 @@ impl<W: AsyncWrite + Unpin> TokioAsyncWriterTriGSerializer<W> {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 pub struct LowLevelTriGSerializer {
-    prefixes: BTreeMap<String, String>,
+    prefixes: Vec<(String, String)>,
     base_iri: Option<Iri<String>>,
     prelude_written: bool,
     current_graph_name: GraphName,
@@ -1060,7 +1063,7 @@ impl LowLevelTriGSerializer {
             if let Some(base_iri) = &self.base_iri {
                 writeln!(writer, "@base <{base_iri}> .")?;
             }
-            for (prefix_iri, prefix_name) in &self.prefixes {
+            for (prefix_name, prefix_iri) in &self.prefixes {
                 writeln!(
                     writer,
                     "@prefix {prefix_name}: <{}> .",
@@ -1182,7 +1185,7 @@ impl LowLevelTriGSerializer {
 
 struct TurtlePredicate<'a> {
     named_node: NamedNodeRef<'a>,
-    prefixes: &'a BTreeMap<String, String>,
+    prefixes: &'a Vec<(String, String)>,
     base_iri: &'a Option<Iri<String>>,
 }
 
@@ -1203,7 +1206,7 @@ impl fmt::Display for TurtlePredicate<'_> {
 
 struct TurtleTerm<'a> {
     term: TermRef<'a>,
-    prefixes: &'a BTreeMap<String, String>,
+    prefixes: &'a Vec<(String, String)>,
     base_iri: &'a Option<Iri<String>>,
 }
 
@@ -1211,7 +1214,7 @@ impl fmt::Display for TurtleTerm<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.term {
             TermRef::NamedNode(v) => {
-                for (prefix_iri, prefix_name) in self.prefixes {
+                for (prefix_name, prefix_iri) in self.prefixes {
                     if let Some(local_name) = v.as_str().strip_prefix(prefix_iri) {
                         if local_name.is_empty() {
                             return write!(f, "{prefix_name}:");
@@ -1434,11 +1437,13 @@ mod tests {
         let mut serializer = TriGSerializer::new()
             .with_prefix("ex", "http://example.com/")
             .unwrap()
+            .with_prefix("exl", "http://example.com/p/")
+            .unwrap()
             .for_writer(Vec::new());
         serializer.serialize_quad(QuadRef::new(
             NamedNodeRef::new_unchecked("http://example.com/s"),
             NamedNodeRef::new_unchecked("http://example.com/p"),
-            NamedNodeRef::new_unchecked("http://example.com/o."),
+            NamedNodeRef::new_unchecked("http://example.com/p/o."),
             NamedNodeRef::new_unchecked("http://example.com/g"),
         ))?;
         serializer.serialize_quad(QuadRef::new(
@@ -1485,7 +1490,7 @@ mod tests {
         ))?;
         assert_eq!(
             String::from_utf8(serializer.finish()?).unwrap(),
-            "@prefix ex: <http://example.com/> .\nex:g {\n\tex:s ex:p ex:o\\. , <http://example.com/o{o}> , ex: , \"foo\" ;\n\t\tex:p2 \"foo\"@en .\n\t_:b ex:p2 _:b2 .\n}\n_:b ex:p2 true .\nex:g2 {\n\t_:b <http://example.org/p2> false .\n}\n"
+            "@prefix exl: <http://example.com/p/> .\n@prefix ex: <http://example.com/> .\nex:g {\n\tex:s ex:p exl:o\\. , <http://example.com/o{o}> , ex: , \"foo\" ;\n\t\tex:p2 \"foo\"@en .\n\t_:b ex:p2 _:b2 .\n}\n_:b ex:p2 true .\nex:g2 {\n\t_:b <http://example.org/p2> false .\n}\n"
         );
         Ok(())
     }
