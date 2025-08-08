@@ -166,6 +166,11 @@ impl RocksDbStorage {
         let mut version = self.ensure_version()?;
         if version == 0 {
             // We migrate to v1
+            if !self.db.is_writable() {
+                return Err(StorageError::Other(
+                    "It is not possible to upgrade read-only Oxigraph instances to newer Oxigraph versions, please open in read-write regular mode to upgrade.".into(),
+                ));
+            }
             let mut graph_names = FxHashSet::default();
             for quad in self.snapshot().quads() {
                 let quad = quad?;
@@ -230,6 +235,11 @@ impl RocksDbStorage {
                 Ok(reifier.as_ref().into())
             }
 
+            if !self.db.is_writable() {
+                return Err(StorageError::Other(
+                    "It is not possible to upgrade read-only Oxigraph instances to newer Oxigraph versions, please open in read-write regular mode to upgrade.".into(),
+                ));
+            }
             let snapshot = self.snapshot();
             #[cfg_attr(not(feature = "rdf-12"), expect(clippy::never_loop))]
             for quad in snapshot
@@ -281,7 +291,6 @@ impl RocksDbStorage {
         match version {
             _ if version < LATEST_STORAGE_VERSION => Err(CorruptionError::msg(format!(
                 "The RocksDB database is using the outdated encoding version {version}. Automated migration is not supported, please dump the store dataset using a compatible Oxigraph version and load it again using the current version"
-
             )).into()),
             LATEST_STORAGE_VERSION => Ok(()),
             _ => Err(CorruptionError::msg(format!(
