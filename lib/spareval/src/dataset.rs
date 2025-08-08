@@ -19,7 +19,7 @@ use std::iter::empty;
 use std::mem::discriminant;
 
 /// A [RDF dataset](https://www.w3.org/TR/sparql11-query/#rdfDataset) that can be queried using SPARQL
-pub trait QueryableDataset: Sized + 'static {
+pub trait QueryableDataset<'a>: Sized + 'a {
     /// Internal representation of an RDF term
     ///
     /// Can be just an integer that indexes into a dictionary...
@@ -39,12 +39,12 @@ pub trait QueryableDataset: Sized + 'static {
         predicate: Option<&Self::InternalTerm>,
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>>>; // TODO: consider `impl`
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + 'a>; // TODO: consider `impl`
 
     /// Fetches the list of dataset named graphs
     fn internal_named_graphs(
         &self,
-    ) -> Box<dyn Iterator<Item = Result<Self::InternalTerm, Self::Error>>> {
+    ) -> Box<dyn Iterator<Item = Result<Self::InternalTerm, Self::Error>> + 'a> {
         // TODO: consider `impl`
         let mut error = None;
         let graph_names = self
@@ -113,7 +113,7 @@ pub trait QueryableDataset: Sized + 'static {
     }
 }
 
-impl QueryableDataset for Dataset {
+impl QueryableDataset<'_> for Dataset {
     type InternalTerm = Term;
     type Error = Infallible;
 

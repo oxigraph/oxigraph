@@ -45,11 +45,11 @@ use std::{fmt, io};
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 /// Wrapper on top of [`QueryableDataset`]
-struct EvalDataset<D: QueryableDataset> {
+struct EvalDataset<D: QueryableDataset<'static>> {
     dataset: Rc<D>,
 }
 
-impl<D: QueryableDataset> EvalDataset<D> {
+impl<D: QueryableDataset<'static>> EvalDataset<D> {
     fn internal_quads_for_pattern(
         &self,
         subject: Option<&D::InternalTerm>,
@@ -120,7 +120,7 @@ impl<D: QueryableDataset> EvalDataset<D> {
     }
 }
 
-impl<D: QueryableDataset> Clone for EvalDataset<D> {
+impl<D: QueryableDataset<'static>> Clone for EvalDataset<D> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
@@ -233,7 +233,7 @@ impl<T: Clone + Eq + Hash> IntoIterator for InternalTuple<T> {
 type InternalTuplesIterator<T> =
     Box<dyn Iterator<Item = Result<InternalTuple<T>, QueryEvaluationError>>>;
 
-pub struct SimpleEvaluator<D: QueryableDataset> {
+pub struct SimpleEvaluator<D: QueryableDataset<'static>> {
     dataset: EvalDataset<D>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
@@ -243,7 +243,7 @@ pub struct SimpleEvaluator<D: QueryableDataset> {
     run_stats: bool,
 }
 
-impl<D: QueryableDataset> SimpleEvaluator<D> {
+impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
     pub fn new(
         dataset: D,
         base_iri: Option<Rc<Iri<String>>>,
@@ -3730,7 +3730,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
     }
 }
 
-impl<D: QueryableDataset> Clone for SimpleEvaluator<D> {
+impl<D: QueryableDataset<'static>> Clone for SimpleEvaluator<D> {
     fn clone(&self) -> Self {
         Self {
             dataset: self.dataset.clone(),
@@ -3873,7 +3873,7 @@ fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
     regex_builder.build().ok()
 }
 
-fn decode_bindings<D: QueryableDataset>(
+fn decode_bindings<D: QueryableDataset<'static>>(
     dataset: EvalDataset<D>,
     iter: InternalTuplesIterator<D::InternalTerm>,
     variables: Arc<[Variable]>,
@@ -3894,7 +3894,7 @@ fn decode_bindings<D: QueryableDataset>(
 }
 
 // this is used to encode results from a BindingIterator into an InternalTuplesIterator. This happens when SERVICE clauses are evaluated
-fn encode_bindings<D: QueryableDataset>(
+fn encode_bindings<D: QueryableDataset<'static>>(
     dataset: EvalDataset<D>,
     variables: Rc<[Variable]>,
     iter: QuerySolutionIter<'static>,
@@ -3913,7 +3913,7 @@ fn encode_bindings<D: QueryableDataset>(
     }))
 }
 
-fn encode_initial_bindings<D: QueryableDataset>(
+fn encode_initial_bindings<D: QueryableDataset<'static>>(
     dataset: &EvalDataset<D>,
     variables: &[Variable],
     values: impl IntoIterator<Item = (Variable, Term)>,
@@ -4902,7 +4902,7 @@ impl<T: Clone + Eq + Hash> TupleSelector<T> {
     fn from_ground_term_pattern(
         term_pattern: &GroundTermPattern,
         variables: &mut Vec<Variable>,
-        dataset: &EvalDataset<impl QueryableDataset<InternalTerm = T>>,
+        dataset: &EvalDataset<impl QueryableDataset<'static, InternalTerm = T>>,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(match term_pattern {
             GroundTermPattern::Variable(variable) => {
@@ -4951,7 +4951,7 @@ impl<T: Clone + Eq + Hash> TupleSelector<T> {
     fn from_named_node_pattern(
         named_node_pattern: &NamedNodePattern,
         variables: &mut Vec<Variable>,
-        dataset: &EvalDataset<impl QueryableDataset<InternalTerm = T>>,
+        dataset: &EvalDataset<impl QueryableDataset<'static, InternalTerm = T>>,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(match named_node_pattern {
             NamedNodePattern::Variable(variable) => {
@@ -4968,7 +4968,7 @@ impl<T: Clone + Eq + Hash> TupleSelector<T> {
         &self,
         tuple: &InternalTuple<T>,
         #[cfg(feature = "sparql-12")] dataset: &EvalDataset<
-            impl QueryableDataset<InternalTerm = T>,
+            impl QueryableDataset<'static, InternalTerm = T>,
         >,
     ) -> Result<Option<T>, QueryEvaluationError> {
         Ok(match self {
@@ -5020,7 +5020,7 @@ struct TripleTupleSelector<T: Clone + Eq + Hash> {
 }
 
 #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
-fn put_pattern_value<D: QueryableDataset>(
+fn put_pattern_value<D: QueryableDataset<'static>>(
     selector: &TupleSelector<D::InternalTerm>,
     value: D::InternalTerm,
     tuple: &mut InternalTuple<D::InternalTerm>,
@@ -5088,11 +5088,11 @@ pub enum PropertyPath<T: Clone + Eq + Hash> {
     NegatedPropertySet(Rc<[T]>),
 }
 
-struct PathEvaluator<D: QueryableDataset> {
+struct PathEvaluator<D: QueryableDataset<'static>> {
     dataset: EvalDataset<D>,
 }
 
-impl<D: QueryableDataset> PathEvaluator<D> {
+impl<D: QueryableDataset<'static>> PathEvaluator<D> {
     fn eval_closed_in_graph(
         &self,
         path: &PropertyPath<D::InternalTerm>,
@@ -5860,7 +5860,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
     }
 }
 
-impl<D: QueryableDataset> Clone for PathEvaluator<D> {
+impl<D: QueryableDataset<'static>> Clone for PathEvaluator<D> {
     fn clone(&self) -> Self {
         Self {
             dataset: self.dataset.clone(),
@@ -6082,7 +6082,7 @@ impl<T: Clone + Eq + Hash> Iterator for ConsecutiveDeduplication<T> {
     }
 }
 
-struct ConstructIterator<D: QueryableDataset> {
+struct ConstructIterator<D: QueryableDataset<'static>> {
     eval: SimpleEvaluator<D>,
     iter: InternalTuplesIterator<D::InternalTerm>,
     template: Vec<TripleTemplate>,
@@ -6091,7 +6091,7 @@ struct ConstructIterator<D: QueryableDataset> {
     bnodes: Vec<BlankNode>,
 }
 
-impl<D: QueryableDataset> Iterator for ConstructIterator<D> {
+impl<D: QueryableDataset<'static>> Iterator for ConstructIterator<D> {
     type Item = Result<Triple, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6236,7 +6236,7 @@ impl TripleTemplateValue {
     }
 }
 
-fn get_triple_template_value<D: QueryableDataset>(
+fn get_triple_template_value<D: QueryableDataset<'static>>(
     selector: &TripleTemplateValue,
     tuple: &InternalTuple<D::InternalTerm>,
     bnodes: &mut Vec<BlankNode>,
@@ -6271,7 +6271,7 @@ fn get_triple_template_value<D: QueryableDataset>(
     }
 }
 
-struct DescribeIterator<D: QueryableDataset> {
+struct DescribeIterator<D: QueryableDataset<'static>> {
     eval: SimpleEvaluator<D>,
     tuples_to_describe: InternalTuplesIterator<D::InternalTerm>,
     nodes_described: FxHashSet<D::InternalTerm>,
@@ -6279,7 +6279,7 @@ struct DescribeIterator<D: QueryableDataset> {
     quads: Box<dyn Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>>>,
 }
 
-impl<D: QueryableDataset> Iterator for DescribeIterator<D> {
+impl<D: QueryableDataset<'static>> Iterator for DescribeIterator<D> {
     type Item = Result<Triple, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
