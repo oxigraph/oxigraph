@@ -269,7 +269,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
-        Result<QuerySolutionIter, QueryEvaluationError>,
+        Result<QuerySolutionIter<'static>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
@@ -327,7 +327,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         template: &[TriplePattern],
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
-        Result<QueryTripleIter, QueryEvaluationError>,
+        Result<QueryTripleIter<'static>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
@@ -376,7 +376,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
-        Result<QueryTripleIter, QueryEvaluationError>,
+        Result<QueryTripleIter<'static>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
@@ -3875,7 +3875,7 @@ fn decode_bindings<D: QueryableDataset>(
     dataset: EvalDataset<D>,
     iter: InternalTuplesIterator<D>,
     variables: Arc<[Variable]>,
-) -> QuerySolutionIter {
+) -> QuerySolutionIter<'static> {
     let tuple_size = variables.len();
     QuerySolutionIter::from_tuples(
         variables,
@@ -3895,7 +3895,7 @@ fn decode_bindings<D: QueryableDataset>(
 fn encode_bindings<D: QueryableDataset>(
     dataset: EvalDataset<D>,
     variables: Rc<[Variable]>,
-    iter: QuerySolutionIter,
+    iter: QuerySolutionIter<'static>,
 ) -> InternalTuplesIterator<D> {
     Box::new(iter.map(move |solution| {
         let mut encoded_terms = InternalTuple::with_capacity(variables.len());

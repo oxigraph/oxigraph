@@ -69,7 +69,7 @@ pub trait ServiceHandler: Send + Sync {
         &self,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, Self::Error>;
+    ) -> Result<QuerySolutionIter<'static>, Self::Error>;
 }
 
 /// Default handler for [SPARQL 1.1 Federated Query](https://www.w3.org/TR/sparql11-federated-query/) SERVICEs.
@@ -134,7 +134,7 @@ pub trait DefaultServiceHandler: Send + Sync {
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, Self::Error>;
+    ) -> Result<QuerySolutionIter<'static>, Self::Error>;
 }
 
 #[derive(Clone, Default)]
@@ -170,7 +170,7 @@ impl ServiceHandlerRegistry {
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+    ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if let Some(handler) = self.handlers.get(service_name) {
             return handler.handle(pattern, base_iri);
         }
@@ -192,7 +192,7 @@ impl<S: ServiceHandler> ServiceHandler for ErrorConversionServiceHandler<S> {
         &self,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+    ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         self.0.handle(pattern, base_iri).map_err(wrap_service_error)
     }
 }
@@ -205,7 +205,7 @@ impl<S: DefaultServiceHandler> DefaultServiceHandler for ErrorConversionServiceH
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+    ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         self.0
             .handle(service_name, pattern, base_iri)
             .map_err(wrap_service_error)
