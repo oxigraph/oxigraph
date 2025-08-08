@@ -37,6 +37,7 @@ use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::iter::{Peekable, empty, once};
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{fmt, io};
@@ -45,18 +46,19 @@ use std::{fmt, io};
 const REGEX_SIZE_LIMIT: usize = 1_000_000;
 
 /// Wrapper on top of [`QueryableDataset`]
-struct EvalDataset<D: QueryableDataset<'static>> {
+struct EvalDataset<'a, D: QueryableDataset<'a>> {
     dataset: Rc<D>,
+    _lifetime: PhantomData<&'a ()>,
 }
 
-impl<D: QueryableDataset<'static>> EvalDataset<D> {
+impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
     fn internal_quads_for_pattern(
         &self,
         subject: Option<&D::InternalTerm>,
         predicate: Option<&D::InternalTerm>,
         object: Option<&D::InternalTerm>,
         graph_name: Option<Option<&D::InternalTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'static
+    ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'a
     {
         self.dataset
             .internal_quads_for_pattern(subject, predicate, object, graph_name)
@@ -65,7 +67,7 @@ impl<D: QueryableDataset<'static>> EvalDataset<D> {
 
     fn internal_named_graphs(
         &self,
-    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + use<D> {
+    ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + use<'a, D> {
         self.dataset
             .internal_named_graphs()
             .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
@@ -120,11 +122,12 @@ impl<D: QueryableDataset<'static>> EvalDataset<D> {
     }
 }
 
-impl<D: QueryableDataset<'static>> Clone for EvalDataset<D> {
+impl<'a, D: QueryableDataset<'a>> Clone for EvalDataset<'a, D> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
             dataset: Rc::clone(&self.dataset),
+            _lifetime: self._lifetime,
         }
     }
 }
@@ -230,11 +233,11 @@ impl<T: Clone + Eq + Hash> IntoIterator for InternalTuple<T> {
     }
 }
 
-type InternalTuplesIterator<T> =
-    Box<dyn Iterator<Item = Result<InternalTuple<T>, QueryEvaluationError>>>;
+type InternalTuplesIterator<'a, T> =
+    Box<dyn Iterator<Item = Result<InternalTuple<T>, QueryEvaluationError>> + 'a>;
 
-pub struct SimpleEvaluator<D: QueryableDataset<'static>> {
-    dataset: EvalDataset<D>,
+pub struct SimpleEvaluator<'a, D: QueryableDataset<'a>> {
+    dataset: EvalDataset<'a, D>,
     base_iri: Option<Rc<Iri<String>>>,
     now: DateTime,
     service_handler: Rc<ServiceHandlerRegistry>,
@@ -243,7 +246,7 @@ pub struct SimpleEvaluator<D: QueryableDataset<'static>> {
     run_stats: bool,
 }
 
-impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
+impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     pub fn new(
         dataset: D,
         base_iri: Option<Rc<Iri<String>>>,
@@ -255,6 +258,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         Self {
             dataset: EvalDataset {
                 dataset: Rc::new(dataset),
+                _lifetime: PhantomData,
             },
             base_iri,
             now: DateTime::now(),
@@ -270,7 +274,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
-        Result<QuerySolutionIter<'static>, QueryEvaluationError>,
+        Result<QuerySolutionIter<'a>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
@@ -328,7 +332,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         template: &[TriplePattern],
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
-        Result<QueryTripleIter<'static>, QueryEvaluationError>,
+        Result<QueryTripleIter<'a>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
@@ -377,7 +381,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
-        Result<QueryTripleIter<'static>, QueryEvaluationError>,
+        Result<QueryTripleIter<'a>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut variables = Vec::new();
@@ -403,7 +407,10 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         encoded_variables: &mut Vec<Variable>,
     ) -> (
-        Rc<dyn Fn(InternalTuple<D::InternalTerm>) -> InternalTuplesIterator<D::InternalTerm>>,
+        Rc<
+            dyn Fn(InternalTuple<D::InternalTerm>) -> InternalTuplesIterator<'a, D::InternalTerm>
+                + 'a,
+        >,
         Rc<EvalNodeWithStats>,
     ) {
         let mut stat_children = Vec::new();
@@ -441,7 +448,9 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(InternalTuple<D::InternalTerm>) -> InternalTuplesIterator<D::InternalTerm>> {
+    ) -> Rc<
+        dyn Fn(InternalTuple<D::InternalTerm>) -> InternalTuplesIterator<'a, D::InternalTerm> + 'a,
+    > {
         match pattern {
             GraphPattern::Values {
                 variables,
@@ -1486,7 +1495,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
                     let mut errors = Vec::default();
                     let mut accumulators_for_group = FxHashMap::<
                         Vec<Option<D::InternalTerm>>,
-                        Vec<AccumulatorWrapper<D::InternalTerm>>,
+                        Vec<AccumulatorWrapper<'_, D::InternalTerm>>,
                     >::default();
                     if key_variables.is_empty() {
                         // There is always a single group if there is no GROUP BY
@@ -1598,7 +1607,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         graph_pattern: &spargebra::algebra::GraphPattern,
         variables: Rc<[Variable]>,
         from: &InternalTuple<D::InternalTerm>,
-    ) -> Result<InternalTuplesIterator<D::InternalTerm>, QueryEvaluationError> {
+    ) -> Result<InternalTuplesIterator<'a, D::InternalTerm>, QueryEvaluationError> {
         let service_name = service_name
             .get_pattern_value(
                 from,
@@ -1621,7 +1630,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         expression: &AggregateExpression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Box<dyn Fn() -> AccumulatorWrapper<D::InternalTerm>> {
+    ) -> Box<dyn Fn() -> AccumulatorWrapper<'a, D::InternalTerm> + 'a> {
         match expression {
             AggregateExpression::CountSolutions { distinct } => {
                 if *distinct {
@@ -1797,7 +1806,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Option<Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<D::InternalTerm>>> {
+    ) -> Option<Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<D::InternalTerm> + 'a>> {
         Some(match expression {
             Expression::NamedNode(t) => {
                 let t = self.encode_term(t.clone()).ok();
@@ -1864,7 +1873,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<bool>> {
+    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<bool> + 'a> {
         // TODO: avoid dyn?
         if let Some(eval) =
             self.internal_expression_evaluator(expression, encoded_variables, stat_children)
@@ -1886,7 +1895,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<ExpressionTerm>> {
+    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<ExpressionTerm> + 'a> {
         match expression {
             Expression::NamedNode(t) => {
                 let t = ExpressionTerm::from(Term::from(t.clone()));
@@ -3669,7 +3678,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
         parameters: &[Expression],
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<ExpressionTerm>> {
+    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<ExpressionTerm> + 'a> {
         let arg = self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
         Rc::new(move |tuple| {
             let ExpressionTerm::StringLiteral(input) = arg(tuple)? else {
@@ -3730,7 +3739,7 @@ impl<D: QueryableDataset<'static>> SimpleEvaluator<D> {
     }
 }
 
-impl<D: QueryableDataset<'static>> Clone for SimpleEvaluator<D> {
+impl<'a, D: QueryableDataset<'a>> Clone for SimpleEvaluator<'a, D> {
     fn clone(&self) -> Self {
         Self {
             dataset: self.dataset.clone(),
@@ -3873,11 +3882,11 @@ fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
     regex_builder.build().ok()
 }
 
-fn decode_bindings<D: QueryableDataset<'static>>(
-    dataset: EvalDataset<D>,
-    iter: InternalTuplesIterator<D::InternalTerm>,
+fn decode_bindings<'a, D: QueryableDataset<'a>>(
+    dataset: EvalDataset<'a, D>,
+    iter: InternalTuplesIterator<'a, D::InternalTerm>,
     variables: Arc<[Variable]>,
-) -> QuerySolutionIter<'static> {
+) -> QuerySolutionIter<'a> {
     let tuple_size = variables.len();
     QuerySolutionIter::from_tuples(
         variables,
@@ -3894,11 +3903,11 @@ fn decode_bindings<D: QueryableDataset<'static>>(
 }
 
 // this is used to encode results from a BindingIterator into an InternalTuplesIterator. This happens when SERVICE clauses are evaluated
-fn encode_bindings<D: QueryableDataset<'static>>(
-    dataset: EvalDataset<D>,
+fn encode_bindings<'a, D: QueryableDataset<'a>>(
+    dataset: EvalDataset<'a, D>,
     variables: Rc<[Variable]>,
-    iter: QuerySolutionIter<'static>,
-) -> InternalTuplesIterator<D::InternalTerm> {
+    iter: QuerySolutionIter<'a>,
+) -> InternalTuplesIterator<'a, D::InternalTerm> {
     Box::new(iter.map(move |solution| {
         let mut encoded_terms = InternalTuple::with_capacity(variables.len());
         for (variable, term) in &solution? {
@@ -3913,8 +3922,8 @@ fn encode_bindings<D: QueryableDataset<'static>>(
     }))
 }
 
-fn encode_initial_bindings<D: QueryableDataset<'static>>(
-    dataset: &EvalDataset<D>,
+fn encode_initial_bindings<'a, D: QueryableDataset<'a>>(
+    dataset: &EvalDataset<'a, D>,
     variables: &[Variable],
     values: impl IntoIterator<Item = (Variable, Term)>,
 ) -> Result<InternalTuple<D::InternalTerm>, QueryEvaluationError> {
@@ -3949,7 +3958,7 @@ fn put_variable_value<T: Clone + Eq + Hash>(
     false
 }
 
-enum AccumulatorWrapper<T: Clone + Eq + Hash> {
+enum AccumulatorWrapper<'a, T: Clone + Eq + Hash> {
     CountTuple {
         count: u64,
     },
@@ -3958,32 +3967,32 @@ enum AccumulatorWrapper<T: Clone + Eq + Hash> {
         count: u64,
     },
     CountInternal {
-        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T> + 'a>,
         count: u64,
     },
     CountDistinctInternal {
         seen: FxHashSet<T>,
-        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T> + 'a>,
         count: u64,
     },
     Sample {
         // TODO: add internal variant
-        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
         value: Option<ExpressionTerm>,
     },
     Expression {
-        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
         accumulator: Option<Box<dyn Accumulator>>,
     },
     DistinctExpression {
         seen: FxHashSet<ExpressionTerm>,
-        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>,
         accumulator: Option<Box<dyn Accumulator>>,
     },
     Failing,
 }
 
-impl<T: Clone + Eq + Hash> AccumulatorWrapper<T> {
+impl<T: Clone + Eq + Hash> AccumulatorWrapper<'_, T> {
     fn accumulate(&mut self, tuple: &InternalTuple<T>) {
         match self {
             Self::CountTuple { count } => {
@@ -4899,10 +4908,10 @@ enum TupleSelector<T: Clone + Eq + Hash> {
 }
 
 impl<T: Clone + Eq + Hash> TupleSelector<T> {
-    fn from_ground_term_pattern(
+    fn from_ground_term_pattern<'a>(
         term_pattern: &GroundTermPattern,
         variables: &mut Vec<Variable>,
-        dataset: &EvalDataset<impl QueryableDataset<'static, InternalTerm = T>>,
+        dataset: &EvalDataset<'a, impl QueryableDataset<'a, InternalTerm = T>>,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(match term_pattern {
             GroundTermPattern::Variable(variable) => {
@@ -4948,10 +4957,10 @@ impl<T: Clone + Eq + Hash> TupleSelector<T> {
         })
     }
 
-    fn from_named_node_pattern(
+    fn from_named_node_pattern<'a>(
         named_node_pattern: &NamedNodePattern,
         variables: &mut Vec<Variable>,
-        dataset: &EvalDataset<impl QueryableDataset<'static, InternalTerm = T>>,
+        dataset: &EvalDataset<'a, impl QueryableDataset<'a, InternalTerm = T>>,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(match named_node_pattern {
             NamedNodePattern::Variable(variable) => {
@@ -4964,11 +4973,12 @@ impl<T: Clone + Eq + Hash> TupleSelector<T> {
     }
 
     #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
-    fn get_pattern_value(
+    fn get_pattern_value<'a>(
         &self,
         tuple: &InternalTuple<T>,
         #[cfg(feature = "sparql-12")] dataset: &EvalDataset<
-            impl QueryableDataset<'static, InternalTerm = T>,
+            'a,
+            impl QueryableDataset<'a, InternalTerm = T>,
         >,
     ) -> Result<Option<T>, QueryEvaluationError> {
         Ok(match self {
@@ -5020,11 +5030,11 @@ struct TripleTupleSelector<T: Clone + Eq + Hash> {
 }
 
 #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
-fn put_pattern_value<D: QueryableDataset<'static>>(
+fn put_pattern_value<'a, D: QueryableDataset<'a>>(
     selector: &TupleSelector<D::InternalTerm>,
     value: D::InternalTerm,
     tuple: &mut InternalTuple<D::InternalTerm>,
-    #[cfg(feature = "sparql-12")] dataset: &EvalDataset<D>,
+    #[cfg(feature = "sparql-12")] dataset: &EvalDataset<'a, D>,
 ) -> Result<bool, QueryEvaluationError> {
     Ok(match selector {
         TupleSelector::Constant(c) => *c == value,
@@ -5088,11 +5098,11 @@ pub enum PropertyPath<T: Clone + Eq + Hash> {
     NegatedPropertySet(Rc<[T]>),
 }
 
-struct PathEvaluator<D: QueryableDataset<'static>> {
-    dataset: EvalDataset<D>,
+struct PathEvaluator<'a, D: QueryableDataset<'a>> {
+    dataset: EvalDataset<'a, D>,
 }
 
-impl<D: QueryableDataset<'static>> PathEvaluator<D> {
+impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
     fn eval_closed_in_graph(
         &self,
         path: &PropertyPath<D::InternalTerm>,
@@ -5171,7 +5181,7 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
         path: &PropertyPath<D::InternalTerm>,
         start: &D::InternalTerm,
         end: &D::InternalTerm,
-    ) -> Box<dyn Iterator<Item = Result<Option<D::InternalTerm>, QueryEvaluationError>>> {
+    ) -> Box<dyn Iterator<Item = Result<Option<D::InternalTerm>, QueryEvaluationError>> + 'a> {
         match path {
             PropertyPath::Path(p) => Box::new(
                 self.dataset
@@ -5269,7 +5279,7 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
         path: &PropertyPath<D::InternalTerm>,
         start: &D::InternalTerm,
         graph_name: Option<&D::InternalTerm>,
-    ) -> Box<dyn Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>>> {
+    ) -> Box<dyn Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + 'a> {
         match path {
             PropertyPath::Path(p) => Box::new(
                 self.dataset
@@ -5345,8 +5355,8 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
         start: &D::InternalTerm,
     ) -> Box<
         dyn Iterator<
-            Item = Result<(D::InternalTerm, Option<D::InternalTerm>), QueryEvaluationError>,
-        >,
+                Item = Result<(D::InternalTerm, Option<D::InternalTerm>), QueryEvaluationError>,
+            > + 'a,
     > {
         match path {
             PropertyPath::Path(p) => Box::new(
@@ -5435,7 +5445,7 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
         path: &PropertyPath<D::InternalTerm>,
         end: &D::InternalTerm,
         graph_name: Option<&D::InternalTerm>,
-    ) -> Box<dyn Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>>> {
+    ) -> Box<dyn Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + 'a> {
         match path {
             PropertyPath::Path(p) => Box::new(
                 self.dataset
@@ -5508,8 +5518,8 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
         end: &D::InternalTerm,
     ) -> Box<
         dyn Iterator<
-            Item = Result<(D::InternalTerm, Option<D::InternalTerm>), QueryEvaluationError>,
-        >,
+                Item = Result<(D::InternalTerm, Option<D::InternalTerm>), QueryEvaluationError>,
+            > + 'a,
     > {
         match path {
             PropertyPath::Path(p) => Box::new(
@@ -5597,8 +5607,9 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
         &self,
         path: &PropertyPath<D::InternalTerm>,
         graph_name: Option<&D::InternalTerm>,
-    ) -> Box<dyn Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>>>
-    {
+    ) -> Box<
+        dyn Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>> + 'a,
+    > {
         match path {
             PropertyPath::Path(p) => Box::new(
                 self.dataset
@@ -5680,11 +5691,11 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
         path: &PropertyPath<D::InternalTerm>,
     ) -> Box<
         dyn Iterator<
-            Item = Result<
-                (D::InternalTerm, D::InternalTerm, Option<D::InternalTerm>),
-                QueryEvaluationError,
-            >,
-        >,
+                Item = Result<
+                    (D::InternalTerm, D::InternalTerm, Option<D::InternalTerm>),
+                    QueryEvaluationError,
+                >,
+            > + 'a,
     > {
         match path {
             PropertyPath::Path(p) => Box::new(
@@ -5762,7 +5773,7 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
     fn get_subject_or_object_identity_pairs_in_graph(
         &self,
         graph_name: Option<&D::InternalTerm>,
-    ) -> impl Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>> + 'static
+    ) -> impl Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>> + 'a
     {
         self.dataset
             .internal_quads_for_pattern(None, None, None, Some(graph_name))
@@ -5781,7 +5792,7 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
             (D::InternalTerm, D::InternalTerm, Option<D::InternalTerm>),
             QueryEvaluationError,
         >,
-    > + 'static {
+    > + 'a {
         self.dataset
             .internal_quads_for_pattern(None, None, None, None)
             .flat_map_ok(|t| {
@@ -5793,14 +5804,14 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
     }
 
     fn run_if_term_is_a_graph_node<
-        T: 'static,
-        I: Iterator<Item = Result<T, QueryEvaluationError>> + 'static,
+        T: 'a,
+        I: Iterator<Item = Result<T, QueryEvaluationError>> + 'a,
     >(
         &self,
         term: &D::InternalTerm,
         graph_name: Option<&D::InternalTerm>,
         f: impl FnOnce() -> I,
-    ) -> Box<dyn Iterator<Item = Result<T, QueryEvaluationError>>> {
+    ) -> Box<dyn Iterator<Item = Result<T, QueryEvaluationError>> + 'a> {
         match self.is_subject_or_object_in_graph(term, graph_name) {
             Ok(true) => Box::new(f()),
             Ok(false) => {
@@ -5830,13 +5841,13 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
     }
 
     fn run_if_term_is_a_dataset_node<
-        T: 'static,
-        I: IntoIterator<Item = Result<T, QueryEvaluationError>> + 'static,
+        T: 'a,
+        I: IntoIterator<Item = Result<T, QueryEvaluationError>> + 'a,
     >(
         &self,
         term: &D::InternalTerm,
-        f: impl FnMut(Option<D::InternalTerm>) -> I + 'static,
-    ) -> Box<dyn Iterator<Item = Result<T, QueryEvaluationError>>> {
+        f: impl FnMut(Option<D::InternalTerm>) -> I + 'a,
+    ) -> Box<dyn Iterator<Item = Result<T, QueryEvaluationError>> + 'a> {
         match self
             .find_graphs_where_the_node_is_in(term)
             .collect::<Result<FxHashSet<_>, _>>()
@@ -5849,7 +5860,7 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
     fn find_graphs_where_the_node_is_in(
         &self,
         term: &D::InternalTerm,
-    ) -> impl Iterator<Item = Result<Option<D::InternalTerm>, QueryEvaluationError>> {
+    ) -> impl Iterator<Item = Result<Option<D::InternalTerm>, QueryEvaluationError>> + 'a {
         self.dataset
             .internal_quads_for_pattern(Some(term), None, None, None)
             .chain(
@@ -5860,7 +5871,7 @@ impl<D: QueryableDataset<'static>> PathEvaluator<D> {
     }
 }
 
-impl<D: QueryableDataset<'static>> Clone for PathEvaluator<D> {
+impl<'a, D: QueryableDataset<'a>> Clone for PathEvaluator<'a, D> {
     fn clone(&self) -> Self {
         Self {
             dataset: self.dataset.clone(),
@@ -5868,13 +5879,13 @@ impl<D: QueryableDataset<'static>> Clone for PathEvaluator<D> {
     }
 }
 
-struct CartesianProductJoinIterator<T: Clone + Eq + Hash> {
-    probe_iter: Peekable<InternalTuplesIterator<T>>,
+struct CartesianProductJoinIterator<'a, T: Clone + Eq + Hash> {
+    probe_iter: Peekable<InternalTuplesIterator<'a, T>>,
     built: Vec<InternalTuple<T>>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for CartesianProductJoinIterator<T> {
+impl<T: Clone + Eq + Hash> Iterator for CartesianProductJoinIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -5903,13 +5914,13 @@ impl<T: Clone + Eq + Hash> Iterator for CartesianProductJoinIterator<T> {
     }
 }
 
-struct HashJoinIterator<T: Clone + Eq + Hash> {
-    probe_iter: Peekable<InternalTuplesIterator<T>>,
+struct HashJoinIterator<'a, T: Clone + Eq + Hash> {
+    probe_iter: Peekable<InternalTuplesIterator<'a, T>>,
     built: InternalTupleSet<T>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for HashJoinIterator<T> {
+impl<T: Clone + Eq + Hash> Iterator for HashJoinIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -5941,14 +5952,14 @@ impl<T: Clone + Eq + Hash> Iterator for HashJoinIterator<T> {
     }
 }
 
-struct HashLeftJoinIterator<T: Clone + Eq + Hash> {
-    left_iter: InternalTuplesIterator<T>,
+struct HashLeftJoinIterator<'a, T: Clone + Eq + Hash> {
+    left_iter: InternalTuplesIterator<'a, T>,
     right: InternalTupleSet<T>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
-    expression: Rc<dyn Fn(&InternalTuple<T>) -> Option<bool>>,
+    expression: Rc<dyn Fn(&InternalTuple<T>) -> Option<bool> + 'a>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<T> {
+impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -5987,15 +5998,15 @@ impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<T> {
 }
 
 #[cfg(feature = "sep-0006")]
-struct ForLoopLeftJoinIterator<T: Clone + Eq + Hash> {
-    right_evaluator: Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<T>>,
-    left_iter: InternalTuplesIterator<T>,
-    current_right: InternalTuplesIterator<T>,
+struct ForLoopLeftJoinIterator<'a, T: Clone + Eq + Hash> {
+    right_evaluator: Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<'a, T> + 'a>,
+    left_iter: InternalTuplesIterator<'a, T>,
+    current_right: InternalTuplesIterator<'a, T>,
     left_tuple_to_yield: Option<InternalTuple<T>>,
 }
 
 #[cfg(feature = "sep-0006")]
-impl<T: Clone + Eq + Hash> Iterator for ForLoopLeftJoinIterator<T> {
+impl<T: Clone + Eq + Hash> Iterator for ForLoopLeftJoinIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6020,14 +6031,14 @@ impl<T: Clone + Eq + Hash> Iterator for ForLoopLeftJoinIterator<T> {
     }
 }
 
-struct UnionIterator<T: Clone + Eq + Hash> {
-    plans: Vec<Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<T>>>,
+struct UnionIterator<'a, T: Clone + Eq + Hash> {
+    plans: Vec<Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<'a, T> + 'a>>,
     input: InternalTuple<T>,
-    current_iterator: InternalTuplesIterator<T>,
+    current_iterator: InternalTuplesIterator<'a, T>,
     current_plan: usize,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for UnionIterator<T> {
+impl<T: Clone + Eq + Hash> Iterator for UnionIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6044,12 +6055,12 @@ impl<T: Clone + Eq + Hash> Iterator for UnionIterator<T> {
     }
 }
 
-struct ConsecutiveDeduplication<T: Clone + Eq + Hash> {
-    inner: InternalTuplesIterator<T>,
+struct ConsecutiveDeduplication<'a, T: Clone + Eq + Hash> {
+    inner: InternalTuplesIterator<'a, T>,
     current: Option<InternalTuple<T>>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for ConsecutiveDeduplication<T> {
+impl<T: Clone + Eq + Hash> Iterator for ConsecutiveDeduplication<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6082,16 +6093,16 @@ impl<T: Clone + Eq + Hash> Iterator for ConsecutiveDeduplication<T> {
     }
 }
 
-struct ConstructIterator<D: QueryableDataset<'static>> {
-    eval: SimpleEvaluator<D>,
-    iter: InternalTuplesIterator<D::InternalTerm>,
+struct ConstructIterator<'a, D: QueryableDataset<'a>> {
+    eval: SimpleEvaluator<'a, D>,
+    iter: InternalTuplesIterator<'a, D::InternalTerm>,
     template: Vec<TripleTemplate>,
     buffered_results: Vec<Result<Triple, QueryEvaluationError>>,
     already_emitted_results: FxHashSet<Triple>,
     bnodes: Vec<BlankNode>,
 }
 
-impl<D: QueryableDataset<'static>> Iterator for ConstructIterator<D> {
+impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
     type Item = Result<Triple, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6236,11 +6247,11 @@ impl TripleTemplateValue {
     }
 }
 
-fn get_triple_template_value<D: QueryableDataset<'static>>(
+fn get_triple_template_value<'a, D: QueryableDataset<'a>>(
     selector: &TripleTemplateValue,
     tuple: &InternalTuple<D::InternalTerm>,
     bnodes: &mut Vec<BlankNode>,
-    dataset: &EvalDataset<D>,
+    dataset: &EvalDataset<'a, D>,
 ) -> Option<Term> {
     match selector {
         TripleTemplateValue::Constant(term) => Some(term.clone()),
@@ -6271,15 +6282,16 @@ fn get_triple_template_value<D: QueryableDataset<'static>>(
     }
 }
 
-struct DescribeIterator<D: QueryableDataset<'static>> {
-    eval: SimpleEvaluator<D>,
-    tuples_to_describe: InternalTuplesIterator<D::InternalTerm>,
+struct DescribeIterator<'a, D: QueryableDataset<'a>> {
+    eval: SimpleEvaluator<'a, D>,
+    tuples_to_describe: InternalTuplesIterator<'a, D::InternalTerm>,
     nodes_described: FxHashSet<D::InternalTerm>,
     nodes_to_describe: Vec<D::InternalTerm>,
-    quads: Box<dyn Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>>>,
+    quads:
+        Box<dyn Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'a>,
 }
 
-impl<D: QueryableDataset<'static>> Iterator for DescribeIterator<D> {
+impl<'a, D: QueryableDataset<'a>> Iterator for DescribeIterator<'a, D> {
     type Item = Result<Triple, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6524,9 +6536,9 @@ fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
     }
 }
 
-fn error_evaluator<T: Clone + Eq + Hash + 'static>(
+fn error_evaluator<'a, T: Clone + Eq + Hash + 'a>(
     error: QueryEvaluationError,
-) -> Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<T>> {
+) -> Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<'a, T> + 'a> {
     let e = RefCell::new(Some(error));
     Rc::new(move |_| {
         if let Some(e) = e.replace(None) {
@@ -6537,9 +6549,9 @@ fn error_evaluator<T: Clone + Eq + Hash + 'static>(
     })
 }
 
-enum ComparatorFunction<T: Clone + Eq + Hash> {
-    Asc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>),
-    Desc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>),
+enum ComparatorFunction<'a, T: Clone + Eq + Hash> {
+    Asc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
+    Desc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
 }
 
 struct InternalTupleSet<T: Clone + Eq + Hash> {
@@ -6598,12 +6610,12 @@ impl<T: Clone + Eq + Hash> Extend<InternalTuple<T>> for InternalTupleSet<T> {
     }
 }
 
-struct StatsIterator<T: Clone + Eq + Hash> {
-    inner: InternalTuplesIterator<T>,
+struct StatsIterator<'a, T: Clone + Eq + Hash> {
+    inner: InternalTuplesIterator<'a, T>,
     stats: Rc<EvalNodeWithStats>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for StatsIterator<T> {
+impl<T: Clone + Eq + Hash> Iterator for StatsIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {

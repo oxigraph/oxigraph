@@ -1,8 +1,8 @@
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::{
-    BlankNode, Dataset, GraphNameRef, Literal, NamedNode, NamedOrBlankNodeRef, QuadRef, Term,
-    TermRef,
+    BlankNode, Dataset, GraphNameRef, Literal, NamedNode, NamedNodeRef, NamedOrBlankNodeRef,
+    QuadRef, Term, TermRef,
 };
 #[cfg(feature = "sparql-12")]
 use oxrdf::{NamedOrBlankNode, Triple};
@@ -25,10 +25,10 @@ pub trait QueryableDataset<'a>: Sized + 'a {
     /// Can be just an integer that indexes into a dictionary...
     ///
     /// Equality here is the RDF term equality (SPARQL `sameTerm` function)
-    type InternalTerm: Clone + Eq + Hash;
+    type InternalTerm: Clone + Eq + Hash + 'static;
 
     /// Error returned by the dataset.
-    type Error: Error + Send + Sync;
+    type Error: Error + Send + Sync + 'static;
 
     /// Fetches quads according to a pattern
     ///
@@ -113,7 +113,7 @@ pub trait QueryableDataset<'a>: Sized + 'a {
     }
 }
 
-impl QueryableDataset<'_> for Dataset {
+impl<'a> QueryableDataset<'a> for &'a Dataset {
     type InternalTerm = Term;
     type Error = Infallible;
 
@@ -123,9 +123,7 @@ impl QueryableDataset<'_> for Dataset {
         predicate: Option<&Term>,
         object: Option<&Term>,
         graph_name: Option<Option<&Term>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Term>, Infallible>>> {
-        // Awful implementation, please don't take it as an example
-
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Term>, Infallible>> + 'a> {
         #[expect(clippy::unnecessary_wraps)]
         fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<Term>, Infallible> {
             Ok(InternalQuad {
@@ -176,44 +174,57 @@ impl QueryableDataset<'_> for Dataset {
         } else {
             None
         };
-        let quads: Vec<_> = if let Some(subject) = subject {
-            self.quads_for_subject(subject)
-                .filter(|q| {
-                    predicate.is_none_or(|t| t == q.predicate)
-                        && object.is_none_or(|t| t == q.object)
-                        && graph_name
-                            .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
-                })
-                .map(quad_to_result)
-                .collect()
+        if let Some(subject) = subject {
+            let predicate = predicate.map(NamedNodeRef::into_owned);
+            let object = object.map(TermRef::into_owned);
+            let graph_name = graph_name.map(GraphNameRef::into_owned);
+            Box::new(
+                self.quads_for_subject(subject)
+                    .filter(move |q| {
+                        predicate.as_ref().is_none_or(|t| t.as_ref() == q.predicate)
+                            && object.as_ref().is_none_or(|t| t.as_ref() == q.object)
+                            && graph_name.as_ref().map_or_else(
+                                || !q.graph_name.is_default_graph(),
+                                |t| t.as_ref() == q.graph_name,
+                            )
+                    })
+                    .map(quad_to_result),
+            )
         } else if let Some(object) = object {
-            self.quads_for_object(object)
-                .filter(|q| {
-                    predicate.is_none_or(|t| t == q.predicate)
-                        && graph_name
-                            .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
-                })
-                .map(quad_to_result)
-                .collect()
+            let predicate = predicate.map(NamedNodeRef::into_owned);
+            let graph_name = graph_name.map(GraphNameRef::into_owned);
+            Box::new(
+                self.quads_for_object(object)
+                    .filter(move |q| {
+                        predicate.as_ref().is_none_or(|t| t.as_ref() == q.predicate)
+                            && graph_name.as_ref().map_or_else(
+                                || !q.graph_name.is_default_graph(),
+                                |t| t.as_ref() == q.graph_name,
+                            )
+                    })
+                    .map(quad_to_result),
+            )
         } else if let Some(predicate) = predicate {
-            self.quads_for_predicate(predicate)
-                .filter(|q| {
-                    graph_name
-                        .map_or_else(|| !q.graph_name.is_default_graph(), |t| t == q.graph_name)
-                })
-                .map(quad_to_result)
-                .collect()
+            let graph_name = graph_name.map(GraphNameRef::into_owned);
+            Box::new(
+                self.quads_for_predicate(predicate)
+                    .filter(move |q| {
+                        graph_name.as_ref().map_or_else(
+                            || !q.graph_name.is_default_graph(),
+                            |t| t.as_ref() == q.graph_name,
+                        )
+                    })
+                    .map(quad_to_result),
+            )
         } else if let Some(graph_name) = graph_name {
-            self.quads_for_graph_name(graph_name)
-                .map(quad_to_result)
-                .collect()
+            Box::new(self.quads_for_graph_name(graph_name).map(quad_to_result))
         } else {
-            self.iter()
-                .filter(|q| !q.graph_name.is_default_graph())
-                .map(quad_to_result)
-                .collect()
-        };
-        Box::new(quads.into_iter())
+            Box::new(
+                self.iter()
+                    .filter(|q| !q.graph_name.is_default_graph())
+                    .map(quad_to_result),
+            )
+        }
     }
 
     fn internalize_term(&self, term: Term) -> Result<Term, Infallible> {
