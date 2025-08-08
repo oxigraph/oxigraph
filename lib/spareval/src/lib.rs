@@ -72,11 +72,11 @@ impl QueryEvaluator {
         Self::default()
     }
 
-    pub fn execute(
+    pub fn execute<'a>(
         &self,
-        dataset: impl QueryableDataset<'static>,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
-    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
+    ) -> Result<QueryResults<'a>, QueryEvaluationError> {
         self.explain(dataset, query).0
     }
 
@@ -109,34 +109,34 @@ impl QueryEvaluator {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn execute_with_substituted_variables(
+    pub fn execute_with_substituted_variables<'a>(
         &self,
-        dataset: impl QueryableDataset<'static>,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
+    ) -> Result<QueryResults<'a>, QueryEvaluationError> {
         self.explain_with_substituted_variables(dataset, query, substitutions)
             .0
     }
 
-    pub fn explain(
+    pub fn explain<'a>(
         &self,
-        dataset: impl QueryableDataset<'static>,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
     ) -> (
-        Result<QueryResults<'static>, QueryEvaluationError>,
+        Result<QueryResults<'a>, QueryEvaluationError>,
         QueryExplanation,
     ) {
         self.explain_with_substituted_variables(dataset, query, [])
     }
 
-    pub fn explain_with_substituted_variables(
+    pub fn explain_with_substituted_variables<'a>(
         &self,
-        dataset: impl QueryableDataset<'static>,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
-        Result<QueryResults<'static>, QueryEvaluationError>,
+        Result<QueryResults<'a>, QueryEvaluationError>,
         QueryExplanation,
     ) {
         let start_planning = Timer::now();

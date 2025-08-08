@@ -48,7 +48,7 @@ fuzz_target!(|data: sparql_smith::Query| {
             .with_default_service_handler(DatasetServiceHandler {
                 dataset: dataset.clone(),
             })
-            .execute(dataset.clone(), &query);
+            .execute(dataset, &query);
         assert_eq!(
             query_results_key(with_opt, query_str.contains(" REDUCED ")),
             query_results_key(without_opt, query_str.contains(" REDUCED "))
@@ -109,7 +109,7 @@ impl DefaultServiceHandler for StoreServiceHandler {
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+    ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if !self
             .store
             .contains_named_graph(service_name)
@@ -149,7 +149,7 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+    ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         if self
             .dataset
             .quads_for_graph_name(service_name)
@@ -178,8 +178,8 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         let evaluator = QueryEvaluator::new().with_default_service_handler(DatasetServiceHandler {
             dataset: dataset.clone(),
         });
-        let spareval::QueryResults::Solutions(iter) = evaluator.execute(
-            dataset,
+        let QueryResults::Solutions(iter) = evaluator.execute(
+            &dataset,
             &Query::Select {
                 dataset: None,
                 pattern: pattern.clone(),
@@ -189,6 +189,9 @@ impl DefaultServiceHandler for DatasetServiceHandler {
         else {
             panic!()
         };
-        Ok(iter)
+        Ok(QuerySolutionIter::new(
+            iter.variables().into(),
+            iter.collect::<Vec<_>>(),
+        ))
     }
 }

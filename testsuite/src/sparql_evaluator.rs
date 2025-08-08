@@ -208,7 +208,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         if !with_query_optimizer {
             evaluator = evaluator.without_optimizations();
         }
-        let actual_results = evaluator.execute(dataset.clone(), &query)?;
+        let actual_results = evaluator.execute(&dataset, &query)?;
         let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)
             .with_context(|| format!("Error when executing {query}"))?;
 
@@ -347,7 +347,7 @@ impl DefaultServiceHandler for StaticServiceHandler {
             services: Arc::clone(&self.services),
         });
         let QueryResults::Solutions(iter) = evaluator.execute(
-            dataset.clone(),
+            dataset,
             &Query::Select {
                 dataset: None,
                 pattern: pattern.clone(),
@@ -360,7 +360,10 @@ impl DefaultServiceHandler for StaticServiceHandler {
                 "Expecting solutions",
             ))));
         };
-        Ok(iter)
+        Ok(QuerySolutionIter::new(
+            iter.variables().into(),
+            iter.collect::<Vec<_>>(),
+        ))
     }
 }
 
