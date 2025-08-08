@@ -50,7 +50,7 @@ impl DatasetView {
     }
 }
 
-impl QueryableDataset for DatasetView {
+impl QueryableDataset<'_> for DatasetView {
     type InternalTerm = EncodedTerm;
     type Error = StorageError;
 

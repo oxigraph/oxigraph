@@ -74,7 +74,7 @@ impl QueryEvaluator {
 
     pub fn execute(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'static>,
         query: &Query,
     ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         self.explain(dataset, query).0
@@ -111,7 +111,7 @@ impl QueryEvaluator {
     /// ```
     pub fn execute_with_substituted_variables(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'static>,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> Result<QueryResults<'static>, QueryEvaluationError> {
@@ -121,7 +121,7 @@ impl QueryEvaluator {
 
     pub fn explain(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'static>,
         query: &Query,
     ) -> (
         Result<QueryResults<'static>, QueryEvaluationError>,
@@ -132,7 +132,7 @@ impl QueryEvaluator {
 
     pub fn explain_with_substituted_variables(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'static>,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
     ) -> (
