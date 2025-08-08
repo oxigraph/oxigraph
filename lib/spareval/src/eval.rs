@@ -56,7 +56,8 @@ impl<D: QueryableDataset> EvalDataset<D> {
         predicate: Option<&D::InternalTerm>,
         object: Option<&D::InternalTerm>,
         graph_name: Option<Option<&D::InternalTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<D>, QueryEvaluationError>> + 'static {
+    ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'static
+    {
         self.dataset
             .internal_quads_for_pattern(subject, predicate, object, graph_name)
             .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
@@ -128,11 +129,11 @@ impl<D: QueryableDataset> Clone for EvalDataset<D> {
     }
 }
 
-pub struct InternalTuple<D: QueryableDataset> {
-    inner: Vec<Option<D::InternalTerm>>,
+pub struct InternalTuple<T: Clone + Eq + Hash> {
+    inner: Vec<Option<T>>,
 }
 
-impl<D: QueryableDataset> InternalTuple<D> {
+impl<T: Clone + Eq + Hash> InternalTuple<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Vec::with_capacity(capacity),
@@ -147,15 +148,15 @@ impl<D: QueryableDataset> InternalTuple<D> {
         self.inner.get(index).is_some_and(Option::is_some)
     }
 
-    pub fn get(&self, index: usize) -> Option<&D::InternalTerm> {
+    pub fn get(&self, index: usize) -> Option<&T> {
         self.inner.get(index).unwrap_or(&None).as_ref()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Option<D::InternalTerm>> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = Option<T>> + '_ {
         self.inner.iter().cloned()
     }
 
-    pub fn set(&mut self, index: usize, value: D::InternalTerm) {
+    pub fn set(&mut self, index: usize, value: T) {
         if self.inner.len() <= index {
             self.inner.resize(index + 1, None);
         }
@@ -197,7 +198,7 @@ impl<D: QueryableDataset> InternalTuple<D> {
     }
 }
 
-impl<D: QueryableDataset> Clone for InternalTuple<D> {
+impl<T: Clone + Eq + Hash> Clone for InternalTuple<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -205,32 +206,32 @@ impl<D: QueryableDataset> Clone for InternalTuple<D> {
     }
 }
 
-impl<D: QueryableDataset> PartialEq for InternalTuple<D> {
+impl<T: Clone + Eq + Hash> PartialEq for InternalTuple<T> {
     #[inline]
-    fn eq(&self, other: &InternalTuple<D>) -> bool {
+    fn eq(&self, other: &InternalTuple<T>) -> bool {
         self.inner == other.inner
     }
 }
 
-impl<D: QueryableDataset> Eq for InternalTuple<D> {}
+impl<T: Clone + Eq + Hash> Eq for InternalTuple<T> {}
 
-impl<D: QueryableDataset> Hash for InternalTuple<D> {
+impl<T: Clone + Eq + Hash> Hash for InternalTuple<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.inner.hash(state)
     }
 }
 
-impl<D: QueryableDataset> IntoIterator for InternalTuple<D> {
-    type Item = Option<D::InternalTerm>;
-    type IntoIter = std::vec::IntoIter<Option<D::InternalTerm>>;
+impl<T: Clone + Eq + Hash> IntoIterator for InternalTuple<T> {
+    type Item = Option<T>;
+    type IntoIter = std::vec::IntoIter<Option<T>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
     }
 }
 
-type InternalTuplesIterator<D> =
-    Box<dyn Iterator<Item = Result<InternalTuple<D>, QueryEvaluationError>>>;
+type InternalTuplesIterator<T> =
+    Box<dyn Iterator<Item = Result<InternalTuple<T>, QueryEvaluationError>>>;
 
 pub struct SimpleEvaluator<D: QueryableDataset> {
     dataset: EvalDataset<D>,
@@ -402,7 +403,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         encoded_variables: &mut Vec<Variable>,
     ) -> (
-        Rc<dyn Fn(InternalTuple<D>) -> InternalTuplesIterator<D>>,
+        Rc<dyn Fn(InternalTuple<D::InternalTerm>) -> InternalTuplesIterator<D::InternalTerm>>,
         Rc<EvalNodeWithStats>,
     ) {
         let mut stat_children = Vec::new();
@@ -440,7 +441,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         pattern: &GraphPattern,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(InternalTuple<D>) -> InternalTuplesIterator<D>> {
+    ) -> Rc<dyn Fn(InternalTuple<D::InternalTerm>) -> InternalTuplesIterator<D::InternalTerm>> {
         match pattern {
             GraphPattern::Values {
                 variables,
@@ -1485,7 +1486,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
                     let mut errors = Vec::default();
                     let mut accumulators_for_group = FxHashMap::<
                         Vec<Option<D::InternalTerm>>,
-                        Vec<AccumulatorWrapper<D>>,
+                        Vec<AccumulatorWrapper<D::InternalTerm>>,
                     >::default();
                     if key_variables.is_empty() {
                         // There is always a single group if there is no GROUP BY
@@ -1593,11 +1594,11 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
 
     fn evaluate_service(
         &self,
-        service_name: &TupleSelector<D>,
+        service_name: &TupleSelector<D::InternalTerm>,
         graph_pattern: &spargebra::algebra::GraphPattern,
         variables: Rc<[Variable]>,
-        from: &InternalTuple<D>,
-    ) -> Result<InternalTuplesIterator<D>, QueryEvaluationError> {
+        from: &InternalTuple<D::InternalTerm>,
+    ) -> Result<InternalTuplesIterator<D::InternalTerm>, QueryEvaluationError> {
         let service_name = service_name
             .get_pattern_value(
                 from,
@@ -1620,7 +1621,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         expression: &AggregateExpression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Box<dyn Fn() -> AccumulatorWrapper<D>> {
+    ) -> Box<dyn Fn() -> AccumulatorWrapper<D::InternalTerm>> {
         match expression {
             AggregateExpression::CountSolutions { distinct } => {
                 if *distinct {
@@ -1790,12 +1791,13 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
     /// Evaluates an expression and returns an internal term
     ///
     /// Returns None if building such expression would mean to convert back to an internal term at the end.
+    #[expect(clippy::type_complexity)]
     fn internal_expression_evaluator(
         &self,
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Option<Rc<dyn Fn(&InternalTuple<D>) -> Option<D::InternalTerm>>> {
+    ) -> Option<Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<D::InternalTerm>>> {
         Some(match expression {
             Expression::NamedNode(t) => {
                 let t = self.encode_term(t.clone()).ok();
@@ -1862,7 +1864,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(&InternalTuple<D>) -> Option<bool>> {
+    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<bool>> {
         // TODO: avoid dyn?
         if let Some(eval) =
             self.internal_expression_evaluator(expression, encoded_variables, stat_children)
@@ -1884,7 +1886,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(&InternalTuple<D>) -> Option<ExpressionTerm>> {
+    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<ExpressionTerm>> {
         match expression {
             Expression::NamedNode(t) => {
                 let t = ExpressionTerm::from(Term::from(t.clone()));
@@ -3667,7 +3669,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
         parameters: &[Expression],
         encoded_variables: &mut Vec<Variable>,
         stat_children: &mut Vec<Rc<EvalNodeWithStats>>,
-    ) -> Rc<dyn Fn(&InternalTuple<D>) -> Option<ExpressionTerm>> {
+    ) -> Rc<dyn Fn(&InternalTuple<D::InternalTerm>) -> Option<ExpressionTerm>> {
         let arg = self.expression_evaluator(&parameters[0], encoded_variables, stat_children);
         Rc::new(move |tuple| {
             let ExpressionTerm::StringLiteral(input) = arg(tuple)? else {
@@ -3695,7 +3697,7 @@ impl<D: QueryableDataset> SimpleEvaluator<D> {
     fn encode_property_path(
         &self,
         path: &PropertyPathExpression,
-    ) -> Result<Rc<PropertyPath<D>>, QueryEvaluationError> {
+    ) -> Result<Rc<PropertyPath<D::InternalTerm>>, QueryEvaluationError> {
         Ok(Rc::new(match path {
             PropertyPathExpression::NamedNode(node) => {
                 PropertyPath::Path(self.encode_term(node.clone())?)
@@ -3873,7 +3875,7 @@ fn compile_pattern(pattern: &str, flags: Option<&str>) -> Option<Regex> {
 
 fn decode_bindings<D: QueryableDataset>(
     dataset: EvalDataset<D>,
-    iter: InternalTuplesIterator<D>,
+    iter: InternalTuplesIterator<D::InternalTerm>,
     variables: Arc<[Variable]>,
 ) -> QuerySolutionIter<'static> {
     let tuple_size = variables.len();
@@ -3896,7 +3898,7 @@ fn encode_bindings<D: QueryableDataset>(
     dataset: EvalDataset<D>,
     variables: Rc<[Variable]>,
     iter: QuerySolutionIter<'static>,
-) -> InternalTuplesIterator<D> {
+) -> InternalTuplesIterator<D::InternalTerm> {
     Box::new(iter.map(move |solution| {
         let mut encoded_terms = InternalTuple::with_capacity(variables.len());
         for (variable, term) in &solution? {
@@ -3915,7 +3917,7 @@ fn encode_initial_bindings<D: QueryableDataset>(
     dataset: &EvalDataset<D>,
     variables: &[Variable],
     values: impl IntoIterator<Item = (Variable, Term)>,
-) -> Result<InternalTuple<D>, QueryEvaluationError> {
+) -> Result<InternalTuple<D::InternalTerm>, QueryEvaluationError> {
     let mut encoded_terms = InternalTuple::with_capacity(variables.len());
     for (variable, term) in values {
         if !put_variable_value(
@@ -3932,11 +3934,11 @@ fn encode_initial_bindings<D: QueryableDataset>(
     Ok(encoded_terms)
 }
 
-fn put_variable_value<D: QueryableDataset>(
+fn put_variable_value<T: Clone + Eq + Hash>(
     selector: &Variable,
     variables: &[Variable],
-    value: D::InternalTerm,
-    tuple: &mut InternalTuple<D>,
+    value: T,
+    tuple: &mut InternalTuple<T>,
 ) -> bool {
     for (i, v) in variables.iter().enumerate() {
         if selector == v {
@@ -3947,42 +3949,42 @@ fn put_variable_value<D: QueryableDataset>(
     false
 }
 
-enum AccumulatorWrapper<D: QueryableDataset> {
+enum AccumulatorWrapper<T: Clone + Eq + Hash> {
     CountTuple {
         count: u64,
     },
     CountDistinctTuple {
-        seen: FxHashSet<InternalTuple<D>>,
+        seen: FxHashSet<InternalTuple<T>>,
         count: u64,
     },
     CountInternal {
-        evaluator: Rc<dyn Fn(&InternalTuple<D>) -> Option<D::InternalTerm>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T>>,
         count: u64,
     },
     CountDistinctInternal {
-        seen: FxHashSet<D::InternalTerm>,
-        evaluator: Rc<dyn Fn(&InternalTuple<D>) -> Option<D::InternalTerm>>,
+        seen: FxHashSet<T>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<T>>,
         count: u64,
     },
     Sample {
         // TODO: add internal variant
-        evaluator: Rc<dyn Fn(&InternalTuple<D>) -> Option<ExpressionTerm>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>,
         value: Option<ExpressionTerm>,
     },
     Expression {
-        evaluator: Rc<dyn Fn(&InternalTuple<D>) -> Option<ExpressionTerm>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>,
         accumulator: Option<Box<dyn Accumulator>>,
     },
     DistinctExpression {
         seen: FxHashSet<ExpressionTerm>,
-        evaluator: Rc<dyn Fn(&InternalTuple<D>) -> Option<ExpressionTerm>>,
+        evaluator: Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>,
         accumulator: Option<Box<dyn Accumulator>>,
     },
     Failing,
 }
 
-impl<D: QueryableDataset> AccumulatorWrapper<D> {
-    fn accumulate(&mut self, tuple: &InternalTuple<D>) {
+impl<T: Clone + Eq + Hash> AccumulatorWrapper<T> {
+    fn accumulate(&mut self, tuple: &InternalTuple<T>) {
         match self {
             Self::CountTuple { count } => {
                 *count += 1;
@@ -4889,18 +4891,18 @@ impl NumericBinaryOperands {
     }
 }
 
-enum TupleSelector<D: QueryableDataset> {
-    Constant(D::InternalTerm),
+enum TupleSelector<T: Clone + Eq + Hash> {
+    Constant(T),
     Variable(usize),
     #[cfg(feature = "sparql-12")]
-    TriplePattern(Rc<TripleTupleSelector<D>>),
+    TriplePattern(Rc<TripleTupleSelector<T>>),
 }
 
-impl<D: QueryableDataset> TupleSelector<D> {
+impl<T: Clone + Eq + Hash> TupleSelector<T> {
     fn from_ground_term_pattern(
         term_pattern: &GroundTermPattern,
         variables: &mut Vec<Variable>,
-        dataset: &EvalDataset<D>,
+        dataset: &EvalDataset<impl QueryableDataset<InternalTerm = T>>,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(match term_pattern {
             GroundTermPattern::Variable(variable) => {
@@ -4949,7 +4951,7 @@ impl<D: QueryableDataset> TupleSelector<D> {
     fn from_named_node_pattern(
         named_node_pattern: &NamedNodePattern,
         variables: &mut Vec<Variable>,
-        dataset: &EvalDataset<D>,
+        dataset: &EvalDataset<impl QueryableDataset<InternalTerm = T>>,
     ) -> Result<Self, QueryEvaluationError> {
         Ok(match named_node_pattern {
             NamedNodePattern::Variable(variable) => {
@@ -4964,9 +4966,11 @@ impl<D: QueryableDataset> TupleSelector<D> {
     #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
     fn get_pattern_value(
         &self,
-        tuple: &InternalTuple<D>,
-        #[cfg(feature = "sparql-12")] dataset: &EvalDataset<D>,
-    ) -> Result<Option<D::InternalTerm>, QueryEvaluationError> {
+        tuple: &InternalTuple<T>,
+        #[cfg(feature = "sparql-12")] dataset: &EvalDataset<
+            impl QueryableDataset<InternalTerm = T>,
+        >,
+    ) -> Result<Option<T>, QueryEvaluationError> {
         Ok(match self {
             Self::Constant(c) => Some(c.clone()),
             Self::Variable(v) => tuple.get(*v).cloned(),
@@ -4997,7 +5001,7 @@ impl<D: QueryableDataset> TupleSelector<D> {
     }
 }
 
-impl<D: QueryableDataset> Clone for TupleSelector<D> {
+impl<T: Clone + Eq + Hash> Clone for TupleSelector<T> {
     fn clone(&self) -> Self {
         match self {
             Self::Constant(c) => Self::Constant(c.clone()),
@@ -5009,17 +5013,17 @@ impl<D: QueryableDataset> Clone for TupleSelector<D> {
 }
 
 #[cfg(feature = "sparql-12")]
-struct TripleTupleSelector<D: QueryableDataset> {
-    subject: TupleSelector<D>,
-    predicate: TupleSelector<D>,
-    object: TupleSelector<D>,
+struct TripleTupleSelector<T: Clone + Eq + Hash> {
+    subject: TupleSelector<T>,
+    predicate: TupleSelector<T>,
+    object: TupleSelector<T>,
 }
 
 #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
 fn put_pattern_value<D: QueryableDataset>(
-    selector: &TupleSelector<D>,
+    selector: &TupleSelector<D::InternalTerm>,
     value: D::InternalTerm,
-    tuple: &mut InternalTuple<D>,
+    tuple: &mut InternalTuple<D::InternalTerm>,
     #[cfg(feature = "sparql-12")] dataset: &EvalDataset<D>,
 ) -> Result<bool, QueryEvaluationError> {
     Ok(match selector {
@@ -5057,9 +5061,9 @@ fn put_pattern_value<D: QueryableDataset>(
     })
 }
 
-pub fn are_compatible_and_not_disjointed<D: QueryableDataset>(
-    a: &InternalTuple<D>,
-    b: &InternalTuple<D>,
+pub fn are_compatible_and_not_disjointed<T: Clone + Eq + Hash>(
+    a: &InternalTuple<T>,
+    b: &InternalTuple<T>,
 ) -> bool {
     let mut found_intersection = false;
     for (a_value, b_value) in a.iter().zip(b.iter()) {
@@ -5073,15 +5077,15 @@ pub fn are_compatible_and_not_disjointed<D: QueryableDataset>(
     found_intersection
 }
 
-pub enum PropertyPath<D: QueryableDataset> {
-    Path(D::InternalTerm),
+pub enum PropertyPath<T: Clone + Eq + Hash> {
+    Path(T),
     Reverse(Rc<Self>),
     Sequence(Rc<Self>, Rc<Self>),
     Alternative(Rc<Self>, Rc<Self>),
     ZeroOrMore(Rc<Self>),
     OneOrMore(Rc<Self>),
     ZeroOrOne(Rc<Self>),
-    NegatedPropertySet(Rc<[D::InternalTerm]>),
+    NegatedPropertySet(Rc<[T]>),
 }
 
 struct PathEvaluator<D: QueryableDataset> {
@@ -5091,7 +5095,7 @@ struct PathEvaluator<D: QueryableDataset> {
 impl<D: QueryableDataset> PathEvaluator<D> {
     fn eval_closed_in_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
         start: &D::InternalTerm,
         end: &D::InternalTerm,
         graph_name: Option<&D::InternalTerm>,
@@ -5164,7 +5168,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
 
     fn eval_closed_in_unknown_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
         start: &D::InternalTerm,
         end: &D::InternalTerm,
     ) -> Box<dyn Iterator<Item = Result<Option<D::InternalTerm>, QueryEvaluationError>>> {
@@ -5262,7 +5266,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
 
     fn eval_from_in_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
         start: &D::InternalTerm,
         graph_name: Option<&D::InternalTerm>,
     ) -> Box<dyn Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>>> {
@@ -5337,7 +5341,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
 
     fn eval_from_in_unknown_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
         start: &D::InternalTerm,
     ) -> Box<
         dyn Iterator<
@@ -5428,7 +5432,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
 
     fn eval_to_in_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
         end: &D::InternalTerm,
         graph_name: Option<&D::InternalTerm>,
     ) -> Box<dyn Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>>> {
@@ -5500,7 +5504,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
 
     fn eval_to_in_unknown_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
         end: &D::InternalTerm,
     ) -> Box<
         dyn Iterator<
@@ -5591,7 +5595,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
 
     fn eval_open_in_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
         graph_name: Option<&D::InternalTerm>,
     ) -> Box<dyn Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>>>
     {
@@ -5673,7 +5677,7 @@ impl<D: QueryableDataset> PathEvaluator<D> {
 
     fn eval_open_in_unknown_graph(
         &self,
-        path: &PropertyPath<D>,
+        path: &PropertyPath<D::InternalTerm>,
     ) -> Box<
         dyn Iterator<
             Item = Result<
@@ -5864,14 +5868,14 @@ impl<D: QueryableDataset> Clone for PathEvaluator<D> {
     }
 }
 
-struct CartesianProductJoinIterator<D: QueryableDataset> {
-    probe_iter: Peekable<InternalTuplesIterator<D>>,
-    built: Vec<InternalTuple<D>>,
-    buffered_results: Vec<Result<InternalTuple<D>, QueryEvaluationError>>,
+struct CartesianProductJoinIterator<T: Clone + Eq + Hash> {
+    probe_iter: Peekable<InternalTuplesIterator<T>>,
+    built: Vec<InternalTuple<T>>,
+    buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
 }
 
-impl<D: QueryableDataset> Iterator for CartesianProductJoinIterator<D> {
-    type Item = Result<InternalTuple<D>, QueryEvaluationError>;
+impl<T: Clone + Eq + Hash> Iterator for CartesianProductJoinIterator<T> {
+    type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -5899,14 +5903,14 @@ impl<D: QueryableDataset> Iterator for CartesianProductJoinIterator<D> {
     }
 }
 
-struct HashJoinIterator<D: QueryableDataset> {
-    probe_iter: Peekable<InternalTuplesIterator<D>>,
-    built: InternalTupleSet<D>,
-    buffered_results: Vec<Result<InternalTuple<D>, QueryEvaluationError>>,
+struct HashJoinIterator<T: Clone + Eq + Hash> {
+    probe_iter: Peekable<InternalTuplesIterator<T>>,
+    built: InternalTupleSet<T>,
+    buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
 }
 
-impl<D: QueryableDataset> Iterator for HashJoinIterator<D> {
-    type Item = Result<InternalTuple<D>, QueryEvaluationError>;
+impl<T: Clone + Eq + Hash> Iterator for HashJoinIterator<T> {
+    type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -5937,15 +5941,15 @@ impl<D: QueryableDataset> Iterator for HashJoinIterator<D> {
     }
 }
 
-struct HashLeftJoinIterator<D: QueryableDataset> {
-    left_iter: InternalTuplesIterator<D>,
-    right: InternalTupleSet<D>,
-    buffered_results: Vec<Result<InternalTuple<D>, QueryEvaluationError>>,
-    expression: Rc<dyn Fn(&InternalTuple<D>) -> Option<bool>>,
+struct HashLeftJoinIterator<T: Clone + Eq + Hash> {
+    left_iter: InternalTuplesIterator<T>,
+    right: InternalTupleSet<T>,
+    buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
+    expression: Rc<dyn Fn(&InternalTuple<T>) -> Option<bool>>,
 }
 
-impl<D: QueryableDataset> Iterator for HashLeftJoinIterator<D> {
-    type Item = Result<InternalTuple<D>, QueryEvaluationError>;
+impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<T> {
+    type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -5983,16 +5987,16 @@ impl<D: QueryableDataset> Iterator for HashLeftJoinIterator<D> {
 }
 
 #[cfg(feature = "sep-0006")]
-struct ForLoopLeftJoinIterator<D: QueryableDataset> {
-    right_evaluator: Rc<dyn Fn(InternalTuple<D>) -> InternalTuplesIterator<D>>,
-    left_iter: InternalTuplesIterator<D>,
-    current_right: InternalTuplesIterator<D>,
-    left_tuple_to_yield: Option<InternalTuple<D>>,
+struct ForLoopLeftJoinIterator<T: Clone + Eq + Hash> {
+    right_evaluator: Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<T>>,
+    left_iter: InternalTuplesIterator<T>,
+    current_right: InternalTuplesIterator<T>,
+    left_tuple_to_yield: Option<InternalTuple<T>>,
 }
 
 #[cfg(feature = "sep-0006")]
-impl<D: QueryableDataset> Iterator for ForLoopLeftJoinIterator<D> {
-    type Item = Result<InternalTuple<D>, QueryEvaluationError>;
+impl<T: Clone + Eq + Hash> Iterator for ForLoopLeftJoinIterator<T> {
+    type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -6016,15 +6020,15 @@ impl<D: QueryableDataset> Iterator for ForLoopLeftJoinIterator<D> {
     }
 }
 
-struct UnionIterator<D: QueryableDataset> {
-    plans: Vec<Rc<dyn Fn(InternalTuple<D>) -> InternalTuplesIterator<D>>>,
-    input: InternalTuple<D>,
-    current_iterator: InternalTuplesIterator<D>,
+struct UnionIterator<T: Clone + Eq + Hash> {
+    plans: Vec<Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<T>>>,
+    input: InternalTuple<T>,
+    current_iterator: InternalTuplesIterator<T>,
     current_plan: usize,
 }
 
-impl<D: QueryableDataset> Iterator for UnionIterator<D> {
-    type Item = Result<InternalTuple<D>, QueryEvaluationError>;
+impl<T: Clone + Eq + Hash> Iterator for UnionIterator<T> {
+    type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -6040,13 +6044,13 @@ impl<D: QueryableDataset> Iterator for UnionIterator<D> {
     }
 }
 
-struct ConsecutiveDeduplication<D: QueryableDataset> {
-    inner: InternalTuplesIterator<D>,
-    current: Option<InternalTuple<D>>,
+struct ConsecutiveDeduplication<T: Clone + Eq + Hash> {
+    inner: InternalTuplesIterator<T>,
+    current: Option<InternalTuple<T>>,
 }
 
-impl<D: QueryableDataset> Iterator for ConsecutiveDeduplication<D> {
-    type Item = Result<InternalTuple<D>, QueryEvaluationError>;
+impl<T: Clone + Eq + Hash> Iterator for ConsecutiveDeduplication<T> {
+    type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Basic idea. We buffer the previous result and we only emit it when we know the next one or it's the end
@@ -6080,7 +6084,7 @@ impl<D: QueryableDataset> Iterator for ConsecutiveDeduplication<D> {
 
 struct ConstructIterator<D: QueryableDataset> {
     eval: SimpleEvaluator<D>,
-    iter: InternalTuplesIterator<D>,
+    iter: InternalTuplesIterator<D::InternalTerm>,
     template: Vec<TripleTemplate>,
     buffered_results: Vec<Result<Triple, QueryEvaluationError>>,
     already_emitted_results: FxHashSet<Triple>,
@@ -6234,7 +6238,7 @@ impl TripleTemplateValue {
 
 fn get_triple_template_value<D: QueryableDataset>(
     selector: &TripleTemplateValue,
-    tuple: &InternalTuple<D>,
+    tuple: &InternalTuple<D::InternalTerm>,
     bnodes: &mut Vec<BlankNode>,
     dataset: &EvalDataset<D>,
 ) -> Option<Term> {
@@ -6269,10 +6273,10 @@ fn get_triple_template_value<D: QueryableDataset>(
 
 struct DescribeIterator<D: QueryableDataset> {
     eval: SimpleEvaluator<D>,
-    tuples_to_describe: InternalTuplesIterator<D>,
+    tuples_to_describe: InternalTuplesIterator<D::InternalTerm>,
     nodes_described: FxHashSet<D::InternalTerm>,
     nodes_to_describe: Vec<D::InternalTerm>,
-    quads: Box<dyn Iterator<Item = Result<InternalQuad<D>, QueryEvaluationError>>>,
+    quads: Box<dyn Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>>>,
 }
 
 impl<D: QueryableDataset> Iterator for DescribeIterator<D> {
@@ -6520,9 +6524,9 @@ fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
     }
 }
 
-fn error_evaluator<D: QueryableDataset>(
+fn error_evaluator<T: Clone + Eq + Hash + 'static>(
     error: QueryEvaluationError,
-) -> Rc<dyn Fn(InternalTuple<D>) -> InternalTuplesIterator<D>> {
+) -> Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<T>> {
     let e = RefCell::new(Some(error));
     Rc::new(move |_| {
         if let Some(e) = e.replace(None) {
@@ -6533,18 +6537,18 @@ fn error_evaluator<D: QueryableDataset>(
     })
 }
 
-enum ComparatorFunction<D: QueryableDataset> {
-    Asc(Rc<dyn Fn(&InternalTuple<D>) -> Option<ExpressionTerm>>),
-    Desc(Rc<dyn Fn(&InternalTuple<D>) -> Option<ExpressionTerm>>),
+enum ComparatorFunction<T: Clone + Eq + Hash> {
+    Asc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>),
+    Desc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm>>),
 }
 
-struct InternalTupleSet<D: QueryableDataset> {
+struct InternalTupleSet<T: Clone + Eq + Hash> {
     key: Vec<usize>,
-    map: FxHashMap<u64, Vec<InternalTuple<D>>>,
+    map: FxHashMap<u64, Vec<InternalTuple<T>>>,
     len: usize,
 }
 
-impl<D: QueryableDataset> InternalTupleSet<D> {
+impl<T: Clone + Eq + Hash> InternalTupleSet<T> {
     fn new(key: Vec<usize>) -> Self {
         Self {
             key,
@@ -6553,7 +6557,7 @@ impl<D: QueryableDataset> InternalTupleSet<D> {
         }
     }
 
-    fn insert(&mut self, tuple: InternalTuple<D>) {
+    fn insert(&mut self, tuple: InternalTuple<T>) {
         self.map
             .entry(self.tuple_key(&tuple))
             .or_default()
@@ -6561,11 +6565,11 @@ impl<D: QueryableDataset> InternalTupleSet<D> {
         self.len += 1;
     }
 
-    fn get(&self, tuple: &InternalTuple<D>) -> &[InternalTuple<D>] {
+    fn get(&self, tuple: &InternalTuple<T>) -> &[InternalTuple<T>] {
         self.map.get(&self.tuple_key(tuple)).map_or(&[], |v| v)
     }
 
-    fn tuple_key(&self, tuple: &InternalTuple<D>) -> u64 {
+    fn tuple_key(&self, tuple: &InternalTuple<T>) -> u64 {
         let mut hasher = FxHasher::default();
         for v in &self.key {
             if let Some(val) = tuple.get(*v) {
@@ -6584,8 +6588,8 @@ impl<D: QueryableDataset> InternalTupleSet<D> {
     }
 }
 
-impl<D: QueryableDataset> Extend<InternalTuple<D>> for InternalTupleSet<D> {
-    fn extend<T: IntoIterator<Item = InternalTuple<D>>>(&mut self, iter: T) {
+impl<T: Clone + Eq + Hash> Extend<InternalTuple<T>> for InternalTupleSet<T> {
+    fn extend<I: IntoIterator<Item = InternalTuple<T>>>(&mut self, iter: I) {
         let iter = iter.into_iter();
         self.map.reserve(iter.size_hint().0);
         for tuple in iter {
@@ -6594,13 +6598,13 @@ impl<D: QueryableDataset> Extend<InternalTuple<D>> for InternalTupleSet<D> {
     }
 }
 
-struct StatsIterator<D: QueryableDataset> {
-    inner: InternalTuplesIterator<D>,
+struct StatsIterator<T: Clone + Eq + Hash> {
+    inner: InternalTuplesIterator<T>,
     stats: Rc<EvalNodeWithStats>,
 }
 
-impl<D: QueryableDataset> Iterator for StatsIterator<D> {
-    type Item = Result<InternalTuple<D>, QueryEvaluationError>;
+impl<T: Clone + Eq + Hash> Iterator for StatsIterator<T> {
+    type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let start = Timer::now();

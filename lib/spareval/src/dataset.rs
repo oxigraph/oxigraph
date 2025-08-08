@@ -39,7 +39,7 @@ pub trait QueryableDataset: Sized + 'static {
         predicate: Option<&Self::InternalTerm>,
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, Self::Error>>>; // TODO: consider `impl`
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>>>; // TODO: consider `impl`
 
     /// Fetches the list of dataset named graphs
     fn internal_named_graphs(
@@ -123,11 +123,11 @@ impl QueryableDataset for Dataset {
         predicate: Option<&Term>,
         object: Option<&Term>,
         graph_name: Option<Option<&Term>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, Infallible>>> {
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Term>, Infallible>>> {
         // Awful implementation, please don't take it as an example
 
         #[expect(clippy::unnecessary_wraps)]
-        fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<Dataset>, Infallible> {
+        fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<Term>, Infallible> {
             Ok(InternalQuad {
                 subject: quad.subject.into(),
                 predicate: quad.predicate.into(),
@@ -225,12 +225,12 @@ impl QueryableDataset for Dataset {
     }
 }
 
-pub struct InternalQuad<D: QueryableDataset> {
-    pub subject: D::InternalTerm,
-    pub predicate: D::InternalTerm,
-    pub object: D::InternalTerm,
+pub struct InternalQuad<T: Clone + Eq + Hash> {
+    pub subject: T,
+    pub predicate: T,
+    pub object: T,
     /// `None` if the quad is in the default graph
-    pub graph_name: Option<D::InternalTerm>,
+    pub graph_name: Option<T>,
 }
 
 /// A term as understood by the expression evaluator
