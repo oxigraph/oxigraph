@@ -174,10 +174,10 @@ impl AggregateFunctionAccumulator for PyAggregateFunctionAccumulator {
     }
 }
 
-pub fn query_results_to_python(
-    py: Python<'_>,
-    results: QueryResults,
-) -> PyResult<Bound<'_, PyAny>> {
+pub fn query_results_to_python<'py>(
+    py: Python<'py>,
+    results: QueryResults<'static>,
+) -> PyResult<Bound<'py, PyAny>> {
     match results {
         QueryResults::Solutions(inner) => PyQuerySolutions {
             inner: PyQuerySolutionsVariant::Query(UngilQuerySolutionIter(inner)),
@@ -310,7 +310,7 @@ enum PyQuerySolutionsVariant {
     },
 }
 
-struct UngilQuerySolutionIter(QuerySolutionIter);
+struct UngilQuerySolutionIter(QuerySolutionIter<'static>);
 
 #[expect(unsafe_code)]
 // SAFETY: To derive Ungil
@@ -504,7 +504,7 @@ pub struct PyQueryTriples {
     inner: UngilQueryTripleIter,
 }
 
-struct UngilQueryTripleIter(QueryTripleIter);
+struct UngilQueryTripleIter(QueryTripleIter<'static>);
 
 #[expect(unsafe_code)]
 // SAFETY: To derive Ungil

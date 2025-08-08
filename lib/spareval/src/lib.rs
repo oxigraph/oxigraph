@@ -76,7 +76,7 @@ impl QueryEvaluator {
         &self,
         dataset: impl QueryableDataset,
         query: &Query,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         self.explain(dataset, query).0
     }
 
@@ -114,7 +114,7 @@ impl QueryEvaluator {
         dataset: impl QueryableDataset,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         self.explain_with_substituted_variables(dataset, query, substitutions)
             .0
     }
@@ -123,7 +123,10 @@ impl QueryEvaluator {
         &self,
         dataset: impl QueryableDataset,
         query: &Query,
-    ) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
+    ) -> (
+        Result<QueryResults<'static>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
         self.explain_with_substituted_variables(dataset, query, [])
     }
 
@@ -132,7 +135,10 @@ impl QueryEvaluator {
         dataset: impl QueryableDataset,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
+    ) -> (
+        Result<QueryResults<'static>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
         let start_planning = Timer::now();
         let (results, plan_node_with_stats, planning_duration) = match query {
             Query::Select {

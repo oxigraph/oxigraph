@@ -271,7 +271,7 @@ impl PyStore {
         custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        pub struct UngilQueryResults(QueryResults);
+        pub struct UngilQueryResults(QueryResults<'static>);
 
         #[expect(unsafe_code)]
         // SAFETY: To derive Ungil
