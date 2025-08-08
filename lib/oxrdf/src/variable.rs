@@ -1,3 +1,5 @@
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -11,7 +13,9 @@ use std::fmt;
 /// # Result::<_,VariableNameParseError>::Ok(())
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Variable {
+    #[cfg_attr(feature = "serde", serde(rename = "value"))]
     name: String,
 }
 
