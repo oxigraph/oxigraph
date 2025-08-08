@@ -392,6 +392,13 @@ impl Db {
         (column_family_names, c_column_family_names, cf_options)
     }
 
+    pub fn is_writable(&self) -> bool {
+        match &self.inner {
+            DbKind::ReadWrite(_) => true,
+            DbKind::ReadOnly(_) => false,
+        }
+    }
+
     pub fn column_family(&self, name: &'static str) -> Result<ColumnFamily, StorageError> {
         let (column_family_names, cf_handles) = match &self.inner {
             DbKind::ReadOnly(db) => (&db.column_family_names, &db.cf_handles),
