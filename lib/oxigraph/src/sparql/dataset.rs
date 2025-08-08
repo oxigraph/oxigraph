@@ -60,7 +60,7 @@ impl QueryableDataset for DatasetView {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: Option<Option<&EncodedTerm>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self>, StorageError>>> {
+    ) -> Box<dyn Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>>> {
         if let Some(graph_name) = graph_name {
             if let Some(graph_name) = graph_name {
                 if self
