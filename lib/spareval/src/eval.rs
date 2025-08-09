@@ -132,11 +132,11 @@ impl<'a, D: QueryableDataset<'a>> Clone for EvalDataset<'a, D> {
     }
 }
 
-pub struct InternalTuple<T: Clone + Eq + Hash> {
+pub struct InternalTuple<T> {
     inner: Vec<Option<T>>,
 }
 
-impl<T: Clone + Eq + Hash> InternalTuple<T> {
+impl<T> InternalTuple<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Vec::with_capacity(capacity),
@@ -154,7 +154,9 @@ impl<T: Clone + Eq + Hash> InternalTuple<T> {
     pub fn get(&self, index: usize) -> Option<&T> {
         self.inner.get(index).unwrap_or(&None).as_ref()
     }
+}
 
+impl<T: Clone> InternalTuple<T> {
     pub fn iter(&self) -> impl Iterator<Item = Option<T>> + '_ {
         self.inner.iter().cloned()
     }
@@ -165,7 +167,9 @@ impl<T: Clone + Eq + Hash> InternalTuple<T> {
         }
         self.inner[index] = Some(value);
     }
+}
 
+impl<T: Clone + Eq> InternalTuple<T> {
     pub fn combine_with(&self, other: &Self) -> Option<Self> {
         if self.inner.len() < other.inner.len() {
             let mut result = other.inner.clone();
@@ -201,7 +205,7 @@ impl<T: Clone + Eq + Hash> InternalTuple<T> {
     }
 }
 
-impl<T: Clone + Eq + Hash> Clone for InternalTuple<T> {
+impl<T: Clone> Clone for InternalTuple<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -209,22 +213,22 @@ impl<T: Clone + Eq + Hash> Clone for InternalTuple<T> {
     }
 }
 
-impl<T: Clone + Eq + Hash> PartialEq for InternalTuple<T> {
+impl<T: Eq> PartialEq for InternalTuple<T> {
     #[inline]
     fn eq(&self, other: &InternalTuple<T>) -> bool {
         self.inner == other.inner
     }
 }
 
-impl<T: Clone + Eq + Hash> Eq for InternalTuple<T> {}
+impl<T: Eq> Eq for InternalTuple<T> {}
 
-impl<T: Clone + Eq + Hash> Hash for InternalTuple<T> {
+impl<T: Hash> Hash for InternalTuple<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.inner.hash(state)
     }
 }
 
-impl<T: Clone + Eq + Hash> IntoIterator for InternalTuple<T> {
+impl<T> IntoIterator for InternalTuple<T> {
     type Item = Option<T>;
     type IntoIter = std::vec::IntoIter<Option<T>>;
 
@@ -3943,7 +3947,7 @@ fn encode_initial_bindings<'a, D: QueryableDataset<'a>>(
     Ok(encoded_terms)
 }
 
-fn put_variable_value<T: Clone + Eq + Hash>(
+fn put_variable_value<T: Clone>(
     selector: &Variable,
     variables: &[Variable],
     value: T,
@@ -3958,7 +3962,7 @@ fn put_variable_value<T: Clone + Eq + Hash>(
     false
 }
 
-enum AccumulatorWrapper<'a, T: Clone + Eq + Hash> {
+enum AccumulatorWrapper<'a, T> {
     CountTuple {
         count: u64,
     },
@@ -4900,14 +4904,14 @@ impl NumericBinaryOperands {
     }
 }
 
-enum TupleSelector<T: Clone + Eq + Hash> {
+enum TupleSelector<T> {
     Constant(T),
     Variable(usize),
     #[cfg(feature = "sparql-12")]
     TriplePattern(Rc<TripleTupleSelector<T>>),
 }
 
-impl<T: Clone + Eq + Hash> TupleSelector<T> {
+impl<T> TupleSelector<T> {
     fn from_ground_term_pattern<'a>(
         term_pattern: &GroundTermPattern,
         variables: &mut Vec<Variable>,
@@ -4971,7 +4975,9 @@ impl<T: Clone + Eq + Hash> TupleSelector<T> {
             }
         })
     }
+}
 
+impl<T: Clone> TupleSelector<T> {
     #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
     fn get_pattern_value<'a>(
         &self,
@@ -5011,7 +5017,7 @@ impl<T: Clone + Eq + Hash> TupleSelector<T> {
     }
 }
 
-impl<T: Clone + Eq + Hash> Clone for TupleSelector<T> {
+impl<T: Clone> Clone for TupleSelector<T> {
     fn clone(&self) -> Self {
         match self {
             Self::Constant(c) => Self::Constant(c.clone()),
@@ -5023,7 +5029,7 @@ impl<T: Clone + Eq + Hash> Clone for TupleSelector<T> {
 }
 
 #[cfg(feature = "sparql-12")]
-struct TripleTupleSelector<T: Clone + Eq + Hash> {
+struct TripleTupleSelector<T> {
     subject: TupleSelector<T>,
     predicate: TupleSelector<T>,
     object: TupleSelector<T>,
@@ -5071,7 +5077,7 @@ fn put_pattern_value<'a, D: QueryableDataset<'a>>(
     })
 }
 
-pub fn are_compatible_and_not_disjointed<T: Clone + Eq + Hash>(
+pub fn are_compatible_and_not_disjointed<T: Clone + Eq>(
     a: &InternalTuple<T>,
     b: &InternalTuple<T>,
 ) -> bool {
@@ -5087,7 +5093,7 @@ pub fn are_compatible_and_not_disjointed<T: Clone + Eq + Hash>(
     found_intersection
 }
 
-pub enum PropertyPath<T: Clone + Eq + Hash> {
+pub enum PropertyPath<T> {
     Path(T),
     Reverse(Rc<Self>),
     Sequence(Rc<Self>, Rc<Self>),
@@ -5879,13 +5885,13 @@ impl<'a, D: QueryableDataset<'a>> Clone for PathEvaluator<'a, D> {
     }
 }
 
-struct CartesianProductJoinIterator<'a, T: Clone + Eq + Hash> {
+struct CartesianProductJoinIterator<'a, T> {
     probe_iter: Peekable<InternalTuplesIterator<'a, T>>,
     built: Vec<InternalTuple<T>>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for CartesianProductJoinIterator<'_, T> {
+impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -5914,7 +5920,7 @@ impl<T: Clone + Eq + Hash> Iterator for CartesianProductJoinIterator<'_, T> {
     }
 }
 
-struct HashJoinIterator<'a, T: Clone + Eq + Hash> {
+struct HashJoinIterator<'a, T> {
     probe_iter: Peekable<InternalTuplesIterator<'a, T>>,
     built: InternalTupleSet<T>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
@@ -5952,7 +5958,7 @@ impl<T: Clone + Eq + Hash> Iterator for HashJoinIterator<'_, T> {
     }
 }
 
-struct HashLeftJoinIterator<'a, T: Clone + Eq + Hash> {
+struct HashLeftJoinIterator<'a, T> {
     left_iter: InternalTuplesIterator<'a, T>,
     right: InternalTupleSet<T>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
@@ -5998,7 +6004,7 @@ impl<T: Clone + Eq + Hash> Iterator for HashLeftJoinIterator<'_, T> {
 }
 
 #[cfg(feature = "sep-0006")]
-struct ForLoopLeftJoinIterator<'a, T: Clone + Eq + Hash> {
+struct ForLoopLeftJoinIterator<'a, T> {
     right_evaluator: Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<'a, T> + 'a>,
     left_iter: InternalTuplesIterator<'a, T>,
     current_right: InternalTuplesIterator<'a, T>,
@@ -6006,7 +6012,7 @@ struct ForLoopLeftJoinIterator<'a, T: Clone + Eq + Hash> {
 }
 
 #[cfg(feature = "sep-0006")]
-impl<T: Clone + Eq + Hash> Iterator for ForLoopLeftJoinIterator<'_, T> {
+impl<T: Clone> Iterator for ForLoopLeftJoinIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6031,14 +6037,14 @@ impl<T: Clone + Eq + Hash> Iterator for ForLoopLeftJoinIterator<'_, T> {
     }
 }
 
-struct UnionIterator<'a, T: Clone + Eq + Hash> {
+struct UnionIterator<'a, T> {
     plans: Vec<Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<'a, T> + 'a>>,
     input: InternalTuple<T>,
     current_iterator: InternalTuplesIterator<'a, T>,
     current_plan: usize,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for UnionIterator<'_, T> {
+impl<T: Clone> Iterator for UnionIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6055,12 +6061,12 @@ impl<T: Clone + Eq + Hash> Iterator for UnionIterator<'_, T> {
     }
 }
 
-struct ConsecutiveDeduplication<'a, T: Clone + Eq + Hash> {
+struct ConsecutiveDeduplication<'a, T> {
     inner: InternalTuplesIterator<'a, T>,
     current: Option<InternalTuple<T>>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for ConsecutiveDeduplication<'_, T> {
+impl<T: Eq> Iterator for ConsecutiveDeduplication<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -6536,7 +6542,7 @@ fn write_hexa_bytes(bytes: &[u8], buffer: &mut String) {
     }
 }
 
-fn error_evaluator<'a, T: Clone + Eq + Hash + 'a>(
+fn error_evaluator<'a, T: 'a>(
     error: QueryEvaluationError,
 ) -> Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<'a, T> + 'a> {
     let e = RefCell::new(Some(error));
@@ -6549,18 +6555,18 @@ fn error_evaluator<'a, T: Clone + Eq + Hash + 'a>(
     })
 }
 
-enum ComparatorFunction<'a, T: Clone + Eq + Hash> {
+enum ComparatorFunction<'a, T> {
     Asc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
     Desc(Rc<dyn Fn(&InternalTuple<T>) -> Option<ExpressionTerm> + 'a>),
 }
 
-struct InternalTupleSet<T: Clone + Eq + Hash> {
+struct InternalTupleSet<T> {
     key: Vec<usize>,
     map: FxHashMap<u64, Vec<InternalTuple<T>>>,
     len: usize,
 }
 
-impl<T: Clone + Eq + Hash> InternalTupleSet<T> {
+impl<T> InternalTupleSet<T> {
     fn new(key: Vec<usize>) -> Self {
         Self {
             key,
@@ -6569,6 +6575,16 @@ impl<T: Clone + Eq + Hash> InternalTupleSet<T> {
         }
     }
 
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<T: Hash> InternalTupleSet<T> {
     fn insert(&mut self, tuple: InternalTuple<T>) {
         self.map
             .entry(self.tuple_key(&tuple))
@@ -6590,17 +6606,9 @@ impl<T: Clone + Eq + Hash> InternalTupleSet<T> {
         }
         hasher.finish()
     }
-
-    fn len(&self) -> usize {
-        self.len
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len == 0
-    }
 }
 
-impl<T: Clone + Eq + Hash> Extend<InternalTuple<T>> for InternalTupleSet<T> {
+impl<T: Hash> Extend<InternalTuple<T>> for InternalTupleSet<T> {
     fn extend<I: IntoIterator<Item = InternalTuple<T>>>(&mut self, iter: I) {
         let iter = iter.into_iter();
         self.map.reserve(iter.size_hint().0);
@@ -6610,12 +6618,12 @@ impl<T: Clone + Eq + Hash> Extend<InternalTuple<T>> for InternalTupleSet<T> {
     }
 }
 
-struct StatsIterator<'a, T: Clone + Eq + Hash> {
+struct StatsIterator<'a, T> {
     inner: InternalTuplesIterator<'a, T>,
     stats: Rc<EvalNodeWithStats>,
 }
 
-impl<T: Clone + Eq + Hash> Iterator for StatsIterator<'_, T> {
+impl<T> Iterator for StatsIterator<'_, T> {
     type Item = Result<InternalTuple<T>, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
