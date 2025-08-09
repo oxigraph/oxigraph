@@ -39,13 +39,12 @@ pub trait QueryableDataset<'a>: Sized + 'a {
         predicate: Option<&Self::InternalTerm>,
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + 'a>; // TODO: consider `impl`
+    ) -> impl Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + use<'a, Self>;
 
     /// Fetches the list of dataset named graphs
     fn internal_named_graphs(
         &self,
-    ) -> Box<dyn Iterator<Item = Result<Self::InternalTerm, Self::Error>> + 'a> {
-        // TODO: consider `impl`
+    ) -> impl Iterator<Item = Result<Self::InternalTerm, Self::Error>> + use<'a, Self> {
         let mut error = None;
         let graph_names = self
             .internal_quads_for_pattern(None, None, None, None)
@@ -123,7 +122,7 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
         predicate: Option<&Term>,
         object: Option<&Term>,
         graph_name: Option<Option<&Term>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<Term>, Infallible>> + 'a> {
+    ) -> impl Iterator<Item = Result<InternalQuad<Term>, Infallible>> + use<'a> {
         #[expect(clippy::unnecessary_wraps)]
         fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<Term>, Infallible> {
             Ok(InternalQuad {
@@ -142,7 +141,10 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
             Some(match TermRef::from(subject) {
                 TermRef::NamedNode(s) => NamedOrBlankNodeRef::from(s),
                 TermRef::BlankNode(s) => s.into(),
-                TermRef::Literal(_) => return Box::new(empty()),
+                TermRef::Literal(_) => {
+                    let empty: Box<dyn Iterator<Item = Result<_, _>>> = Box::new(empty());
+                    return empty;
+                }
                 #[cfg(feature = "sparql-12")]
                 TermRef::Triple(_) => return Box::new(empty()),
             })

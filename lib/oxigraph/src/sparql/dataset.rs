@@ -50,7 +50,7 @@ impl DatasetView {
     }
 }
 
-impl QueryableDataset<'_> for DatasetView {
+impl<'a> QueryableDataset<'a> for DatasetView {
     type InternalTerm = EncodedTerm;
     type Error = StorageError;
 
@@ -60,8 +60,8 @@ impl QueryableDataset<'_> for DatasetView {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: Option<Option<&EncodedTerm>>,
-    ) -> Box<dyn Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>>> {
-        if let Some(graph_name) = graph_name {
+    ) -> impl Iterator<Item = Result<InternalQuad<EncodedTerm>, StorageError>> + use<'a> {
+        let iter: Box<dyn Iterator<Item = Result<_, _>>> = if let Some(graph_name) = graph_name {
             if let Some(graph_name) = graph_name {
                 if self
                     .dataset
@@ -189,11 +189,14 @@ impl QueryableDataset<'_> for DatasetView {
                         }))
                     }),
             )
-        }
+        };
+        iter
     }
 
-    fn internal_named_graphs(&self) -> Box<dyn Iterator<Item = Result<EncodedTerm, StorageError>>> {
-        Box::new(self.reader.named_graphs())
+    fn internal_named_graphs(
+        &self,
+    ) -> impl Iterator<Item = Result<EncodedTerm, StorageError>> + use<'a> {
+        self.reader.named_graphs()
     }
 
     fn contains_internal_graph_name(&self, graph_name: &EncodedTerm) -> Result<bool, StorageError> {
