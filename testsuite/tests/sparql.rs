@@ -13,7 +13,6 @@ fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
     )
 }
 
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
     check_testsuite(
