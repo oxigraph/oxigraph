@@ -247,7 +247,6 @@ impl PyQuerySolution {
         .map(|term| PyTerm::from(term.clone()))
     }
 
-    #[allow(clippy::unnecessary_to_owned, clippy::allow_attributes)] // TODO: Rust 1.85 false positive
     fn __iter__(&self) -> SolutionValueIter {
         SolutionValueIter {
             inner: self.inner.values().to_vec().into_iter(),

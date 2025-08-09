@@ -26,7 +26,7 @@ version = "0.5.0-beta.2"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.87"
 
 [workspace.dependencies]
 anyhow = "1.0.72"
@@ -76,7 +76,7 @@ thiserror = ">=1.0.50, <3.0"
 time = "0.3"
 tokio = "1.29"
 url = "2.4"
-wasm-bindgen = "0.2.83"
+wasm-bindgen = "0.2.88"
 wkt = "0.14"
 
 # Internal dependencies

@@ -32,7 +32,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.85.0
+          version: 1.87.0
           component: clippy
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: ./lib/oxsdatatypes
@@ -87,7 +87,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.85.0
+          version: 1.87.0
           target: wasm32-unknown-unknown
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --no-default-features -- -D warnings -D clippy::all
@@ -103,7 +103,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.85.0
+          version: 1.87.0
           target: wasm32-wasip1
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-wasip1 -- -D warnings -D clippy::all
@@ -119,7 +119,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.85.0
+          version: 1.87.0
           target: wasm32-unknown-emscripten
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-emscripten -- -D warnings -D clippy::all
@@ -135,7 +135,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.85.0
+          version: 1.87.0
           target: wasm32-unknown-unknown
           component: clippy
       - run: cargo clippy --lib --tests --target wasm32-unknown-unknown --features getrandom/custom --features oxsdatatypes/custom-now -- -D warnings -D clippy::all
@@ -292,7 +292,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup-rust
         with:
-          version: 1.85.0
+          version: 1.87.0
       - run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
