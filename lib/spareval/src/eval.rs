@@ -58,7 +58,7 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
         predicate: Option<&D::InternalTerm>,
         object: Option<&D::InternalTerm>,
         graph_name: Option<Option<&D::InternalTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + 'a
+    ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + use<'a, D>
     {
         self.dataset
             .internal_quads_for_pattern(subject, predicate, object, graph_name)
@@ -5779,8 +5779,8 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
     fn get_subject_or_object_identity_pairs_in_graph(
         &self,
         graph_name: Option<&D::InternalTerm>,
-    ) -> impl Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>> + 'a
-    {
+    ) -> impl Iterator<Item = Result<(D::InternalTerm, D::InternalTerm), QueryEvaluationError>>
+    + use<'a, D> {
         self.dataset
             .internal_quads_for_pattern(None, None, None, Some(graph_name))
             .flat_map_ok(|t| {
@@ -5798,7 +5798,7 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
             (D::InternalTerm, D::InternalTerm, Option<D::InternalTerm>),
             QueryEvaluationError,
         >,
-    > + 'a {
+    > + use<'a, D> {
         self.dataset
             .internal_quads_for_pattern(None, None, None, None)
             .flat_map_ok(|t| {
@@ -5866,7 +5866,8 @@ impl<'a, D: QueryableDataset<'a>> PathEvaluator<'a, D> {
     fn find_graphs_where_the_node_is_in(
         &self,
         term: &D::InternalTerm,
-    ) -> impl Iterator<Item = Result<Option<D::InternalTerm>, QueryEvaluationError>> + 'a {
+    ) -> impl Iterator<Item = Result<Option<D::InternalTerm>, QueryEvaluationError>> + use<'a, D>
+    {
         self.dataset
             .internal_quads_for_pattern(Some(term), None, None, None)
             .chain(
