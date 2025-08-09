@@ -1,8 +1,8 @@
 #[cfg(feature = "sparql-12")]
 use oxrdf::BaseDirection;
 use oxrdf::{
-    BlankNode, Dataset, GraphNameRef, Literal, NamedNode, NamedNodeRef, NamedOrBlankNodeRef,
-    QuadRef, Term, TermRef,
+    BlankNode, Dataset, GraphNameRef, Literal, NamedNode, NamedOrBlankNodeRef, QuadRef, Term,
+    TermRef,
 };
 #[cfg(feature = "sparql-12")]
 use oxrdf::{NamedOrBlankNode, Triple};
@@ -25,7 +25,7 @@ pub trait QueryableDataset<'a>: Sized + 'a {
     /// Can be just an integer that indexes into a dictionary...
     ///
     /// Equality here is the RDF term equality (SPARQL `sameTerm` function)
-    type InternalTerm: Clone + Eq + Hash + 'static;
+    type InternalTerm: Clone + Eq + Hash + 'a;
 
     /// Error returned by the dataset.
     type Error: Error + Send + Sync + 'static;
@@ -113,60 +113,39 @@ pub trait QueryableDataset<'a>: Sized + 'a {
 }
 
 impl<'a> QueryableDataset<'a> for &'a Dataset {
-    type InternalTerm = Term;
+    type InternalTerm = TermCow<'a>;
     type Error = Infallible;
 
     fn internal_quads_for_pattern(
         &self,
-        subject: Option<&Term>,
-        predicate: Option<&Term>,
-        object: Option<&Term>,
-        graph_name: Option<Option<&Term>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<Term>, Infallible>> + use<'a> {
+        subject: Option<&TermCow<'a>>,
+        predicate: Option<&TermCow<'a>>,
+        object: Option<&TermCow<'a>>,
+        graph_name: Option<Option<&TermCow<'a>>>,
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>, Infallible>> + use<'a> {
         #[expect(clippy::unnecessary_wraps)]
-        fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<Term>, Infallible> {
+        fn quad_to_result(quad: QuadRef<'_>) -> Result<InternalQuad<TermCow<'_>>, Infallible> {
             Ok(InternalQuad {
-                subject: quad.subject.into(),
-                predicate: quad.predicate.into(),
-                object: quad.object.into_owned(),
+                subject: TermRef::from(quad.subject).into(),
+                predicate: TermRef::from(quad.predicate).into(),
+                object: quad.object.into(),
                 graph_name: match quad.graph_name {
-                    GraphNameRef::NamedNode(g) => Some(g.into()),
-                    GraphNameRef::BlankNode(g) => Some(g.into()),
+                    GraphNameRef::NamedNode(g) => Some(TermRef::from(g).into()),
+                    GraphNameRef::BlankNode(g) => Some(TermRef::from(g).into()),
                     GraphNameRef::DefaultGraph => None,
                 },
             })
         }
 
-        let subject = if let Some(subject) = subject {
-            Some(match TermRef::from(subject) {
-                TermRef::NamedNode(s) => NamedOrBlankNodeRef::from(s),
-                TermRef::BlankNode(s) => s.into(),
-                TermRef::Literal(_) => {
-                    let empty: Box<dyn Iterator<Item = Result<_, _>>> = Box::new(empty());
-                    return empty;
-                }
-                #[cfg(feature = "sparql-12")]
-                TermRef::Triple(_) => return Box::new(empty()),
-            })
-        } else {
-            None
-        };
-        let predicate = if let Some(predicate) = predicate {
-            if let TermRef::NamedNode(p) = TermRef::from(predicate) {
-                Some(p)
-            } else {
-                return Box::new(empty());
-            }
-        } else {
-            None
-        };
-        let object = object.map(TermRef::from);
         let graph_name = if let Some(graph_name) = graph_name {
             Some(if let Some(graph_name) = graph_name {
-                match TermRef::from(graph_name) {
+                match graph_name.into() {
                     TermRef::NamedNode(s) => s.into(),
                     TermRef::BlankNode(s) => s.into(),
-                    TermRef::Literal(_) => return Box::new(empty()),
+                    TermRef::Literal(_) => {
+                        let empty: Box<dyn Iterator<Item = Result<_, _>>> = Box::new(empty());
+                        return empty;
+                    }
                     #[cfg(feature = "sparql-12")]
                     TermRef::Triple(_) => return Box::new(empty()),
                 }
@@ -177,14 +156,25 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
             None
         };
         if let Some(subject) = subject {
-            let predicate = predicate.map(NamedNodeRef::into_owned);
-            let object = object.map(TermRef::into_owned);
+            let subject = match subject.into() {
+                TermRef::NamedNode(s) => NamedOrBlankNodeRef::from(s),
+                TermRef::BlankNode(s) => s.into(),
+                TermRef::Literal(_) => {
+                    return Box::new(empty());
+                }
+                #[cfg(feature = "sparql-12")]
+                TermRef::Triple(_) => return Box::new(empty()),
+            };
+            let predicate = predicate.cloned();
+            let object = object.cloned();
             let graph_name = graph_name.map(GraphNameRef::into_owned);
             Box::new(
                 self.quads_for_subject(subject)
                     .filter(move |q| {
-                        predicate.as_ref().is_none_or(|t| t.as_ref() == q.predicate)
-                            && object.as_ref().is_none_or(|t| t.as_ref() == q.object)
+                        predicate
+                            .as_ref()
+                            .is_none_or(|t| TermRef::from(t) == q.predicate.into())
+                            && object.as_ref().is_none_or(|t| TermRef::from(t) == q.object)
                             && graph_name.as_ref().map_or_else(
                                 || !q.graph_name.is_default_graph(),
                                 |t| t.as_ref() == q.graph_name,
@@ -193,12 +183,14 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
                     .map(quad_to_result),
             )
         } else if let Some(object) = object {
-            let predicate = predicate.map(NamedNodeRef::into_owned);
+            let predicate = predicate.cloned();
             let graph_name = graph_name.map(GraphNameRef::into_owned);
             Box::new(
                 self.quads_for_object(object)
                     .filter(move |q| {
-                        predicate.as_ref().is_none_or(|t| t.as_ref() == q.predicate)
+                        predicate
+                            .as_ref()
+                            .is_none_or(|t| TermRef::from(t) == q.predicate.into())
                             && graph_name.as_ref().map_or_else(
                                 || !q.graph_name.is_default_graph(),
                                 |t| t.as_ref() == q.graph_name,
@@ -207,6 +199,9 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
                     .map(quad_to_result),
             )
         } else if let Some(predicate) = predicate {
+            let TermRef::NamedNode(predicate) = predicate.into() else {
+                return Box::new(empty());
+            };
             let graph_name = graph_name.map(GraphNameRef::into_owned);
             Box::new(
                 self.quads_for_predicate(predicate)
@@ -229,12 +224,12 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
         }
     }
 
-    fn internalize_term(&self, term: Term) -> Result<Term, Infallible> {
-        Ok(term)
+    fn internalize_term(&self, term: Term) -> Result<TermCow<'a>, Infallible> {
+        Ok(term.into())
     }
 
-    fn externalize_term(&self, term: Term) -> Result<Term, Infallible> {
-        Ok(term)
+    fn externalize_term(&self, term: TermCow<'a>) -> Result<Term, Infallible> {
+        Ok(term.into())
     }
 }
 
@@ -685,6 +680,43 @@ impl From<NamedOrBlankNode> for ExpressionTerm {
         match subject {
             NamedOrBlankNode::NamedNode(s) => Self::NamedNode(s),
             NamedOrBlankNode::BlankNode(s) => Self::BlankNode(s),
+        }
+    }
+}
+
+#[doc(hidden)]
+#[derive(Eq, PartialEq, Clone, Hash)]
+pub enum TermCow<'a> {
+    Owned(Term),
+    Borrowed(TermRef<'a>),
+}
+
+impl From<Term> for TermCow<'_> {
+    fn from(value: Term) -> Self {
+        Self::Owned(value)
+    }
+}
+
+impl<'a> From<TermRef<'a>> for TermCow<'a> {
+    fn from(value: TermRef<'a>) -> Self {
+        Self::Borrowed(value)
+    }
+}
+
+impl From<TermCow<'_>> for Term {
+    fn from(value: TermCow<'_>) -> Self {
+        match value {
+            TermCow::Owned(t) => t,
+            TermCow::Borrowed(t) => t.into_owned(),
+        }
+    }
+}
+
+impl<'a> From<&'a TermCow<'a>> for TermRef<'a> {
+    fn from(value: &'a TermCow<'a>) -> Self {
+        match value {
+            TermCow::Owned(t) => t.as_ref(),
+            TermCow::Borrowed(t) => *t,
         }
     }
 }
