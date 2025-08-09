@@ -208,7 +208,7 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
         if !with_query_optimizer {
             evaluator = evaluator.without_optimizations();
         }
-        let actual_results = evaluator.execute(dataset.clone(), &query)?;
+        let actual_results = evaluator.execute(&dataset, &query)?;
         let actual_results = StaticQueryResults::from_query_results(actual_results, with_order)
             .with_context(|| format!("Error when executing {query}"))?;
 
@@ -335,7 +335,7 @@ impl DefaultServiceHandler for StaticServiceHandler {
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> Result<QuerySolutionIter, QueryEvaluationError> {
+    ) -> Result<QuerySolutionIter<'static>, QueryEvaluationError> {
         let dataset = self.services.get(service_name).ok_or_else(|| {
             QueryEvaluationError::Service(Box::new(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -347,7 +347,7 @@ impl DefaultServiceHandler for StaticServiceHandler {
             services: Arc::clone(&self.services),
         });
         let QueryResults::Solutions(iter) = evaluator.execute(
-            dataset.clone(),
+            dataset,
             &Query::Select {
                 dataset: None,
                 pattern: pattern.clone(),
@@ -360,11 +360,14 @@ impl DefaultServiceHandler for StaticServiceHandler {
                 "Expecting solutions",
             ))));
         };
-        Ok(iter)
+        Ok(QuerySolutionIter::new(
+            iter.variables().into(),
+            iter.collect::<Vec<_>>(),
+        ))
     }
 }
 
-fn to_graph(result: QueryResults, with_order: bool) -> Result<Graph> {
+fn to_graph(result: QueryResults<'_>, with_order: bool) -> Result<Graph> {
     Ok(match result {
         QueryResults::Graph(graph) => graph.collect::<Result<Graph, _>>()?,
         QueryResults::Boolean(value) => {
@@ -509,7 +512,7 @@ enum StaticQueryResults {
 }
 
 impl StaticQueryResults {
-    fn from_query_results(results: QueryResults, with_order: bool) -> Result<Self> {
+    fn from_query_results(results: QueryResults<'_>, with_order: bool) -> Result<Self> {
         Self::from_graph(&to_graph(results, with_order)?)
     }
 

@@ -621,7 +621,7 @@ impl BoundPreparedSparqlQuery {
     }
 
     /// Evaluate the query against the given store.
-    pub fn execute(self) -> Result<QueryResults, QueryEvaluationError> {
+    pub fn execute(self) -> Result<QueryResults<'static>, QueryEvaluationError> {
         let dataset = DatasetView::new(self.reader, &self.dataset);
         self.evaluator
             .execute_with_substituted_variables(dataset, &self.query, self.substitutions)
@@ -655,7 +655,12 @@ impl BoundPreparedSparqlQuery {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn explain(self) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
+    pub fn explain(
+        self,
+    ) -> (
+        Result<QueryResults<'static>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
         let dataset = DatasetView::new(self.reader, &self.dataset);
         let (results, explanation) = self.evaluator.explain_with_substituted_variables(
             dataset,

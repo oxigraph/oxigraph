@@ -109,7 +109,7 @@ impl DefaultServiceHandler for HttpServiceHandler {
         service_name: &NamedNode,
         pattern: &GraphPattern,
         base_iri: Option<&Iri<String>>,
-    ) -> std::result::Result<QuerySolutionIter, Self::Error> {
+    ) -> std::result::Result<QuerySolutionIter<'static>, Self::Error> {
         let (content_type, body) = self
             .client
             .post(
