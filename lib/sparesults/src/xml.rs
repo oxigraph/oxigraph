@@ -748,12 +748,12 @@ impl XmlInnerSolutionsParser {
                 ))
                 .into()),
                 State::BNode => Err(QueryResultsSyntaxError::msg(format!(
-                    "<uri> must only contain a string, found <{}>",
+                    "<bnode> must only contain a string, found <{}>",
                     self.decoder.decode(event.name().as_ref())?
                 ))
                 .into()),
                 State::Literal => Err(QueryResultsSyntaxError::msg(format!(
-                    "<uri> must only contain a string, found <{}>",
+                    "<literal> must only contain a string, found <{}>",
                     self.decoder.decode(event.name().as_ref())?
                 ))
                 .into()),

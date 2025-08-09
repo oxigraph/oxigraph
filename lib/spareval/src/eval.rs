@@ -599,7 +599,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         iter.map(move |quad| {
                             let quad = quad?;
                             let mut new_tuple = from.clone();
-                            if !put_pattern_value(
+                            if !put_pattern_value::<D>(
                                 &subject_selector,
                                 quad.subject,
                                 &mut new_tuple,
@@ -608,7 +608,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             )? {
                                 return Ok(None);
                             }
-                            if !put_pattern_value(
+                            if !put_pattern_value::<D>(
                                 &predicate_selector,
                                 quad.predicate,
                                 &mut new_tuple,
@@ -617,7 +617,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                             )? {
                                 return Ok(None);
                             }
-                            if !put_pattern_value(
+                            if !put_pattern_value::<D>(
                                 &object_selector,
                                 quad.object,
                                 &mut new_tuple,
@@ -630,7 +630,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                 let Some(quad_graph_name) = quad.graph_name else {
                                     return Err(QueryEvaluationError::UnexpectedDefaultGraph);
                                 };
-                                if !put_pattern_value(
+                                if !put_pattern_value::<D>(
                                     graph_name_selector,
                                     quad_graph_name,
                                     &mut new_tuple,
@@ -745,7 +745,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                     .map(move |o| {
                                         let o = o?;
                                         let mut new_tuple = from.clone();
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
@@ -773,7 +773,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                     .map(move |s| {
                                         let s = s?;
                                         let mut new_tuple = from.clone();
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
@@ -798,7 +798,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                     .map(move |t| {
                                         let (s, o) = t?;
                                         let mut new_tuple = from.clone();
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
@@ -807,7 +807,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                         )? {
                                             return Ok(None);
                                         }
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
@@ -841,7 +841,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                                     QueryEvaluationError::UnexpectedDefaultGraph,
                                                 );
                                             };
-                                            if !put_pattern_value(
+                                            if !put_pattern_value::<D>(
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
@@ -867,7 +867,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                     .map(move |t| {
                                         let (o, g) = t?;
                                         let mut new_tuple = from.clone();
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
@@ -882,7 +882,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                                     QueryEvaluationError::UnexpectedDefaultGraph,
                                                 );
                                             };
-                                            if !put_pattern_value(
+                                            if !put_pattern_value::<D>(
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
@@ -908,7 +908,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                     .map(move |t| {
                                         let (s, g) = t?;
                                         let mut new_tuple = from.clone();
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
@@ -923,7 +923,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                                     QueryEvaluationError::UnexpectedDefaultGraph,
                                                 );
                                             };
-                                            if !put_pattern_value(
+                                            if !put_pattern_value::<D>(
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
@@ -950,7 +950,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                     .map(move |t| {
                                         let (s, o, g) = t?;
                                         let mut new_tuple = from.clone();
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &subject_selector,
                                             s,
                                             &mut new_tuple,
@@ -959,7 +959,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                         )? {
                                             return Ok(None);
                                         }
-                                        if !put_pattern_value(
+                                        if !put_pattern_value::<D>(
                                             &object_selector,
                                             o,
                                             &mut new_tuple,
@@ -974,7 +974,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                                     QueryEvaluationError::UnexpectedDefaultGraph,
                                                 );
                                             };
-                                            if !put_pattern_value(
+                                            if !put_pattern_value::<D>(
                                                 graph_name_selector,
                                                 g,
                                                 &mut new_tuple,
@@ -1027,7 +1027,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                 .map(move |graph_name| {
                                     let graph_name = graph_name?;
                                     let mut new_tuple = from.clone();
-                                    if !put_pattern_value(
+                                    if !put_pattern_value::<D>(
                                         &graph_name_selector,
                                         graph_name,
                                         &mut new_tuple,
@@ -4978,7 +4978,14 @@ impl<T> TupleSelector<T> {
 }
 
 impl<T: Clone> TupleSelector<T> {
-    #[cfg_attr(not(feature = "sparql-12"), expect(clippy::unnecessary_wraps))]
+    #[cfg_attr(
+        not(feature = "sparql-12"),
+        expect(
+            unused_lifetimes,
+            clippy::unnecessary_wraps,
+            clippy::extra_unused_lifetimes
+        )
+    )]
     fn get_pattern_value<'a>(
         &self,
         tuple: &InternalTuple<T>,
