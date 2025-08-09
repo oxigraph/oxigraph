@@ -18,7 +18,6 @@ fn rdf12_n_triples_syntax_w3c_testsuite() -> Result<()> {
         &[],
     )
 }
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn rdf12_n_triples_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -43,7 +42,6 @@ fn rdf12_n_quads_syntax_w3c_testsuite() -> Result<()> {
     )
 }
 
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn rdf12_n_quads_c14n_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -52,7 +50,6 @@ fn rdf12_n_quads_c14n_w3c_testsuite() -> Result<()> {
     )
 }
 
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn rdf11_turtle_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -77,7 +74,6 @@ fn rdf12_turtle_eval_w3c_testsuite() -> Result<()> {
     )
 }
 
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn rdf11_trig_w3c_testsuite() -> Result<()> {
     check_testsuite(
@@ -126,7 +122,6 @@ fn n3_extended_testsuite() -> Result<()> {
     )
 }
 
-#[cfg(not(windows))] // Tests don't like git auto "\r\n" on Windows
 #[test]
 fn n3_turtle_testsuite() -> Result<()> {
     check_testsuite(
