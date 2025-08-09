@@ -8,17 +8,19 @@ build:
   os: "ubuntu-lts-latest"
   tools:
     python: "3"
-    rust: latest
   apt_packages:
     - clang
   jobs:
-    create_environment:
+    pre_create_environment:
+      - asdf install rust latest
+      - asdf global rust latest
       - asdf plugin add uv
       - asdf install uv latest
       - asdf global uv latest
-      - cd python && UV_PROJECT_ENVIRONMENT=$READTHEDOCS_VIRTUALENV_PATH uv sync --locked
+    create_environment:
+      - cd python && uv venv "${READTHEDOCS_VIRTUALENV_PATH}"
     install:
-      - "true"
+      - cd python && UV_PROJECT_ENVIRONMENT="${READTHEDOCS_VIRTUALENV_PATH}" uv sync --frozen
 
 submodules:
   include: all
