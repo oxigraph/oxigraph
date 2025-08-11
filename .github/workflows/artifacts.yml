@@ -235,7 +235,7 @@ jobs:
       - wheel_linux
       - wheel_linux_musl
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           pattern: pyoxigraph_*
           path: dist
@@ -260,7 +260,7 @@ jobs:
       - wheel_linux
       - wheel_linux_musl
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           pattern: oxigraph_pypi_*
           path: dist
