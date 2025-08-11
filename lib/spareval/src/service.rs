@@ -33,7 +33,7 @@ use std::sync::Arc;
 ///         &self,
 ///         _pattern: &GraphPattern,
 ///         _base_iri: Option<&Iri<String>>,
-///     ) -> Result<QuerySolutionIter, Self::Error> {
+///     ) -> Result<QuerySolutionIter<'static>, Self::Error> {
 ///         // Always return a single binding foo -> 1
 ///         let variables = [Variable::new_unchecked("foo")].into();
 ///         Ok(QuerySolutionIter::new(
@@ -52,7 +52,7 @@ use std::sync::Arc;
 /// );
 /// let query = SparqlParser::new()
 ///     .parse_query("SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }")?;
-/// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
+/// if let QueryResults::Solutions(mut solutions) = evaluator.execute(&Dataset::new(), &query)? {
 ///     assert_eq!(
 ///         solutions.next().unwrap()?.get("foo"),
 ///         Some(&Literal::from(1).into())
@@ -100,7 +100,7 @@ pub trait ServiceHandler: Send + Sync {
 ///         service_name: &NamedNode,
 ///         _pattern: &GraphPattern,
 ///         _base_iri: Option<&Iri<String>>,
-///     ) -> Result<QuerySolutionIter, Self::Error> {
+///     ) -> Result<QuerySolutionIter<'static>, Self::Error> {
 ///         // Always return a single binding name -> name of service
 ///         let variables = [Variable::new_unchecked("foo")].into();
 ///         Ok(QuerySolutionIter::new(
@@ -116,7 +116,7 @@ pub trait ServiceHandler: Send + Sync {
 /// let evaluator = QueryEvaluator::default().with_default_service_handler(TestServiceHandler {});
 /// let query = SparqlParser::new()
 ///     .parse_query("SELECT ?foo WHERE { SERVICE <http://example.com/service> {} }")?;
-/// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
+/// if let QueryResults::Solutions(mut solutions) = evaluator.execute(&Dataset::new(), &query)? {
 ///     assert_eq!(
 ///         solutions.next().unwrap()?.get("foo"),
 ///         Some(&NamedNode::new("http://example.com/service")?.into())

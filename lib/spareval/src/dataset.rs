@@ -233,7 +233,7 @@ impl<'a> QueryableDataset<'a> for &'a Dataset {
     }
 }
 
-pub struct InternalQuad<T: Clone + Eq + Hash> {
+pub struct InternalQuad<T> {
     pub subject: T,
     pub predicate: T,
     pub object: T,
@@ -685,10 +685,26 @@ impl From<NamedOrBlankNode> for ExpressionTerm {
 }
 
 #[doc(hidden)]
-#[derive(Eq, PartialEq, Clone, Hash)]
+#[derive(Clone)]
 pub enum TermCow<'a> {
     Owned(Term),
     Borrowed(TermRef<'a>),
+}
+
+impl PartialEq for TermCow<'_> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        TermRef::from(self) == TermRef::from(other)
+    }
+}
+
+impl Eq for TermCow<'_> {}
+
+impl Hash for TermCow<'_> {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        TermRef::from(self).hash(state)
+    }
 }
 
 impl From<Term> for TermCow<'_> {
