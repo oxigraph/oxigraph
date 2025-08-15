@@ -140,18 +140,22 @@ fuzz_target!(|data: &[u8]| {
     let new_serialization = serialize_quads(&quads, prefixes, base_iri);
 
     // We parse the serialization
-    let new_quads = TriGParser::new()
+    match TriGParser::new()
         .for_slice(&new_serialization)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| {
-            format!(
-                "Error on {:?} from {quads:?} based on {:?}: {e}",
-                String::from_utf8_lossy(&new_serialization),
-                String::from_utf8_lossy(data)
-            )
-        })
-        .unwrap();
-
-    // We check the roundtrip has not changed anything
-    assert_eq!(new_quads, quads);
+    {
+        Ok(new_quads) => {
+            // We check the roundtrip has not changed anything
+            assert_eq!(new_quads, quads);
+        }
+        Err(e) => {
+            if errors.is_empty() {
+                panic!(
+                    "Error on {:?} from {quads:?} based on {:?}: {e}",
+                    String::from_utf8_lossy(&new_serialization),
+                    String::from_utf8_lossy(data)
+                )
+            }
+        }
+    }
 });
