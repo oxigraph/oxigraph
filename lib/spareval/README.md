@@ -27,7 +27,7 @@ let dataset = Dataset::from_iter([Quad::new(
     GraphName::DefaultGraph,
 )]);
 let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }").unwrap();
-let results = QueryEvaluator::new().execute(dataset, &query);
+let results = QueryEvaluator::new().execute(&dataset, &query);
 if let QueryResults::Solutions(solutions) = results.unwrap() {
     let solutions = solutions.collect::<Result<Vec<_>, _>>().unwrap();
     assert_eq!(solutions.len(), 1);

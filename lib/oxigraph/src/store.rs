@@ -154,7 +154,7 @@ impl Store {
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         self.query_opt(query, SparqlEvaluator::new())
     }
 
@@ -188,7 +188,7 @@ impl Store {
         &self,
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         self.query_opt_with_substituted_variables(query, options, [])
     }
 
@@ -222,7 +222,7 @@ impl Store {
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         let mut evaluator = options.for_query(query.try_into().map_err(Into::into)?);
         for (variable, term) in substitutions {
             evaluator = evaluator.substitute_variable(variable, term);
@@ -260,8 +260,13 @@ impl Store {
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
         with_stats: bool,
-    ) -> Result<(Result<QueryResults, QueryEvaluationError>, QueryExplanation), QueryEvaluationError>
-    {
+    ) -> Result<
+        (
+            Result<QueryResults<'static>, QueryEvaluationError>,
+            QueryExplanation,
+        ),
+        QueryEvaluationError,
+    > {
         let mut prepared = options
             .for_query(query.try_into().map_err(Into::into)?)
             .on_store(self);
@@ -304,8 +309,13 @@ impl Store {
         options: SparqlEvaluator,
         with_stats: bool,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<(Result<QueryResults, QueryEvaluationError>, QueryExplanation), QueryEvaluationError>
-    {
+    ) -> Result<
+        (
+            Result<QueryResults<'static>, QueryEvaluationError>,
+            QueryExplanation,
+        ),
+        QueryEvaluationError,
+    > {
         let mut prepared = options
             .for_query(query.try_into().map_err(Into::into)?)
             .on_store(self);
@@ -1063,7 +1073,7 @@ impl<'a> Transaction<'a> {
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         self.query_opt(query, SparqlEvaluator::new())
     }
 
@@ -1109,7 +1119,7 @@ impl<'a> Transaction<'a> {
         &self,
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
         options
             .for_query(query.try_into().map_err(Into::into)?)
             .on_transaction(self)

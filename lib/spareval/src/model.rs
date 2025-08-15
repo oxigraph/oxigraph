@@ -9,37 +9,37 @@ use std::io::Read;
 use std::sync::Arc;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
-pub enum QueryResults {
+pub enum QueryResults<'a> {
     /// Results of a [SELECT](https://www.w3.org/TR/sparql11-query/#select) query.
-    Solutions(QuerySolutionIter),
+    Solutions(QuerySolutionIter<'a>),
     /// Result of a [ASK](https://www.w3.org/TR/sparql11-query/#ask) query.
     Boolean(bool),
     /// Results of a [CONSTRUCT](https://www.w3.org/TR/sparql11-query/#construct) or [DESCRIBE](https://www.w3.org/TR/sparql11-query/#describe) query.
-    Graph(QueryTripleIter),
+    Graph(QueryTripleIter<'a>),
 }
 
-impl From<QuerySolutionIter> for QueryResults {
+impl<'a> From<QuerySolutionIter<'a>> for QueryResults<'a> {
     #[inline]
-    fn from(value: QuerySolutionIter) -> Self {
+    fn from(value: QuerySolutionIter<'a>) -> Self {
         Self::Solutions(value)
     }
 }
 
-impl From<bool> for QueryResults {
+impl From<bool> for QueryResults<'_> {
     #[inline]
     fn from(value: bool) -> Self {
         Self::Boolean(value)
     }
 }
 
-impl From<QueryTripleIter> for QueryResults {
+impl<'a> From<QueryTripleIter<'a>> for QueryResults<'a> {
     #[inline]
-    fn from(value: QueryTripleIter) -> Self {
+    fn from(value: QueryTripleIter<'a>) -> Self {
         Self::Graph(value)
     }
 }
 
-impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults {
+impl<'a, R: Read + 'a> From<ReaderQueryResultsParserOutput<R>> for QueryResults<'a> {
     #[inline]
     fn from(output: ReaderQueryResultsParserOutput<R>) -> Self {
         match output {
@@ -49,9 +49,9 @@ impl<R: Read + 'static> From<ReaderQueryResultsParserOutput<R>> for QueryResults
     }
 }
 
-impl From<SliceQueryResultsParserOutput<'static>> for QueryResults {
+impl<'a> From<SliceQueryResultsParserOutput<'a>> for QueryResults<'a> {
     #[inline]
-    fn from(output: SliceQueryResultsParserOutput<'static>) -> Self {
+    fn from(output: SliceQueryResultsParserOutput<'a>) -> Self {
         match output {
             SliceQueryResultsParserOutput::Solutions(output) => Self::Solutions(output.into()),
             SliceQueryResultsParserOutput::Boolean(output) => Self::Boolean(output),
@@ -68,7 +68,7 @@ impl From<SliceQueryResultsParserOutput<'static>> for QueryResults {
 ///
 /// let query = SparqlParser::new().parse_query("SELECT ?s ?o WHERE { ?s ?p ?o }")?;
 /// if let QueryResults::Solutions(solutions) =
-///     QueryEvaluator::new().execute(Dataset::new(), &query)?
+///     QueryEvaluator::new().execute(&Dataset::new(), &query)?
 /// {
 ///     for solution in solutions {
 ///         println!("{:?}", solution?.get("s"));
@@ -76,16 +76,16 @@ impl From<SliceQueryResultsParserOutput<'static>> for QueryResults {
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct QuerySolutionIter {
+pub struct QuerySolutionIter<'a> {
     variables: Arc<[Variable]>,
-    iter: Box<dyn Iterator<Item = Result<QuerySolution, QueryEvaluationError>>>,
+    iter: Box<dyn Iterator<Item = Result<QuerySolution, QueryEvaluationError>> + 'a>,
 }
 
-impl QuerySolutionIter {
+impl<'a> QuerySolutionIter<'a> {
     /// Construct a new iterator of solutions from an ordered list of solution variables and an iterator of solutions
     pub fn new(
         variables: Arc<[Variable]>,
-        iter: impl IntoIterator<Item = Result<QuerySolution, QueryEvaluationError>> + 'static,
+        iter: impl IntoIterator<Item = Result<QuerySolution, QueryEvaluationError>> + 'a,
     ) -> Self {
         Self {
             variables,
@@ -97,7 +97,7 @@ impl QuerySolutionIter {
     /// (each tuple using the same ordering as the variable list such that tuple element 0 is the value for the variable 0...)
     pub fn from_tuples(
         variables: Arc<[Variable]>,
-        iter: impl IntoIterator<Item = Result<Vec<Option<Term>>, QueryEvaluationError>> + 'static,
+        iter: impl IntoIterator<Item = Result<Vec<Option<Term>>, QueryEvaluationError>> + 'a,
     ) -> Self {
         Self::new(
             Arc::clone(&variables),
@@ -115,7 +115,7 @@ impl QuerySolutionIter {
     ///
     /// let query = SparqlParser::new().parse_query("SELECT ?s ?o WHERE { ?s ?p ?o }")?;
     /// if let QueryResults::Solutions(solutions) =
-    ///     QueryEvaluator::new().execute(Dataset::new(), &query)?
+    ///     QueryEvaluator::new().execute(&Dataset::new(), &query)?
     /// {
     ///     assert_eq!(
     ///         solutions.variables(),
@@ -130,7 +130,7 @@ impl QuerySolutionIter {
     }
 }
 
-impl Iterator for QuerySolutionIter {
+impl Iterator for QuerySolutionIter<'_> {
     type Item = Result<QuerySolution, QueryEvaluationError>;
 
     #[inline]
@@ -144,7 +144,7 @@ impl Iterator for QuerySolutionIter {
     }
 }
 
-impl<R: Read + 'static> From<ReaderSolutionsParser<R>> for QuerySolutionIter {
+impl<'a, R: Read + 'a> From<ReaderSolutionsParser<R>> for QuerySolutionIter<'a> {
     #[inline]
     fn from(parser: ReaderSolutionsParser<R>) -> Self {
         Self {
@@ -156,9 +156,9 @@ impl<R: Read + 'static> From<ReaderSolutionsParser<R>> for QuerySolutionIter {
     }
 }
 
-impl From<SliceSolutionsParser<'static>> for QuerySolutionIter {
+impl<'a> From<SliceSolutionsParser<'a>> for QuerySolutionIter<'a> {
     #[inline]
-    fn from(parser: SliceSolutionsParser<'static>) -> Self {
+    fn from(parser: SliceSolutionsParser<'a>) -> Self {
         Self {
             variables: parser.variables().into(),
             iter: Box::new(
@@ -176,20 +176,20 @@ impl From<SliceSolutionsParser<'static>> for QuerySolutionIter {
 /// use spargebra::SparqlParser;
 ///
 /// let query = SparqlParser::new().parse_query("CONSTRUCT WHERE { ?s ?p ?o }")?;
-/// if let QueryResults::Graph(triples) = QueryEvaluator::new().execute(Dataset::new(), &query)? {
+/// if let QueryResults::Graph(triples) = QueryEvaluator::new().execute(&Dataset::new(), &query)? {
 ///     for triple in triples {
 ///         println!("{}", triple?);
 ///     }
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct QueryTripleIter {
-    iter: Box<dyn Iterator<Item = Result<Triple, QueryEvaluationError>>>,
+pub struct QueryTripleIter<'a> {
+    iter: Box<dyn Iterator<Item = Result<Triple, QueryEvaluationError>> + 'a>,
 }
 
-impl QueryTripleIter {
+impl<'a> QueryTripleIter<'a> {
     pub(crate) fn new(
-        iter: impl Iterator<Item = Result<Triple, QueryEvaluationError>> + 'static,
+        iter: impl Iterator<Item = Result<Triple, QueryEvaluationError>> + 'a,
     ) -> Self {
         Self {
             iter: Box::new(iter),
@@ -197,7 +197,7 @@ impl QueryTripleIter {
     }
 }
 
-impl Iterator for QueryTripleIter {
+impl Iterator for QueryTripleIter<'_> {
     type Item = Result<Triple, QueryEvaluationError>;
 
     #[inline]

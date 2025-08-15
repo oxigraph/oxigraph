@@ -48,7 +48,7 @@ use std::{fmt, io};
 ///     GraphName::DefaultGraph,
 /// )]);
 /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
-/// let results = QueryEvaluator::new().execute(dataset, &query);
+/// let results = QueryEvaluator::new().execute(&dataset, &query);
 /// if let QueryResults::Solutions(solutions) = results? {
 ///     let solutions = solutions.collect::<Result<Vec<_>, _>>()?;
 ///     assert_eq!(solutions.len(), 1);
@@ -72,11 +72,11 @@ impl QueryEvaluator {
         Self::default()
     }
 
-    pub fn execute(
+    pub fn execute<'a>(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'a>, QueryEvaluationError> {
         self.explain(dataset, query).0
     }
 
@@ -98,7 +98,7 @@ impl QueryEvaluator {
     /// )]);
     /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
     /// let results = QueryEvaluator::new().execute_with_substituted_variables(
-    ///     dataset,
+    ///     &dataset,
     ///     &query,
     ///     [(Variable::new("s")?, ex.clone().into())],
     /// );
@@ -109,30 +109,36 @@ impl QueryEvaluator {
     /// }
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn execute_with_substituted_variables(
+    pub fn execute_with_substituted_variables<'a>(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    ) -> Result<QueryResults<'a>, QueryEvaluationError> {
         self.explain_with_substituted_variables(dataset, query, substitutions)
             .0
     }
 
-    pub fn explain(
+    pub fn explain<'a>(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
-    ) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
+    ) -> (
+        Result<QueryResults<'a>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
         self.explain_with_substituted_variables(dataset, query, [])
     }
 
-    pub fn explain_with_substituted_variables(
+    pub fn explain_with_substituted_variables<'a>(
         &self,
-        dataset: impl QueryableDataset,
+        dataset: impl QueryableDataset<'a>,
         query: &Query,
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> (Result<QueryResults, QueryEvaluationError>, QueryExplanation) {
+    ) -> (
+        Result<QueryResults<'a>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
         let start_planning = Timer::now();
         let (results, plan_node_with_stats, planning_duration) = match query {
             Query::Select {
@@ -288,7 +294,7 @@ impl QueryEvaluator {
     /// );
     /// let query = SparqlParser::new()
     ///     .parse_query("SELECT (<http://www.w3.org/ns/formats/N-Triples>(1) AS ?nt) WHERE {}")?;
-    /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
+    /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(&Dataset::new(), &query)? {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("nt"),
     ///         Some(&Literal::from("\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>").into())
@@ -350,7 +356,7 @@ impl QueryEvaluator {
     ///     .parse_query(
     ///         "SELECT (<http://example.com/concat>(?v) AS ?r) WHERE { VALUES ?v { 1 2 3 } }",
     ///     )?;
-    /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(Dataset::new(), &query)? {
+    /// if let QueryResults::Solutions(mut solutions) = evaluator.execute(&Dataset::new(), &query)? {
     ///     assert_eq!(
     ///         solutions.next().unwrap()?.get("r"),
     ///         Some(&Literal::new_simple_literal("1 2 3").into())
