@@ -226,8 +226,6 @@ jobs:
           version: ${{ steps.metadata.outputs.rust-version }}
       - run: rustup toolchain install nightly
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
-        env:
-          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
       - run: cargo test --workspace --exclude sparql-smith
 
   test_linux_latest:
@@ -359,8 +357,6 @@ jobs:
         with:
           python-version: "3.8"
       - run: rm Cargo.lock && cargo +nightly update -Z direct-minimal-versions
-        env:
-          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
       - run: uv sync --locked
         working-directory: ./python
       - run: uv run -m unittest

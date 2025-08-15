@@ -60,10 +60,8 @@ use std::path::Path;
 /// use oxigraph::model::*;
 /// use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 /// use oxigraph::store::Store;
-/// # use std::fs::remove_dir_all;
 ///
-/// # {
-/// let store = Store::open("example.db")?;
+/// let store = Store::new()?;
 ///
 /// // insertion
 /// let ex = NamedNode::new("http://example.com")?;
@@ -82,9 +80,6 @@ use std::path::Path;
 /// {
 ///     assert_eq!(solutions.next().unwrap()?.get("s"), Some(&ex.into()));
 /// };
-/// #
-/// # };
-/// # remove_dir_all("example.db")?;
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[derive(Clone)]

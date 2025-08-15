@@ -50,12 +50,15 @@ pub type EvaluationError = QueryEvaluationError;
 ///
 /// Usage example disabling the federated query support:
 /// ```
+/// use oxigraph::model::NamedNode;
 /// use oxigraph::sparql::SparqlEvaluator;
 /// use oxigraph::store::Store;
 ///
 /// SparqlEvaluator::new()
-///     .without_default_http_service_handler()
-///     .parse_query("SELECT * WHERE { SERVICE <https://query.wikidata.org/sparql> {} }")?
+///     .with_custom_function(NamedNode::new("http://example.com/identity")?, |args| {
+///         args.get(0).cloned()
+///     })
+///     .parse_query("SELECT (<http://example.com/identity>('foo') AS ?r) WHERE {}")?
 ///     .on_store(&Store::new()?)
 ///     .execute()?;
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())

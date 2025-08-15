@@ -1,3 +1,15 @@
+# [0.5.2-beta.3] - 2025-08-15
+
+### Changed
+- Rust: bump MSRV to 1.87.
+- RocksDB: bump to 10.5.1.
+- Turtle: use the longest possible prefix during serialization.
+- Improved error when opening an old RocksDB database in read-only
+- `spareval`: Add a lifetime to `QueryResults`
+- `spareval`: Allow `QueryableDataset` to be bounded by a lifetime. 
+- `spareval`: `QueryableDataset` is now implemented by `&Dataset` and not by `Dataset` (allows to avoid a bunch of copies).
+
+
 # [0.5.2-beta.2] - 2025-08-07
 
 ### Added
