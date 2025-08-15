@@ -1037,12 +1037,14 @@ impl fmt::Display for OptionalGraphPattern {
     }
 }
 
+#[cfg(feature = "sep-0006")]
 #[derive(Arbitrary)]
 struct LateralGraphPattern {
     // []   LateralGraphPattern   ::=   'LATERAL' GroupGraphPattern
     inner: GroupGraphPattern,
 }
 
+#[cfg(feature = "sep-0006")]
 impl fmt::Display for LateralGraphPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, " LATERAL {}", self.inner)
