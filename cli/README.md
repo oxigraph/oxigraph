@@ -16,7 +16,6 @@ Oxigraph is in heavy development, and SPARQL query evaluation has not been optim
 Oxigraph provides different installation methods for Oxigraph CLI:
 * [`cargo install`](#installation) (multiplatform)
 * [A Docker image](#using-a-docker-image)
-* [A Homebrew formula](#homebrew)
 * [A Pypi package](https://pypi.org/project/oxigraph): with [UV](https://docs.astral.sh/uv/) just run `uvx oxigraph`
 * [A conda-forge package](https://anaconda.org/conda-forge/oxigraph-server)
 * [Pre-built binaries](https://github.com/oxigraph/oxigraph/releases/latest)
@@ -167,7 +166,7 @@ services:
     ## To build from local source code:
     # build:
     #   context: .
-    #   dockerfile: server/Dockerfile
+    #   dockerfile: cli/Dockerfile
     volumes:
       - ./data:/data
 
@@ -214,21 +213,9 @@ cd oxigraph
 
 Then run this command to build the image locally:
 
-````sh
-docker build -t ghcr.io/oxigraph/oxigraph -f server/Dockerfile .
-````
-
-## Homebrew
-
-Oxigraph maintains a [Homebrew](https://brew.sh) formula in [a custom tap](https://github.com/oxigraph/homebrew-oxigraph).
-
-To install Oxigraph server using Homebrew do:
 ```sh
-brew tap oxigraph/oxigraph
-brew install oxigraph
+docker build -t ghcr.io/oxigraph/oxigraph -f cli/Dockerfile .
 ```
-It installs the `oxigraph` binary. [See the usage documentation to know how to use it](#usage).
-
 
 ## Systemd
 
