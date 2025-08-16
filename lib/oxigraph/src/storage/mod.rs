@@ -61,14 +61,12 @@ impl Storage {
         })
     }
 
-    pub fn snapshot(&self) -> StorageReader {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageKind::RocksDb(storage) => StorageReader {
-                kind: StorageReaderKind::RocksDb(storage.snapshot()),
-            },
-            StorageKind::Memory(storage) => StorageReader {
-                kind: StorageReaderKind::Memory(storage.snapshot()),
+    pub fn snapshot(&self) -> StorageReader<'static> {
+        StorageReader {
+            kind: match &self.kind {
+                #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+                StorageKind::RocksDb(storage) => StorageReaderKind::RocksDb(storage.snapshot()),
+                StorageKind::Memory(storage) => StorageReaderKind::Memory(storage.snapshot()),
             },
         }
     }
@@ -154,21 +152,21 @@ impl Storage {
 }
 
 #[must_use]
-pub struct StorageReader {
-    kind: StorageReaderKind,
+pub struct StorageReader<'a> {
+    kind: StorageReaderKind<'a>,
 }
 
-enum StorageReaderKind {
+enum StorageReaderKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    RocksDb(RocksDbStorageReader),
-    Memory(MemoryStorageReader),
+    RocksDb(RocksDbStorageReader<'a>),
+    Memory(MemoryStorageReader<'a>),
 }
 
 #[cfg_attr(
     not(all(not(target_family = "wasm"), feature = "rocksdb")),
     expect(clippy::unnecessary_wraps)
 )]
-impl StorageReader {
+impl<'a> StorageReader<'a> {
     pub fn len(&self) -> Result<usize, StorageError> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -199,7 +197,7 @@ impl StorageReader {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
-    ) -> DecodingQuadIterator {
+    ) -> DecodingQuadIterator<'a> {
         DecodingQuadIterator {
             kind: match &self.kind {
                 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -213,14 +211,16 @@ impl StorageReader {
         }
     }
 
-    pub fn named_graphs(&self) -> DecodingGraphIterator {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReaderKind::RocksDb(reader) => DecodingGraphIterator {
-                kind: DecodingGraphIteratorKind::RocksDb(reader.named_graphs()),
-            },
-            StorageReaderKind::Memory(reader) => DecodingGraphIterator {
-                kind: DecodingGraphIteratorKind::Memory(reader.named_graphs()),
+    pub fn named_graphs(&self) -> DecodingGraphIterator<'a> {
+        DecodingGraphIterator {
+            kind: match &self.kind {
+                #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+                StorageReaderKind::RocksDb(reader) => {
+                    DecodingGraphIteratorKind::RocksDb(reader.named_graphs())
+                }
+                StorageReaderKind::Memory(reader) => {
+                    DecodingGraphIteratorKind::Memory(reader.named_graphs())
+                }
             },
         }
     }
@@ -252,17 +252,17 @@ impl StorageReader {
 }
 
 #[must_use]
-pub struct DecodingQuadIterator {
-    kind: DecodingQuadIteratorKind,
+pub struct DecodingQuadIterator<'a> {
+    kind: DecodingQuadIteratorKind<'a>,
 }
 
-enum DecodingQuadIteratorKind {
+enum DecodingQuadIteratorKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    RocksDb(RocksDbChainedDecodingQuadIterator),
-    Memory(QuadIterator),
+    RocksDb(RocksDbChainedDecodingQuadIterator<'a>),
+    Memory(QuadIterator<'a>),
 }
 
-impl Iterator for DecodingQuadIterator {
+impl Iterator for DecodingQuadIterator<'_> {
     type Item = Result<EncodedQuad, StorageError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -275,17 +275,17 @@ impl Iterator for DecodingQuadIterator {
 }
 
 #[must_use]
-pub struct DecodingGraphIterator {
-    kind: DecodingGraphIteratorKind,
+pub struct DecodingGraphIterator<'a> {
+    kind: DecodingGraphIteratorKind<'a>,
 }
 
-enum DecodingGraphIteratorKind {
+enum DecodingGraphIteratorKind<'a> {
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-    RocksDb(RocksDbDecodingGraphIterator),
-    Memory(MemoryDecodingGraphIterator),
+    RocksDb(RocksDbDecodingGraphIterator<'a>),
+    Memory(MemoryDecodingGraphIterator<'a>),
 }
 
-impl Iterator for DecodingGraphIterator {
+impl Iterator for DecodingGraphIterator<'_> {
     type Item = Result<EncodedTerm, StorageError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -297,7 +297,7 @@ impl Iterator for DecodingGraphIterator {
     }
 }
 
-impl StrLookup for StorageReader {
+impl StrLookup for StorageReader<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -423,14 +423,16 @@ enum StorageReadableTransactionKind<'a> {
     expect(clippy::unnecessary_wraps)
 )]
 impl StorageReadableTransaction<'_> {
-    pub fn reader(&self) -> StorageReader {
-        match &self.kind {
-            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
-            StorageReadableTransactionKind::RocksDb(transaction) => StorageReader {
-                kind: StorageReaderKind::RocksDb(transaction.reader()),
-            },
-            StorageReadableTransactionKind::Memory(transaction) => StorageReader {
-                kind: StorageReaderKind::Memory(transaction.reader()),
+    pub fn reader(&self) -> StorageReader<'_> {
+        StorageReader {
+            kind: match &self.kind {
+                #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+                StorageReadableTransactionKind::RocksDb(transaction) => {
+                    StorageReaderKind::RocksDb(transaction.reader())
+                }
+                StorageReadableTransactionKind::Memory(transaction) => {
+                    StorageReaderKind::Memory(transaction.reader())
+                }
             },
         }
     }

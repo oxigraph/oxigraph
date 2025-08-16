@@ -350,7 +350,7 @@ impl Store {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
-    ) -> QuadIter {
+    ) -> QuadIter<'static> {
         let reader = self.storage.snapshot();
         QuadIter {
             iter: reader.quads_for_pattern(
@@ -382,7 +382,7 @@ impl Store {
     /// assert_eq!(vec![quad], results);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn iter(&self) -> QuadIter {
+    pub fn iter(&self) -> QuadIter<'static> {
         self.quads_for_pattern(None, None, None, None)
     }
 
@@ -469,9 +469,16 @@ impl Store {
     ///
     /// // Copy all triples about ex:a to triples about ex:b
     /// let mut transaction = store.start_transaction()?;
-    /// for q in transaction.quads_for_pattern(Some(a.into()), None, None, None) {
-    ///     let q = q?;
-    ///     transaction.insert(QuadRef::new(b, &q.predicate, &q.object, &q.graph_name));
+    /// let triples = transaction
+    ///     .quads_for_pattern(Some(a.into()), None, None, None)
+    ///     .collect::<Result<Vec<_>, _>>()?;
+    /// for triple in triples {
+    ///     transaction.insert(QuadRef::new(
+    ///         b,
+    ///         &triple.predicate,
+    ///         &triple.object,
+    ///         &triple.graph_name,
+    ///     ));
     /// }
     /// transaction.commit()?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -780,7 +787,7 @@ impl Store {
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
-    pub fn named_graphs(&self) -> GraphNameIter {
+    pub fn named_graphs(&self) -> GraphNameIter<'static> {
         let reader = self.storage.snapshot();
         GraphNameIter {
             iter: reader.named_graphs(),
@@ -1016,7 +1023,7 @@ impl fmt::Display for Store {
 }
 
 impl IntoIterator for &Store {
-    type IntoIter = QuadIter;
+    type IntoIter = QuadIter<'static>;
     type Item = Result<Quad, StorageError>;
 
     #[inline]
@@ -1044,6 +1051,7 @@ impl<'a> Transaction<'a> {
     ///
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
+    /// let mut triples_to_add = Vec::new();
     /// if let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
     ///     .parse_query("SELECT ?s WHERE { ?s ?p ?o }")?
     ///     .on_transaction(&transaction)
@@ -1051,14 +1059,17 @@ impl<'a> Transaction<'a> {
     /// {
     ///     for solution in solutions {
     ///         if let Some(Term::NamedNode(s)) = solution?.get("s") {
-    ///             transaction.insert(QuadRef::new(
-    ///                 s,
+    ///             triples_to_add.push(Quad::new(
+    ///                 s.clone(),
     ///                 vocab::rdf::TYPE,
-    ///                 NamedNodeRef::new_unchecked("http://example.com"),
-    ///                 GraphNameRef::DefaultGraph,
+    ///                 NamedNode::new_unchecked("http://example.com"),
+    ///                 GraphName::DefaultGraph,
     ///             ));
     ///         }
     ///     }
+    /// }
+    /// for triple in triples_to_add {
+    ///     transaction.insert(&triple);
     /// }
     /// transaction.commit()?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -1068,7 +1079,7 @@ impl<'a> Transaction<'a> {
     pub fn query(
         &self,
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
-    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
+    ) -> Result<QueryResults<'_>, QueryEvaluationError> {
         self.query_opt(query, SparqlEvaluator::new())
     }
 
@@ -1082,6 +1093,7 @@ impl<'a> Transaction<'a> {
     ///
     /// let store = Store::new()?;
     /// let mut transaction = store.start_transaction()?;
+    /// let mut triples_to_add = Vec::new();
     /// if let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
     ///     .with_custom_function(
     ///         NamedNode::new_unchecked("http://www.w3.org/ns/formats/N-Triples"),
@@ -1096,14 +1108,17 @@ impl<'a> Transaction<'a> {
     ///     for solution in solutions {
     ///         let solution = solution?;
     ///         if let (Some(Term::NamedNode(s)), Some(nt)) = (solution.get("s"), solution.get("nt")) {
-    ///             transaction.insert(QuadRef::new(
-    ///                 s,
-    ///                 NamedNodeRef::new_unchecked("http://example.com/n-triples-representation"),
-    ///                 nt,
-    ///                 GraphNameRef::DefaultGraph,
+    ///             triples_to_add.push(Quad::new(
+    ///                 s.clone(),
+    ///                 NamedNode::new_unchecked("http://example.com/n-triples-representation"),
+    ///                 nt.clone(),
+    ///                 GraphName::DefaultGraph,
     ///             ));
     ///         }
     ///     }
+    /// }
+    /// for triple in triples_to_add {
+    ///     transaction.insert(&triple);
     /// }
     /// transaction.commit()?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -1114,7 +1129,7 @@ impl<'a> Transaction<'a> {
         &self,
         query: impl TryInto<Query, Error = impl Into<QueryEvaluationError>>,
         options: SparqlEvaluator,
-    ) -> Result<QueryResults<'static>, QueryEvaluationError> {
+    ) -> Result<QueryResults<'_>, QueryEvaluationError> {
         options
             .for_query(query.try_into().map_err(Into::into)?)
             .on_transaction(self)
@@ -1134,9 +1149,16 @@ impl<'a> Transaction<'a> {
     ///
     /// // Copy all triples about ex:a to triples about ex:b
     /// let mut transaction = store.start_transaction()?;
-    /// for q in transaction.quads_for_pattern(Some(a.into()), None, None, None) {
-    ///     let q = q?;
-    ///     transaction.insert(QuadRef::new(b, &q.predicate, &q.object, &q.graph_name));
+    /// let triples = transaction
+    ///     .quads_for_pattern(Some(a.into()), None, None, None)
+    ///     .collect::<Result<Vec<_>, _>>()?;
+    /// for triple in triples {
+    ///     transaction.insert(QuadRef::new(
+    ///         b,
+    ///         &triple.predicate,
+    ///         &triple.object,
+    ///         &triple.graph_name,
+    ///     ));
     /// }
     /// transaction.commit()?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -1147,7 +1169,7 @@ impl<'a> Transaction<'a> {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph_name: Option<GraphNameRef<'_>>,
-    ) -> QuadIter {
+    ) -> QuadIter<'_> {
         let reader = self.inner.reader();
         QuadIter {
             iter: reader.quads_for_pattern(
@@ -1161,7 +1183,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Returns all the quads contained in the store.
-    pub fn iter(&self) -> QuadIter {
+    pub fn iter(&self) -> QuadIter<'_> {
         self.quads_for_pattern(None, None, None, None)
     }
 
@@ -1395,7 +1417,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Returns all the named graphs in the store.
-    pub fn named_graphs(&self) -> GraphNameIter {
+    pub fn named_graphs(&self) -> GraphNameIter<'_> {
         let reader = self.inner.reader();
         GraphNameIter {
             iter: reader.named_graphs(),
@@ -1537,9 +1559,9 @@ impl<'a> Transaction<'a> {
     }
 }
 
-impl IntoIterator for &Transaction<'_> {
+impl<'a> IntoIterator for &'a Transaction<'_> {
     type Item = Result<Quad, StorageError>;
-    type IntoIter = QuadIter;
+    type IntoIter = QuadIter<'a>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -1549,12 +1571,12 @@ impl IntoIterator for &Transaction<'_> {
 
 /// An iterator returning the quads contained in a [`Store`].
 #[must_use]
-pub struct QuadIter {
-    iter: DecodingQuadIterator,
-    reader: StorageReader,
+pub struct QuadIter<'a> {
+    iter: DecodingQuadIterator<'a>,
+    reader: StorageReader<'a>,
 }
 
-impl Iterator for QuadIter {
+impl Iterator for QuadIter<'_> {
     type Item = Result<Quad, StorageError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1567,12 +1589,12 @@ impl Iterator for QuadIter {
 
 /// An iterator returning the graph names contained in a [`Store`].
 #[must_use]
-pub struct GraphNameIter {
-    iter: DecodingGraphIterator,
-    reader: StorageReader,
+pub struct GraphNameIter<'a> {
+    iter: DecodingGraphIterator<'a>,
+    reader: StorageReader<'a>,
 }
 
-impl Iterator for GraphNameIter {
+impl Iterator for GraphNameIter<'_> {
     type Item = Result<NamedOrBlankNode, StorageError>;
 
     fn next(&mut self) -> Option<Self::Item> {

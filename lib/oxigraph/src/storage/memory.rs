@@ -11,6 +11,7 @@ use oxrdf::Quad;
 use rustc_hash::FxHasher;
 use std::borrow::Borrow;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::marker::PhantomData;
 use std::mem::{take, transmute};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
@@ -60,10 +61,11 @@ impl MemoryStorage {
         }
     }
 
-    pub fn snapshot(&self) -> MemoryStorageReader {
+    pub fn snapshot(&self) -> MemoryStorageReader<'static> {
         MemoryStorageReader {
             storage: self.clone(),
             snapshot_id: self.version_counter.load(Ordering::Acquire),
+            _lifetime: PhantomData,
         }
     }
 
@@ -92,12 +94,13 @@ impl MemoryStorage {
 
 #[derive(Clone)]
 #[must_use]
-pub struct MemoryStorageReader {
+pub struct MemoryStorageReader<'a> {
     storage: MemoryStorage,
     snapshot_id: usize,
+    _lifetime: PhantomData<&'a ()>,
 }
 
-impl MemoryStorageReader {
+impl<'a> MemoryStorageReader<'a> {
     pub fn len(&self) -> usize {
         self.storage
             .content
@@ -130,7 +133,7 @@ impl MemoryStorageReader {
         predicate: Option<&EncodedTerm>,
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
-    ) -> QuadIterator {
+    ) -> QuadIterator<'a> {
         fn get_start_and_count(
             map: &DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
             term: Option<&EncodedTerm>,
@@ -200,12 +203,12 @@ impl MemoryStorageReader {
     }
 
     #[expect(unsafe_code)]
-    pub fn named_graphs(&self) -> MemoryDecodingGraphIterator {
+    pub fn named_graphs(&self) -> MemoryDecodingGraphIterator<'a> {
         MemoryDecodingGraphIterator {
             reader: self.clone(),
             // SAFETY: this is fine, the owning struct also owns the iterated data structure
             iter: unsafe {
-                transmute::<Iter<'_, _, _>, Iter<'static, _, _>>(self.storage.content.graphs.iter())
+                transmute::<Iter<'_, _, _>, Iter<'a, _, _>>(self.storage.content.graphs.iter())
             },
         }
     }
@@ -403,7 +406,7 @@ impl MemoryStorageReader {
     }
 }
 
-impl StrLookup for MemoryStorageReader {
+impl StrLookup for MemoryStorageReader<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(self.storage.id2str.view(key, |_, v| v.clone()))
     }
@@ -420,10 +423,11 @@ pub struct MemoryStorageTransaction<'a> {
 }
 
 impl MemoryStorageTransaction<'_> {
-    pub fn reader(&self) -> MemoryStorageReader {
+    pub fn reader(&self) -> MemoryStorageReader<'_> {
         MemoryStorageReader {
             storage: self.storage.clone(),
             snapshot_id: self.transaction_id,
+            _lifetime: PhantomData,
         }
     }
 
@@ -612,7 +616,8 @@ impl MemoryStorageTransaction<'_> {
     }
 
     pub fn clear_all_named_graphs(&mut self) {
-        for graph_name in self.reader().named_graphs() {
+        let graph_names = self.reader().named_graphs().collect::<Vec<_>>();
+        for graph_name in graph_names {
             self.clear_encoded_graph(&graph_name)
         }
     }
@@ -715,8 +720,8 @@ impl Drop for MemoryStorageTransaction<'_> {
 }
 
 #[must_use]
-pub struct QuadIterator {
-    reader: MemoryStorageReader,
+pub struct QuadIterator<'a> {
+    reader: MemoryStorageReader<'a>,
     current: Option<Weak<QuadListNode>>,
     kind: QuadIteratorKind,
     expect_subject: Option<EncodedTerm>,
@@ -734,7 +739,7 @@ enum QuadIteratorKind {
     GraphName,
 }
 
-impl Iterator for QuadIterator {
+impl Iterator for QuadIterator<'_> {
     type Item = EncodedQuad;
 
     fn next(&mut self) -> Option<EncodedQuad> {
@@ -776,12 +781,12 @@ impl Iterator for QuadIterator {
 }
 
 #[must_use]
-pub struct MemoryDecodingGraphIterator {
-    reader: MemoryStorageReader, // Needed to make sure the underlying map is not GCed
-    iter: Iter<'static, EncodedTerm, VersionRange>,
+pub struct MemoryDecodingGraphIterator<'a> {
+    reader: MemoryStorageReader<'a>, // Needed to make sure the underlying map is not GCed
+    iter: Iter<'a, EncodedTerm, VersionRange>,
 }
 
-impl Iterator for MemoryDecodingGraphIterator {
+impl Iterator for MemoryDecodingGraphIterator<'_> {
     type Item = EncodedTerm;
 
     fn next(&mut self) -> Option<EncodedTerm> {

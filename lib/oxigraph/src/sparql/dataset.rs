@@ -18,14 +18,14 @@ use std::iter::empty;
 #[cfg(feature = "rdf-12")]
 use std::sync::Arc;
 
-pub struct DatasetView {
-    reader: StorageReader,
+pub struct DatasetView<'a> {
+    reader: StorageReader<'a>,
     extra: RefCell<HashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
     dataset: EncodedDatasetSpec,
 }
 
-impl DatasetView {
-    pub fn new(reader: StorageReader, dataset: &QueryDataset) -> Self {
+impl<'a> DatasetView<'a> {
+    pub fn new(reader: StorageReader<'a>, dataset: &QueryDataset) -> Self {
         let dataset = EncodedDatasetSpec {
             default: dataset
                 .default_graph_graphs()
@@ -50,7 +50,7 @@ impl DatasetView {
     }
 }
 
-impl<'a> QueryableDataset<'a> for DatasetView {
+impl<'a> QueryableDataset<'a> for DatasetView<'a> {
     type InternalTerm = EncodedTerm;
     type Error = StorageError;
 
@@ -309,7 +309,7 @@ impl<'a> QueryableDataset<'a> for DatasetView {
     }
 }
 
-impl StrLookup for DatasetView {
+impl StrLookup for DatasetView<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         Ok(if let Some(value) = self.extra.borrow().get(key) {
             Some(value.clone())
