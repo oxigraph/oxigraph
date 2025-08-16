@@ -8,7 +8,7 @@ use crate::sparql::dataset::DatasetView;
 use crate::sparql::error::UpdateEvaluationError;
 #[cfg(feature = "http-client")]
 use crate::sparql::http::Client;
-use crate::storage::{StorageError, StorageReadableTransaction, StorageTransaction};
+use crate::storage::{Storage, StorageError, StorageReadableTransaction, StorageTransaction};
 use crate::store::{Store, Transaction};
 use oxiri::Iri;
 #[cfg(feature = "http-client")]
@@ -106,10 +106,10 @@ impl PreparedSparqlUpdate {
                 .start_readable_transaction()
                 .map(UpdateTransaction::OwnedReadable)
         } else {
-            store
-                .storage()
+            let storage = store.storage();
+            storage
                 .start_transaction()
-                .map(UpdateTransaction::Owned)
+                .map(|transaction| UpdateTransaction::Owned(transaction, storage))
         };
         BoundPreparedSparqlUpdate {
             evaluator: self.evaluator,
@@ -189,7 +189,7 @@ impl BoundPreparedSparqlUpdate<'_, '_> {
     pub fn execute(self) -> Result<(), UpdateEvaluationError> {
         match self.transaction? {
             UpdateTransaction::OwnedReadable(mut transaction) => {
-                SimpleUpdateEvaluator {
+                ReadableUpdateEvaluator {
                     transaction: &mut transaction,
                     base_iri: self.update.base_iri.clone(),
                     query_evaluator: self.evaluator,
@@ -200,7 +200,7 @@ impl BoundPreparedSparqlUpdate<'_, '_> {
                 transaction.commit()?;
                 Ok(())
             }
-            UpdateTransaction::BorrowedReadable(transaction) => SimpleUpdateEvaluator {
+            UpdateTransaction::BorrowedReadable(transaction) => ReadableUpdateEvaluator {
                 transaction,
                 base_iri: self.update.base_iri.clone(),
                 query_evaluator: self.evaluator,
@@ -208,8 +208,16 @@ impl BoundPreparedSparqlUpdate<'_, '_> {
                 client: Client::new(self.http_timeout, self.http_redirection_limit),
             }
             .eval_all(&self.update.operations, &self.using_datasets),
-            UpdateTransaction::Owned(mut transaction) => {
-                evaluate_update_without_read(&mut transaction, &self.update);
+            UpdateTransaction::Owned(mut transaction, storage) => {
+                WriteOnlyUpdateEvaluator {
+                    transaction: &mut transaction,
+                    storage_for_initial_read: Some(storage),
+                    base_iri: self.update.base_iri.clone(),
+                    query_evaluator: self.evaluator,
+                    #[cfg(feature = "http-client")]
+                    client: Client::new(self.http_timeout, self.http_redirection_limit),
+                }
+                .eval_all(&self.update.operations, &self.using_datasets)?;
                 transaction.commit()?;
                 Ok(())
             }
@@ -220,10 +228,10 @@ impl BoundPreparedSparqlUpdate<'_, '_> {
 enum UpdateTransaction<'a, 'b> {
     OwnedReadable(StorageReadableTransaction<'b>),
     BorrowedReadable(&'a mut StorageReadableTransaction<'b>),
-    Owned(StorageTransaction<'b>),
+    Owned(StorageTransaction<'b>, &'b Storage),
 }
 
-struct SimpleUpdateEvaluator<'a, 'b> {
+struct ReadableUpdateEvaluator<'a, 'b> {
     transaction: &'a mut StorageReadableTransaction<'b>,
     base_iri: Option<Iri<String>>,
     query_evaluator: QueryEvaluator,
@@ -231,7 +239,7 @@ struct SimpleUpdateEvaluator<'a, 'b> {
     client: Client,
 }
 
-impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
+impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
     fn eval_all(
         &mut self,
         updates: &[GraphUpdateOperation],
@@ -337,58 +345,14 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
         Ok(())
     }
 
-    #[cfg(feature = "http-client")]
     fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
-        let (content_type, body) = self
-            .client
-            .get(
-                from.as_str(),
-                "application/n-triples, text/turtle, application/rdf+xml",
-            )
-            .map_err(|e| UpdateEvaluationError::Service(Box::new(e)))?;
-        let format = RdfFormat::from_media_type(&content_type)
-            .ok_or_else(|| UpdateEvaluationError::UnsupportedContentType(content_type))?;
-        let to_graph_name = match to {
-            GraphName::NamedNode(graph_name) => graph_name.into(),
-            GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
-        };
-        let client = self.client.clone();
-        let parser = RdfParser::from_format(format)
-            .rename_blank_nodes()
-            .without_named_graphs()
-            .with_default_graph(to_graph_name)
-            .with_base_iri(from.as_str())
-            .map_err(|e| {
-                UpdateEvaluationError::Unexpected(format!("Invalid URL: {from}: {e}").into())
-            })?
-            .for_reader(body)
-            .with_document_loader(move |url| {
-                let (content_type, mut body) = client.get(
-                    url,
-                    "application/n-triples, text/turtle, application/rdf+xml, application/ld+json",
-                )?;
-                let mut content = Vec::new();
-                body.read_to_end(&mut content)?;
-                Ok(LoadedDocument {
-                    url: url.into(),
-                    content,
-                    format: RdfFormat::from_media_type(&content_type).ok_or_else(|| {
-                        UpdateEvaluationError::UnsupportedContentType(content_type)
-                    })?,
-                })
-            });
-        for q in parser {
-            self.transaction.insert(q?.as_ref());
-        }
-        Ok(())
-    }
-
-    #[cfg(not(feature = "http-client"))]
-    #[expect(clippy::unused_self)]
-    fn eval_load(&mut self, _: &NamedNode, _: &GraphName) -> Result<(), UpdateEvaluationError> {
-        Err(UpdateEvaluationError::Unexpected(
-            "HTTP client is not available. Enable the feature 'http-client'".into(),
-        ))
+        eval_load(
+            from,
+            to,
+            #[cfg(feature = "http-client")]
+            &self.client,
+            |q| self.transaction.insert(q.as_ref()),
+        )
     }
 
     fn eval_create(
@@ -472,7 +436,7 @@ impl<'a, 'b: 'a> SimpleUpdateEvaluator<'a, 'b> {
 }
 
 fn update_requires_read(update: &spargebra::Update) -> bool {
-    for op in &update.operations {
+    for (i, op) in update.operations.iter().enumerate() {
         match op {
             GraphUpdateOperation::InsertData { .. }
             | GraphUpdateOperation::DeleteData { .. }
@@ -485,62 +449,263 @@ fn update_requires_read(update: &spargebra::Update) -> bool {
                 graph: GraphTarget::DefaultGraph | GraphTarget::NamedGraphs | GraphTarget::AllGraphs,
                 ..
             } => (),
+            GraphUpdateOperation::DeleteInsert { .. } if i == 0 => (),
             _ => return true,
         }
     }
     false
 }
-fn evaluate_update_without_read(
-    transaction: &mut StorageTransaction<'_>,
-    update: &spargebra::Update,
-) {
-    // Must be sync with update_require_read
-    for op in &update.operations {
-        match op {
+
+struct WriteOnlyUpdateEvaluator<'a, 'b> {
+    transaction: &'a mut StorageTransaction<'b>,
+    storage_for_initial_read: Option<&'b Storage>,
+    base_iri: Option<Iri<String>>,
+    query_evaluator: QueryEvaluator,
+    #[cfg(feature = "http-client")]
+    client: Client,
+}
+
+impl WriteOnlyUpdateEvaluator<'_, '_> {
+    fn eval_all(
+        &mut self,
+        updates: &[GraphUpdateOperation],
+        using_datasets: &[Option<QueryDataset>],
+    ) -> Result<(), UpdateEvaluationError> {
+        for (update, using_dataset) in updates.iter().zip(using_datasets) {
+            self.eval(update, using_dataset)?;
+            self.storage_for_initial_read.take(); // We unset the initial reader because we have likely mutated the store state.
+        }
+        Ok(())
+    }
+
+    fn eval(
+        &mut self,
+        update: &GraphUpdateOperation,
+        using_dataset: &Option<QueryDataset>,
+    ) -> Result<(), UpdateEvaluationError> {
+        match update {
             GraphUpdateOperation::InsertData { data } => {
-                let mut bnodes = FxHashMap::default();
-                for quad in data {
-                    let quad = convert_quad(quad, &mut bnodes);
-                    transaction.insert(quad.as_ref())
-                }
+                self.eval_insert_data(data);
+                Ok(())
             }
             GraphUpdateOperation::DeleteData { data } => {
-                for quad in data {
-                    let quad = convert_ground_quad(quad);
-                    transaction.remove(quad.as_ref())
+                self.eval_delete_data(data);
+                Ok(())
+            }
+            GraphUpdateOperation::DeleteInsert {
+                delete,
+                insert,
+                pattern,
+                ..
+            } => self.eval_delete_insert(
+                delete,
+                insert,
+                using_dataset.as_ref().unwrap_or(&QueryDataset::new()),
+                pattern,
+            ),
+            GraphUpdateOperation::Load {
+                silent,
+                source,
+                destination,
+            } => {
+                if let Err(error) = self.eval_load(source, destination) {
+                    if *silent { Ok(()) } else { Err(error) }
+                } else {
+                    Ok(())
                 }
             }
-            GraphUpdateOperation::Create {
-                graph,
-                silent: true,
-            } => transaction.insert_named_graph(graph.into()),
-            GraphUpdateOperation::Clear {
-                graph: GraphTarget::DefaultGraph,
-                ..
-            }
-            | GraphUpdateOperation::Drop {
-                graph: GraphTarget::DefaultGraph,
-                ..
-            } => transaction.clear_default_graph(),
-            GraphUpdateOperation::Clear {
-                graph: GraphTarget::NamedGraphs,
-                ..
-            } => transaction.clear_all_named_graphs(),
-            GraphUpdateOperation::Clear {
-                graph: GraphTarget::AllGraphs,
-                ..
-            } => transaction.clear_all_graphs(),
-            GraphUpdateOperation::Drop {
-                graph: GraphTarget::NamedGraphs,
-                ..
-            } => transaction.remove_all_named_graphs(),
-            GraphUpdateOperation::Drop {
-                graph: GraphTarget::AllGraphs,
-                ..
-            } => transaction.clear(),
-            _ => unreachable!("Must be gated by update_require_read"),
+            GraphUpdateOperation::Clear { graph, silent } => self.eval_clear(graph, *silent),
+            GraphUpdateOperation::Create { graph, silent } => self.eval_create(graph, *silent),
+            GraphUpdateOperation::Drop { graph, silent } => self.eval_drop(graph, *silent),
         }
     }
+
+    fn eval_insert_data(&mut self, data: &[Quad]) {
+        let mut bnodes = FxHashMap::default();
+        for quad in data {
+            let quad = convert_quad(quad, &mut bnodes);
+            self.transaction.insert(quad.as_ref());
+        }
+    }
+
+    fn eval_delete_data(&mut self, data: &[GroundQuad]) {
+        for quad in data {
+            let quad = convert_ground_quad(quad);
+            self.transaction.remove(quad.as_ref());
+        }
+    }
+
+    fn eval_delete_insert(
+        &mut self,
+        delete: &[GroundQuadPattern],
+        insert: &[QuadPattern],
+        using: &QueryDataset,
+        algebra: &GraphPattern,
+    ) -> Result<(), UpdateEvaluationError> {
+        let Some(storage) = self.storage_for_initial_read.take() else {
+            return Err(UpdateEvaluationError::Unexpected(
+                "It is not possible to evaluate delete/insert operations on a write-only transaction after other update operations".into(),
+            ));
+        };
+        let QueryResults::Solutions(solutions) = self.query_evaluator.clone().execute(
+            DatasetView::new(storage.snapshot(), using),
+            &Query::Select {
+                dataset: None,
+                pattern: algebra.clone(),
+                base_iri: self.base_iri.clone(),
+            },
+        )?
+        else {
+            unreachable!("We provided a SELECT query, we must get back solutions")
+        };
+
+        let mut bnodes = FxHashMap::default();
+        for solution in solutions {
+            let solution = solution?;
+            for quad in delete {
+                if let Some(quad) = fill_ground_quad_pattern(quad, &solution) {
+                    self.transaction.remove(quad.as_ref());
+                }
+            }
+            for quad in insert {
+                if let Some(quad) = fill_quad_pattern(quad, &solution, &mut bnodes) {
+                    self.transaction.insert(quad.as_ref());
+                }
+            }
+            bnodes.clear();
+        }
+        Ok(())
+    }
+
+    fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
+        eval_load(
+            from,
+            to,
+            #[cfg(feature = "http-client")]
+            &self.client,
+            |q| self.transaction.insert(q.as_ref()),
+        )
+    }
+
+    fn eval_create(
+        &mut self,
+        graph_name: &NamedNode,
+        silent: bool,
+    ) -> Result<(), UpdateEvaluationError> {
+        if !silent {
+            return Err(UpdateEvaluationError::Unexpected(
+                "Not possible to create a named graph using a write-only transaction when SILENT option is not set".into(),
+            ));
+        }
+        self.transaction.insert_named_graph(graph_name.into());
+        Ok(())
+    }
+
+    fn eval_clear(
+        &mut self,
+        graph: &GraphTarget,
+        _silent: bool,
+    ) -> Result<(), UpdateEvaluationError> {
+        match graph {
+            GraphTarget::NamedNode(_) => Err(UpdateEvaluationError::Unexpected(
+                "Not possible to clear a named graph using a write-only transaction".into(),
+            )),
+            GraphTarget::DefaultGraph => {
+                self.transaction.clear_default_graph();
+                Ok(())
+            }
+            GraphTarget::NamedGraphs => {
+                self.transaction.clear_all_named_graphs();
+                Ok(())
+            }
+            GraphTarget::AllGraphs => {
+                self.transaction.clear_all_graphs();
+                Ok(())
+            }
+        }
+    }
+
+    fn eval_drop(
+        &mut self,
+        graph: &GraphTarget,
+        _silent: bool,
+    ) -> Result<(), UpdateEvaluationError> {
+        match graph {
+            GraphTarget::NamedNode(_) => Err(UpdateEvaluationError::Unexpected(
+                "Not possible to drop a named graph using a write-only transaction".into(),
+            )),
+            GraphTarget::DefaultGraph => {
+                self.transaction.clear_default_graph();
+                Ok(())
+            }
+            GraphTarget::NamedGraphs => {
+                self.transaction.remove_all_named_graphs();
+                Ok(())
+            }
+            GraphTarget::AllGraphs => {
+                self.transaction.clear();
+                Ok(())
+            }
+        }
+    }
+}
+
+#[cfg(feature = "http-client")]
+fn eval_load(
+    from: &NamedNode,
+    to: &GraphName,
+    client: &Client,
+    mut insert: impl FnMut(OxQuad),
+) -> Result<(), UpdateEvaluationError> {
+    let (content_type, body) = client
+        .get(
+            from.as_str(),
+            "application/n-triples, text/turtle, application/rdf+xml",
+        )
+        .map_err(|e| UpdateEvaluationError::Service(Box::new(e)))?;
+    let format = RdfFormat::from_media_type(&content_type)
+        .ok_or_else(|| UpdateEvaluationError::UnsupportedContentType(content_type))?;
+    let to_graph_name = match to {
+        GraphName::NamedNode(graph_name) => graph_name.into(),
+        GraphName::DefaultGraph => GraphNameRef::DefaultGraph,
+    };
+    let client = client.clone();
+    let parser = RdfParser::from_format(format)
+        .rename_blank_nodes()
+        .without_named_graphs()
+        .with_default_graph(to_graph_name)
+        .with_base_iri(from.as_str())
+        .map_err(|e| UpdateEvaluationError::Unexpected(format!("Invalid URL: {from}: {e}").into()))?
+        .for_reader(body)
+        .with_document_loader(move |url| {
+            let (content_type, mut body) = client.get(
+                url,
+                "application/n-triples, text/turtle, application/rdf+xml, application/ld+json",
+            )?;
+            let mut content = Vec::new();
+            body.read_to_end(&mut content)?;
+            Ok(LoadedDocument {
+                url: url.into(),
+                content,
+                format: RdfFormat::from_media_type(&content_type)
+                    .ok_or_else(|| UpdateEvaluationError::UnsupportedContentType(content_type))?,
+            })
+        });
+    for q in parser {
+        insert(q?);
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "http-client"))]
+fn eval_load(
+    _from: &NamedNode,
+    _to: &GraphName,
+    _insert: impl FnMut(OxQuad),
+) -> Result<(), UpdateEvaluationError> {
+    Err(UpdateEvaluationError::Unexpected(
+        "HTTP client is not available. Enable the feature 'http-client'".into(),
+    ))
 }
 
 fn convert_quad(quad: &Quad, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> OxQuad {
