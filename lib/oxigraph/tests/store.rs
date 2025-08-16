@@ -12,6 +12,10 @@ use std::env::temp_dir;
 use std::error::Error;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::fs::{File, create_dir_all, remove_dir_all};
+#[cfg(all(target_os = "linux", feature = "rocksdb"))]
+use std::fs::{read, read_dir, write};
+#[cfg(all(target_os = "linux", feature = "rocksdb"))]
+use std::io;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::io::Write;
 use std::iter::empty;
@@ -19,8 +23,6 @@ use std::iter::empty;
 use std::iter::once;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 use std::path::{Path, PathBuf};
-#[cfg(all(target_os = "linux", feature = "rocksdb"))]
-use std::process::Command;
 
 #[expect(clippy::non_ascii_literal)]
 const DATA: &str = r#"
@@ -418,6 +420,7 @@ fn test_backup_on_in_memory() -> Result<(), Box<dyn Error>> {
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
 fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
     // We run twice to check if data is properly saved and closed
+    let _reset = DirSaver::new("tests/rocksdb_bc_data")?;
     for _ in 0..2 {
         let store = Store::open("tests/rocksdb_bc_data")?;
         for q in quads(GraphNameRef::DefaultGraph) {
@@ -434,7 +437,6 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
             store.named_graphs().collect::<Result<Vec<_>, _>>()?
         );
     }
-    reset_dir("tests/rocksdb_bc_data")?;
     Ok(())
 }
 
@@ -442,6 +444,7 @@ fn test_backward_compatibility() -> Result<(), Box<dyn Error>> {
 #[cfg(all(target_os = "linux", feature = "rocksdb", feature = "rdf-12"))]
 fn test_rdf_star_backward_compatibility() -> Result<(), Box<dyn Error>> {
     // We run twice to check if data is properly saved and closed
+    let _reset = DirSaver::new("tests/rocksdb_bc_rdf_star_data")?;
     let s = NamedNodeRef::new_unchecked("http://example.com/s");
     let p = NamedNodeRef::new_unchecked("http://example.com/p");
     let o = NamedNodeRef::new_unchecked("http://example.com/o");
@@ -468,7 +471,6 @@ fn test_rdf_star_backward_compatibility() -> Result<(), Box<dyn Error>> {
             GraphNameRef::DefaultGraph
         ))?);
     }
-    reset_dir("tests/rocksdb_bc_data")?;
     Ok(())
 }
 
@@ -534,20 +536,36 @@ fn test_open_read_only_bad_dir() -> Result<(), Box<dyn Error>> {
 }
 
 #[cfg(all(target_os = "linux", feature = "rocksdb"))]
-fn reset_dir(dir: &str) -> Result<(), Box<dyn Error>> {
-    assert!(
-        Command::new("git")
-            .args(["clean", "-fX", dir])
-            .status()?
-            .success()
-    );
-    assert!(
-        Command::new("git")
-            .args(["checkout", "HEAD", "--", dir])
-            .status()?
-            .success()
-    );
-    Ok(())
+struct DirSaver {
+    path: PathBuf,
+    elements: Vec<(PathBuf, Vec<u8>)>,
+}
+
+#[cfg(all(target_os = "linux", feature = "rocksdb"))]
+impl DirSaver {
+    fn new(path: &str) -> io::Result<Self> {
+        Ok(Self {
+            path: path.into(),
+            elements: read_dir(path)?
+                .map(|item| {
+                    let path = item?.path();
+                    let content = read(&path)?;
+                    Ok((path, content))
+                })
+                .collect::<io::Result<Vec<_>>>()?,
+        })
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "rocksdb"))]
+impl Drop for DirSaver {
+    fn drop(&mut self) {
+        remove_dir_all(&self.path).unwrap();
+        create_dir_all(&self.path).unwrap();
+        for (path, content) in &self.elements {
+            write(path, content).unwrap();
+        }
+    }
 }
 
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
