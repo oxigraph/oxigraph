@@ -19,7 +19,7 @@ use std::error::Error;
 use std::ffi::CString;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::sync::{Arc, OnceLock};
 use std::thread::available_parallelism;
 use std::{fmt, io, ptr, slice};
 
@@ -413,7 +413,7 @@ impl Db {
     }
 
     #[must_use]
-    pub fn snapshot(&self) -> Reader {
+    pub fn snapshot(&self) -> Reader<'static> {
         unsafe {
             match &self.inner {
                 DbKind::ReadOnly(db) => {
@@ -429,11 +429,9 @@ impl Db {
                     assert!(!snapshot.is_null(), "rocksdb_create_snapshot returned null");
                     rocksdb_readoptions_set_snapshot(options, snapshot);
                     Reader {
-                        inner: InnerReader::ReadWrite(Arc::new(TransactionalSnapshot {
+                        inner: InnerReader::ReadWrite(Arc::new(SnapshotReader {
                             db: Arc::clone(db),
                             snapshot,
-                            owned_snapshot: true,
-                            batch: None,
                         })),
                         options,
                     }
@@ -456,7 +454,7 @@ impl Db {
         })
     }
 
-    pub fn start_readable_transaction(&self) -> Result<ReadableTransaction, StorageError> {
+    pub fn start_readable_transaction(&self) -> Result<ReadableTransaction<'_>, StorageError> {
         let DbKind::ReadWrite(db) = &self.inner else {
             return Err(StorageError::Other(
                 "Transaction are only possible on read-write instances".into(),
@@ -471,9 +469,8 @@ impl Db {
         };
         assert!(!batch.is_null(), "rocksdb_writebatch_create returned null");
         Ok(ReadableTransaction {
-            db: Arc::clone(db),
-            #[expect(clippy::arc_with_non_send_sync, clippy::mutex_atomic)]
-            batch: Arc::new(Mutex::new(batch)),
+            db,
+            batch,
             snapshot,
             read_options,
         })
@@ -673,39 +670,45 @@ pub struct ColumnFamily(*mut rocksdb_column_family_handle_t);
 unsafe impl Send for ColumnFamily {}
 unsafe impl Sync for ColumnFamily {}
 
-pub struct Reader {
-    inner: InnerReader,
+pub struct Reader<'a> {
+    inner: InnerReader<'a>,
     options: *mut rocksdb_readoptions_t,
 }
 
-unsafe impl Send for Reader {}
-unsafe impl Sync for Reader {}
+unsafe impl Send for Reader<'_> {}
+unsafe impl Sync for Reader<'_> {}
 
 #[derive(Clone)]
-enum InnerReader {
+enum InnerReader<'a> {
     ReadOnly(Arc<RoDbHandler>),
-    ReadWrite(Arc<TransactionalSnapshot>),
+    ReadWrite(Arc<SnapshotReader>),
+    Transaction(TransactionReader<'a>),
 }
 
-struct TransactionalSnapshot {
+struct SnapshotReader {
     db: Arc<RwDbHandler>,
     snapshot: *const rocksdb_snapshot_t,
-    owned_snapshot: bool,
-    batch: Option<Weak<Mutex<*mut rocksdb_writebatch_wi_t>>>,
 }
 
-unsafe impl Send for TransactionalSnapshot {}
-unsafe impl Sync for TransactionalSnapshot {}
+unsafe impl Send for SnapshotReader {}
+unsafe impl Sync for SnapshotReader {}
 
-impl Drop for TransactionalSnapshot {
+impl Drop for SnapshotReader {
     fn drop(&mut self) {
-        if self.owned_snapshot {
-            unsafe { rocksdb_release_snapshot(self.db.db, self.snapshot) }
-        }
+        unsafe { rocksdb_release_snapshot(self.db.db, self.snapshot) }
     }
 }
 
-impl Clone for Reader {
+#[derive(Clone)]
+struct TransactionReader<'a> {
+    db: &'a RwDbHandler,
+    batch: *mut rocksdb_writebatch_wi_t,
+}
+
+unsafe impl Send for TransactionReader<'_> {}
+unsafe impl Sync for TransactionReader<'_> {}
+
+impl Clone for Reader<'_> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -714,13 +717,13 @@ impl Clone for Reader {
     }
 }
 
-impl Drop for Reader {
+impl Drop for Reader<'_> {
     fn drop(&mut self) {
         unsafe { rocksdb_readoptions_destroy(self.options) }
     }
 }
 
-impl Reader {
+impl<'a> Reader<'a> {
     pub fn get(
         &self,
         column_family: &ColumnFamily,
@@ -738,29 +741,23 @@ impl Reader {
                     ))
                 }
                 InnerReader::ReadWrite(inner) => {
-                    if let Some(batch) = &inner.batch {
-                        let Some(batch) = batch.upgrade() else {
-                            return Err(StorageError::Other(
-                                "The transaction is already ended".into(),
-                            ));
-                        };
-                        ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
-                            *batch.lock().unwrap(),
-                            inner.db.db,
-                            self.options,
-                            column_family.0,
-                            key.as_ptr().cast(),
-                            key.len()
-                        ))
-                    } else {
-                        ffi_result!(rocksdb_get_pinned_cf(
-                            inner.db.db,
-                            self.options,
-                            column_family.0,
-                            key.as_ptr().cast(),
-                            key.len()
-                        ))
-                    }
+                    ffi_result!(rocksdb_get_pinned_cf(
+                        inner.db.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len()
+                    ))
+                }
+                InnerReader::Transaction(inner) => {
+                    ffi_result!(oxrocksdb_writebatch_wi_get_pinned_from_batch_and_db_cf(
+                        inner.batch,
+                        inner.db.db,
+                        self.options,
+                        column_family.0,
+                        key.as_ptr().cast(),
+                        key.len()
+                    ))
                 }
             }?;
             Ok(if slice.is_null() {
@@ -780,15 +777,11 @@ impl Reader {
     }
 
     #[expect(clippy::iter_not_returning_iterator)]
-    pub fn iter(&self, column_family: &ColumnFamily) -> Result<Iter, StorageError> {
+    pub fn iter(&self, column_family: &ColumnFamily) -> Iter<'a> {
         self.scan_prefix(column_family, &[])
     }
 
-    pub fn scan_prefix(
-        &self,
-        column_family: &ColumnFamily,
-        prefix: &[u8],
-    ) -> Result<Iter, StorageError> {
+    pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter<'a> {
         // We generate the upper bound
         let upper_bound = {
             let mut bound = prefix.to_vec();
@@ -821,23 +814,15 @@ impl Reader {
                     rocksdb_create_iterator_cf(inner.db, options, column_family.0)
                 }
                 InnerReader::ReadWrite(inner) => {
-                    let iterator =
-                        rocksdb_create_iterator_cf(inner.db.db, options, column_family.0);
-                    if let Some(batch) = &inner.batch {
-                        let Some(batch) = batch.upgrade() else {
-                            return Err(StorageError::Other(
-                                "The transaction is already ended".into(),
-                            ));
-                        };
-                        oxrocksdb_writebatch_wi_create_iterator_with_base_readopts_cf(
-                            *batch.lock().unwrap(),
-                            iterator,
-                            options,
-                            column_family.0,
-                        )
-                    } else {
-                        iterator
-                    }
+                    rocksdb_create_iterator_cf(inner.db.db, options, column_family.0)
+                }
+                InnerReader::Transaction(inner) => {
+                    oxrocksdb_writebatch_wi_create_iterator_with_base_readopts_cf(
+                        inner.batch,
+                        rocksdb_create_iterator_cf(inner.db.db, options, column_family.0),
+                        options,
+                        column_family.0,
+                    )
                 }
             };
             assert!(!iter.is_null(), "rocksdb_create_iterator returned null");
@@ -847,19 +832,19 @@ impl Reader {
                 rocksdb_iter_seek(iter, prefix.as_ptr().cast(), prefix.len());
             }
             let is_currently_valid = rocksdb_iter_valid(iter) != 0;
-            Ok(Iter {
+            Iter {
                 inner: iter,
                 options,
                 _upper_bound: upper_bound,
                 _reader: self.clone(),
                 is_currently_valid,
-            })
+            }
         }
     }
 
     pub fn len(&self, column_family: &ColumnFamily) -> Result<usize, StorageError> {
         let mut count = 0;
-        let mut iter = self.iter(column_family)?;
+        let mut iter = self.iter(column_family);
         while iter.is_valid() {
             count += 1;
             iter.next();
@@ -869,7 +854,7 @@ impl Reader {
     }
 
     pub fn is_empty(&self, column_family: &ColumnFamily) -> Result<bool, StorageError> {
-        let iter = self.iter(column_family)?;
+        let iter = self.iter(column_family);
         iter.status()?; // We make sure there is no read problem
         Ok(!iter.is_valid())
     }
@@ -939,35 +924,33 @@ impl Transaction {
     }
 }
 
-pub struct ReadableTransaction {
-    db: Arc<RwDbHandler>,
-    batch: Arc<Mutex<*mut rocksdb_writebatch_wi_t>>,
+pub struct ReadableTransaction<'a> {
+    db: &'a RwDbHandler,
+    batch: *mut rocksdb_writebatch_wi_t,
     snapshot: *const rocksdb_snapshot_t,
     read_options: *mut rocksdb_readoptions_t,
 }
 
-unsafe impl Send for ReadableTransaction {}
-unsafe impl Sync for ReadableTransaction {}
+unsafe impl Send for ReadableTransaction<'_> {}
+unsafe impl Sync for ReadableTransaction<'_> {}
 
-impl Drop for ReadableTransaction {
+impl Drop for ReadableTransaction<'_> {
     fn drop(&mut self) {
         unsafe {
-            rocksdb_writebatch_wi_destroy(*self.batch.lock().unwrap());
+            rocksdb_writebatch_wi_destroy(self.batch);
             rocksdb_readoptions_destroy(self.read_options);
             rocksdb_release_snapshot(self.db.db, self.snapshot);
         }
     }
 }
 
-impl ReadableTransaction {
-    pub fn reader(&self) -> Reader {
+impl ReadableTransaction<'_> {
+    pub fn reader(&self) -> Reader<'_> {
         Reader {
-            inner: InnerReader::ReadWrite(Arc::new(TransactionalSnapshot {
-                db: Arc::clone(&self.db),
-                snapshot: self.snapshot,
-                owned_snapshot: false,
-                batch: Some(Arc::downgrade(&self.batch)),
-            })),
+            inner: InnerReader::Transaction(TransactionReader {
+                db: self.db,
+                batch: self.batch,
+            }),
             options: unsafe { oxrocksdb_readoptions_create_copy(self.read_options) },
         }
     }
@@ -975,7 +958,7 @@ impl ReadableTransaction {
     pub fn insert(&mut self, column_family: &ColumnFamily, key: &[u8], value: &[u8]) {
         unsafe {
             rocksdb_writebatch_wi_put_cf(
-                *self.batch.lock().unwrap(),
+                self.batch,
                 column_family.0,
                 key.as_ptr().cast(),
                 key.len(),
@@ -992,7 +975,7 @@ impl ReadableTransaction {
     pub fn remove(&mut self, column_family: &ColumnFamily, key: &[u8]) {
         unsafe {
             rocksdb_writebatch_wi_delete_cf(
-                *self.batch.lock().unwrap(),
+                self.batch,
                 column_family.0,
                 key.as_ptr().cast(),
                 key.len(),
@@ -1005,7 +988,7 @@ impl ReadableTransaction {
             ffi_result!(rocksdb_write_writebatch_wi(
                 self.db.db,
                 self.db.write_options,
-                *self.batch.lock().unwrap()
+                self.batch
             ))?;
         }
         Ok(())
@@ -1091,15 +1074,15 @@ impl From<Buffer> for Vec<u8> {
     }
 }
 
-pub struct Iter {
+pub struct Iter<'a> {
     inner: *mut rocksdb_iterator_t,
     is_currently_valid: bool,
     _upper_bound: Option<Vec<u8>>,
-    _reader: Reader, // needed to ensure that DB still lives while iter is used
+    _reader: Reader<'a>, // needed to ensure that DB still lives while iter is used
     options: *mut rocksdb_readoptions_t, /* needed to ensure that options still lives while iter is used */
 }
 
-impl Drop for Iter {
+impl Drop for Iter<'_> {
     fn drop(&mut self) {
         unsafe {
             rocksdb_iter_destroy(self.inner);
@@ -1108,11 +1091,11 @@ impl Drop for Iter {
     }
 }
 
-unsafe impl Send for Iter {}
+unsafe impl Send for Iter<'_> {}
 
-unsafe impl Sync for Iter {}
+unsafe impl Sync for Iter<'_> {}
 
-impl Iter {
+impl Iter<'_> {
     pub fn is_valid(&self) -> bool {
         self.is_currently_valid
     }

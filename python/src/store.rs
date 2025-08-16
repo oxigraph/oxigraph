@@ -811,7 +811,7 @@ impl PyStore {
 
 #[pyclass(unsendable, module = "pyoxigraph")]
 pub struct QuadIter {
-    inner: store::QuadIter,
+    inner: store::QuadIter<'static>,
 }
 
 #[pymethods]
@@ -830,7 +830,7 @@ impl QuadIter {
 
 #[pyclass(unsendable, module = "pyoxigraph")]
 pub struct GraphNameIter {
-    inner: store::GraphNameIter,
+    inner: store::GraphNameIter<'static>,
 }
 
 #[pymethods]

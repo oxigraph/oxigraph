@@ -538,7 +538,7 @@ impl PreparedSparqlQuery {
     }
 
     /// Bind the prepared query to the [`Store`] it should be evaluated on.
-    pub fn on_store(self, store: &Store) -> BoundPreparedSparqlQuery {
+    pub fn on_store(self, store: &Store) -> BoundPreparedSparqlQuery<'static> {
         BoundPreparedSparqlQuery {
             evaluator: self.evaluator,
             query: self.query,
@@ -549,7 +549,10 @@ impl PreparedSparqlQuery {
     }
 
     /// Bind the prepared query to the [`Transaction`] it should be evaluated on.
-    pub fn on_transaction(self, transaction: &Transaction<'_>) -> BoundPreparedSparqlQuery {
+    pub fn on_transaction<'a>(
+        self,
+        transaction: &'a Transaction<'_>,
+    ) -> BoundPreparedSparqlQuery<'a> {
         BoundPreparedSparqlQuery {
             evaluator: self.evaluator,
             query: self.query,
@@ -583,15 +586,15 @@ impl PreparedSparqlQuery {
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
 #[must_use]
-pub struct BoundPreparedSparqlQuery {
+pub struct BoundPreparedSparqlQuery<'a> {
     evaluator: QueryEvaluator,
     query: spargebra::Query,
     dataset: QueryDataset,
     substitutions: HashMap<Variable, Term>,
-    reader: StorageReader,
+    reader: StorageReader<'a>,
 }
 
-impl BoundPreparedSparqlQuery {
+impl<'a> BoundPreparedSparqlQuery<'a> {
     /// Substitute a variable with a given RDF term in the SPARQL query.
     ///
     /// Usage example:
@@ -624,7 +627,7 @@ impl BoundPreparedSparqlQuery {
     }
 
     /// Evaluate the query against the given store.
-    pub fn execute(self) -> Result<QueryResults<'static>, QueryEvaluationError> {
+    pub fn execute(self) -> Result<QueryResults<'a>, QueryEvaluationError> {
         let dataset = DatasetView::new(self.reader, &self.dataset);
         self.evaluator
             .execute_with_substituted_variables(dataset, &self.query, self.substitutions)
@@ -661,7 +664,7 @@ impl BoundPreparedSparqlQuery {
     pub fn explain(
         self,
     ) -> (
-        Result<QueryResults<'static>, QueryEvaluationError>,
+        Result<QueryResults<'a>, QueryEvaluationError>,
         QueryExplanation,
     ) {
         let dataset = DatasetView::new(self.reader, &self.dataset);

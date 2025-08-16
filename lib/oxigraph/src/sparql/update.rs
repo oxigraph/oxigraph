@@ -327,20 +327,28 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             unreachable!("We provided a SELECT query, we must get back solutions")
         };
 
+        let mut mutations = Vec::new();
         let mut bnodes = FxHashMap::default();
         for solution in solutions {
             let solution = solution?;
             for quad in delete {
                 if let Some(quad) = fill_ground_quad_pattern(quad, &solution) {
-                    self.transaction.remove(quad.as_ref());
+                    mutations.push(InsertOrDelete::Delete(quad));
                 }
             }
             for quad in insert {
                 if let Some(quad) = fill_quad_pattern(quad, &solution, &mut bnodes) {
-                    self.transaction.insert(quad.as_ref());
+                    mutations.push(InsertOrDelete::Insert(quad));
                 }
             }
             bnodes.clear();
+        }
+
+        for mutation in mutations {
+            match mutation {
+                InsertOrDelete::Delete(quad) => self.transaction.remove(quad.as_ref()),
+                InsertOrDelete::Insert(quad) => self.transaction.insert(quad.as_ref()),
+            }
         }
         Ok(())
     }
@@ -706,6 +714,11 @@ fn eval_load(
     Err(UpdateEvaluationError::Unexpected(
         "HTTP client is not available. Enable the feature 'http-client'".into(),
     ))
+}
+
+enum InsertOrDelete {
+    Insert(OxQuad),
+    Delete(OxQuad),
 }
 
 fn convert_quad(quad: &Quad, bnodes: &mut FxHashMap<BlankNode, BlankNode>) -> OxQuad {
