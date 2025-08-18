@@ -175,6 +175,7 @@ jobs:
   wheel_windows:
     strategy:
       matrix:
+        python-version: ["3.12", "3.13", "3.13t", "3.14", "3.14t"]
         include:
           - arch: x86_64
             runner: windows-latest
@@ -187,38 +188,53 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@v6
+      - name: "Setting up UV environment with python version ${{ matrix.python-version }}"
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
       - run: uv run maturin develop --release --features abi3
         working-directory: ./python
       - run: uv run python generate_stubs.py pyoxigraph pyoxigraph.pyi --ruff
         working-directory: ./python
-      - run: uv run maturin build --release --features abi3
+      - name: Build wheel for Windows cpython version-specific release
+        run: uv run maturin build --release --interpreter "python${{ matrix.python-version }}"
         working-directory: ./python
-      - run: uvx maturin build --release
+      - name: Build wheel for Windows ABI3 release
+        run: uv run maturin build --release --features abi3
+        if: matrix.python-version == "3.13"
+        working-directory: ./python
+      - name: Build wheel for oxigraph CLI tool
+        run: uvx maturin build --release
+        if: matrix.python-version == "3.13"
         working-directory: ./cli
-      - uses: actions/upload-artifact@v4
+      - name: Push pyoxigraph wheel/s to GH artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: pyoxigraph_windows_${{ matrix.arch }}
+          name: pyoxigraph_windows_py${{ matrix.python-version }}_${{ matrix.arch }}
           path: target/wheels/pyoxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+      - name: Push oxigraph cli wheel to GH artifacts
+        uses: actions/upload-artifact@v4
+        if: matrix.python-version == "3.13"
         with:
           name: oxigraph_pypi_windows_${{ matrix.arch }}
           path: target/wheels/oxigraph-*.whl
       - run: unzip target/wheels/oxigraph-*.whl
-      - uses: actions/upload-artifact@v4
+        if: matrix.python-version == "3.13"
+      - name: Push oxigraph Windows executable to GH artifacts
+        uses: actions/upload-artifact@v4
+        if: matrix.python-version == "3.13"
         with:
           name: oxigraph_${{ matrix.arch }}_windows
           path: oxigraph-*.data/scripts/oxigraph.exe
       - run: mv oxigraph-*.data/scripts/oxigraph.exe oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_windows_msvc.exe
-        if: github.event_name == 'release'
+        if: ${{ github.event_name == 'release' && matrix.python-version == "3.13" }}
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             oxigraph_${{ github.event.release.tag_name }}_${{ matrix.arch }}_windows_msvc.exe
-        if: github.event_name == 'release'
-      - run: uvx twine check target/wheels/*
+        if: ${{ github.event_name == 'release' && matrix.python-version == "3.13" }}
+      - name: Check built wheels
+        run: uvx twine check target/wheels/*
 
   publish_pyoxigraph_pypi:
     if: github.event_name == 'release'
