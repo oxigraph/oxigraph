@@ -196,6 +196,20 @@ jobs:
         working-directory: ./python
       - run: uv run maturin build --release --features abi3
         working-directory: ./python
+      - run: |
+          $versions = "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.13t", "pypy-3.9", "pypy-3.10", "pypy-3.11"
+          foreach ($version in $versions) {
+            uvx --python $version maturin build --release
+          }
+        working-directory: ./python
+        if: matrix.arch == 'x86_64' && github.event_name == 'release'
+      - run: |
+          $versions = "3.12", "3.13"
+          foreach ($version in $versions) {
+            uvx --python $version maturin build --release
+          }
+        working-directory: ./python
+        if: matrix.arch == 'aarch64' && github.event_name == 'release'
       - run: uvx maturin build --release
         working-directory: ./cli
       - uses: actions/upload-artifact@v4
