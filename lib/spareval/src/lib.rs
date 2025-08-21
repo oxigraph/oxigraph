@@ -396,6 +396,7 @@ impl QueryEvaluator {
     }
 }
 
+
 pub(crate) type CustomFunctionRegistry =
     HashMap<NamedNode, Arc<dyn (Fn(&[Term]) -> Option<Term>) + Send + Sync>>;
 pub(crate) type CustomAggregateFunctionRegistry = HashMap<
