@@ -414,15 +414,12 @@ impl QueryEvaluator {
 
         let mut encoded_variables = Vec::new();
         let mut stat_children = Vec::new();
-        let eval = evaluator.expression_evaluator(
-            expression,
-            &mut encoded_variables,
-            &mut stat_children,
-        );
+        let eval =
+            evaluator.expression_evaluator(expression, &mut encoded_variables, &mut stat_children);
 
         // Build the input tuple with provided substitutions (ignore unknown variables)
         let mut tuple = eval::InternalTuple::with_capacity(encoded_variables.len());
-        for (var, term) in substitutions.into_iter() {
+        for (var, term) in substitutions {
             if let Some(pos) = encoded_variables.iter().position(|v| v == var) {
                 let internal = (&dataset).internalize_term(term.clone()).ok()?;
                 tuple.set(pos, internal);
@@ -440,8 +437,7 @@ impl QueryEvaluator {
         expression: &sparopt::algebra::Expression,
         substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> Option<Term> {
-        self
-            .eval_expression_term_with_substitutions(expression, substitutions)
+        self.eval_expression_term_with_substitutions(expression, substitutions)
             .map(Into::into)
     }
 
@@ -454,8 +450,7 @@ impl QueryEvaluator {
         expression: &sparopt::algebra::Expression,
         substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
     ) -> Option<bool> {
-        self
-            .eval_expression_term_with_substitutions(expression, substitutions)?
+        self.eval_expression_term_with_substitutions(expression, substitutions)?
             .effective_boolean_value()
     }
 }
@@ -521,8 +516,8 @@ impl fmt::Debug for QueryExplanation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxrdf::{Literal, Term};
     use oxrdf::vocab::xsd;
+    use oxrdf::{Literal, Term};
     use sparopt::algebra::{Expression, GraphPattern};
 
     #[test]
@@ -587,17 +582,12 @@ mod tests {
         let empty_str = Expression::from(Literal::from(""));
         let non_empty_str = Expression::from(Literal::from("a"));
         assert_eq!(
-            evaluator.evaluate_effective_boolean_value_expression(
-                &empty_str,
-                std::iter::empty()
-            ),
+            evaluator.evaluate_effective_boolean_value_expression(&empty_str, std::iter::empty()),
             Some(false)
         );
         assert_eq!(
-            evaluator.evaluate_effective_boolean_value_expression(
-                &non_empty_str,
-                std::iter::empty()
-            ),
+            evaluator
+                .evaluate_effective_boolean_value_expression(&non_empty_str, std::iter::empty()),
             Some(true)
         );
     }
@@ -609,20 +599,15 @@ mod tests {
         // EXISTS {} (empty) -> false
         let exists_empty = Expression::exists(GraphPattern::empty());
         assert_eq!(
-            evaluator.evaluate_effective_boolean_value_expression(
-                &exists_empty,
-                std::iter::empty()
-            ),
+            evaluator
+                .evaluate_effective_boolean_value_expression(&exists_empty, std::iter::empty()),
             Some(false)
         );
 
         // EXISTS { VALUES () {} } (empty singleton) -> true
         let exists_unit = Expression::exists(GraphPattern::empty_singleton());
         assert_eq!(
-            evaluator.evaluate_effective_boolean_value_expression(
-                &exists_unit,
-                std::iter::empty()
-            ),
+            evaluator.evaluate_effective_boolean_value_expression(&exists_unit, std::iter::empty()),
             Some(true)
         );
     }
@@ -632,7 +617,7 @@ mod tests {
         let evaluator = QueryEvaluator::new();
 
         // NamedNode has no EBV
-    let iri = NamedNode::new("http://example.com/").unwrap();
+        let iri = NamedNode::new("http://example.com/").unwrap();
         let nn = Expression::from(iri.clone());
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&nn, std::iter::empty()),
@@ -668,7 +653,7 @@ mod tests {
         let evaluator = QueryEvaluator::new();
 
         // OR(error, false) => error (None)
-    let errorish = Expression::from(NamedNode::new("http://e/iri").unwrap());
+        let errorish = Expression::from(NamedNode::new("http://e/iri").unwrap());
         let or_expr = Expression::or_all([errorish, Expression::from(Literal::from(false))]);
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&or_expr, std::iter::empty()),
@@ -676,7 +661,7 @@ mod tests {
         );
 
         // AND(false, error) => false
-    let errorish = Expression::from(NamedNode::new("http://e/iri2").unwrap());
+        let errorish = Expression::from(NamedNode::new("http://e/iri2").unwrap());
         let and_expr = Expression::and_all([Expression::from(Literal::from(false)), errorish]);
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&and_expr, std::iter::empty()),
@@ -684,7 +669,7 @@ mod tests {
         );
 
         // AND(true, error) => error (None)
-    let errorish = Expression::from(NamedNode::new("http://e/iri3").unwrap());
+        let errorish = Expression::from(NamedNode::new("http://e/iri3").unwrap());
         let and_expr = Expression::and_all([Expression::from(Literal::from(true)), errorish]);
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&and_expr, std::iter::empty()),
