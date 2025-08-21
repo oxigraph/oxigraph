@@ -517,3 +517,112 @@ impl fmt::Debug for QueryExplanation {
         obj.finish_non_exhaustive()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxrdf::{Literal, Term};
+    use sparopt::algebra::{Expression, GraphPattern};
+
+    #[test]
+    fn evaluate_expression_literal_and_arithmetic() {
+        let evaluator = QueryEvaluator::new();
+
+        // Simple literal
+        let expr = Expression::from(Literal::from(3i32));
+        let term = evaluator.evaluate_expression(&expr, std::iter::empty());
+        assert_eq!(term, Some(Term::from(Literal::from(3i32))));
+
+        // 1 + 2 = 3
+        let add = Expression::Add(
+            Box::new(Expression::from(Literal::from(1i32))),
+            Box::new(Expression::from(Literal::from(2i32))),
+        );
+        let term = evaluator.evaluate_expression(&add, std::iter::empty());
+        assert_eq!(term, Some(Term::from(Literal::from(3i32))));
+    }
+
+    #[test]
+    fn evaluate_expression_with_variable_substitution() {
+        let evaluator = QueryEvaluator::new();
+        let x = Variable::new("x").unwrap();
+
+        // ?x + 2 with ?x = 1 => 3
+        let expr = Expression::Add(
+            Box::new(Expression::from(x.clone())),
+            Box::new(Expression::from(Literal::from(2i32))),
+        );
+        let one: Term = Literal::from(1i32).into();
+        let result = evaluator.evaluate_expression(&expr, [(&x, &one)]);
+        assert_eq!(result, Some(Term::from(Literal::from(3i32))));
+    }
+
+    #[test]
+    fn evaluate_expression_with_unbound_variable_returns_none() {
+        let evaluator = QueryEvaluator::new();
+        let x = Variable::new("x").unwrap();
+        let expr = Expression::from(x);
+        let result = evaluator.evaluate_expression(&expr, std::iter::empty());
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn evaluate_effective_boolean_value_expression_basic() {
+        let evaluator = QueryEvaluator::new();
+
+        // Numeric EBV: 0 -> false, non-zero -> true
+        let zero = Expression::from(Literal::from(0i32));
+        let five = Expression::from(Literal::from(5i32));
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&zero, std::iter::empty()),
+            Some(false)
+        );
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&five, std::iter::empty()),
+            Some(true)
+        );
+
+        // String EBV: empty -> false, non-empty -> true
+        let empty_str = Expression::from(Literal::from(""));
+        let non_empty_str = Expression::from(Literal::from("a"));
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(
+                &empty_str,
+                std::iter::empty()
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(
+                &non_empty_str,
+                std::iter::empty()
+            ),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn evaluate_effective_boolean_value_expression_exists() {
+        let evaluator = QueryEvaluator::new();
+
+        // EXISTS {} (empty) -> false
+        let exists_empty = Expression::exists(GraphPattern::empty());
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(
+                &exists_empty,
+                std::iter::empty()
+            ),
+            Some(false)
+        );
+
+        // EXISTS { VALUES () {} } (empty singleton) -> true
+        let exists_unit = Expression::exists(GraphPattern::empty_singleton());
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(
+                &exists_unit,
+                std::iter::empty()
+            ),
+            Some(true)
+        );
+    }
+}
