@@ -525,17 +525,17 @@ mod tests {
         let evaluator = QueryEvaluator::new();
 
         // Simple literal
-        let expr = Expression::from(Literal::from(3i32));
+        let expr = Expression::from(Literal::from(3_i32));
         let term = evaluator.evaluate_expression(&expr, std::iter::empty());
-        assert_eq!(term, Some(Term::from(Literal::from(3i32))));
+        assert_eq!(term, Some(Term::from(Literal::from(3_i32))));
 
         // 1 + 2 = 3
         let add = Expression::Add(
-            Box::new(Expression::from(Literal::from(1i32))),
-            Box::new(Expression::from(Literal::from(2i32))),
+            Box::new(Expression::from(Literal::from(1_i32))),
+            Box::new(Expression::from(Literal::from(2_i32))),
         );
         let term = evaluator.evaluate_expression(&add, std::iter::empty());
-        assert_eq!(term, Some(Term::from(Literal::from(3i32))));
+        assert_eq!(term, Some(Term::from(Literal::from(3_i32))));
     }
 
     #[test]
@@ -546,11 +546,11 @@ mod tests {
         // ?x + 2 with ?x = 1 => 3
         let expr = Expression::Add(
             Box::new(Expression::from(x.clone())),
-            Box::new(Expression::from(Literal::from(2i32))),
+            Box::new(Expression::from(Literal::from(2_i32))),
         );
-        let one: Term = Literal::from(1i32).into();
+        let one: Term = Literal::from(1_i32).into();
         let result = evaluator.evaluate_expression(&expr, [(&x, &one)]);
-        assert_eq!(result, Some(Term::from(Literal::from(3i32))));
+        assert_eq!(result, Some(Term::from(Literal::from(3_i32))));
     }
 
     #[test]
@@ -567,8 +567,8 @@ mod tests {
         let evaluator = QueryEvaluator::new();
 
         // Numeric EBV: 0 -> false, non-zero -> true
-        let zero = Expression::from(Literal::from(0i32));
-        let five = Expression::from(Literal::from(5i32));
+        let zero = Expression::from(Literal::from(0_i32));
+        let five = Expression::from(Literal::from(5_i32));
         assert_eq!(
             evaluator.evaluate_effective_boolean_value_expression(&zero, std::iter::empty()),
             Some(false)
@@ -681,8 +681,8 @@ mod tests {
     fn evaluate_expression_equality_returns_boolean_literal() {
         let evaluator = QueryEvaluator::new();
         let eq = Expression::equal(
-            Expression::from(Literal::from(1i32)),
-            Expression::from(Literal::from(1i32)),
+            Expression::from(Literal::from(1_i32)),
+            Expression::from(Literal::from(1_i32)),
         );
         let term = evaluator.evaluate_expression(&eq, std::iter::empty());
         assert_eq!(term, Some(Term::from(Literal::from(true))));
@@ -693,7 +693,7 @@ mod tests {
         let evaluator = QueryEvaluator::new();
         let x = Variable::new("x").unwrap();
         let expr = Expression::Add(
-            Box::new(Expression::from(Literal::from(2i32))),
+            Box::new(Expression::from(Literal::from(2_i32))),
             Box::new(Expression::from(x)),
         );
         let result = evaluator.evaluate_expression(&expr, std::iter::empty());
