@@ -522,6 +522,7 @@ impl fmt::Debug for QueryExplanation {
 mod tests {
     use super::*;
     use oxrdf::{Literal, Term};
+    use oxrdf::vocab::xsd;
     use sparopt::algebra::{Expression, GraphPattern};
 
     #[test]
@@ -624,5 +625,93 @@ mod tests {
             ),
             Some(true)
         );
+    }
+
+    #[test]
+    fn evaluate_effective_boolean_value_expression_non_boolean_term() {
+        let evaluator = QueryEvaluator::new();
+
+        // NamedNode has no EBV
+    let iri = NamedNode::new("http://example.com/").unwrap();
+        let nn = Expression::from(iri.clone());
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&nn, std::iter::empty()),
+            None
+        );
+
+        // dateTime literal has no EBV
+        let dt = Literal::new_typed_literal("2020-01-01T00:00:00Z", xsd::DATE_TIME);
+        let expr = Expression::from(dt);
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&expr, std::iter::empty()),
+            None
+        );
+    }
+
+    #[test]
+    fn evaluate_effective_boolean_value_expression_boolean_lexical_forms() {
+        let evaluator = QueryEvaluator::new();
+        let one = Expression::from(Literal::new_typed_literal("1", xsd::BOOLEAN));
+        let zero = Expression::from(Literal::new_typed_literal("0", xsd::BOOLEAN));
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&one, std::iter::empty()),
+            Some(true)
+        );
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&zero, std::iter::empty()),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn evaluate_effective_boolean_value_expression_logic_with_errors() {
+        let evaluator = QueryEvaluator::new();
+
+        // OR(error, false) => error (None)
+    let errorish = Expression::from(NamedNode::new("http://e/iri").unwrap());
+        let or_expr = Expression::or_all([errorish, Expression::from(Literal::from(false))]);
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&or_expr, std::iter::empty()),
+            None
+        );
+
+        // AND(false, error) => false
+    let errorish = Expression::from(NamedNode::new("http://e/iri2").unwrap());
+        let and_expr = Expression::and_all([Expression::from(Literal::from(false)), errorish]);
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&and_expr, std::iter::empty()),
+            Some(false)
+        );
+
+        // AND(true, error) => error (None)
+    let errorish = Expression::from(NamedNode::new("http://e/iri3").unwrap());
+        let and_expr = Expression::and_all([Expression::from(Literal::from(true)), errorish]);
+        assert_eq!(
+            evaluator.evaluate_effective_boolean_value_expression(&and_expr, std::iter::empty()),
+            None
+        );
+    }
+
+    #[test]
+    fn evaluate_expression_equality_returns_boolean_literal() {
+        let evaluator = QueryEvaluator::new();
+        let eq = Expression::equal(
+            Expression::from(Literal::from(1i32)),
+            Expression::from(Literal::from(1i32)),
+        );
+        let term = evaluator.evaluate_expression(&eq, std::iter::empty());
+        assert_eq!(term, Some(Term::from(Literal::from(true))));
+    }
+
+    #[test]
+    fn evaluate_expression_arithmetic_with_unbound_variable_is_none() {
+        let evaluator = QueryEvaluator::new();
+        let x = Variable::new("x").unwrap();
+        let expr = Expression::Add(
+            Box::new(Expression::from(Literal::from(2i32))),
+            Box::new(Expression::from(x)),
+        );
+        let result = evaluator.evaluate_expression(&expr, std::iter::empty());
+        assert!(result.is_none());
     }
 }
