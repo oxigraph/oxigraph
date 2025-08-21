@@ -1872,7 +1872,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     }
 
     /// Evaluate an expression and return its effective boolean value
-    fn effective_boolean_value_expression_evaluator(
+    pub(crate) fn effective_boolean_value_expression_evaluator(
         &self,
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,
@@ -1894,7 +1894,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
     }
 
     /// Evaluate an expression and return an explicit ExpressionTerm
-    fn expression_evaluator(
+    pub(crate) fn expression_evaluator(
         &self,
         expression: &Expression,
         encoded_variables: &mut Vec<Variable>,

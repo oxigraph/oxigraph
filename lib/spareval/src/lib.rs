@@ -18,7 +18,7 @@ pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTrip
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
-use oxrdf::{NamedNode, Term, Variable};
+use oxrdf::{Dataset, NamedNode, Term, Variable};
 use oxsdatatypes::{DayTimeDuration, Float};
 use spargebra::Query;
 use sparopt::Optimizer;
@@ -393,6 +393,70 @@ impl QueryEvaluator {
     pub fn compute_statistics(mut self) -> Self {
         self.run_stats = true;
         self
+    }
+
+    // Internal helper: evaluates a SPARQL expression to an ExpressionTerm against an empty dataset
+    fn eval_expression_term_with_substitutions<'a>(
+        &self,
+        expression: &sparopt::algebra::Expression,
+        substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+    ) -> Option<ExpressionTerm> {
+        // Empty dataset to support EXISTS evaluation without accessing data
+        let dataset = Dataset::new();
+        let evaluator = SimpleEvaluator::new(
+            &dataset,
+            None,
+            Rc::new(self.service_handler.clone()),
+            Rc::new(self.custom_functions.clone()),
+            Rc::new(self.custom_aggregate_functions.clone()),
+            false,
+        );
+
+        let mut encoded_variables = Vec::new();
+        let mut stat_children = Vec::new();
+        let eval = evaluator.expression_evaluator(
+            expression,
+            &mut encoded_variables,
+            &mut stat_children,
+        );
+
+        // Build the input tuple with provided substitutions (ignore unknown variables)
+        let mut tuple = eval::InternalTuple::with_capacity(encoded_variables.len());
+        for (var, term) in substitutions.into_iter() {
+            if let Some(pos) = encoded_variables.iter().position(|v| v == var) {
+                let internal = (&dataset).internalize_term(term.clone()).ok()?;
+                tuple.set(pos, internal);
+            }
+        }
+
+        eval(&tuple)
+    }
+
+    /// Evaluates a SPARQL expression against an empty dataset with optional variable substitutions.
+    ///
+    /// Returns the computed term or `None` if an error occurs or the expression is invalid.
+    pub fn evaluate_expression<'a>(
+        &self,
+        expression: &sparopt::algebra::Expression,
+        substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+    ) -> Option<Term> {
+        self
+            .eval_expression_term_with_substitutions(expression, substitutions)
+            .map(Into::into)
+    }
+
+    /// Evaluates a SPARQL expression effective boolean value (EBV) against an empty dataset
+    /// with optional variable substitutions.
+    ///
+    /// Returns the EBV or `None` if an error occurs or EBV is undefined for the result type.
+    pub fn evaluate_effective_boolean_value_expression<'a>(
+        &self,
+        expression: &sparopt::algebra::Expression,
+        substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+    ) -> Option<bool> {
+        self
+            .eval_expression_term_with_substitutions(expression, substitutions)?
+            .effective_boolean_value()
     }
 }
 
