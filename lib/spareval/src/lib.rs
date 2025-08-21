@@ -399,7 +399,7 @@ impl QueryEvaluator {
     fn eval_expression_term_with_substitutions<'a>(
         &self,
         expression: &sparopt::algebra::Expression,
-        substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        substitutions: impl IntoIterator<Item = (&'a Variable, Term)>,
     ) -> Option<ExpressionTerm> {
         // Empty dataset to support EXISTS evaluation without accessing data
         let dataset = Dataset::new();
@@ -421,7 +421,7 @@ impl QueryEvaluator {
         let mut tuple = eval::InternalTuple::with_capacity(encoded_variables.len());
         for (var, term) in substitutions {
             if let Some(pos) = encoded_variables.iter().position(|v| v == var) {
-                let internal = (&dataset).internalize_term(term.clone()).ok()?;
+                let internal = (&dataset).internalize_term(term).ok()?;
                 tuple.set(pos, internal);
             }
         }
@@ -435,7 +435,7 @@ impl QueryEvaluator {
     pub fn evaluate_expression<'a>(
         &self,
         expression: &sparopt::algebra::Expression,
-        substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        substitutions: impl IntoIterator<Item = (&'a Variable, Term)>,
     ) -> Option<Term> {
         self.eval_expression_term_with_substitutions(expression, substitutions)
             .map(Into::into)
@@ -448,7 +448,7 @@ impl QueryEvaluator {
     pub fn evaluate_effective_boolean_value_expression<'a>(
         &self,
         expression: &sparopt::algebra::Expression,
-        substitutions: impl IntoIterator<Item = (&'a Variable, &'a Term)>,
+        substitutions: impl IntoIterator<Item = (&'a Variable, Term)>,
     ) -> Option<bool> {
         self.eval_expression_term_with_substitutions(expression, substitutions)?
             .effective_boolean_value()
@@ -549,7 +549,7 @@ mod tests {
             Box::new(Expression::from(Literal::from(2_i32))),
         );
         let one: Term = Literal::from(1_i32).into();
-        let result = evaluator.evaluate_expression(&expr, [(&x, &one)]);
+        let result = evaluator.evaluate_expression(&expr, [(&x, one)]);
         assert_eq!(result, Some(Term::from(Literal::from(3_i32))));
     }
 
