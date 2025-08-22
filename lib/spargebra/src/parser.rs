@@ -115,8 +115,7 @@ impl SparqlParser {
             self.prefixes,
             self.custom_aggregate_functions,
         );
-        parser::QueryUnit(query, &mut state)
-            .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))
+        Ok(parser::QueryUnit(query, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?)
     }
 
     /// Parse the given update string using the already set options.
@@ -135,8 +134,9 @@ impl SparqlParser {
             self.prefixes,
             self.custom_aggregate_functions,
         );
-        let operations = parser::UpdateInit(update, &mut state)
-            .map_err(|e| SparqlSyntaxError(ParseErrorKind::Syntax(e)))?;
+        let operations =
+            parser::UpdateInit(update, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?;
+        check_if_insert_data_are_sharing_blank_nodes(&operations)?;
         Ok(Update {
             operations,
             base_iri: state.base_iri,
@@ -147,20 +147,25 @@ impl SparqlParser {
 /// Error returned during SPARQL parsing.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct SparqlSyntaxError(#[from] ParseErrorKind);
+pub struct SparqlSyntaxError {
+    #[from]
+    kind: SparqlSyntaxErrorKind,
+}
 
 impl SparqlSyntaxError {
     pub(crate) fn from_bad_base_iri(e: IriParseError) -> Self {
-        Self(ParseErrorKind::InvalidBaseIri(e))
+        SparqlSyntaxErrorKind::InvalidBaseIri(e).into()
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-enum ParseErrorKind {
+enum SparqlSyntaxErrorKind {
     #[error("Invalid SPARQL base IRI provided: {0}")]
     InvalidBaseIri(#[from] IriParseError),
     #[error(transparent)]
     Syntax(#[from] peg::error::ParseError<LineCol>),
+    #[error("The blank node {0} cannot be shared by multiple blocks")]
+    SharedBlankNode(BlankNode),
 }
 
 struct ReifiedTerm {
@@ -762,6 +767,56 @@ fn copy_graph(from: impl Into<GraphName>, to: impl Into<GraphNamePattern>) -> Gr
             GraphName::DefaultGraph => bgp,
         }),
     }
+}
+
+fn check_if_insert_data_are_sharing_blank_nodes(
+    update: &[GraphUpdateOperation],
+) -> Result<(), SparqlSyntaxError> {
+    #[cfg(feature = "sparql-12")]
+    fn add_triple_blank_nodes<'a>(triple: &'a Triple, bnodes: &mut HashSet<&'a BlankNode>) {
+        if let NamedOrBlankNode::BlankNode(bnode) = &triple.subject {
+            bnodes.insert(bnode);
+        }
+        if let Term::BlankNode(bnode) = &triple.object {
+            bnodes.insert(bnode);
+        } else if let Term::Triple(triple) = &triple.object {
+            add_triple_blank_nodes(triple, bnodes);
+        }
+    }
+
+    if update
+        .iter()
+        .filter(|op| matches!(op, GraphUpdateOperation::InsertData { .. }))
+        .count()
+        < 2
+    {
+        // Fast path, no need to validate
+        return Ok(());
+    }
+
+    let mut existing_blank_nodes = HashSet::new();
+    for operation in update {
+        if let GraphUpdateOperation::InsertData { data } = operation {
+            let mut new_blank_nodes = HashSet::new();
+            for quad in data {
+                if let NamedOrBlankNode::BlankNode(bnode) = &quad.subject {
+                    new_blank_nodes.insert(bnode);
+                }
+                if let Term::BlankNode(bnode) = &quad.object {
+                    new_blank_nodes.insert(bnode);
+                }
+                #[cfg(feature = "sparql-12")]
+                if let Term::Triple(triple) = &quad.object {
+                    add_triple_blank_nodes(triple, &mut new_blank_nodes);
+                }
+            }
+            if let Some(error) = existing_blank_nodes.intersection(&new_blank_nodes).next() {
+                return Err(SparqlSyntaxErrorKind::SharedBlankNode((**error).clone()).into());
+            }
+            existing_blank_nodes.extend(new_blank_nodes);
+        }
+    }
+    Ok(())
 }
 
 enum Either<L, R> {
