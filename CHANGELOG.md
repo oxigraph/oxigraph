@@ -1,3 +1,15 @@
+# [0.5.2-beta.4] - 2025-08-23
+
+### Added
+- `spareval`: expose `QueryEvaluator::evaluate_expression` to evaluate expressions
+
+### Changed
+- Oxigraph: `Transaction` has now stronger lifetime bounds to ensure operations on a transactions are not running longer than the transaction itself. 
+  It also affects types like `QuadIter` or `GraphNameIter` that now carry a lifetime.
+- SPARQL: raise an error when blank nodes are shared between different INSERT DATA statements (follows SPARQL spec).
+- SPARQL: Makes single DELETE/INSERT and LOAD statements slightly faster by not indexing the changes.
+
+
 # [0.5.2-beta.3] - 2025-08-15
 
 ### Changed
@@ -7,7 +19,7 @@
 - Improved error when opening an old RocksDB database in read-only
 - `spareval`: Add a lifetime to `QueryResults`
 - `spareval`: Allow `QueryableDataset` to be bounded by a lifetime. 
-- `spareval`: `QueryableDataset` is now implemented by `&Dataset` and not by `Dataset` (allows to avoid a bunch of copies).
+- `spareval`: `QueryableDataset` is now implemented by `&Dataset` and not by `Dataset` (allows avoiding a bunch of copies).
 
 
 # [0.5.2-beta.2] - 2025-08-07
