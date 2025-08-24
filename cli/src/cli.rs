@@ -29,6 +29,13 @@ pub enum Command {
         /// This is equivalent as setting the union-default-graph option in all SPARQL queries
         #[arg(long)]
         union_default_graph: bool,
+        /// Timeout for request processing in seconds
+        ///
+        /// Currently only used for SPARQL queries
+        ///
+        /// Might be used to set up things like HTTP query timeout
+        #[arg(long)]
+        timeout_s: Option<u64>,
     },
     /// Start Oxigraph HTTP server in read-only mode
     ///
@@ -49,6 +56,13 @@ pub enum Command {
         /// This is equivalent as setting the union-default-graph option in all SPARQL queries
         #[arg(long)]
         union_default_graph: bool,
+        /// Timeout for request processing in seconds
+        ///
+        /// Currently only used for SPARQL queries
+        ///
+        /// Might be used to set up things like HTTP query timeout
+        #[arg(long)]
+        timeout_s: Option<u64>,
     },
     /// Create a database backup into a target directory
     ///
