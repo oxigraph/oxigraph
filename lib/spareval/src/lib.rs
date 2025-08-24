@@ -13,6 +13,7 @@ mod service;
 pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
 pub use crate::error::QueryEvaluationError;
+pub use crate::eval::CancellationToken;
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
@@ -63,6 +64,7 @@ pub struct QueryEvaluator {
     custom_aggregate_functions: CustomAggregateFunctionRegistry,
     without_optimizations: bool,
     run_stats: bool,
+    cancellation_token: Option<CancellationToken>,
 }
 
 impl QueryEvaluator {
@@ -155,6 +157,7 @@ impl QueryEvaluator {
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
                     Rc::new(self.custom_aggregate_functions.clone()),
+                    self.cancellation_token.clone().unwrap_or_default(),
                     self.run_stats,
                 )
                 .evaluate_select(&pattern, substitutions);
@@ -178,6 +181,7 @@ impl QueryEvaluator {
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
                     Rc::new(self.custom_aggregate_functions.clone()),
+                    self.cancellation_token.clone().unwrap_or_default(),
                     self.run_stats,
                 )
                 .evaluate_ask(&pattern, substitutions);
@@ -204,6 +208,7 @@ impl QueryEvaluator {
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
                     Rc::new(self.custom_aggregate_functions.clone()),
+                    self.cancellation_token.clone().unwrap_or_default(),
                     self.run_stats,
                 )
                 .evaluate_construct(&pattern, template, substitutions);
@@ -227,6 +232,7 @@ impl QueryEvaluator {
                     Rc::new(self.service_handler.clone()),
                     Rc::new(self.custom_functions.clone()),
                     Rc::new(self.custom_aggregate_functions.clone()),
+                    self.cancellation_token.clone().unwrap_or_default(),
                     self.run_stats,
                 )
                 .evaluate_describe(&pattern, substitutions);
@@ -395,6 +401,42 @@ impl QueryEvaluator {
         self
     }
 
+    /// Inject a cancellation token to the SPARQL evaluation.
+    ///
+    /// Might be used to abort a query cleanly.
+    ///
+    /// ```
+    /// use oxrdf::{Dataset, GraphName, NamedNode, Quad};
+    /// use spareval::{CancellationToken, QueryEvaluationError, QueryEvaluator, QueryResults};
+    /// use spargebra::SparqlParser;
+    ///
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let dataset = Dataset::from_iter([Quad::new(
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     ex.clone(),
+    ///     GraphName::DefaultGraph,
+    /// )]);
+    /// let query = SparqlParser::new().parse_query("SELECT * WHERE { ?s ?p ?o }")?;
+    /// let cancellation_token = CancellationToken::new();
+    /// let results = QueryEvaluator::new()
+    ///     .with_cancellation_token(cancellation_token.clone())
+    ///     .execute(&dataset, &query);
+    /// if let QueryResults::Solutions(mut solutions) = results? {
+    ///     cancellation_token.cancel(); // We cancel
+    ///     assert!(matches!(
+    ///         solutions.next().unwrap().unwrap_err(), // It's cancelled
+    ///         QueryEvaluationError::Cancelled
+    ///     ));
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    #[must_use]
+    pub fn with_cancellation_token(mut self, cancellation_token: CancellationToken) -> Self {
+        self.cancellation_token = Some(cancellation_token);
+        self
+    }
+
     // Internal helper: evaluates a SPARQL expression to an ExpressionTerm against an empty dataset
     fn eval_expression_term_with_substitutions<'a>(
         &self,
@@ -409,6 +451,7 @@ impl QueryEvaluator {
             Rc::new(self.service_handler.clone()),
             Rc::new(self.custom_functions.clone()),
             Rc::new(self.custom_aggregate_functions.clone()),
+            self.cancellation_token.clone().unwrap_or_default(),
             false,
         );
 

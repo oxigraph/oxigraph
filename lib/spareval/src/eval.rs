@@ -39,7 +39,8 @@ use std::hash::{Hash, Hasher};
 use std::iter::{Peekable, empty, once};
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, atomic};
 use std::{fmt, io};
 // TODO: make expression raise error when relevant (storage I/O)
 
@@ -48,6 +49,7 @@ const REGEX_SIZE_LIMIT: usize = 1_000_000;
 /// Wrapper on top of [`QueryableDataset`]
 struct EvalDataset<'a, D: QueryableDataset<'a>> {
     dataset: Rc<D>,
+    cancellation_token: CancellationToken,
     _lifetime: PhantomData<&'a ()>,
 }
 
@@ -60,17 +62,23 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
         graph_name: Option<Option<&D::InternalTerm>>,
     ) -> impl Iterator<Item = Result<InternalQuad<D::InternalTerm>, QueryEvaluationError>> + use<'a, D>
     {
+        let cancellation_token = self.cancellation_token.clone();
         self.dataset
             .internal_quads_for_pattern(subject, predicate, object, graph_name)
-            .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
+            .map(move |r| {
+                cancellation_token.ensure_alive()?;
+                r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
+            })
     }
 
     fn internal_named_graphs(
         &self,
     ) -> impl Iterator<Item = Result<D::InternalTerm, QueryEvaluationError>> + use<'a, D> {
-        self.dataset
-            .internal_named_graphs()
-            .map(|r| r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e))))
+        let cancellation_token = self.cancellation_token.clone();
+        self.dataset.internal_named_graphs().map(move |r| {
+            cancellation_token.ensure_alive()?;
+            r.map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
+        })
     }
 
     fn contains_internal_graph_name(
@@ -83,6 +91,7 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
     }
 
     fn internalize_term(&self, term: Term) -> Result<D::InternalTerm, QueryEvaluationError> {
+        self.cancellation_token.ensure_alive()?;
         self.dataset
             .internalize_term(term)
             .map_err(|e| QueryEvaluationError::Dataset(Box::new(e)))
@@ -127,6 +136,7 @@ impl<'a, D: QueryableDataset<'a>> Clone for EvalDataset<'a, D> {
     fn clone(&self) -> Self {
         Self {
             dataset: Rc::clone(&self.dataset),
+            cancellation_token: self.cancellation_token.clone(),
             _lifetime: self._lifetime,
         }
     }
@@ -257,11 +267,13 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         service_handler: Rc<ServiceHandlerRegistry>,
         custom_functions: Rc<CustomFunctionRegistry>,
         custom_aggregate_functions: Rc<CustomAggregateFunctionRegistry>,
+        cancellation_token: CancellationToken,
         run_stats: bool,
     ) -> Self {
         Self {
             dataset: EvalDataset {
                 dataset: Rc::new(dataset),
+                cancellation_token,
                 _lifetime: PhantomData,
             },
             base_iri,
@@ -6857,6 +6869,41 @@ impl Timer {
 
     pub fn elapsed(&self) -> Option<DayTimeDuration> {
         DateTime::now().checked_sub(self.start)
+    }
+}
+
+/// A token that can be used to mark something as canceled.
+///
+/// To cancel run [`CancellationToken::cancel`] and to check if the token is canceled run [`CancellationToken::is_cancelled`].
+#[derive(Clone, Default)]
+pub struct CancellationToken {
+    value: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            value: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    #[inline]
+    pub fn cancel(&self) {
+        self.value.store(true, atomic::Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn is_cancelled(&self) -> bool {
+        self.value.load(atomic::Ordering::Relaxed)
+    }
+
+    fn ensure_alive(&self) -> Result<(), QueryEvaluationError> {
+        if self.is_cancelled() {
+            Err(QueryEvaluationError::Cancelled)
+        } else {
+            Ok(())
+        }
     }
 }
 

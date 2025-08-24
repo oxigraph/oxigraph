@@ -17,7 +17,7 @@ use oxigraph::model::{
     GraphName, GraphNameRef, IriParseError, NamedNode, NamedNodeRef, NamedOrBlankNode,
 };
 use oxigraph::sparql::results::{QueryResultsFormat, QueryResultsSerializer};
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::{CancellationToken, QueryResults, SparqlEvaluator};
 use oxigraph::store::{BulkLoader, LoaderError, Store};
 use oxiri::Iri;
 use rand::random;
@@ -40,7 +40,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::thread::available_parallelism;
 use std::time::{Duration, Instant};
-use std::{fmt, fs, str};
+use std::{fmt, fs, str, thread};
 use url::{Url, form_urlencoded};
 
 mod cli;
@@ -62,6 +62,7 @@ pub fn main() -> anyhow::Result<()> {
             bind,
             cors,
             union_default_graph,
+            timeout_s,
         } => serve(
             if let Some(location) = location {
                 Store::open(location)
@@ -72,18 +73,21 @@ pub fn main() -> anyhow::Result<()> {
             false,
             cors,
             union_default_graph,
+            timeout_s,
         ),
         Command::ServeReadOnly {
             location,
             bind,
             cors,
             union_default_graph,
+            timeout_s,
         } => serve(
             Store::open_read_only(location)?,
             &bind,
             true,
             cors,
             union_default_graph,
+            timeout_s,
         ),
         Command::Backup {
             location,
@@ -703,19 +707,33 @@ fn serve(
     read_only: bool,
     cors: bool,
     union_default_graph: bool,
+    timeout_s: Option<u64>,
 ) -> anyhow::Result<()> {
+    let timeout = timeout_s.map(Duration::from_secs);
     let mut server = if cors {
         Server::new(cors_middleware(move |request| {
-            handle_request(request, store.clone(), read_only, union_default_graph)
-                .unwrap_or_else(|(status, message)| error(status, message))
+            handle_request(
+                request,
+                store.clone(),
+                read_only,
+                union_default_graph,
+                timeout,
+            )
+            .unwrap_or_else(|(status, message)| error(status, message))
         }))
     } else {
         Server::new(move |request| {
-            handle_request(request, store.clone(), read_only, union_default_graph)
-                .unwrap_or_else(|(status, message)| error(status, message))
+            handle_request(
+                request,
+                store.clone(),
+                read_only,
+                union_default_graph,
+                timeout,
+            )
+            .unwrap_or_else(|(status, message)| error(status, message))
         })
     }
-    .with_global_timeout(HTTP_TIMEOUT)
+    .with_global_timeout(timeout.unwrap_or(HTTP_TIMEOUT))
     .with_server_name(concat!("Oxigraph/", env!("CARGO_PKG_VERSION")))?
     .with_max_concurrent_connections(available_parallelism()?.get() * 128);
     for socket in bind.to_socket_addrs()? {
@@ -768,6 +786,7 @@ fn handle_request(
     store: Store,
     read_only: bool,
     union_default_graph: bool,
+    timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
     match (request.uri().path(), request.method().as_ref()) {
         ("/", "HEAD") => Ok(Response::builder()
@@ -819,6 +838,7 @@ fn handle_request(
                     None,
                     request,
                     union_default_graph,
+                    timeout,
                 )
             }
         }
@@ -833,6 +853,7 @@ fn handle_request(
                     Some(query),
                     request,
                     union_default_graph,
+                    timeout,
                 )
             } else if content_type == "application/x-www-form-urlencoded" {
                 let buffer = limited_body(request)?;
@@ -842,6 +863,7 @@ fn handle_request(
                     None,
                     request,
                     union_default_graph,
+                    timeout,
                 )
             } else {
                 Err(unsupported_media_type(&content_type))
@@ -1155,6 +1177,7 @@ fn configure_and_evaluate_sparql_query(
     mut query: Option<String>,
     request: &Request<Body>,
     default_use_default_graph_as_union: bool,
+    timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
     let mut default_graph_uris = Vec::new();
     let mut named_graph_uris = Vec::new();
@@ -1186,6 +1209,7 @@ fn configure_and_evaluate_sparql_query(
         default_graph_uris,
         named_graph_uris,
         request,
+        timeout,
     )
 }
 
@@ -1196,12 +1220,25 @@ fn evaluate_sparql_query(
     default_graph_uris: Vec<String>,
     named_graph_uris: Vec<String>,
     request: &Request<Body>,
+    timeout: Option<Duration>,
 ) -> Result<Response<Body>, HttpError> {
-    let mut prepared = default_sparql_evaluator()
+    let mut evaluator = default_sparql_evaluator()
         .with_base_iri(base_url(request))
-        .map_err(bad_request)?
-        .parse_query(query)
         .map_err(bad_request)?;
+
+    if let Some(timeout) = timeout {
+        let cancellation_token = CancellationToken::new();
+        evaluator = evaluator.with_cancellation_token(cancellation_token.clone());
+        thread::Builder::new()
+            .name("SPARQL evaluation timeout".into())
+            .spawn(move || {
+                thread::sleep(timeout);
+                cancellation_token.cancel();
+            })
+            .map_err(internal_server_error)?;
+    }
+
+    let mut prepared = evaluator.parse_query(query).map_err(bad_request)?;
 
     if use_default_graph_as_union {
         if !default_graph_uris.is_empty() || !named_graph_uris.is_empty() {
@@ -3030,6 +3067,7 @@ mod tests {
                 self.store.clone(),
                 false,
                 false,
+                None,
             )
             .unwrap_or_else(|(status, message)| error(status, message))
         }
@@ -3040,6 +3078,7 @@ mod tests {
                 self.store.clone(),
                 true,
                 false,
+                None,
             )
             .unwrap_or_else(|(status, message)| error(status, message))
         }

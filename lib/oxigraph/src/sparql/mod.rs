@@ -24,8 +24,9 @@ use oxrdf::IriParseError;
 pub use oxrdf::{Variable, VariableNameParseError};
 use spareval::QueryEvaluator;
 pub use spareval::{
-    AggregateFunctionAccumulator, DefaultServiceHandler, QueryEvaluationError, QueryExplanation,
-    QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter, ServiceHandler,
+    AggregateFunctionAccumulator, CancellationToken, DefaultServiceHandler, QueryEvaluationError,
+    QueryExplanation, QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter,
+    ServiceHandler,
 };
 use spargebra::SparqlParser;
 pub use spargebra::SparqlSyntaxError;
@@ -304,6 +305,44 @@ impl SparqlEvaluator {
     #[inline]
     pub fn without_optimizations(mut self) -> Self {
         self.inner = self.inner.without_optimizations();
+        self
+    }
+
+    /// Inject a cancellation token to the SPARQL evaluation.
+    ///
+    /// Might be used to abort a query cleanly.
+    ///
+    /// ```
+    /// use oxigraph::model::*;
+    /// use oxigraph::sparql::{
+    ///     CancellationToken, QueryEvaluationError, QueryResults, SparqlEvaluator,
+    /// };
+    /// use oxigraph::store::Store;
+    ///
+    /// let store = Store::new()?;
+    /// store.insert(QuadRef::new(
+    ///     NamedNodeRef::new("http://example.com/s")?,
+    ///     NamedNodeRef::new("http://example.com/p")?,
+    ///     NamedNodeRef::new("http://example.com/o")?,
+    ///     GraphNameRef::DefaultGraph,
+    /// ))?;
+    /// let cancellation_token = CancellationToken::new();
+    /// if let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+    ///     .with_cancellation_token(cancellation_token.clone())
+    ///     .parse_query("SELECT * WHERE { ?s ?p ?o }")?
+    ///     .on_store(&store)
+    ///     .execute()?
+    /// {
+    ///     cancellation_token.cancel(); // We cancel
+    ///     assert!(matches!(
+    ///         solutions.next().unwrap().unwrap_err(),
+    ///         QueryEvaluationError::Cancelled
+    ///     ));
+    /// }
+    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// ```
+    pub fn with_cancellation_token(mut self, cancellation_token: CancellationToken) -> Self {
+        self.inner = self.inner.with_cancellation_token(cancellation_token);
         self
     }
 

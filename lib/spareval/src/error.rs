@@ -31,6 +31,8 @@ pub enum QueryEvaluationError {
     #[cfg(feature = "sparql-12")]
     #[error("The SPARQL dataset returned a triple term that is not a valid RDF 1.2 term")]
     InvalidStorageTripleTerm,
+    #[error("The SPARQL operation has been cancelled")]
+    Cancelled,
     #[doc(hidden)]
     #[error(transparent)]
     Unexpected(Box<dyn Error + Send + Sync>),
