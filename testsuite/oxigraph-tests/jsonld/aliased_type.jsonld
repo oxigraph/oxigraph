@@ -1,0 +1,8 @@
+{
+  "@context": {
+    "schema": "https://schema.org/",
+    "type": "@type"
+  },
+  "id": "0124568",
+  "type": "schema:Place"
+}
