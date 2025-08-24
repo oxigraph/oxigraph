@@ -378,8 +378,8 @@ impl JsonLdExpansionConverter {
                 }
                 if depth == 0 {
                     // We look for @context @type, @id and @graph
-                    let mut context_value = None;
-                    let mut type_data = None;
+                    let mut with_context = false;
+                    let mut type_data = Vec::new();
                     let mut id_data = None;
                     let mut graph_data = Vec::new();
                     let mut other_data = Vec::with_capacity(buffer.len());
@@ -387,20 +387,24 @@ impl JsonLdExpansionConverter {
                         let expanded = self.expand_iri(key.as_str().into(), false, true, errors);
                         match expanded.as_deref() {
                             Some("@context") => {
-                                if context_value.is_some() {
-                                    errors.push(JsonLdSyntaxError::msg("@context is defined twice"))
+                                if with_context {
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "@context is defined twice",
+                                        JsonLdErrorCode::CollidingKeywords,
+                                    ))
                                 }
-                                context_value = Some(value);
+                                self.push_new_context(value, errors);
+                                with_context = true;
                             }
                             Some("@type") => {
-                                if type_data.is_some() {
-                                    errors.push(JsonLdSyntaxError::msg("@type is defined twice"))
-                                }
-                                type_data = Some((key, value));
+                                type_data.push((key, value));
                             }
                             Some("@id") => {
                                 if id_data.is_some() {
-                                    errors.push(JsonLdSyntaxError::msg("@id is defined twice"))
+                                    errors.push(JsonLdSyntaxError::msg_and_code(
+                                        "@id is defined twice",
+                                        JsonLdErrorCode::CollidingKeywords,
+                                    ))
                                 }
                                 id_data = Some((key, value));
                             }
@@ -418,9 +422,6 @@ impl JsonLdExpansionConverter {
                         });
 
                     // We first process @context, @type and @id then other then graph
-                    if let Some(context) = context_value {
-                        self.push_new_context(context, errors);
-                    }
                     for (key, value) in type_data
                         .into_iter()
                         .chain(id_data)
