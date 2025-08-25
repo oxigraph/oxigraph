@@ -38,6 +38,14 @@ fn oxigraph_parser_error_testsuite() -> Result<()> {
 }
 
 #[test]
+fn oxigraph_jsonld_testsuite() -> Result<()> {
+    check_testsuite(
+        "https://github.com/oxigraph/oxigraph/tests/jsonld/manifest.jsonld",
+        &[],
+    )
+}
+
+#[test]
 fn oxigraph_sparql_testsuite() -> Result<()> {
     check_testsuite(
         "https://github.com/oxigraph/oxigraph/tests/sparql/manifest.ttl",

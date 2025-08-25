@@ -1,0 +1,15 @@
+{
+  "@context": ["https://w3c.github.io/json-ld-api/tests/context.jsonld", {"@base": "manifest"}],
+  "@id": "",
+  "@type": "mf:Manifest",
+  "name": "Oxigraph tests for JSON-LD",
+  "sequence": [
+    {
+      "@id": "#aliased_type",
+      "@type": ["jld:PositiveEvaluationTest", "jld:ToRDFTest"],
+      "name": "type aliased in the same level context",
+      "input": "aliased_type.jsonld",
+      "expect": "aliased_type.nq"
+    }
+  ]
+}
