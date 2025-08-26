@@ -1941,7 +1941,7 @@ parser! {
             t:VarOrTerm() { FocusedTripleOrPathPattern::new(t) } /
             TriplesNodePath()
 
-        rule ReifiedTriple() -> FocusedTriplePattern<TermPattern> = "<<" _ s:ReifiedTripleSubject() _ p:Verb() _ o:ReifiedTripleObject() _ r:Reifier()? _ ">>" {?
+        rule ReifiedTriple() -> FocusedTriplePattern<TermPattern> = "<<" _ s:ReifiedTripleObject() _ p:Verb() _ o:ReifiedTripleObject() _ r:Reifier()? _ ">>" {?
             #[cfg(feature = "sparql-12")]
             {
                 let r = r.unwrap_or_else(|| BlankNode::default().into());
@@ -1965,15 +1965,6 @@ parser! {
             }
         }
 
-        rule ReifiedTripleSubject() -> FocusedTriplePattern<TermPattern> =
-            v:Var() { FocusedTriplePattern::new(v) } /
-            ReifiedTriple() /
-            i:iri() { FocusedTriplePattern::new(i) } /
-            l:RDFLiteral() { FocusedTriplePattern::new(l) } /
-            l:NumericLiteral() { FocusedTriplePattern::new(l) } /
-            l:BooleanLiteral() { FocusedTriplePattern::new(l) } /
-            b:BlankNode() { FocusedTriplePattern::new(b) }
-
         rule ReifiedTripleObject() -> FocusedTriplePattern<TermPattern> =
             v:Var() { FocusedTriplePattern::new(v) } /
             t:TripleTerm() {?
@@ -1987,22 +1978,13 @@ parser! {
             l:BooleanLiteral() { FocusedTriplePattern::new(l) } /
             b:BlankNode() { FocusedTriplePattern::new(b) }
 
-        rule TripleTerm() -> TriplePattern = "<<(" _ s:TripleTermSubject() _ p:Verb() _ o:TripleTermObject() _ ")>>" {
+        rule TripleTerm() -> TriplePattern = "<<(" _ s:TripleTermObject() _ p:Verb() _ o:TripleTermObject() _ ")>>" {
             TriplePattern {
                 subject: s,
                 predicate: p,
                 object: o
             }
         }
-
-        rule TripleTermSubject() -> TermPattern =
-            v:Var() { v.into() } /
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() } /
-            b:BlankNode() { b.into() }
-
         rule TripleTermObject() -> TermPattern =
             v:Var() { v.into() } /
             t:TripleTerm() {?
@@ -2015,7 +1997,7 @@ parser! {
             l:BooleanLiteral() { l.into() } /
             b:BlankNode() { b.into() }
 
-        rule TripleTermData() -> GroundTriple = "<<(" _ s:TripleTermDataSubject() _ p:TripleTermData_p() _ o:TripleTermDataObject() _ ")>>" {?
+        rule TripleTermData() -> GroundTriple = "<<(" _ s:TripleTermDataObject() _ p:TripleTermData_p() _ o:TripleTermDataObject() _ ")>>" {?
             Ok(GroundTriple {
                 subject: if let GroundTerm::NamedNode(s) = s { s } else { return Err("Literals are not allowed in subject position of nested patterns") },
                 predicate: p,
@@ -2023,12 +2005,6 @@ parser! {
             })
         }
         rule TripleTermData_p() -> NamedNode = i: iri() { i } / "a" { rdf::TYPE.into() }
-
-        rule TripleTermDataSubject() -> GroundTerm =
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() }
 
         rule TripleTermDataObject() -> GroundTerm =
             t:TripleTermData() {?
@@ -2117,17 +2093,10 @@ parser! {
             l:BooleanLiteral() { l.into() } /
             BuiltInCall()
 
-        rule ExprTripleTerm() -> Expression = "<<(" _ s:ExprTripleTermSubject() _ p:Verb() _ o:ExprTripleTermObject() _ ")>>" {?
+        rule ExprTripleTerm() -> Expression = "<<(" _ s:ExprTripleTermObject() _ p:Verb() _ o:ExprTripleTermObject() _ ")>>" {?
             #[cfg(feature = "sparql-12")]{Ok(Expression::FunctionCall(Function::Triple, vec![s, p.into(), o]))}
             #[cfg(not(feature = "sparql-12"))]{Err("Triple terms are only available in SPARQL 1.2")}
         }
-
-        rule ExprTripleTermSubject() -> Expression =
-            i:iri() { i.into() } /
-            l:RDFLiteral() { l.into() } /
-            l:NumericLiteral() { l.into() } /
-            l:BooleanLiteral() { l.into() } /
-            v:Var() { v.into() }
 
         rule ExprTripleTermObject() -> Expression =
             ExprTripleTerm() /
