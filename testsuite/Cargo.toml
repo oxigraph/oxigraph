@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
+dissimilar.workspace = true
 json-event-parser.workspace = true
 oxigraph = { workspace = true, features = ["rdf-12"] }
 oxiri.workspace = true
@@ -20,7 +21,6 @@ spargebra.workspace = true
 spargeo.workspace = true
 sparopt.workspace = true
 spareval.workspace = true
-text-diff.workspace = true
 time = { workspace = true, features = ["formatting"] }
 
 [dev-dependencies]
