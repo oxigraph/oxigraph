@@ -1,7 +1,7 @@
 use anyhow::Result;
+use dissimilar::{Chunk, diff};
 use oxigraph::model::{Dataset, NamedNode};
 use std::fmt::Write;
-use text_diff::{Difference, diff};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
@@ -27,23 +27,22 @@ fn normalize_dataset_text(store: &Dataset) -> String {
 }
 
 pub(super) fn format_diff(expected: &str, actual: &str, kind: &str) -> String {
-    let (_, changeset) = diff(expected, actual, "\n");
     let mut ret = String::new();
     writeln!(
         &mut ret,
         "Note: missing {kind} in yellow and extra {kind} in blue"
     )
     .unwrap();
-    for seq in changeset {
+    for seq in diff(expected, actual) {
         match seq {
-            Difference::Same(x) => {
-                writeln!(&mut ret, "{x}").unwrap();
+            Chunk::Equal(x) => {
+                write!(&mut ret, "{x}").unwrap();
             }
-            Difference::Add(x) => {
-                writeln!(&mut ret, "\x1B[94m{x}\x1B[0m").unwrap();
+            Chunk::Insert(x) => {
+                write!(&mut ret, "\x1B[94m{x}\x1B[0m").unwrap();
             }
-            Difference::Rem(x) => {
-                writeln!(&mut ret, "\x1B[93m{x}\x1B[0m").unwrap();
+            Chunk::Delete(x) => {
+                write!(&mut ret, "\x1B[93m{x}\x1B[0m").unwrap();
             }
         }
     }
