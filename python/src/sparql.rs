@@ -81,8 +81,8 @@ pub fn prepare_sparql_query(
 pub fn sparql_evaluator_from_python(
     base_iri: Option<&str>,
     prefixes: Option<HashMap<String, String>>,
-    custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
-    custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
+    custom_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
+    custom_aggregate_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
 ) -> PyResult<SparqlEvaluator> {
     let mut evaluator = SparqlEvaluator::default();
     #[cfg(feature = "geosparql")]
@@ -93,7 +93,7 @@ pub fn sparql_evaluator_from_python(
     if let Some(custom_functions) = custom_functions {
         for (name, function) in custom_functions {
             evaluator = evaluator.with_custom_function(name.into(), move |args| {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     Some(
                         function
                             .call1(
@@ -113,7 +113,7 @@ pub fn sparql_evaluator_from_python(
     if let Some(custom_aggregate_functions) = custom_aggregate_functions {
         for (name, function) in custom_aggregate_functions {
             evaluator = evaluator.with_custom_aggregate_function(name.into(), move || {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     Box::new(PyAggregateFunctionAccumulator {
                         inner: function.call0(py).ok(),
                     })
@@ -144,12 +144,12 @@ pub fn sparql_evaluator_from_python(
 }
 
 struct PyAggregateFunctionAccumulator {
-    inner: Option<PyObject>,
+    inner: Option<Py<PyAny>>,
 }
 
 impl AggregateFunctionAccumulator for PyAggregateFunctionAccumulator {
     fn accumulate(&mut self, element: Term) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.inner = self.inner.take().and_then(|inner| {
                 inner
                     .call_method1(py, "accumulate", (PyTerm::from(element),))
@@ -160,7 +160,7 @@ impl AggregateFunctionAccumulator for PyAggregateFunctionAccumulator {
     }
 
     fn finish(&mut self) -> Option<Term> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             Some(
                 self.inner
                     .take()?
@@ -370,7 +370,7 @@ impl PyQuerySolutions {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
-                py.allow_threads(|| {
+                py.detach(|| {
                     let mut serializer = QueryResultsSerializer::from_format(format)
                         .serialize_solutions_to_writer(
                             output,
@@ -413,11 +413,11 @@ impl PyQuerySolutions {
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyQuerySolution>> {
         Ok(match &mut self.inner {
             PyQuerySolutionsVariant::Query(inner) => py
-                .allow_threads(move || inner.0.next())
+                .detach(move || inner.0.next())
                 .transpose()
                 .map_err(map_evaluation_error),
             PyQuerySolutionsVariant::Reader { iter, file_path } => py
-                .allow_threads(|| iter.next())
+                .detach(|| iter.next())
                 .transpose()
                 .map_err(|e| map_query_results_parse_error(e, file_path.clone())),
         }?
@@ -473,7 +473,7 @@ impl PyQueryBoolean {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_query_results_format(format, file_path.as_deref())?;
-                py.allow_threads(|| {
+                py.detach(|| {
                     Ok(QueryResultsSerializer::from_format(format)
                         .serialize_boolean_to_writer(output, self.inner)?)
                 })
@@ -546,7 +546,7 @@ impl PyQueryTriples {
         PyWritable::do_write(
             |output, file_path| {
                 let format = lookup_rdf_format(format, file_path.as_deref())?;
-                py.allow_threads(move || {
+                py.detach(move || {
                     let mut serializer = RdfSerializer::from_format(format).for_writer(output);
                     for triple in &mut self.inner.0 {
                         serializer.serialize_triple(&triple.map_err(map_evaluation_error)?)?;
@@ -565,7 +565,7 @@ impl PyQueryTriples {
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyTriple>> {
         Ok(py
-            .allow_threads(move || self.inner.0.next())
+            .detach(move || self.inner.0.next())
             .transpose()
             .map_err(map_evaluation_error)?
             .map(Into::into))

@@ -49,7 +49,7 @@ impl PyStore {
     #[new]
     #[pyo3(signature = (path = None))]
     fn new(path: Option<PathBuf>, py: Python<'_>) -> PyResult<Self> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok(Self {
                 inner: if let Some(path) = path {
                     Store::open(path)
@@ -64,7 +64,7 @@ impl PyStore {
     #[cfg(target_family = "wasm")]
     #[new]
     fn new(py: Python<'_>) -> PyResult<Self> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok(Self {
                 inner: Store::new().map_err(map_storage_error)?,
             })
@@ -83,7 +83,7 @@ impl PyStore {
     #[cfg(not(target_family = "wasm"))]
     #[staticmethod]
     fn read_only(path: &str, py: Python<'_>) -> PyResult<Self> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok(Self {
                 inner: Store::open_read_only(path).map_err(map_storage_error)?,
             })
@@ -102,7 +102,7 @@ impl PyStore {
     /// >>> list(store)
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     fn add(&self, quad: &PyQuad, py: Python<'_>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.insert(quad).map_err(map_storage_error)?;
             Ok(())
         })
@@ -127,7 +127,7 @@ impl PyStore {
             .try_iter()?
             .map(|q| q?.extract())
             .collect::<PyResult<Vec<PyQuad>>>()?;
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.extend(quads).map_err(map_storage_error)?;
             Ok(())
         })
@@ -168,7 +168,7 @@ impl PyStore {
     /// >>> list(store)
     /// []
     fn remove(&self, quad: &PyQuad, py: Python<'_>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.remove(quad).map_err(map_storage_error)?;
             Ok(())
         })
@@ -267,8 +267,8 @@ impl PyStore {
         default_graph: Option<&Bound<'_, PyAny>>,
         named_graphs: Option<&Bound<'_, PyAny>>,
         substitutions: Option<HashMap<PyVariable, PyTerm>>,
-        custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
-        custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
+        custom_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
+        custom_aggregate_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
         pub struct UngilQueryResults(QueryResults<'static>);
@@ -296,7 +296,7 @@ impl PyStore {
             }
         }
         let results = py
-            .allow_threads(|| Ok(UngilQueryResults(evaluator.execute()?)))
+            .detach(|| Ok(UngilQueryResults(evaluator.execute()?)))
             .map_err(map_evaluation_error)?
             .0;
         query_results_to_python(py, results)
@@ -348,11 +348,11 @@ impl PyStore {
         update: &str,
         base_iri: Option<&str>,
         prefixes: Option<HashMap<String, String>>,
-        custom_functions: Option<HashMap<PyNamedNode, PyObject>>,
-        custom_aggregate_functions: Option<HashMap<PyNamedNode, PyObject>>,
+        custom_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
+        custom_aggregate_functions: Option<HashMap<PyNamedNode, Py<PyAny>>>,
         py: Python<'_>,
     ) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             sparql_evaluator_from_python(
                 base_iri,
                 prefixes,
@@ -420,7 +420,7 @@ impl PyStore {
         let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
         let input = PyReadable::from_args(&path, input, py)?;
         let format = lookup_rdf_format(format, path.as_deref())?;
-        py.allow_threads(|| {
+        py.detach(|| {
             let mut parser = RdfParser::from_format(format);
             if let Some(base_iri) = base_iri {
                 parser = parser
@@ -492,7 +492,7 @@ impl PyStore {
         let to_graph_name = to_graph.as_ref().map(GraphNameRef::from);
         let input = PyReadable::from_args(&path, input, py)?;
         let format = lookup_rdf_format(format, path.as_deref())?;
-        py.allow_threads(|| {
+        py.detach(|| {
             let mut parser = RdfParser::from_format(format);
             if let Some(base_iri) = base_iri {
                 parser = parser.with_base_iri(base_iri).map_err(|e| {
@@ -565,7 +565,7 @@ impl PyStore {
         let from_graph_name = from_graph.as_ref().map(GraphNameRef::from);
         PyWritable::do_write(
             |output, file_path| {
-                py.allow_threads(|| {
+                py.detach(|| {
                     let format = lookup_rdf_format(format, file_path.as_deref())?;
                     let mut serializer = RdfSerializer::from_format(format);
                     if let Some(prefixes) = prefixes {
@@ -633,7 +633,7 @@ impl PyStore {
         py: Python<'_>,
     ) -> PyResult<bool> {
         let graph_name = GraphNameRef::from(&graph_name);
-        py.allow_threads(|| {
+        py.detach(|| {
             match graph_name {
                 GraphNameRef::DefaultGraph => Ok(true),
                 GraphNameRef::NamedNode(graph_name) => self.inner.contains_named_graph(graph_name),
@@ -657,7 +657,7 @@ impl PyStore {
     #[expect(clippy::needless_pass_by_value)]
     fn add_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphNameRef::from(&graph_name);
-        py.allow_threads(|| {
+        py.detach(|| {
             match graph_name {
                 GraphNameRef::DefaultGraph => Ok(()),
                 GraphNameRef::NamedNode(graph_name) => self.inner.insert_named_graph(graph_name),
@@ -684,7 +684,7 @@ impl PyStore {
     #[expect(clippy::needless_pass_by_value)]
     fn clear_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphNameRef::from(&graph_name);
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner
                 .clear_graph(graph_name)
                 .map_err(map_storage_error)
@@ -708,7 +708,7 @@ impl PyStore {
     #[expect(clippy::needless_pass_by_value)]
     fn remove_graph(&self, graph_name: PyGraphNameRef<'_>, py: Python<'_>) -> PyResult<()> {
         let graph_name = GraphNameRef::from(&graph_name);
-        py.allow_threads(|| {
+        py.detach(|| {
             match graph_name {
                 GraphNameRef::DefaultGraph => self.inner.clear_graph(GraphNameRef::DefaultGraph),
                 GraphNameRef::NamedNode(graph_name) => self.inner.remove_named_graph(graph_name),
@@ -731,7 +731,7 @@ impl PyStore {
     /// >>> list(store.named_graphs())
     /// []
     fn clear(&self, py: Python<'_>) -> PyResult<()> {
-        py.allow_threads(|| self.inner.clear().map_err(map_storage_error))
+        py.detach(|| self.inner.clear().map_err(map_storage_error))
     }
 
     /// Flushes all buffers and ensures that all writes are saved on disk.
@@ -742,7 +742,7 @@ impl PyStore {
     /// :raises OSError: if an error happens during the flush.
     #[cfg(not(target_family = "wasm"))]
     fn flush(&self, py: Python<'_>) -> PyResult<()> {
-        py.allow_threads(|| self.inner.flush().map_err(map_storage_error))
+        py.detach(|| self.inner.flush().map_err(map_storage_error))
     }
 
     /// Optimizes the database for future workload.
@@ -753,7 +753,7 @@ impl PyStore {
     /// :raises OSError: if an error happens during the optimization.
     #[cfg(not(target_family = "wasm"))]
     fn optimize(&self, py: Python<'_>) -> PyResult<()> {
-        py.allow_threads(|| self.inner.optimize().map_err(map_storage_error))
+        py.detach(|| self.inner.optimize().map_err(map_storage_error))
     }
 
     /// Creates database backup into the `target_directory`.
@@ -779,7 +779,7 @@ impl PyStore {
     /// :raises OSError: if an error happens during the backup.
     #[cfg(not(target_family = "wasm"))]
     fn backup(&self, target_directory: PathBuf, py: Python<'_>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner
                 .backup(target_directory)
                 .map_err(map_storage_error)
@@ -787,7 +787,7 @@ impl PyStore {
     }
 
     fn __str__(&self, py: Python<'_>) -> String {
-        py.allow_threads(|| self.inner.to_string())
+        py.detach(|| self.inner.to_string())
     }
 
     fn __bool__(&self) -> PyResult<bool> {
