@@ -1,2 +1,10 @@
-pyoxigraph.pyoxigraph
+pyoxigraph.CanonicalizationAlgorithm.__init__
 pyoxigraph.DefaultGraph.__init__
+pyoxigraph.QuadParser.__init__
+pyoxigraph.QueryBoolean.__init__
+pyoxigraph.QueryResultsFormat.__init__
+pyoxigraph.QuerySolution.__init__
+pyoxigraph.QuerySolutions.__init__
+pyoxigraph.QueryTriples.__init__
+pyoxigraph.RdfFormat.__init__
+pyoxigraph.pyoxigraph
