@@ -26,7 +26,7 @@ geosparql = ["dep:spargeo"]
 rdf-12 = ["oxigraph/rdf-12"]
 
 [dependencies]
-pyo3 = { workspace = true, features = ["extension-module"] }
+pyo3 = { workspace = true, features = ["extension-module"] } # TODO: remove the feature in a few months
 spargeo = { workspace = true, optional = true }
 
 [target.'cfg(any(target_family = "windows", target_os = "macos", target_os = "ios"))'.dependencies]

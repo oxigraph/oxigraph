@@ -231,7 +231,7 @@ impl PyQuadParser {
     }
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyQuad>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok(self
                 .inner
                 .next()
@@ -453,7 +453,7 @@ impl PyReadable {
             (Some(_), Some(_)) => Err(PyValueError::new_err(
                 "input and file_path can't be both set at the same time",
             )),
-            (Some(path), None) => Ok(Self::File(py.allow_threads(|| File::open(path))?)),
+            (Some(path), None) => Ok(Self::File(py.detach(|| File::open(path))?)),
             (None, Some(input)) => Ok(input.into()),
             (None, None) => Err(PyValueError::new_err(
                 "Either input or file_path must be set",
@@ -477,7 +477,7 @@ impl Read for PyReadable {
 pub enum PyReadableInput {
     String(PyBackedStr),
     Bytes(PyBackedBytes),
-    Io(PyObject),
+    Io(Py<PyAny>),
 }
 
 impl From<PyReadableInput> for PyReadable {
@@ -504,28 +504,28 @@ impl PyWritable {
     ) -> PyResult<Option<Vec<u8>>> {
         let (output, file_path) = match output {
             Some(PyWritableOutput::Path(file_path)) => (
-                Self::File(py.allow_threads(|| File::create(&file_path))?),
+                Self::File(py.detach(|| File::create(&file_path))?),
                 Some(file_path),
             ),
             Some(PyWritableOutput::Io(object)) => (Self::Io(PyIo(object)), None),
             None => (Self::Bytes(Vec::new()), None),
         };
         let serializer = write(BufWriter::new(output), file_path)?;
-        py.allow_threads(|| serializer.into_inner())?.close(py)
+        py.detach(|| serializer.into_inner())?.close(py)
     }
 
     fn close(self, py: Python<'_>) -> PyResult<Option<Vec<u8>>> {
         match self {
             Self::Bytes(bytes) => Ok(Some(bytes)),
             Self::File(mut file) => {
-                py.allow_threads(|| {
+                py.detach(|| {
                     file.flush()?;
                     file.sync_all()
                 })?;
                 Ok(None)
             }
             Self::Io(mut io) => {
-                py.allow_threads(|| io.flush())?;
+                py.detach(|| io.flush())?;
                 Ok(None)
             }
         }
@@ -553,14 +553,14 @@ impl Write for PyWritable {
 #[derive(FromPyObject)]
 pub enum PyWritableOutput {
     Path(PathBuf),
-    Io(PyObject),
+    Io(Py<PyAny>),
 }
 
-pub struct PyIo(PyObject);
+pub struct PyIo(Py<PyAny>);
 
 impl Read for PyIo {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             if buf.is_empty() {
                 return Ok(0);
             }
@@ -583,7 +583,7 @@ impl Read for PyIo {
 
 impl Write for PyIo {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             Ok(self
                 .0
                 .bind(py)
@@ -593,7 +593,7 @@ impl Write for PyIo {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.0.bind(py).call_method0(intern!(py, "flush"))?;
             Ok(())
         })
@@ -679,7 +679,7 @@ pub fn map_parse_error(error: RdfParseError, file_path: Option<PathBuf>) -> PyEr
 pub fn python_version() -> (u8, u8) {
     static VERSION: OnceLock<(u8, u8)> = OnceLock::new();
     *VERSION.get_or_init(|| {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let v = py.version_info();
             (v.major, v.minor)
         })
@@ -687,7 +687,7 @@ pub fn python_version() -> (u8, u8) {
 }
 
 pub fn deprecation_warning(message: &str) -> PyResult<()> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         PyErr::warn(
             py,
             &py.get_type::<PyDeprecationWarning>(),
