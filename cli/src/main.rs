@@ -144,7 +144,9 @@ pub fn main() -> anyhow::Result<()> {
                     base.as_deref(),
                     graph,
                     lenient,
-                )
+                )?;
+                loader.commit()?;
+                Ok(())
             } else {
                 ThreadPoolBuilder::new()
                     .num_threads(max(1, available_parallelism()?.get() / 2))
@@ -218,6 +220,8 @@ pub fn main() -> anyhow::Result<()> {
                                         error
                                     )
                                     // TODO: hard fail
+                                } else if let Err(e) = loader.commit() {
+                                    eprintln!("Failed to save triples: {e}")
                                 }
                             })
                         }
@@ -557,7 +561,7 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn bulk_load(
-    loader: &BulkLoader,
+    loader: &BulkLoader<'_>,
     reader: impl Read,
     format: RdfFormat,
     base_iri: Option<&str>,
@@ -1617,11 +1621,16 @@ fn web_load_graph(
         parser = parser.with_base_iri(base_iri).map_err(bad_request)?;
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_from_reader(parser, request.body_mut())
+        let loader = web_bulk_loader(store, request);
+        loader
+            .load_from_reader(parser, request.body_mut())
+            .map_err(loader_to_http_error)?;
+        loader.commit().map_err(internal_server_error)
     } else {
-        store.load_from_reader(parser, request.body_mut())
+        store
+            .load_from_reader(parser, request.body_mut())
+            .map_err(loader_to_http_error)
     }
-    .map_err(loader_to_http_error)
 }
 
 fn web_load_dataset(
@@ -1634,14 +1643,19 @@ fn web_load_dataset(
         parser = parser.lenient();
     }
     if url_query_parameter(request, "no_transaction").is_some() {
-        web_bulk_loader(store, request).load_from_reader(parser, request.body_mut())
+        let loader = web_bulk_loader(store, request);
+        loader
+            .load_from_reader(parser, request.body_mut())
+            .map_err(loader_to_http_error)?;
+        loader.commit().map_err(internal_server_error)
     } else {
-        store.load_from_reader(parser, request.body_mut())
+        store
+            .load_from_reader(parser, request.body_mut())
+            .map_err(loader_to_http_error)
     }
-    .map_err(loader_to_http_error)
 }
 
-fn web_bulk_loader(store: &Store, request: &Request<Body>) -> BulkLoader {
+fn web_bulk_loader<'a>(store: &'a Store, request: &Request<Body>) -> BulkLoader<'a> {
     let start = Instant::now();
     let mut loader = store.bulk_loader().on_progress(move |size| {
         let elapsed = start.elapsed();

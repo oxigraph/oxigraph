@@ -84,9 +84,10 @@ impl MemoryStorage {
         }
     }
 
-    pub fn bulk_loader(&self) -> MemoryStorageBulkLoader {
+    pub fn bulk_loader(&self) -> MemoryStorageBulkLoader<'_> {
         MemoryStorageBulkLoader {
-            storage: self.clone(),
+            store: self,
+            quads: Mutex::new(Vec::new()),
             hooks: Vec::new(),
         }
     }
@@ -800,34 +801,48 @@ impl Iterator for MemoryDecodingGraphIterator<'_> {
 }
 
 #[must_use]
-pub struct MemoryStorageBulkLoader {
-    storage: MemoryStorage,
+pub struct MemoryStorageBulkLoader<'a> {
+    store: &'a MemoryStorage,
+    quads: Mutex<Vec<Quad>>,
     hooks: Vec<Box<dyn Fn(u64) + Send + Sync>>,
 }
 
-impl MemoryStorageBulkLoader {
+impl MemoryStorageBulkLoader<'_> {
     pub fn on_progress(mut self, callback: impl Fn(u64) + Send + Sync + 'static) -> Self {
         self.hooks.push(Box::new(callback));
         self
     }
 
-    pub fn load<EI, EO: From<StorageError> + From<EI>>(
-        &self,
-        quads: impl IntoIterator<Item = Result<Quad, EI>>,
-    ) -> Result<(), EO> {
-        let mut transaction = self.storage.start_transaction();
-        let mut done_counter = 0;
-        for quad in quads {
-            transaction.insert(quad?.as_ref());
-            done_counter += 1;
-            if done_counter % 1_000_000 == 0 {
-                for hook in &self.hooks {
-                    hook(done_counter);
-                }
+    pub fn load_batch(&self, new_quads: Vec<Quad>) {
+        let mut quads = self.quads.lock().unwrap();
+        let start_size = quads.len();
+        quads.extend(new_quads);
+        let end_size = quads.len();
+        for i in start_size / 1_000_000 + 1..=end_size / 1_000_000 {
+            for hook in &self.hooks {
+                hook((i * 1_000_000).try_into().unwrap());
             }
         }
-        transaction.commit();
-        Ok(())
+    }
+
+    pub fn commit(self) {
+        let transaction_mutex = self.store.transaction_counter.lock().unwrap();
+        let new_version_id = self.store.version_counter.load(Ordering::Acquire) + 1;
+        let mut transaction = MemoryStorageTransaction {
+            storage: self.store,
+            log: Vec::new(),
+            transaction_id: new_version_id,
+            snapshot_id: new_version_id,
+            _transaction_mutex: transaction_mutex,
+            committed: true,
+        };
+        for quad in self.quads.into_inner().unwrap() {
+            transaction.insert(quad.as_ref());
+            transaction.log.clear();
+        }
+        self.store
+            .version_counter
+            .store(new_version_id, Ordering::Release);
     }
 }
 
@@ -1158,10 +1173,10 @@ mod tests {
         storage.snapshot().validate()?;
 
         // We add quads and graph, then clear
-        storage.bulk_loader().load::<StorageError, StorageError>([
-            Ok(default_quad.into_owned()),
-            Ok(named_graph_quad.into_owned()),
-        ])?;
+        storage.bulk_loader().load_batch(vec![
+            default_quad.into_owned(),
+            named_graph_quad.into_owned(),
+        ]);
         let mut transaction = storage.start_transaction();
         transaction.insert_named_graph(example2.into());
         transaction.commit();

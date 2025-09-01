@@ -146,11 +146,11 @@ impl PyStore {
     /// [<Quad subject=<NamedNode value=http://example.com> predicate=<NamedNode value=http://example.com/p> object=<Literal value=1 datatype=<NamedNode value=http://www.w3.org/2001/XMLSchema#string>> graph_name=<NamedNode value=http://example.com/g>>]
     #[cfg(not(target_family = "wasm"))]
     fn bulk_extend(&self, quads: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.inner
-            .bulk_loader()
-            .load_ok_quads::<PyErr, PythonOrStorageError>(
-                quads.try_iter()?.map(|q| q?.extract::<PyQuad>()),
-            )?;
+        let loader = self.inner.bulk_loader();
+        loader.load_ok_quads::<PyErr, PythonOrStorageError>(
+            quads.try_iter()?.map(|q| q?.extract::<PyQuad>()),
+        )?;
+        loader.commit().map_err(map_storage_error)?;
         Ok(())
     }
 
@@ -505,10 +505,12 @@ impl PyStore {
             if lenient {
                 parser = parser.lenient();
             }
-            self.inner
-                .bulk_loader()
+            let loader = self.inner.bulk_loader();
+            loader
                 .load_from_reader(parser, input)
-                .map_err(|e| map_loader_error(e, path))
+                .map_err(|e| map_loader_error(e, path))?;
+            loader.commit().map_err(map_storage_error)?;
+            Ok(())
         })
     }
 
